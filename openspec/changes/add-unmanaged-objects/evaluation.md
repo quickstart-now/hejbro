@@ -346,12 +346,48 @@ red across the full core suite (98 files/1469), the other 1466 stayed
 green, including every managed-table serial test — the fix does not
 touch managed-table sequence synthesis at all.
 
-**B2 — held.** Not addressed this round; per instruction, `ObjectKind`,
-`diffSnapshots`, and `table-kind.ts`'s guard were not touched. Needs a
-diff-engine-level rule (whether a fanned-out object's drop/create is
-suppressed by `next`'s existing status alone or by `previous || next`
-— the RLS-on-adoption question) that the lead has taken to the owner
-(J10). Awaiting that ruling before any code change.
+**B2 — fixed (J10 ruling: `next` only).** `ObjectKind` gained an
+optional `ownerTableIdentity?(node): string` accessor (no kind-name
+hardcoding) — implemented by `sequenceKind`/`rlsKind`/`policyKind`
+(each `tableIdentity(schema, table)` off their own snapshot node) and
+by `tableKind` itself (`tableIdentity(schema, name)`, self); **not**
+implemented by `grant` (a user's own standalone declaration, never a
+table fan-out — implementing it there would silently drop an
+explicitly-written grant under the same rule). `diffSnapshots`
+(`engine/diff-engine.ts`) gained `ownerIsExisting`: a key is skipped
+before its kind's own `diff` ever runs when its owning table's
+*authoritative* record — `next`'s own entry for that identity, falling
+back to `previous`'s only when the table's declaration was removed
+outright and `next` carries no entry for it at all — is marked
+existing. This is deliberately not `previous || next`: on adoption,
+`next`'s own record says the table is managed again, so a fanned-out
+object's create must proceed rather than being suppressed merely
+because the table once was existing (the exact recommendation — "both
+directions silence" — J10 rejected: a user who declares RLS, a policy,
+and a `serial` column on an adopted table and gets silent non-creation
+pays the cost in live data, forever, on every later run too).
+`tableKind.diff`'s own `isExistingSide` guard was **measured and
+removed**: no test calls `tableKind.diff` directly with an
+`existing`-marked node (`table-kind-diff.test.ts` and every other
+direct-call site — `generated-columns-{diff,emit}.test.ts`,
+`identity-columns-{diff,emit}.test.ts` — exercise unrelated concerns;
+every existing-table assertion in the repo goes through
+`generateMigration`/`diffSnapshots`), and the full core suite (98
+files) stays green with the guard gone — the single-chokepoint claim
+is now literally true. Two new tests in `packages/core/test/
+generate.test.ts` replay the evaluator's own reproduction fixture (RLS
++ one policy + a `serial()` primary key) on both handover directions:
+"managed … to existing" (`hasChanges: false`, `sql === ""`) and
+"existing to managed" (no `create table`, but `create sequence`/
+`enable row level security`/`create policy` all present — asserting
+presence, not just absence, since that is the half of the ruling a
+"nothing happened" assertion can't tell apart from a bug). Mutant ①
+(`next` → `previous || next`): exactly 1 red (the adoption test only)
+across the file's 33, the handover test and the other 31 stayed green
+— the one word is the substance of the ruling. Mutant ② (the rule
+removed): exactly 1 red (the handover test only) across the full core
+suite (98 files/1471), the adoption test unaffected (its own path
+never needed the rule to be green). Both reverted; 98/98 clean.
 
 **N1, N2, N5 — no instruction received this round.** Not addressed;
 left exactly as the evaluation found them, pending direction.
@@ -370,20 +406,24 @@ Verified genuinely red before B1's fix (the actual `create sequence`/
 to `generateMigration`") corrected to match the other three doc sites
 already updated by this change; the constraint alone, no narrative.
 
-**N6 — fixed (pins only; spec text is the lead's).** `raise`: no new
-test — cites 2.3's own structural finding (`SnapshotFile`/`applyRaise`
-never touch `Snapshot`/declarations at all, only opaque SQL text and
-the ledger, so no existing-table-specific behavior is constructible to
-pin). `baseline`: new test in `packages/cli/test/baseline-command.test.ts`
-("an existing declaration contributes nothing to the baseline
-migration") — a schema with both a managed table and an
-`existingTable()` baselines to a migration containing the managed
-table's DDL and nothing naming the existing one. Probe mutant
-(`table-kind.ts`'s `isExistingSide` guard replaced with `false`,
-core+cli rebuilt): exactly 1 red (this new test) across the file's 11,
-the other 10 stayed green; reverted, rebuilt, 11/11 green again,
-`table-kind.ts` diff empty. The requirement-text fold (`cli-commands`)
-is the lead's own edit, staged separately.
+**N6 — fixed (pins; spec text is the lead's).** `baseline`: new test in
+`packages/cli/test/baseline-command.test.ts` ("an existing declaration
+contributes nothing to the baseline migration") — a schema with both a
+managed table and an `existingTable()` baselines to a migration
+containing the managed table's DDL and nothing naming the existing
+one. Probe mutant (`table-kind.ts`'s `isExistingSide` guard replaced
+with `false`, core+cli rebuilt): exactly 1 red (this new test) across
+the file's 11, the other 10 stayed green; reverted, rebuilt, 11/11
+green again, `table-kind.ts` diff empty. `raise`: round 1 cited only
+2.3's structural finding with no new test — round 2 corrected that
+(exactly the N2-shaped gap: a satisfiable-but-unexercised clause, once
+the `raise` sentence landed in the `cli-commands` requirement). New
+test in `apply-raise.test.ts` raises a *real* `generateMigration`
+output for a schema including an `existingTable()` (not a hand-written
+SQL string) end-to-end — succeeds, records the ledger under the
+caller's own filename, and the generated SQL names nothing about the
+existing table. The requirement-text fold (`cli-commands`) is the
+lead's own edit, staged separately.
 
 **N7 — fixed.** `generate.ts`'s `synced-table-declared` message now
 names both `table()` and `existingTable()` as valid declaration forms.
@@ -393,6 +433,12 @@ engine/authority-refusal.test.ts:45`), which the new wording still
 contains unchanged; the code-only pins (`synthesize.test.ts:69-85`,
 `authority-refusal.test.ts:30`) are untouched by a wording change.
 
-**Gates**: `TURBO_FORCE=1 pnpm build --force` (7/7), `check` (656 files
-clean), `check-types` (16/16, 0 cached), `test` (17/17 tasks — core
-98f/1469t incl. 1 todo, query 61f/843t, nile 5f/59t, cli 64f/544t).
+**Gates (round 1, B1/N3/N4/N6-baseline/N7)**: `TURBO_FORCE=1 pnpm build
+--force` (7/7), `check` (656 files clean), `check-types` (16/16, 0
+cached), `test` (17/17 tasks — core 98f/1469t incl. 1 todo, query
+61f/843t, nile 5f/59t, cli 64f/544t).
+
+**Gates (round 2, B2/N6-raise)**: `TURBO_FORCE=1 pnpm build --force`
+(7/7), `check` (656 files clean), `check-types` (16/16, 0 cached),
+`test` (17/17 tasks — core 98f/1471t incl. 1 todo (+2), query 61f/843t,
+nile 5f/59t, supabase 17f/141t, cli 64f/545t (+1)).

@@ -14,6 +14,7 @@ import {
 	predropStatement,
 	statement,
 } from "../sql/statement";
+import { tableIdentity } from "./table-snapshot";
 
 /**
  * The sequence's own base-type clause (#23/D66) — `as integer`/
@@ -305,4 +306,8 @@ export const sequenceKind: ObjectKind<SequenceDeclaration> = {
 	},
 	emit: (change, siblingChanges = []) =>
 		emitHandlers[change.operation](change, siblingChanges),
+	ownerTableIdentity: (node) => {
+		const snapshot = asSequenceSnapshot(node);
+		return tableIdentity(snapshot.schema, snapshot.table);
+	},
 };

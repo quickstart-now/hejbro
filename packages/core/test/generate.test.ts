@@ -1015,4 +1015,85 @@ describe("an existing declaration emits nothing (add-unmanaged-objects, #605)", 
 			secondResult.snapshot.objects["table:uo6.widgets"],
 		).not.toHaveProperty("existing");
 	});
+
+	// D106 R1, B2: the two tests above use a bare table (no RLS, no
+	// policy, no serial column) — exactly the shape the evaluator found
+	// "cannot reach the fan-out" (evaluation.md's own test-gap note).
+	// These replay the evaluator's own reproduction fixture (RLS + one
+	// policy + a `serial()` primary key) on both handover directions.
+	it("a table changing hands emits nothing, including what it fans out into: managed (with RLS, a policy, and a serial column) to existing", () => {
+		const app = schema("uo7");
+		const managed = table(
+			app,
+			"widgets",
+			{ id: serial().primaryKey() },
+			() => ({
+				rls: rls.enabled({
+					readLow: rls
+						.policy("read_low")
+						.for("select")
+						.to("anon")
+						.using(literal(true)),
+				}),
+			}),
+		);
+		const firstResult = generateMigration({
+			declarations: [app, managed],
+			previousSnapshot: emptySnapshot,
+		});
+		const existing = existingTable("uo7", "widgets", {
+			id: uuid().primaryKey(),
+		});
+		const secondResult = generateMigration({
+			declarations: [app, getTableMeta(existing)],
+			previousSnapshot: firstResult.snapshot,
+		});
+		expect(secondResult.hasChanges).toBe(false);
+		expect(secondResult.sql).toBe("");
+		expect(secondResult.snapshot.objects["table:uo7.widgets"]).toMatchObject({
+			existing: true,
+		});
+	});
+
+	it("an adopted table gains what the declaration manages: existing to managed (with RLS, a policy, and a serial column)", () => {
+		const app = schema("uo8");
+		const existing = existingTable("uo8", "widgets", {
+			id: uuid().primaryKey(),
+		});
+		const firstResult = generateMigration({
+			declarations: [app, getTableMeta(existing)],
+			previousSnapshot: emptySnapshot,
+		});
+		const managed = table(
+			app,
+			"widgets",
+			{ id: serial().primaryKey() },
+			() => ({
+				rls: rls.enabled({
+					readLow: rls
+						.policy("read_low")
+						.for("select")
+						.to("anon")
+						.using(literal(true)),
+				}),
+			}),
+		);
+		const secondResult = generateMigration({
+			declarations: [app, managed],
+			previousSnapshot: firstResult.snapshot,
+		});
+		expect(secondResult.errors).toEqual([]);
+		// No `create table` -- the table itself already exists.
+		expect(secondResult.sql).not.toContain("create table");
+		// ...but everything hejbro now manages ON that table is created as
+		// it would be for any managed table -- this is the half of the
+		// judgement that isn't "nothing": adoption is not silent about
+		// what the declaration asks for.
+		expect(secondResult.sql).toContain("create sequence");
+		expect(secondResult.sql).toContain("enable row level security");
+		expect(secondResult.sql).toContain("create policy");
+		expect(
+			secondResult.snapshot.objects["table:uo8.widgets"],
+		).not.toHaveProperty("existing");
+	});
 });
