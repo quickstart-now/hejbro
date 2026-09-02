@@ -312,4 +312,30 @@ describe("the Functions section (#587)", () => {
 		expect(source).toContain("readonly Functions: {};");
 		expect(source).not.toContain("authorPosts");
 	});
+
+	it("two runs against one commit are byte-identical with a function declared", () => {
+		const posts = table(app, "posts", {
+			id: uuid().primaryKey().defaultRandom(),
+			title: text().notNull(),
+		});
+		const totalPosts = defineFunction(
+			app,
+			"total_posts",
+			{ args: { minWeight: bigint({ mode: "number" }) }, returns: bigint() },
+			(ctx) => {
+				ctx.return(sql`1`);
+			},
+		);
+		const declarations: ReadonlyArray<HejbroInput> = [app, posts, totalPosts];
+		const exportNames = new Map<HejbroInput, string>([
+			[posts, "posts"],
+			[totalPosts, "totalPosts"],
+		]);
+		const payload = buildFixturePayload(declarations, exportNames);
+
+		const first = emitContract(payload, ORIGIN);
+		const second = emitContract(payload, ORIGIN);
+
+		expect(first).toBe(second);
+	});
 });

@@ -72,7 +72,7 @@ const linkHejbro = async (cwd: string): Promise<void> => {
 	await symlink(CLI_PACKAGE_ROOT, join(cwd, "node_modules", "hejbro"), "dir");
 };
 
-const SCHEMA_SOURCE = `import { schema, table, text, uuid } from "hejbro";
+const SCHEMA_SOURCE = `import { bigint, defineFunction, schema, select, sql, table, text, uuid } from "hejbro";
 
 export const app = schema("app");
 
@@ -80,6 +80,24 @@ export const posts = table(app, "posts", {
 	id: uuid().primaryKey().defaultRandom(),
 	title: text().notNull(),
 });
+
+export const totalPosts = defineFunction(
+	app,
+	"total_posts",
+	{ args: { minWeight: bigint({ mode: "number" }) }, returns: bigint() },
+	(ctx) => {
+		ctx.return(sql\`1\`);
+	},
+);
+
+export const postById = defineFunction(
+	app,
+	"post_by_id",
+	{ args: { postId: uuid() }, returns: posts },
+	(ctx, args) => {
+		ctx.return(select(posts).where(sql\`\${posts.id} = \${args.postId}\`));
+	},
+);
 `;
 
 let schemaRepo: string;
