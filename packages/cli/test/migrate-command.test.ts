@@ -1,4 +1,4 @@
-import { rm } from "node:fs/promises";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { hejbroError } from "@hejbro/core";
 import type {
@@ -464,6 +464,55 @@ describe("runMigrate / 17.1 (D106 M3) verifies the chain before connecting", () 
 	// #616: the chain root's own parent is taken as given, so removing the
 	// first migration leaves a chain that verifies -- the pre-flight passes
 	// and the run goes on to open its connection. A stated limit, pinned.
+	// #616: the pre-flight is the chain walk alone -- no tip check -- so both
+	// ends of the chain are outside its reach. Each case below is one the
+	// requirement states as passing; the spy importer records the connection
+	// attempt that proves the pre-flight passed.
+	const connectionAttempted = async (): Promise<number> => {
+		const calls: string[] = [];
+		const spyImporter = async () => {
+			calls.push("import");
+			throw Object.assign(new Error("Cannot find package '@hejbro/pg'"), {
+				code: "ERR_MODULE_NOT_FOUND",
+			});
+		};
+		await runMigrate(cwd, ["--url", "postgres://fake"], spyImporter);
+		return calls.length;
+	};
+
+	it("opens a connection when the first migration's parent-snapshot line was edited (stated limitation)", async () => {
+		await writeTwoFileChain(cwd, "sha256:bbbb");
+		const first = join(cwd, "migrations", "0001_a.sql");
+		const original = await readFile(first, "utf8");
+		await writeFile(
+			first,
+			original.replace(
+				"-- parent-snapshot: sha256:aaaa",
+				"-- parent-snapshot: sha256:0000",
+			),
+		);
+		expect(await connectionAttempted()).toBe(1);
+	});
+
+	it("opens a connection when the last migration's snapshot line was edited (stated limitation: no tip check)", async () => {
+		await writeTwoFileChain(cwd, "sha256:bbbb");
+		const last = join(cwd, "migrations", "0002_b.sql");
+		const original = await readFile(last, "utf8");
+		const edited = original.replace(
+			/^-- snapshot: .*$/m,
+			"-- snapshot: sha256:0000",
+		);
+		expect(edited).not.toBe(original);
+		await writeFile(last, edited);
+		expect(await connectionAttempted()).toBe(1);
+	});
+
+	it("opens a connection when the last migration was removed (stated limitation: no tip check)", async () => {
+		await writeTwoFileChain(cwd, "sha256:bbbb");
+		await rm(join(cwd, "migrations", "0002_b.sql"));
+		expect(await connectionAttempted()).toBe(1);
+	});
+
 	it("opens a connection when the first migration was removed (stated limitation: the root is taken as given)", async () => {
 		await writeTwoFileChain(cwd, "sha256:bbbb");
 		await rm(join(cwd, "migrations", "0001_a.sql"));

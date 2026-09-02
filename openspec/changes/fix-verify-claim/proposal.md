@@ -59,11 +59,13 @@ here: it adds a column to a durable object and a refusal path to
   position-keeping rename, an added hash-less file).
 - `migration-apply` — the requirement "Applying refuses a chain that
   does not verify, and reports what disagrees": `migrate` walks the same
-  chain, so its sentence and scenario take the same two root qualifiers
-  (the first migration's `parent-snapshot:` is taken as given; removing
-  the first migration passes the pre-flight), and a scenario states it.
-  Round 2 of the D106 review measured `migrate` opening its connection in
-  exactly those two cases.
+  chain — and only the chain: its pre-flight has no counterpart to
+  `verify`'s tip check, so both ends are outside its reach. Its sentence
+  and scenario now exclude the head (the root's `parent-snapshot:`, a
+  removed leading run) and the tail (the last `snapshot:` line, a removed
+  trailing run), and a scenario states it. Rounds 2 and 3 of the D106
+  review measured `migrate` opening its connection in exactly those four
+  cases; pins hold all four.
 
 ## Impact
 

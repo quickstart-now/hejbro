@@ -24,9 +24,11 @@ outside its reach include — this list names the measured ones, not
 every possible one — an edit to a migration's SQL body that leaves its
 hash lines intact, an edit to any other banner line (the summary lines,
 the `hejbro:` version line), a rename that keeps a file's sort position
-(no hash covers the filename), the removal of the first migration (the
-next file's own `parent-snapshot:` becomes the root and is taken as
-given), and a file added with no hash lines at all (the walk skips it,
+(no hash covers the filename), the removal of the first migration or of
+any leading run of migrations up to and including all of them (whatever
+file is first is the root, and its `parent-snapshot:` is taken as given;
+an empty directory has no tip to compare), and a file added with no
+hash lines at all (the walk skips it,
 though `verify`'s summary line still counts it among the migrations).
 Each of these SHALL pass `verify` unreported. The limit is stated so
 that nobody reads a passing `verify` as proof that applied SQL matches
@@ -52,9 +54,9 @@ needs a record of what was applied, which is a separate capability.
   intact, and `hejbro verify` runs
 - **THEN** it passes with exit code zero
 
-#### Scenario: Removing the first migration passes
-- **WHEN** the first migration of a chain is deleted and `hejbro verify`
-  runs
+#### Scenario: Removing a leading run of migrations passes
+- **WHEN** the first migration of a chain, or every migration, is deleted
+  and `hejbro verify` runs
 - **THEN** it passes with exit code zero
 
 #### Scenario: A rename that keeps a file's position passes

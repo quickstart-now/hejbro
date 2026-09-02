@@ -498,6 +498,18 @@ export const projects = table(app, "projects", {
 		expect(result.exitCode).toBe(0);
 	});
 
+	it("removing every migration passes (stated limitation: an empty directory has no tip to compare)", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(BASE_SCHEMA);
+		await runCli(cwd, ["generate"]);
+		const [only] = await migrationFileNames();
+		await rm(join(cwd, "migrations", only as string));
+
+		const result = await runCli(cwd, ["verify"]);
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("checks passed (0 migrations");
+	});
+
 	it("a rename that keeps a file's sort position passes (stated limitation: no hash covers the filename)", async () => {
 		await runCli(cwd, ["init"]);
 		await writeSchema(BASE_SCHEMA);

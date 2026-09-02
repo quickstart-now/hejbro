@@ -13,13 +13,19 @@ make. This is why the chain catches a hash-chain line edited, a file
 removed, or the order rearranged, but not a hand-edit to a migration's
 own SQL body: the chain was never a witness to that body, so a body edit
 is instead what the transaction-control refusal above exists to bound.
-The walk starts at the first hashed file and takes that file's own
-`parent-snapshot:` as given (cli-commands' `verify` requirement states
-the same root rule), so two mutations at the head of the chain are
-outside its reach and SHALL NOT be refused: an edit to the first
-migration's `parent-snapshot:` line, and the removal of the first
-migration itself — the next file becomes the root. Both pass the
-pre-flight and the connection is opened as for an intact chain.
+The pre-flight is the chain walk alone — each file's `parent-snapshot:`
+against the previous file's `snapshot:` — and nothing else: the apply
+path reads no snapshot file, so `verify`'s tip check (the last
+migration's `snapshot:` against the on-disk snapshot) is not part of it.
+That leaves both ends of the chain outside its reach, and the following
+SHALL NOT be refused: at the head, an edit to the first migration's
+`parent-snapshot:` line (the root is taken as given, the same rule
+cli-commands' `verify` states) and the removal of the first migration or
+of any leading run of migrations; at the tail, an edit to the last
+migration's `snapshot:` line and the removal of the last migration or
+of any trailing run. Each passes the pre-flight and the connection is
+opened as for an intact chain; `verify` is the command that sees the
+tail cases, through the snapshot.
 
 It SHALL also report where the chain and the ledger disagree, with each
 kind of disagreement carrying its own code and its own `Next:` line: a
@@ -29,16 +35,17 @@ these sends the reader somewhere no other one does, which is why they
 are told apart rather than reported as one condition.
 
 #### Scenario: An unverifiable chain opens no connection
-- **WHEN** a migration's hash-chain banner line other than the first
-  migration's `parent-snapshot:` has been edited, or a migration other
-  than the first has been removed, or the order has been rearranged, and
-  `migrate` runs
+- **WHEN** a hash-chain banner line other than the first migration's
+  `parent-snapshot:` and the last migration's `snapshot:` has been
+  edited, or a migration between the first and the last has been
+  removed, or the order has been rearranged, and `migrate` runs
 - **THEN** it fails naming the artifact whose hash no longer matches, no
   connection is opened, and no statement is sent to the database
 
-#### Scenario: A mutation at the chain root passes the pre-flight
-- **WHEN** the first migration's `parent-snapshot:` line has been edited,
-  or the first migration has been removed, and `migrate` runs
+#### Scenario: A mutation at either end of the chain passes the pre-flight
+- **WHEN** the first migration's `parent-snapshot:` line or the last
+  migration's `snapshot:` line has been edited, or the first or the last
+  migration has been removed, and `migrate` runs
 - **THEN** the chain pre-flight passes and the run proceeds to open its
   connection exactly as it would for an intact chain
 
