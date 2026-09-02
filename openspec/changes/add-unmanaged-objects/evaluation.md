@@ -2116,14 +2116,28 @@ expected), `check:next-marker` ok, `check:fixed-group` ok (7 packages),
 change needed), `smoke:pack-install` all 6 assertions ok. `openspec
 validate --strict` valid; `show --diff` reconfirmed once more:
 `deltaCount: 6` and `cli-commands` MODIFIED still exactly one entry,
-unchanged by this sub-round's code-only commit. Full-workspace `pnpm
-check` (biome) and `pnpm check-types` (turbo, every package) were not
-re-run in this sub-round without a fresh slot grant — scoped coverage
-exists instead (`biome check` on the 4 changed files, clean; `turbo run
-check-types --filter=@hejbro/core`/`--filter=hejbro`, clean, covering
-every package this sub-round actually touched) and the two
-full-workspace runs are deferred to the next slot rather than run
-outside one on a personal reading of scope.
+unchanged by this sub-round's code-only commit.
 
-**13 commits total this round now** (`6fc944b8` through `c8c97ceb`),
-still unpushed.
+**Full-workspace `check`/`check-types`, run to completion (two further
+slot grants, not deferred)**. `pnpm check` (root `biome check .`) is a
+single process, not a turbo fan-out — the ban list that had it flagged
+as heavy was the planner's own misclassification, corrected mid-round;
+it ran outside a slot once it was: 656 files clean, no fixes
+(2026-09-02T16:14:15Z–16:14:17Z). `pnpm check-types` (turbo, every
+package) genuinely does fan out and stayed gated behind a dedicated,
+single-command slot: `snapshotChanged` is a *required* field on a public
+result type, so any site building that type's object literal wholesale
+(a test's own fake result, most plausibly) would type-error at exactly
+that site and nowhere `pnpm test` — which does not type-check — could
+show it. Scoped coverage (`--filter=@hejbro/core`/`--filter=hejbro`,
+clean, run earlier without a slot) covered core and the CLI but not
+`@hejbro/query`/`@hejbro/supabase`/`@hejbro/neon`/`@hejbro/pg`/
+`@hejbro/nile`/`examples/*` — sites that consume `GenerateMigrationsResult`
+indirectly and were exactly the gap a full run closes. `TURBO_FORCE=1
+pnpm check-types` — **16/16 tasks successful, 0 cached (forced)** —
+every one of those packages included, zero type errors from the new
+field (2026-09-02T16:15:46Z–16:16:04Z, slot held, exactly one run, slot
+released immediately after). Neither run left the tree dirty.
+
+**14 commits total this round now** (`6fc944b8` through this section's
+own commit), still unpushed.
