@@ -84,6 +84,40 @@ export default defineConfig({
 });
 `;
 
+// D106 R2, R2-B2: the evaluator's own handover fixture (RLS + one policy +
+// a `serial()` primary key, `k1.widgets`), replayed through the real CLI
+// across separate runs -- the in-process pins (`generate.test.ts`'s
+// uo7/uo8) thread `firstResult.snapshot` straight into `secondResult`'s
+// `previousSnapshot` by hand, which is exactly what the shipped CLI
+// declined to do before this fix.
+const HANDOVER_MANAGED_SCHEMA_SOURCE = `import { literal, rls, schema, serial, table } from "hejbro";
+
+export const k1 = schema("k1");
+
+export const widgets = table(
+	k1,
+	"widgets",
+	{ id: serial().primaryKey() },
+	() => ({
+		rls: rls.enabled({
+			readLow: rls.policy("read_low").for("select").to("anon").using(literal(true)),
+		}),
+	}),
+);
+`;
+
+const HANDOVER_EXISTING_SCHEMA_SOURCE = `import { existingTable, schema, uuid } from "hejbro";
+
+export const k1 = schema("k1");
+
+export const widgets = existingTable("k1", "widgets", { id: uuid() });
+`;
+
+const HANDOVER_REMOVED_SCHEMA_SOURCE = `import { schema } from "hejbro";
+
+export const k1 = schema("k1");
+`;
+
 let cwd: string;
 
 beforeEach(async () => {
@@ -140,6 +174,83 @@ describe("hejbro generate (built CLI, tmp-dir)", () => {
 			"no changes — snapshot already matches your declarations.",
 		);
 		expect(await sqlFileNames()).toHaveLength(1);
+	});
+
+	it("an existing marker survives a real handover run on the on-disk snapshot (D106 R2, R2-B2 measurement ①)", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(HANDOVER_MANAGED_SCHEMA_SOURCE);
+		await runCli(cwd, ["generate"]);
+
+		await writeSchema(HANDOVER_EXISTING_SCHEMA_SOURCE);
+		const result = await runCli(cwd, ["generate"]);
+		expect(result.exitCode).toBe(0);
+		// cli-commands (this change's own MODIFIED delta, "A recorded
+		// declaration that emits nothing still writes the snapshot"): a run
+		// that moves the snapshot with no migration reports that, never the
+		// unqualified "already matches" line -- that line would now be
+		// false the moment this run's own write lands.
+		expect(result.stdout).toContain(
+			"no migration — snapshot updated to record the declared change.",
+		);
+
+		const snapshotText = await readFile(
+			join(cwd, "hejbro.snapshot.json"),
+			"utf8",
+		);
+		const snapshot = JSON.parse(snapshotText);
+		expect(snapshot.objects["table:k1.widgets"]).toMatchObject({
+			existing: true,
+		});
+	});
+
+	it("a run that later removes a handed-over table's declaration entirely never brings its drops back (D106 R2, R2-B2 measurement ②)", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(HANDOVER_MANAGED_SCHEMA_SOURCE);
+		await runCli(cwd, ["generate"]);
+
+		await writeSchema(HANDOVER_EXISTING_SCHEMA_SOURCE);
+		const handoverResult = await runCli(cwd, ["generate"]);
+		expect(handoverResult.exitCode).toBe(0);
+
+		await writeSchema(HANDOVER_REMOVED_SCHEMA_SOURCE);
+		const removedResult = await runCli(cwd, ["generate"]);
+		expect(removedResult.exitCode).toBe(0);
+
+		// Neither the handover run nor the declaration-removal run after it
+		// emits any DDL for k1.widgets -- if either had, a second migration
+		// file would exist alongside the original `create table` one. The
+		// file count alone already proves it; the destructive-drop greps
+		// below (evaluation.md's own consequence 2 text, exact statements)
+		// rule out the one false positive a bare "drop" substring search
+		// would catch -- `create policy`'s own idempotent
+		// `drop policy if exists` guard, present in the original file too.
+		const fileNames = await sqlFileNames();
+		expect(fileNames).toHaveLength(1);
+		const [onlyFileName] = fileNames;
+		const onlyFileText = await readFile(
+			join(cwd, "migrations", onlyFileName as string),
+			"utf8",
+		);
+		expect(onlyFileText).not.toContain('drop policy "read_low"');
+		expect(onlyFileText).not.toContain("drop sequence");
+		expect(onlyFileText).not.toContain("disable row level security");
+		expect(onlyFileText).not.toContain("drop table");
+
+		// Removing the declaration entirely still moves the snapshot (the
+		// entry itself drops out, since nothing declares the table any
+		// longer) even though it emits no statement -- the same "snapshot
+		// differs, no migration" case as the handover run before it, so it
+		// gets the same report line, not "already matches".
+		expect(removedResult.stdout).toContain(
+			"no migration — snapshot updated to record the declared change.",
+		);
+		const finalSnapshotText = await readFile(
+			join(cwd, "hejbro.snapshot.json"),
+			"utf8",
+		);
+		expect(
+			JSON.parse(finalSnapshotText).objects["table:k1.widgets"],
+		).toBeUndefined();
 	});
 
 	// #26/#136 (identity fix, item 21 of phase8-snapshot-v5) originally

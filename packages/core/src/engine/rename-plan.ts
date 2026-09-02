@@ -12,6 +12,7 @@ import { partitionConfirmDrops, partitionRenameSpecs } from "./rename/claims";
 import {
 	computeSchemaTableSets,
 	computeTableColumnSets,
+	excludeExisting,
 	tableEntries,
 	tableRenamePairings,
 } from "./rename/snapshot-sets";
@@ -43,8 +44,10 @@ export const planRenames = (options: {
 	readonly declaredAtByIdentity: ReadonlyMap<string, string | null>;
 }): RenamePlan =>
 	guardSnapshotRead("planning renames from the on-disk snapshot", () => {
-		const previousTables = tableEntries(options.previous.objects);
-		const nextTables = tableEntries(options.next.objects);
+		const previousTables = excludeExisting(
+			tableEntries(options.previous.objects),
+		);
+		const nextTables = excludeExisting(tableEntries(options.next.objects));
 		const schemaTableSets = computeSchemaTableSets(previousTables, nextTables);
 		const renamedPairings = tableRenamePairings(
 			options.renames,

@@ -1,17 +1,22 @@
 import { describe, expect, it } from "vitest";
 import {
+	buildSnapshot,
+	createDefaultRegistry,
 	defineView,
 	emptySnapshot,
 	eq,
 	existingTable,
 	exists,
 	generateMigration,
+	getTableMeta,
 	rls,
 	schema,
 	select,
 	table,
 	uuid,
 } from "../src/index";
+import type { TableSnapshot } from "../src/kinds/table-snapshot";
+import { tableExisting } from "../src/kinds/table-snapshot";
 
 describe("existingTable", () => {
 	const authUsers = existingTable("auth", "users", { id: uuid() });
@@ -42,15 +47,42 @@ describe("existingTable", () => {
 		);
 	});
 
-	it("hard-errors when passed as a declaration", () => {
-		expect(() =>
-			generateMigration({
-				declarations: [authUsers],
-				previousSnapshot: emptySnapshot,
-			}),
-		).toThrowError(
-			expect.objectContaining({ code: "existing-table-declared" }),
+	it("produces no migration when passed as a declaration (add-unmanaged-objects)", () => {
+		const result = generateMigration({
+			declarations: [authUsers],
+			previousSnapshot: emptySnapshot,
+		});
+		expect(result.hasChanges).toBe(false);
+		expect(result.sql).toBe("");
+		expect(result.snapshot.objects["table:auth.users"]).toMatchObject({
+			existing: true,
+		});
+	});
+
+	it("records an existing table as such, with its declared columns", () => {
+		const registry = createDefaultRegistry();
+		const snapshot = buildSnapshot(
+			[app, getTableMeta(authUsers)],
+			registry,
+			emptySnapshot,
 		);
+		const node = snapshot.objects["table:auth.users"];
+		expect(node).toMatchObject({
+			schema: "auth",
+			name: "users",
+			columns: [expect.objectContaining({ name: "id" })],
+			existing: true,
+		});
+
+		const profiles = table(app, "profiles", { id: uuid().primaryKey() });
+		const managedSnapshot = buildSnapshot(
+			[app, getTableMeta(profiles)],
+			registry,
+			emptySnapshot,
+		);
+		const managedNode = managedSnapshot.objects["table:app.profiles"];
+		expect(managedNode).not.toHaveProperty("existing");
+		expect(tableExisting(node as TableSnapshot)).toBe(true);
 	});
 });
 

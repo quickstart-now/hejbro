@@ -1,3 +1,4 @@
+import type { FunctionDeclaration } from "../dsl/define-function";
 import type { TriggerDeclaration } from "../dsl/define-trigger";
 import type { GrantSetDeclaration } from "../dsl/grant";
 import type { DeclaredTable, Table, TableDeclaration } from "../dsl/table";
@@ -63,6 +64,34 @@ const isGrantSetDeclaration = (
 ): declaration is GrantSetDeclaration =>
 	declaration.declarationKind === "grant-set";
 
+const isFunctionDeclaration = (
+	declaration: HejbroDeclaration,
+): declaration is FunctionDeclaration =>
+	declaration.declarationKind === "function";
+
+/**
+ * The function sibling of {@link resolveTableDeclarations}'s single
+ * chokepoint (#587/G3): a synthesized `FunctionDeclaration` handed to
+ * `generateMigration` used to be silently ACCEPTED, producing an
+ * empty-body function migration — no refusal existed at all before this.
+ * Keyed on `meta.authority === "usage"` only, mirroring the table guard's
+ * own rule exactly: absence (every real `defineFunction()`/
+ * `defineTrigger()` call, which never sets this field) must never trip
+ * this, only a hand-built or synthesized `"usage"`-tagged value does.
+ */
+const resolveFunctionDeclaration = (
+	meta: FunctionDeclaration,
+): ReadonlyArray<HejbroDeclaration> => {
+	if (meta.authority === "usage") {
+		return throwHejbroError(
+			"synced-function-declared",
+			`function "${meta.schemaName}"."${meta.functionName}" carries no migration authority — for example, a module obtained from a database this repository does not own. Next: declare it with defineFunction() in the repository that owns its schema, or remove it from the declarations list if this repository doesn't own that schema.`,
+			meta.declaredAt,
+		);
+	}
+	return [meta];
+};
+
 /**
  * Synthesizes one `SequenceDeclaration` per `serial`/`smallserial`/
  * `bigserial` column on `meta` (#23/D66) — there is no `defineSequence()`
@@ -98,13 +127,12 @@ const isTableDeclaration = (input: AnyInput): input is TableDeclaration =>
 const resolveTableDeclarations = (
 	meta: TableDeclaration,
 ): ReadonlyArray<HejbroDeclaration> => {
-	if (meta.existing) {
-		return throwHejbroError(
-			"existing-table-declared",
-			`existingTable("${meta.schema.schemaName}", "${meta.tableName}") is reference-only — it describes an existing table and must not be passed to generateMigration. Next: remove it from the declarations list (managed tables are declared with table()).`,
-			meta.declaredAt,
-		);
-	}
+	// add-unmanaged-objects: `meta.existing` no longer refuses here — an
+	// `existingTable()` declaration is accepted and flows through to the
+	// snapshot (`existingField`, kinds/table-kind.ts), producing no
+	// statement (the guard moves to `tableKind.diff`). "existing-table-
+	// declared" stays a registered code (`error.ts`'s codes are a plain
+	// string, not a static union) with no live raise site.
 	// The single chokepoint for the absent-authority refusal (D87
 	// polyrepo-sync): keyed on `meta.authority === "usage"` only, never on
 	// `!== "declared"` — a hand-assembled `TableDeclaration` that bypasses
@@ -117,9 +145,24 @@ const resolveTableDeclarations = (
 	if (meta.authority === "usage") {
 		return throwHejbroError(
 			"synced-table-declared",
-			`table "${meta.schema.schemaName}"."${meta.tableName}" carries no migration authority — for example, a module obtained from a database this repository does not own. Next: declare it with table() in the repository that owns its schema, or remove it from the declarations list if this repository doesn't own that schema.`,
+			`table "${meta.schema.schemaName}"."${meta.tableName}" carries no migration authority — for example, a module obtained from a database this repository does not own. Next: declare it with table() (if this repository owns its DDL) or existingTable() (if it only owns the table's shape) in the repository that owns its schema, or remove it from the declarations list if this repository doesn't own that schema.`,
 			meta.declaredAt,
 		);
+	}
+	// D106 R1, B1/B1-removal: an existing declaration fans out into
+	// nothing — no synthesized sequence, no rls/policy attachment — so a
+	// table hejbro does not own never gains a hejbro-declared sequence or
+	// policy in the first place. The guard sits here, at declaration
+	// expansion, not in `tableKind.diff`: that guard only ever saw the
+	// table node itself, never the objects a table fans out into, which
+	// is exactly the gap D106 found (evaluation.md, B1). A managed↔
+	// existing handover for a table that already has these objects is a
+	// separate question (B2, held pending a diff-engine design ruling —
+	// this guard does not touch that path, since the objects being
+	// suppressed here never existed in a previous snapshot to diff
+	// against).
+	if (meta.existing) {
+		return [meta];
 	}
 	const sequences = synthesizeSequenceDeclarations(meta);
 	if (meta.rls === null) {
@@ -129,14 +172,39 @@ const resolveTableDeclarations = (
 };
 
 /**
- * Resolves one `HejbroInput` into the declaration(s) it contributes to the
- * snapshot. A `defineTrigger` declaration expands into its own function
- * declaration plus itself — `[functionDeclaration, triggerDeclaration]` —
- * so the function it creates lands in the snapshot without a separate
+ * {@link resolveDeclarations}'s non-table branch, split out to keep each
+ * function's own complexity under the CRAP gate (#587/G3 — adding the
+ * function-authority guard as a fifth branch on the un-split function
+ * pushed it from complexity 5 to 6, over the ratchet at full coverage).
+ * A `defineTrigger` declaration expands into its own function declaration
+ * plus itself — `[functionDeclaration, triggerDeclaration]` — so the
+ * function it creates lands in the snapshot without a separate
  * `defineFunction` call. A `grant(...).to(...)` `grant-set` expands into
- * its per-role `GrantDeclaration`s (D28 fan-out). A `table()` with any
- * `serial`-family columns similarly expands into one `SequenceDeclaration`
- * per such column (#23/D66) — see {@link resolveTableDeclarations}.
+ * its per-role `GrantDeclaration`s (D28 fan-out). A plain function
+ * declaration routes through {@link resolveFunctionDeclaration}'s own
+ * authority guard.
+ */
+const resolveNonTableDeclaration = (
+	input: HejbroDeclaration,
+): ReadonlyArray<HejbroDeclaration> => {
+	if (isTriggerDeclaration(input)) {
+		return [input.functionDeclaration, input];
+	}
+	if (isGrantSetDeclaration(input)) {
+		return input.grants;
+	}
+	if (isFunctionDeclaration(input)) {
+		return resolveFunctionDeclaration(input);
+	}
+	return [input];
+};
+
+/**
+ * Resolves one `HejbroInput` into the declaration(s) it contributes to the
+ * snapshot. A `table()` with any `serial`-family columns expands into one
+ * `SequenceDeclaration` per such column (#23/D66) — see
+ * {@link resolveTableDeclarations}. Everything else routes through
+ * {@link resolveNonTableDeclaration}.
  */
 const resolveDeclarations = (
 	input: AnyInput,
@@ -147,13 +215,7 @@ const resolveDeclarations = (
 	if (isTableDeclaration(input)) {
 		return resolveTableDeclarations(input);
 	}
-	if (isTriggerDeclaration(input)) {
-		return [input.functionDeclaration, input];
-	}
-	if (isGrantSetDeclaration(input)) {
-		return input.grants;
-	}
-	return [input];
+	return resolveNonTableDeclaration(input);
 };
 
 type GenerateMigrationOptions = {
@@ -211,6 +273,16 @@ export type GenerateMigrationsResult = {
 	/** `[]` when nothing changed, one entry for an ordinary run, two for a run `generateMigration` itself would have refused (spec: "more than one only where Postgres's own transaction semantics require a boundary"). */
 	readonly migrations: ReadonlyArray<GeneratedMigration>;
 	readonly hasChanges: boolean;
+	/**
+	 * [D106 R2, R2-B2] The state this run reached, present unconditionally
+	 * (blocked, no-DDL, or ordinary) — matching {@link GenerateMigrationResult}'s
+	 * own unconditional `snapshot`. `hasChanges` only tracks whether there is
+	 * DDL to emit; an existing-table marker change (handover/adoption/rename)
+	 * can differ this from `previousSnapshot` with `hasChanges` still `false`
+	 * (nothing to diff into a statement), and a caller that only checked
+	 * `hasChanges` before this field existed had no way to notice.
+	 */
+	readonly snapshot: Snapshot;
 	readonly errors: ReadonlyArray<HejbroError>;
 	readonly ambiguities: ReadonlyArray<RenameAmbiguity>;
 	readonly warnings: ReadonlyArray<Diagnostic>;
@@ -538,6 +610,7 @@ export const generateMigrations = (
 		return {
 			migrations: [],
 			hasChanges: false,
+			snapshot: pipeline.snapshot,
 			errors: pipeline.errors,
 			ambiguities: pipeline.ambiguities,
 			warnings: pipeline.warnings,
@@ -547,6 +620,7 @@ export const generateMigrations = (
 		return {
 			migrations: [],
 			hasChanges: false,
+			snapshot: pipeline.snapshot,
 			errors: [],
 			ambiguities: [],
 			warnings: pipeline.warnings,
@@ -582,6 +656,7 @@ export const generateMigrations = (
 	return {
 		migrations,
 		hasChanges: true,
+		snapshot: pipeline.snapshot,
 		errors: [],
 		ambiguities: [],
 		warnings: pipeline.warnings,

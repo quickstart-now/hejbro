@@ -23,7 +23,7 @@ SQL) and **declare → typed queries** (the same declarations drive a typed
 9. `db.as(context)` runs statements under an explicit role/session context (RLS); a role outside the declared whitelist fails immediately, before anything reaches the database.
 10. `db(schema, driver, { context })` registers a resolver instead: every execution surface applies the resolved context automatically. An explicit `db.as(context)` still always wins and never calls the resolver; a throwing resolver propagates unchanged rather than running uncontexted.
 11. A repository that doesn't declare the schema it queries gets types from a committed, generated `contract.ts` (`link`/`vendor`), never from declarations directly — except inside the *same* workspace, where importing the declaring package (an alias) is correct and `link`/`vendor` would be an unnecessary detour. See `references/polyrepo.md`.
-12. `table()` returns `DeclaredTable`, not the general `Table` type — an existing declaration explicitly annotated `: Table` that no longer satisfies something requiring a real declaration (e.g. `generateMigration`) just needs that annotation removed or narrowed to `DeclaredTable`.
+12. `table()` returns `DeclaredTable`, not the general `Table` type — an existing declaration explicitly annotated `: Table` that no longer satisfies something requiring a real declaration (e.g. `generateMigration`, imported from `@hejbro/core` — the `hejbro` barrel carries the declaration and query vocabulary only, never the engine) just needs that annotation removed or narrowed to `DeclaredTable`.
 
 ## References
 

@@ -5,8 +5,12 @@ import type { Snapshot } from "@hejbro/core";
  * embedded snapshot's `formatVersion` (schema-export spec, "The export
  * records the formats it is written in": the two move independently, so
  * a reader that cannot tell them apart would misjudge one when the
- * other changed). Bump this when `ExportDescription`'s own shape
- * changes, never when the snapshot format changes underneath it.
+ * other changed). Bump this when an older reader would misread the
+ * description, never merely when a field is added: `validate-export.ts`'s
+ * reader refuses a newer format wholesale, so bumping for a purely
+ * additive field would refuse an older toolchain an export it could
+ * actually still read past. Never bump for the snapshot format changing
+ * underneath it, either — that is `snapshotFormat`'s own field.
  */
 export const EXPORT_DESCRIPTION_FORMAT = 1;
 

@@ -63,6 +63,9 @@ importers:
 
   examples/postgres:
     dependencies:
+      '@hejbro/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@hejbro/pg':
         specifier: workspace:*
         version: link:../../packages/pg
@@ -98,6 +101,9 @@ importers:
 
   examples/supabase:
     dependencies:
+      '@hejbro/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@hejbro/supabase':
         specifier: workspace:*
         version: link:../../packages/supabase

@@ -1,6 +1,13 @@
 import type { ExportPayload } from "../export/write";
+import type { FunctionClientMeta, FunctionComputation } from "./functions";
+import {
+	buildFunctionClientMeta,
+	computeFunctions,
+	renderFunctionEntry,
+} from "./functions";
+import type { ContractEnumFact } from "./read-snapshot";
 import { enumsInSnapshot, tablesInSnapshot } from "./read-snapshot";
-import type { TableComputation } from "./tables";
+import type { TableClientMeta, TableComputation } from "./tables";
 import {
 	buildEnumLookup,
 	buildTableClientMeta,
@@ -9,19 +16,24 @@ import {
 } from "./tables";
 import { enumUnion } from "./ts-type";
 
+type EnumLookup = (schema: string, name: string) => ContractEnumFact | null;
+
 /**
  * Every exported table fact computed exactly once (6.1's condition ②) —
  * `renderDatabaseInterface` and `renderMetadata` both render from this
  * same array, so the `Database` interface and `contractMetadata.tables`
  * can never disagree about which tables exist or what either carries. A
  * table fact with no matching snapshot node is dropped, not guessed at.
+ * `enumLookup` is built once by the caller and passed in (extended by
+ * #587 to `computeFunctions` too), never rebuilt here, for the same
+ * "exactly once" reason.
  */
 const computeTables = (
 	payload: ExportPayload,
+	enumLookup: EnumLookup,
 ): ReadonlyArray<TableComputation> => {
 	const snapshot = payload.snapshot;
 	const tables = tablesInSnapshot(snapshot);
-	const enumLookup = buildEnumLookup(enumsInSnapshot(snapshot));
 	return payload.tables
 		.map((fact) => {
 			const table = tables.find(
@@ -106,22 +118,34 @@ const renderEnumEntry = (fact: {
 }): string => `\t${JSON.stringify(fact.name)}: ${enumUnion(fact.values)};`;
 
 /**
- * The `Database` interface's own `Views`/`Functions` sections — always
- * present, always empty, in this version: R2-G2's own 2.8 decision
- * carries no view column types and no function signatures in the
- * export, so there is nothing to emit here yet. `Record<string, never>`
- * (never omitting the key entirely) is what tells a reader "not carried
- * by this version" apart from "this schema genuinely has none" — the
- * distinction the delta's own type-layer requirement never promises to
- * make on its own.
+ * The `Database` interface's own `Views` section — always present, always
+ * empty, in this version: R2-G2's own 2.8 decision carries no view column
+ * types in the export, so there is nothing to emit here yet.
+ * `Record<string, never>` (never omitting the key entirely) is what tells
+ * a reader "not carried by this version" apart from "this schema
+ * genuinely has none".
  */
-const EMPTY_SECTION =
-	'\t// R2-G2 2.8: view column types and function signatures are not carried\n\t// by the export yet — this is "not supported", not "none declared".\n\t[key: string]: never;';
+const VIEWS_EMPTY_SECTION =
+	'\t// R2-G2 2.8: view column types are not carried by the export yet — this\n\t// is "not supported", not "none declared".\n\t[key: string]: never;';
+
+/** `{}` when no function carries an export name (#587) — distinct from `Views`' own marker: this schema genuinely exports no function, not "not carried by this version". */
+const renderFunctionsSection = (
+	functions: ReadonlyArray<FunctionComputation>,
+): string => {
+	if (functions.length === 0) {
+		return "\treadonly Functions: {};";
+	}
+	const entries = functions.map(renderFunctionEntry).join("\n");
+	return `\treadonly Functions: {
+${entries}
+\t};`;
+};
 
 /** Renders the `Database` interface's full source (5.1's own settled shape: `Tables`/`Views`/`Functions`/`Enums`, mirroring Supabase's own generated type). */
 const renderDatabaseInterface = (
 	payload: ExportPayload,
 	tables: ReadonlyArray<TableComputation>,
+	functions: ReadonlyArray<FunctionComputation>,
 ): string => {
 	const enums = enumsInSnapshot(payload.snapshot);
 	const tableEntries = tables.map(renderTableEntry).join("\n");
@@ -131,15 +155,21 @@ const renderDatabaseInterface = (
 ${tableEntries}
 	};
 	readonly Views: {
-${EMPTY_SECTION}
+${VIEWS_EMPTY_SECTION}
 	};
-	readonly Functions: {
-${EMPTY_SECTION}
-	};
+${renderFunctionsSection(functions)}
 	readonly Enums: {
 ${enumEntries}
 	};
 }`;
+};
+
+/** `\t\t\texisting: true,\n` for an existing table's meta entry, else `""` (compact, no ternary — mirrors core's own `existingField`-style helpers) — add-unmanaged-objects, 3.1. */
+const existingMetaLine = (meta: TableClientMeta): string => {
+	if (meta.existing !== true) {
+		return "";
+	}
+	return "\t\t\texisting: true,\n";
 };
 
 const renderTableClientMetaEntry = (computation: TableComputation): string => {
@@ -165,6 +195,33 @@ ${columns}
 \t\t\tforeignKeys: [
 ${foreignKeys}
 \t\t\t],
+${existingMetaLine(meta)}\t\t},`;
+};
+
+const renderFunctionReturnsMetaValue = (
+	returns: FunctionClientMeta["returns"],
+): string => {
+	if (returns.kind === "scalar") {
+		return `{ kind: "scalar", typeNode: ${JSON.stringify(returns.typeNode)}, mode: ${JSON.stringify(returns.mode)} }`;
+	}
+	return `{ kind: "table", schema: ${JSON.stringify(returns.schema)}, name: ${JSON.stringify(returns.name)} }`;
+};
+
+const renderFunctionClientMetaEntry = (fn: FunctionComputation): string => {
+	const meta = buildFunctionClientMeta(fn);
+	const args = meta.args
+		.map(
+			(arg) =>
+				`\t\t\t\t{ key: ${JSON.stringify(arg.key)}, sqlName: ${JSON.stringify(arg.sqlName)}, typeNode: ${JSON.stringify(arg.typeNode)}, mode: ${JSON.stringify(arg.mode)}, notNullElements: ${JSON.stringify(arg.notNullElements)} },`,
+		)
+		.join("\n");
+	return `\t\t${JSON.stringify(fn.exportName)}: {
+\t\t\tschema: ${JSON.stringify(meta.schema)},
+\t\t\tname: ${JSON.stringify(meta.name)},
+\t\t\targs: [
+${args}
+\t\t\t],
+\t\t\treturns: ${renderFunctionReturnsMetaValue(meta.returns)},
 \t\t},`;
 };
 
@@ -208,13 +265,20 @@ const renderMetadata = (
 	origin: ContractOrigin,
 	roles: ReadonlyArray<string>,
 	tables: ReadonlyArray<TableComputation>,
+	functions: ReadonlyArray<FunctionComputation>,
 ): string => {
 	const tableEntries = tables.map(renderTableClientMetaEntry).join("\n");
+	const functionEntries = functions
+		.map(renderFunctionClientMetaEntry)
+		.join("\n");
 	return `export const contractMetadata = {
 ${renderOriginFields(origin)}
 \troles: [${roles.map((role) => JSON.stringify(role)).join(", ")}] as const,
 \ttables: {
 ${tableEntries}
+\t},
+\tfunctions: {
+${functionEntries}
 \t},
 } as const;`;
 };
@@ -247,11 +311,13 @@ export const emitContract = (
 	payload: ExportPayload,
 	origin: ContractOrigin,
 ): string => {
-	const tables = computeTables(payload);
+	const enumLookup = buildEnumLookup(enumsInSnapshot(payload.snapshot));
+	const tables = computeTables(payload, enumLookup);
+	const functions = computeFunctions(payload, tables, enumLookup);
 	return `${renderHeader(origin)}
-${renderDatabaseInterface(payload, tables)}
+${renderDatabaseInterface(payload, tables, functions)}
 
-${renderMetadata(origin, payload.roles, tables)}
+${renderMetadata(origin, payload.roles, tables, functions)}
 
 ${CREATE_DB_FACTORY}
 `;

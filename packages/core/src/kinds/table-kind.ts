@@ -29,7 +29,12 @@ import type {
 	IndexSnapshot,
 	TableSnapshot,
 } from "./table-snapshot";
-import { asTableSnapshot, tableChecks, tableIdentity } from "./table-snapshot";
+import {
+	asTableSnapshot,
+	tableChecks,
+	tableExisting,
+	tableIdentity,
+} from "./table-snapshot";
 
 /** Derives an index's default name from its owning table and columns — shared with `engine/rename-plan.ts`'s drift guard (Phase 5). */
 export const deriveIndexName = (
@@ -477,6 +482,16 @@ const primaryKeyNameField = (
 	return { primaryKeyName: derivePrimaryKeyName(declaration.tableName) };
 };
 
+/** `{ existing: true }` for an `existingTable()` declaration, else `{}` (compact snapshot, add-unmanaged-objects) — sourced from `declaration.existing`, the same flag `existingTable()` already sets. */
+const existingField = (
+	declaration: TableDeclaration,
+): Pick<TableSnapshot, "existing"> => {
+	if (!declaration.existing) {
+		return {};
+	}
+	return { existing: true };
+};
+
 const isEmptyKeyedDiff = <TValue>(diff: KeyedDiff<TValue>): boolean =>
 	diff.added.length === 0 &&
 	diff.removed.length === 0 &&
@@ -549,6 +564,10 @@ const isEmptyTableFieldDiffs = (diffs: TableFieldDiffs): boolean =>
 	isEmptyKeyedDiff(diffs.foreignKeyDiff) &&
 	isEmptyKeyedDiff(diffs.checkDiff);
 
+/** `true` when `node` is a table snapshot node marked existing — `null` (the table absent on that side) is never existing (add-unmanaged-objects). The DDL-blocking guard `tableKind.diff` opens with: an existing table on *either* side of a diff emits nothing, before create/drop/alter is even considered. */
+const isExistingSide = (node: JsonValue | null): boolean =>
+	node !== null && tableExisting(asTableSnapshot(node));
+
 /** One banner note per added/dropped/changed entry across all four of `diffs`' fields (#154 ratchet-5, see tableFieldDiffs). */
 const tableFieldDiffNotes = (diffs: TableFieldDiffs): ReadonlyArray<string> => [
 	...buildNotes("column", diffs.columnDiff),
@@ -598,12 +617,25 @@ export const tableKind: ObjectKind<TableDeclaration> = {
 		foreignKeys: serializeForeignKeys(declaration),
 		...checksField(serializeChecks(declaration)),
 		...primaryKeyNameField(declaration),
+		...existingField(declaration),
 	}),
 	identify: (snapshot) => {
 		const tableSnapshot = asTableSnapshot(snapshot);
 		return tableIdentity(tableSnapshot.schema, tableSnapshot.name);
 	},
 	diff: (previous, next, identity) => {
+		// D106 R2: the table's own contract is bidirectional silence —
+		// existing on *either* side suppresses a drop (handover) or a
+		// create (adoption) alike, unlike the objects it fans out into
+		// (`sequenceKind`/`rlsKind`/`policyKind`'s own `ownerTableIdentity`,
+		// `engine/diff-engine.ts`'s `ownerIsExisting`), which the J10
+		// ruling deliberately keyed on `next` alone so adoption still
+		// creates what the declaration now manages. Two different
+		// contracts, not one duplicated — this guard stays, and
+		// `tableKind` does not implement `ownerTableIdentity`.
+		if (isExistingSide(previous) || isExistingSide(next)) {
+			return [];
+		}
 		const guard = createOrDropDiff("table", previous, next, identity);
 		if (guard.done) {
 			return guard.changes;

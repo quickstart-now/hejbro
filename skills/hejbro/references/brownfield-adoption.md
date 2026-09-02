@@ -108,6 +108,11 @@ tables inside your declared schemas that no declaration covers, and the
 database's installed extensions — informational only, never a `check`
 finding and never affecting the exit code.
 
+hejbro does not manage a table for one of two reasons — no declaration
+covers it at all (`check`'s own inventory, above), or a declaration
+covers it with `existingTable()` (never in the inventory) — and the two
+are never the same table twice: the section below is the second one.
+
 Before `check` existed, the general technique was to apply the generated
 migration to a scratch database (empty, disposable), take a schema dump
 of it, and compare that dump against a schema dump of the real database
@@ -120,23 +125,42 @@ exists to answer for your own project.
 
 ## Deciding what to manage
 
-`existingTable(schemaName, tableName, columns)` (D41,
-`packages/core/src/dsl/existing-table.ts`) is a reference-only table: it
-can be an FK target, used in `exists()`, and joined against, but it is
-never passed to `generateMigration`, never diffed, and never emitted —
-passing one as a declaration is the hard error `existing-table-declared`.
-It exists for tables that stay permanently outside hejbro's management
-(Supabase's `authUsers` is the shipped example) — it is not a staging
-step toward later full management of that table. The adoption choice per
-table is binary and made once: declare it with `table()` (hejbro now
-owns its DDL going forward) or reference it with `existingTable()`
-(hejbro never touches it, only reads its shape for typing/FK purposes).
+`existingTable(schemaName, tableName, columns)` (D41, amended by
+add-unmanaged-objects #605, `packages/core/src/dsl/existing-table.ts`)
+declares a table for its shape, never for its DDL: it can be an FK
+target, used in `exists()`, and joined against — and, since #605, it is
+also a real top-level declaration in its own right. Exported from a
+schema file the same way a `table()` is, it reaches the snapshot (marked
+`existing: true`), the export description, and a vendored contract's
+`Tables` entry, exactly like a managed table's shape does. As long as a
+table stays declared `existingTable()`, `generateMigration` diffs
+nothing about *that table's own identity* against it and emits no
+statement for it, on any run (D106 R2, R2-B1: this includes a run that
+changes its declared columns, renames it, or removes the declaration
+entirely — none of these produce DDL naming that table, and none of
+them can be blocked into refusing an unrelated managed change in the
+same schema either). It exists for tables that stay outside hejbro's
+management for as long as they're declared this way (Supabase's
+`authUsers` is the shipped example).
+
+Since #605, the choice is not permanent: replacing a managed `table()`
+declaration with an `existingTable()` of the same identity hands the
+table to the platform and emits nothing at all, for the table or for
+anything hejbro managed on it (its sequences, its row-level security,
+its policies). The reverse — replacing an `existingTable()` with a
+managed `table()` of the same identity — **adopts** it: no `create
+table` is emitted for the table itself (it already exists), but
+everything the new declaration manages on it (a serial column's
+sequence, row-level security, its policies) is created exactly as it
+would be for any other managed table. Declaring a schema's tables with
+`table()`/`existingTable()` no longer has to stay a bare, unexported
+reference to work this way, the difference from before #605.
 
 ```ts
 import { existingTable, text, uuid } from "hejbro";
 
-// Permanently unmanaged — never passed to generateMigration, never diffed.
-const legacyCustomers = existingTable("public", "legacy_customers", {
+// Permanently unmanaged — declared for its shape, never diffed or emitted.
+export const legacyCustomers = existingTable("public", "legacy_customers", {
 	id: uuid().primaryKey(),
 	email: text().notNull(),
 });
@@ -233,7 +257,7 @@ shape.
   snapshot-only, no live connection), `packages/cli/src/commands/verify.ts`
   (the five file-only checks, and `readBaselineFileNames`, which reads
   the `-- baseline:` marker for `migrate`), `packages/core/src/dsl/existing-table.ts`
-  (`existingTable`, `existing-table-declared`), `packages/cli/src/commands/check.ts`
+  (`existingTable`), `packages/cli/src/commands/check.ts`
   (the three-way exit code, the coverage-boundary statement, the
   inventory section), `packages/cli/src/check/catalog.ts` (the read-only
   catalog queries), `packages/cli/src/check/driver.ts` (`--url`/
@@ -250,6 +274,13 @@ shape.
   own builders, the undeclarable-name-column exclusion, the cycle-safe
   handle), `packages/cli/src/commands/pull.ts` (the database fallback,
   writing where `vendor` writes).
+- Where an `existingTable()` declaration itself is handled: the
+  snapshot marker (`packages/core/src/kinds/table-snapshot.ts`'s
+  `existing?: true`, read via `tableExisting`) and the DDL-blocking
+  guard it feeds (`packages/core/src/kinds/table-kind.ts`'s
+  `isExistingSide`, opening `tableKind.diff`) — the two together are
+  why declaring one is never a hard error and never produces a
+  migration, add-unmanaged-objects (#605).
 - Gates: every path cited above is checked by
   `packages/skills/test/links.test.ts`; the `ts` block on this page is
   type-checked against this repo's real source by

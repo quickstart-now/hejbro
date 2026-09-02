@@ -41,9 +41,20 @@ const isGrantDeclaration = (
 	declaration: HejbroDeclaration,
 ): declaration is GrantDeclaration => declaration.declarationKind === "grant";
 
-const isTableDeclaration = (
+/**
+ * A table this repository manages — excludes an `existingTable()`
+ * declaration (add-unmanaged-objects, J6-2): every one of this predicate's
+ * three call sites (tenant-aware serial/identity/primary-key refusals)
+ * judges DDL Nile would have to run, and an existing table's is never
+ * run. Named for what it excludes, not just what it matches — a plain
+ * `isTableDeclaration` that quietly excluded existing tables would lie
+ * about its own name.
+ */
+const isManagedTableDeclaration = (
 	declaration: HejbroDeclaration,
-): declaration is TableDeclaration => declaration.declarationKind === "table";
+): declaration is TableDeclaration =>
+	declaration.declarationKind === "table" &&
+	(declaration as TableDeclaration).existing !== true;
 
 /**
  * The two evidence-grade clauses every message below ends with (task 4.6,
@@ -241,7 +252,7 @@ const isTenantAwareTable = (table: TableDeclaration): boolean =>
  */
 export const nileSerialValidator: Validator = (_snapshot, declarations) =>
 	declarations
-		.filter(isTableDeclaration)
+		.filter(isManagedTableDeclaration)
 		.filter(isTenantAwareTable)
 		.flatMap(
 			(table): ReadonlyArray<Diagnostic> =>
@@ -286,7 +297,7 @@ export const nileTenantPrimaryKeyValidator: Validator = (
 	declarations,
 ) =>
 	declarations
-		.filter(isTableDeclaration)
+		.filter(isManagedTableDeclaration)
 		.filter(isTenantAwareTable)
 		.flatMap((table): ReadonlyArray<Diagnostic> => {
 			const primaryKeyColumns = table.columns.filter(
@@ -335,7 +346,7 @@ const identityMessage = (
  */
 export const nileIdentityValidator: Validator = (_snapshot, declarations) =>
 	declarations
-		.filter(isTableDeclaration)
+		.filter(isManagedTableDeclaration)
 		.filter(isTenantAwareTable)
 		.flatMap(
 			(table): ReadonlyArray<Diagnostic> =>

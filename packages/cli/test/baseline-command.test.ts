@@ -34,6 +34,25 @@ export const posts = table(app, "posts", {
 });
 `;
 
+// D106 R1, N6: `baseline` shares its diff path with `generate`
+// (`commands/generate.ts`'s `runGenerate`, both modes call the identical
+// `generateMigrations`) -- this fixture pins the observable half of that
+// claim directly, since no ADDED requirement named `baseline` at all
+// (evaluation.md).
+const SCHEMA_WITH_EXISTING_SOURCE = `import { existingTable, schema, table, text, uuid } from "hejbro";
+
+export const app = schema("app");
+
+export const legacyCustomers = existingTable("app", "legacy_customers", {
+	id: uuid(),
+});
+
+export const posts = table(app, "posts", {
+	id: uuid().primaryKey().defaultRandom(),
+	title: text().notNull(),
+});
+`;
+
 const soleMigration = async (cwd: string): Promise<string> => {
 	const names = (await readdir(join(cwd, "migrations"))).filter((name) =>
 		name.endsWith(".sql"),
@@ -73,6 +92,32 @@ describe("hejbro baseline", () => {
 			expect(sql).toContain('create table "app"."posts"');
 			expect(sql).toContain("-- parent-snapshot: sha256:");
 			expect(sql).toContain("-- snapshot: sha256:");
+		} finally {
+			await removeCliFixtureDir(cwd);
+		}
+	});
+
+	it("an existing declaration contributes nothing to the baseline migration (D106 R1, N6)", async () => {
+		const cwd = await createCliFixtureDir();
+		try {
+			await writeFixtureFile(cwd, "hejbro.config.ts", CONFIG_SOURCE);
+			await writeFixtureFile(
+				cwd,
+				"src/app.schema.ts",
+				SCHEMA_WITH_EXISTING_SOURCE,
+			);
+			await runCli(cwd, ["init"]);
+
+			const result = await runCli(cwd, ["baseline"]);
+			expect(result.exitCode).toBe(0);
+
+			const sql = await soleMigration(cwd);
+			// The managed table still baselines normally...
+			expect(sql).toContain('create table "app"."posts"');
+			// ...and the existing declaration contributes no statement and no
+			// banner note naming it -- baseline shares generate's diff path,
+			// and generate emits nothing for an existing table (group 1).
+			expect(sql.toLowerCase()).not.toContain("legacy_customers");
 		} finally {
 			await removeCliFixtureDir(cwd);
 		}

@@ -2,7 +2,7 @@
 	"name": "example-supabase",
 	"version": "0.0.0",
 	"private": true,
-	"description": "Showcase: the Supabase preset on a generic schema — authUsers FK, authUid() RLS, a storage bucket, role-preset grants, the exposed-table warning, the view security-invoker warning — with a four-step migration history, seed data, and a local Docker round-trip.",
+	"description": "Showcase: the Supabase preset on a generic schema \u2014 authUsers FK, authUid() RLS, a storage bucket, role-preset grants, the exposed-table warning, the view security-invoker warning \u2014 with a four-step migration history, seed data, and a local Docker round-trip.",
 	"type": "module",
 	"scripts": {
 		"check-types": "tsc --noEmit",
@@ -10,8 +10,9 @@
 		"roundtrip": "sh ../../scripts/roundtrip.sh . seed/supabase.sql"
 	},
 	"dependencies": {
-		"hejbro": "workspace:*",
-		"@hejbro/supabase": "workspace:*"
+		"@hejbro/core": "workspace:*",
+		"@hejbro/supabase": "workspace:*",
+		"hejbro": "workspace:*"
 	},
 	"devDependencies": {
 		"typescript": "catalog:",

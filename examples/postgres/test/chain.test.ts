@@ -1,13 +1,13 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { ChainEntry, ConfirmDropSpec } from "hejbro";
 import {
 	checkChain,
 	emptySnapshot,
 	generateMigration,
-	parseBannerHashes,
 	renderSnapshot,
-} from "hejbro";
+} from "@hejbro/core";
+import type { ChainEntry, ConfirmDropSpec } from "hejbro";
+import { parseBannerHashes } from "hejbro";
 import { describe, expect, it } from "vitest";
 import { declarations as step1 } from "../src/steps/step-1.schema";
 import { declarations as step2 } from "../src/steps/step-2.schema";

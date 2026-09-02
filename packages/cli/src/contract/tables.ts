@@ -220,12 +220,18 @@ const renderRelationships = (
  * table and handed to both the `Database` interface renderer and the
  * `contractMetadata` renderer (6.1's condition ②, structural rather than
  * conventional: there is no second call site either renderer could drift
- * against).
+ * against). `existing` is read from the snapshot node here, once, for the
+ * same reason (add-unmanaged-objects, 3.1) — only `contractMetadata`
+ * renders it (the marker is client-metadata only, never the `Database`/
+ * `Tables` interface, lead judgement), but sourcing it on this shared
+ * array keeps that a rendering choice, not a second place the two
+ * renderers could disagree about which tables exist.
  */
 export type TableComputation = {
 	readonly table: TableSnapshot;
 	readonly entries: ReadonlyArray<ColumnEntry>;
 	readonly relationships: ReadonlyArray<RelationshipEntry>;
+	readonly existing: boolean;
 };
 
 export const computeTable = (
@@ -237,6 +243,7 @@ export const computeTable = (
 	table,
 	entries: buildColumnEntries(table, fact, snapshot, enumLookup),
 	relationships: buildRelationships(table, snapshot),
+	existing: table.existing === true,
 });
 
 /** One `Database["Tables"][tableName]` entry's own source text, keyed by the table's bare SQL name (the mirror is flat — no per-schema nesting, proposal.md's own "the emitted mirror is flat"). */
@@ -286,13 +293,31 @@ export type ContractForeignKeyMeta = {
  * the contract exists to provide. Carries no value-conversion policy
  * beyond what query compilation and row conversion actually read
  * (planner condition ④) — `primaryKey`/`unique`/`defaultValue` are
- * deliberately absent.
+ * deliberately absent. `existing` (add-unmanaged-objects, 3.1) is
+ * **compact** — present (`true`) only for an existing table, absent for
+ * a managed one — mirroring the snapshot's own `TableSnapshot.existing`
+ * convention rather than the export description's always-present one:
+ * this is generated code a person reads and diffs, so the common
+ * (managed) case carries no noise (D57). No code reads this mark today;
+ * it is carried for the reader of the generated file and for tooling
+ * built on it.
  */
 export type TableClientMeta = {
 	readonly schema: string;
 	readonly name: string;
 	readonly columns: { readonly [tsKey: string]: ContractColumnMeta };
 	readonly foreignKeys: ReadonlyArray<ContractForeignKeyMeta>;
+	readonly existing?: true;
+};
+
+/** `{ existing: true }` for an existing table's client meta, else `{}` (compact, mirrors core's own `existingField`, `table-kind.ts`) — add-unmanaged-objects, 3.1. */
+const clientMetaExistingField = (
+	computation: TableComputation,
+): Pick<TableClientMeta, "existing"> => {
+	if (!computation.existing) {
+		return {};
+	}
+	return { existing: true };
 };
 
 export const buildTableClientMeta = (
@@ -318,4 +343,5 @@ export const buildTableClientMeta = (
 		referencesTable: relationship.referencesTable,
 		referencedColumns: relationship.referencedColumns,
 	})),
+	...clientMetaExistingField(computation),
 });

@@ -72,13 +72,68 @@ const linkHejbro = async (cwd: string): Promise<void> => {
 	await symlink(CLI_PACKAGE_ROOT, join(cwd, "node_modules", "hejbro"), "dir");
 };
 
-const SCHEMA_SOURCE = `import { schema, table, text, uuid } from "hejbro";
+const SCHEMA_SOURCE = `import { bigint, defineFunction, schema, select, sql, table, text, uuid } from "hejbro";
 
 export const app = schema("app");
 
 export const posts = table(app, "posts", {
 	id: uuid().primaryKey().defaultRandom(),
 	title: text().notNull(),
+});
+
+export const totalPosts = defineFunction(
+	app,
+	"total_posts",
+	{ args: { minWeight: bigint({ mode: "number" }) }, returns: bigint() },
+	(ctx) => {
+		ctx.return(sql\`1\`);
+	},
+);
+
+export const postById = defineFunction(
+	app,
+	"post_by_id",
+	{ args: { postId: uuid() }, returns: posts },
+	(ctx, args) => {
+		ctx.return(select(posts).where(sql\`\${posts.id} = \${args.postId}\`));
+	},
+);
+`;
+
+/**
+ * add-unmanaged-objects, 3.2 (type witness): `authUsers` is exported --
+ * a real declaration, per group 1 -- so it reaches the snapshot, the
+ * export, and the vendored contract's own `Tables` entry (3.1). The
+ * mutant version below drops only the `export` keyword, the same
+ * declared-vs-undeclared axis `contract-emit.test.ts`'s own "no relation
+ * is derived for an unmanaged target" already pins.
+ */
+const EXISTING_SCHEMA_SOURCE = `import { existingTable, schema, table, uuid } from "hejbro";
+
+export const app = schema("app");
+
+export const authUsers = existingTable("auth", "users", {
+	id: uuid(),
+});
+
+export const posts = table(app, "posts", {
+	id: uuid().primaryKey().defaultRandom(),
+	authorId: uuid().notNull().references(() => authUsers.id),
+});
+`;
+
+/** [mutant] `authUsers` built but never exported -- back on the undeclared axis, matching what `examples/supabase` does today (import + inline FK reference only). */
+const EXISTING_SCHEMA_SOURCE_UNDECLARED = `import { existingTable, schema, table, uuid } from "hejbro";
+
+export const app = schema("app");
+
+const authUsers = existingTable("auth", "users", {
+	id: uuid(),
+});
+
+export const posts = table(app, "posts", {
+	id: uuid().primaryKey().defaultRandom(),
+	authorId: uuid().notNull().references(() => authUsers.id),
 });
 `;
 
@@ -215,6 +270,24 @@ type AssertEqual<A, B> = A extends B ? (B extends A ? true : false) : false;
 // result types are not structurally identical.
 const _typesAgree: AssertEqual<LocalRow, VendoredRow> = true;
 void _typesAgree;
+
+// The function sibling of the same claim (#587/G3) -- type-only, never
+// invoked (the live half belongs to 3.2): a scalar-returning fn and a
+// table-returning fn, compared as whole call signatures (arguments AND
+// result), read two ways through one real tsc.
+type LocalTotalPosts = typeof localHandle.fn.totalPosts;
+type VendoredTotalPosts = typeof vendoredHandle.fn.totalPosts;
+const _totalPostsFnTypesAgree: AssertEqual<
+	LocalTotalPosts,
+	VendoredTotalPosts
+> = true;
+void _totalPostsFnTypesAgree;
+
+type LocalPostById = typeof localHandle.fn.postById;
+type VendoredPostById = typeof vendoredHandle.fn.postById;
+const _postByIdFnTypesAgree: AssertEqual<LocalPostById, VendoredPostById> =
+	true;
+void _postByIdFnTypesAgree;
 `,
 		);
 
@@ -235,5 +308,167 @@ void _typesAgree;
 		);
 		expect(check.stdout).toBe("");
 		expect(check.exitCode).toBe(0);
+	});
+
+	/**
+	 * add-unmanaged-objects, 3.2 (type witness): the same D106 m8 parity
+	 * idiom as the test above, applied to a declared existing table --
+	 * proves the vendored contract's own `Tables["users"]` row type
+	 * (built from `contractMetadata`, 3.1) is structurally identical to
+	 * a local `db()` handle's row type for the same `existingTable()`
+	 * declaration, and that a managed table's FK column onto it types
+	 * as a plain `string` either way (the column itself, not a joined
+	 * value -- `.related()` isn't exposed on the vendored client yet,
+	 * D102/owner-seal "가", so this proves row-type parity for the
+	 * existing table's own declared columns, not automatic relation
+	 * following).
+	 */
+	it("a declared existing table's row type is identical on a vendored client and a local db() handle", async () => {
+		const init = await runCli(schemaRepo, ["init"]);
+		expect(init.exitCode).toBe(0);
+		await mkdir(join(schemaRepo, "src"), { recursive: true });
+		await writeFile(
+			join(schemaRepo, "src", "app.schema.ts"),
+			EXISTING_SCHEMA_SOURCE,
+		);
+		const generate = await runCli(schemaRepo, ["generate", "--export"]);
+		expect(generate.exitCode).toBe(0);
+		await run("git", ["init", "-q"], schemaRepo);
+		await run("git", ["config", "user.email", "smoke@example.com"], schemaRepo);
+		await run("git", ["config", "user.name", "smoke"], schemaRepo);
+		await run("git", ["add", "-A"], schemaRepo);
+		await run("git", ["commit", "-q", "-m", "export"], schemaRepo);
+
+		const link = await runCli(consumerRepo, ["link", schemaRepo]);
+		expect(link.exitCode).toBe(0);
+		const vendor = await runCli(consumerRepo, ["vendor"]);
+		expect(vendor.exitCode).toBe(0);
+
+		await writeFile(
+			join(consumerRepo, "local-schema.ts"),
+			EXISTING_SCHEMA_SOURCE,
+		);
+		const parityCheckPath = join(consumerRepo, "existing-type-parity-check.ts");
+		await writeFile(
+			parityCheckPath,
+			`import type { Driver } from "hejbro";
+import { db } from "hejbro";
+import * as localSchema from "./local-schema";
+import { createDb } from "./.hejbro/vendor/contract";
+
+declare const driver: Driver;
+
+const localHandle = db(localSchema, driver);
+const vendoredHandle = createDb(driver);
+
+const localChain = localHandle.select(localSchema.authUsers);
+const vendoredChain = vendoredHandle.users.select();
+
+type LocalRow = Awaited<typeof localChain>[number];
+type VendoredRow = Awaited<typeof vendoredChain>[number];
+
+type AssertEqual<A, B> = A extends B ? (B extends A ? true : false) : false;
+const _existingRowTypesAgree: AssertEqual<LocalRow, VendoredRow> = true;
+void _existingRowTypesAgree;
+
+// The managed table's FK column onto the existing one types as a plain
+// string -- the column, not a joined value (no .related() sugar yet).
+const postsChain = vendoredHandle.posts.select();
+type VendoredPostsRow = Awaited<typeof postsChain>[number];
+const _authorIdIsString: AssertEqual<
+	VendoredPostsRow["authorId"],
+	string
+> = true;
+void _authorIdIsString;
+`,
+		);
+
+		const check = await run(
+			TSC_PATH,
+			[
+				"--noEmit",
+				"--strict",
+				"--moduleResolution",
+				"bundler",
+				"--module",
+				"esnext",
+				"--target",
+				"es2022",
+				parityCheckPath,
+			],
+			consumerRepo,
+		);
+		expect(check.stdout).toBe("");
+		expect(check.exitCode).toBe(0);
+	});
+
+	/**
+	 * add-unmanaged-objects, 3.2 mutant (type half): the exact same
+	 * consumer code as the test above, against a schema that builds the
+	 * identical `existingTable()` but never exports it (undeclared
+	 * axis) -- `vendoredHandle.users` does not exist on the vendored
+	 * `Database["Tables"]` at all (3.1: an unexported table never
+	 * reaches the snapshot/export/contract), so `tsc` must fail, not
+	 * `vitest`. Pinned as its own test (not a mutant reverted after the
+	 * fact) so CI itself proves the type pin is load-bearing on every
+	 * run, mirroring `contract-emit.test.ts`'s own undeclared-axis
+	 * control.
+	 */
+	it("an undeclared existing table has no entry to type-check against, so the same consumer code fails tsc", async () => {
+		const init = await runCli(schemaRepo, ["init"]);
+		expect(init.exitCode).toBe(0);
+		await mkdir(join(schemaRepo, "src"), { recursive: true });
+		await writeFile(
+			join(schemaRepo, "src", "app.schema.ts"),
+			EXISTING_SCHEMA_SOURCE_UNDECLARED,
+		);
+		const generate = await runCli(schemaRepo, ["generate", "--export"]);
+		expect(generate.exitCode).toBe(0);
+		await run("git", ["init", "-q"], schemaRepo);
+		await run("git", ["config", "user.email", "smoke@example.com"], schemaRepo);
+		await run("git", ["config", "user.name", "smoke"], schemaRepo);
+		await run("git", ["add", "-A"], schemaRepo);
+		await run("git", ["commit", "-q", "-m", "export"], schemaRepo);
+
+		const link = await runCli(consumerRepo, ["link", schemaRepo]);
+		expect(link.exitCode).toBe(0);
+		const vendor = await runCli(consumerRepo, ["vendor"]);
+		expect(vendor.exitCode).toBe(0);
+
+		await writeFile(
+			join(consumerRepo, "local-schema.ts"),
+			EXISTING_SCHEMA_SOURCE_UNDECLARED,
+		);
+		const parityCheckPath = join(consumerRepo, "existing-type-parity-check.ts");
+		await writeFile(
+			parityCheckPath,
+			`import { createDb } from "./.hejbro/vendor/contract";
+import type { Driver } from "hejbro";
+
+declare const driver: Driver;
+
+const vendoredHandle = createDb(driver);
+const vendoredChain = vendoredHandle.users.select();
+void vendoredChain;
+`,
+		);
+
+		const check = await run(
+			TSC_PATH,
+			[
+				"--noEmit",
+				"--strict",
+				"--moduleResolution",
+				"bundler",
+				"--module",
+				"esnext",
+				"--target",
+				"es2022",
+				parityCheckPath,
+			],
+			consumerRepo,
+		);
+		expect(check.exitCode).not.toBe(0);
+		expect(check.stdout).toContain("users");
 	});
 });

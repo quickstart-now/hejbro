@@ -4,7 +4,9 @@ import {
 	defineTrigger,
 	emptySnapshot,
 	eq,
+	existingTable,
 	generateMigration,
+	getTableMeta,
 	grant,
 	integer,
 	rls,
@@ -460,4 +462,48 @@ describe("An identity column in a tenant-aware table is refused (measured on the
 			expect(result.errors).toEqual([]);
 		},
 	);
+});
+
+describe("an existingTable is not validated as a managed table (add-unmanaged-objects, J6-2)", () => {
+	it("an existingTable is not validated as a managed table", () => {
+		const serialRef = existingTable("app", "legacy_counters", {
+			tenantId: uuid(),
+			seq: serial(),
+		});
+		const primaryKeyRef = existingTable("app", "legacy_items", {
+			id: uuid().primaryKey(),
+			tenantId: uuid(),
+		});
+		const identityRef = existingTable("app", "legacy_seq", {
+			id: integer().generatedByDefaultAsIdentity(),
+			tenantId: uuid(),
+		});
+		// D106 R1, N3: a base run creates the schema alone first (the same
+		// two-phase shape evaluation.md's own B1 reproduction uses) so the
+		// existing declarations' own run below has nothing to emit but
+		// what they themselves would contribute -- `sql === ""` only means
+		// what it should when schema creation isn't noise inside it.
+		const base = generateMigration({
+			declarations: [app],
+			previousSnapshot: emptySnapshot,
+		});
+		const result = generateMigration({
+			declarations: [
+				app,
+				getTableMeta(serialRef),
+				getTableMeta(primaryKeyRef),
+				getTableMeta(identityRef),
+			],
+			previousSnapshot: base.snapshot,
+			validators: allValidators,
+		});
+		expect(result.errors).toEqual([]);
+		// No diagnostic is only half the claim — "not validated as a
+		// managed table" means no DDL either, and this fixture's own
+		// `serial()` column was exactly what B1 (evaluation.md) found
+		// emitting `create sequence`/`alter table` against a table none of
+		// these declarations own. `result.errors` alone couldn't have
+		// caught that; this line is the one that would have.
+		expect(result.sql).toBe("");
+	});
 });

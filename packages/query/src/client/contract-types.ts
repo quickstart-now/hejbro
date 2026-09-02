@@ -28,17 +28,52 @@ export type ContractForeignKeyMeta = {
 	readonly referencedColumns: ReadonlyArray<string>;
 };
 
-/** One table's vendored facts — see `contract/tables.ts`'s own `TableClientMeta`. */
+/**
+ * One table's vendored facts — see `contract/tables.ts`'s own
+ * `TableClientMeta`. `existing` (add-unmanaged-objects, 3.1) is
+ * **compact** — present (`true`) only for an existing table, absent for
+ * a managed one, matching the emitting side's own convention — no code
+ * in this package reads it today; it is carried for the reader of the
+ * generated file and for tooling built on it.
+ */
 export type ContractTableMeta = {
 	readonly schema: string;
 	readonly name: string;
 	readonly columns: { readonly [tsKey: string]: ContractColumnMeta };
 	readonly foreignKeys: ReadonlyArray<ContractForeignKeyMeta>;
+	readonly existing?: true;
+};
+
+/** One function argument's vendored facts — see `contract/functions.ts`'s own `FunctionArgMeta`. */
+export type ContractFunctionArgMeta = {
+	readonly key: string;
+	readonly sqlName: string;
+	readonly typeNode: TypeNode;
+	readonly mode: NumericMode | null;
+	readonly notNullElements: boolean;
+};
+
+/** A function's vendored return shape — see `contract/functions.ts`'s own `FunctionReturnsMeta`. A table return names the returned table's SQL identity, never its export name (`Database["Tables"]` is itself SQL-name-keyed). */
+export type ContractFunctionReturnsMeta =
+	| {
+			readonly kind: "scalar";
+			readonly typeNode: TypeNode;
+			readonly mode: NumericMode | null;
+	  }
+	| { readonly kind: "table"; readonly schema: string; readonly name: string };
+
+/** One function's vendored facts — see `contract/functions.ts`'s own `FunctionClientMeta`. */
+export type ContractFunctionMeta = {
+	readonly schema: string;
+	readonly name: string;
+	readonly args: ReadonlyArray<ContractFunctionArgMeta>;
+	readonly returns: ContractFunctionReturnsMeta;
 };
 
 type ContractMetadataBase = {
 	readonly roles: ReadonlyArray<string>;
 	readonly tables: { readonly [tableName: string]: ContractTableMeta };
+	readonly functions: { readonly [exportName: string]: ContractFunctionMeta };
 };
 
 /**

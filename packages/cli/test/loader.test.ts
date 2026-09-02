@@ -139,4 +139,22 @@ describe("loadDeclarations", () => {
 		expect(Array.isArray(declarations)).toBe(true);
 		expect(declarations).toHaveLength(2);
 	});
+
+	// Characterization pin, green on arrival (add-unmanaged-objects, 2.2):
+	// group 1 already landed the loader-relevant half of this change --
+	// `loadDeclarations` collects every `isTable()` export regardless of
+	// managed/existing, so this scenario required no loader code change
+	// at all. Load-bearing anyway (proven by mutant, not by red): see this
+	// file's own `.filter` in `loadDeclarations` (`src/loader.ts`).
+	it("an exported existing table is loaded as a declaration", async () => {
+		const cwd = join(fixturesDir, "existing-table");
+		const { config, configPath } = await loadConfig(cwd, undefined);
+		const declarations = await loadDeclarations(configPath, config);
+		expect(declarations).toHaveLength(1);
+		const [authUsersInput] = declarations;
+		expect(isTable(authUsersInput as HejbroInput)).toBe(true);
+		expect(declarations.exportNames.get(authUsersInput as HejbroInput)).toBe(
+			"authUsers",
+		);
+	});
 });

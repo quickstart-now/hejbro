@@ -1,6 +1,8 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { emitContract } from "../src/contract/emit";
+import { validateExport } from "../src/vendor/validate-export";
 import {
 	assertBuiltCli,
 	createCliFixtureDir,
@@ -24,6 +26,34 @@ export const posts = table(app, "posts", {
 	id: uuid().primaryKey().defaultRandom(),
 	title: text().notNull(),
 });
+`;
+
+const FUNCTION_SCHEMA_SOURCE = `import { bigint, defineFunction, schema, select, sql, table, text, uuid } from "hejbro";
+
+export const app = schema("app");
+
+export const posts = table(app, "posts", {
+	id: uuid().primaryKey().defaultRandom(),
+	title: text().notNull(),
+});
+
+export const totalPosts = defineFunction(
+	app,
+	"total_posts",
+	{ returns: bigint() },
+	(ctx) => {
+		ctx.return(sql\`1\`);
+	},
+);
+
+export const postById = defineFunction(
+	app,
+	"post_by_id",
+	{ args: { postId: uuid() }, returns: posts },
+	(ctx, args) => {
+		ctx.return(select(posts).where(sql\`\${posts.id} = \${args.postId}\`));
+	},
+);
 `;
 
 let cwd: string;
@@ -76,6 +106,42 @@ describe("hejbro generate --export", () => {
 		const format = JSON.parse(await readExportFile(cwd, "format.json"));
 		expect(typeof format.descriptionFormat).toBe("number");
 		expect(typeof format.snapshotFormat).toBe("number");
+	});
+
+	it("carries a function's argument keys and return shape through a real write", async () => {
+		await writeSchema(cwd, FUNCTION_SCHEMA_SOURCE);
+
+		const result = await runCli(cwd, ["generate", "--export"]);
+		expect(result.exitCode).toBe(0);
+
+		const description = JSON.parse(await readExportFile(cwd, "schema.json"));
+		const scalarFact = description.functions.find(
+			(f: { functionName: string }) => f.functionName === "total_posts",
+		);
+		expect(scalarFact.args).toEqual([]);
+		expect(scalarFact.returns).toEqual({
+			kind: "scalar",
+			typeNode: { typeName: "bigint" },
+			mode: "bigint",
+		});
+
+		const tableFact = description.functions.find(
+			(f: { functionName: string }) => f.functionName === "post_by_id",
+		);
+		expect(tableFact.args).toEqual([
+			{
+				key: "postId",
+				sqlName: "post_id",
+				typeNode: { typeName: "uuid" },
+				mode: null,
+				notNullElements: false,
+			},
+		]);
+		expect(tableFact.returns).toEqual({
+			kind: "table",
+			schemaName: "app",
+			tableName: "posts",
+		});
 	});
 
 	it("writes the export with no database reachable", async () => {
@@ -138,6 +204,144 @@ describe("hejbro generate --export", () => {
 		expect(result.exitCode).toBe(0);
 
 		expect(await readExportFile(cwd, "schema.json")).toBe(before);
+	});
+
+	it("carries an existing table marked as such (add-unmanaged-objects, 2.1)", async () => {
+		const schemaWithExisting = `import { existingTable, schema, table, text, uuid } from "hejbro";
+
+export const app = schema("app");
+
+export const authUsers = existingTable("auth", "users", { id: uuid() });
+
+export const posts = table(app, "posts", {
+	id: uuid().primaryKey().defaultRandom(),
+	title: text().notNull(),
+});
+`;
+		await writeSchema(cwd, schemaWithExisting);
+		const result = await runCli(cwd, ["generate", "--export"]);
+		expect(result.exitCode).toBe(0);
+
+		const description = JSON.parse(await readExportFile(cwd, "schema.json"));
+		const authUsersFact = description.tables.find(
+			(t: { tableName: string }) => t.tableName === "users",
+		);
+		expect(authUsersFact).toBeDefined();
+		expect(authUsersFact.existing).toBe(true);
+
+		// The field is always present (export/description.ts's own "no
+		// omitted key" convention, unlike the snapshot's compact rule) --
+		// a managed table's entry carries an explicit `false`, not an
+		// absent key a reader would have to default itself.
+		const postsFact = description.tables.find(
+			(t: { tableName: string }) => t.tableName === "posts",
+		);
+		expect(postsFact).toBeDefined();
+		expect(postsFact.existing).toBe(false);
+	});
+
+	// D106 R2, R2-N7: the write half above only ever asserts `existing`
+	// itself; the read half (`validate-export.test.ts`) only ever reads
+	// a hand-written payload. Neither exercises the existing table's own
+	// `columns`/`exportName`/`mode`/`notNullElements` surviving a real
+	// write-then-read round trip -- this connects both halves in one
+	// fixture, `validateExport` imported in-process (pure JSON
+	// validation, no jiti/module-instance risk the CLI-subprocess
+	// convention exists to avoid) reading the same `format.json`/
+	// `schema.json` this same run's real CLI write just produced.
+	it("an existing table's own columns, mode and notNullElements survive a real write-then-read round trip (D106 R2, R2-N7)", async () => {
+		const schemaWithRichExisting = `import { bigint, existingTable, schema, table, text, uuid } from "hejbro";
+
+export const app = schema("app");
+
+export const authUsers = existingTable("auth", "users", {
+	id: uuid(),
+	balance: bigint(),
+	tags: text().array().notNullElements(),
+});
+
+export const posts = table(app, "posts", {
+	id: uuid().primaryKey().defaultRandom(),
+	title: text().notNull(),
+});
+`;
+		await writeSchema(cwd, schemaWithRichExisting);
+		const result = await runCli(cwd, ["generate", "--export"]);
+		expect(result.exitCode).toBe(0);
+
+		const formatText = await readExportFile(cwd, "format.json");
+		const schemaText = await readExportFile(cwd, "schema.json");
+		const { payload } = validateExport(formatText, schemaText);
+
+		const authUsersFact = payload.tables.find(
+			(fact) => fact.tableName === "users",
+		);
+		expect(authUsersFact).toBeDefined();
+		expect(authUsersFact?.existing).toBe(true);
+		expect(authUsersFact?.exportName).toBe("authUsers");
+		expect(authUsersFact?.columns).toEqual({
+			id: { key: "id", mode: null, notNullElements: false },
+			balance: { key: "balance", mode: "bigint", notNullElements: false },
+			tags: { key: "tags", mode: null, notNullElements: true },
+		});
+	});
+
+	// D106 R2, R2-B2 measurement ③: `authUsers` below is a real reference
+	// from the very first run (an FK target), but not yet exported --
+	// exporting it later, with nothing else about `posts` changing, is
+	// exactly the evaluator's own "hasChanges: false" fixture. The prior
+	// in-process pins (`contract-existing.test.ts`) never catch this: they
+	// build one payload straight from `generateMigration` against
+	// `emptySnapshot` in a single call, never through two separate real
+	// `generate --export` runs the way this repository's own users do.
+	it("an in-sync project that only newly exports an existing declaration keeps the export/contract pairing (D106 R2, R2-B2 measurement ③)", async () => {
+		const referencedOnly = `import { existingTable, schema, table, uuid } from "hejbro";
+
+export const app = schema("app");
+
+const authUsers = existingTable("auth", "users", { id: uuid() });
+
+export const posts = table(app, "posts", {
+	id: uuid().primaryKey().defaultRandom(),
+	authorId: uuid().notNull().references(() => authUsers.id),
+});
+`;
+		await writeSchema(cwd, referencedOnly);
+		const firstResult = await runCli(cwd, ["generate", "--export"]);
+		expect(firstResult.exitCode).toBe(0);
+
+		const alsoExported = `import { existingTable, schema, table, uuid } from "hejbro";
+
+export const app = schema("app");
+
+export const authUsers = existingTable("auth", "users", { id: uuid() });
+
+export const posts = table(app, "posts", {
+	id: uuid().primaryKey().defaultRandom(),
+	authorId: uuid().notNull().references(() => authUsers.id),
+});
+`;
+		await writeSchema(cwd, alsoExported);
+		const secondResult = await runCli(cwd, ["generate", "--export"]);
+		expect(secondResult.exitCode).toBe(0);
+		// Newly exporting `authUsers` moves the snapshot itself (it gains
+		// its own `table:` entry, marked existing) even though it emits no
+		// statement -- the "snapshot updated, no migration" report, not
+		// "already matches" (D106 R2, cli-commands MODIFIED delta).
+		expect(secondResult.stdout).toContain(
+			"no migration — snapshot updated to record the declared change.",
+		);
+
+		const formatText = await readExportFile(cwd, "format.json");
+		const schemaText = await readExportFile(cwd, "schema.json");
+		const { payload } = validateExport(formatText, schemaText);
+
+		const contractSource = emitContract(payload, {
+			commit: "abc123",
+			exportHash: "sha256:deadbeef",
+		});
+		expect(contractSource).toContain('"users": {');
+		expect(contractSource).toContain('referencedRelation: "auth.users"');
 	});
 
 	it("description and snapshot formats are distinct values", async () => {

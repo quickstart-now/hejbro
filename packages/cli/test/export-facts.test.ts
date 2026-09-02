@@ -95,9 +95,148 @@ describe("buildExportDescription", () => {
 			schemaName: "app",
 			functionName: "total_posts",
 			exportName: "totalPosts",
+			args: [],
+			returns: {
+				kind: "scalar",
+				typeNode: { typeName: "bigint" },
+				mode: "bigint",
+			},
 		});
 
 		expect(description.roles).toEqual(["anon", "authenticated"]);
+	});
+
+	it("carries a function's argument keys and return shape", () => {
+		const posts = table(app, "posts", {
+			id: uuid().primaryKey(),
+			title: text().notNull(),
+		});
+		// Declared out of alphabetical order on purpose (zebraId before
+		// alphaId) -- stableJson sorts object keys but never array
+		// elements, so args order is a property the implementation has to
+		// preserve itself; an accidental sort anywhere would read this
+		// back alphabetized instead of as declared.
+		const touchPost = defineFunction(
+			app,
+			"touch_post",
+			{ args: { zebraId: uuid(), alphaId: uuid() }, returns: bigint() },
+			(ctx) => {
+				ctx.return(sql`1`);
+			},
+		);
+		const postsById = defineFunction(
+			app,
+			"posts_by_id",
+			{ args: { postId: uuid() }, returns: posts },
+			(ctx, args) => {
+				ctx.return(select(posts).where(sql`${posts.id} = ${args.postId}`));
+			},
+		);
+
+		const declarations: ReadonlyArray<HejbroInput> = [
+			app,
+			posts,
+			touchPost,
+			postsById,
+		];
+		const exportNames = new Map<HejbroInput, string>([
+			[touchPost, "touchPost"],
+			[postsById, "postsById"],
+		]);
+
+		const description = buildExportDescription(declarations, exportNames);
+
+		const touchPostFact = description.functions.find(
+			(f) => f.functionName === "touch_post",
+		);
+		expect(touchPostFact?.args).toEqual([
+			{
+				key: "zebraId",
+				sqlName: "zebra_id",
+				typeNode: { typeName: "uuid" },
+				mode: null,
+				notNullElements: false,
+			},
+			{
+				key: "alphaId",
+				sqlName: "alpha_id",
+				typeNode: { typeName: "uuid" },
+				mode: null,
+				notNullElements: false,
+			},
+		]);
+		expect(touchPostFact?.returns).toEqual({
+			kind: "scalar",
+			typeNode: { typeName: "bigint" },
+			mode: "bigint",
+		});
+
+		const postsByIdFact = description.functions.find(
+			(f) => f.functionName === "posts_by_id",
+		);
+		expect(postsByIdFact?.args).toEqual([
+			{
+				key: "postId",
+				sqlName: "post_id",
+				typeNode: { typeName: "uuid" },
+				mode: null,
+				notNullElements: false,
+			},
+		]);
+		expect(postsByIdFact?.returns).toEqual({
+			kind: "table",
+			schemaName: "app",
+			tableName: "posts",
+		});
+	});
+
+	it("carries an argument's declared type and choices", () => {
+		const totalScore = defineFunction(
+			app,
+			"total_score",
+			{
+				args: {
+					weight: bigint({ mode: "number" }),
+					tags: text().array().notNullElements(),
+				},
+				returns: bigint({ mode: "number" }),
+			},
+			(ctx) => {
+				ctx.return(sql`1`);
+			},
+		);
+
+		const declarations: ReadonlyArray<HejbroInput> = [app, totalScore];
+		const exportNames = new Map<HejbroInput, string>([
+			[totalScore, "totalScore"],
+		]);
+
+		const description = buildExportDescription(declarations, exportNames);
+
+		const fact = description.functions.find(
+			(f) => f.functionName === "total_score",
+		);
+		expect(fact?.args).toEqual([
+			{
+				key: "weight",
+				sqlName: "weight",
+				typeNode: { typeName: "bigint" },
+				mode: "number",
+				notNullElements: false,
+			},
+			{
+				key: "tags",
+				sqlName: "tags",
+				typeNode: { typeName: "array", element: { typeName: "text" } },
+				mode: null,
+				notNullElements: true,
+			},
+		]);
+		expect(fact?.returns).toEqual({
+			kind: "scalar",
+			typeNode: { typeName: "bigint" },
+			mode: "number",
+		});
 	});
 
 	it("carries roles sorted, not in declaration order", () => {
@@ -142,6 +281,34 @@ describe("buildExportDescription", () => {
 		);
 		expect(triggerFunctionFact).toBeDefined();
 		expect(triggerFunctionFact?.exportName).toBeNull();
+	});
+
+	it("a trigger-synthesized function's fact carries no return shape", () => {
+		const posts = table(app, "posts", {
+			id: uuid().primaryKey(),
+			title: text().notNull(),
+		});
+		const trigger = defineTrigger(
+			posts,
+			{
+				name: "posts_touch",
+				timing: "before",
+				events: ["update"],
+				forEach: "row",
+			},
+			(ctx, { new: row }) => {
+				ctx.return(row);
+			},
+		);
+
+		const declarations: ReadonlyArray<HejbroInput> = [app, posts, trigger];
+		const description = buildExportDescription(declarations, new Map());
+
+		const triggerFunctionFact = description.functions.find(
+			(f) => f.functionName === trigger.functionDeclaration.functionName,
+		);
+		expect(triggerFunctionFact?.args).toEqual([]);
+		expect(triggerFunctionFact?.returns).toBeNull();
 	});
 
 	it("a brand is not among the carried facts", () => {
@@ -208,10 +375,11 @@ describe("buildExportDescription", () => {
 	});
 
 	it("the export states what it does not carry", () => {
-		// A view and a function with a typed argument, together: the export
-		// has never had a branch for either's extra shape (R2-G2 2.8's own
-		// boundary decision) — a view yields no fact at all, and a
-		// function's fact carries only its names, never an argument.
+		// A view and a function with a typed argument, together: a view
+		// still yields no fact at all (R2-G2 2.8's own boundary decision,
+		// unchanged), while a function's fact now carries its argument
+		// keys and return shape (#587) -- the boundary moved for one of
+		// the two, not both.
 		const posts = table(app, "posts", {
 			id: uuid().primaryKey(),
 			status: text().notNull(),
@@ -251,8 +419,17 @@ describe("buildExportDescription", () => {
 			schemaName: "app",
 			functionName: "posts_by_status",
 			exportName: "postsByStatus",
+			args: [
+				{
+					key: "status",
+					sqlName: "status",
+					typeNode: { typeName: "text" },
+					mode: null,
+					notNullElements: false,
+				},
+			],
+			returns: { kind: "table", schemaName: "app", tableName: "posts" },
 		});
-		expect(functionFact).not.toHaveProperty("args");
 	});
 });
 

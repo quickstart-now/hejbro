@@ -42,9 +42,39 @@ const post = await db.posts.select().where(eq(db.posts.columns.id, "some-id"));
 `createDb`'s return value has no `Table`-typed member anywhere in its
 public surface — a vendored contract cannot be passed anywhere a
 declaration-authority-carrying table is expected (`generateMigration`,
-`existingTable`, …). It carries only what a consumer needs to read and
-write rows: `columns` (plain expressions, usable with `eq`/`and`/`or`
-the same as any other query), `select`/`insert`/`update`/`delete`.
+`existingTable`, …). Tables carry `columns` (plain expressions, usable
+with `eq`/`and`/`or` the same as any other query), `select`/`insert`/
+`update`/`delete`.
+
+A vendored contract also carries every `defineFunction` declaration the
+schema repository exports, callable through `db.fn` — `createDb(driver)
+.fn.searchByStatus({ status: "published" })`, the same typed surface
+`query-layer.md` documents for a local `db()` handle. `db.as(context).fn`
+carries over unchanged: a scoped handle's `fn` calls the same vendored
+functions, inside that context's transaction.
+
+**Two different keying rules, not one.** `Tables` is keyed by the
+table's own SQL name (matching `db()`'s own table-name keying);
+`Functions` is keyed by the function's own **export name** from the
+schema module, never its SQL name. A reader who only sees one of the two
+groups tends to assume both follow the same rule — they don't.
+
+## Existing tables cross the boundary too
+
+An `existingTable()` declaration (D41, amended by add-unmanaged-objects
+#605) — a platform-owned table like Supabase's `authUsers`, declared for
+its shape and never for its DDL — vendors like any other: it reaches
+`.hejbro/vendor/contract.ts`'s own `Tables` entry with the same `Row`/
+`Insert`/`Update` a managed table gets, its client metadata is marked
+existing, and a managed table's foreign key onto it resolves to a
+relation in the contract exactly as one onto a managed table does (an
+undeclared target still has none). `createDb(driver)` reads it plainly,
+the same as any other table — `db.authUsers.select()`, no different
+shape than a managed one. **What this does not give you yet**:
+*following* that relation from the client — the name-keyed chain has no
+`.related()` for any table, managed or existing (opening that surface is
+separate work, #653) — so a consumer reads the existing table and the
+managed table each on their own, not as one nested/joined query.
 
 ## A database as a marked fallback (`pull`)
 

@@ -1,11 +1,11 @@
-import { registerSupabaseKinds, supabaseValidators } from "@hejbro/supabase";
-import type { KindRegistry } from "hejbro";
 import {
 	createDefaultRegistry,
 	emptySnapshot,
 	generateMigration,
-	schema,
-} from "hejbro";
+} from "@hejbro/core";
+import { registerSupabaseKinds, supabaseValidators } from "@hejbro/supabase";
+import type { KindRegistry } from "hejbro";
+import { schema } from "hejbro";
 import { describe, expect, it } from "vitest";
 import {
 	app,

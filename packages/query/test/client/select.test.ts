@@ -12,6 +12,7 @@ type TestDatabase = {
 			readonly Update: { readonly id?: string; readonly title?: string };
 		};
 	};
+	readonly Functions: Record<string, never>;
 };
 
 const METADATA: ContractMetadata = {
@@ -40,6 +41,7 @@ const METADATA: ContractMetadata = {
 			foreignKeys: [],
 		},
 	},
+	functions: {},
 };
 
 describe("selects and types rows from the contract (R2-G6 6.3)", () => {

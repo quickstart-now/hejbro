@@ -57,6 +57,7 @@ export const contractMetadata = {
 			foreignKeys: [],
 		},
 	},
+	functions: {},
 } as const;
 
 export const createDb = (conn: Driver) =>

@@ -182,3 +182,20 @@ describe("a branded column reads as its unbranded type (5.5)", () => {
 		expect(source).not.toContain("PostId");
 	});
 });
+
+describe("a no-arg function's Args type refuses an excess property (#587, 2.1)", () => {
+	it("Record<string, never> refuses an excess property that a bare {} would silently accept", () => {
+		// A no-arg function's emitted `Args` type is `Record<string, never>`,
+		// never `{}` -- `{}` places no constraint on an object's own keys, so
+		// a caller passing extra arguments to a no-arg function would type-
+		// check against `{}` and only `Record<string, never>` actually
+		// refuses it. This probe is evidence for `check-types`, not
+		// `vitest run` (`@ts-expect-error` is a runtime no-op).
+		const callWithNoArgFunctionArgs = (args: Record<string, never>): void => {
+			void args;
+		};
+		callWithNoArgFunctionArgs({});
+		// @ts-expect-error an excess property against Record<string, never> -- the property Args's own emitted type exists to catch.
+		callWithNoArgFunctionArgs({ extra: 1 });
+	});
+});

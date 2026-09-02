@@ -6,6 +6,7 @@ import type {
 } from "@hejbro/core";
 import {
 	createDefaultRegistry,
+	emptySnapshot,
 	generateMigration,
 	parseSnapshot,
 	requiredKeysByKind,
@@ -91,6 +92,45 @@ const boundaryLineFor = (kind: RegisteredObjectKind): ReadonlyArray<string> => {
 const kindCoverageBoundaryLines = (
 	registry: KindRegistry,
 ): ReadonlyArray<string> => registry.list().flatMap(boundaryLineFor);
+
+// Mirrors compare.ts's/inventory.ts's own internal-invariant idiom (table
+// shapes aren't part of core's public surface).
+type LocalExistingTableSnapshot = {
+	readonly schema: string;
+	readonly name: string;
+	readonly existing?: true;
+};
+
+/**
+ * One boundary line per declared `existingTable()` (add-unmanaged-objects,
+ * D106 R2-06/07) -- a distinct axis from both `kindCoverageBoundaryLines`
+ * (a whole *kind* that states it is never backed by a catalog object) and
+ * `inventoryLines` (a catalog table *no declaration covers at all*). An
+ * existing table is neither: `tableKind` is comparable in general, and
+ * the table itself is not missing from the declarations -- it is a
+ * declared object this command intentionally never attempts to compare,
+ * by the schema author's own choice, which "The check states the
+ * boundary of its own coverage" (`cli-commands`) requires naming
+ * regardless of the reason it was never compared. Never a `Finding`
+ * (mirrors `boundaryLineFor`'s own kind-level lines, not
+ * `check-not-compared`): add-unmanaged-objects' own delta already SHALLs
+ * that an existing table's presence or absence SHALL NOT affect the exit
+ * code, and a `Finding` is exactly the mechanism that would.
+ */
+const existingTableBoundaryLines = (
+	snapshot: Snapshot,
+): ReadonlyArray<string> =>
+	Object.entries(snapshot.objects)
+		.filter(([key]) => key.startsWith("table:"))
+		.map(([, node]) => node as LocalExistingTableSnapshot)
+		.filter((table) => table.existing === true)
+		.map(
+			(table) =>
+				// Matches `boundaryLineFor`'s own "check does not compare X:
+				// reason" shape (never `inventoryLines`' "unmanaged" wording --
+				// that word is reserved for a table no declaration covers).
+				`check does not compare ${table.schema}.${table.name}: declared existing and not compared.`,
+		);
 
 /**
  * Three answers, not two (4.5, spec Req1) -- "the database disagrees"
@@ -199,16 +239,22 @@ const summaryLine = (
  * boundary text, never the exit code -- that guarantee comes from
  * `compareCatalog` already having turned an unregistered preset kind
  * into a `check-not-compared` finding (task 2.4) before `findings` ever
- * reaches this function.
+ * reaches this function. `snapshot` (D106 R2-06/07) is optional and
+ * additive, same reasoning as `registry`: an existing call site that
+ * passes no snapshot sees the same boundary lines it always did, and
+ * omitting it only drops the existing-table boundary lines, never the
+ * exit code.
  */
 export const renderCheckReport = (
 	findings: ReadonlyArray<Finding>,
 	inventory: Inventory,
 	registry: KindRegistry = createDefaultRegistry(),
+	snapshot: Snapshot = emptySnapshot,
 ): CheckReport => {
 	const boundaryLines = [
 		...COVERAGE_BOUNDARY_LINES,
 		...kindCoverageBoundaryLines(registry),
+		...existingTableBoundaryLines(snapshot),
 	];
 	const inventoryFooter = inventoryLines(inventory);
 	if (findings.length === 0) {
@@ -409,7 +455,7 @@ export const runCheck = async (
 					registry,
 				);
 				const inventory = buildInventory(snapshot, catalog);
-				return renderCheckReport(findings, inventory, registry);
+				return renderCheckReport(findings, inventory, registry, snapshot);
 			},
 			importer,
 		);

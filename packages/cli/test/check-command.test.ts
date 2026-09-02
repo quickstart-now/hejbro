@@ -2,7 +2,9 @@ import type { HejbroInput, Snapshot } from "@hejbro/core";
 import {
 	check,
 	emptySnapshot,
+	existingTable,
 	generateMigration,
+	getTableMeta,
 	hejbroError,
 	inArray,
 	schema,
@@ -15,6 +17,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { Catalog } from "../src/check/catalog";
 import type { Finding } from "../src/check/compare";
 import type { Inventory } from "../src/check/inventory";
+import { buildInventory } from "../src/check/inventory";
 import {
 	compareCheckAgainstCatalog,
 	EMPTY_INVENTORY,
@@ -536,5 +539,172 @@ export const posts = table(app, "posts", {
 		expect(equalsForm.stderr).toBe(spaceForm.stderr);
 		expect(equalsForm.stdout).toBe(spaceForm.stdout);
 		expect(equalsForm.stderr).not.toContain("check-connection-missing");
+	});
+});
+
+describe("an existing declaration is neither compared nor inventoried (add-unmanaged-objects, 2.2)", () => {
+	const noOpSession: DriverSession = {
+		execute: async () => [],
+	};
+
+	// The database carries a real, differently-shaped table under this
+	// identity (declared "id uuid", catalog says "integer") -- if the
+	// existing skip in compare.ts didn't run first, this shape gap
+	// would produce a `check-object-differs` finding on its own.
+	const buildScenario = (): { snapshot: Snapshot; catalog: Catalog } => {
+		const authUsers = existingTable("auth", "users", { id: uuid() });
+		const snapshot = buildTestSnapshot([getTableMeta(authUsers)]);
+		const catalog: Catalog = {
+			...emptyCatalog(),
+			tables: [{ schema: "auth", table: "users", rls: false }],
+			columns: [
+				{
+					schema: "auth",
+					table: "users",
+					name: "id",
+					notNull: true,
+					catalogType: "integer",
+					baseTypeKind: null,
+					baseTypeSchema: null,
+					baseTypeName: null,
+					catalogDefault: null,
+				},
+			],
+		};
+		return { snapshot, catalog };
+	};
+
+	// ① Independent of ②: this reads only `compareCheckAgainstCatalog`
+	// (compare.ts's own existing skip), never `buildInventory` -- a
+	// mutant that removes only the inventory side leaves this green.
+	it("no difference is reported for it", async () => {
+		const { snapshot, catalog } = buildScenario();
+		const findings = await compareCheckAgainstCatalog(
+			snapshot,
+			catalog,
+			noOpSession,
+		);
+		expect(findings).toEqual([]);
+	});
+
+	// ② Independent of ①: `buildInventory` never calls `compareCatalog` --
+	// a mutant that removes only compare.ts's skip leaves this green (it
+	// was already true before this task, since the table's identity is
+	// declared either way -- see inventory.ts's own `declaredTableIdentities`).
+	it("is absent from the inventory section", () => {
+		const { snapshot, catalog } = buildScenario();
+		const inventory = buildInventory(snapshot, catalog);
+		expect(inventory.unmanagedTables).toEqual([]);
+	});
+
+	// ③ Delta's own third clause, derived from ① (a real difference would
+	// also flip this) -- asserted on the same real pipeline
+	// (`compareCheckAgainstCatalog` + `renderCheckReport`), not assumed
+	// from ① alone.
+	it("the exit code is unaffected", async () => {
+		const { snapshot, catalog } = buildScenario();
+		const findings = await compareCheckAgainstCatalog(
+			snapshot,
+			catalog,
+			noOpSession,
+		);
+		const inventory = buildInventory(snapshot, catalog);
+		const report = renderCheckReport(findings, inventory);
+		expect(report.exitCode).toBe(0);
+	});
+
+	// ④ Phrase-independent of ①-③: reuses this file's own idiom (line 179's
+	// "does not warn on an existingTable...") for `check`'s pre-existing
+	// "unmanaged" concept -- a *declared* existing table SHALL NOT surface
+	// as "unmanaged" text anywhere in the report, since that word is
+	// reserved for a catalog table no declaration covers at all. A mutant
+	// that made the report render the wrong section, or a stray reuse of
+	// this word for the existing declaration, would show up here even if
+	// ①-③ all happened to net a clean report by coincidence.
+	it("the word `unmanaged` never appears in the report, even though an existing table is declared", async () => {
+		const { snapshot, catalog } = buildScenario();
+		const findings = await compareCheckAgainstCatalog(
+			snapshot,
+			catalog,
+			noOpSession,
+		);
+		const inventory = buildInventory(snapshot, catalog);
+		const report = renderCheckReport(findings, inventory);
+		const wholeReport = [...report.stdout, report.stderr ?? ""].join("\n");
+		expect(wholeReport).not.toContain("unmanaged");
+	});
+
+	// D106 R2-08/R2-09/R2-11: "The check states the boundary of its own
+	// coverage" (cli-commands, live requirement) requires naming what it
+	// did not compare regardless of the reason -- an existing table's skip
+	// is neither of that requirement's two named categories (not a
+	// kind-level incapacity: `table` compares fine for every other
+	// declaration; not an operational failure: nothing failed, this was
+	// never attempted by design), but the requirement's own opening
+	// sentence is not scoped to only those two, and the report said
+	// nothing about it before this fix. The delta's own scenario names
+	// four THEN clauses (naming, not a finding, absent from the unmanaged
+	// inventory, exit code unaffected) -- a fourth, "not counted as
+	// agreeing", was cut mid-round (R2-11) once measuring
+	// `renderCheckReport` showed this report has no agree-count anywhere
+	// to be counted under, which would have made that clause an
+	// unobserved claim (evaluation.md's own N2 shape, the one this piece
+	// has avoided throughout). Each of the four remaining clauses gets its
+	// own assertion (round 1's own convention), so a mutant removing only
+	// one leaves the other three green. Passes the real `snapshot` (the
+	// 4th, previously-unexercised parameter) rather than relying on the
+	// `emptySnapshot` default every other test in this file uses.
+	const buildCoverageBoundaryReport = async (): Promise<{
+		readonly report: ReturnType<typeof renderCheckReport>;
+		readonly findings: ReadonlyArray<Finding>;
+		readonly inventory: Inventory;
+	}> => {
+		const { snapshot, catalog } = buildScenario();
+		const findings = await compareCheckAgainstCatalog(
+			snapshot,
+			catalog,
+			noOpSession,
+		);
+		const inventory = buildInventory(snapshot, catalog);
+		const report = renderCheckReport(findings, inventory, undefined, snapshot);
+		return { report, findings, inventory };
+	};
+
+	// ⑤ Names the table, in the coverage-boundary section's own
+	// established style ("check does not compare X: reason") -- never
+	// `inventoryLines`' "unmanaged" wording (④ above already established
+	// the report never calls a declared table that; this line only
+	// confirms the *positive* claim, that it names it some other way).
+	it("names the table in the coverage-boundary section", async () => {
+		const { report } = await buildCoverageBoundaryReport();
+		const stdoutText = report.stdout.join("\n");
+		expect(stdoutText).toContain(
+			"check does not compare auth.users: declared existing and not compared.",
+		);
+	});
+
+	// ⑥ Not a finding: the boundary line is additive to the report's
+	// stdout, never derived from `findings` -- the table contributes zero
+	// findings of any kind (not a difference, not a `check-not-compared`).
+	// Restates ① above (same fact) so this describe block proves the
+	// scenario's own clauses on its own.
+	it("is not a finding", async () => {
+		const { findings } = await buildCoverageBoundaryReport();
+		expect(findings).toEqual([]);
+	});
+
+	// ⑦ Restates ② above (same fact, absent from the unmanaged inventory)
+	// alongside the other three clauses so this describe block proves the
+	// whole scenario on its own, without a reader having to
+	// cross-reference the block above it.
+	it("is absent from the unmanaged inventory", async () => {
+		const { inventory } = await buildCoverageBoundaryReport();
+		expect(inventory.unmanagedTables).toEqual([]);
+	});
+
+	// ⑧ Restates ③ above (same fact) for the same reason as ⑦.
+	it("does not affect the exit code", async () => {
+		const { report } = await buildCoverageBoundaryReport();
+		expect(report.exitCode).toBe(0);
 	});
 });
