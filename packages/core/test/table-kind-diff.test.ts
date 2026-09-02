@@ -128,6 +128,44 @@ describe("tableKind.serialize", () => {
 		expect(byName.get("label")?.notNull).toBeUndefined();
 	});
 
+	// D106 R3-B3 (lead ruling, CI-R3-07): ForeignKeyDeclaration.name is
+	// `string | null`, but the snapshot stays compact regardless -- an
+	// unnamed foreign key's own serialized shape carries exactly the
+	// four fields it always has (name resolved to the derived string,
+	// never a literal `null`), so an existing project's own committed
+	// snapshot text never moves a byte for adopting this slot without
+	// using it.
+	it("keeps an unnamed foreign key's own serialized shape unchanged -- no extra key, name resolved to the derived string", () => {
+		const posts = table(app, "posts", { id: uuid().primaryKey() });
+		const comments = table(
+			app,
+			"comments",
+			{ id: uuid().primaryKey(), postId: uuid().notNull() },
+			(t) => ({
+				foreignKeys: [
+					{
+						columns: [t.postId],
+						references: { table: posts, columns: [posts.id] },
+					},
+				],
+			}),
+		);
+		const snapshot = tableKind.serialize(getTableMeta(comments)) as {
+			readonly foreignKeys: ReadonlyArray<Record<string, unknown>>;
+		};
+		const [foreignKey] = snapshot.foreignKeys;
+		if (foreignKey === undefined) {
+			throw new Error("expected one foreign key in the serialized snapshot");
+		}
+		expect(Object.keys(foreignKey).sort()).toEqual([
+			"columns",
+			"name",
+			"referencesColumns",
+			"referencesTable",
+		]);
+		expect(foreignKey.name).toBe("comments_post_id_fk");
+	});
+
 	// D81: the oracle, not declaration order, decides the snapshot's column
 	// order once one is supplied — `generate`'s only real caller of this
 	// (`buildSnapshot`) always supplies one built from the parent snapshot.
