@@ -25,10 +25,33 @@ describe("validateExport", () => {
 			functionName: "total_posts",
 			exportName: "totalPosts",
 			args: [
-				{ key: "postId", sqlName: "post_id" },
-				{ key: "createdAt", sqlName: "created_at" },
+				{
+					key: "postId",
+					sqlName: "post_id",
+					typeNode: { typeName: "uuid" },
+					mode: null,
+					notNullElements: false,
+				},
+				{
+					key: "weight",
+					sqlName: "weight",
+					typeNode: { typeName: "bigint" },
+					mode: "number",
+					notNullElements: false,
+				},
+				{
+					key: "tags",
+					sqlName: "tags",
+					typeNode: { typeName: "array", element: { typeName: "text" } },
+					mode: null,
+					notNullElements: true,
+				},
 			],
-			returns: { kind: "scalar" },
+			returns: {
+				kind: "scalar",
+				typeNode: { typeName: "bigint" },
+				mode: "bigint",
+			},
 		};
 
 		const validated = validateExport(FORMAT_TEXT, buildSchemaText(fact));
@@ -41,13 +64,56 @@ describe("validateExport", () => {
 			schemaName: "app",
 			functionName: "posts_by_status",
 			exportName: "postsByStatus",
-			args: [{ key: "status", sqlName: "status" }],
+			args: [
+				{
+					key: "status",
+					sqlName: "status",
+					typeNode: { typeName: "text" },
+					mode: null,
+					notNullElements: false,
+				},
+			],
 			returns: { kind: "table", schemaName: "app", tableName: "posts" },
 		};
 
 		const validated = validateExport(FORMAT_TEXT, buildSchemaText(fact));
 
 		expect(validated.payload.functions).toEqual([fact]);
+	});
+
+	it("refuses an argument missing its declared type", () => {
+		const fact = {
+			schemaName: "app",
+			functionName: "total_posts",
+			exportName: "totalPosts",
+			args: [
+				{
+					key: "postId",
+					sqlName: "post_id",
+					mode: null,
+					notNullElements: false,
+				},
+			],
+			returns: null,
+		};
+
+		expect(() => validateExport(FORMAT_TEXT, buildSchemaText(fact))).toThrow(
+			/does not answer its own format/,
+		);
+	});
+
+	it("refuses a scalar return missing its declared type", () => {
+		const fact = {
+			schemaName: "app",
+			functionName: "total_posts",
+			exportName: "totalPosts",
+			args: [],
+			returns: { kind: "scalar", mode: "bigint" },
+		};
+
+		expect(() => validateExport(FORMAT_TEXT, buildSchemaText(fact))).toThrow(
+			/does not answer its own format/,
+		);
 	});
 
 	it("keeps a trigger-synthesized function's null return", () => {

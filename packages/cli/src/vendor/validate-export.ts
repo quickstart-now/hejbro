@@ -1,13 +1,36 @@
-import { parseSnapshot, throwHejbroError } from "@hejbro/core";
+import type { TypeNode } from "@hejbro/core";
+import { parseSnapshot, simpleTypeNames, throwHejbroError } from "@hejbro/core";
 import { z } from "zod";
 import type { ExportFormatRecord } from "../export/format";
 import { EXPORT_DESCRIPTION_FORMAT } from "../export/format";
 import type { ExportPayload } from "../export/write";
 
+/** Mirrors `@hejbro/core`'s own `TypeNode` union (`types/type-node.ts`) — restated here rather than imported as a schema, since core exports the type but not a runtime validator for it (the same constraint `read-snapshot.ts`'s own doc comment already names for the table snapshot). `z.lazy` handles the one recursive member (`array`'s `element`). */
+const typeNodeSchema: z.ZodType<TypeNode> = z.lazy(() =>
+	z.union([
+		z.object({ typeName: z.enum([...simpleTypeNames]) }),
+		z.object({ typeName: z.literal("varchar"), length: z.number().nullable() }),
+		z.object({ typeName: z.literal("char"), length: z.number() }),
+		z.object({
+			typeName: z.literal("numeric"),
+			precision: z.number().nullable(),
+			scale: z.number().nullable(),
+		}),
+		z.object({
+			typeName: z.literal("enum"),
+			enumSchema: z.string(),
+			enumName: z.string(),
+		}),
+		z.object({ typeName: z.literal("array"), element: typeNodeSchema }),
+	]),
+);
+
+const numericModeSchema = z.enum(["bigint", "number", "string"]).nullable();
+
 /** Mirrors `export/description.ts`'s own `ExportColumnFact` — the sidecar facts a description carries per column. */
 const columnFactSchema = z.object({
 	key: z.string(),
-	mode: z.enum(["bigint", "number", "string"]).nullable(),
+	mode: numericModeSchema,
 	notNullElements: z.boolean(),
 });
 
@@ -21,12 +44,19 @@ const tableFactSchema = z.object({
 const functionArgFactSchema = z.object({
 	key: z.string(),
 	sqlName: z.string(),
+	typeNode: typeNodeSchema,
+	mode: numericModeSchema,
+	notNullElements: z.boolean(),
 });
 
-/** `null` for a trigger-synthesized function's return — neither a scalar value nor a row (schema-export delta). */
+/** `null` for a trigger-synthesized function's return — neither a scalar value nor a row (schema-export delta). A scalar return carries no `notNullElements` — core refuses `.notNullElements()` at a `returns` position, so there is no such fact to carry. */
 const functionReturnsFactSchema = z
 	.union([
-		z.object({ kind: z.literal("scalar") }),
+		z.object({
+			kind: z.literal("scalar"),
+			typeNode: typeNodeSchema,
+			mode: numericModeSchema,
+		}),
 		z.object({
 			kind: z.literal("table"),
 			schemaName: z.string(),
