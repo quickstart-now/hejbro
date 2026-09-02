@@ -194,17 +194,23 @@ export const orderedColumnsWithKeys = (
 	inferenceCatalog: InferenceCatalog,
 	schemaName: string,
 	tableName: string,
-): { readonly columns: ReadonlyArray<ColumnRow>; readonly tsKeys: ReadonlyArray<string> } => {
+): {
+	readonly columns: ReadonlyArray<ColumnRow>;
+	readonly tsKeys: ReadonlyArray<string>;
+} => {
 	const columns = catalog.columns.filter(
 		(row) => row.schema === schemaName && row.table === tableName,
 	);
 	const positionByName = new Map(
 		inferenceCatalog.columnDetails
-			.filter((detail) => detail.schema === schemaName && detail.table === tableName)
+			.filter(
+				(detail) => detail.schema === schemaName && detail.table === tableName,
+			)
 			.map((detail) => [detail.name, detail.position]),
 	);
 	const orderedColumns = [...columns].sort(
-		(a, b) => (positionByName.get(a.name) ?? 0) - (positionByName.get(b.name) ?? 0),
+		(a, b) =>
+			(positionByName.get(a.name) ?? 0) - (positionByName.get(b.name) ?? 0),
 	);
 	return {
 		columns: orderedColumns,
