@@ -535,6 +535,17 @@ export const handleBaseNameFor = (fk: ForeignKeySnapshot): string =>
 	`${fk.referencesTable.replace(".", "_")}_${fk.name}_ref`;
 
 /**
+ * D106 B1's own unexported `pgEnum` clone base name (before this file's own
+ * casing+collision pass) -- deterministic in the target enum's own identity,
+ * so two clones in one file never collide by accident, matching
+ * {@link handleBaseNameFor}'s own reasoning.
+ */
+export const enumCloneBaseNameFor = (
+	enumSchema: string,
+	enumNameValue: string,
+): string => `${enumSchema}_${enumNameValue}_enum`;
+
+/**
  * Whether `fk` must never be an immediate reference (must instead go
  * through a handle, {@link handleBaseNameFor}) -- two different rules,
  * by whether `fk` stays inside one file:
@@ -583,6 +594,39 @@ export const mustDeferForeignKey = (
 	return context.isSchemaCrossingOnBackEdge(table, fk, targetSchema);
 };
 
+/** {@link mustDeferForeignKey}'s own context, widened with the enum-crossing check {@link mustDeferEnumReference} needs (D106 B1, CI-D106-R2-02) -- one shared bag, threaded through `TableRenderContext.mustDeferContext` exactly as before. */
+export type CycleDeferContext = Parameters<typeof mustDeferForeignKey>[2] & {
+	readonly isEnumCrossingOnBackEdge: (
+		table: TableSnapshot,
+		enumSchema: string,
+		enumIdentityValue: string,
+	) => boolean;
+};
+
+/**
+ * Whether a column's enum reference must go through a local, unexported
+ * `pgEnum` clone instead of a real cross-file import (D106 B1,
+ * CI-D106-R2-02, lead verdict B+A, measured safe: the clone is never
+ * exported, so `loader.ts`'s own `Object.entries(moduleNamespace)`
+ * collection never sees it as a second declaration of the same enum; its
+ * `.column()` factory only ever captures `{ enumSchema, enumName }` as
+ * plain strings, so its generated DDL is identical to the "real" enum's
+ * own) -- the enum analogue of {@link mustDeferForeignKey}: same schema
+ * (same file) never defers; a cross-schema reference defers exactly when
+ * its own crossing is the schema graph's back edge.
+ */
+export const mustDeferEnumReference = (
+	table: TableSnapshot,
+	enumSchema: string,
+	enumIdentityValue: string,
+	context: Pick<CycleDeferContext, "isEnumCrossingOnBackEdge">,
+): boolean => {
+	if (enumSchema === table.schema) {
+		return false;
+	}
+	return context.isEnumCrossingOnBackEdge(table, enumSchema, enumIdentityValue);
+};
+
 /** One table's own FKs split into the two settled branches (CI-G2-R1-16): handled (every cycle-closing edge, paired with its own handle's base name) and everything else -- self-references, same-schema non-closing references, and a cross-schema reference whose file pair is acyclic -- left on the ordinary `extras` path. */
 export type ForeignKeyClassification = {
 	readonly isHandled: (fk: ForeignKeySnapshot) => boolean;
@@ -616,14 +660,28 @@ export type TableRenderContext = {
 	readonly tsKeyFor: (tableIdentity: string, sqlColumnName: string) => string;
 	readonly enumRef: (enumSchema: string, enumName: string) => string;
 	readonly sequences: SequenceFacts;
-	/** {@link mustDeferForeignKey}'s own context (CI-G2-R1-11): table-level cycle-closing edges for a same-schema pair, plus file-level (schema-to-schema) reachability for a cross-schema pair. */
-	readonly mustDeferContext: Parameters<typeof mustDeferForeignKey>[2];
+	/** {@link mustDeferForeignKey}'s own context (CI-G2-R1-11): table-level cycle-closing edges for a same-schema pair, plus file-level (schema-to-schema) reachability for a cross-schema pair -- widened (D106 B1) with the same reachability check for an enum crossing. */
+	readonly mustDeferContext: CycleDeferContext;
 	/** Every table this run covers, by identity -- (c)'s own handle needs its target's real column types, which a cross-schema reference otherwise never looks up (its target's own file renders those, not this one). */
 	readonly tablesByIdentity: ReadonlyMap<string, TableSnapshot>;
+	/** Every enum this run covers, by identity (D106 B1) -- a deferred enum reference's own local clone needs its target's real values. */
+	readonly enumsByIdentity: ReadonlyMap<
+		string,
+		{
+			readonly schema: string;
+			readonly name: string;
+			readonly values: ReadonlyArray<string>;
+		}
+	>;
 	/** Resolved per (owning table identity, FK name) -- (c)'s own unexported `existingTable` handle identifier, seeded into this file's own identifier namespace alongside its schema/enum/table names. */
 	readonly handleIdentifierFor: (
 		ownIdentity: string,
 		foreignKeyName: string,
+	) => string;
+	/** Resolved per (owning table identity, enum identity) -- D106 B1's own unexported local `pgEnum` clone identifier, seeded into this file's own identifier namespace the same way a foreign key's handle is. */
+	readonly enumCloneIdentifierFor: (
+		ownIdentity: string,
+		enumIdentityValue: string,
 	) => string;
 };
 
@@ -733,6 +791,24 @@ const renderExistingTableHandle = (
 	};
 };
 
+/**
+ * D106 B1's own unexported `pgEnum` clone (CI-D106-R2-02, lead-approved,
+ * measured): same schema, name and values as the "real" enum, built via a
+ * fresh, local `schema(...)` call rather than an import of the owning
+ * file's own schema constant -- `pgEnum` only ever reads `owner.schemaName`
+ * (a plain string) into the column's own type node, never the schema
+ * object's identity, so this throwaway owner produces identical DDL.
+ */
+const renderEnumClone = (
+	enumSchema: string,
+	enumNameValue: string,
+	values: ReadonlyArray<string>,
+	cloneIdentifier: string,
+): TypeRender => ({
+	call: `const ${cloneIdentifier} = pgEnum(schema(${JSON.stringify(enumSchema)}), ${JSON.stringify(enumNameValue)}, ${JSON.stringify([...values])});`,
+	symbols: new Set(["pgEnum", "schema"]),
+});
+
 /** Resolves one FK entry's own `references.table` (Q: self -> `null` (the extras path's own self-reference shape); (c) -> its handle's identifier; (a) -> the target's real identifier, same-file or cross-file alike). */
 const resolveForeignKeyTargetIdentifier = (
 	fk: ForeignKeySnapshot,
@@ -767,14 +843,72 @@ export const renderTable = (
 
 	const classification = classifyForeignKeys(table, context.mustDeferContext);
 
+	/**
+	 * D106 B1 (CI-D106-R2-02): an enum reference on this table's own back
+	 * edge resolves to a local clone's identifier instead of the real
+	 * cross-file import -- every column's `enumRef` call goes through this
+	 * wrapper so the deferral is invisible to `renderTypeNode`'s own
+	 * recursion (array-of-enum included).
+	 */
+	const enumRefForOwnTable = (
+		enumSchema: string,
+		enumNameValue: string,
+	): string => {
+		const identity = enumIdentity(enumSchema, enumNameValue);
+		if (
+			mustDeferEnumReference(
+				table,
+				enumSchema,
+				identity,
+				context.mustDeferContext,
+			)
+		) {
+			return context.enumCloneIdentifierFor(ownIdentity, identity);
+		}
+		return context.enumRef(enumSchema, enumNameValue);
+	};
+
 	const columnRenders = table.columns.map((column) => ({
 		tsKey: tsKeyForOwn(column.name),
 		render: renderColumnBuilder(column, {
 			schema: table.schema,
 			table: table.name,
 			sequences: context.sequences,
-			enumRef: context.enumRef,
+			enumRef: enumRefForOwnTable,
 		}),
+	}));
+
+	/** D106 B1's own preamble: one clone declaration per distinct enum this table defers to a local handle instead of a real import, values looked up from the target enum's own snapshot fact. */
+	const enumCloneRenders = [
+		...new Map(
+			table.columns.flatMap((column) =>
+				enumIdentitiesIn(column.typeNode).flatMap((identity) => {
+					const enumFact = context.enumsByIdentity.get(identity);
+					if (
+						enumFact === undefined ||
+						!mustDeferEnumReference(
+							table,
+							enumFact.schema,
+							identity,
+							context.mustDeferContext,
+						)
+					) {
+						return [];
+					}
+					return [[identity, enumFact] as const];
+				}),
+			),
+		).values(),
+	].map((enumFact) => ({
+		render: renderEnumClone(
+			enumFact.schema,
+			enumFact.name,
+			enumFact.values,
+			context.enumCloneIdentifierFor(
+				ownIdentity,
+				enumIdentity(enumFact.schema, enumFact.name),
+			),
+		),
 	}));
 
 	const handleRenders = classification.handled.map(({ fk }) => {
@@ -858,8 +992,12 @@ export const renderTable = (
 		...indexRenders.flatMap((render) => [...render.symbols]),
 		...checkRenders.flatMap((render) => [...render.symbols]),
 		...handleRenders.flatMap(({ render }) => [...render.symbols]),
+		...enumCloneRenders.flatMap(({ render }) => [...render.symbols]),
 	]);
-	const preamble = handleRenders.map(({ render }) => render.call);
+	const preamble = [
+		...enumCloneRenders.map(({ render }) => render.call),
+		...handleRenders.map(({ render }) => render.call),
+	];
 
 	return { preamble, call, symbols };
 };
@@ -945,17 +1083,29 @@ type HandleNeed = {
 	readonly handleBaseName: string;
 };
 
+/** D106 B1 (CI-D106-R2-02): one unexported local `pgEnum` clone this file's own tables need, the enum analogue of {@link HandleNeed}. */
+type EnumCloneNeed = {
+	readonly ownIdentity: string;
+	readonly enumIdentityValue: string;
+	readonly enumSchema: string;
+	readonly enumNameValue: string;
+	readonly cloneBaseName: string;
+};
+
 type FilePlan = {
 	readonly schemaName: string;
 	readonly fileBaseName: string;
 	readonly schemaTables: ReadonlyArray<TableSnapshot>;
 	readonly schemaEnums: ReturnType<typeof enumsInSnapshot>;
 	readonly schemaHandles: ReadonlyArray<HandleNeed>;
+	readonly schemaEnumClones: ReadonlyArray<EnumCloneNeed>;
 	readonly schemaIdentifier: string;
 	readonly enumIdentifiers: ReadonlyMap<string, string>;
 	readonly tableIdentifiers: ReadonlyMap<string, string>;
 	/** Keyed `${ownIdentity} ${foreignKeyName}` -- one per (c) handle this file's own tables need. */
 	readonly handleIdentifiers: ReadonlyMap<string, string>;
+	/** Keyed `${ownIdentity} ${enumIdentity}` -- one per D106 B1 enum clone this file's own tables need. */
+	readonly enumCloneIdentifiers: ReadonlyMap<string, string>;
 	readonly vocabulary: ReadonlySet<string>;
 };
 
@@ -972,6 +1122,12 @@ const addToMultiMap = (
 
 const handleNeedKey = (ownIdentity: string, foreignKeyName: string): string =>
 	`${ownIdentity} ${foreignKeyName}`;
+
+/** D106 B1's own key shape for {@link EnumCloneNeed}, the enum analogue of {@link handleNeedKey}. */
+const enumCloneNeedKey = (
+	ownIdentity: string,
+	enumIdentityValue: string,
+): string => `${ownIdentity} ${enumIdentityValue}`;
 
 /** Every table a cross-schema FK reaches for, except (c)'s own -- a handled FK never imports its target, it declares an unexported local handle instead (CI-G2-R1-08). Both (a) (a plain cross-file reference) and (b) (a thunked one) still need the import: (b)'s thunk text names the target's real identifier directly. */
 const neededCrossFileTableReferences = (
@@ -1003,18 +1159,21 @@ const resolveFileIdentifiers = (
 	schemaEnums: ReturnType<typeof enumsInSnapshot>,
 	schemaTables: ReadonlyArray<TableSnapshot>,
 	schemaHandles: ReadonlyArray<HandleNeed>,
+	schemaEnumClones: ReadonlyArray<EnumCloneNeed>,
 	reserved: ReadonlySet<string>,
 ): {
 	readonly schemaIdentifier: string;
 	readonly enumIdentifiers: ReadonlyMap<string, string>;
 	readonly tableIdentifiers: ReadonlyMap<string, string>;
 	readonly handleIdentifiers: ReadonlyMap<string, string>;
+	readonly enumCloneIdentifiers: ReadonlyMap<string, string>;
 } => {
 	const names = [
 		schemaName,
 		...schemaEnums.map((row) => row.name),
 		...schemaTables.map((table) => table.name),
 		...schemaHandles.map((need) => need.handleBaseName),
+		...schemaEnumClones.map((need) => need.cloneBaseName),
 	];
 	const identifiers = resolveIdentifierKeys(names, reserved);
 	const schemaIdentifier = identifiers[0] ?? schemaName;
@@ -1047,11 +1206,22 @@ const resolveFileIdentifiers = (
 				] as const,
 		),
 	);
+	const enumCloneOffset = handleOffset + schemaHandles.length;
+	const enumCloneIdentifiers = new Map(
+		schemaEnumClones.map(
+			(need, index) =>
+				[
+					enumCloneNeedKey(need.ownIdentity, need.enumIdentityValue),
+					identifiers[enumCloneOffset + index] ?? need.cloneBaseName,
+				] as const,
+		),
+	);
 	return {
 		schemaIdentifier,
 		enumIdentifiers,
 		tableIdentifiers,
 		handleIdentifiers,
+		enumCloneIdentifiers,
 	};
 };
 
@@ -1074,6 +1244,10 @@ export const emitDeclarationFiles = (
 		tables.map(
 			(table) => [tableIdentity(table.schema, table.name), table] as const,
 		),
+	);
+	/** Every enum this run covers, by identity -- an enum-crossing back edge's own local clone (D106 B1) needs its target's real values, which a cross-schema reference otherwise never looks up (its target's own file renders those, not this one). */
+	const enumsByIdentity = new Map(
+		enums.map((row) => [enumIdentity(row.schema, row.name), row] as const),
 	);
 
 	const edges: ReadonlyArray<TopoEdge> = tables.flatMap((table) => {
@@ -1111,8 +1285,8 @@ export const emitDeclarationFiles = (
 	 * this one just leaves more real, type-carrying imports in the files
 	 * the repository now owns).
 	 */
-	const schemaCrossings: ReadonlyArray<SchemaCrossing> = tables.flatMap(
-		(table) => {
+	const foreignKeySchemaCrossings: ReadonlyArray<SchemaCrossing> =
+		tables.flatMap((table) => {
 			const ownIdentity = tableIdentity(table.schema, table.name);
 			return table.foreignKeys
 				.filter((fk) => fk.referencesTable !== ownIdentity)
@@ -1126,11 +1300,50 @@ export const emitDeclarationFiles = (
 							fromSchema: table.schema,
 							toSchema: targetSchema,
 							edgeId: `${ownIdentity} ${fk.name}`,
+							kind: "foreignKey" as const,
 						},
 					];
 				});
-		},
-	);
+		});
+	/**
+	 * D106 B1 (CI-D106-R2-02): a column typed against another schema's enum
+	 * renders a real cross-file import exactly like a foreign key does
+	 * (`referencedEnumIdentities` below), so it is a crossing the cycle
+	 * graph must see too -- one edge per (owning table, referenced enum),
+	 * deduped so two columns of the same table referencing the same enum
+	 * don't register the crossing twice.
+	 */
+	const enumCrossingEntries: ReadonlyArray<readonly [string, SchemaCrossing]> =
+		tables.flatMap((table) =>
+			table.columns.flatMap((column) =>
+				enumIdentitiesIn(column.typeNode).flatMap((identity) => {
+					const enumFact = enumsByIdentity.get(identity);
+					if (enumFact === undefined || enumFact.schema === table.schema) {
+						return [];
+					}
+					const ownIdentity = tableIdentity(table.schema, table.name);
+					const key = `${ownIdentity} ${identity}`;
+					return [
+						[
+							key,
+							{
+								fromSchema: table.schema,
+								toSchema: enumFact.schema,
+								edgeId: key,
+								kind: "enum" as const,
+							},
+						] as const,
+					];
+				}),
+			),
+		);
+	const enumSchemaCrossings: ReadonlyArray<SchemaCrossing> = [
+		...new Map(enumCrossingEntries).values(),
+	];
+	const schemaCrossings: ReadonlyArray<SchemaCrossing> = [
+		...foreignKeySchemaCrossings,
+		...enumSchemaCrossings,
+	];
 	const schemaNamesForTopo = [...new Set(tables.map((table) => table.schema))];
 	const schemaFileGraph = buildSchemaFileGraph(
 		schemaNamesForTopo,
@@ -1145,12 +1358,25 @@ export const emitDeclarationFiles = (
 			table.schema,
 			targetSchema,
 			`${tableIdentity(table.schema, table.name)} ${fk.name}`,
+			"foreignKey",
+		);
+	const isEnumCrossingOnBackEdge = (
+		table: TableSnapshot,
+		enumSchema: string,
+		enumIdentityValue: string,
+	): boolean =>
+		schemaFileGraph.isBackEdge(
+			table.schema,
+			enumSchema,
+			`${tableIdentity(table.schema, table.name)} ${enumIdentityValue}`,
+			"enum",
 		);
 
-	const mustDeferContext: Parameters<typeof mustDeferForeignKey>[2] = {
+	const mustDeferContext: CycleDeferContext = {
 		cycleClosingEdges: topo.cycleClosingEdges,
 		targetSchemaOf,
 		isSchemaCrossingOnBackEdge,
+		isEnumCrossingOnBackEdge,
 	};
 
 	const classificationByTable = new Map(
@@ -1193,6 +1419,40 @@ export const emitDeclarationFiles = (
 				}));
 			},
 		);
+		const schemaEnumClones: ReadonlyArray<EnumCloneNeed> = [
+			...new Map(
+				schemaTables.flatMap((table) => {
+					const ownIdentity = tableIdentity(table.schema, table.name);
+					return table.columns.flatMap((column) =>
+						enumIdentitiesIn(column.typeNode).flatMap((identity) => {
+							const enumFact = enumsByIdentity.get(identity);
+							if (
+								enumFact === undefined ||
+								!mustDeferEnumReference(
+									table,
+									enumFact.schema,
+									identity,
+									mustDeferContext,
+								)
+							) {
+								return [];
+							}
+							const need: EnumCloneNeed = {
+								ownIdentity,
+								enumIdentityValue: identity,
+								enumSchema: enumFact.schema,
+								enumNameValue: enumFact.name,
+								cloneBaseName: enumCloneBaseNameFor(
+									enumFact.schema,
+									enumFact.name,
+								),
+							};
+							return [[enumCloneNeedKey(ownIdentity, identity), need] as const];
+						}),
+					);
+				}),
+			).values(),
+		];
 
 		const dryRunContext: TableRenderContext = {
 			schemaIdentifier: "schema",
@@ -1202,11 +1462,16 @@ export const emitDeclarationFiles = (
 			sequences,
 			mustDeferContext,
 			tablesByIdentity,
+			enumsByIdentity,
 			handleIdentifierFor: dryRunHandleIdentifierFor,
+			enumCloneIdentifierFor: dryRunHandleIdentifierFor,
 		};
 		const vocabulary = new Set<string>([
 			"schema",
-			...entryWhen(schemaEnums.length > 0, "pgEnum"),
+			...entryWhen(
+				schemaEnums.length > 0 || schemaEnumClones.length > 0,
+				"pgEnum",
+			),
 			...schemaTables.flatMap((table) => [
 				...renderTable(table, dryRunContext).symbols,
 			]),
@@ -1217,6 +1482,7 @@ export const emitDeclarationFiles = (
 			schemaEnums,
 			schemaTables,
 			schemaHandles,
+			schemaEnumClones,
 			reserved(vocabulary),
 		);
 
@@ -1226,6 +1492,7 @@ export const emitDeclarationFiles = (
 			schemaTables,
 			schemaEnums,
 			schemaHandles,
+			schemaEnumClones,
 			vocabulary,
 			...resolved,
 		};
@@ -1332,6 +1599,17 @@ export const emitDeclarationFiles = (
 			foreignKeyName
 		);
 	};
+	const enumCloneIdentifierFor = (
+		ownIdentity: string,
+		enumIdentityValue: string,
+	): string => {
+		const plan = fileOfTable.get(ownIdentity);
+		return (
+			plan?.enumCloneIdentifiers.get(
+				enumCloneNeedKey(ownIdentity, enumIdentityValue),
+			) ?? enumIdentityValue
+		);
+	};
 
 	const identifierForTable = (identity: string): string =>
 		fileOfTable.get(identity)?.tableIdentifiers.get(identity) ?? identity;
@@ -1352,7 +1630,9 @@ export const emitDeclarationFiles = (
 			sequences,
 			mustDeferContext,
 			tablesByIdentity,
+			enumsByIdentity,
 			handleIdentifierFor,
+			enumCloneIdentifierFor,
 		};
 		const tableRenders = plan.schemaTables.map((table) =>
 			renderTable(table, renderContext),
@@ -1369,8 +1649,19 @@ export const emitDeclarationFiles = (
 		const referencedTableIdentities = plan.schemaTables.flatMap((table) =>
 			neededCrossFileTableReferences(table, classificationFor(table)),
 		);
+		/** D106 B1: a deferred enum reference (this table's own crossing is the back edge) never imports its target -- it declares a local clone instead, exactly like a handled FK never imports its target table. */
 		const referencedEnumIdentities = plan.schemaTables.flatMap((table) =>
-			table.columns.flatMap((column) => enumIdentitiesIn(column.typeNode)),
+			table.columns.flatMap((column) =>
+				enumIdentitiesIn(column.typeNode).filter(
+					(identity) =>
+						!mustDeferEnumReference(
+							table,
+							enumsByIdentity.get(identity)?.schema ?? table.schema,
+							identity,
+							mustDeferContext,
+						),
+				),
+			),
 		);
 
 		const importsByFile = [

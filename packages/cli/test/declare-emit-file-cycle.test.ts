@@ -87,3 +87,115 @@ describe("buildSchemaFileGraph / CI-G2-R1-19: the schema graph's own determinist
 		);
 	});
 });
+
+describe("buildSchemaFileGraph / D106 B1 (CI-D106-R2-02): an enum reference also counts as a crossing, and a foreign key is preferred as the cut", () => {
+	/** The reviewer's own repro (`evaluation.md`): `app.users.kind` types against `audit.event_kind` (enum crossing, app -> audit), `audit.logs.user_id` references `app.users` (FK crossing, audit -> app) -- a genuine cycle a foreign-key-only graph never saw. */
+	const reviewerFixture: ReadonlyArray<SchemaCrossing> = [
+		{
+			fromSchema: "app",
+			toSchema: "audit",
+			edgeId: "app.users kind",
+			kind: "enum",
+		},
+		{
+			fromSchema: "audit",
+			toSchema: "app",
+			edgeId: "audit.logs user_id_fkey",
+			kind: "foreignKey",
+		},
+	];
+
+	it("names the FK crossing as the back edge, not the enum crossing, regardless of which schema name sorts first", () => {
+		const graph = buildSchemaFileGraph(["app", "audit"], reviewerFixture);
+		expect(
+			graph.isBackEdge("audit", "app", "audit.logs user_id_fkey", "foreignKey"),
+		).toBe(true);
+		expect(graph.isBackEdge("app", "audit", "app.users kind", "enum")).toBe(
+			false,
+		);
+	});
+
+	it("still prefers the FK crossing as the back edge when the enum and FK directions are swapped (FK app -> audit, enum audit -> app)", () => {
+		const swapped: ReadonlyArray<SchemaCrossing> = [
+			{
+				fromSchema: "app",
+				toSchema: "audit",
+				edgeId: "app.users audit_ref_fkey",
+				kind: "foreignKey",
+			},
+			{
+				fromSchema: "audit",
+				toSchema: "app",
+				edgeId: "audit.logs kind",
+				kind: "enum",
+			},
+		];
+		const graph = buildSchemaFileGraph(["app", "audit"], swapped);
+		expect(
+			graph.isBackEdge(
+				"app",
+				"audit",
+				"app.users audit_ref_fkey",
+				"foreignKey",
+			),
+		).toBe(true);
+		expect(graph.isBackEdge("audit", "app", "audit.logs kind", "enum")).toBe(
+			false,
+		);
+	});
+
+	it("still cuts the enum crossing when the cycle has no foreign key to prefer instead (an enum-only cycle)", () => {
+		const enumOnly: ReadonlyArray<SchemaCrossing> = [
+			{
+				fromSchema: "app",
+				toSchema: "audit",
+				edgeId: "app.users kind",
+				kind: "enum",
+			},
+			{
+				fromSchema: "audit",
+				toSchema: "app",
+				edgeId: "audit.logs status",
+				kind: "enum",
+			},
+		];
+		const graph = buildSchemaFileGraph(["app", "audit"], enumOnly);
+		expect(graph.isBackEdge("audit", "app", "audit.logs status", "enum")).toBe(
+			true,
+		);
+		expect(graph.isBackEdge("app", "audit", "app.users kind", "enum")).toBe(
+			false,
+		);
+	});
+
+	it("picks the same edge to cut regardless of crossing order or schema-name order (determinism pin)", () => {
+		const forward = buildSchemaFileGraph(["app", "audit"], reviewerFixture);
+		const reversed = buildSchemaFileGraph(
+			["audit", "app"],
+			[...reviewerFixture].reverse(),
+		);
+		expect(
+			forward.isBackEdge(
+				"audit",
+				"app",
+				"audit.logs user_id_fkey",
+				"foreignKey",
+			),
+		).toBe(
+			reversed.isBackEdge(
+				"audit",
+				"app",
+				"audit.logs user_id_fkey",
+				"foreignKey",
+			),
+		);
+		expect(
+			forward.isBackEdge(
+				"audit",
+				"app",
+				"audit.logs user_id_fkey",
+				"foreignKey",
+			),
+		).toBe(true);
+	});
+});
