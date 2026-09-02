@@ -34,7 +34,8 @@ export type FunctionReturns =
  * plain runtime fields, so without this a non-recursive mention of
  * `TArgs`/`TReturns` would exist nowhere at all — `args`/`returns` are
  * plain, already-resolved runtime shapes (`ReadonlyArray<{key, argName,
- * typeNode}>`, a `returnsKind` union) that never reference the generic
+ * typeNode, mode, notNullElements}>`, a `returnsKind` union) that never
+ * reference the generic
  * parameters, not even recursively through another method the way
  * `ColumnBuilder`'s own chain methods do. Without this anchor,
  * `FunctionDeclaration<A>` and `FunctionDeclaration<B>` would be
@@ -82,6 +83,8 @@ export type FunctionDeclaration<
 		readonly key: string;
 		readonly argName: string;
 		readonly typeNode: TypeNode;
+		readonly mode: NumericMode | null;
+		readonly notNullElements: boolean;
 	}>;
 	readonly returns:
 		| { readonly returnsKind: "trigger" }
@@ -166,6 +169,8 @@ type ResolvedArgs<TArgs extends Record<string, ColumnBuilder>> = {
 		readonly key: string;
 		readonly argName: string;
 		readonly typeNode: TypeNode;
+		readonly mode: NumericMode | null;
+		readonly notNullElements: boolean;
 	}>;
 	readonly refs: ArgRefs<TArgs>;
 };
@@ -182,6 +187,8 @@ const resolveArgs = <TArgs extends Record<string, ColumnBuilder>>(
 			key,
 			argName,
 			typeNode: builder.columnState.typeNode,
+			mode: builder.columnState.mode,
+			notNullElements: builder.columnState.notNullElements === true,
 			family: familyOfTypeNode(builder.columnState.typeNode),
 		};
 	});
@@ -190,6 +197,8 @@ const resolveArgs = <TArgs extends Record<string, ColumnBuilder>>(
 		key: entry.key,
 		argName: entry.argName,
 		typeNode: entry.typeNode,
+		mode: entry.mode,
+		notNullElements: entry.notNullElements,
 	}));
 
 	const refs = Object.fromEntries(

@@ -1,6 +1,7 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 import type { ColumnBuilder, FunctionDeclaration } from "../src/index";
 import {
+	bigint,
 	defineFunction,
 	defineTrigger,
 	eq,
@@ -105,7 +106,13 @@ describe("FunctionDeclaration<TArgs, TReturns> generics (task 4.10)", () => {
 		const bare: FunctionDeclaration = searchByStatus;
 		expect(Object.getOwnPropertySymbols(bare)).toHaveLength(0);
 		expect(bare.args).toEqual([
-			{ key: "status", argName: "status", typeNode: { typeName: "text" } },
+			{
+				key: "status",
+				argName: "status",
+				typeNode: { typeName: "text" },
+				mode: null,
+				notNullElements: false,
+			},
 		]);
 	});
 });
@@ -124,11 +131,52 @@ describe("resolved args carry the declared key (#587)", () => {
 			},
 		);
 		expect(fn.args).toEqual([
-			{ key: "postId", argName: "post_id", typeNode: { typeName: "uuid" } },
+			{
+				key: "postId",
+				argName: "post_id",
+				typeNode: { typeName: "uuid" },
+				mode: null,
+				notNullElements: false,
+			},
 			{
 				key: "createdAt",
 				argName: "created_at",
 				typeNode: { typeName: "timestamptz" },
+				mode: null,
+				notNullElements: false,
+			},
+		]);
+	});
+
+	it("keeps an argument's declared mode and element nullability", () => {
+		const fn = defineFunction(
+			app,
+			"adjust_score",
+			{
+				args: {
+					amount: bigint({ mode: "number" }),
+					tags: text().array().notNullElements(),
+				},
+				returns: posts,
+			},
+			(ctx) => {
+				ctx.return(select(posts));
+			},
+		);
+		expect(fn.args).toEqual([
+			{
+				key: "amount",
+				argName: "amount",
+				typeNode: { typeName: "bigint" },
+				mode: "number",
+				notNullElements: false,
+			},
+			{
+				key: "tags",
+				argName: "tags",
+				typeNode: { typeName: "array", element: { typeName: "text" } },
+				mode: null,
+				notNullElements: true,
 			},
 		]);
 	});
