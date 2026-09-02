@@ -347,7 +347,7 @@ const buildFunctionKeyMap = (
  * table — never reverse this order.
  */
 const buildInternalSchema = (
-	tables: Readonly<Record<string, DeclaredTable>>,
+	tables: Readonly<Record<string, SynthesizedTable>>,
 	functions: Readonly<Record<string, FunctionDeclaration>>,
 	keyMap: ReadonlyMap<string, string>,
 ): Readonly<Record<string, unknown>> => ({
