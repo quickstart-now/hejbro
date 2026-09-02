@@ -153,12 +153,63 @@ made directly against the database is invisible to `verify`, but not to
 catch that drift; it is the one command built to answer exactly that
 question. `hejbro baseline` (above) writes the marker, and `hejbro
 migrate` (step 3) does the actual registration — together they cover the
-registration half of #385. The other half — introspection-assisted
-seeding, where hejbro
-reads a live schema or a dump and writes starter declarations for you —
-does not exist: step 1 is still yours to write, and "Checking a
-declaration against the real schema" above is still how you confirm you
-got it right.
+registration half of #385.
+
+## Writing step 1 for you: `hejbro import`
+
+The other half of #385 — introspection-assisted seeding, where hejbro
+reads a live schema and writes starter declarations for you — is
+`hejbro import`:
+
+```
+hejbro import --url postgres://... --schema public --out src/schema
+# or: DATABASE_URL=postgres://... hejbro import --schema public --out src/schema
+```
+
+It reads the named schemas through the same read-only catalog `check`
+uses, and writes one starter declaration file per schema into the
+directory named by `--out`, using the DSL's own builders — this *is*
+step 1 above, generated rather than hand-written, so the adoption
+procedure continues unchanged from step 2 (`hejbro baseline`) once
+`import` has run. `--schema` is required and repeatable, with no
+default: a hosted Postgres's own platform schemas (`auth`, `storage`,
+and their neighbours) are schemas too, and adopting those as
+declarations is not a default anyone can want — name the ones you
+actually own. `--out` is required as well; `import` refuses to
+overwrite any file already there, so rerunning it (after fixing
+something by hand) never silently discards that edit.
+
+What it infers is necessarily an approximation of a hand-written
+declaration — a column's key is guessed from its SQL name, a numeric
+column's mode and array not-null-ness can't be read back from the
+catalog alone, and a handful of object kinds (views, functions,
+triggers, RLS policies, grants beyond a role's bare name) aren't
+inferred at all. `import` never hides this: every file's own header
+carries the full loss report, restating what that file could not
+express, and the same report prints to the terminal on every run. A
+column whose SQL name no declaration key can round-trip (a quoted
+`"createdAt"`, since the DSL derives a column's SQL name from its key
+by snake_case) is left out of the starter file entirely and named in
+the loss report, rather than guessed at under the wrong name — `check`
+keeps reporting that column as undeclared until it's added by hand or
+renamed in the database. Two schemas whose tables reference each other
+would otherwise make their generated files import one another in a
+cycle no loader can resolve; `import` breaks that cycle itself, on one
+deterministic direction, using an unexported reference-only handle
+(`existingTable`, above) for the foreign keys that cross it — the
+starter files always load regardless of which one a loader reaches
+first. "Checking a declaration against the real schema" above is still
+how you confirm the result (hand-edited or not) matches the database,
+and a `hejbro generate` against an empty snapshot right after `import`
+reproduces the database's own DDL, which `hejbro baseline` then
+registers exactly as step 2 describes.
+
+A database is also a valid *fallback* source for a vendored contract
+(`skills/hejbro/references/polyrepo.md`'s own subject) when the schema
+repository itself isn't reachable: `hejbro pull --db-url ... --schema
+...` writes into the same destination `hejbro vendor` does, marked
+with no commit so `vendor --check`/`outdated` refuse to compare it
+against one — see that reference for the full shape.
 
 ## Where this is enforced
 
@@ -177,7 +228,14 @@ got it right.
   the subset of pending migrations `migrate` registers rather than
   applies), `packages/cli/src/apply/execute.ts` (`applyMigration` skips
   sending a baseline file's SQL), `packages/cli/src/commands/migrate.ts`
-  (the "registered ... (statements not executed)" report line).
+  (the "registered ... (statements not executed)" report line),
+  `packages/cli/src/commands/import.ts` (`--schema`/`--out` required
+  with no default, refuse-before-write), `packages/cli/src/infer/compose.ts`
+  (`inferFromCatalog`, the single reading behind both `import` and
+  `pull`), `packages/cli/src/declare-emit/emit.ts` (the starter files'
+  own builders, the undeclarable-name-column exclusion, the cycle-safe
+  handle), `packages/cli/src/commands/pull.ts` (the database fallback,
+  writing where `vendor` writes).
 - Gates: every path cited above is checked by
   `packages/skills/test/links.test.ts`; the `ts` block on this page is
   type-checked against this repo's real source by

@@ -46,6 +46,26 @@ declaration-authority-carrying table is expected (`generateMigration`,
 write rows: `columns` (plain expressions, usable with `eq`/`and`/`or`
 the same as any other query), `select`/`insert`/`update`/`delete`.
 
+## A database as a marked fallback (`pull`)
+
+`link`/`vendor` read a schema *repository* only — `link` itself records
+nothing but a git URL or a local path ("Repository only" above). When
+that repository genuinely isn't reachable, `hejbro pull --db-url
+<db> --schema <name>` is the separate, marked fallback: it reads a
+live database's catalog instead (the same reading `import` uses,
+`packages/cli/src/infer/compose.ts`'s `inferFromCatalog`) and writes
+into the exact same destination `vendor` does — `.hejbro/vendor/
+{schema.json, snapshot.sql, contract.ts}` and `hejbro.lock` — so
+`createDb`/the rest of "The loop" above work identically either way.
+The contract's own header says it was inferred from a database rather
+than vendored, and the lock it leaves carries no commit — `vendor
+--check` and `outdated` both refuse to run against it (naming `link` as
+the way to a commit-anchored contract instead), since there is no
+commit to compare a database-sourced pin against. Reach for `pull` only
+as the fallback it's named for; once the schema repository is
+reachable, `link`+`vendor` replace the same destination with a
+commit-anchored one.
+
 ## Migrating an annotation that named the general `Table` type
 
 If you have an existing declaration variable explicitly annotated with

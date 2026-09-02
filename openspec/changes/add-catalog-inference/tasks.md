@@ -222,7 +222,9 @@ Files: `packages/cli/test/*.integration.test.ts`,
 `packages/query/src/client/contract-types.ts` and its own test fixtures
 (the consuming side of the contract restates the metadata type on
 purpose, so the origin union has to be widened there too — found by
-compiling a pulled contract, not by reading), `skills/hejbro/
+compiling a pulled contract, not by reading; a hand-written contract
+stand-in under `packages/skills/test/fixtures/` type-checks against the
+same type and moves with it), `skills/hejbro/
 references/brownfield-adoption.md`, the polyrepo reference,
 `.changeset/*.md`
 
