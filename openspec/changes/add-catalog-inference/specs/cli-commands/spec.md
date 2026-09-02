@@ -19,7 +19,9 @@ code rather than writing empty files. The files SHALL declare what
 the reading inferred with the DSL's own builders, and the command SHALL
 print the loss report. A column whose SQL name no declaration key can
 produce — the DSL derives a column's SQL name from its key by
-snake_case — SHALL be omitted from the starter files and named in the
+snake_case — or whose name the DSL's own identifier rule rejects, such
+as the leading-underscore `_id` a key does produce back, SHALL be
+omitted from the starter files and named in the
 loss report together with its consequence: the table is only partly
 declared, and `check` reports that column until it is declared by hand
 or renamed in the database. A foreign key's own catalog name SHALL survive into the starter
@@ -77,6 +79,15 @@ meant to run.
   names it and its table, and states the consequence: the table is only
   partly declared, and `check` reports that column until it is declared
   by hand or renamed in the database
+
+#### Scenario: a column the DSL rejects by name is left out the same way
+- **WHEN** a table holds a column named `_id`, whose inferred key
+  produces that same SQL name back but whose name the DSL's own
+  identifier rule rejects
+- **THEN** the run completes exactly as it does for a name no key can
+  produce: the starter file leaves that column out, the loss report
+  names it with its table and consequence, and every other column of
+  that table is declared
 
 #### Scenario: import refuses to guess which schemas to read
 - **WHEN** `hejbro import --url <db> --out src/schema` runs with no
