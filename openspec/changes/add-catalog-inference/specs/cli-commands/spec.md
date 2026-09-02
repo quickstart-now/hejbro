@@ -7,7 +7,15 @@ The CLI SHALL provide an `import` command that reads a database through
 the catalog (connection from `--url`, else `DATABASE_URL`, never from
 `hejbro.config.ts` — the rule `check` follows) and writes one starter
 declaration file per schema into a directory the command names,
-refusing to overwrite any existing file. The files SHALL declare what
+refusing to overwrite any existing file. The schemas to read SHALL be
+named explicitly — `--schema`, repeatable, with no default — and a run
+that names none SHALL refuse with a coded diagnostic that shows the
+common answer; a database's schemas include its platform's own
+(`auth`, `storage` and their neighbours on a hosted Postgres), and
+adopting those as declarations is not a default anyone can want. The
+destination SHALL be named explicitly too (`--out`, no default), and a
+run whose named schemas hold nothing to infer SHALL say so with its own
+code rather than writing empty files. The files SHALL declare what
 the reading inferred with the DSL's own builders, and the command SHALL
 print the loss report. A column whose SQL name no declaration key can
 produce — the DSL derives a column's SQL name from its key by
@@ -56,6 +64,18 @@ which `baseline` then registers.
   names it and its table, and states the consequence: the table is only
   partly declared, and `check` reports that column until it is declared
   by hand or renamed in the database
+
+#### Scenario: import refuses to guess which schemas to read
+- **WHEN** `hejbro import --url <db> --out src/schema` runs with no
+  `--schema`
+- **THEN** it fails with a coded diagnostic that names `--schema` and
+  shows the common answer, and writes nothing
+
+#### Scenario: The named schemas hold nothing to infer
+- **WHEN** every schema named by `--schema` holds no table, enum or
+  sequence the reading can infer
+- **THEN** it fails with its own coded diagnostic naming those schemas,
+  and writes no files at all
 
 #### Scenario: import never overwrites
 - **WHEN** the output directory already holds a file `import` would

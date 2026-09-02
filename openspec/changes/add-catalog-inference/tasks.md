@@ -170,9 +170,16 @@ Files: `packages/cli/src/commands/import.ts` (new — its codes are string
 literals at their own raise sites), `main.ts` (registers `import`),
 `packages/cli/test/import-command.test.ts`
 
-- [ ] 3.1 (~8m) Connection sourcing as `check`; refuse-before-write on
-      any existing file; write; print the report. Failing tests: the two
-      scenarios.
+- [ ] 3.1 (~10m) [design, settled] Connection sourcing as `check`;
+      `--schema` required and repeatable with no default, `--out`
+      required with no default, no `--force` (the header says the files
+      are the repository's own from the moment they are written, and a
+      flag that overwrites them contradicts it); refuse-before-write on
+      any existing file; write; print the report. Codes are `import-*`
+      literals at their raise sites: the three connection ones `check`
+      already defines the rule for, no schema named, nothing to infer in
+      the named schemas, a destination file that exists, a destination
+      that cannot be written. Failing tests: the delta's five scenarios.
 
 ## 4. The pull command and the marked contract (#604)
 Files: `packages/cli/src/commands/pull.ts` (new — its codes, and the
