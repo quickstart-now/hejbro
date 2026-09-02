@@ -427,6 +427,40 @@ export const projects = table(app, "projects", {
 		);
 	});
 
+	// #616: the banner hashes are snapshot hashes, so a body edit is outside
+	// verify's reach. This pins the limit the requirement now states; it is
+	// green by construction and is meant to turn red only when a body hash
+	// ships. The check-4 test above is its control (the same file with a
+	// banner line altered exits 1).
+	it("a body edit that keeps the banner lines passes (stated limitation)", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(BASE_SCHEMA);
+		await runCli(cwd, ["generate"]);
+
+		const [fileName] = await migrationFileNames();
+		const filePath = join(cwd, "migrations", fileName as string);
+		const original = await readFile(filePath, "utf8");
+		const lines = original.split("\n");
+		const statementIndex = lines.findIndex((line) =>
+			line.startsWith("create "),
+		);
+		expect(statementIndex).toBeGreaterThan(-1);
+		const edited = lines
+			.map((line, index) => {
+				if (index !== statementIndex) {
+					return line;
+				}
+				return line.replace("create ", "create /* hand-edited */ ");
+			})
+			.join("\n");
+		expect(edited).not.toBe(original);
+		await writeFile(filePath, edited);
+
+		const result = await runCli(cwd, ["verify"]);
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("checks passed");
+	});
+
 	it("existing chain diagnostics are unchanged (R2-G3's export check contributes nothing to a repository with no export)", async () => {
 		await runCli(cwd, ["init"]);
 		await writeSchema(BASE_SCHEMA);
