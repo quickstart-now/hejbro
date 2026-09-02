@@ -147,11 +147,24 @@ describe("the untracked boundary holds at a nested read's own subselect (narrow-
 
 describe("Db.execute's resolved row type for mutations (task 4.11-mutation)", () => {
 	it("insert().returning() (no projection) resolves the whole declared table's shape", () => {
-		type Stage = InsertFinal<Posts>;
+		type Stage = InsertFinal<Posts, undefined>;
 
 		expectTypeOf<ExecuteRows<Stage>>().toEqualTypeOf<
 			ReadonlyArray<SelectResult<Posts>>
 		>();
+	});
+
+	// #622: a bare mutation stage (returning() never called) is the `never`
+	// instantiation -- the statement carries no RETURNING clause, so the
+	// resolved type is the empty array's own, not the table's rows.
+	it("an insert that never called returning() resolves ReadonlyArray<never>", () => {
+		type Stage = InsertFinal<Posts>;
+		type Row = ExecuteRows<Stage>[number];
+
+		expectTypeOf<ExecuteRows<Stage>>().toEqualTypeOf<ReadonlyArray<never>>();
+		expectTypeOf<Row>().toBeNever();
+		// @ts-expect-error nothing is assignable to the element type -- there are no rows.
+		const _row: Row = { status: "draft" };
 	});
 
 	it("insert().returning({...}) (object projection) resolves exactly those keys -- a different instantiation from the whole-table case, not the same erased shape", () => {
@@ -173,11 +186,18 @@ describe("Db.execute's resolved row type for mutations (task 4.11-mutation)", ()
 	});
 
 	it("update()/deleteFrom() resolve through the exact same ReturningRow mechanism -- one shared path, not three independently-typed copies", () => {
-		type UpdateStage = UpdateFinal<Posts>;
+		type UpdateStage = UpdateFinal<Posts, undefined>;
 		type DeleteStage = DeleteFinal<Posts, { readonly id: Posts["id"] }>;
 
 		expectTypeOf<ExecuteRows<UpdateStage>>().toEqualTypeOf<
 			ReadonlyArray<SelectResult<Posts>>
+		>();
+		// #622: the never-requested case rides the same path for all three.
+		expectTypeOf<ExecuteRows<UpdateFinal<Posts>>>().toEqualTypeOf<
+			ReadonlyArray<never>
+		>();
+		expectTypeOf<ExecuteRows<DeleteFinal<Posts>>>().toEqualTypeOf<
+			ReadonlyArray<never>
 		>();
 		// A mutation's own left-joined set is always `never` (narrow-join-
 		// nullability, task 3.5): ReturningRow's object-projection branch

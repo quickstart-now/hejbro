@@ -198,9 +198,18 @@ describe("chain await types equal execute types for select and returning mutatio
 		>();
 	});
 
-	it("a returning-less mutation chain (no .returning() call at all) awaits to exactly what db.execute(insert(...).values(...)) resolves -- the same documented imprecision db.ts's own ExecuteResult already carries, inherited rather than re-decided", () => {
+	it("a returning-less mutation chain (no .returning() call at all) awaits to ReadonlyArray<never>, exactly what db.execute(insert(...).values(...)) resolves (#622)", () => {
 		expectTypeOf<Awaited<InsertChainFinal<Posts>>>().toEqualTypeOf<
 			ExecuteResult<InsertFinal<Posts>>
+		>();
+		expectTypeOf<Awaited<InsertChainFinal<Posts>>>().toEqualTypeOf<
+			ReadonlyArray<never>
+		>();
+		expectTypeOf<Awaited<UpdateChainFinal<Posts>>>().toEqualTypeOf<
+			ReadonlyArray<never>
+		>();
+		expectTypeOf<Awaited<DeleteChainFinal<Posts>>>().toEqualTypeOf<
+			ReadonlyArray<never>
 		>();
 	});
 

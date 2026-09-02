@@ -502,15 +502,16 @@ const makeDistinctableChain = <
 /**
  * A mutation chain's terminal shape: awaiting it resolves the `returning()`
  * row shape ({@link ReturningRow}, task 3.13/4.11-mutation reused). A
- * chain that never called `.returning()` at all types identically to one
- * that called `.returning()` with no projection — the same known,
- * documented imprecision `db.ts`'s own `ExecuteResult` already carries
- * (task 4.11-mutation) — and resolves the same way at runtime: an empty
- * array, since neither issues a SQL `RETURNING` clause.
+ * chain that never called `.returning()` carries `TReturning = never`
+ * (core's own default for a bare mutation stage, #622) and so awaits to
+ * `ReadonlyArray<never>` — the empty array it always resolves to, typed
+ * as such, since no SQL `RETURNING` clause is ever issued for it.
+ * `.returning()` with no projection is the `undefined` instantiation and
+ * still resolves every declared column.
  */
 export type InsertChainFinal<
 	TTable extends Table = Table,
-	TReturning extends ReturningProjection | undefined = undefined,
+	TReturning extends ReturningProjection | undefined = never,
 > = ChainTerminal<ReturningRow<TTable, TReturning>>;
 
 export type InsertChainReturnable<TTable extends Table = Table> =
@@ -533,7 +534,7 @@ export type InsertChainConflictable<TTable extends Table = Table> =
 
 export type UpdateChainFinal<
 	TTable extends Table = Table,
-	TReturning extends ReturningProjection | undefined = undefined,
+	TReturning extends ReturningProjection | undefined = never,
 > = ChainTerminal<ReturningRow<TTable, TReturning>>;
 
 export type UpdateChainReturnable<TTable extends Table = Table> =
@@ -550,7 +551,7 @@ export type UpdateChainFilterable<TTable extends Table = Table> =
 
 export type DeleteChainFinal<
 	TTable extends Table = Table,
-	TReturning extends ReturningProjection | undefined = undefined,
+	TReturning extends ReturningProjection | undefined = never,
 > = ChainTerminal<ReturningRow<TTable, TReturning>>;
 
 export type DeleteChainReturnable<TTable extends Table = Table> =

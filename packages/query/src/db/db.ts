@@ -200,17 +200,15 @@ const rolesOf = (
  *   update/delete equivalents all structurally carry `TTable`/
  *   `TReturning` the same way, core's `query/mutate.ts`, task
  *   4.11-mutation) resolves {@link ReturningRow}<TTable, TReturning> —
- *   `TReturning` `undefined` (no `.returning()` call, or `.returning()`
- *   with no projection) means the whole declared table's shape,
- *   matching `ReturningRow`'s own default. **Known, documented
- *   imprecision**: a chain that never called `.returning()` at all types
- *   identically to one that called `.returning()` with no projection,
- *   even though the former never issues a SQL `RETURNING` clause and
- *   always resolves to an empty array at runtime — an empty array is a
- *   structurally valid (if unhelpfully typed) instance of
- *   `ReadonlyArray<ReturningRow<TTable, undefined>>`, so this is
- *   imprecise typing, not an unsound one (no element could ever violate
- *   the promised shape, because there are never any elements).
+ *   `TReturning` `undefined` (`.returning()` with no projection) means
+ *   the whole declared table's shape, matching `ReturningRow`'s own
+ *   default; `TReturning` `never` (no `.returning()` call at all —
+ *   core's default for a bare mutation stage, #622) resolves to
+ *   `ReadonlyArray<never>`, the honest type of the empty array such a
+ *   statement always produces, since it carries no SQL `RETURNING`
+ *   clause and hejbro never adds one implicitly. The two are different
+ *   instantiations, so a caller cannot read rows off a mutation that
+ *   never asked for any.
  * - Everything else — a bare, already-unwrapped `QueryNode` (that
  *   builder-stage richness is gone once unwrapped) or the `sql` escape
  *   hatch — resolves to the plain {@link DriverRow} shape, exactly as it

@@ -270,6 +270,11 @@ describe("InsertFinal/UpdateFinal/DeleteFinal<TTable, TReturning> generics (task
 		type ProjectedReturning = ExtractInsertReturning<typeof projected>;
 
 		expectTypeOf<WholeReturning>().toEqualTypeOf<undefined>();
+		// #622: a stage whose returning() was never called is the `never`
+		// instantiation -- distinct from the no-projection `undefined` one.
+		expectTypeOf<
+			ExtractInsertReturning<InsertFinal<typeof posts>>
+		>().toBeNever();
 		expectTypeOf<keyof ProjectedReturning>().toEqualTypeOf<"id">();
 		expectTypeOf<ProjectedReturning["id"]>().toEqualTypeOf<typeof posts.id>();
 		// @ts-expect-error "id" was the only key projected -- "slug" wasn't.

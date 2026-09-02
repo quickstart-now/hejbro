@@ -153,14 +153,18 @@ type MutationStageMeta<
 
 /**
  * The terminal insert stage: nothing left to chain but the compiled
- * query. `TTable` defaults to the widest `Table` and `TReturning` to
- * `undefined` (spec §5.2's "no projection = every column"), so every
- * existing non-generic consumer keeps compiling against the bare
- * `InsertFinal` name unchanged.
+ * query. `TTable` defaults to the widest `Table`. `TReturning` defaults
+ * to `never` — "returning was never requested" (#622): the statement
+ * carries no `returning` clause, so the row type a reader derives from
+ * it must be `never`, not the table's shape. `returning()` with no
+ * argument sets `undefined` instead (spec §5.2's "no projection = every
+ * column"); the two are different instantiations on purpose, and
+ * `never` is the one a bare `InsertFinal<T>` means. `UpdateFinal` and
+ * `DeleteFinal` follow the same rule.
  */
 export type InsertFinal<
 	TTable extends Table = Table,
-	TReturning extends ReturningProjection | undefined = undefined,
+	TReturning extends ReturningProjection | undefined = never,
 > = {
 	readonly insertQuery: InsertNode;
 	/** Type-only marker, never assigned — see {@link mutationStageBrand}. */
@@ -192,7 +196,7 @@ export type InsertConflictable<TTable extends Table> =
 
 export type UpdateFinal<
 	TTable extends Table = Table,
-	TReturning extends ReturningProjection | undefined = undefined,
+	TReturning extends ReturningProjection | undefined = never,
 > = {
 	readonly updateQuery: UpdateNode;
 	/** Type-only marker, never assigned — see {@link mutationStageBrand}. */
@@ -211,7 +215,7 @@ export type UpdateFilterable<TTable extends Table = Table> =
 
 export type DeleteFinal<
 	TTable extends Table = Table,
-	TReturning extends ReturningProjection | undefined = undefined,
+	TReturning extends ReturningProjection | undefined = never,
 > = {
 	readonly deleteQuery: DeleteNode;
 	/** Type-only marker, never assigned — see {@link mutationStageBrand}. */
