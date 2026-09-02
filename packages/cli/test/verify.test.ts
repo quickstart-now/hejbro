@@ -432,7 +432,7 @@ export const projects = table(app, "projects", {
 	// green by construction and is meant to turn red only when a body hash
 	// ships. The check-4 test above is its control (the same file with a
 	// banner line altered exits 1).
-	it("a body edit that keeps the banner lines passes (stated limitation)", async () => {
+	it("a body edit that keeps the hash lines passes (stated limitation)", async () => {
 		await runCli(cwd, ["init"]);
 		await writeSchema(BASE_SCHEMA);
 		await runCli(cwd, ["generate"]);
@@ -459,6 +459,43 @@ export const projects = table(app, "projects", {
 		const result = await runCli(cwd, ["verify"]);
 		expect(result.exitCode).toBe(0);
 		expect(result.stdout).toContain("checks passed");
+	});
+
+	// #616: the chain root's own parent is taken as given (core's checkChain,
+	// by design -- a legacy-prefix chain's first hashed file does not start at
+	// the empty snapshot), so deleting the first migration is not reported.
+	// A stated limit, pinned; the middle-file case is the control (broken-chain).
+	it("removing the first migration passes (stated limitation: the root is taken as given)", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(BASE_SCHEMA);
+		await runCli(cwd, ["generate"]);
+		await writeSchema(CHANGED_SCHEMA);
+		await runCli(cwd, ["generate"]);
+		const [first, second] = await migrationFileNames();
+		expect(second).toBeDefined();
+		await rm(join(cwd, "migrations", first as string));
+
+		const result = await runCli(cwd, ["verify"]);
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("checks passed (1 migrations");
+	});
+
+	it("editing a non-hash banner line passes (stated limitation: only the two hash lines are read)", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(BASE_SCHEMA);
+		await runCli(cwd, ["generate"]);
+		const [fileName] = await migrationFileNames();
+		const filePath = join(cwd, "migrations", fileName as string);
+		const original = await readFile(filePath, "utf8");
+		const edited = original.replace(
+			"-- hejbro migration",
+			"-- hejbro migration (edited by hand)",
+		);
+		expect(edited).not.toBe(original);
+		await writeFile(filePath, edited);
+
+		const result = await runCli(cwd, ["verify"]);
+		expect(result.exitCode).toBe(0);
 	});
 
 	it("existing chain diagnostics are unchanged (R2-G3's export check contributes nothing to a repository with no export)", async () => {

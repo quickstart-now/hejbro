@@ -21,15 +21,19 @@ contents"), so the guide is corrected in the same change.
 
 ## What Changes
 
-- The `verify` requirement states what its hashes cover — the declared
-  history a chain records — and states the limit in its own words: a
-  body edit that keeps the banner lines intact passes. The existing
-  hand-edit scenario narrows its WHEN to the banner and the snapshot;
-  a new scenario pins the pass. No behaviour changes.
-- One subprocess test pins the stated limit (a body edit, banner
-  untouched, `verify` exits 0). It arrives green — it is a pin on a
-  contract sentence, and the day a body hash ships is the day it is
-  meant to turn red on purpose.
+- The `verify` requirement states what its hashes cover — the recorded
+  sequence of declared states, checked link by link from the first
+  hashed file — and states every limit the D106 review measured: a body
+  edit that keeps the two hash lines passes, so does an edit to any
+  other banner line, a rename that keeps sort position, and the removal
+  of the first migration (the chain root's `parent-snapshot:` is taken
+  as given, by core's design for legacy-prefix chains). The hand-edit
+  scenario narrows its WHEN to the two hash lines and the snapshot; two
+  scenarios pin the passes. No behaviour changes.
+- Subprocess tests pin the stated limits (body edit, non-hash banner
+  line, first-file removal — each `verify` exits 0). They arrive green —
+  they are pins on contract sentences; the day a body hash or a root
+  check ships is the day they are meant to turn red on purpose.
 - `docs/guide/renames.md` says what the banner lines actually hash.
 - One `patch` changeset: a documented contract of the released CLI is
   corrected.
