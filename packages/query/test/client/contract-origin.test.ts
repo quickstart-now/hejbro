@@ -10,6 +10,7 @@ type TestDatabase = {
 			readonly Update: { readonly id?: string; readonly title?: string };
 		};
 	};
+	readonly Functions: Record<string, never>;
 };
 
 const TABLES = {
@@ -60,6 +61,7 @@ describe("ContractMetadata backward/forward compatibility (CI-G5-R1-02)", () => 
 			exportHash: "sha256:x",
 			roles: [],
 			tables: TABLES,
+			functions: {},
 		});
 		const rows = await client.posts.select();
 
@@ -77,6 +79,7 @@ describe("ContractMetadata backward/forward compatibility (CI-G5-R1-02)", () => 
 			exportHash: "sha256:x",
 			roles: [],
 			tables: TABLES,
+			functions: {},
 		});
 		const rows = await client.posts.select();
 
@@ -94,6 +97,7 @@ describe("ContractMetadata backward/forward compatibility (CI-G5-R1-02)", () => 
 			schemas: ["app"],
 			roles: [],
 			tables: TABLES,
+			functions: {},
 		});
 
 		expect(client.posts).toBeDefined();
@@ -121,6 +125,7 @@ describe("ContractMetadata backward/forward compatibility (CI-G5-R1-02)", () => 
 			commit: "abc123",
 			roles: [],
 			tables: TABLES,
+			functions: {},
 		});
 	});
 });

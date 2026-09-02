@@ -36,6 +36,9 @@ const tableFactFromCatalog = (
 	schemaName: table.schema,
 	tableName: table.table,
 	exportName: null,
+	// A catalog reading has no declaration to mark existing: every inferred
+	// table is one the starter files will manage (add-unmanaged-objects, #605).
+	existing: false,
 	columns: Object.fromEntries(
 		table.columns.map((column) => [
 			column.sqlName,

@@ -5,7 +5,8 @@ import { buildFixturePayload } from "./support/contract-fixture";
 import { loadEmittedContract } from "./support/load-emitted-contract";
 
 const app = schema("app");
-const ORIGIN = { commit: "abc123", exportHash: "sha256:deadbeef" };
+const ORIGIN = {
+	source: "git" as const, commit: "abc123", exportHash: "sha256:deadbeef" };
 
 const buildFixture = () => {
 	const authUsers = existingTable("auth", "users", {
