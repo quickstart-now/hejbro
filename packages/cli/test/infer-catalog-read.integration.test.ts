@@ -144,6 +144,16 @@ const FIXTURE_DDL = `
 		"createdAt" timestamptz
 	);
 
+	-- CI-G1-R1-16 info: the delta's own "Two SQL names that collide on one
+	-- key are both described" scenario -- user_id keeps the plain key
+	-- (physical order), "USER_ID" gets the collision suffix, and since
+	-- toSnakeCase("userId2") is "user_id2" (not "USER_ID"), the second is
+	-- exactly as undeclarable as "createdAt", for a different reason.
+	create table infer_probe.collision_probe (
+		user_id uuid,
+		"USER_ID" uuid
+	);
+
 	-- CI-G1-R1-10 (D): the three-way sequence split -- identity-owned
 	-- (parents.id/children.id above), serial-owned (legacy.id, deptype
 	-- 'a'), and standalone (orphan_seq, no OWNED BY at all, only an
@@ -488,5 +498,39 @@ describe("inferFromCatalog / 1.8 single entry point", () => {
 		expect(line).toBeDefined();
 		expect(line).toContain("cannot be carried in the contract");
 		expect(line).not.toContain("only partly declared");
+	});
+
+	// The delta's own "Two SQL names that collide on one key are both
+	// described" scenario (CI-G1-R1-16 info) -- description carries both
+	// user_id and "USER_ID", but only the first (physical order, plain
+	// key) can round-trip; the loss report names the second.
+	it("a collision: both columns are described, but only the earliest-in-physical-order one reaches the snapshot", async () => {
+		const result = await inferFromCatalog({
+			session: driver,
+			schemas: ["infer_probe"],
+			command: "pull",
+		});
+
+		const described = result.description.tables.find(
+			(entry) =>
+				entry.schema === "infer_probe" && entry.table === "collision_probe",
+		);
+		expect(described?.columns).toEqual([
+			{ sqlName: "user_id", tsKey: "userId" },
+			{ sqlName: "USER_ID", tsKey: "userId2" },
+		]);
+
+		const collisionTable = result.snapshot.objects[
+			"table:infer_probe.collision_probe"
+		] as { readonly columns: ReadonlyArray<{ readonly name: string }> };
+		expect(collisionTable.columns.map((column) => column.name)).toEqual([
+			"user_id",
+		]);
+
+		const collisionLine = result.lossReport.find((entry) =>
+			entry.includes("collision_probe"),
+		);
+		expect(collisionLine).toContain("USER_ID");
+		expect(collisionLine).not.toContain('infer_probe.collision_probe.user_id"');
 	});
 });
