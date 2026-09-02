@@ -2,7 +2,9 @@ import type { HejbroInput, Snapshot } from "@hejbro/core";
 import {
 	check,
 	emptySnapshot,
+	existingTable,
 	generateMigration,
+	getTableMeta,
 	hejbroError,
 	inArray,
 	schema,
@@ -15,6 +17,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { Catalog } from "../src/check/catalog";
 import type { Finding } from "../src/check/compare";
 import type { Inventory } from "../src/check/inventory";
+import { buildInventory } from "../src/check/inventory";
 import {
 	compareCheckAgainstCatalog,
 	EMPTY_INVENTORY,
@@ -536,5 +539,98 @@ export const posts = table(app, "posts", {
 		expect(equalsForm.stderr).toBe(spaceForm.stderr);
 		expect(equalsForm.stdout).toBe(spaceForm.stdout);
 		expect(equalsForm.stderr).not.toContain("check-connection-missing");
+	});
+});
+
+describe("an existing declaration is neither compared nor inventoried (add-unmanaged-objects, 2.2)", () => {
+	const noOpSession: DriverSession = {
+		execute: async () => [],
+	};
+
+	// The database carries a real, differently-shaped table under this
+	// identity (declared "id uuid", catalog says "integer") -- if the
+	// existing skip in compare.ts didn't run first, this shape gap
+	// would produce a `check-object-differs` finding on its own.
+	const buildScenario = (): { snapshot: Snapshot; catalog: Catalog } => {
+		const authUsers = existingTable("auth", "users", { id: uuid() });
+		const snapshot = buildTestSnapshot([getTableMeta(authUsers)]);
+		const catalog: Catalog = {
+			...emptyCatalog(),
+			tables: [{ schema: "auth", table: "users", rls: false }],
+			columns: [
+				{
+					schema: "auth",
+					table: "users",
+					name: "id",
+					notNull: true,
+					catalogType: "integer",
+					baseTypeKind: null,
+					baseTypeSchema: null,
+					baseTypeName: null,
+					catalogDefault: null,
+				},
+			],
+		};
+		return { snapshot, catalog };
+	};
+
+	// ① Independent of ②: this reads only `compareCheckAgainstCatalog`
+	// (compare.ts's own existing skip), never `buildInventory` -- a
+	// mutant that removes only the inventory side leaves this green.
+	it("no difference is reported for it", async () => {
+		const { snapshot, catalog } = buildScenario();
+		const findings = await compareCheckAgainstCatalog(
+			snapshot,
+			catalog,
+			noOpSession,
+		);
+		expect(findings).toEqual([]);
+	});
+
+	// ② Independent of ①: `buildInventory` never calls `compareCatalog` --
+	// a mutant that removes only compare.ts's skip leaves this green (it
+	// was already true before this task, since the table's identity is
+	// declared either way -- see inventory.ts's own `declaredTableIdentities`).
+	it("is absent from the inventory section", () => {
+		const { snapshot, catalog } = buildScenario();
+		const inventory = buildInventory(snapshot, catalog);
+		expect(inventory.unmanagedTables).toEqual([]);
+	});
+
+	// ③ Delta's own third clause, derived from ① (a real difference would
+	// also flip this) -- asserted on the same real pipeline
+	// (`compareCheckAgainstCatalog` + `renderCheckReport`), not assumed
+	// from ① alone.
+	it("the exit code is unaffected", async () => {
+		const { snapshot, catalog } = buildScenario();
+		const findings = await compareCheckAgainstCatalog(
+			snapshot,
+			catalog,
+			noOpSession,
+		);
+		const inventory = buildInventory(snapshot, catalog);
+		const report = renderCheckReport(findings, inventory);
+		expect(report.exitCode).toBe(0);
+	});
+
+	// ④ Phrase-independent of ①-③: reuses this file's own idiom (line 179's
+	// "does not warn on an existingTable...") for `check`'s pre-existing
+	// "unmanaged" concept -- a *declared* existing table SHALL NOT surface
+	// as "unmanaged" text anywhere in the report, since that word is
+	// reserved for a catalog table no declaration covers at all. A mutant
+	// that made the report render the wrong section, or a stray reuse of
+	// this word for the existing declaration, would show up here even if
+	// ①-③ all happened to net a clean report by coincidence.
+	it("the word `unmanaged` never appears in the report, even though an existing table is declared", async () => {
+		const { snapshot, catalog } = buildScenario();
+		const findings = await compareCheckAgainstCatalog(
+			snapshot,
+			catalog,
+			noOpSession,
+		);
+		const inventory = buildInventory(snapshot, catalog);
+		const report = renderCheckReport(findings, inventory);
+		const wholeReport = [...report.stdout, report.stderr ?? ""].join("\n");
+		expect(wholeReport).not.toContain("unmanaged");
 	});
 });

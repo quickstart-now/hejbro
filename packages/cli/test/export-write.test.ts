@@ -204,6 +204,40 @@ describe("hejbro generate --export", () => {
 		expect(await readExportFile(cwd, "schema.json")).toBe(before);
 	});
 
+	it("carries an existing table marked as such (add-unmanaged-objects, 2.1)", async () => {
+		const schemaWithExisting = `import { existingTable, schema, table, text, uuid } from "hejbro";
+
+export const app = schema("app");
+
+export const authUsers = existingTable("auth", "users", { id: uuid() });
+
+export const posts = table(app, "posts", {
+	id: uuid().primaryKey().defaultRandom(),
+	title: text().notNull(),
+});
+`;
+		await writeSchema(cwd, schemaWithExisting);
+		const result = await runCli(cwd, ["generate", "--export"]);
+		expect(result.exitCode).toBe(0);
+
+		const description = JSON.parse(await readExportFile(cwd, "schema.json"));
+		const authUsersFact = description.tables.find(
+			(t: { tableName: string }) => t.tableName === "users",
+		);
+		expect(authUsersFact).toBeDefined();
+		expect(authUsersFact.existing).toBe(true);
+
+		// The field is always present (export/description.ts's own "no
+		// omitted key" convention, unlike the snapshot's compact rule) --
+		// a managed table's entry carries an explicit `false`, not an
+		// absent key a reader would have to default itself.
+		const postsFact = description.tables.find(
+			(t: { tableName: string }) => t.tableName === "posts",
+		);
+		expect(postsFact).toBeDefined();
+		expect(postsFact.existing).toBe(false);
+	});
+
 	it("description and snapshot formats are distinct values", async () => {
 		await writeSchema(cwd, SCHEMA_SOURCE);
 		await runCli(cwd, ["generate", "--export"]);

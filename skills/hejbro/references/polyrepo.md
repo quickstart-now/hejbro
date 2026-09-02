@@ -59,6 +59,23 @@ table's own SQL name (matching `db()`'s own table-name keying);
 schema module, never its SQL name. A reader who only sees one of the two
 groups tends to assume both follow the same rule — they don't.
 
+## Existing tables cross the boundary too
+
+An `existingTable()` declaration (D41, amended by add-unmanaged-objects
+#605) — a platform-owned table like Supabase's `authUsers`, declared for
+its shape and never for its DDL — vendors like any other: it reaches
+`.hejbro/vendor/contract.ts`'s own `Tables` entry with the same `Row`/
+`Insert`/`Update` a managed table gets, its client metadata is marked
+existing, and a managed table's foreign key onto it resolves to a
+relation in the contract exactly as one onto a managed table does (an
+undeclared target still has none). `createDb(driver)` reads it plainly,
+the same as any other table — `db.authUsers.select()`, no different
+shape than a managed one. **What this does not give you yet**:
+*following* that relation from the client — the name-keyed chain has no
+`.related()` for any table, managed or existing (opening that surface is
+separate work, #653) — so a consumer reads the existing table and the
+managed table each on their own, not as one nested/joined query.
+
 ## Migrating an annotation that named the general `Table` type
 
 If you have an existing declaration variable explicitly annotated with

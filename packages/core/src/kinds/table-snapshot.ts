@@ -240,6 +240,15 @@ export const checkExpression = (check: CheckSnapshot): string =>
  * approved design, #24). Frozen now (pre-1.0, D65) for the same reason as
  * {@link ColumnSnapshot.uniqueName}: a later PK-alter feature must never
  * disagree with a name already committed to a user's database.
+ *
+ * `existing` (add-unmanaged-objects, D33 compact rule) marks a table
+ * declared with `existingTable()` — present only when `true` (absent ⇒
+ * managed) — read via {@link tableExisting}. Named for the DSL/core
+ * vocabulary already in use (`existingTable()`,
+ * `TableDeclaration.existing`), not "unmanaged": `hejbro check`'s own
+ * shipped inventory already spends that word on a different sense (a
+ * catalog table no declaration covers at all). A snapshot written
+ * before this field existed has every table reading as managed.
  */
 export type TableSnapshot = {
 	readonly schema: string;
@@ -249,6 +258,7 @@ export type TableSnapshot = {
 	readonly foreignKeys: ReadonlyArray<ForeignKeySnapshot>;
 	readonly checks?: ReadonlyArray<CheckSnapshot>;
 	readonly primaryKeyName?: string;
+	readonly existing?: true;
 };
 
 /** `snapshot.checks`, defaulting to `[]` when absent (compact snapshot, D33). */
@@ -259,6 +269,10 @@ export const tableChecks = (
 /** `snapshot.primaryKeyName`, defaulting to `null` when absent (compact snapshot — always absent when no column has `primaryKey: true`). */
 export const tablePrimaryKeyName = (snapshot: TableSnapshot): string | null =>
 	snapshot.primaryKeyName ?? null;
+
+/** `snapshot.existing`, defaulting to `false` when absent (compact snapshot — a pre-marker snapshot reads as managed). */
+export const tableExisting = (snapshot: TableSnapshot): boolean =>
+	snapshot.existing === true;
 
 // Internal invariant: this shape is exactly what tableKind.serialize (table-kind.ts) produces.
 /** Narrows a raw snapshot `JsonValue` to {@link TableSnapshot}. */

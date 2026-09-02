@@ -39,6 +39,13 @@ const tableFactSchema = z.object({
 	tableName: z.string(),
 	exportName: z.string().nullable(),
 	columns: z.record(z.string(), columnFactSchema),
+	// add-unmanaged-objects: additive, no description-format bump -- an
+	// export written before this field existed carries no `existing` key
+	// at all, and MUST read as `false` (managed), never as a rejection.
+	// `descriptionFormat` stays 1 either way (`export/format.ts`); a
+	// reader that instead required the key would refuse an older,
+	// perfectly valid export for a fact it never claimed to carry.
+	existing: z.boolean().default(false),
 });
 
 const functionArgFactSchema = z.object({

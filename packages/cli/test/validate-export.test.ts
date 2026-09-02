@@ -130,3 +130,49 @@ describe("validateExport", () => {
 		expect(validated.payload.functions).toEqual([fact]);
 	});
 });
+
+describe("validateExport — existing (add-unmanaged-objects, 2.1)", () => {
+	it("a current export's existing table reads back as existing", () => {
+		const schema = JSON.stringify({
+			tables: [
+				{
+					schemaName: "auth",
+					tableName: "users",
+					exportName: null,
+					columns: {},
+					existing: true,
+				},
+			],
+			functions: [],
+			roles: [],
+			snapshot: { formatVersion: 8, dialect: "postgres", objects: {} },
+		});
+		const { payload } = validateExport(FORMAT_TEXT, schema);
+		expect(payload.tables[0]?.existing).toBe(true);
+	});
+
+	// Hand-written, not built by our own writer -- a schema.json this
+	// package's own writer produces already carries the field one way or
+	// the other, so it can never stand in for a file written before the
+	// field existed (add-unmanaged-objects/1.3's own reasoning, applied
+	// to the export instead of the snapshot).
+	it("an export written before the marker reads as managed", () => {
+		const olderSchema = JSON.stringify({
+			tables: [
+				{
+					schemaName: "app",
+					tableName: "posts",
+					exportName: null,
+					columns: {},
+					// No `existing` key at all -- a real pre-add-unmanaged-
+					// objects export.
+				},
+			],
+			functions: [],
+			roles: [],
+			snapshot: { formatVersion: 8, dialect: "postgres", objects: {} },
+		});
+		const { payload } = validateExport(FORMAT_TEXT, olderSchema);
+		expect(payload.tables[0]?.existing).toBe(false);
+	});
+});

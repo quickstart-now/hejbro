@@ -2,6 +2,7 @@ import {
 	buildSnapshot,
 	createDefaultRegistry,
 	emptySnapshot,
+	existingTable,
 	getTableMeta,
 	schema,
 	table,
@@ -132,6 +133,53 @@ describe("planReset / 5.1", () => {
 			ddlCalls.some((call) => call.sql.includes('drop table "app"."managed"')),
 		).toBe(true);
 		expect(ddlCalls.some((call) => call.sql.includes("unmanaged"))).toBe(false);
+	});
+
+	// add-unmanaged-objects, 2.3: an `existingTable()` declaration is a
+	// declaration (unlike the `UnmanagedTable` case above), but the
+	// snapshot marks it `existing: true` and core's DDL-blocking guard
+	// (`isExistingSide`, table-kind.ts) makes it invisible to
+	// `diffSnapshots` on either side -- reset's own `planReset` and its
+	// DDL-generating `generateMigrations` call both route through that
+	// same guard, so this table should never appear in the drop plan,
+	// never raise the confirmation count, and never appear in the DDL
+	// reset actually sends.
+	it("leaves a declared-but-existing table standing, and never counts it toward the drop confirmation", async () => {
+		const authUsers = existingTable("auth", "users", {
+			id: uuid().primaryKey(),
+		});
+		const snapshotWithExisting = buildSnapshot(
+			[
+				app,
+				getTableMeta(table(app, "managed", { id: uuid().primaryKey() })),
+				getTableMeta(authUsers),
+			],
+			registry,
+			emptySnapshot,
+		);
+
+		const changes = planReset(snapshotWithExisting, registry);
+		expect(
+			changes.map((change) => `${change.kind}:${change.identity}`),
+		).toEqual(["table:app.managed", "schema:app"]);
+
+		const { driver, calls } = makeFakeDriver();
+		const confirmation = requiredConfirmation("testdb", changes);
+
+		await applyReset(driver, snapshotWithExisting, registry, confirmation);
+
+		const ddlCalls = calls.filter(
+			(call) =>
+				!call.sql.toLowerCase().includes("ledger") &&
+				(call.sql.toLowerCase().includes("drop") ||
+					call.sql.toLowerCase().includes("create")),
+		);
+		expect(
+			ddlCalls.some((call) => call.sql.includes('drop table "app"."managed"')),
+		).toBe(true);
+		expect(
+			ddlCalls.some((call) => call.sql.toLowerCase().includes("auth")),
+		).toBe(false);
 	});
 
 	// [G4 rework, #610] reset now builds its DDL by reusing

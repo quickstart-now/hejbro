@@ -108,6 +108,11 @@ tables inside your declared schemas that no declaration covers, and the
 database's installed extensions — informational only, never a `check`
 finding and never affecting the exit code.
 
+hejbro does not manage a table for one of two reasons — no declaration
+covers it at all (`check`'s own inventory, above), or a declaration
+covers it with `existingTable()` (never in the inventory) — and the two
+are never the same table twice: the section below is the second one.
+
 Before `check` existed, the general technique was to apply the generated
 migration to a scratch database (empty, disposable), take a schema dump
 of it, and compare that dump against a schema dump of the real database
@@ -120,23 +125,30 @@ exists to answer for your own project.
 
 ## Deciding what to manage
 
-`existingTable(schemaName, tableName, columns)` (D41,
-`packages/core/src/dsl/existing-table.ts`) is a reference-only table: it
-can be an FK target, used in `exists()`, and joined against, but it is
-never passed to `generateMigration`, never diffed, and never emitted —
-passing one as a declaration is the hard error `existing-table-declared`.
-It exists for tables that stay permanently outside hejbro's management
-(Supabase's `authUsers` is the shipped example) — it is not a staging
-step toward later full management of that table. The adoption choice per
-table is binary and made once: declare it with `table()` (hejbro now
-owns its DDL going forward) or reference it with `existingTable()`
-(hejbro never touches it, only reads its shape for typing/FK purposes).
+`existingTable(schemaName, tableName, columns)` (D41, amended by
+add-unmanaged-objects #605, `packages/core/src/dsl/existing-table.ts`)
+declares a table for its shape, never for its DDL: it can be an FK
+target, used in `exists()`, and joined against — and, since #605, it is
+also a real top-level declaration in its own right. Exported from a
+schema file the same way a `table()` is, it reaches the snapshot (marked
+`existing: true`), the export description, and a vendored contract's
+`Tables` entry, exactly like a managed table's shape does — but
+`generateMigration` diffs nothing for it and emits no statement, ever,
+ready to adopt or not. It exists for tables that stay permanently
+outside hejbro's management (Supabase's `authUsers` is the shipped
+example) — it is not a staging step toward later full management of
+that table. The adoption choice per table is binary and made once:
+declare it with `table()` (hejbro now owns its DDL going forward) or
+declare it with `existingTable()` (hejbro never touches its DDL, only
+reads its shape for typing/FK/export purposes) — the difference from
+before #605 is that the second choice no longer has to stay a bare,
+unexported reference to be usable this way.
 
 ```ts
 import { existingTable, text, uuid } from "hejbro";
 
-// Permanently unmanaged — never passed to generateMigration, never diffed.
-const legacyCustomers = existingTable("public", "legacy_customers", {
+// Permanently unmanaged — declared for its shape, never diffed or emitted.
+export const legacyCustomers = existingTable("public", "legacy_customers", {
 	id: uuid().primaryKey(),
 	email: text().notNull(),
 });
@@ -168,7 +180,7 @@ got it right.
   snapshot-only, no live connection), `packages/cli/src/commands/verify.ts`
   (the five file-only checks, and `readBaselineFileNames`, which reads
   the `-- baseline:` marker for `migrate`), `packages/core/src/dsl/existing-table.ts`
-  (`existingTable`, `existing-table-declared`), `packages/cli/src/commands/check.ts`
+  (`existingTable`), `packages/cli/src/commands/check.ts`
   (the three-way exit code, the coverage-boundary statement, the
   inventory section), `packages/cli/src/check/catalog.ts` (the read-only
   catalog queries), `packages/cli/src/check/driver.ts` (`--url`/
@@ -178,6 +190,13 @@ got it right.
   applies), `packages/cli/src/apply/execute.ts` (`applyMigration` skips
   sending a baseline file's SQL), `packages/cli/src/commands/migrate.ts`
   (the "registered ... (statements not executed)" report line).
+- Where an `existingTable()` declaration itself is handled: the
+  snapshot marker (`packages/core/src/kinds/table-snapshot.ts`'s
+  `existing?: true`, read via `tableExisting`) and the DDL-blocking
+  guard it feeds (`packages/core/src/kinds/table-kind.ts`'s
+  `isExistingSide`, opening `tableKind.diff`) — the two together are
+  why declaring one is never a hard error and never produces a
+  migration, add-unmanaged-objects (#605).
 - Gates: every path cited above is checked by
   `packages/skills/test/links.test.ts`; the `ts` block on this page is
   type-checked against this repo's real source by
