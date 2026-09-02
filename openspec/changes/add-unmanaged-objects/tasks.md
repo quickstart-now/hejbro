@@ -357,9 +357,63 @@ check/inventory.ts`, `packages/cli/src/commands/{reset,raise}.ts` (skip),
       (the new loader test), the other 8 in that file stay green —
       proves the characterization pin is load-bearing even though it
       arrived green.
-- [ ] 2.3 (~5m) `reset` drops nothing of an existing table and `raise`
-      ignores it. Failing test: `reset-command.test.ts` — "reset drops no
-      existing table".
+- [x] 2.3 (~9m) `reset` drops nothing of an existing table; `raise` and
+      `baseline` measured, neither needs a fix.
+
+      **Measured first, per instruction, before writing anything.**
+      **`reset`**: `apply/reset.ts`'s `planReset` (`diffSnapshots`) and
+      its DDL-generating `resetMigrationSql` (`generateMigrations`) both
+      route through core's `tableKind.diff`, which opens with the
+      group-1 `isExistingSide` guard (`table-kind.ts:627`) before
+      `createOrDropDiff` runs — structurally the same chokepoint
+      `generate`/`baseline` already rely on, no reset-specific code
+      exists to add a skip to.
+      **`raise`**: `apply/raise.ts`'s `SnapshotFile`/`applyRaise` never
+      touch a `Snapshot` or declarations at all — only opaque migration
+      SQL text (`{fileName, sql, origin}`) and the ledger. Structurally
+      no existing-table-specific test is constructible here; the
+      pre-existing `apply-raise.test.ts:206` ("never refuses over an
+      object this snapshot's own DDL does not touch (an unmanaged object
+      is not a declared one)") already covers the identical
+      "raise doesn't inspect anything beyond its own text" reasoning,
+      under `check`'s own unrelated "unmanaged" sense (left untouched by
+      2.1b, category ②) — a new pin here would assert the same absence
+      of behavior a second time, not a different one, so none was added.
+      **`baseline`**: `commands/generate.ts`'s `runGenerate` calls the
+      identical `generateMigrations({declarations, previousSnapshot,
+      ...})` for `mode: "generate"` (line 672/729, first and final pass)
+      and `mode: "baseline"` — `mode` only gates
+      `assertBaselineIsFirst`/`throwBaselineNothingToAdopt` and report
+      text (`reportHead`), and the `baseline: mode === "baseline"` flag
+      passed into the final pass only marks the emitted migration's own
+      banner (`engine/generate.ts:170-171`, doc comment: "Core only
+      renders the marker; deciding when it is legal is the CLI's job").
+      No diff-logic branch reads `mode` or `baseline` — baseline shares
+      `generate`'s exact code path through the group-1 guard, so this
+      task owns baseline's coverage too (proposal.md's claim; tasks.md
+      had no task naming it before this one).
+      **G3 pre-measurement** (cheap, reported only — judgement reserved
+      for the lead): `contract/emit.ts` and `contract/tables.ts` have
+      zero case-insensitive occurrences of `unmanaged` or `existing` —
+      the marker doesn't reach contract text yet, so 3.1 starts from a
+      clean file with no collision to resolve.
+
+      Test added: `apply-reset.test.ts` — "leaves a declared-but-existing
+      table standing, and never counts it toward the drop confirmation"
+      (an `existingTable()` alongside a managed table; asserts
+      `planReset`'s own change list excludes it entirely, so it never
+      raises the confirmation count, and that the DDL `applyReset` sends
+      never mentions its schema). Green on arrival (0 red) — the
+      group-1 guard already covers it; not a failing-test task, a
+      probe-mutant one.
+      Probe mutant: `table-kind.ts`'s `isExistingSide(previous) ||
+      isExistingSide(next)` guard replaced with `false`. Exactly 1 red
+      (the new test) across the file's 11, the other 10 (including the
+      pre-existing "leaves an unmanaged table standing" test, `check`'s
+      own sense) stay green — proves reset's "no fix needed" claim is
+      measured, not assumed, the same technique 2.2 used for
+      `inventory.ts`. Reverted; core rebuilt; file back to 11/11 green,
+      `git diff` on `table-kind.ts` empty.
 
 ## 3. The contract, the client, and the witness (#605)
 Files: `packages/cli/src/contract/{tables,emit}.ts`, `packages/query/src/
