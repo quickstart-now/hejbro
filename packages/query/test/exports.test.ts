@@ -64,6 +64,7 @@ type _TestDatabaseShape = {
 			readonly Update: unknown;
 		};
 	};
+	readonly Functions: Record<string, never>;
 };
 
 type _AgreedTypesPresent = [

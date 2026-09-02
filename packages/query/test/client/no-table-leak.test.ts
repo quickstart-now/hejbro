@@ -17,6 +17,7 @@ type TestDatabase = {
 			readonly Update: { readonly id?: string };
 		};
 	};
+	readonly Functions: Record<string, never>;
 };
 
 /**
@@ -44,9 +45,9 @@ describe("no Table value crosses into the client's public types (R2-G6 6.1 condi
 		>().not.toExtend<DeclaredTable>();
 	});
 
-	it("NameKeyedDb<TDatabase> is keyed exactly by the contract's own table names plus .as", () => {
+	it("NameKeyedDb<TDatabase> is keyed exactly by the contract's own table names plus fn/as", () => {
 		expectTypeOf<keyof NameKeyedDb<TestDatabase>>().toEqualTypeOf<
-			"posts" | "as"
+			"posts" | "fn" | "as"
 		>();
 	});
 
@@ -71,6 +72,7 @@ describe("no Table value crosses into the client's public types (R2-G6 6.1 condi
 					foreignKeys: [],
 				},
 			},
+			functions: {},
 		};
 
 		const client = createNameKeyedDb<TestDatabase>(driver, metadata);

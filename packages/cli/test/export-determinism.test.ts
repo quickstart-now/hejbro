@@ -12,7 +12,7 @@ import {
 
 beforeAll(assertBuiltCli);
 
-const SCHEMA_SOURCE = `import { schema, table, text, uuid } from "hejbro";
+const SCHEMA_SOURCE = `import { bigint, defineFunction, schema, sql, table, text, uuid } from "hejbro";
 
 export const app = schema("app");
 
@@ -20,6 +20,15 @@ export const posts = table(app, "posts", {
 	id: uuid().primaryKey().defaultRandom(),
 	title: text().notNull(),
 });
+
+export const totalPosts = defineFunction(
+	app,
+	"total_posts",
+	{ args: { minId: uuid() }, returns: bigint() },
+	(ctx) => {
+		ctx.return(sql\`1\`);
+	},
+);
 `;
 
 const EXPORT_FILES = ["schema.json", "snapshot.sql", "format.json"];

@@ -23,6 +23,7 @@ type TestDatabase = {
 			readonly Update: { readonly id?: string; readonly title?: string };
 		};
 	};
+	readonly Functions: Record<string, never>;
 };
 
 const METADATA: ContractMetadata = {
@@ -56,6 +57,7 @@ const METADATA: ContractMetadata = {
 			foreignKeys: [],
 		},
 	},
+	functions: {},
 };
 
 describe("insert and update honour the contract's write optionality (R2-G6 6.4)", () => {

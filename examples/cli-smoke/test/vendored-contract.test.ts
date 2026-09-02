@@ -72,7 +72,7 @@ const linkHejbro = async (cwd: string): Promise<void> => {
 	await symlink(CLI_PACKAGE_ROOT, join(cwd, "node_modules", "hejbro"), "dir");
 };
 
-const SCHEMA_SOURCE = `import { schema, table, text, uuid } from "hejbro";
+const SCHEMA_SOURCE = `import { bigint, defineFunction, schema, select, sql, table, text, uuid } from "hejbro";
 
 export const app = schema("app");
 
@@ -80,6 +80,24 @@ export const posts = table(app, "posts", {
 	id: uuid().primaryKey().defaultRandom(),
 	title: text().notNull(),
 });
+
+export const totalPosts = defineFunction(
+	app,
+	"total_posts",
+	{ args: { minWeight: bigint({ mode: "number" }) }, returns: bigint() },
+	(ctx) => {
+		ctx.return(sql\`1\`);
+	},
+);
+
+export const postById = defineFunction(
+	app,
+	"post_by_id",
+	{ args: { postId: uuid() }, returns: posts },
+	(ctx, args) => {
+		ctx.return(select(posts).where(sql\`\${posts.id} = \${args.postId}\`));
+	},
+);
 `;
 
 let schemaRepo: string;
@@ -215,6 +233,24 @@ type AssertEqual<A, B> = A extends B ? (B extends A ? true : false) : false;
 // result types are not structurally identical.
 const _typesAgree: AssertEqual<LocalRow, VendoredRow> = true;
 void _typesAgree;
+
+// The function sibling of the same claim (#587/G3) -- type-only, never
+// invoked (the live half belongs to 3.2): a scalar-returning fn and a
+// table-returning fn, compared as whole call signatures (arguments AND
+// result), read two ways through one real tsc.
+type LocalTotalPosts = typeof localHandle.fn.totalPosts;
+type VendoredTotalPosts = typeof vendoredHandle.fn.totalPosts;
+const _totalPostsFnTypesAgree: AssertEqual<
+	LocalTotalPosts,
+	VendoredTotalPosts
+> = true;
+void _totalPostsFnTypesAgree;
+
+type LocalPostById = typeof localHandle.fn.postById;
+type VendoredPostById = typeof vendoredHandle.fn.postById;
+const _postByIdFnTypesAgree: AssertEqual<LocalPostById, VendoredPostById> =
+	true;
+void _postByIdFnTypesAgree;
 `,
 		);
 

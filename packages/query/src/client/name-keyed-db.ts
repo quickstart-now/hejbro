@@ -2,6 +2,7 @@ import type {
 	Condition,
 	DeclaredTable,
 	Expr,
+	FunctionDeclaration,
 	OrderTermInput,
 } from "@hejbro/core";
 import { roleName } from "@hejbro/core";
@@ -9,9 +10,11 @@ import type { CompileResult } from "../compile/compile";
 import type { ChainApi } from "../db/chain";
 import type { DbContext } from "../db/context";
 import { db } from "../db/db";
+import type { FnApi } from "../db/fn";
 import type { Driver } from "../driver/contract";
 import type { ContractMetadata, ContractTableMeta } from "./contract-types";
 import { synthesizeTable } from "./synthesize";
+import { synthesizeFunction } from "./synthesize-function";
 
 /** The shape a vendored `Database` interface always has — just enough to key {@link NameKeyedDb} off it, never imported from `hejbro`/`@hejbro/cli` (this package has no dependency on either, `AGENTS.md`'s own repo map). */
 export type DatabaseShape = {
@@ -21,6 +24,13 @@ export type DatabaseShape = {
 			readonly Row: unknown;
 			readonly Insert: unknown;
 			readonly Update: unknown;
+		}
+	>;
+	readonly Functions: Record<
+		string,
+		{
+			readonly Args: unknown;
+			readonly Returns: unknown;
 		}
 	>;
 };
@@ -90,6 +100,21 @@ export type NameKeyedTables<TDatabase extends DatabaseShape> = {
 	>;
 };
 
+/** One vendored function's public surface (#587/G3): a single callable, keyed by its export name — never the declaration shape `synthesizeFunction` builds internally (`no-fn-leak.test.ts`'s own probe). */
+export type NameKeyedFnCaller<
+	TFn extends {
+		readonly Args: unknown;
+		readonly Returns: unknown;
+	},
+> = (args: TFn["Args"]) => Promise<TFn["Returns"]>;
+
+/** Every function client, keyed exactly as `Database["Functions"]` is — the contract's own export-name keying (schema-vendoring spec: `Functions` is keyed by export name, unlike `Tables`' SQL-name keying), never the internal collision-avoiding key `buildFunctionKeyMap` may have assigned it. */
+export type NameKeyedFn<TDatabase extends DatabaseShape> = {
+	readonly [K in keyof TDatabase["Functions"] & string]: NameKeyedFnCaller<
+		TDatabase["Functions"][K]
+	>;
+};
+
 /**
  * `createNameKeyedDb`'s own return type: every table client, plus
  * `.as(context)` (Requirement: "Role names travel with the contract and
@@ -100,7 +125,10 @@ export type NameKeyedTables<TDatabase extends DatabaseShape> = {
  */
 export type NameKeyedDb<TDatabase extends DatabaseShape> =
 	NameKeyedTables<TDatabase> & {
-		as(context: DbContext): NameKeyedTables<TDatabase>;
+		readonly fn: NameKeyedFn<TDatabase>;
+		as(
+			context: DbContext,
+		): NameKeyedTables<TDatabase> & { readonly fn: NameKeyedFn<TDatabase> };
 	};
 
 /**
@@ -169,15 +197,15 @@ const buildTableClient = <
  * catch that drift on its own, since `TDatabase` is a static claim this
  * function trusts at compile time only. Derives the known-table list
  * from `target`'s own keys (never a separately threaded list, so it can
- * never disagree with what's actually reachable) and excludes `as`,
- * which is a real member, not a table.
+ * never disagree with what's actually reachable) and excludes `as`/`fn`,
+ * which are real members, not tables.
  */
 const wrapWithTableGuard = <T extends object>(target: T): T =>
 	new Proxy(target, {
 		get(obj, prop, receiver) {
 			if (typeof prop === "string" && !(prop in obj)) {
 				const known = Object.keys(obj)
-					.filter((key) => key !== "as")
+					.filter((key) => key !== "as" && key !== "fn")
 					.sort();
 				const buildList = (): string => {
 					if (known.length === 0) {
@@ -211,6 +239,144 @@ const buildTables = <TDatabase extends DatabaseShape>(
 };
 
 /**
+ * Refuses an unknown function by name, the `fn` sibling of
+ * {@link wrapWithTableGuard} (#587/G3, R2-G6 6.8's own "errors name the
+ * contract, not internals" applied to the second name-keyed surface).
+ * `target`'s own keys are always export names (the façade's public key
+ * space, built by {@link buildFn}) — never the internal, collision-
+ * avoiding key `buildFunctionKeyMap` may have assigned, so the vendored
+ * list this names is exactly what a caller of `fn` sees, not an
+ * implementation detail.
+ */
+const wrapWithFunctionGuard = <T extends object>(target: T): T =>
+	new Proxy(target, {
+		get(obj, prop, receiver) {
+			if (typeof prop === "string" && !(prop in obj)) {
+				const known = Object.keys(obj).sort();
+				const buildList = (): string => {
+					if (known.length === 0) {
+						return "(none vendored)";
+					}
+					return known.join(", ");
+				};
+				const list = buildList();
+				throw Object.assign(
+					new Error(
+						`"${prop}" is not a function this contract vendors. Vendored functions: ${list}. Next: check the function name for a typo, or re-run \`hejbro vendor\` if the schema recently changed.`,
+					),
+					{ code: "unknown-contract-function" },
+				);
+			}
+			return Reflect.get(obj, prop, receiver);
+		},
+	});
+
+/**
+ * The first candidate `db()`'s own merged schema record doesn't already
+ * hold, for `exportName` — deterministic (the same `exportName`/`occupied`
+ * pair always yields the same key) and guaranteed to terminate: `occupied`
+ * is finite (the vendored table names plus whatever this function has
+ * already assigned), while the candidate space (`exportName`, then
+ * `exportName#1`, `exportName#2`, …) is infinite, so some attempt is
+ * always free. Recursive, not iterative (`check:bans` forbids `for`/
+ * `while`/`let` in this repo's own source) — each call either returns a
+ * free key or tries the next candidate.
+ */
+const candidateInternalKey = (exportName: string, attempt: number): string => {
+	if (attempt === 0) {
+		return exportName;
+	}
+	return `${exportName}#${attempt}`;
+};
+
+const freeInternalKey = (
+	occupied: ReadonlySet<string>,
+	exportName: string,
+	attempt: number,
+): string => {
+	const candidate = candidateInternalKey(exportName, attempt);
+	if (!occupied.has(candidate)) {
+		return candidate;
+	}
+	return freeInternalKey(occupied, exportName, attempt + 1);
+};
+
+/**
+ * Assigns every vendored function an internal key `db()`'s own merged
+ * schema record can carry alongside the vendored tables, without ever
+ * silently losing an entry to a name collision (#587/G3) — a function's
+ * export name and a table's SQL name are two independently-sourced
+ * namespaces (`Database["Functions"]` is export-name-keyed,
+ * `Database["Tables"]` is SQL-name-keyed, schema-vendoring spec), forced
+ * into one merged record only so `db()`'s own classification can wire
+ * `fn` through the exact call plan `db.fn` already uses, with no second
+ * renderer. `tableKeys` is checked first (tables never move), and each
+ * assigned function key is added to what the *next* function must also
+ * avoid, so two functions can never collide with each other either (their
+ * export names are already unique — `metadata.functions`'s own keys — but
+ * this keeps the invariant true even if two internal keys otherwise would
+ * have coincided). The returned map is export name → internal key; `fn`'s
+ * own public surface is built from it, so the internal key is never the
+ * one a caller ever sees.
+ */
+const buildFunctionKeyMap = (
+	tableKeys: ReadonlySet<string>,
+	functionExportNames: ReadonlyArray<string>,
+): ReadonlyMap<string, string> =>
+	functionExportNames.reduce((assigned, exportName) => {
+		const occupied = new Set([...tableKeys, ...assigned.values()]);
+		const internalKey = freeInternalKey(occupied, exportName, 0);
+		assigned.set(exportName, internalKey);
+		return assigned;
+	}, new Map<string, string>());
+
+/**
+ * Builds the merged record `db()` classifies (#587/G3): tables first
+ * (their keys are the SQL names {@link buildFunctionKeyMap} avoided),
+ * then functions under their own collision-avoiding internal key —
+ * `db()`'s own `functionsOf` reads this record's keys directly, so this
+ * is the one place that determines what `internalDb.fn` is keyed by
+ * (never what the public `fn` façade is keyed by; {@link buildFn} handles
+ * that translation).
+ *
+ * Tables are spread first so a colliding function key never evicts a
+ * table — never reverse this order.
+ */
+const buildInternalSchema = (
+	tables: Readonly<Record<string, DeclaredTable>>,
+	functions: Readonly<Record<string, FunctionDeclaration>>,
+	keyMap: ReadonlyMap<string, string>,
+): Readonly<Record<string, unknown>> => ({
+	...tables,
+	...Object.fromEntries(
+		Object.entries(functions).map(([exportName, declaration]) => [
+			keyMap.get(exportName) ?? exportName,
+			declaration,
+		]),
+	),
+});
+
+/**
+ * Builds the public `fn` façade: every entry keyed by its export name
+ * (never the internal key {@link buildFunctionKeyMap} assigned it),
+ * reading the underlying callable off `internalFn` (`db()`'s own `fn`,
+ * `FnApi`'s loose runtime shape) through that same map — the one seam
+ * where the internal-key world and the export-name world meet.
+ */
+const buildFn = <TDatabase extends DatabaseShape>(
+	internalFn: FnApi,
+	keyMap: ReadonlyMap<string, string>,
+): NameKeyedFn<TDatabase> => {
+	const plain = Object.fromEntries(
+		[...keyMap.entries()].map(([exportName, internalKey]) => [
+			exportName,
+			internalFn[internalKey],
+		]),
+	);
+	return wrapWithFunctionGuard(plain) as unknown as NameKeyedFn<TDatabase>;
+};
+
+/**
  * The name-keyed client (R2-G6): `createDb`'s own real body (R2-G5
  * 6.12). Reconstructs a real `Table` per vendored table
  * (`synthesizeTable`), feeds them all into one `db()` handle so
@@ -237,13 +403,32 @@ export const createNameKeyedDb = <TDatabase extends DatabaseShape>(
 			],
 		),
 	);
-	const internalDb = db(tables, conn, {
+	const functions: Readonly<Record<string, FunctionDeclaration>> =
+		Object.fromEntries(
+			Object.entries(metadata.functions).map(([name, fnMeta]) => [
+				name,
+				synthesizeFunction(fnMeta),
+			]),
+		);
+	const keyMap = buildFunctionKeyMap(
+		new Set(Object.keys(tables)),
+		Object.keys(functions),
+	);
+	const internalSchema = buildInternalSchema(tables, functions, keyMap);
+	const internalDb = db(internalSchema, conn, {
 		roles: metadata.roles.map(roleName),
 	});
+	const internalFn = internalDb.fn as unknown as FnApi;
 	const plain = {
 		...buildTables<TDatabase>(internalDb, tables),
-		as: (context: DbContext) =>
-			buildTables<TDatabase>(internalDb.as(context), tables),
+		fn: buildFn<TDatabase>(internalFn, keyMap),
+		as: (context: DbContext) => {
+			const scoped = internalDb.as(context);
+			return {
+				...buildTables<TDatabase>(scoped, tables),
+				fn: buildFn<TDatabase>(scoped.fn as unknown as FnApi, keyMap),
+			};
+		},
 	};
 	return wrapWithTableGuard(plain);
 };

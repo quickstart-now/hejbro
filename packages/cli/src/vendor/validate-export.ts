@@ -1,13 +1,36 @@
-import { parseSnapshot, throwHejbroError } from "@hejbro/core";
+import type { TypeNode } from "@hejbro/core";
+import { parseSnapshot, simpleTypeNames, throwHejbroError } from "@hejbro/core";
 import { z } from "zod";
 import type { ExportFormatRecord } from "../export/format";
 import { EXPORT_DESCRIPTION_FORMAT } from "../export/format";
 import type { ExportPayload } from "../export/write";
 
+/** Mirrors `@hejbro/core`'s own `TypeNode` union (`types/type-node.ts`) — restated here rather than imported as a schema, since core exports the type but not a runtime validator for it (the same constraint `read-snapshot.ts`'s own doc comment already names for the table snapshot). `z.lazy` handles the one recursive member (`array`'s `element`). */
+const typeNodeSchema: z.ZodType<TypeNode> = z.lazy(() =>
+	z.union([
+		z.object({ typeName: z.enum([...simpleTypeNames]) }),
+		z.object({ typeName: z.literal("varchar"), length: z.number().nullable() }),
+		z.object({ typeName: z.literal("char"), length: z.number() }),
+		z.object({
+			typeName: z.literal("numeric"),
+			precision: z.number().nullable(),
+			scale: z.number().nullable(),
+		}),
+		z.object({
+			typeName: z.literal("enum"),
+			enumSchema: z.string(),
+			enumName: z.string(),
+		}),
+		z.object({ typeName: z.literal("array"), element: typeNodeSchema }),
+	]),
+);
+
+const numericModeSchema = z.enum(["bigint", "number", "string"]).nullable();
+
 /** Mirrors `export/description.ts`'s own `ExportColumnFact` — the sidecar facts a description carries per column. */
 const columnFactSchema = z.object({
 	key: z.string(),
-	mode: z.enum(["bigint", "number", "string"]).nullable(),
+	mode: numericModeSchema,
 	notNullElements: z.boolean(),
 });
 
@@ -18,10 +41,36 @@ const tableFactSchema = z.object({
 	columns: z.record(z.string(), columnFactSchema),
 });
 
+const functionArgFactSchema = z.object({
+	key: z.string(),
+	sqlName: z.string(),
+	typeNode: typeNodeSchema,
+	mode: numericModeSchema,
+	notNullElements: z.boolean(),
+});
+
+/** `null` for a trigger-synthesized function's return — neither a scalar value nor a row (schema-export delta). A scalar return carries no `notNullElements` — core refuses `.notNullElements()` at a `returns` position, so there is no such fact to carry. */
+const functionReturnsFactSchema = z
+	.union([
+		z.object({
+			kind: z.literal("scalar"),
+			typeNode: typeNodeSchema,
+			mode: numericModeSchema,
+		}),
+		z.object({
+			kind: z.literal("table"),
+			schemaName: z.string(),
+			tableName: z.string(),
+		}),
+	])
+	.nullable();
+
 const functionFactSchema = z.object({
 	schemaName: z.string(),
 	functionName: z.string(),
 	exportName: z.string().nullable(),
+	args: z.array(functionArgFactSchema),
+	returns: functionReturnsFactSchema,
 });
 
 /**
@@ -47,10 +96,11 @@ const formatSchema = z.object({
  * Refuses a `format.json` newer than this toolchain knows, naming both
  * versions and the upgrade command (schema-vendoring spec, member 6 of
  * the eleven — "A description format newer than the reader is refused").
- * An older format is read as-is (the description schema below has grown
- * by exactly one field so far, `EXPORT_DESCRIPTION_FORMAT`'s own history
- * — there is no earlier shape yet to tolerate; this branch exists so the
- * asymmetry is structural now, not added the day format 2 ships).
+ * An older format is read as-is (the description schema below has only
+ * ever grown by additive fields since format 1 shipped, `EXPORT_
+ * DESCRIPTION_FORMAT`'s own history — there is no earlier shape yet to
+ * tolerate; this branch exists so the asymmetry is structural now, not
+ * added the day format 2 ships).
  */
 const assertDescriptionFormatSupported = (format: ExportFormatRecord): void => {
 	if (format.descriptionFormat <= EXPORT_DESCRIPTION_FORMAT) {
