@@ -33,11 +33,13 @@ column the reading found is carried with a guessed key; a declaration
 round trip is not its source, and a column that no declaration can
 express is therefore still described — described, but never contracted:
 a contract carries the columns the snapshot holds, and a column the DSL
-cannot name never reaches the snapshot. The reading SHALL infer no
+cannot name never reaches the snapshot. The snapshot SHALL hold no
 function, trigger, policy expression, view body, grant beyond its role
 name, column whose type no column builder expresses, or standalone
 sequence that no column owns — the DSL has no `defineSequence()` (D66)
-— and SHALL say so.
+— and the loss report SHALL name each of them. A column named there is
+still described: the description records what the database holds, and
+the snapshot records what a declaration can express.
 
 #### Scenario: Tables and enums are inferred
 - **WHEN** a database holding two schemas with tables, foreign keys

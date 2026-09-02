@@ -68,6 +68,25 @@ describe("ContractMetadata backward/forward compatibility (CI-G5-R1-02)", () => 
 		expect(topLevelSent).toHaveLength(1);
 	});
 
+	it("accepts a current git-sourced contract literal that names source explicitly", async () => {
+		const gitMetadata: ContractMetadata = {
+			source: "git",
+			commit: "abc123",
+			exportHash: "sha256:x",
+			roles: [],
+			tables: TABLES,
+		};
+
+		const { driver, topLevelSent } = recordingTransactionalDriver({
+			rows: [{ id: "p1", title: "hello" }],
+		});
+		const client = createNameKeyedDb<TestDatabase>(driver, gitMetadata);
+		const rows = await client.posts.select();
+
+		expect(rows).toEqual([{ id: "p1", title: "hello" }]);
+		expect(topLevelSent).toHaveLength(1);
+	});
+
 	it("still requires a database-sourced contract to name its source -- the compile-time guard the union exists for", async () => {
 		const databaseMetadata: DatabaseContractMetadata = {
 			source: "database",
@@ -83,5 +102,30 @@ describe("ContractMetadata backward/forward compatibility (CI-G5-R1-02)", () => 
 		const client = createNameKeyedDb<TestDatabase>(driver, databaseMetadata);
 
 		expect(client.posts).toBeDefined();
+	});
+
+	/**
+	 * The negative control the lead required (CI-G5-R1-03): a
+	 * database-sourced contract carrying a `commit` is rejected outright,
+	 * not silently widened -- the whole reason `source` discriminates a
+	 * union instead of every field just being optional on one shape.
+	 * `@ts-expect-error` is this package's own established idiom for
+	 * "must fail to compile" (`test/types/*.test.ts`'s own convention,
+	 * checked by the same `tsc --noEmit` this repo already gates on --
+	 * never a spawned second `tsc` process, which is `examples/cli-smoke`'s
+	 * own answer to a different problem, an external consumer's package
+	 * resolution, not this package's own internal type shape).
+	 */
+	it("rejects a database-sourced contract that also names a commit", () => {
+		const invalid: DatabaseContractMetadata = {
+			source: "database",
+			database: "widgets_db",
+			schemas: ["app"],
+			// @ts-expect-error a database-sourced contract has no commit field.
+			commit: "abc123",
+			roles: [],
+			tables: TABLES,
+		};
+		void invalid;
 	});
 });

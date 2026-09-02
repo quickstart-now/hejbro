@@ -50,8 +50,8 @@ which `baseline` then registers.
   repository's own from now on
 
 #### Scenario: A database is imported into starter files
-- **WHEN** `hejbro import --url <db> --out src/schema` runs against a
-  database with two schemas
+- **WHEN** `hejbro import --url <db> --out src/schema --schema app
+  --schema billing` runs against a database holding both
 - **THEN** two declaration files are written, the loss report is
   printed, and a following `generate` against an empty snapshot emits a
   migration whose objects match the database's
@@ -88,10 +88,14 @@ The CLI SHALL provide `pull --db-url <url>` that feeds a catalog reading
 to the same contract emitter `vendor` uses, writes the contract with an
 origin naming the database rather than a commit, and prints the loss
 report naming `link` as the way out. It SHALL use no other source of
-schema than the catalog.
+schema than the catalog, and SHALL name the schemas to read the way
+`import` does — `--schema`, repeatable, with no default, for the same
+reason: a hosted database's own platform schemas are never what a
+consumer meant to contract against. Its destination is not named on the
+command line at all: the contract goes where `vendor` puts it.
 
 #### Scenario: A contract is pulled from a database
-- **WHEN** `hejbro pull --db-url <db>` runs
+- **WHEN** `hejbro pull --db-url <db> --schema public` runs
 - **THEN** a contract is written whose header says it was inferred from
   a database, whose `Tables` are the inferred tables with guessed keys,
   and the loss report is printed

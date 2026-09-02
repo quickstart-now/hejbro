@@ -180,19 +180,28 @@ overwrite any file already there, so rerunning it (after fixing
 something by hand) never silently discards that edit.
 
 What it infers is necessarily an approximation of a hand-written
-declaration — a column's key is guessed from its SQL name, a numeric
-column's mode and array not-null-ness can't be read back from the
-catalog alone, and a handful of object kinds (views, functions,
-triggers, RLS policies, grants beyond a role's bare name) aren't
-inferred at all. `import` never hides this: every file's own header
-carries the full loss report, restating what that file could not
-express, and the same report prints to the terminal on every run. A
-column whose SQL name no declaration key can round-trip (a quoted
-`"createdAt"`, since the DSL derives a column's SQL name from its key
-by snake_case) is left out of the starter file entirely and named in
-the loss report, rather than guessed at under the wrong name — `check`
+declaration, and every reading prints a loss report saying exactly
+which kind of approximation it made, in four bands: **Guessed** — a
+column's TypeScript key from its SQL name, the default numeric mode,
+and unknown array-element nullability (read as nullable), plus any
+role name a grant or policy names; **Not inferred** — functions,
+triggers, view bodies, policy expressions, grants beyond a role's bare
+name (a blanket line — never a per-instance list), a column whose type
+no builder expresses, and a standalone sequence no column owns (the
+DSL has no `defineSequence()` yet); **Approximated** — a named UNIQUE
+constraint as a same-named unique index, a `nextval(...)` default kept
+as a raw expression, and every default/check/generated/index-predicate
+expression as raw SQL text rather than a typed builder; and
+**Omitted** — a column whose SQL name no declaration key can round-trip
+(a quoted `"createdAt"`, since the DSL derives a column's SQL name from
+its key by snake_case) is left out of the starter file entirely rather
+than guessed at under the wrong name, and named here instead — `check`
 keeps reporting that column as undeclared until it's added by hand or
-renamed in the database. Two schemas whose tables reference each other
+renamed in the database. `import` never hides any of this: every
+file's own header carries the full report, and the same report prints
+to the terminal on every run, ending with the way out ("The loss ends
+when you hand-edit the starter declarations"). Two schemas whose
+tables reference each other
 would otherwise make their generated files import one another in a
 cycle no loader can resolve; `import` breaks that cycle itself, on one
 deterministic direction, using an unexported reference-only handle
@@ -207,9 +216,14 @@ registers exactly as step 2 describes.
 A database is also a valid *fallback* source for a vendored contract
 (`skills/hejbro/references/polyrepo.md`'s own subject) when the schema
 repository itself isn't reachable: `hejbro pull --db-url ... --schema
-...` writes into the same destination `hejbro vendor` does, marked
-with no commit so `vendor --check`/`outdated` refuse to compare it
-against one — see that reference for the full shape.
+...` reads the same catalog `import` does and writes into the same
+destination `hejbro vendor` does, marked with no commit so `vendor
+--check`/`outdated` refuse to compare it against one. Its own loss
+report prints the same way, ending instead with "Link the schema
+repository to declare it by hand" — `link` (then `vendor`) is what ends
+a `pull`-sourced contract's own loss, the same role it plays for
+`import`'s undeclared column above. See that reference for the full
+shape.
 
 ## Where this is enforced
 

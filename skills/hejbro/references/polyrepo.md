@@ -66,6 +66,18 @@ as the fallback it's named for; once the schema repository is
 reachable, `link`+`vendor` replace the same destination with a
 commit-anchored one.
 
+`contract.ts`'s own `contractMetadata` constant carries this same
+distinction at the type level (`@hejbro/query`'s `ContractMetadata`,
+consumed by `createDb`): it's a union on a `source` field, `"git"`
+(`commit`/`exportHash`, `vendor`'s own) or `"database"` (`database`/
+`schemas`, `pull`'s own) — code written against it that forgets the
+database-sourced case fails to compile rather than surfacing only once
+someone runs `pull`. A contract a pre-#604 `hejbro vendor` already
+wrote and committed carries no `source` key at all, and keeps
+type-checking unchanged after upgrading `hejbro`/`@hejbro/query` alone
+— `source` is optional on the git-sourced shape for exactly that
+reason (never on the database-sourced one, which always names itself).
+
 ## Migrating an annotation that named the general `Table` type
 
 If you have an existing declaration variable explicitly annotated with

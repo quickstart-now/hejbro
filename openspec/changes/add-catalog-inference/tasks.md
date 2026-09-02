@@ -23,19 +23,19 @@ description from the existing serializer and
 would need a core export (`encodeExprNode`) that does not exist on the
 public surface.
 
-- [ ] 1.1 (~9m) [design] Settled with the lead: the key casing and
+- [x] 1.1 (~9m) [design] Settled with the lead: the key casing and
       collision-suffix rules (now stated in the `catalog-inference`
       delta, which owns them), default → `sql.raw` verbatim,
       `attidentity` → identity kind, `attgenerated` → generated. Write
       them as the module's rules. Failing test: `infer-keys.test.ts`.
-- [ ] 1.2 (~10m) Inference's own read-only catalog reads: column
+- [x] 1.2 (~10m) Inference's own read-only catalog reads: column
       position/`attidentity`/`attgenerated`, foreign-key targets and
       actions, check expressions, index columns/uniqueness/method/
       predicate/operator class/sort options and expression bodies, enum
       labels, identity sequence options. Failing test:
       `infer-catalog-read.test.ts` (parameterless read-only text pinned,
       rows parsed).
-- [ ] 1.2b (~10m) The same reads proved against a real database, not a
+- [x] 1.2b (~10m) The same reads proved against a real database, not a
       string-matching fake: one fixture carrying an enum, an identity
       column with non-default options, a stored generated column, a
       self-referencing foreign key and one with `on delete cascade`, a
@@ -45,17 +45,17 @@ public surface.
       owns this file; group 5's witness is a separate one), on the
       ephemeral-container harness `check-live.integration.test.ts`
       already uses.
-- [ ] 1.3 (~9m) Columns → declarations: type → builder, defaults,
+- [x] 1.3 (~9m) Columns → declarations: type → builder, defaults,
       identity (options only where they differ from Postgres's own),
       generated, not-null; a type no builder expresses is omitted and
       recorded as a loss. Failing test: `infer-tables.test.ts`.
-- [ ] 1.4 (~9m) Table-level: primary key, unique, foreign keys (a
+- [x] 1.4 (~9m) Table-level: primary key, unique, foreign keys (a
       self-referencing one included), checks, indexes — an index's
       expression columns, partial predicate, access method and operator
       class among them, since `examples/postgres` declares all four and
       group 5's witness reads that database. Failing test:
       `infer-constraints.test.ts`.
-- [ ] 1.4b (~7m) A foreign key to another table, and a cycle between
+- [x] 1.4b (~7m) A foreign key to another table, and a cycle between
       two, with core's `existingTable` (D41) as the target handle —
       reference-only, so there is no build order to get right and no
       cycle to break. A UNIQUE constraint rides on its backing index,
@@ -63,9 +63,9 @@ public surface.
       rather than asserting it. Failing test: `infer-constraints.test.ts`
       (the target's identity string in the foreign-key snapshot, and the
       handle appearing in no snapshot of its own).
-- [ ] 1.5 (~8m) Enums, sequences, roles; the not-inferred list, with
+- [x] 1.5 (~8m) Enums, sequences, roles; the not-inferred list, with
       exactly the delta's own members. Failing test: `infer-rest.test.ts`.
-- [ ] 1.5b (~7m) The three kinds of sequence told apart by ownership
+- [x] 1.5b (~7m) The three kinds of sequence told apart by ownership
       (`pg_depend`, deptype `i` and `a`), since the loss report may not
       claim a loss that did not happen: one an identity column owns
       (carried as that column), one a serial-family column owns (carried
@@ -73,16 +73,16 @@ public surface.
       sequence from), and one no column owns (not inferred, named).
       Failing test: `infer-rest.test.ts`, over a fixture holding all
       three.
-- [ ] 1.5c (~6m) A `nextval` default naming a sequence the column does
+- [x] 1.5c (~6m) A `nextval` default naming a sequence the column does
       not own stays a raw default and is named as an approximation —
       the serial mapping applies to owned sequences only. Failing test:
       `infer-tables.test.ts`.
-- [ ] 1.6 (~9m) The description, built from the catalog reading itself
+- [x] 1.6 (~9m) The description, built from the catalog reading itself
       rather than from the declarations, so a column no declaration key
       can name is still carried with its guessed key (the collision
       suffix is reachable only here). Failing test:
       `infer-description.test.ts`.
-- [ ] 1.7 (~8m) The loss report text: what was guessed, what was not
+- [x] 1.7 (~8m) The loss report text: what was guessed, what was not
       inferred, the approximations (a UNIQUE constraint as a unique
       index), and the columns left undeclarable. The last of those rests
       on a measurement, not on reading the DSL, and the measurement is
@@ -91,18 +91,26 @@ public surface.
       then creates `"createdat"` — neither the original nor
       `created_at`. The report's wording follows that observation.
       Failing test: `infer-loss-report.test.ts`.
-- [ ] 1.8 (~8m) One entry point over the parts — a session in; the
+- [x] 1.8 (~8m) One entry point over the parts — a session in; the
       snapshot, the description and the loss report out — so groups 3
       and 4 share one composition instead of writing two that drift.
       Failing test: `infer-catalog-read.integration.test.ts`, end to end
       over the live fixture, pinning the three outputs against each
       other: a column whose SQL name no key can produce is absent from
       the snapshot, present in the description, and named in the report.
+- [x] 1.9 (~8m) A column the DSL cannot name is kept out of **both**
+      commands' snapshots, not just `import`'s: the contract's tables
+      come from the snapshot (`contract/emit.ts`), so leaving such a
+      column in would put a column name in the contract that the
+      database does not have. It stays in the description, and the loss
+      report says what each command can do about it — hand-edit for
+      `import`, `link` for `pull`. Failing test: the contract side, plus
+      the description and report halves.
 
 ## 2. Declarations from a snapshot (#604)
 Files: `packages/cli/src/declare-emit/*.ts` (new), tests
 
-- [ ] 2.1 (~10m) [design, settled] The source shape: one file per
+- [x] 2.1 (~10m) [design, settled] The source shape: one file per
       schema, named `<schema>.schema.ts` (only the file name is made
       safe, and the original schema name goes in the loss report);
       named imports from `hejbro`, alphabetical, only the symbols the
@@ -158,7 +166,7 @@ Files: `packages/cli/src/declare-emit/*.ts` (new), tests
       it proves the module), plus the two determinism pins: the same
       input in a different row order emits the same files, and the same
       import run twice emits the same bytes.
-- [ ] 2.2 (~8m) Round trip over the examples' own database rather than
+- [x] 2.2 (~8m) Round trip over the examples' own database rather than
       the fixture: emitted source, loaded and generated against an empty
       snapshot, yields DDL equal to that database's objects — compared
       over exactly what the reading claims, with the objects left out of
@@ -172,7 +180,7 @@ Files: `packages/cli/src/commands/import.ts` (new — its codes are string
 literals at their own raise sites), `main.ts` (registers `import`),
 `packages/cli/test/import-command.test.ts`
 
-- [ ] 3.1 (~10m) [design, settled] Connection sourcing as `check`;
+- [x] 3.1 (~10m) [design, settled] Connection sourcing as `check`;
       `--schema` required and repeatable with no default, `--out`
       required with no default, no `--force` (the header says the files
       are the repository's own from the moment they are written, and a
@@ -197,7 +205,7 @@ since `pull` writes the same four artefacts `vendor` does),
 `test/vendor-code-ownership.test.ts` (the new code names its owning
 requirement, outside the eleven), tests
 
-- [ ] 4.1 (~10m) [design, settled] `ContractOrigin` becomes a
+- [x] 4.1 (~10m) [design, settled] `ContractOrigin` becomes a
       discriminated union — `{source: "git", commit, exportHash}` and
       `{source: "database", database, schemas}` — so a reader that
       forgets the database case fails to compile rather than at run
@@ -228,14 +236,14 @@ same type and moves with it), `skills/hejbro/
 references/brownfield-adoption.md`, the polyrepo reference,
 `.changeset/*.md`
 
-- [ ] 5.1 (~9m) Runs the real command, with no test seam standing in for
+- [x] 5.1 (~9m) Runs the real command, with no test seam standing in for
       the reading — group 3's own suite injects one, so this is the only
       place the command's wiring to the inference is exercised. Import
       the examples' postgres database (applied with the
       examples' own chain), generate against empty, compare objects with
       the examples' snapshot; pull a contract and read one table through
       it. Both majors.
-- [ ] 5.2 (~5m) Skill sentences (the guide's "does not exist" paragraph
+- [x] 5.2 (~5m) Skill sentences (the guide's "does not exist" paragraph
       becomes the import paragraph), `minor` changeset, ledger rows.
 
 ## Verification (definition of done, not a task)
