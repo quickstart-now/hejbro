@@ -31,11 +31,13 @@ active change that owns them:
   declaration reaching `generate` is refused with
   `synced-function-declared`, mirroring the table guard; the diagnostic
   gains its documented entry where `check:diagnostic-xref` looks.
-- `.references()` thunks are resolved when declarations are collected —
-  after every module has evaluated — so a cycle between declaration files
-  loads under either name order; a self-reference keeps working unchanged.
-  The single-evaluation property is kept (one fold per declaration, at
-  collection).
+- `.references()` thunks never resolve while `table()` runs — each is
+  resolved exactly once, on the declaration's first `foreignKeys` read,
+  after every declaration module has evaluated, so a cycle between
+  declaration files (or two tables in one file) loads under either
+  order; a self-reference keeps working unchanged. The single-evaluation
+  property is kept (memoized after the first read, not re-folded on
+  every later one).
 - `ReturnableQuery` accepts the three mutation stages with a returning
   projection; the rendered body is measured for the projected form.
 - One `patch` changeset; skill references updated where they describe
@@ -57,5 +59,7 @@ active change that owns them:
 - Group 1: `packages/cli/src/commands/verify.ts`, `packages/core/src/engine/generate.ts`
   (message/doc only), diagnostic docs, tests.
 - Group 2: `packages/core/src/dsl/table.ts`, `packages/core/src/plpgsql/body-context.ts`,
-  the CLI loader's collection step if the fold moves there, tests.
+  `packages/cli/src/declare-emit/emit.ts` (comment only), tests. The CLI
+  loader is untouched — the fold moved to the declaration's own memoized
+  getter, not a loader collection step.
 - Closes #632, #658 (function half), #669, #634.
