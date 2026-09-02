@@ -17,6 +17,7 @@ import {
 	parseSnapshot,
 	renderSnapshot,
 	requiredKeysByKind,
+	sameJson,
 	throwHejbroError,
 } from "@hejbro/core";
 import { defineCommand } from "citty";
@@ -612,6 +613,21 @@ const reportHead = (
 	];
 };
 
+/**
+ * cli-commands (this change's own MODIFIED delta, D106 R2 R2-B2): the
+ * DDL-free branch covers two outcomes -- a truly unchanged snapshot, and
+ * one this run itself moved with nothing to diff into a statement (an
+ * existing-table marker gained, changed or removed). The second SHALL
+ * NOT report "already matches" -- this run's own write just made that
+ * false.
+ */
+const noMigrationReportLine = (snapshotUnchanged: boolean): string => {
+	if (snapshotUnchanged) {
+		return "no changes — snapshot already matches your declarations.";
+	}
+	return "no migration — snapshot updated to record the declared change.";
+};
+
 export const runGenerate = async (
 	cwd: string,
 	argv: ReadonlyArray<string>,
@@ -709,16 +725,40 @@ export const runGenerate = async (
 				if (mode === "baseline") {
 					throwBaselineNothingToAdopt(config.entry);
 				}
+				// D106 R2, R2-B2: `hasChanges` only tracks whether there is DDL
+				// to emit -- an existing-table marker change (handover,
+				// adoption, rename) can differ `firstPass.snapshot` from
+				// `previousSnapshot` with no statement at all. The old
+				// `hasChanges`-only gate treated that as "nothing to persist",
+				// so the marker never reached disk and a later run diffed
+				// against the stale, pre-handover snapshot (evaluation.md
+				// R2-B2 consequence 2 -- the drops it had already silenced
+				// coming back one run later). This snapshot-identity check is
+				// this fix's own mutant target.
+				const snapshotUnchanged = sameJson(
+					firstPass.snapshot.objects,
+					previousSnapshot.objects,
+				);
+				if (!snapshotUnchanged) {
+					writeFileSync(
+						join(cwd, config.snapshotPath),
+						renderSnapshot(firstPass.snapshot),
+					);
+				}
 				if (exportEnabled) {
-					// No changes means the declared state already matches
-					// `previousSnapshot` (`generateMigrations` returns no
-					// migrations, and so no snapshot, exactly when there is
-					// nothing to diff) -- this is that state's own export.
-					writeExportArtifact(previousSnapshot);
+					// `firstPass.snapshot`, not `previousSnapshot`: the export
+					// must describe the same state generate just settled on, or
+					// the export's `Tables` entry and any FK relation onto a
+					// table whose only change was its existing marker silently
+					// disagree with what generate itself just wrote
+					// (evaluation.md R2-B2 consequence 3). Identical content to
+					// `previousSnapshot` when nothing actually differed, so this
+					// is a no-op for that case.
+					writeExportArtifact(firstPass.snapshot);
 				}
 				return {
 					exitCode: 0,
-					stdout: ["no changes — snapshot already matches your declarations."],
+					stdout: [noMigrationReportLine(snapshotUnchanged)],
 					stderr: null,
 				};
 			}

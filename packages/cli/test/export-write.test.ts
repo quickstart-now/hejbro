@@ -1,6 +1,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { emitContract } from "../src/contract/emit";
 import { validateExport } from "../src/vendor/validate-export";
 import {
 	assertBuiltCli,
@@ -283,6 +284,64 @@ export const posts = table(app, "posts", {
 			balance: { key: "balance", mode: "bigint", notNullElements: false },
 			tags: { key: "tags", mode: null, notNullElements: true },
 		});
+	});
+
+	// D106 R2, R2-B2 measurement ③: `authUsers` below is a real reference
+	// from the very first run (an FK target), but not yet exported --
+	// exporting it later, with nothing else about `posts` changing, is
+	// exactly the evaluator's own "hasChanges: false" fixture. The prior
+	// in-process pins (`contract-existing.test.ts`) never catch this: they
+	// build one payload straight from `generateMigration` against
+	// `emptySnapshot` in a single call, never through two separate real
+	// `generate --export` runs the way this repository's own users do.
+	it("an in-sync project that only newly exports an existing declaration keeps the export/contract pairing (D106 R2, R2-B2 measurement ③)", async () => {
+		const referencedOnly = `import { existingTable, schema, table, uuid } from "hejbro";
+
+export const app = schema("app");
+
+const authUsers = existingTable("auth", "users", { id: uuid() });
+
+export const posts = table(app, "posts", {
+	id: uuid().primaryKey().defaultRandom(),
+	authorId: uuid().notNull().references(() => authUsers.id),
+});
+`;
+		await writeSchema(cwd, referencedOnly);
+		const firstResult = await runCli(cwd, ["generate", "--export"]);
+		expect(firstResult.exitCode).toBe(0);
+
+		const alsoExported = `import { existingTable, schema, table, uuid } from "hejbro";
+
+export const app = schema("app");
+
+export const authUsers = existingTable("auth", "users", { id: uuid() });
+
+export const posts = table(app, "posts", {
+	id: uuid().primaryKey().defaultRandom(),
+	authorId: uuid().notNull().references(() => authUsers.id),
+});
+`;
+		await writeSchema(cwd, alsoExported);
+		const secondResult = await runCli(cwd, ["generate", "--export"]);
+		expect(secondResult.exitCode).toBe(0);
+		// Newly exporting `authUsers` moves the snapshot itself (it gains
+		// its own `table:` entry, marked existing) even though it emits no
+		// statement -- the "snapshot updated, no migration" report, not
+		// "already matches" (D106 R2, cli-commands MODIFIED delta).
+		expect(secondResult.stdout).toContain(
+			"no migration — snapshot updated to record the declared change.",
+		);
+
+		const formatText = await readExportFile(cwd, "format.json");
+		const schemaText = await readExportFile(cwd, "schema.json");
+		const { payload } = validateExport(formatText, schemaText);
+
+		const contractSource = emitContract(payload, {
+			commit: "abc123",
+			exportHash: "sha256:deadbeef",
+		});
+		expect(contractSource).toContain('"users": {');
+		expect(contractSource).toContain('referencedRelation: "auth.users"');
 	});
 
 	it("description and snapshot formats are distinct values", async () => {
