@@ -114,19 +114,47 @@ export const rankKinds = (
 };
 
 /**
- * `true` when `key`'s owning table (per `kind.ownerTableIdentity`, D106
- * R1, B2) is existing — read from `next`'s own entry for that table
- * identity, falling back to `previous`'s when the table's declaration
- * was removed outright (so `next` carries no entry for it at all; the
- * table's own key uses the identical fallback for itself, `next` having
- * nothing to say being exactly the removal case). A kind that doesn't
- * implement `ownerTableIdentity` (a `grant`, for instance — the user's
- * own standalone declaration, never a table fan-out) is never asked, and
- * this returns `false` unconditionally for it. `previous ?? next`'s own
- * reverse (adoption: `next` says managed) is why this is not `previous
- * || existing-in-next` — a fanned-out object's create must proceed once
- * `next`'s own record says the table is managed again, never suppressed
- * merely because it once was existing.
+ * `key`'s owning table's own snapshot node (per `kind.ownerTableIdentity`,
+ * D106 R1, B2) — `next`'s own entry for that table identity, falling
+ * back to `previous`'s when the table's declaration was removed
+ * outright (so `next` carries no entry for it at all). `null` when
+ * `kind` doesn't implement `ownerTableIdentity` at all (a `grant`, for
+ * instance — the user's own standalone declaration, never a table
+ * fan-out, is never asked).
+ *
+ * Internal invariant: `diffSnapshots`' own caller draws `key` from the
+ * union of `previous.objects`'/`next.objects`' keys, so at least one of
+ * `previousNode`/`nextNode` is always non-null here — the cast below
+ * narrows that guarantee rather than adding a runtime branch nothing
+ * can ever take (a fan-out object's own key only ever exists because
+ * some run once serialized it from a real table declaration).
+ */
+const authoritativeOwnerNode = (
+	kind: RegisteredObjectKind,
+	previous: Snapshot,
+	next: Snapshot,
+	previousNode: JsonValue | null,
+	nextNode: JsonValue | null,
+): JsonValue | null => {
+	if (kind.ownerTableIdentity === undefined) {
+		return null;
+	}
+	const ownerNode = (nextNode ?? previousNode) as JsonValue;
+	const ownerTableKey = `table:${kind.ownerTableIdentity(ownerNode)}`;
+	return (
+		lookupNode(next.objects, ownerTableKey) ??
+		lookupNode(previous.objects, ownerTableKey)
+	);
+};
+
+/**
+ * `true` when `key`'s owning table is existing — read via
+ * {@link authoritativeOwnerNode}, so `next`'s own record decides except
+ * when the table's declaration was removed outright (`next` having
+ * nothing to say being exactly the removal case). This is not `previous
+ * || existing-in-next`: on adoption, `next`'s own record says the table
+ * is managed again, and a fanned-out object's create must proceed then,
+ * never suppressed merely because the table once was existing.
  */
 const ownerIsExisting = (
 	kind: RegisteredObjectKind,
@@ -135,17 +163,13 @@ const ownerIsExisting = (
 	previousNode: JsonValue | null,
 	nextNode: JsonValue | null,
 ): boolean => {
-	if (kind.ownerTableIdentity === undefined) {
-		return false;
-	}
-	const ownerNode = nextNode ?? previousNode;
-	if (ownerNode === null) {
-		return false;
-	}
-	const ownerTableKey = `table:${kind.ownerTableIdentity(ownerNode)}`;
-	const authoritative =
-		lookupNode(next.objects, ownerTableKey) ??
-		lookupNode(previous.objects, ownerTableKey);
+	const authoritative = authoritativeOwnerNode(
+		kind,
+		previous,
+		next,
+		previousNode,
+		nextNode,
+	);
 	if (authoritative === null) {
 		return false;
 	}
