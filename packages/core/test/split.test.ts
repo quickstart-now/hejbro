@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { check } from "../src/dsl/check";
 import { defineFunction } from "../src/dsl/define-function";
 import { pgEnum } from "../src/dsl/pg-enum";
 import { schema } from "../src/dsl/schema";
@@ -10,6 +11,7 @@ import {
 	generateMigrations,
 } from "../src/engine/generate";
 import { applySplitChangesOnly, planSplit } from "../src/engine/split";
+import { sql } from "../src/expr/sql-template";
 import type { KindChange } from "../src/kind/object-kind";
 import { createDefaultRegistry } from "../src/kind/registry";
 import { select } from "../src/query/select";
@@ -166,6 +168,126 @@ describe("planSplit / 4.1", () => {
 		const decision = planSplit(changes);
 
 		expect(decision.split).toBe(false);
+	});
+});
+
+describe("planSplit / 19.2 (D106 M4) -- raw text (sql template / sql.raw)", () => {
+	it("splits when the added value is spelled inside a sql template", () => {
+		const columns = { id: uuid().primaryKey(), status: text() };
+		const mood = pgEnum(app, "mood", ["ok"]);
+		const t = table(app, "t", columns);
+		const previous = buildSnapshot(
+			[app, mood, getTableMeta(t)],
+			registry,
+			emptySnapshot,
+		);
+
+		const moodV2 = pgEnum(app, "mood", ["ok", "great"]);
+		// A whole static string (no interpolation) -- `expr/codec.ts`'s own
+		// `encodeSqlTemplateChunk` renders this as one `chunkKind: "text"`
+		// node, never a `nodeKind: "literal"` one, so this is the shape
+		// `isMatchingLiteral` alone cannot reach.
+		const t2 = table(app, "t", columns, () => ({
+			checks: [check("t_status_check", sql`status = 'great'`)],
+		}));
+		const next = buildSnapshot(
+			[app, moodV2, getTableMeta(t2)],
+			registry,
+			previous,
+		);
+
+		const changes = diffSnapshots(previous, next, registry);
+		const decision = planSplit(changes);
+
+		expect(decision.split).toBe(true);
+	});
+
+	it("splits when the added value is spelled inside sql.raw", () => {
+		const columns = { id: uuid().primaryKey(), status: text() };
+		const mood = pgEnum(app, "mood", ["ok"]);
+		const t = table(app, "t", columns);
+		const previous = buildSnapshot(
+			[app, mood, getTableMeta(t)],
+			registry,
+			emptySnapshot,
+		);
+
+		const moodV2 = pgEnum(app, "mood", ["ok", "great"]);
+		// `expr/codec.ts`'s own `encodeRawSql` renders `sql.raw(...)` as
+		// `{ nodeKind: "raw-sql", sql }` -- a shape `isMatchingLiteral`
+		// never matches (its own guard checks for `"literal"`).
+		const t2 = table(app, "t", columns, () => ({
+			checks: [check("t_status_check", sql.raw("status = 'great'"))],
+		}));
+		const next = buildSnapshot(
+			[app, moodV2, getTableMeta(t2)],
+			registry,
+			previous,
+		);
+
+		const changes = diffSnapshots(previous, next, registry);
+		const decision = planSplit(changes);
+
+		expect(decision.split).toBe(true);
+	});
+
+	it("does not split when the value only occurs inside a longer word", () => {
+		const columns = { id: uuid().primaryKey(), status: text() };
+		const stage = pgEnum(app, "stage", ["ok"]);
+		const t = table(app, "t", columns);
+		const previous = buildSnapshot(
+			[app, stage, getTableMeta(t)],
+			registry,
+			emptySnapshot,
+		);
+
+		const stageV2 = pgEnum(app, "stage", ["ok", "draft"]);
+		// "redraft" carries "draft" as a substring, but the character
+		// immediately before it ("re") is a letter -- the identifier-boundary
+		// rule (task 19.1) rejects this the same way the database would
+		// never read "redraft" as the value "draft".
+		const t2 = table(app, "t", columns, () => ({
+			checks: [check("t_status_check", sql`status <> 'redraft'`)],
+		}));
+		const next = buildSnapshot(
+			[app, stageV2, getTableMeta(t2)],
+			registry,
+			previous,
+		);
+
+		const changes = diffSnapshots(previous, next, registry);
+		const decision = planSplit(changes);
+
+		expect(decision.split).toBe(false);
+	});
+
+	it("splits when the value's quote is doubled in the text", () => {
+		const columns = { id: uuid().primaryKey(), status: text() };
+		const mood = pgEnum(app, "mood", ["ok"]);
+		const t = table(app, "t", columns);
+		const previous = buildSnapshot(
+			[app, mood, getTableMeta(t)],
+			registry,
+			emptySnapshot,
+		);
+
+		// The added value itself holds a quote -- SQL text that spells it as
+		// a string literal doubles that quote (`can't` -> `can''t`,
+		// Postgres's own escaping), the second needle task 19.1 requires.
+		const moodV2 = pgEnum(app, "mood", ["ok", "can't"]);
+		const t2 = table(app, "t", columns, () => ({
+			checks: [check("t_status_check", sql`status = 'can''t'`)],
+		}));
+		const next = buildSnapshot(
+			[app, moodV2, getTableMeta(t2)],
+			registry,
+			previous,
+		);
+
+		const changes = diffSnapshots(previous, next, registry);
+		const decision = planSplit(changes);
+
+		expect(decision.split).toBe(true);
 	});
 });
 

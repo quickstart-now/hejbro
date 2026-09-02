@@ -910,12 +910,26 @@ sentence is the same defect as a call site nobody owns (15.8).
       statement is sent — *not* "without opening a connection", which is
       group 17's claim about `migrate`'s chain refusal alone) **and**
       moves `clearLedger` inside the same `changes.length > 0` branch as
-      the drop DDL. So no carve-out is owed: what this task writes is an
-      **invariant**, one sentence — "A reset that would drop nothing
-      writes nothing, the ledger included; the ledger is cleared only
-      together with the drops it records." It earns its place by the
-      admission test: no other sentence tells a reader that the ledger
-      clear is bound to the drops rather than to the run.
+      the drop DDL.
+      **Split across two registers, and the split is the point** (lead,
+      after group 18 measured its own mutant). Group 18 established that
+      every registered kind routes through `createOrDropDiff` and returns
+      `"drop"` whenever an object's `previous` exists and its `next` does
+      not — so a non-empty declaration set *cannot* diff to zero drops
+      (**code-certain, not verified by execution**; carry that grade into
+      the prose). With the empty-set refusal in front, "a reset that would
+      drop nothing" is therefore a state a user cannot reach.
+      - **The scenario** is the reachable half, and only that: reset
+        refuses a declaration set that exports nothing, before any
+        statement is sent. It has a test.
+      - **The invariant** — the ledger is cleared only together with the
+        drops it records, so no unconfirmed destructive path remains — is
+        written as the requirement's **rationale prose**, never as a
+        scenario.
+      Why this matters more than it looks: a scenario whose WHEN cannot
+      occur is M2 planted fresh — a "reported" state with no observer —
+      in the very change that exists to remove those. The sentence stays
+      true; what changes is the register it is written in.
 - [ ] 15.6 (~8m) The minors: m1 (`before any *migration* statement is
       sent` — this is the **weaker** of the two layers 15.1 notes, and it
       is the right sentence here: the capability refusal genuinely runs
@@ -1035,7 +1049,7 @@ the direction the requirement's own rationale exists to forbid.
 **This reopens the file the CRAP gate broke on.** Group 13's rules apply:
 aim below the line, and measure every helper the work extracts.
 
-- [ ] 19.1 (~8m) [design] The match rule for raw text. Substring on the
+- [x] 19.1 (~8m) [design] The match rule for raw text. Substring on the
       value's spelling is licensed by the stated over-approximation, but
       *how far* it over-approximates was never settled — a value spelled
       inside an unrelated word or a comment would split a run that did
@@ -1060,7 +1074,7 @@ aim below the line, and measure every helper the work extracts.
       escapes are deliberately not chased — that limit is stated in 15.8
       rather than half-implemented here.
       One boundary helper, named, and measured by name in 19.3.
-- [ ] 19.2 (~9m) The walk reaches `chunkKind: "text"` chunks and
+- [x] 19.2 (~9m) The walk reaches `chunkKind: "text"` chunks and
       `nodeKind: "raw-sql"` nodes. Red: `split.test.ts` — "splits when the
       added value is spelled inside a sql template", "…inside sql.raw".
       The over-approximation direction already has a test; this is the
@@ -1071,10 +1085,10 @@ aim below the line, and measure every helper the work extracts.
       quote is doubled in the text" (the second needle). Each text chunk
       is tested on its own — a value straddling a parameter boundary is
       not that value.
-- [ ] 19.3 (~6m) Re-measure the gate. `pnpm check:crap` must exit 0 with
+- [x] 19.3 (~6m) Re-measure the gate. `pnpm check:crap` must exit 0 with
       room, not at the line, and every helper this group adds is measured
       by name.
-- [ ] 19.4 (~9m) The live witness the report marked UNVERIFIED: a run
+- [x] 19.4 (~9m) The live witness the report marked UNVERIFIED: a run
       that adds an enum value and a check constraint spelling it, applied
       against a real server. Without 19.2 it takes `55P04`; with it, two
       migrations apply. Red: `apply-live.integration.test.ts`.
