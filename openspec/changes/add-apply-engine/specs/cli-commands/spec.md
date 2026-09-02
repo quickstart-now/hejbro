@@ -194,15 +194,27 @@ hejbro emits no other kind of function body. Creating an enum type and
 using its values in the same run does not satisfy it either — the
 restriction applies to values added to a type that already existed.
 
-The test is by the value's spelling, and it over-approximates: a string
-literal elsewhere in the same run that happens to read the same as the
-added value causes a split it did not need. That is deliberate. A
+The decision is made over the run's own **encoded expression nodes** —
+an encoded string-literal node, a `sql` template's own text chunks, and
+a `sql.raw` node's text — never over the statements as rendered for the
+database, so this SHALL is a claim about what the surface reads, not
+about text the database would see. Within that surface, the test is by
+the value's spelling: the value as written, and its spelling with every
+`'` doubled (the form a string literal carries it in when the value
+itself holds a quote), matched wherever the characters immediately
+before and after are not a letter, digit or underscore — an identifier
+boundary, not a bare substring search. It over-approximates in the
+direction that boundary licenses: the same word inside a comment or an
+unrelated string SHALL still cause a split, and that is deliberate. A
 literal carries no type of its own, so distinguishing "this enum's
 value" from "a string that looks like it" would mean inferring the type
 of every expression — and the two failures are not symmetric: an
 unnecessary split costs one extra migration that applies cleanly, while
 a missed one costs a migration that passes every check hejbro has and
-fails against the database.
+fails against the database. A value assembled by concatenation or
+produced by a function call is not a spelling and is not seen. A `sql`
+template's text chunks are each tested on their own: a value split
+across a chunk boundary by an interpolated parameter is not that value.
 
 Where a run is split, the migrations it writes SHALL carry distinct
 versions under every prefix strategy, and SHALL each carry their own

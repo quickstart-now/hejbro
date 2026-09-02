@@ -848,7 +848,7 @@ emit … it over-approximates" standing over a surface that still reads
 encoded nodes under a bounded rule. An artifact with a group and no
 sentence is the same defect as a call site nobody owns (15.8).
 
-- [ ] 15.1 (~8m) M3's prose: state that the chain vouches for the
+- [x] 15.1 (~8m) M3's prose: state that the chain vouches for the
       **snapshot hashes**, not for a file's SQL bytes, and that this is
       *why* the transaction-control refusal exists. Rewrite the scenario
       to the true contract (a banner line edited, a file removed or
@@ -862,12 +862,12 @@ sentence is the same defect as a call site nobody owns (15.8).
       after the probe and the bootstrap, so those keep 15.6's weaker
       wording. Do not write one sentence covering both: that is how a
       sentence starts claiming more than the code does.
-- [ ] 15.2 (~9m) M5, part one: `migrate`'s three-way exit code, and the
+- [x] 15.2 (~9m) M5, part one: `migrate`'s three-way exit code, and the
       shared `--url` / `DATABASE_URL` rule for the connecting commands —
       including the shipped security sentence's extension (**not** read
       from `hejbro.config.ts`). The corpus pins exactly this for `check`;
       four new commands inherited the behaviour and none of the words.
-- [ ] 15.3 (~8m) M5, part two: `raise --file`, `reset --confirm-drop` and
+- [x] 15.3 (~8m) M5, part two: `raise --file`, `reset --confirm-drop` and
       its `<database>:<count>` token, and `migrate`'s report buckets.
       Apply the admission test — a sentence earns its place by pinning
       something a reader cannot get from another sentence.
@@ -876,7 +876,7 @@ sentence is the same defect as a call site nobody owns (15.8).
       act" with `1`, not with the `2` 15.2 pins for `migrate`. Write that
       as it is; do not extend migrate's trichotomy to a command that does
       not implement it.
-- [ ] 15.4 (~7m) [design] M5, part three + M7's prose, **written
+- [x] 15.4 (~7m) [design] M5, part three + M7's prose, **written
       together**: the ledger's identity (schema, table, columns) and the
       origin discriminator group 16 adds. These are one decision about
       one durable object; writing them in two passes would settle its
@@ -901,7 +901,7 @@ sentence is the same defect as a call site nobody owns (15.8).
       reasoning into spec prose — it does not reopen it. Final shape:
       `origin text not null check (origin in ('applied', 'registered',
       'raised'))`, no default, on `hejbro.migration_ledger`.
-- [ ] 15.5 (~5m) M6's prose: either the zero-change carve-out is stated
+- [x] 15.5 (~5m) M6's prose: either the zero-change carve-out is stated
       or the implementation refuses first. Group 18 chooses; this task
       writes whichever it chose.
       **Chosen, and it is neither branch as originally framed** (lead,
@@ -930,7 +930,7 @@ sentence is the same defect as a call site nobody owns (15.8).
       occur is M2 planted fresh — a "reported" state with no observer —
       in the very change that exists to remove those. The sentence stays
       true; what changes is the register it is written in.
-- [ ] 15.6 (~8m) The minors: m1 (`before any *migration* statement is
+- [x] 15.6 (~8m) The minors: m1 (`before any *migration* statement is
       sent` — this is the **weaker** of the two layers 15.1 notes, and it
       is the right sentence here: the capability refusal genuinely runs
       after `assertConnected`'s `select 1`, and group 17 does not move
@@ -939,13 +939,13 @@ sentence is the same defect as a call site nobody owns (15.8).
       m4 (raise refuses net-of-rollback, and says so), m5 (reset's two
       SHALLs under declaration drift), m6 (drop `and a configuration
       default` — there is none).
-- [ ] 15.7 (~6m) m2: the **shipped** `cli-commands` Purpose already
+- [x] 15.7 (~6m) m2: the **shipped** `cli-commands` Purpose already
       promises the four commands, whose requirements live in the
       unarchived `migration-apply`. Point it at that capability. First
       measure who wrote that Purpose line and when (`git log -p`) — a
       Purpose edited ahead of its requirements is worth understanding
       before it is patched.
-- [ ] 15.8 (~7m) M4's prose, written after group 19 settles the rule it
+- [x] 15.8 (~7m) M4's prose, written after group 19 settles the rule it
       describes. Three things, and no more: (a) the decision is made over
       the run's **encoded expression nodes** — literal nodes, `sql`
       template text chunks, and `sql.raw` text — not over the rendered

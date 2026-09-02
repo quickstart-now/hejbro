@@ -7,7 +7,7 @@ Every migration file hejbro writes SHALL open with a banner of comment
 lines that carry, each under its own known prefix: the hash-chain lines
 (the normalized snapshot's hash before and after this migration, so that
 each file's "before" is its predecessor's "after" — the chain `verify`
-checks), the format-version line, and — on a baseline
+checks), the hejbro-version line, and — on a baseline
 migration only — the `-- baseline:` marker line, whose consumers are the
 tools deciding whether to run the migration or register it as applied,
 hejbro's own apply path among them. hejbro SHALL expose public parsers
