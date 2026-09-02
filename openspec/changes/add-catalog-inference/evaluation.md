@@ -1124,3 +1124,264 @@ identifiers of objects other than columns and foreign keys.
   missing `Guessed role names:`, so that comparison had been quietly
   half-blind; a line-by-line sweep of every literal `loss-report.ts`
   renders found it.
+
+## Round 5
+
+### Verdict
+
+BLOCKING 3 / NON-BLOCKING 5 / OK 13
+
+(18 delta scenarios: `catalog-inference` 4, `cli-commands` 8,
+`schema-vendoring` 3, `table-declaration` 3. Five scenarios are blocked
+by three findings. All three round-4 findings are closed as written —
+but R4-B1's own class is not: the round-4 correction guards the four
+object kinds it names by their *own* catalog name, and leaves unguarded
+every other path by which a non-D36 name reaches the DSL — a foreign
+key's *target*, and a column name the delta's own key rule is required
+to produce. A third finding is older than any round: two tables in one
+schema sharing a constraint name silently swap check expressions.)
+
+### Round-4 findings re-checked
+
+- **R4-B1 — an unexpressible schema, table, index or check name stopped
+  the whole reading — CLOSED for those four kinds (code + observers),
+  the class STILL OPEN on two other paths.** `partitionSchemas` /
+  `partitionTables` (`infer/compose.ts:175-215`) filter ahead of
+  `declareSchema`/`table()`, and `inferTable` filters checks and indexes
+  ahead of `check()`/`index()` (`infer/table.ts:379-398`), each naming
+  what it dropped. Measured against a real postgres:17 (one throwaway
+  container, `docker rm -v`'d): a database holding schema `"App"`
+  (with a table), `s4."Widgets"`, `"IX_Parts"`, `"CK_Parts"` and
+  `"FK_Parts_Owner"` beside ordinary siblings of each kind reads to
+  completion under both `import` and `pull` — starter file written,
+  contract written, every ordinary object inferred, one report line per
+  omission with its own consequence, and two runs byte-identical
+  (`identicalBytes: true`). The remedy lines speak to someone adopting a
+  database ("rename the schema in the database, then re-run `hejbro
+  import`"), not to a declaration author. The `stillReportedInInventory`
+  split is accurate: `buildInventory` returns `[]` for an omitted table
+  whose schema kept nothing else, because a bare `schema:` snapshot node
+  carries `name`, not `schema`, and `declaredSchemaNames`
+  (`check/inventory.ts:46-59`) therefore never counts it — measured, not
+  assumed. **But** the same `invalid-sql-name` abort survives wherever
+  such a name reaches the DSL by a route other than the object's own
+  declaration: `existingTable(fk.targetSchema, fk.targetTable, …)`
+  (`infer/table.ts:273-300`) and `assertSqlName(toSnakeCase(columnKey))`
+  (`core/src/dsl/table.ts:266`). See R5-B1 and R5-B2.
+- **R4-N1 — the skill's Approximated band was missing the FK-name kind —
+  CLOSED.** `brownfield-adoption.md:247-250` now names "a foreign key
+  whose own catalog name is not a valid hejbro SQL identifier, declared
+  under the derived name instead (D106 round 3)". The band is now exactly
+  the four kinds `approximationLines` renders. (Its **Omitted** band is
+  now the stale one — R5-N1.)
+- **R4-N2 — the round-3 changeset promised a non-existent export —
+  CLOSED.** `.changeset/fix-catalog-inference-d106-r3.md:19` now says
+  `deriveForeignKeyName` and `assertSqlName`; both are exported
+  (`core/src/index.ts:279`, `:386`) and `assertSqlName` is classified in
+  `cli/src/core-surface.ts:218`. `isSqlName` stays module-private, as
+  the round-3 disposition said.
+
+### Blocking
+
+**R5-B1 — a foreign key whose *target* table or schema carries a name no
+declaration can carry still aborts the entire reading.** The round-4
+correction filters the omitted object out of the declarations; it does
+not filter the references *into* it. `partitionTables` drops
+`app."Widgets"` but leaves untouched the foreign key that a surviving
+`app.orders` holds against it, and `referencesFor`
+(`infer/table.ts:264-292`) builds every non-self target as
+`existingTable(fk.targetSchema, fk.targetTable, …)`, which asserts both
+names (`core/src/dsl/existing-table.ts:24-25`). Measured against a real
+postgres:17, in-process from `src`:
+
+```sql
+create schema s1;
+create table s1."Widgets" (id uuid primary key);
+create table s1.orders (id uuid primary key, widget_id uuid references s1."Widgets"(id));
+```
+```
+inferFromCatalog({schemas:["s1"]}) -> THREW HejbroError:
+  table name "Widgets" is not a valid hejbro SQL identifier … Next: rename the table to snake_case.
+```
+
+The schema-level mirror is the same one frame up (`create table
+s5.orders (… references "App".orders(id))` → `schema name "App" is not a
+valid hejbro SQL identifier`). Zero files, no contract, no loss report,
+exit 1 — and the diagnostic's remedy is addressed to a declaration
+author. A mixed-case database (one ORM-created table beside hand-written
+ones) is the ordinary shape here, and it is the same shape the round-4
+correction exists to serve. Contradicts `catalog-inference` › "A name no
+declaration can carry costs that object, not the run" (shipped behavior
+is neither of the two outcomes it allows), `cli-commands` › "A database
+is imported into starter files", and `pull …` › "A contract is pulled
+from a database". Nothing in the suite feeds a foreign key whose target
+name is inexpressible: `infer-compose.test.ts`'s own `tableFacts` helper
+builds tables with `foreignKeys: []`, and the live witness
+(`infer-omitted-names.integration.test.ts:110-127`) gives its omitted
+table no inbound reference at all.
+
+**R5-B2 — a column whose SQL name begins with an underscore (`_id`)
+aborts the entire reading.** The delta's own key rule requires the key
+to keep a leading underscore ("keeping leading underscores and prefixing
+`_` to a key that would otherwise start with a digit"), and
+`baseTsKey` implements it (`infer/column-keys.ts:33-43`): `_id` → `_id`.
+`isNameRoundTrippable` then passes it (`toSnakeCase("_id") === "_id"`,
+`infer/compose.ts:122-124`), so it is *not* excluded as undeclarable —
+and `table()` rejects it three frames later, because `assertSqlName`'s
+pattern is `^[a-z][a-z0-9_]*$` (`core/src/dsl/table.ts:266`,
+`core/src/sql/identifier-rules.ts:3`). Measured against a real
+postgres:17:
+
+```sql
+create schema s2;
+create table s2.legacy (_id uuid primary key, name text not null);
+```
+```
+inferFromCatalog({schemas:["s2"]}) -> THREW HejbroError:
+  column name "_id" is not a valid hejbro SQL identifier … Next: rename the column to snake_case.
+```
+
+The round-trip predicate and the DSL's acceptance rule are two different
+rules, and this is the gap between them: every SQL name matching
+`^_` (and no other) round-trips *and* fails the assertion. `_id`,
+`_created_at`, `_metadata` are ordinary in a database hejbro did not
+create. Contradicts `cli-commands` › "a column the DSL cannot name is
+left out and said so" (the delta's prescribed outcome is omission plus a
+named line; shipped behavior is a dead run), `catalog-inference` › "A
+catalog reading yields a snapshot and a marked description" (the closed
+list of what the snapshot omits, and "Leaving such an object out SHALL
+never stop the reading"), and both commands' end-to-end scenarios.
+Whichever way it is settled — exclude `^_` names from the snapshot and
+name them, or loosen D36 — the two rules must become one, since a third
+divergence is what produced both this finding and R4-B1.
+
+**R5-B3 — two tables in one schema sharing a check-constraint name get
+each other's expression, silently.** `checksFor`
+(`infer/adapter.ts:186-193`) looks a check expression up by
+`row.schema === constraint.schema && row.name === constraint.name` — the
+table is not part of the match, although `CheckExpressionRow` carries it
+and every sibling lookup (foreign keys `:140-145`, index details,
+column details) uses it. Postgres only requires a constraint name to be
+unique per table, so this is legal and measured:
+
+```sql
+create schema s3;
+create table s3.a (x int, constraint pos check (x > 0));
+create table s3.b (y int, constraint pos check (y < 0));
+```
+```
+inferFromCatalog({schemas:["s3"]}).sql:
+  create table "s3"."a" ( "x" integer, constraint "pos" check ((x > 0)) );
+  create table "s3"."b" ( "y" integer, constraint "pos" check ((x > 0)) );   <-- s3.a's expression
+```
+
+`s3.b`'s own `(y < 0)` is gone and `s3.a`'s `(x > 0)` is asserted against
+a column `s3.b` does not have. No loss-report line mentions it. Run
+against the same server, the DDL `baseline` would emit is not merely
+different from the database, it is rejected: `ERROR: column "x" does not
+exist`. Contradicts `catalog-inference` › "Tables and enums are
+inferred" ("the snapshot records each of them with its columns, keys and
+constraints") and `cli-commands` › "A database is imported into starter
+files" ("a following `baseline` emits a first migration whose objects
+match the database's"). The fix is one clause — match on `row.table`
+too, the way every neighbouring lookup already does — plus the pin no
+suite has: `infer-constraints.test.ts` never gives two tables the same
+constraint name.
+
+### Non-blocking
+
+**R5-N1 — the skill's **Omitted** band is now the stale one: it names
+only the undeclarable column, not the four omission kinds the round-4
+correction added.** `brownfield-adoption.md:251-259` still enumerates the
+Omitted band as "a column whose SQL name no declaration key can
+round-trip (a quoted `"createdAt"` …)" and nothing else, while
+`buildLossReport` now renders four more kinds ahead of it —
+`Omitted: schema …`, `Omitted: table …`, `Omitted: index …`,
+`Omitted: check constraint …` (`infer/loss-report.ts:300-400`). `grep -n
+"valid hejbro SQL identifier" skills/hejbro/references/brownfield-adoption.md`
+returns one hit, the Approximated band's foreign-key sentence. This is
+R4-N1 one round later, in the band next door: the page a reader consults
+to know what `import` did and did not preserve does not mention that a
+whole table or schema can be left behind.
+
+**R5-N2 — the UNIQUE-constraint approximation is announced for tables
+the reading did not infer.** `detectUniqueIndexApproximations` is passed
+the schema-filtered catalog, not the surviving tables
+(`infer/compose.ts:329`), while its three sibling detectors are passed
+`mergedTables`. A UNIQUE constraint on an omitted table therefore yields
+`Approximated: the UNIQUE constraint "app.Widgets.widgets_email_key" is
+inferred as a unique index of the same name …` in the same report whose
+next line says the whole table was omitted — measured. Two lines about
+one object, one of them false.
+
+**R5-N3 — when every named schema is omitted for its name, the reason is
+never printed.** `runImport` refuses with `import-nothing-to-infer`
+before assembling stdout (`commands/import.ts:311`; `errorReport`
+returns `stdout: []`), so `hejbro import --schema App --out …` against a
+database whose `"App"` schema is full of tables prints "found no table,
+enum, or sequence to infer in schema(s) App. Next: confirm the schema
+name(s) are correct and that the database holds objects in them" —
+measured end to end through `runImport`. The `Omitted: schema "App" …`
+line the reading produced is discarded. The round-4 correction handled
+exactly this honesty problem for the *partial* case (`emptySchemaLines`
+suppresses "nothing to infer" for an omitted schema, `:129-141`, "stating
+both would tell the reader two different stories"); the all-omitted case
+tells the one wrong story instead. `pull` has no such refusal and does
+print the line.
+
+**R5-N4 — `cli-commands` states the foreign-key-name rule without the
+exception the code implements.** "A foreign key's own catalog name SHALL
+survive into the starter declaration — written out where it differs from
+the name the DSL would derive, left implicit where it does not" carries
+no exception, but a name D36 cannot carry is dropped for the derived one
+(`expressibleForeignKeyName`, `infer/table.ts:194-200`) and announced as
+an approximation. Measured live: `"FK_Parts_Owner"` becomes
+`parts_owner_id_fk` with an `Approximated:` line, while the expressible
+`comments_post_id_fkey` is written out as `name: "comments_post_id_fkey"`
+and `notes_post_id_fk` (equal to the derived name) is left implicit. The
+behavior is the one rounds 3–4 settled; it is the requirement text that
+never gained the clause, and the `catalog-inference` approximation
+enumeration does not list this kind either.
+
+**R5-N5 — an enum type's catalog name is the one identifier the D36 net
+never touches.** `pgEnum` asserts nothing (`core/src/dsl/pg-enum.ts:27-33`),
+so a `create type app."Status"` reaches the snapshot, the starter
+(`pgEnum(app, "Status", …)`) and the emitted DDL unchanged — measured —
+while a table, schema, index or check of exactly the same shape is
+omitted and reported. Nothing in the delta's own closed list names an
+enum, so no scenario is contradicted; but the requirement's stated reason
+for omitting the others ("a declaration's identifiers are lower
+snake_case (D36)") applies verbatim here, and the resulting starter file
+declares an identifier `--rename`/`--confirm-drop` cannot address. Decide
+it explicitly (carry, or omit-and-name) rather than by which DSL
+constructor happens to assert.
+
+### Verified scenarios
+
+- `catalog-inference` › A catalog reading yields a snapshot and a marked description › **Tables and enums are inferred** — BLOCKING (R5-B2, R5-B3). Holds for a database of D36-expressible names with distinct constraint names; a `_`-leading column kills the run, and a duplicated check name silently rewrites a table's own constraint.
+- `catalog-inference` › … › **Two SQL names that collide on one key are both described** — OK. `keyFor`/`bareKeyWinnerIndex` (`infer/column-keys.ts:82-119`) unchanged since round 4's re-measurement of eleven shapes; `infer-keys.test.ts` green in this round's run.
+- `catalog-inference` › … › **A name no declaration can carry costs that object, not the run** — BLOCKING (R5-B1). True for the four kinds named by their own catalog name (measured live, both commands, both orders, byte-identical); false for a reference into an omitted table or schema.
+- `catalog-inference` › … › **What is not inferred is named** — OK. `notInferredLines` (`infer/loss-report.ts:213-237`) counts each kind and names each column-with-type and unowned sequence; `infer-loss-report.test.ts`, `infer-rest.test.ts` green.
+- `catalog-inference` › The loss is announced, with the way out › **The report names the way out** — OK. `wayOutLine` is the last line of every report measured this round, `pull`'s being "The loss ends when you link the schema repository". (Band honesty: R5-N2; doc drift: R5-N1.)
+- `cli-commands` › import writes starter declarations › **Declaration files never import each other in a cycle** — OK. Re-measured: the chorded three-schema graph (`a→b`, `a→c`, `b→c` foreign keys plus a `c→a` enum column) and its mirror with the enum on the `b→a` edge, emitted to a real directory and loaded from **every** file as entry point through the production `jiti` (6/6 clean). Import edges `{a:[b,c], b:[c], c:[]}`, acyclic under a traversal written independently of the one under test; the cut carries the unexported `pgEnum` clone with its own comment, and nothing is declared twice.
+- `cli-commands` › … › **A second import writes the same bytes** — OK. Measured live against postgres:17: two readings of the same database emit identical files; header carries the full report and the repository-owns-it sentence, and no clock- or machine-derived value.
+- `cli-commands` › … › **A database is imported into starter files** — BLOCKING (R5-B1, R5-B2, R5-B3). Two schemas, files written, report printed, `baseline`-shaped DDL correct for a database of expressible names and distinct constraint names; each of the three findings breaks it for a database that is not.
+- `cli-commands` › … › **a column the DSL cannot name is left out and said so** — BLOCKING (R5-B2). A quoted `"createdAt"` is excluded and named with its consequence verbatim; a `_id` is neither — it stops the run.
+- `cli-commands` › … › **import refuses to guess which schemas to read** — OK. `throwMissingSchema` (`commands/import.ts:79-83`) names `--schema` and "most commonly --schema public", before any connection; `--out` has its own code. `import-command.test.ts` green.
+- `cli-commands` › … › **The named schemas hold nothing to infer** — OK as written (the refusal fires before any write, `import-command.test.ts` green), with the diagnostic-honesty gap R5-N3 when the emptiness is really an omission.
+- `cli-commands` › … › **import never overwrites** — OK. `throwIfPlannedFilesCollide` then `throwIfAnyFileExists`, both before the first write (`commands/import.ts:198-232`); `import-command.test.ts` green.
+- `cli-commands` › pull reads a database as the marked fallback › **A contract is pulled from a database** — BLOCKING (R5-B1, R5-B2) by the same reading; otherwise OK, measured: the contract's header says "inferred from a database catalog", its `Tables` carry the guessed keys, an omitted table reaches neither `Database["Tables"]` nor `contractMetadata.tables`, and the report prints with `link` as the way out.
+- `schema-vendoring` › **pull writes where vendor writes** — OK. `runPull` calls `assertLockWritable`/`assertContractDestinationWritable` with `force: false` and `"hejbro pull"` before any network work (`commands/pull.ts:138-143`), then writes the four vendor paths and a lock marked `generatedBy: "hejbro pull"`. `pull-command.test.ts`, `vendor-lock-origin.test.ts` green.
+- `schema-vendoring` › **A database-sourced contract says so and carries no commit** — OK. Measured contract text carries `source: "database"`, `database`, `schemas` and no `commit`; `ContractMetadata` (`query/src/client/contract-types.ts:90-104`) is a `source`-discriminated union whose git arm keeps `source` optional, so a pre-#604 contract still type-checks. `contract-origin.test.ts` green.
+- `schema-vendoring` › **outdated refuses a database-sourced contract** — OK. `assertLockNamesACommit` before any source read in both `outdated.ts:42` and `vendor.ts:75`; `outdated-database-origin.test.ts`, `vendor-check.test.ts` (the latter blocked only by the dist guard) as written.
+- `table-declaration` › **A named foreign key keeps its name** — OK. Measured: a catalog `comments_post_id_fkey` reaches the starter as `name: "comments_post_id_fkey"` and the DDL as `alter table "app"."comments" add constraint "comments_post_id_fkey" …`.
+- `table-declaration` › **An unnamed foreign key is unchanged** — OK. The sibling whose catalog name equals the derived one emits no `name:` field at all and `… add constraint "notes_post_id_fk" …`; `declare-emit-emit.test.ts` green.
+- `table-declaration` › **Renaming the table leaves an explicit name alone** — OK. `rename-plan.test.ts:1831` (full statement-list equality plus `diffSnapshots(rewrittenPrevious, next) === []`) and the `wasDerived` guard (`core/src/engine/rename/retarget.ts:691-706`) unchanged; `packages/core` suite green (99 files / 1508 tests).
+
+### Method
+
+- Read `openspec show add-catalog-inference --diff` in full, then the named surface: `packages/cli/src/{commands/{import,pull}.ts,infer/*,declare-emit/emit.ts,contract/{emit,from-catalog}.ts,check/{catalog,inventory}.ts,vendor/{state,lock,write}.ts}`, `packages/core/src/{dsl/{table,existing-table,pg-enum}.ts,sql/identifier-rules.ts,index.ts}`, `packages/query/src/client/contract-types.ts`, `skills/hejbro/references/brownfield-adoption.md`, `.changeset/fix-catalog-inference-d106-r{3,4}.md`. Only rounds 1–4 of `evaluation.md` were read (findings + dispositions), as claims.
+- Live witness, one throwaway postgres:17 container (`docker system df` first; `docker rm -v -f` after, container count back to its pre-run value): five isolated fixture schemas driven through the real `inferFromCatalog`/`emitDeclarationFiles` from `src` — the round-5 exotic set (`"App"` schema, `"Widgets"`, `"IX_Parts"`, `"CK_Parts"`, `"FK_Parts_Owner"` beside ordinary siblings, read twice, under `import` and `pull`), a foreign key into a CamelCase table, a foreign key into a CamelCase schema, a `_id` column, and two tables sharing a check name. The invalid `baseline` DDL from the last was executed against the same server to confirm `ERROR: column "x" does not exist`.
+- In-process probes (created, run and deleted in the same tool call, `packages/cli/test/_r5probe*.test.ts`; `git status --porcelain` shows only `evaluation.md`): a fake `DriverSession` answering `CHECK_CATALOG_QUERIES` + `INFER_CATALOG_QUERIES` by exact text, driving `inferFromCatalog` for the omitted-object matrix, `emitContract`/`exportPayloadFromCatalog` for the contract, `runImport` end to end (fake connection, real inference) for the two refusal paths and header/stdout parity, `buildInventory` for the `stillReportedInInventory` claim, and two cycle graphs emitted to `/private/tmp` and loaded from every entry point with the production `jiti` (deleted afterwards).
+- Suites: `packages/core` 99 files / 1508 tests green; `packages/query` 64 files / 857 tests green; `packages/cli` 564 passed, 189 skipped (docker-gated), **24 files failing only on the dist-freshness guard** — the single distinct error is "`@hejbro/core`'s dist/ is older than its src/ (stale build)", read not fixed per this round's brief. Every measurement above therefore runs from `src`; the only `dist` use is `jiti`'s own resolution of `"hejbro"` in the cycle-load probe, where the loaded surface (`schema`/`table`/`pgEnum`/`uuid`) predates this change.
+- `node scripts/check-diagnostic-xref.mjs` (227 codes, ok) and `node scripts/check-bans.mjs` (235 files, ok). Not run: `pnpm build`, `pnpm install`, full-workspace `pnpm test`/`check-types` (another team holds the gate slot).
