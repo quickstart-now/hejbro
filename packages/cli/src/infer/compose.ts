@@ -15,6 +15,7 @@ import { readInferenceCatalog } from "./catalog";
 import type { CatalogDescription } from "./description";
 import { describeCatalog } from "./description";
 import type {
+	OmittedForeignKey,
 	OmittedSchema,
 	OmittedTable,
 	UndeclarableNameColumn,
@@ -31,7 +32,7 @@ import {
 	notInferredSummary,
 	standaloneSequences,
 } from "./rest";
-import type { InferredTableFacts } from "./table";
+import type { InferredForeignKey, InferredTableFacts } from "./table";
 import { inferTable, isExpressibleName } from "./table";
 
 export type InferSourceCommand = "import" | "pull";
@@ -253,6 +254,87 @@ export const withInventorySignal = (
 		stillReportedInInventory: schemasWithOtherDeclarations.has(table.schema),
 	}));
 
+/** A self-reference (`table` omitted, core's own D52 rule) is always into a surviving table -- the table holding it is one, by construction of this being called on a table that survived far enough to reach here. */
+const isSelfReference = (
+	fk: InferredForeignKey,
+	facts: InferredTableFacts,
+): boolean =>
+	fk.targetSchema === facts.schema.schemaName &&
+	fk.targetTable === facts.tableName;
+
+/** Whether the target was left out because its own table name was inexpressible, or because its whole schema was -- the schema check first, since a schema-level omission already explains why the table under it never reached `survivingTableIdentities` either. */
+const targetKindFor = (
+	targetSchema: string,
+	omittedSchemaNames: ReadonlySet<string>,
+): OmittedForeignKey["targetKind"] => {
+	if (omittedSchemaNames.has(targetSchema)) {
+		return "schema";
+	}
+	return "table";
+};
+
+const targetIdentifierFor = (
+	fk: InferredForeignKey,
+	targetKind: OmittedForeignKey["targetKind"],
+): string => {
+	if (targetKind === "schema") {
+		return fk.targetSchema;
+	}
+	return `${fk.targetSchema}.${fk.targetTable}`;
+};
+
+export type ForeignKeyPartition = {
+	readonly tables: ReadonlyArray<InferredTableFacts>;
+	readonly omittedForeignKeys: ReadonlyArray<OmittedForeignKey>;
+};
+
+/**
+ * D106 R5-B1: a foreign key whose *target* table or schema was itself
+ * omitted still built an `existingTable` handle against a name
+ * `assertSqlName` could not carry, aborting the whole reading --
+ * `partitionSchemas`/`partitionTables` filtered the omitted object out
+ * of the declarations, never the references *into* it. Checked here
+ * against `survivingTableIdentities`, the same set every other survival
+ * question in this module answers from -- not a second, independent
+ * judgment of which tables exist.
+ */
+export const partitionForeignKeys = (
+	tables: ReadonlyArray<InferredTableFacts>,
+	survivingTableIdentities: ReadonlySet<string>,
+	omittedSchemaNames: ReadonlySet<string>,
+): ForeignKeyPartition => {
+	const isReachable = (
+		fk: InferredForeignKey,
+		facts: InferredTableFacts,
+	): boolean => {
+		if (isSelfReference(fk, facts)) {
+			return true;
+		}
+		return survivingTableIdentities.has(`${fk.targetSchema}.${fk.targetTable}`);
+	};
+	const omittedForeignKeys = tables.flatMap((facts) =>
+		facts.foreignKeys
+			.filter((fk) => !isReachable(fk, facts))
+			.map((fk) => {
+				const targetKind = targetKindFor(fk.targetSchema, omittedSchemaNames);
+				return {
+					schema: facts.schema.schemaName,
+					table: facts.tableName,
+					name: fk.name,
+					targetKind,
+					target: targetIdentifierFor(fk, targetKind),
+				};
+			}),
+	);
+	return {
+		tables: tables.map((facts) => ({
+			...facts,
+			foreignKeys: facts.foreignKeys.filter((fk) => isReachable(fk, facts)),
+		})),
+		omittedForeignKeys,
+	};
+};
+
 /**
  * The single entry point over every `infer/` part (CI-G1-R1-14): one
  * session and a required schema list in, `{ snapshot, description,
@@ -316,6 +398,20 @@ export const inferFromCatalog = async (
 	);
 	const tablePartition = partitionTables(allMergedTables);
 	const mergedTables = tablePartition.tables;
+	/**
+	 * D106 R5: the single "which tables actually survived" identity set
+	 * every later step that must agree on it reads -- `mergedTables`
+	 * itself, named once here rather than re-derived per caller. R5-B1
+	 * and R5-N2 both trace to a caller that judged survival its own way
+	 * (a foreign key's target existing regardless of whether the reading
+	 * kept it; a UNIQUE constraint read off unfiltered catalog rows) --
+	 * one set, read by both, closes both the same way.
+	 */
+	const survivingTableIdentities = new Set(
+		mergedTables.map(
+			(table) => `${table.schema.schemaName}.${table.tableName}`,
+		),
+	);
 	// #707: a schema an omitted table's own report line names as still
 	// scanned by `check`'s inventory needs another surviving declared
 	// table or enum in that same schema -- computed from the survivors,
@@ -329,8 +425,16 @@ export const inferFromCatalog = async (
 		tablePartition.omittedTables,
 		schemasWithOtherDeclarations,
 	);
+	const foreignKeyPartition = partitionForeignKeys(
+		mergedTables,
+		survivingTableIdentities,
+		new Set(schemaPartition.omittedSchemas.map((schema) => schema.sqlName)),
+	);
+	const tablesWithReachableForeignKeys = foreignKeyPartition.tables;
 
-	const snapshotTables = tablesExcludingUndeclarableNames(mergedTables);
+	const snapshotTables = tablesExcludingUndeclarableNames(
+		tablesWithReachableForeignKeys,
+	);
 	const built = snapshotTables.map((table) => inferTable(table));
 	const typeLosses = built.flatMap((result) => result.losses);
 	const declarations: ReadonlyArray<HejbroInput> = [
@@ -350,15 +454,24 @@ export const inferFromCatalog = async (
 		notInferred: notInferredSummary(catalog),
 		standaloneSequences: standaloneSequences(catalog, inferenceCatalog),
 		typeLosses,
-		uniqueIndexApproximations: detectUniqueIndexApproximations(catalog),
-		nextvalDefaults: detectNextvalDefaultApproximations(mergedTables),
-		foreignKeyNameApproximations:
-			detectForeignKeyNameApproximations(mergedTables),
-		undeclarableNameColumns: undeclarableNameColumnsFor(mergedTables),
+		uniqueIndexApproximations: detectUniqueIndexApproximations(
+			catalog,
+			survivingTableIdentities,
+		),
+		nextvalDefaults: detectNextvalDefaultApproximations(
+			tablesWithReachableForeignKeys,
+		),
+		foreignKeyNameApproximations: detectForeignKeyNameApproximations(
+			tablesWithReachableForeignKeys,
+		),
+		undeclarableNameColumns: undeclarableNameColumnsFor(
+			tablesWithReachableForeignKeys,
+		),
 		omittedSchemas: schemaPartition.omittedSchemas,
 		omittedTables,
 		omittedIndexes: built.flatMap((result) => result.omittedIndexes),
 		omittedChecks: built.flatMap((result) => result.omittedChecks),
+		omittedForeignKeys: foreignKeyPartition.omittedForeignKeys,
 	});
 
 	return {

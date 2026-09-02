@@ -114,7 +114,11 @@ const psqlFile = (database: string, sql: string): void => {
  * leading-underscore column (`_id`) beside an ordinary one (`label`) --
  * round-trippable (`toSnakeCase("_id") === "_id"`) but not a valid
  * hejbro SQL identifier, the exact gap between the two rules that used
- * to abort the whole reading.
+ * to abort the whole reading. `line_items` (D106 R5-B1) holds two
+ * foreign keys into objects this reading omits for their own names --
+ * one into `app."Widgets"` (a table-kind omission), one into
+ * `"App".orders` (a schema-kind one) -- proving a bad name elsewhere
+ * costs only the relation into it, never `line_items` itself.
  */
 const SCHEMA_SQL = `
 create schema "App";
@@ -139,6 +143,12 @@ create table app."Widgets" (
 create table app.legacy (
 	_id uuid primary key default gen_random_uuid(),
 	label text not null
+);
+
+create table app.line_items (
+	id uuid primary key default gen_random_uuid(),
+	widget_id uuid references app."Widgets"(id),
+	owner_order_id uuid references "App".orders(id)
 );
 `;
 
@@ -263,6 +273,16 @@ describe("catalog-inference / D106 R4-B1: a bad name costs the object, not the r
 			// omitted and named like any other undeclarable column, never an
 			// abort of the whole reading.
 			expect(first.stdout).toContain('Omitted: column "app.legacy._id"');
+			// D106 R5-B1: a foreign key whose own name is a valid hejbro SQL
+			// identifier still costs only itself when its *target* was
+			// omitted -- one line per target kind (table vs. schema),
+			// `line_items` itself unaffected.
+			expect(first.stdout).toContain(
+				'Omitted: foreign key "app.line_items.line_items_widget_id_fkey" -- references table "app.Widgets"',
+			);
+			expect(first.stdout).toContain(
+				'Omitted: foreign key "app.line_items.line_items_owner_order_id_fkey" -- references schema "App"',
+			);
 
 			const schemaSource = readFileSync(
 				resolve(cwd, "src/schema/app.schema.ts"),
@@ -290,6 +310,15 @@ describe("catalog-inference / D106 R4-B1: a bad name costs the object, not the r
 			expect(declarationCode).not.toContain("_id");
 			expect(declarationCode).not.toContain("CK_Widgets");
 			expect(declarationCode).not.toContain("IX_Widgets");
+			// D106 R5-B1: `line_items` itself is declared, its two source
+			// columns survive as ordinary columns (the relationship is what
+			// was omitted, not the column), but neither omitted-target
+			// foreign key reaches the declaration -- no `existingTable`
+			// handle for either "Widgets" or "App" appears at all.
+			expect(declarationCode).toContain("lineItems");
+			expect(declarationCode).toContain("widgetId");
+			expect(declarationCode).toContain("ownerOrderId");
+			expect(declarationCode).not.toContain("existingTable");
 
 			expect(
 				execFileSync("ls", [resolve(cwd, "src/schema")], {

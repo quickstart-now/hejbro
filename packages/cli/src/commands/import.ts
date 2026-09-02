@@ -112,6 +112,29 @@ const throwNothingToInfer = (schemas: ReadonlyArray<string>): never =>
 	);
 
 /**
+ * D106 R5-N3: "found no table, enum, or sequence" is only true of a
+ * schema this refusal is allowed to name -- one `result.omittedSchemaNames`
+ * doesn't already explain. A schema omitted for its own name did hold
+ * something; hejbro just could not carry it, and the `Omitted: schema
+ * …` loss-report line already says so. Refusing outright here would
+ * discard that line before it ever reaches stdout (the exact honesty
+ * gap R4's own `emptySchemaLines` closed for the *partial* case, one
+ * round earlier) -- so this refusal now fires only when every named
+ * schema is genuinely empty, never when the reading found something it
+ * merely couldn't name.
+ */
+const allSchemasExplainedAsEmpty = (
+	result: InferCatalogResult,
+	schemas: ReadonlyArray<string>,
+): boolean => {
+	const withObjects = schemasWithInferredObjects(result);
+	const omitted = new Set(result.omittedSchemaNames);
+	return schemas.every(
+		(schemaName) => !withObjects.has(schemaName) && !omitted.has(schemaName),
+	);
+};
+
+/**
  * D106 N7: when *some* (not all) named schemas hold nothing, `import`
  * used to write files for the ones that do and say nothing at all about
  * the ones that don't -- neither a file nor a diagnostic named the
@@ -307,7 +330,7 @@ export const runImport = async (
 					schemas,
 					command: "import",
 				});
-				if (schemasWithInferredObjects(result).size === 0) {
+				if (allSchemasExplainedAsEmpty(result, schemas)) {
 					throwNothingToInfer(schemas);
 				}
 				const resultWithFullReport = withEmptySchemaLines(result, schemas);

@@ -327,6 +327,35 @@ describe("runImport / 3.1", () => {
 	});
 
 	/**
+	 * D106 R5-N3: `import-nothing-to-infer` used to fire whenever every
+	 * named schema produced zero snapshot objects, whether that was
+	 * genuine emptiness or an omission for the schema's own name -- the
+	 * refusal discarded the `Omitted: schema …` line the reading had
+	 * already produced, telling the user "nothing here" about a schema
+	 * that in fact held a table hejbro just could not name. This is the
+	 * same honesty gap R4's own `emptySchemaLines` closed one round
+	 * earlier for the *partial* case (some schemas empty, some not).
+	 */
+	it("succeeds and prints the omission reason when every named schema was omitted for its name, not genuinely empty", async () => {
+		const omittedLine =
+			'Omitted: schema "App" -- its catalog name is not a valid hejbro SQL identifier.';
+		const result = resultFor([], [omittedLine], ["App"]);
+
+		const outcome = await runImport(
+			cwd,
+			["--url", "postgres://fixture", "--schema", "App", "--out", "src/schema"],
+			depsFor(result),
+		);
+
+		expect(outcome.exitCode).toBe(0);
+		expect(outcome.stderr).toBeNull();
+		expect(outcome.stdout).toContain(omittedLine);
+		expect(
+			outcome.stdout.some((line) => line.includes("import-nothing-to-infer")),
+		).toBe(false);
+	});
+
+	/**
 	 * D106 N7: when only *some* named schemas hold nothing, `import` wrote
 	 * a file for the ones that did and said nothing at all about the ones
 	 * that didn't -- no file, no diagnostic, no loss-report line. Only the
