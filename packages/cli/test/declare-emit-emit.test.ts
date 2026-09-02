@@ -886,3 +886,71 @@ describe("renderHeader / D106 R3-B1 (CI-R3-01): a star-slash pair inside a loss-
 		expect(header).toContain(" * Guessed: TypeScript keys from SQL names.");
 	});
 });
+
+describe("emitDeclarationFiles / D106 R3-B3: a foreign key's own catalog name", () => {
+	const postsTable: TableSnapshot = {
+		schema: "app",
+		name: "posts",
+		columns: [
+			{
+				name: "id",
+				typeNode: { typeName: "uuid" },
+				notNull: true,
+				primaryKey: true,
+			},
+		],
+		indexes: [],
+		foreignKeys: [],
+		primaryKeyName: "posts_pkey",
+	};
+	const commentsWithFkName = (name: string): TableSnapshot => ({
+		schema: "app",
+		name: "comments",
+		columns: [
+			{
+				name: "id",
+				typeNode: { typeName: "uuid" },
+				notNull: true,
+				primaryKey: true,
+			},
+			{ name: "post_id", typeNode: { typeName: "uuid" }, notNull: true },
+		],
+		indexes: [],
+		foreignKeys: [
+			{
+				name,
+				columns: ["post_id"],
+				referencesTable: "app.posts",
+				referencesColumns: ["id"],
+			},
+		],
+		primaryKeyName: "comments_pkey",
+	});
+
+	it("omits an explicit name when the catalog name matches what hejbro would derive -- a hejbro-created database's own golden stays byte-identical", () => {
+		const files = emitDeclarationFiles(
+			resultFor([postsTable, commentsWithFkName("comments_post_id_fk")]),
+		);
+		const [file] = files;
+		if (file === undefined) {
+			throw new Error("expected one file");
+		}
+		expect(file.source).toContain(
+			"references: { table: posts, columns: [posts.id] } }",
+		);
+		expect(file.source).not.toContain("name:");
+	});
+
+	it("emits the catalog's own name explicitly when it differs from what hejbro would derive", () => {
+		const files = emitDeclarationFiles(
+			resultFor([postsTable, commentsWithFkName("comments_post_id_fkey")]),
+		);
+		const [file] = files;
+		if (file === undefined) {
+			throw new Error("expected one file");
+		}
+		expect(file.source).toContain(
+			'references: { table: posts, columns: [posts.id] }, name: "comments_post_id_fkey" }',
+		);
+	});
+});

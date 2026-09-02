@@ -13,6 +13,7 @@ import {
 	columnIdentity,
 	columnNotNull,
 	decodeExprNode,
+	deriveForeignKeyName,
 	renderExpr,
 	tableIdentity,
 } from "@hejbro/core";
@@ -476,6 +477,29 @@ export type ForeignKeyRenderContext = {
 	readonly targetIdentifier: string | null;
 	readonly tsKeyFor: (sqlName: string) => string;
 	readonly targetTsKeyFor: (sqlName: string) => string;
+	/** The owning table's own SQL name (D106 R3-B3) -- `renderForeignKeyNameField`'s own input for deciding whether the catalog's name needs stating explicitly at all. */
+	readonly tableName: string;
+};
+
+/**
+ * D106 R3-B3: an explicit `name:` only when the catalog's own foreign key
+ * name differs from what `deriveForeignKeyName` would produce for this
+ * table and these columns -- so importing a database hejbro itself
+ * created (whose foreign keys are already named this way) writes exactly
+ * the same bytes it always has, and only a foreign key hejbro did not
+ * create carries the extra field. `fk.name` is already guaranteed
+ * expressible by this point: `infer/table.ts`'s own `expressibleForeignKeyName`
+ * (D36) falls back to the derived name before this snapshot is ever
+ * built, so no validation is needed here, only the equality check.
+ */
+const renderForeignKeyNameField = (
+	tableName: string,
+	fk: ForeignKeySnapshot,
+): string => {
+	if (fk.name === deriveForeignKeyName(tableName, fk.columns)) {
+		return "";
+	}
+	return `, name: ${JSON.stringify(fk.name)}`;
 };
 
 const renderReferencesObject = (
@@ -509,7 +533,8 @@ const renderForeignKey = (
 		context.targetIdentifier,
 		targetColumns,
 	);
-	return `{ columns: [${columns}], references: ${references}${renderForeignKeyActions(fk)} }`;
+	const nameField = renderForeignKeyNameField(context.tableName, fk);
+	return `{ columns: [${columns}], references: ${references}${nameField}${renderForeignKeyActions(fk)} }`;
 };
 
 /**
@@ -949,6 +974,7 @@ export const renderTable = (
 					context.identifierFor,
 				),
 				tsKeyFor: tsKeyForOwn,
+				tableName: table.name,
 				targetTsKeyFor: (sqlName: string) =>
 					context.tsKeyFor(fk.referencesTable, sqlName),
 			});
