@@ -178,3 +178,115 @@ describe("a function export name equal to a table's SQL name (#587/G3)", () => {
 		expect(value).toBe(5n);
 	});
 });
+
+/**
+ * The recursion's own observer (#587/G3, requested after the first
+ * collision test's mutant came back vacuous for a single-attempt
+ * fallback -- see `buildFunctionKeyMap`'s own doc comment): a function
+ * whose export name collides with a table's SQL name, where the
+ * *first* fallback candidate (`buildFunctionKeyMap`'s own suffix
+ * convention) is ALSO occupied, by a second, unrelated table. Assigning
+ * the function's internal key correctly requires trying a second
+ * candidate, not stopping after one fallback attempt -- the single
+ * scenario the earlier "posts"-only fixture could never exercise
+ * (there was nothing occupying its first fallback candidate).
+ */
+describe("recursive collision avoidance beyond one fallback attempt (#587/G3)", () => {
+	const DoubleCollidingMetadata: ContractMetadata = {
+		commit: "abc123",
+		exportHash: "sha256:x",
+		roles: [],
+		tables: {
+			posts: {
+				schema: "app",
+				name: "posts",
+				columns: {
+					id: {
+						sqlName: "id",
+						typeNode: { typeName: "uuid" },
+						mode: null,
+						notNullElements: false,
+					},
+				},
+				foreignKeys: [],
+			},
+			// Occupies the first fallback candidate `buildFunctionKeyMap`
+			// would try for the colliding "posts" export -- a synthetic key
+			// (an SQL identifier could never literally read this way), on
+			// purpose: this fixture exists to exercise the abstract
+			// collision-avoidance mechanism itself, the same reasoning the
+			// `buildFunctionKeyMap` doc comment already gives for why the
+			// occupied set keeps growing across assignments.
+			"posts#1": {
+				schema: "app",
+				name: "posts_alt",
+				columns: {
+					id: {
+						sqlName: "id",
+						typeNode: { typeName: "uuid" },
+						mode: null,
+						notNullElements: false,
+					},
+				},
+				foreignKeys: [],
+			},
+		},
+		functions: {
+			posts: {
+				schema: "app",
+				name: "count_posts",
+				args: [],
+				returns: {
+					kind: "scalar",
+					typeNode: { typeName: "bigint" },
+					mode: "bigint",
+				},
+			},
+		},
+	};
+
+	type DoubleCollidingDatabase = {
+		readonly Tables: {
+			readonly posts: {
+				readonly Row: { readonly id: string };
+				readonly Insert: { readonly id?: string };
+				readonly Update: { readonly id?: string };
+			};
+			readonly "posts#1": {
+				readonly Row: { readonly id: string };
+				readonly Insert: { readonly id?: string };
+				readonly Update: { readonly id?: string };
+			};
+		};
+		readonly Functions: {
+			readonly posts: {
+				readonly Args: Record<string, never>;
+				readonly Returns: bigint;
+			};
+		};
+	};
+
+	it("both tables and the function all survive when the first fallback candidate is also occupied", async () => {
+		const { driver, topLevelSent } = recordingTransactionalDriver({
+			rows: [{ result: "5" }],
+		});
+		const client = createNameKeyedDb<DoubleCollidingDatabase>(
+			driver,
+			DoubleCollidingMetadata,
+		);
+
+		// `.compile()` renders SQL without executing (no row-conversion
+		// dependence on the canned response shape) -- proves both tables
+		// kept their own real declaration, independent of the function call
+		// below.
+		expect(client.posts.select().compile().sql).toContain('from "app"."posts"');
+		expect(client["posts#1"].select().compile().sql).toContain(
+			'from "app"."posts_alt"',
+		);
+
+		const value = await client.fn.posts({});
+
+		expect(value).toBe(5n);
+		expect(topLevelSent[0]?.sql).toContain("count_posts");
+	});
+});
