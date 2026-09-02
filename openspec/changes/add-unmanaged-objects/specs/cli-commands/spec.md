@@ -78,7 +78,11 @@ snapshot it arrived at against the previous one, never by whether the
 migration SQL came out empty. An empty statement list decides what a
 migration *contains*, not whether one exists: a state hejbro recorded is
 a state the chain has to carry, or `verify` is left calling an untouched
-repository edited.
+repository edited. Whether a run has something to write and whether it
+emitted any statement are two facts, not one: a run can have a snapshot
+to write and no statement to emit. Generation SHALL state each of them
+on its own, so that no caller has to infer one from the other or
+reconcile a result that reports no change while carrying a migration.
 
 `generate`'s flag surface carries the rename flags
 (identifying a rename that would otherwise diff as drop-plus-add) and
