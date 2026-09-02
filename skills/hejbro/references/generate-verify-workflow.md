@@ -75,11 +75,15 @@ a value added by the same run that also *creates* the enum type (the
 restriction is about values added to a type that already existed).
 
 `@hejbro/core` exposes this as `generateMigrations` (plural) — the CLI's
-own entry point for `hejbro generate`. It returns `{ migrations, hasChanges,
-errors, ambiguities, warnings }`, where `migrations` is `[]` when nothing
-changed, one entry for an ordinary run, and two when the run above
-applies — each `GeneratedMigration` carries its own `sql`/`changes`/
-`snapshot`. `generateMigration` (singular) is unchanged for existing
+own entry point for `hejbro generate`. It returns `{ migrations,
+hasChanges, snapshot, errors, ambiguities, warnings }`, where `migrations`
+is `[]` when nothing changed, one entry for an ordinary run, and two when
+the run above applies — each `GeneratedMigration` carries its own
+`sql`/`changes`/`snapshot`, and the top-level `snapshot` (D106 R2) is the
+state this run reached regardless, present even when `migrations` is `[]`
+(`hasChanges` tracks DDL only — a declaration whose own identity never
+diffs into a statement, like an `existingTable()` marker change, can still
+move this). `generateMigration` (singular) is unchanged for existing
 callers that only need one file's worth of a run that can't split; it
 refuses (`migration-requires-split`) a run that would need two, naming
 `generateMigrations` as the entry point that returns the split.
