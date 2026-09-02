@@ -90,7 +90,7 @@ declaring the same column through both fails at declaration time:
 | Use when | Form | Covers |
 |---|---|---|
 | A single local column, referencing one other table | Column-level `.references()` | Also feeds the query layer's relation types (`related()` — see the query-layer reference) in the same declaration; nothing is declared twice |
-| Composite (multi-column), self-referencing, or `onDelete`/`onUpdate` | `extras.foreignKeys` | Everything the column-level form can't express |
+| Composite (multi-column), self-referencing, an explicit constraint name, or `onDelete`/`onUpdate` | `extras.foreignKeys` | Everything the column-level form can't express |
 
 **Column-level**: `ownerId: uuid().notNull().references(() => users.id)`
 — one declaration feeds both the generated DDL and the query layer's
@@ -109,10 +109,15 @@ this is not "add extras alongside `.references()` for the action", it
 is one form or the other, per column.
 
 **`extras.foreignKeys`**: an array of `{ columns, references: { table?,
-columns }, onDelete?, onUpdate? }` — `columns` names this table's own
-local column(s); `references.table` is optional, derived from the
+columns }, name?, onDelete?, onUpdate? }` — `columns` names this table's
+own local column(s); `references.table` is optional, derived from the
 referenced columns' own refs when omitted, which is how a
-self-referencing foreign key needs no extra syntax:
+self-referencing foreign key needs no extra syntax. `name` is optional
+too (validated per D36 when given, same rule `index()`'s own optional
+name already follows) and derives `<table>_<columns>_fk` when omitted;
+give one explicitly to match a foreign key's own catalog name when it
+was created outside hejbro (`hejbro import`/`pull` already do this for
+you whenever the catalog name is expressible — D106 R3-B3):
 
 ```ts
 import { schema, table, uuid } from "hejbro";
@@ -147,8 +152,9 @@ export const comments = table(
 );
 ```
 
-See `packages/core/src/dsl/table.ts` (`resolveReferenceTarget`) and the
-task/comment foreign keys in `examples/postgres/src/app.schema.ts`.
+See `packages/core/src/dsl/table.ts` (`resolveReferenceTarget`,
+`resolveForeignKeyName`) and the task/comment foreign keys in
+`examples/postgres/src/app.schema.ts`.
 
 ## CHECK constraints
 
