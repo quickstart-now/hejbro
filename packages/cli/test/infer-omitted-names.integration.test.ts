@@ -110,7 +110,12 @@ const psqlFile = (database: string, sql: string): void => {
  * it even when the table's own name would otherwise be fine. `app`
  * holds the ordinary sibling of each kind (`widgets`, its check and its
  * index) beside the one bad name of that kind (`"Widgets"`,
- * `"CK_Widgets"`, `"IX_Widgets"`). `legacy` (D106 R5-B2) holds a
+ * `"CK_Widgets"`, `"IX_Widgets"`) -- `"Widgets"` also carries its own
+ * `UNIQUE` constraint (D106 R5-N2 measurement/#711: another team's live
+ * measurement found this exact combination made the whole reading
+ * abort with `error[invalid-sql-name]`; this fixture is the live
+ * witness for what this branch actually does about it). `legacy`
+ * (D106 R5-B2) holds a
  * leading-underscore column (`_id`) beside an ordinary one (`label`) --
  * round-trippable (`toSnakeCase("_id") === "_id"`) but not a valid
  * hejbro SQL identifier, the exact gap between the two rules that used
@@ -137,7 +142,9 @@ create index widgets_name_idx on app.widgets (name);
 create index "IX_Widgets" on app.widgets (name);
 
 create table app."Widgets" (
-	id uuid primary key default gen_random_uuid()
+	id uuid primary key default gen_random_uuid(),
+	sku text not null,
+	constraint "Widgets_sku_key" unique (sku)
 );
 
 create table app.legacy (
@@ -258,6 +265,14 @@ describe("catalog-inference / D106 R4-B1: a bad name costs the object, not the r
 			expect(first.stdout).toContain(
 				'Omitted: check constraint "app.widgets.CK_Widgets"',
 			);
+			// D106 R5-N2 measurement/#711: a `UNIQUE` constraint on an
+			// omitted table used to abort the whole reading on a live
+			// database (`error[invalid-sql-name]`, another team's own
+			// measurement) -- the run above already reached this line
+			// without throwing, and the constraint gets no approximation
+			// line naming an object the line just above already says was
+			// never inferred.
+			expect(first.stdout).not.toContain("Widgets_sku_key");
 			// D106 R4-B3/#707: three distinct consequence sentences, not one
 			// generic "check will not report this" line reused three times --
 			// "Widgets"'s own schema ("app") still declares "widgets", so
