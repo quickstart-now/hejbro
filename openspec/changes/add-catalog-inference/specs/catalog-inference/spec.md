@@ -13,7 +13,9 @@ infer at all, and how it announces the loss — the one reading shared by
 Reading a database through the catalog SHALL yield a snapshot of the
 schemas named — tables with columns, defaults, identity and generated
 markers, primary keys, foreign keys, checks and indexes; enum types;
-sequences — through read-only catalog queries: `check`'s own inventory
+and the sequences an identity or serial column owns, carried as that
+column rather than as sequences of their own — through read-only
+catalog queries: `check`'s own inventory
 queries plus the column-, constraint-, index- and enum-detail queries
 inference needs on top of them, all read-only, none writing to the
 database. It SHALL also yield a schema description whose
@@ -31,8 +33,9 @@ column the reading found is carried with a guessed key; a declaration
 round trip is not its source, and a column that no declaration can
 express is therefore still described. The reading SHALL infer no
 function, trigger, policy expression, view body, grant beyond its role
-name, or column whose type no column builder expresses, and SHALL say
-so.
+name, column whose type no column builder expresses, or standalone
+sequence that no column owns — the DSL has no `defineSequence()` (D66)
+— and SHALL say so.
 
 #### Scenario: Tables and enums are inferred
 - **WHEN** a database holding two schemas with tables, foreign keys
@@ -42,10 +45,12 @@ so.
   every TypeScript key as guessed
 
 #### Scenario: What is not inferred is named
-- **WHEN** the database also holds a function, a trigger, a view, and a
-  column whose type no column builder expresses
+- **WHEN** the database also holds a function, a trigger, a view, a
+  column whose type no column builder expresses, and a sequence no
+  column owns
 - **THEN** none appears in the snapshot, the loss report names each kind
-  as not inferred, and it names that column and its type
+  as not inferred, and it names that column with its type and that
+  sequence by name
 
 ### Requirement: The loss is announced, with the way out
 Every command that uses a catalog reading SHALL print a loss report
@@ -53,7 +58,9 @@ naming what was guessed (keys, modes, element nullability), what was
 not inferred, every approximation the reading made — a UNIQUE
 constraint is inferred as a unique index carrying the constraint's own
 name, so re-creating it emits `create unique index` rather than
-`add constraint … unique` — and the command that removes the loss:
+`add constraint … unique`; a `nextval` default on a sequence the column
+does not own is kept as a raw default, naming that sequence — and the
+command that removes the loss:
 linking the schema repository for `pull`, hand-editing the starter
 declarations for `import`.
 

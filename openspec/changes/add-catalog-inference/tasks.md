@@ -65,6 +65,18 @@ public surface.
       handle appearing in no snapshot of its own).
 - [ ] 1.5 (~8m) Enums, sequences, roles; the not-inferred list, with
       exactly the delta's own members. Failing test: `infer-rest.test.ts`.
+- [ ] 1.5b (~7m) The three kinds of sequence told apart by ownership
+      (`pg_depend`, deptype `i` and `a`), since the loss report may not
+      claim a loss that did not happen: one an identity column owns
+      (carried as that column), one a serial-family column owns (carried
+      as `smallserial`/`serial`/`bigserial`, which the DSL synthesizes a
+      sequence from), and one no column owns (not inferred, named).
+      Failing test: `infer-rest.test.ts`, over a fixture holding all
+      three.
+- [ ] 1.5c (~6m) A `nextval` default naming a sequence the column does
+      not own stays a raw default and is named as an approximation —
+      the serial mapping applies to owned sequences only. Failing test:
+      `infer-tables.test.ts`.
 - [ ] 1.6 (~9m) The description, built from the catalog reading itself
       rather than from the declarations, so a column no declaration key
       can name is still carried with its guessed key (the collision
@@ -73,10 +85,12 @@ public surface.
 - [ ] 1.7 (~8m) The loss report text: what was guessed, what was not
       inferred, the approximations (a UNIQUE constraint as a unique
       index), and the columns left undeclarable. The last of those rests
-      on a measurement, not on reading the DSL: what `generateMigration`
-      actually creates for a quoted `"createdAt"` column is observed
-      first and recorded here, and the report's wording follows that
-      observation. Failing test: `infer-loss-report.test.ts`.
+      on a measurement, not on reading the DSL, and the measurement is
+      in: a quoted `"createdAt"` column is read from the catalog with
+      its spelling intact, keys as `createdat`, and `generateMigration`
+      then creates `"createdat"` — neither the original nor
+      `created_at`. The report's wording follows that observation.
+      Failing test: `infer-loss-report.test.ts`.
 
 ## 2. Declarations from a snapshot (#604)
 Files: `packages/cli/src/declare-emit/*.ts` (new), tests
