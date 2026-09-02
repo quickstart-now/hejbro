@@ -152,7 +152,8 @@ managed `table()` of the same identity — **adopts** it: no `create
 table` is emitted for the table itself (it already exists), and only
 the three things a handover also spares are created for it — a serial
 column's sequence, row-level security, its policies. **Not** created:
-the declaration's own indexes, check constraints, foreign keys, or
+the declaration's own columns beyond those the existing declaration
+already named, its indexes, check constraints, foreign keys, or
 primary key, even though the snapshot afterwards records them as if
 they were (#671) — and because the snapshot already records them as
 present, no *later* `hejbro generate` run will ever diff them into DDL
