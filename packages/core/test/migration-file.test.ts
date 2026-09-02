@@ -540,10 +540,48 @@ describe("deriveExistingTransitionSlug (D106 R3, J13)", () => {
 		);
 	});
 
-	it("throws an internal-invariant error when the two snapshots carry no existing-marker transition at all", () => {
+	// D106 R4, R4-B1: both sides marked existing, but the declared columns
+	// differ -- the fifth transition, reached only when the two sides'
+	// content actually differs (not by side-category alone, unlike the
+	// other four).
+	it("names 'reshape_<table>' when both sides are existing but the declared shape differs", () => {
+		const previous = snapshotWith("table:auth.users", existingNode);
+		const next = snapshotWith("table:auth.users", {
+			...existingNode,
+			columns: [{ name: "email" }],
+		});
+		expect(deriveExistingTransitionSlug(previous, next)).toBe("reshape_users");
+	});
+
+	it("keeps scanning past an unchanged existing:existing table to find the real mover, even when it sorts first", () => {
+		const previous: Snapshot = {
+			...emptySnapshot,
+			objects: {
+				"table:app.same_shape": existingNode,
+				"table:app.zzz_reshaped": existingNode,
+			},
+		};
+		const next: Snapshot = {
+			...emptySnapshot,
+			objects: {
+				// Sorts before "app.zzz_reshaped" but carries no content
+				// difference -- must be skipped, not mistaken for the mover.
+				"table:app.same_shape": existingNode,
+				"table:app.zzz_reshaped": { ...existingNode, columns: [{ name: "x" }] },
+			},
+		};
+		expect(deriveExistingTransitionSlug(previous, next)).toBe(
+			"reshape_zzz_reshaped",
+		);
+	});
+
+	it("throws a coded HejbroError, not a raw Error, when the two snapshots carry no explaining transition at all (D106 R4, R4-B1)", () => {
 		const same = snapshotWith("table:app.widgets", managedNode);
 		expect(() => deriveExistingTransitionSlug(same, same)).toThrow(
-			/no existing-marker transition/,
+			expect.objectContaining({
+				name: "HejbroError",
+				code: "existing-transition-not-found",
+			}),
 		);
 	});
 });
