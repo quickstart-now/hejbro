@@ -2482,3 +2482,192 @@ Cosmetic, but it is shipped report text.
   `assertFreshBuild` dist guard alone); Docker-gated
   `*.integration.test.ts` files were read, not run, for the same
   reason — the live-server facts above were measured directly instead.
+
+## Round 4 disposition
+
+One blocking finding closed, two non-blocking findings closed, one
+non-blocking finding (NB1) measured, escalated, and deferred to its
+own issue with the round's own recommended fix already recorded there.
+
+### R4-B1 — fixed
+
+`classifyExistingTransition` (`packages/core/src/sql/migration-file.ts`)
+gains a fifth transition, `reshape`, for the side pair R3-B1's fix
+left unnamed: both sides already marked existing, but the declared
+*shape* itself moved (a column added/renamed/retyped on an
+`existingTable()`) — the evaluator's own flagship reproduction (the
+join case the proposal itself names). `reshapedOrNull` resolves it via
+content comparison (`sameJson`), split out from the side-category
+table lookup so neither function's own complexity risks the CRAP-13
+mistake `sideOf` was already extracted to avoid (#154) — most
+`existing:existing` pairs reaching the function are simply unchanged
+(some other `table:` key is the run's real mover), and `reshapedOrNull`
+returning `null` in that case is what keeps `deriveExistingTransitionSlug`'s
+scan looking rather than misnaming the wrong table. The verb itself,
+`reshape`, comes from the requirement's own title ("declared for its
+shape"), the same sourcing discipline J13's four verbs already used.
+
+The doc comment the evaluator quoted (claiming a "closed enumeration"
+that wasn't) is corrected to an accurate reachability argument: of the
+nine `previous:next` side pairings `sideOf` can produce, four are
+unreachable at this function BY CONSTRUCTION — `absent:absent` is no
+movement, and `absent:managed`/`managed:absent`/`managed:managed` (when
+the two sides' content differs) are exactly the cases `tableKind.diff`
+still emits a real `KindChange` for, so a run reaching this function
+(`hasChanges: false`) structurally cannot carry one. The remaining,
+now genuinely-unreachable throw (every real difference is named by one
+of the five verbs) is raised as a coded `HejbroError`
+(`existing-transition-not-found`, a `Next:` step, via
+`throwHejbroError`) instead of a raw `Error` — a real future bug in
+this area surfaces as a diagnostic, not an unhandled stack trace,
+closing the evaluator's own "three things worse than a wrong exit
+code" list at its root.
+
+Red, measured directly (not assumed): 3 new core-level unit tests
+(reshape naming; skipping an unchanged `existing:existing` pair to find
+the real mover even when it sorts first; the coded-error assertion)
+confirmed red by editing the source back to its pre-fix shape and
+rerunning (a plain file edit, restored afterward — not `git stash`,
+which is repo-global and can affect another worktree, a rule this
+round itself surfaced): exactly 3 red / 47, restored clean. 2 new
+CLI-level repro tests (`generate-command.test.ts`) cover the
+regression's own real site (the plural entry point's CLI caller, where
+R3-B1's shipped pins never reached — the singular `generateMigration`
+never derives a slug at all): widening an existing declaration's shape
+no longer crashes, writes `..._reshape_users.sql` with no statements,
+`verify` passes after, and the slug is deterministic across two
+independent projects. Both confirmed green under a real, forced build
+in the round's own gate slot (`build --force` → full `test`, both
+included and passing — see Gates below). The spec's own new scenario
+("A changed existing declaration is named and anchored like any
+other", `specs/cli-commands/spec.md`, planner-authored) deliberately
+doesn't enumerate the five verbs — R4-B1 was itself a closed
+enumeration missing a member, and naming the verbs in the spec would
+repeat that failure one layer up; the contract is "deterministic name,
+states what changed," which word is the code and test's own concern.
+
+**④ pin, reported not built**: a CLI-level reproduction of the
+now-unreachable internal-invariant throw was considered and rejected —
+with all five verbs filled, there is no real user input left that
+reaches it, so an artificial CLI-level repro would be a manufactured
+observer, not a real one. The core-level "coded error, not raw Error"
+unit test is the right home for this fact; this piece's own discipline
+throughout has been to not build observers for states nothing produces
+(NB7's history is the same shape, one layer down).
+
+### R4-NB3 — fixed
+
+`brownfield-adoption.md`'s claim that an adopted table's #671 gap
+"needs its own follow-up run once that gap closes" corrected: the
+recorded snapshot already claims the indexes/checks/FKs/PK are
+present, so no future `hejbro generate` diff will ever see them as
+new, before or after #671 closes. The sentence now names the actual
+remedy (out-of-band DDL, or a hand-corrected snapshot).
+
+### R4-NB4 — fixed
+
+The one double-hyphen in `commands/generate.ts`'s NB6 report line
+replaced with an em dash, matching every other user-facing line in
+that file.
+
+### R4-NB1 — measured, escalated, deferred (#694)
+
+Measured, not decided, per instruction — three questions, answered
+factually:
+
+1. **Adoption's own sequence statements**: exactly `emitCreate`'s
+   "brand-new table" path (`create sequence` main + `owned by`/`set
+   default nextval` both deferred). Adoption's table itself carries no
+   sibling `table` `KindChange` at all (existing-marker transitions
+   never produce one), so `ownedColumnAddedToExistingTable`'s sibling
+   search finds nothing and takes the brand-new-table branch regardless
+   of the table's real age.
+2. **An `alter` path already exists** (`emitAlter`/`alterBaseTypeSql`,
+   `alter sequence ... as <type>;`) and is directly reusable — its only
+   input, `nextSnapshot`, is already in scope in `emitCreate` at the
+   exact point a fix would need it, no new function or input required.
+   But it's structurally unreachable for adoption specifically: `diff`
+   only takes the `alter` path when both `previousSnapshot`/
+   `nextSnapshot` already carry the identity, and adoption's previous
+   snapshot never tracked this sequence at all (the table was
+   `existingTable()` before, and existing tables never synthesize
+   sequences).
+3. **14 assertion sites** would need updating for an unconditional
+   `if not exists`: `sequence-kind.test.ts` (4), `generate.test.ts`
+   (6), 3 golden `.sql` fixtures
+   (`sequence-lifecycle/expected/step-{1,4,6}.sql`),
+   `infer-tables.test.ts` (1, a `toContain` substring assertion that
+   would also break — the inserted text lands inside the matched
+   substring).
+
+The measurement's own reuse finding (②) reversed the lead's first
+ruling (J15: defer outright) into a re-judgment (asked as J16): since
+`alterBaseTypeSql` already exists and is a one-line reuse, not new
+plumbing, the objection to the cheaper fix (A: bare `if not exists`,
+silently masking a real type mismatch on the one first-adoption run)
+doesn't apply to the reuse-based fix (C: `if not exists` create,
+followed unconditionally by the existing `alter` renderer, which
+brings the live state in line with the declaration regardless of
+which branch created it) the same way. J16's final ruling (confirmed,
+not reversed again) keeps the *outcome* of J15 — deferred to #694, not
+fixed in this round — but for a different reason than J15's own: not
+cost, but *kind*. `create sequence if not exists` plus an unconditional
+`alter` changes every greenfield run's own generated SQL, an
+external-observable-contract change (its own delta scenario, full
+golden-suite refresh) that belongs to its own change, not a D106
+correction round. The measured C-shape is recorded in #694 itself as
+the recommended fix for whoever picks it up next — "known and
+recorded for the next change," not "known and left."
+
+**The round-trip integration test moved twice, both landings
+documented, not hidden.** Written first as a live, asserting pin
+(intentionally red against the unfixed path) once NB1 looked like a
+same-round fix candidate; reverted (`daf04349`) when J15 first landed
+on "defer"; reapplied (`1bf14d9e`) when J16 reopened the question;
+converted to `it.todo("...( #694)")` (`88132f59`) once J16 confirmed
+the same "defer" outcome, on the lead's own suggestion (an observer's
+seat, not a removed reproduction) over deleting it outright. The
+skill's own "handover-then-adopt is not yet safe" caption followed the
+identical arc — added, reverted (judgment-dependent wording,
+pre-J16), restored verbatim (`3f1001ef`, byte-identical to the earlier
+version, diffed directly to confirm) once J16 settled. All four moves
+are separate, un-rewritten commits — the branch's own history is the
+honest record of a judgment reopened and reconfirmed, not smoothed
+over; the PR squash-merges this into one commit on `dev`, so this
+back-and-forth is visible only here, exactly where a round-5 reader
+would look for the reasoning behind it.
+
+### Gates
+
+Slot-executed, uncontended (system load 1-min avg 3.54 at the start,
+confirmed clean beforehand), exactly once, zero flakes across all
+five: `TURBO_FORCE=1 pnpm build --force` 7/7
+(2026-09-02T17:51:07Z–17:51:17Z, slot held). Full `pnpm test` 17/17
+tasks — core 99f/1493t+1 todo, query 64f/856t, cli **84f/710t**
+(includes both new R4-B1 CLI repro tests, confirmed green under a real
+build), supabase 17f/141t, neon 6f/39t, pg 1f/27t, nile 5f/59t, skills
+5f/21t, every example package green
+(2026-09-02T17:51:21Z–17:53:02Z, slot held). Full-workspace
+`pnpm check-types` 16/16 (2026-09-02T17:53:24Z–17:53:34Z, slot held).
+`pnpm check:crap` 0/1609 (+2 functions over the prior round's 1607 --
+`reshapedOrNull` and the redesigned `classifyExistingTransition` --
+neither in the 38-function at-exactly-5 list, comfortably under the
+threshold; README.md protocol followed, reverted, never committed;
+2026-09-02T17:53:40Z–17:55:21Z, slot held). `pnpm --filter hejbro
+test:integration` — 9 files passed, 63 tests passed, **2 todo (65)**:
+the `it.todo` conversion registers exactly twice, matching
+`describe.each(["postgres:15-alpine", "postgres:17-alpine"])` wrapping
+the whole file (1 todo × 2 images) — confirming both that `it.todo`
+aggregates correctly in this suite's own reporting and that the
+now-dormant `beforeAll`/`afterAll` rig around it doesn't itself fail;
+no leftover containers after (2026-09-02T17:55:48Z–17:56:39Z, slot
+held). `pnpm check` (root biome, corrected mid-round from the ban
+list — a single process, never a turbo fan-out) 656 files clean,
+outside any slot. `openspec validate --strict` valid throughout;
+`show --diff` reconfirmed multiple times across the round's several
+spec edits: `deltaCount: 6`, `cli-commands` MODIFIED still exactly one
+entry, `table-declaration` ADDED ×2 unchanged from round 3.
+`pnpm check:bans` 235 clean.
+
+14 commits this round (`d039544a` through this section's own commit),
+still unpushed.
