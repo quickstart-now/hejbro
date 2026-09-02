@@ -107,6 +107,7 @@ export const planRenames = (options: {
 		const tableAmbiguityResults = residualTableAmbiguities(
 			schemaTableSets,
 			consumedTables,
+			rawNextTables,
 			options.declaredAtByIdentity,
 		);
 		const ambiguityResults = [

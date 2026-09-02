@@ -1338,6 +1338,21 @@ describe("an existing declaration emits nothing (add-unmanaged-objects, #605)", 
 		expect(secondResult.errors[0]).toMatchObject({
 			code: "ambiguous-table-rename",
 		});
+		// #703: the prescribed remedy must never suggest rerunning THIS
+		// generate with --rename e3.widgets=gadgets as if it would apply
+		// as-is -- that flag targets an existingTable() and the guard
+		// above refuses it too, the exact "the remedy is the command that
+		// just failed" shape D106 R5-B1 was filed against. The flag text
+		// may still appear as step 1 of the two-run path (a legitimate,
+		// different procedure), just never as a standalone "rerun with"
+		// suggestion for the current declarations.
+		expect(secondResult.errors[0]?.message).not.toContain(
+			"rerun with `--rename e3.widgets=gadgets`",
+		);
+		expect(secondResult.errors[0]?.message).toContain("two runs");
+		expect(secondResult.errors[0]?.message).toContain(
+			"--confirm-drop e3.widgets",
+		);
 		// No DDL at all fires without confirmation -- not the managed
 		// table's drop, and never anything naming the existing declaration.
 		expect(secondResult.sql).toBe("");
