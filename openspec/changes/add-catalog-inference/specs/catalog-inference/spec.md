@@ -19,15 +19,18 @@ catalog queries: `check`'s own inventory
 queries plus the column-, constraint-, index- and enum-detail queries
 inference needs on top of them, all read-only, none writing to the
 database. It SHALL also yield a schema description whose
-declaration-time facts are guessed by the rules stated here and marked
-as guessed: a column's TypeScript key from its SQL name by lower-casing
+declaration-time facts are guessed by the rules stated here, and whose
+guessing the loss report announces: a column's TypeScript key from its
+SQL name by lower-casing
 it and joining the runs between non-alphanumeric characters in camel
 case, keeping leading underscores and prefixing `_` to a key that would
 otherwise start with a digit, with collisions resolved by leaving the
-key to the earliest column in physical order and appending to each
-later colliding key the smallest integer from 2 upwards that leaves it
-free; the default numeric mode; unknown element nullability read as
-nullable; and role names from the grants and policies present. The
+bare key to the one colliding column whose SQL name that key produces
+back — the column a declaration can still name — and appending to each
+other colliding key the smallest integer from 2 upwards that leaves it
+free, so an exotic sibling never costs an ordinary column its own key;
+the default numeric mode; unknown element nullability read as
+nullable; and role names from the grants present. The
 description SHALL be built from the catalog reading directly, so every
 column the reading found is carried with a guessed key; a declaration
 round trip is not its source, and a column that no declaration can
@@ -45,16 +48,17 @@ the snapshot records what a declaration can express.
 - **WHEN** a database holding two schemas with tables, foreign keys
   between them, a check, an index and an enum type is read
 - **THEN** the snapshot records each of them with its columns, keys and
-  constraints, and the enum with its values, and the description marks
-  every TypeScript key as guessed
+  constraints, and the enum with its values, and the loss report says
+  the TypeScript keys were guessed
 
 #### Scenario: Two SQL names that collide on one key are both described
 - **WHEN** a table holds `user_id` and a quoted `USER_ID`, whose
   TypeScript keys collide
-- **THEN** the description carries both columns, the first in physical
-  order under the plain key and the second under the key with the
-  collision suffix, and the loss report names the column that cannot be
-  declared, since only one of the two can be named by a declaration
+- **THEN** the description carries both columns — the one a declaration
+  can still name under the bare key, the other under the key with the
+  collision suffix, whichever of the two comes first physically — and
+  the loss report names the column that cannot be declared, since only
+  one of the two can be named by a declaration
 
 #### Scenario: What is not inferred is named
 - **WHEN** the database also holds a function, a trigger, a view, a
