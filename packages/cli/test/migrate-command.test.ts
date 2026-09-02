@@ -59,10 +59,12 @@ const makeFakeDriver = (options?: {
 const migrationA: Migration = {
 	fileName: "0001_a.sql",
 	sql: 'create table "app"."a" (id integer);',
+	origin: "applied",
 };
 const migrationB: Migration = {
 	fileName: "0002_b.sql",
 	sql: 'create table "app"."b" (id integer);',
+	origin: "applied",
 };
 
 describe("applyFrom / 7.5", () => {
@@ -161,6 +163,7 @@ describe("applyFrom / 11.2 (#620)", () => {
 		const migrationC: Migration = {
 			fileName: "0003_c.sql",
 			sql: 'create table "app"."c" (id integer);',
+			origin: "applied",
 		};
 		const recheckFindsA = (
 			call: CompileResult,
@@ -197,7 +200,7 @@ describe("applyFrom / 12.2 (#624)", () => {
 	const baselineMigration: Migration = {
 		fileName: "0001_baseline.sql",
 		sql: 'create table "app"."adopted" (id integer);',
-		baseline: true,
+		origin: "baseline",
 	};
 
 	it("registers a baseline without sending its statements, and reports it as registered, not applied", async () => {
@@ -221,7 +224,10 @@ describe("applyFrom / 12.2 (#624)", () => {
 		const ledgerInsertCall = calls.find((call) =>
 			call.sql.toLowerCase().includes("insert into"),
 		);
-		expect(ledgerInsertCall?.params).toEqual([baselineMigration.fileName]);
+		expect(ledgerInsertCall?.params).toEqual([
+			baselineMigration.fileName,
+			baselineMigration.origin,
+		]);
 	});
 
 	it("keeps a baseline's own bucket separate from an ordinary migration applied in the same run", async () => {

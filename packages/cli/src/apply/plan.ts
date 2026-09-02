@@ -1,6 +1,6 @@
 import type { ChainEntry, ChainReport, HejbroError } from "@hejbro/core";
 import { checkChain, hejbroError } from "@hejbro/core";
-import type { LedgerState } from "./ledger";
+import type { LedgerRow, LedgerState } from "./ledger";
 
 /**
  * `chain`'s array order IS chain order (root first), the same contract
@@ -95,12 +95,26 @@ const orphanRowFinding = (filename: string): Disagreement => ({
 });
 
 /** `ledger.exists` narrows which arm carries `applied` -- no ternary (banned house style): an absent ledger has recorded nothing. */
-const appliedFileNames = (ledger: LedgerState): ReadonlyArray<string> => {
+const ledgerRows = (ledger: LedgerState): ReadonlyArray<LedgerRow> => {
 	if (ledger.exists) {
 		return ledger.applied;
 	}
 	return [];
 };
+
+/**
+ * [task 16.2, D106 M7] The filenames of every ledger row that is *not*
+ * `raise`'s own -- a raised row's `--file` value has no relationship to
+ * the migration chain at all (typically a vendored snapshot, never a
+ * chain file), so it can never appear in `chain` by construction. A
+ * `baseline` row needs no such exclusion: the baseline migration it
+ * names is the chain's own first file, already present in `chain`, so
+ * it was never at risk of being misclassified as an orphan.
+ */
+const chainLinkedFileNames = (
+	rows: ReadonlyArray<LedgerRow>,
+): ReadonlyArray<string> =>
+	rows.filter((row) => row.origin !== "raised").map((row) => row.filename);
 
 const outOfOrderFinding = (
 	filename: string,
@@ -196,7 +210,7 @@ export const planApply = (
 	// and a failure already returned. So nothing below may re-sort `chain`
 	// (e.g. by filename) without silently substituting a different order
 	// for the one just verified -- filter/map only, never `.sort()`.
-	const applied = new Set(appliedFileNames(ledger));
+	const applied = new Set(chainLinkedFileNames(ledgerRows(ledger)));
 	const chainFileNames = new Set(chain.map((entry) => entry.fileName));
 
 	const orphanRows = Array.from(applied)

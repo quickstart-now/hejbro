@@ -105,7 +105,7 @@ export const runRaise = async (
 	try {
 		const fileName = assertFileFlagGiven(fileFlag);
 		const sql = readFileSync(join(cwd, fileName), "utf8");
-		const snapshotFile: SnapshotFile = { fileName, sql };
+		const snapshotFile: SnapshotFile = { fileName, sql, origin: "raised" };
 
 		return await withCheckConnection(
 			urlFlag,

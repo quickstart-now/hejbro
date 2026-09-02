@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { defineCommand } from "citty";
 import { APPLY_CONNECTION_CODES } from "../apply/capability";
+import type { LedgerState } from "../apply/ledger";
 import { readLedger } from "../apply/ledger";
 import type { PlanResult } from "../apply/plan";
 import { planApply } from "../apply/plan";
@@ -76,12 +77,67 @@ const pendingLines = (
 	];
 };
 
-/** `plan.ok`'s own report (task 7.6) -- pending migrations named, in chain order, or the "caught up" line when there are none. */
+/**
+ * [task 16.3, D106 M1/M2] The ledger's own absent-vs-empty distinction
+ * (spec: "A ledger table that does not exist and a ledger table that
+ * holds no rows are different facts and SHALL be reported differently"),
+ * printed only when there is nothing else to say about applied rows --
+ * once a ledger holds even one row, which of the two states produced it
+ * is no longer ambiguous to a reader.
+ */
+const ledgerAbsenceLines = (
+	ledgerState: LedgerState,
+): ReadonlyArray<string> => {
+	if (!ledgerState.exists) {
+		return [
+			"status: no ledger table exists yet -- this database has never been touched by hejbro.",
+		];
+	}
+	if (ledgerState.applied.length === 0) {
+		return ["status: the ledger table exists and records no migrations yet."];
+	}
+	return [];
+};
+
+/** [task 16.3, D106 M1] The migrations the ledger records as applied -- chain-linked rows only (`origin !== "raised"`); a raised row is named by {@link raisedLines} instead, never folded in here (spec: "names the migrations the ledger records as applied", which a raised row -- never applied by `migrate` -- is not). */
+const appliedLines = (ledgerState: LedgerState): ReadonlyArray<string> => {
+	if (!ledgerState.exists) {
+		return [];
+	}
+	const chainLinked = ledgerState.applied.filter(
+		(row) => row.origin !== "raised",
+	);
+	if (chainLinked.length === 0) {
+		return [];
+	}
+	return [
+		`status: ${chainLinked.length} migration(s) recorded as applied:`,
+		...chainLinked.map((row) => ` - ${row.filename}`),
+	];
+};
+
+/** [task 16.4, D106 M7] Names a raised database as raised, from the file it was raised from -- never listed as a pending migration nobody has (task 16.2 already keeps `planApply` from treating it as an orphan; this is the positive half, saying what it actually is). */
+const raisedLines = (ledgerState: LedgerState): ReadonlyArray<string> => {
+	if (!ledgerState.exists) {
+		return [];
+	}
+	return ledgerState.applied
+		.filter((row) => row.origin === "raised")
+		.map((row) => `status: this database was raised from "${row.filename}".`);
+};
+
+/** `plan.ok`'s own report (task 7.6; applied/raised sections since task 16.3/16.4, D106 M1/M2/M7) -- the ledger's own absence-vs-empty state, the migrations it records as applied, which file (if any) raised it, then pending migrations named in chain order, or the "caught up" line when there are none. */
 export const renderStatusReport = (
 	plan: Extract<PlanResult, { readonly ok: true }>,
+	ledgerState: LedgerState,
 ): StatusResult => ({
 	exitCode: 0,
-	stdout: pendingLines(plan.pending),
+	stdout: [
+		...ledgerAbsenceLines(ledgerState),
+		...appliedLines(ledgerState),
+		...raisedLines(ledgerState),
+		...pendingLines(plan.pending),
+	],
 	stderr: null,
 });
 
@@ -150,7 +206,7 @@ export const runStatus = async (
 				if (!plan.ok) {
 					return renderPlanFailure(plan);
 				}
-				return renderStatusReport(plan);
+				return renderStatusReport(plan, ledgerState);
 			},
 			importer,
 		);

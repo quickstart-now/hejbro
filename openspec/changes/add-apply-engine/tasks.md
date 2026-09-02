@@ -792,6 +792,22 @@ Groups are sequential here, not parallel: they share `plan.ts`,
 are in one group, which is why the grouping does not follow the
 report's own numbering.
 
+**Opening order, and where this round stopped.** Groups open 14 → 16 →
+17 → 18 → 19 → **15** → 20. Group 15 is prose and comes *after* the code
+it describes: 15.4 transcribes the ledger shape group 16 settles, and
+15.5 writes whichever repair group 18 chose. Writing the sentences first
+would reproduce this round's own subject — a sentence claiming more than
+the code does.
+
+The round paused after **group 16** at the owner's instruction. Groups
+15 and 17–20 are unopened; everything needed to resume is in files:
+this plan, the ledger draft in `.agents/task-times-draft.md`, and the
+D106 report kept beside this file as `evaluation.md`. The two settled
+decisions still hold — M7 is a ledger column (not a filename
+convention), and `openspec show <change> --diff` joins the gate lists
+because `validate` answers "valid" while a `MODIFIED` block names a
+requirement that does not exist.
+
 ## 14. The two blocking delta repairs (B1, B2)
 
 Files: `openspec/changes/add-apply-engine/specs/cli-commands/spec.md`,
@@ -872,17 +888,17 @@ filename" and is stringly). The window matters — the ledger is a
 permanent object in a user's database and **nothing is published yet**,
 so its shape is free to change today and not tomorrow.
 
-- [ ] 16.1 (~9m) [design] The discriminator: its column name and its
+- [x] 16.1 (~9m) [design] The discriminator: its column name and its
       value set (chain-applied / baseline-registered / raised). Settle it
       with 15.4 in the same breath. Red: `apply-ledger.test.ts` — "records
       how a row entered the ledger".
-- [ ] 16.2 (~8m) `planApply` stops classifying a non-chain row as
+- [x] 16.2 (~8m) `planApply` stops classifying a non-chain row as
       `apply-ledger-orphan-row`. Today a raised database makes `status`
       exit 1 and `migrate` refuse with "resolve the mismatch by hand" —
       one requirement mandates creating exactly the state another
       mandates reporting as blocking. Red: `apply-plan.test.ts` — "a
       raised row is not an orphan".
-- [ ] 16.3 (~9m) M1 + M2 together, because they are one command's output:
+- [x] 16.3 (~9m) M1 + M2 together, because they are one command's output:
       `status` gains an applied section, and says **which** of the two
       empty states it found (no ledger table at all vs. a ledger with no
       rows). The distinction exists today only as a private union that
@@ -890,10 +906,10 @@ so its shape is free to change today and not tomorrow.
       "reported" has no observer. Red: `status-command.test.ts` — "names
       the migrations the ledger records", "tells an absent ledger from an
       empty one".
-- [ ] 16.4 (~7m) `raise` writes its row with the raised origin, and
+- [x] 16.4 (~7m) `raise` writes its row with the raised origin, and
       `status` says the database was raised from that file rather than
       listing it as a migration nobody has.
-- [ ] 16.5 (~6m) m4's half of the ordering family: `bootstrapLedger` runs
+- [x] 16.5 (~6m) m4's half of the ordering family: `bootstrapLedger` runs
       *after* the emptiness check, so a database `raise` refuses does not
       keep `hejbro.migration_ledger` as a souvenir.
 

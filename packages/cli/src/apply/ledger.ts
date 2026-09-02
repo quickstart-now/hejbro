@@ -137,6 +137,33 @@ const LEDGER_SCHEMA = "hejbro";
 const LEDGER_TABLE = "migration_ledger";
 const QUALIFIED_LEDGER_TABLE = `"${LEDGER_SCHEMA}"."${LEDGER_TABLE}"`;
 
+/**
+ * [task 16.1, D106 M7] How a ledger row entered the ledger -- a column,
+ * not a filename convention: a filename-encoded marker would collide
+ * with "a row identifies its migration by the full filename" (task
+ * 1.1's own key choice) and is stringly (a marker embedded in the same
+ * field a caller also matches on for identity). `"applied"` is an
+ * ordinary migration `migrate` ran; `"baseline"` is a baseline migration
+ * registered without its statements ever being sent (task 12.2, #624);
+ * `"raised"` is the one row `hejbro raise` writes for the snapshot SQL
+ * file it applied. Nothing is published yet, so this column carries no
+ * migration path and no default -- a row with an unstated origin would
+ * silently mean something, and there is no compatibility obligation this
+ * early to justify choosing what.
+ */
+export type LedgerOrigin = "applied" | "baseline" | "raised";
+
+const LEDGER_ORIGINS: ReadonlyArray<LedgerOrigin> = [
+	"applied",
+	"baseline",
+	"raised",
+];
+
+/** `'applied', 'baseline', 'raised'` -- the `origin` column's own check constraint, built from {@link LEDGER_ORIGINS} so the two can never drift apart. */
+const LEDGER_ORIGIN_CHECK_LIST = LEDGER_ORIGINS.map(
+	(origin) => `'${origin}'`,
+).join(", ");
+
 /** Postgres's own code for "the relation named in this statement does not exist" -- the one failure `readLedger`/`recordAppliedMigration` interpret themselves; every other failure is not this module's to classify and is rethrown as-is. */
 const UNDEFINED_TABLE = "42P01";
 
@@ -174,8 +201,14 @@ export const bootstrapLedger = async (
 	await exec(session, `create schema if not exists "${LEDGER_SCHEMA}"`);
 	await exec(
 		session,
-		`create table if not exists ${QUALIFIED_LEDGER_TABLE} (\n\t"id" bigint generated always as identity primary key,\n\t"filename" text not null unique,\n\t"applied_at" timestamptz not null default now()\n)`,
+		`create table if not exists ${QUALIFIED_LEDGER_TABLE} (\n\t"id" bigint generated always as identity primary key,\n\t"filename" text not null unique,\n\t"origin" text not null check ("origin" in (${LEDGER_ORIGIN_CHECK_LIST})),\n\t"applied_at" timestamptz not null default now()\n)`,
 	);
+};
+
+/** [task 16.1, D106 M7] One ledger row, as `readLedger` reads it back: the filename it identifies its migration by, and how it entered the ledger. */
+export type LedgerRow = {
+	readonly filename: string;
+	readonly origin: LedgerOrigin;
 };
 
 /**
@@ -187,14 +220,15 @@ export const bootstrapLedger = async (
  */
 export type LedgerState =
 	| { readonly exists: false }
-	| { readonly exists: true; readonly applied: ReadonlyArray<string> };
+	| { readonly exists: true; readonly applied: ReadonlyArray<LedgerRow> };
 
 /**
  * Reads which migrations the ledger records, in the database's own order
- * (the `"id"` identity column `bootstrapLedger` created). `exists: false`
- * only when the read itself fails with Postgres's own "relation does not
- * exist" (42P01); any other failure is not this function's to interpret
- * and is rethrown unchanged.
+ * (the `"id"` identity column `bootstrapLedger` created), each with the
+ * origin it was recorded under. `exists: false` only when the read
+ * itself fails with Postgres's own "relation does not exist" (42P01);
+ * any other failure is not this function's to interpret and is rethrown
+ * unchanged.
  */
 export const readLedger = async (
 	session: DriverSession,
@@ -202,11 +236,14 @@ export const readLedger = async (
 	try {
 		const rows = await exec(
 			session,
-			`select "filename" from ${QUALIFIED_LEDGER_TABLE} order by "id"`,
+			`select "filename", "origin" from ${QUALIFIED_LEDGER_TABLE} order by "id"`,
 		);
 		return {
 			exists: true,
-			applied: rows.map((row) => String(row.filename)),
+			applied: rows.map((row) => ({
+				filename: String(row.filename),
+				origin: String(row.origin) as LedgerOrigin,
+			})),
 		};
 	} catch (error) {
 		if (isUndefinedTableError(error)) {
@@ -254,22 +291,26 @@ export const isMigrationRecorded = async (
  * Records one migration as applied, identified by its full filename --
  * never its version prefix alone (spec: `verify`'s own duplicate message
  * is why; a tool keyed on the prefix can only ever apply one of a
- * colliding pair).
+ * colliding pair). `origin` (task 16.1, D106 M7) is required, never
+ * defaulted: a caller SHALL say how this row entered the ledger, the
+ * same reasoning that keeps this column itself `not null` with no
+ * default at the database layer.
  *
  * This is also the whole of the baseline path (spec: "A baseline is
  * registered rather than run"): this function has no parameter for a
  * migration's own SQL, so calling it can never send that SQL. Registering
  * a baseline is calling this once, with the baseline migration's
- * filename, and nothing else.
+ * filename, `origin: "baseline"`, and nothing else.
  */
 export const recordAppliedMigration = async (
 	session: DriverSession,
 	filename: string,
+	origin: LedgerOrigin,
 ): Promise<void> => {
 	await exec(
 		session,
-		`insert into ${QUALIFIED_LEDGER_TABLE} ("filename") values ($1)`,
-		[filename],
+		`insert into ${QUALIFIED_LEDGER_TABLE} ("filename", "origin") values ($1, $2)`,
+		[filename, origin],
 	);
 };
 

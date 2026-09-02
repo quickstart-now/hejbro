@@ -1,12 +1,25 @@
 import { hejbroError, throwHejbroError } from "@hejbro/core";
 import type { CompileResult, Driver } from "@hejbro/query";
+import type { LedgerOrigin } from "./ledger";
 import { isMigrationRecorded, recordAppliedMigration } from "./ledger";
 
-/** One migration ready to apply -- the filename the ledger keys on (G1) and the file's own SQL text, already read from disk by the caller (group 7's job; this module touches no filesystem). `baseline` (task 12.2, #624) marks a file the caller already knows carries the `-- baseline:` marker (`commands/verify.ts`'s own `readBaselineFileNames`) -- optional, defaulting to an ordinary migration, so every existing caller/fixture that never mentions one keeps meaning exactly what it did before this field existed. */
+/**
+ * One migration ready to apply -- the filename the ledger keys on (G1)
+ * and the file's own SQL text, already read from disk by the caller
+ * (group 7's job; this module touches no filesystem). `origin` (task
+ * 16.1, D106 M7) is the ledger row's own origin this call will record --
+ * required, never defaulted, the same reasoning that keeps the ledger's
+ * own `origin` column `not null` with no default: a caller SHALL say how
+ * this row entered the ledger. `origin === "baseline"` is also what
+ * tells {@link applyMigration} to skip sending this migration's SQL
+ * (task 12.2, #624) -- replacing the earlier, narrower `baseline?:
+ * boolean` field this change carried before this group folded it into
+ * the one origin value every caller already has to supply.
+ */
 export type Migration = {
 	readonly fileName: string;
 	readonly sql: string;
-	readonly baseline?: boolean;
+	readonly origin: LedgerOrigin;
 };
 
 const exec = (
@@ -328,18 +341,21 @@ export type ApplyOutcome = "applied" | "already-applied";
  * is fixed (G6, #612) -- passed straight through to
  * {@link throwApplyFailure}, never assumed.
  *
- * [task 12.2, #624] `migration.baseline === true` skips the DDL send
- * entirely -- still inside the same lock, still after the same
- * already-recorded recheck above, but the statement that carries it
- * never reaches the database (spec: "A baseline is registered rather
- * than run"; the object it describes already exists, so sending it would
- * only meet the server's own already-exists refusal, group 12's own live
- * witness, task 12.3). This call still reports `"applied"` either way --
- * "did this call itself do the ledger work, or find it already done" is
- * the only distinction `ApplyOutcome` makes; "applied vs. registered" is
- * a report-wording decision `migrate.ts` makes from the same
- * `baselineFileNames` set it already read to build this `Migration`, not
- * a fact this module re-derives.
+ * [task 12.2, #624; origin since task 16.1, D106 M7]
+ * `migration.origin === "baseline"` skips the DDL send entirely -- still
+ * inside the same lock, still after the same already-recorded recheck
+ * above, but the statement that carries it never reaches the database
+ * (spec: "A baseline is registered rather than run"; the object it
+ * describes already exists, so sending it would only meet the server's
+ * own already-exists refusal, group 12's own live witness, task 12.3).
+ * This call still reports `"applied"` either way -- "did this call
+ * itself do the ledger work, or find it already done" is the only
+ * distinction `ApplyOutcome` makes; "applied vs. registered" is a
+ * report-wording decision `migrate.ts` makes from the same `origin` it
+ * already read to build this `Migration`, not a fact this module
+ * re-derives. `migration.origin` is also what this call passes straight
+ * through to {@link recordAppliedMigration} -- the one place that origin
+ * actually reaches the ledger row.
  */
 export const applyMigration = async (
 	driver: Driver,
@@ -353,10 +369,14 @@ export const applyMigration = async (
 			if (await isMigrationRecorded(session, migration.fileName)) {
 				return "already-applied";
 			}
-			if (migration.baseline !== true) {
+			if (migration.origin !== "baseline") {
 				await session.execute(exec(migration.sql, []));
 			}
-			await recordAppliedMigration(session, migration.fileName);
+			await recordAppliedMigration(
+				session,
+				migration.fileName,
+				migration.origin,
+			);
 			return "applied";
 		});
 	} catch (error) {

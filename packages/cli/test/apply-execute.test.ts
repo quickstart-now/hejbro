@@ -70,6 +70,7 @@ const makeFakeDriver = (options?: {
 const okMigration: Migration = {
 	fileName: "0001_init.sql",
 	sql: 'create table "app"."t" (id integer);',
+	origin: "applied",
 };
 
 // `applyMigration` has no production caller yet -- group 7 wires
@@ -102,7 +103,10 @@ describe("applyMigration / 3.1", () => {
 			call.sql.toLowerCase().includes("insert into"),
 		);
 		expect(ledgerCall).toBeDefined();
-		expect(ledgerCall?.params).toEqual([okMigration.fileName]);
+		expect(ledgerCall?.params).toEqual([
+			okMigration.fileName,
+			okMigration.origin,
+		]);
 	});
 });
 
@@ -110,6 +114,7 @@ describe("applyMigration / 3.2", () => {
 	const failingMigration: Migration = {
 		fileName: "0002_bad.sql",
 		sql: "this statement fails",
+		origin: "applied",
 	};
 
 	it("does not swallow a failed migration's error -- the driver's own transaction() then rolls back, proved live in group 8", async () => {
@@ -146,7 +151,11 @@ describe("applyMigration / 3.2", () => {
 
 describe("applyMigration / 3.3", () => {
 	it("names the file and repeats the server's code", async () => {
-		const migration: Migration = { fileName: "0003_bad.sql", sql: "ddl" };
+		const migration: Migration = {
+			fileName: "0003_bad.sql",
+			sql: "ddl",
+			origin: "applied",
+		};
 		const { driver } = makeFakeDriver({
 			failWhen: (call) => call.sql === migration.sql,
 			failError: Object.assign(new Error('relation "t2_a" already exists'), {
@@ -169,7 +178,11 @@ describe("applyMigration / 3.3", () => {
 	});
 
 	it("translates 55P04 into the regenerate remedy", async () => {
-		const migration: Migration = { fileName: "0004_enum.sql", sql: "ddl" };
+		const migration: Migration = {
+			fileName: "0004_enum.sql",
+			sql: "ddl",
+			origin: "applied",
+		};
 		const { driver } = makeFakeDriver({
 			failWhen: (call) => call.sql === migration.sql,
 			failError: Object.assign(
@@ -243,6 +256,7 @@ describe("applyMigration / 11.1 (#620)", () => {
 		const raced: Migration = {
 			fileName: "0011_raced.sql",
 			sql: 'alter type "app"."mood" add value \'great\';',
+			origin: "applied",
 		};
 		const recheckFindsRaced = (
 			call: CompileResult,
@@ -277,6 +291,7 @@ describe("applyMigration / 3.5", () => {
 		const migration: Migration = {
 			fileName: "0005_bad.sql",
 			sql: 'create table "app"."t" (id integer);\ncommit;\ncreate table "app"."u" (id integer);',
+			origin: "applied",
 		};
 		const { driver, calls } = makeFakeDriver();
 
@@ -297,6 +312,7 @@ begin
   raise notice 'commit this to memory';
 end;
 $$ language plpgsql;`,
+			origin: "applied",
 		};
 		const { driver } = makeFakeDriver();
 
@@ -309,6 +325,7 @@ $$ language plpgsql;`,
 		const migration: Migration = {
 			fileName: "0007_comment.sql",
 			sql: 'create table "app"."t" (id integer); -- do not forget to commit this migration\n',
+			origin: "applied",
 		};
 		const { driver } = makeFakeDriver();
 
@@ -321,6 +338,7 @@ $$ language plpgsql;`,
 		const migration: Migration = {
 			fileName: "0008_escaped.sql",
 			sql: "insert into \"app\".\"t\" (name) values ('it''s fine, no commit here');",
+			origin: "applied",
 		};
 		const { driver } = makeFakeDriver();
 
@@ -337,6 +355,7 @@ $$ language plpgsql;`,
 				{
 					fileName: "0009_begin.sql",
 					sql: "begin;\ncreate table t (id int);",
+					origin: "applied",
 				},
 				NEXT_COMMAND,
 			),
@@ -349,6 +368,7 @@ $$ language plpgsql;`,
 				{
 					fileName: "0010_rollback.sql",
 					sql: "create table t (id int);\nrollback;",
+					origin: "applied",
 				},
 				NEXT_COMMAND,
 			),

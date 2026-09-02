@@ -24,7 +24,13 @@ const makeFakeDriver = (options?: {
 	readonly calls: CompileResult[];
 } => {
 	const calls: CompileResult[] = [];
-	const ledgerRows: string[] = [...(options?.seededLedgerRows ?? [])];
+	const ledgerRows: Array<{
+		readonly filename: string;
+		readonly origin: string;
+	}> = (options?.seededLedgerRows ?? []).map((filename) => ({
+		filename,
+		origin: "applied",
+	}));
 	const session: DriverSession = {
 		execute: async (compiled) => {
 			calls.push(compiled);
@@ -36,11 +42,14 @@ const makeFakeDriver = (options?: {
 				return [];
 			}
 			if (sql.startsWith("insert into")) {
-				ledgerRows.push(String(compiled.params[0]));
+				ledgerRows.push({
+					filename: String(compiled.params[0]),
+					origin: String(compiled.params[1]),
+				});
 				return [];
 			}
 			if (sql.startsWith('select "filename"')) {
-				return ledgerRows.map((filename) => ({ filename }));
+				return ledgerRows;
 			}
 			// The snapshot file's own DDL (and the advisory lock statement)
 			// -- nothing here interprets it further, matching
@@ -63,6 +72,7 @@ const makeFakeDriver = (options?: {
 const snapshotFile: SnapshotFile = {
 	fileName: "vendor/schema.sql",
 	sql: 'create schema "app";\ncreate table "app"."t" (id integer);',
+	origin: "raised",
 };
 
 // `applyRaise` has no production caller yet -- the real command name is
@@ -99,7 +109,10 @@ describe("assertDatabaseEmptyByLedger / 6.2", () => {
 	it("refuses, naming the count, when the ledger already records history", () => {
 		expect(() =>
 			assertDatabaseEmptyByLedger(
-				{ exists: true, applied: ["0001_init.sql"] },
+				{
+					exists: true,
+					applied: [{ filename: "0001_init.sql", origin: "applied" }],
+				},
 				COMMAND,
 			),
 		).toThrow(expect.objectContaining({ code: "raise-not-empty" }));
@@ -117,6 +130,29 @@ describe("applyRaise / 6.2", () => {
 		).rejects.toMatchObject({ code: "raise-not-empty" });
 
 		expect(calls.some((call) => call.sql === snapshotFile.sql)).toBe(false);
+	});
+});
+
+describe("applyRaise / 16.5 (D106 m4)", () => {
+	it("never bootstraps the ledger when it already has history -- a refused database gains no souvenir table", async () => {
+		const { driver, calls } = makeFakeDriver({
+			seededLedgerRows: ["0001_init.sql"],
+		});
+
+		await expect(
+			applyRaise(driver, snapshotFile, COMMAND),
+		).rejects.toMatchObject({ code: "raise-not-empty" });
+
+		// The emptiness check (readLedger) ran and refused before
+		// bootstrapLedger's own two statements ever had a reason to run --
+		// not merely idempotent no-ops this time, but calls that never
+		// happened at all.
+		expect(
+			calls.some((call) => call.sql.toLowerCase().startsWith("create schema")),
+		).toBe(false);
+		expect(
+			calls.some((call) => call.sql.toLowerCase().startsWith("create table")),
+		).toBe(false);
 	});
 
 	// Layer 2 (execute.ts's own `alreadyExists` translation, owned by
@@ -183,7 +219,10 @@ describe("applyRaise / 6.3", () => {
 		await applyRaise(driver, snapshotFile, COMMAND);
 
 		const state = await readLedger(driver);
-		expect(state).toEqual({ exists: true, applied: [snapshotFile.fileName] });
+		expect(state).toEqual({
+			exists: true,
+			applied: [{ filename: snapshotFile.fileName, origin: "raised" }],
+		});
 	});
 
 	it("records the snapshot file's own name verbatim -- not reshaped into a chain-looking filename", async () => {
@@ -191,6 +230,7 @@ describe("applyRaise / 6.3", () => {
 		const vendoredFile: SnapshotFile = {
 			fileName: "vendor/2024-prod-schema.sql",
 			sql: snapshotFile.sql,
+			origin: "raised",
 		};
 
 		await applyRaise(driver, vendoredFile, COMMAND);
@@ -204,6 +244,9 @@ describe("applyRaise / 6.3", () => {
 		// showing raise performs no transformation on the name at all,
 		// rather than asserting the two just happen to look different.
 		const state = await readLedger(driver);
-		expect(state).toEqual({ exists: true, applied: [vendoredFile.fileName] });
+		expect(state).toEqual({
+			exists: true,
+			applied: [{ filename: vendoredFile.fileName, origin: "raised" }],
+		});
 	});
 });

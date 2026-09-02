@@ -45,7 +45,8 @@ const makeUnbootstrappedSession = (): DriverSession => ({
  */
 const makeInMemoryLedgerSession = (): { readonly session: DriverSession } => {
 	let bootstrapped = false;
-	const rows: string[] = [];
+	const rows: Array<{ readonly filename: string; readonly origin: string }> =
+		[];
 	const session: DriverSession = {
 		execute: async (compiled): Promise<ReadonlyArray<DriverRow>> => {
 			const sql = compiled.sql.trim().toLowerCase();
@@ -60,8 +61,10 @@ const makeInMemoryLedgerSession = (): { readonly session: DriverSession } => {
 						{ code: UNDEFINED_TABLE },
 					);
 				}
-				const filename = compiled.params[0];
-				rows.push(String(filename));
+				rows.push({
+					filename: String(compiled.params[0]),
+					origin: String(compiled.params[1]),
+				});
 				return [];
 			}
 			if (sql.startsWith("select")) {
@@ -71,7 +74,7 @@ const makeInMemoryLedgerSession = (): { readonly session: DriverSession } => {
 						{ code: UNDEFINED_TABLE },
 					);
 				}
-				return rows.map((filename) => ({ filename }));
+				return rows;
 			}
 			if (sql.startsWith("delete from")) {
 				if (!bootstrapped) {
@@ -168,27 +171,70 @@ describe("recordAppliedMigration / 1.4", () => {
 		const { session } = makeInMemoryLedgerSession();
 		await bootstrapLedger(session);
 
-		await recordAppliedMigration(session, "0001_init.sql");
-		await recordAppliedMigration(session, "0002_add_column.sql");
+		await recordAppliedMigration(session, "0001_init.sql", "applied");
+		await recordAppliedMigration(session, "0002_add_column.sql", "applied");
 		const state = await readLedger(session);
 
 		expect(state).toEqual({
 			exists: true,
-			applied: ["0001_init.sql", "0002_add_column.sql"],
+			applied: [
+				{ filename: "0001_init.sql", origin: "applied" },
+				{ filename: "0002_add_column.sql", origin: "applied" },
+			],
 		});
 	});
 
 	it("registers a baseline without executing its statements", async () => {
 		const { session, calls } = makeRecordingSession();
 
-		await recordAppliedMigration(session, "0001_adopt.sql");
+		await recordAppliedMigration(session, "0001_adopt.sql", "baseline");
 
 		// The ledger has no facility to send a migration's own DDL -- the
 		// baseline path (spec: "A baseline is registered rather than run")
 		// is exactly this one insert and nothing else, at this layer.
 		expect(calls).toHaveLength(1);
 		expect(calls[0]?.sql.toLowerCase()).toMatch(/^insert into/);
-		expect(calls[0]?.params).toEqual(["0001_adopt.sql"]);
+		expect(calls[0]?.params).toEqual(["0001_adopt.sql", "baseline"]);
+	});
+});
+
+describe("recordAppliedMigration / 16.1 (D106 M7)", () => {
+	it("records how a row entered the ledger", async () => {
+		const { session } = makeInMemoryLedgerSession();
+		await bootstrapLedger(session);
+
+		await recordAppliedMigration(session, "0001_init.sql", "applied");
+		await recordAppliedMigration(session, "0002_baseline.sql", "baseline");
+		await recordAppliedMigration(session, "snapshot.sql", "raised");
+		const state = await readLedger(session);
+
+		expect(state).toEqual({
+			exists: true,
+			applied: [
+				{ filename: "0001_init.sql", origin: "applied" },
+				{ filename: "0002_baseline.sql", origin: "baseline" },
+				{ filename: "snapshot.sql", origin: "raised" },
+			],
+		});
+	});
+
+	it("declares the origin column not null with a check constraint naming the three origins, and no default", async () => {
+		const { session, calls } = makeRecordingSession();
+
+		await bootstrapLedger(session);
+
+		const tableStatement = calls.find((call) =>
+			call.sql.toLowerCase().includes("create table"),
+		);
+		const originLine = tableStatement?.sql
+			.split("\n")
+			.find((line) => line.toLowerCase().includes('"origin"'));
+		expect(originLine).toMatch(
+			/"origin"\s+text\s+not null\s+check\s*\(\s*"origin"\s+in\s*\('applied', 'baseline', 'raised'\)\)/i,
+		);
+		// Not defaulted -- an unstated origin SHALL be an error, never a
+		// silent classification (task 16.1's own "no default" constraint).
+		expect(originLine?.toLowerCase()).not.toContain("default");
 	});
 });
 
@@ -196,8 +242,8 @@ describe("clearLedger / 5.3", () => {
 	it("clears every row in the ledger", async () => {
 		const { session } = makeInMemoryLedgerSession();
 		await bootstrapLedger(session);
-		await recordAppliedMigration(session, "0001_init.sql");
-		await recordAppliedMigration(session, "0002_add_column.sql");
+		await recordAppliedMigration(session, "0001_init.sql", "applied");
+		await recordAppliedMigration(session, "0002_add_column.sql", "applied");
 
 		await clearLedger(session);
 		const state = await readLedger(session);
