@@ -1,0 +1,183 @@
+import type { ColumnBuilder, HejbroInput } from "@hejbro/core";
+import { emptySnapshot, generateMigration, schema, table } from "@hejbro/core";
+import { describe, expect, it } from "vitest";
+import type { InferredColumnFacts } from "../src/infer/columns";
+import { inferColumnDeclaration } from "../src/infer/columns";
+
+const app = schema("app");
+
+const baseFacts: InferredColumnFacts = {
+	schema: "app",
+	table: "widgets",
+	name: "col",
+	sqlType: "text",
+	baseTypeName: "text",
+	isArray: false,
+	notNull: false,
+	catalogDefault: null,
+	identityKind: "",
+	generatedKind: "",
+	identityOptions: null,
+};
+
+/** Rebuilds a one-column table from a declaration result and returns the create-table SQL -- the black-box proof (team rule "generated code is proved by running it") that the builder `inferColumnDeclaration` returns is actually well-formed, not just shaped right internally. */
+const createSqlFor = (builder: ColumnBuilder): string => {
+	const widgets = table(app, "widgets", { col: builder });
+	const declarations: ReadonlyArray<HejbroInput> = [app, widgets];
+	const migration = generateMigration({
+		declarations,
+		previousSnapshot: emptySnapshot,
+	});
+	expect(migration.errors).toEqual([]);
+	return migration.sql;
+};
+
+describe("inferColumnDeclaration / 1.3 type -> builder", () => {
+	it("maps a plain text column", () => {
+		const result = inferColumnDeclaration({ ...baseFacts, notNull: true });
+
+		expect(result.kind).toBe("declared");
+		if (result.kind !== "declared") {
+			throw new Error("expected a declared column");
+		}
+		expect(createSqlFor(result.builder)).toContain('"col" text not null');
+	});
+
+	it("maps numeric(10,2) with precision and scale", () => {
+		const result = inferColumnDeclaration({
+			...baseFacts,
+			sqlType: "numeric(10,2)",
+			baseTypeName: "numeric",
+		});
+
+		expect(result.kind).toBe("declared");
+		if (result.kind !== "declared") {
+			throw new Error("expected a declared column");
+		}
+		expect(createSqlFor(result.builder)).toContain('"col" numeric(10,2)');
+	});
+
+	it("maps character varying(255) with length", () => {
+		const result = inferColumnDeclaration({
+			...baseFacts,
+			sqlType: "character varying(255)",
+			baseTypeName: "varchar",
+		});
+
+		expect(result.kind).toBe("declared");
+		if (result.kind !== "declared") {
+			throw new Error("expected a declared column");
+		}
+		// core's own emitter renders the builder's `varchar` type name, not
+		// Postgres's `character varying` spelling that `format_type` used on
+		// the way in (check/catalog.ts's own catalogType text) -- confirmed by
+		// running it, not assumed.
+		expect(createSqlFor(result.builder)).toContain('"col" varchar(255)');
+	});
+
+	it("records a loss for a type no column builder expresses", () => {
+		const result = inferColumnDeclaration({
+			...baseFacts,
+			sqlType: "point",
+			baseTypeName: "point",
+		});
+
+		expect(result).toEqual({
+			kind: "loss",
+			loss: {
+				schema: "app",
+				table: "widgets",
+				column: "col",
+				sqlType: "point",
+			},
+		});
+	});
+});
+
+describe("inferColumnDeclaration / 1.3 default, identity, generated", () => {
+	it("carries a catalog default verbatim as sql.raw, never re-derived", () => {
+		const result = inferColumnDeclaration({
+			...baseFacts,
+			catalogDefault: "'anon'::text",
+		});
+
+		expect(result.kind).toBe("declared");
+		if (result.kind !== "declared") {
+			throw new Error("expected a declared column");
+		}
+		expect(createSqlFor(result.builder)).toContain("default 'anon'::text");
+	});
+
+	it("routes a stored generated column to generatedAlwaysAs, never default (CI-G1-R1-04)", () => {
+		// The trap this test exists for: attgenerated = 's' columns keep their
+		// expression in the same pg_attrdef row a plain default would use, so
+		// a naive implementation reads catalogDefault and calls .default(),
+		// producing a column that renders as DEFAULT instead of GENERATED
+		// ALWAYS AS ... STORED -- a real behavioral bug, not a cosmetic one.
+		const result = inferColumnDeclaration({
+			...baseFacts,
+			generatedKind: "s",
+			catalogDefault: "(name || '!'::text)",
+		});
+
+		expect(result.kind).toBe("declared");
+		if (result.kind !== "declared") {
+			throw new Error("expected a declared column");
+		}
+		const sql = createSqlFor(result.builder);
+		expect(sql).toContain("generated always as ((name || '!'::text)) stored");
+		expect(sql).not.toContain("default");
+	});
+
+	it("declares only the identity options that differ from Postgres's own default", () => {
+		const result = inferColumnDeclaration({
+			...baseFacts,
+			sqlType: "int8",
+			baseTypeName: "int8",
+			identityKind: "d",
+			identityOptions: {
+				startValue: "5",
+				increment: "2",
+				minValue: "1",
+				maxValue: "9223372036854775807",
+				cache: "1",
+				cycle: false,
+			},
+		});
+
+		expect(result.kind).toBe("declared");
+		if (result.kind !== "declared") {
+			throw new Error("expected a declared column");
+		}
+		const sql = createSqlFor(result.builder);
+		expect(sql).toContain(
+			"generated by default as identity (start with 5 increment by 2)",
+		);
+	});
+
+	it("declares no identity options when every one matches Postgres's own default", () => {
+		const result = inferColumnDeclaration({
+			...baseFacts,
+			sqlType: "int8",
+			baseTypeName: "int8",
+			identityKind: "a",
+			identityOptions: {
+				startValue: "1",
+				increment: "1",
+				minValue: "1",
+				maxValue: "9223372036854775807",
+				cache: "1",
+				cycle: false,
+			},
+		});
+
+		expect(result.kind).toBe("declared");
+		if (result.kind !== "declared") {
+			throw new Error("expected a declared column");
+		}
+		const sql = createSqlFor(result.builder);
+		expect(sql).toContain("generated always as identity");
+		expect(sql).not.toContain("start with");
+		expect(sql).not.toContain("increment by");
+	});
+});

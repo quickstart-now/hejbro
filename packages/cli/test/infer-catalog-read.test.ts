@@ -51,7 +51,9 @@ const FIXTURE_ROWS: {
 			columns: [
 				{
 					text: "slug",
+					column: "slug",
 					opclass: "text_ops",
+					opclassIsDefault: true,
 					descending: false,
 					nullsFirst: false,
 				},
@@ -66,8 +68,10 @@ const FIXTURE_ROWS: {
 			predicate: null,
 			columns: [
 				{
-					text: "lower((email)::text)",
+					text: "lower(email)",
+					column: null,
 					opclass: "text_ops",
+					opclassIsDefault: true,
 					descending: false,
 					nullsFirst: false,
 				},
@@ -83,7 +87,9 @@ const FIXTURE_ROWS: {
 			columns: [
 				{
 					text: "due_at",
+					column: "due_at",
 					opclass: "timestamptz_ops",
+					opclassIsDefault: true,
 					descending: true,
 					nullsFirst: true,
 				},
@@ -99,7 +105,9 @@ const FIXTURE_ROWS: {
 			columns: [
 				{
 					text: "metadata",
+					column: "metadata",
 					opclass: "jsonb_path_ops",
+					opclassIsDefault: false,
 					descending: false,
 					nullsFirst: false,
 				},
@@ -115,13 +123,17 @@ const FIXTURE_ROWS: {
 			columns: [
 				{
 					text: "project_id",
+					column: "project_id",
 					opclass: "uuid_ops",
+					opclassIsDefault: true,
 					descending: false,
 					nullsFirst: false,
 				},
 				{
 					text: "title",
+					column: "title",
 					opclass: "text_ops",
+					opclassIsDefault: true,
 					descending: false,
 					nullsFirst: false,
 				},

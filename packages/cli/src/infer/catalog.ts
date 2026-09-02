@@ -48,17 +48,23 @@ const checkExpressionRow = z.object({
 export type CheckExpressionRow = z.infer<typeof checkExpressionRow>;
 
 /**
- * One key column of an index, via `pg_get_indexdef(indexrelid, n, true)`
- * (`text`) so a plain column and an expression element (B6: `lower(email)`)
- * come back the same way -- never a raw `pg_attribute` join, which has no
- * row for an expression element's `attnum = 0`. `opclass` is `null` only
- * when the type has no operator class family for this access method (rare
- * in practice; every B6 candidate -- btree/gin -- has one). `descending`/
- * `nullsFirst` decode `pg_index.indoption`'s two low bits.
+ * One key column of an index. `text` is `pg_get_indexdef(indexrelid, n,
+ * true)`'s deparse of this position -- Postgres's own decoder for "the
+ * n-th zero in `indkey` is the n-th expression in `indexprs`", so this
+ * module never re-walks that mapping by hand. `column` carries the
+ * `pg_attribute` name when this position is a real column (`indkey[n] !=
+ * 0`) and is `null` for an expression element (B6: `lower(email)`) --
+ * 1.4 needs this split to tell "reference an existing column" apart from
+ * "wrap raw text in `sql.raw`". `opclassIsDefault` matters because the
+ * snapshot's compact form only records a non-default operator class
+ * (B6: `jsonb_path_ops` on a GIN index, `jsonb_ops` is the default).
+ * `descending`/`nullsFirst` decode `pg_index.indoption`'s two low bits.
  */
 const indexColumnRow = z.object({
 	text: z.string(),
-	opclass: z.string().nullable(),
+	column: z.string().nullable(),
+	opclass: z.string(),
+	opclassIsDefault: z.boolean(),
 	descending: z.boolean(),
 	nullsFirst: z.boolean(),
 });
@@ -153,12 +159,18 @@ export const INFER_CATALOG_QUERIES = {
 				select json_agg(
 					json_build_object(
 						'text', pg_get_indexdef(ix.indexrelid, ord.n::int, true),
+						'column', att.attname,
 						'opclass', opc.opcname,
+						'opclassIsDefault', opc.opcdefault,
 						'descending', (ix.indoption[ord.n - 1] & 1) = 1,
 						'nullsFirst', (ix.indoption[ord.n - 1] & 2) = 2
 					) order by ord.n
 				)
 				from generate_series(1, ix.indnkeyatts) as ord(n)
+				left join pg_attribute att
+					on att.attrelid = ix.indrelid
+					and att.attnum = ix.indkey[ord.n - 1]
+					and ix.indkey[ord.n - 1] <> 0
 				left join pg_opclass opc on opc.oid = ix.indclass[ord.n - 1]
 			), '[]'::json) as columns
 		from pg_index ix
