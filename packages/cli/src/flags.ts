@@ -18,6 +18,7 @@ const VALUE_TAKING_FLAGS: ReadonlyArray<string> = [
 	"--url",
 	"--schema",
 	"--out",
+	"--db-url",
 ];
 
 /**

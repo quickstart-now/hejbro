@@ -183,14 +183,33 @@ literals at their own raise sites), `main.ts` (registers `import`),
 
 ## 4. The pull command and the marked contract (#604)
 Files: `packages/cli/src/commands/pull.ts` (new — its codes, and the
-refusal's, are literals at their own raise sites), `main.ts` (registers
+refusal's, are literals at their own raise sites),
+`contract/from-catalog.ts` (new: the catalog description as the export
+payload the emitter already takes — the delta says the same emitter,
+so the adapter is the only way in), `main.ts` (registers
 `pull`, after group 3's edit to the same map), `contract/emit.ts`
 (origin variant), `vendor/state.ts`, `commands/{outdated,vendor}.ts`
 (refusal), tests
 
-- [ ] 4.1 (~9m) [design] The origin shape for a database source and the
-      header line; the refusal code. Failing tests: `pull-command.test.ts`,
-      `outdated` refusal test.
+- [ ] 4.1 (~10m) [design, settled] `ContractOrigin` becomes a
+      discriminated union — `{source: "git", commit, exportHash}` and
+      `{source: "database", database, schemas}` — so a reader that
+      forgets the database case fails to compile rather than at run
+      time. The database is named by `current_database()` and the
+      schemas that were read, sorted by name; the connection string
+      never appears anywhere, since it carries a secret. The header says
+      the contract was inferred from a database rather than vendored,
+      and carries no clock- or machine-derived value. `pull` writes the
+      lock too, so `generatedBy` widens to
+      `"hejbro vendor" | "hejbro pull"` and a pull lock holds the
+      database and schemas in place of a commit. The refusal is
+      `vendor-origin-not-a-commit` — the operation stops because there
+      is no commit to compare against, not because a database was
+      involved — and its message names `link`. Failing tests:
+      `pull-command.test.ts`, the `outdated` refusal, a `readLock` test
+      that still refuses a file carrying neither mark, and a golden that
+      shows a git-sourced contract's bytes changing by the added
+      `source` key and nothing else.
 
 ## 5. The live witness and the docs (#604)
 Files: `packages/cli/test/*.integration.test.ts`, `skills/hejbro/
