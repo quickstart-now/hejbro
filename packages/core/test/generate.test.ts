@@ -1193,7 +1193,8 @@ describe("an existing declaration emits nothing (add-unmanaged-objects, #605)", 
 			previousSnapshot: firstResult.snapshot,
 		});
 		expect(secondResult.errors).toEqual([]);
-		// Adoption legitimately DOES emit `alter table "uo10"."widgets"`
+		// Deliberately asymmetric with uo9's own `sql === ""`: adoption
+		// legitimately DOES emit `alter table "uo10"."widgets"`
 		// lines -- enabling RLS and wiring the new sequence's own
 		// default are both real `alter table` statements, the fan-out
 		// objects' own creation DDL, not a diff of the table's structure.
