@@ -116,7 +116,9 @@ export const postById = defineFunction(
 // #662: a function argument keyed by something that is not a valid TS
 // identifier -- the DSL accepts it (only table columns go through D36's
 // assertSqlName), so this is the one place a non-identifier key reaches
-// a real, vendored contract that a real tsc actually compiles.
+// a real, vendored contract that a real tsc actually compiles. Contract
+// axis only -- the DDL this same declaration would generate renders the
+// argument name unquoted and is invalid SQL (#679).
 export const echoArg = defineFunction(
 	app,
 	"echo_arg",

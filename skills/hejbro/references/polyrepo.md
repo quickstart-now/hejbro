@@ -27,7 +27,11 @@ snapshot.sql, contract.ts}` and `hejbro.lock`) → `import { createDb }
 from "./.hejbro/vendor/contract"` → `createDb(driver)` → ordinary
 `select`/`insert`/`update`/`deleteFrom` chains, identical to a `db()`
 built from local declarations. Re-run `vendor` to move the pin forward;
-run `vendor --check` (offline, writes nothing) in CI.
+run `vendor --check` (offline, writes nothing) in CI. `vendor --check`
+only compares recorded hashes and never re-`emitContract`s, so a
+contract's own compilation fix from upgrading `hejbro` alone reaches an
+already-vendored `contract.ts` only by running `vendor` again, not by
+`vendor --check` reporting it stale.
 
 ```ts prelude=polyrepo-contract
 // createDb/driver below stand in for `import { createDb } from
