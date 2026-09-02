@@ -211,7 +211,7 @@ declaration, and every reading prints a loss report saying exactly
 which kind of approximation it made, in four bands: **Guessed** — a
 column's TypeScript key from its SQL name, the default numeric mode,
 and unknown array-element nullability (read as nullable), plus any
-role name a grant or policy names; **Not inferred** — functions,
+role name a grant names; **Not inferred** — functions,
 triggers, view bodies, policy expressions, grants beyond a role's bare
 name (a blanket line — never a per-instance list), a column whose type
 no builder expresses, and a standalone sequence no column owns (the
@@ -228,15 +228,19 @@ renamed in the database. `import` never hides any of this: every
 file's own header carries the full report, and the same report prints
 to the terminal on every run, ending with the way out ("The loss ends
 when you hand-edit the starter declarations"). Two schemas whose
-tables reference each other
-would otherwise make their generated files import one another in a
-cycle no loader can resolve; `import` breaks that cycle itself, on one
-deterministic direction, using an unexported reference-only handle
-(`existingTable`, above) for the foreign keys that cross it — the
-starter files always load regardless of which one a loader reaches
-first. "Checking a declaration against the real schema" above is still
-how you confirm the result (hand-edited or not) matches the database,
-and a `hejbro generate` against an empty snapshot right after `import`
+tables reference each other, or whose columns reference each other's
+enum types, would otherwise make their generated files import one
+another in a cycle no loader can resolve — a reference to another
+file's enum counts as an import exactly as a foreign key to another
+file's table does. `import` breaks such a cycle itself, on one
+deterministic direction, using an unexported reference-only
+declaration for whichever kind of crossing runs that way: a handle
+(`existingTable`, above) for a foreign key, a local copy of the enum
+for an enum reference — so the starter files' imports form no cycle,
+and loading does not depend on which file the loader reaches first.
+"Checking a declaration against the real schema" above is still how
+you confirm the result (hand-edited or not) matches the database, and
+a `hejbro generate` against an empty snapshot right after `import`
 reproduces the database's own DDL, which `hejbro baseline` then
 registers exactly as step 2 describes.
 

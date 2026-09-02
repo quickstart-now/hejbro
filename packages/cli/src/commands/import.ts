@@ -115,9 +115,9 @@ const throwNothingToInfer = (schemas: ReadonlyArray<string>): never =>
  * D106 N7: when *some* (not all) named schemas hold nothing, `import`
  * used to write files for the ones that do and say nothing at all about
  * the ones that don't -- neither a file nor a diagnostic named the
- * gap. One line per empty schema, printed alongside the real loss
- * report; the all-empty case is unchanged (`throwNothingToInfer` above
- * still refuses outright, before any file is written).
+ * gap. One line per empty schema; the all-empty case is unchanged
+ * (`throwNothingToInfer` above still refuses outright, before any file
+ * is written).
  */
 const emptySchemaLines = (
 	result: InferCatalogResult,
@@ -131,6 +131,23 @@ const emptySchemaLines = (
 				`Not inferred: nothing to infer in schema "${schemaName}".`,
 		);
 };
+
+/**
+ * D106 R2-N3: the empty-schema lines used to reach stdout only, so a
+ * file's own header carried a strictly smaller report than the run
+ * printed. `emptySchemaLines` depends only on `result` and the raw
+ * `--schema` list (both known before `emitDeclarationFiles` runs), so
+ * folding them into `result.lossReport` here -- before emission -- makes
+ * every written file's header carry the same full report the terminal
+ * does, with the same one array feeding both.
+ */
+const withEmptySchemaLines = (
+	result: InferCatalogResult,
+	schemas: ReadonlyArray<string>,
+): InferCatalogResult => ({
+	...result,
+	lossReport: [...result.lossReport, ...emptySchemaLines(result, schemas)],
+});
 
 const targetPath = (out: string, file: DeclareEmitFile): string =>
 	join(out, `${file.fileBaseName}.schema.ts`);
@@ -284,17 +301,14 @@ export const runImport = async (
 				if (schemasWithInferredObjects(result).size === 0) {
 					throwNothingToInfer(schemas);
 				}
-				const files = emitDeclarationFiles(result);
+				const resultWithFullReport = withEmptySchemaLines(result, schemas);
+				const files = emitDeclarationFiles(resultWithFullReport);
 				throwIfPlannedFilesCollide(out, files);
 				throwIfAnyFileExists(out, outDir, files);
 				const created = writeFiles(outDir, out, files);
 				return {
 					exitCode: 0,
-					stdout: [
-						...created,
-						...result.lossReport,
-						...emptySchemaLines(result, schemas),
-					],
+					stdout: [...created, ...resultWithFullReport.lossReport],
 					stderr: null,
 				};
 			},

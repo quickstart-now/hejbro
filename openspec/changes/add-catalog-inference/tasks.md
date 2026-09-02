@@ -166,6 +166,18 @@ Files: `packages/cli/src/declare-emit/*.ts` (new), tests
       it proves the module), plus the two determinism pins: the same
       input in a different row order emits the same files, and the same
       import run twice emits the same bytes.
+- [x] 2.1c [design, settled — D106 round 2] A file's identifiers are
+      assigned without any knowledge of the other files, and only then
+      are its imports named: an imported symbol keeps the name its owner
+      settled on unless that name is already taken here, in which case
+      it is aliased to the owner schema's own identifier joined with the
+      symbol in Pascal case (`users` from schema `b` becomes `bUsers`),
+      and a further collision takes the smallest integer from 2 upwards
+      — the suffix rule the keys already use. Aliases are settled in
+      order of owner file name, then symbol name, so the output does not
+      depend on traversal order. The two-phase resolution this replaces
+      reserved a name from the first phase and rendered the second's,
+      which made a file import the very name it had given its own table.
 - [x] 2.2 (~8m) Round trip over the examples' own database rather than
       the fixture: emitted source, loaded and generated against an empty
       snapshot, yields DDL equal to that database's objects — compared

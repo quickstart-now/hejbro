@@ -39,14 +39,31 @@ export type SchemaFileGraph = {
 	 * Whether the crossing `fromSchema -> toSchema` (named `edgeId`, of
 	 * `kind`) is the *back edge* a deterministic depth-first walk of the
 	 * schema graph finds (CI-G2-R1-18/19, lead-adopted refinement over
-	 * R1-16's own first cut; D106 B1/CI-D106-R2-02's own kind-preference
-	 * correction on top): only this edge needs a handle -- severing it
-	 * alone already makes the remaining import graph acyclic, so every
-	 * other crossing keeps a real, type-carrying cross-file import. Ties
-	 * are broken by schema name, the same rule the table graph's own
-	 * topological order uses, so a different catalog row order can never
-	 * flip which direction gets the handle. `kind` defaults to
-	 * `"foreignKey"`, matching `SchemaCrossing`'s own default.
+	 * R1-16's own first cut): only this edge needs a handle -- severing
+	 * it alone already makes the remaining import graph acyclic (a DFS
+	 * back edge is, by construction, the only kind of edge a cycle can
+	 * close, so cutting every one the walk reports is always enough --
+	 * D106 R2-B1/CI-R2-02), so every other crossing keeps a real,
+	 * type-carrying cross-file import. Ties are broken by schema name,
+	 * the same rule the table graph's own topological order uses, so a
+	 * different catalog row order can never flip which direction gets
+	 * the handle. `kind` defaults to `"foreignKey"`, matching
+	 * `SchemaCrossing`'s own default.
+	 *
+	 * A round-1 correction here (`preferForeignKeyBackEdges`, since
+	 * removed) swapped a raw enum back edge for a same-pair reverse
+	 * foreign key when one existed, so the FK side (already carrying a
+	 * proven handle) got cut instead and the enum's own real import
+	 * stayed. It never checked that the "mirror" FK lay on the very
+	 * cycle the raw back edge closed -- only that it was the exact
+	 * reverse crossing. On a graph with a chord (an edge between two
+	 * schemas that are also connected by a longer path) the mirror can
+	 * be a chord itself: cutting it leaves the real cycle untouched, and
+	 * every entry order crashes. Restoring that optimization would need
+	 * re-deriving whether the candidate replacement is itself on the
+	 * closed cycle -- exactly the check "cut what the DFS found" already
+	 * gets for free -- so it is not attempted; fewer handles and more
+	 * real imports is given up in favor of the correctness guarantee.
 	 */
 	readonly isBackEdge: (
 		fromSchema: string,
@@ -63,71 +80,13 @@ const crossingKind = (crossing: SchemaCrossing): "foreignKey" | "enum" =>
 const compoundEdgeId = (edgeId: string, kind: "foreignKey" | "enum"): string =>
 	`${kind}:${edgeId}`;
 
-const crossingGraphKey = (crossing: SchemaCrossing): string =>
-	foreignKeyEdgeKey({
-		from: crossing.fromSchema,
-		to: crossing.toSchema,
-		foreignKeyName: compoundEdgeId(crossing.edgeId, crossingKind(crossing)),
-	});
-
-/**
- * D106 B1 (lead verdict: candidate B+A) -- among the raw back edges a
- * plain DFS finds, prefer cutting a foreign-key crossing over an enum
- * crossing when both are available for the very same schema pair in
- * opposite directions: a foreign key's own back edge already has a
- * proven handle (`existingTable`); severing the FK side instead of the
- * enum side leaves the enum's own real, type-carrying import in place,
- * which is one more genuine cross-file reference than cutting the enum
- * side would. An enum-only cycle (no mirroring FK crossing to swap onto)
- * is still cut -- candidate A's own limit is exactly what candidate B
- * covers. Scoped to the direct two-schema mutual-pair shape (an edge and
- * its exact reverse): a longer cycle with no such mirror is left as the
- * plain DFS found it. Deterministic: when more than one FK mirror
- * candidate exists, the one sorting first by its own compound key wins,
- * so a different catalog/table row order can never flip which edge is
- * cut.
- */
-const preferForeignKeyBackEdges = (
-	crossings: ReadonlyArray<SchemaCrossing>,
-	rawBackEdgeKeys: ReadonlySet<string>,
-): ReadonlySet<string> =>
-	crossings.reduce((backEdgeKeys, crossing) => {
-		if (
-			crossingKind(crossing) !== "enum" ||
-			!backEdgeKeys.has(crossingGraphKey(crossing))
-		) {
-			return backEdgeKeys;
-		}
-		const mirrorKey = crossings
-			.filter(
-				(candidate) =>
-					crossingKind(candidate) === "foreignKey" &&
-					candidate.fromSchema === crossing.toSchema &&
-					candidate.toSchema === crossing.fromSchema &&
-					!backEdgeKeys.has(crossingGraphKey(candidate)),
-			)
-			.map((candidate) => crossingGraphKey(candidate))
-			.sort()
-			.at(0);
-		if (mirrorKey === undefined) {
-			return backEdgeKeys;
-		}
-		// A fresh copy, mutated locally -- never the shared `backEdgeKeys`
-		// this iteration started from, and never spread back into itself
-		// (`lint/performance/noAccumulatingSpread`).
-		const swapped = new Set(backEdgeKeys);
-		swapped.delete(crossingGraphKey(crossing));
-		swapped.add(mirrorKey);
-		return swapped;
-	}, rawBackEdgeKeys);
-
 /**
  * Builds the schema-level graph from every cross-schema crossing this
  * run's own foreign keys and enum references produce, reusing
  * `topologicalTableOrder` unchanged (one schema per vertex, one edge per
  * crossing) -- the exact same deterministic DFS and tie-break rule the
- * table graph uses, just at schema granularity -- then applies D106 B1's
- * own FK-preference correction on top.
+ * table graph uses, just at schema granularity. Every back edge the DFS
+ * reports is cut, with no further selection on top (D106 R2-B1).
  */
 export const buildSchemaFileGraph = (
 	schemaNames: ReadonlyArray<string>,
@@ -139,13 +98,9 @@ export const buildSchemaFileGraph = (
 		foreignKeyName: compoundEdgeId(crossing.edgeId, crossingKind(crossing)),
 	}));
 	const topo = topologicalTableOrder(schemaNames, edges);
-	const backEdgeKeys = preferForeignKeyBackEdges(
-		crossings,
-		topo.cycleClosingEdges,
-	);
 	return {
 		isBackEdge: (fromSchema, toSchema, edgeId, kind = "foreignKey") =>
-			backEdgeKeys.has(
+			topo.cycleClosingEdges.has(
 				foreignKeyEdgeKey({
 					from: fromSchema,
 					to: toSchema,
