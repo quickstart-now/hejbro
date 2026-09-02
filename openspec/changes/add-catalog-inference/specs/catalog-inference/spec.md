@@ -38,9 +38,15 @@ express is therefore still described — described, but never contracted:
 a contract carries the columns the snapshot holds, and a column the DSL
 cannot name never reaches the snapshot. The snapshot SHALL hold no
 function, trigger, policy expression, view body, grant beyond its role
-name, column whose type no column builder expresses, or standalone
+name, column whose type no column builder expresses, standalone
 sequence that no column owns — the DSL has no `defineSequence()` (D66)
-— and the loss report SHALL name each of them. A column named there is
+— or table, schema, index or check whose catalog name no declaration
+can carry, since a declaration's identifiers are lower snake_case (D36)
+while a database hejbro did not create names its objects its own way;
+a table or schema left out takes the objects it holds with it. Leaving
+such an object out SHALL never stop the reading — everything else in
+the named schemas is still inferred — and the loss report SHALL name
+each of them. A column named there is
 still described: the description records what the database holds, and
 the snapshot records what a declaration can express.
 
@@ -59,6 +65,15 @@ the snapshot records what a declaration can express.
   collision suffix, whichever of the two comes first physically — and
   the loss report names the column that cannot be declared, since only
   one of the two can be named by a declaration
+
+#### Scenario: A name no declaration can carry costs that object, not the run
+- **WHEN** a named schema holds a table whose catalog name is not lower
+  snake_case, beside tables whose names are
+- **THEN** the reading still yields the other tables, the starter files
+  and the contract are still written, and the loss report names the
+  omitted table with its schema and says what to do about it — and the
+  same holds for an index or a check whose name a declaration cannot
+  carry, which costs that index or check alone
 
 #### Scenario: What is not inferred is named
 - **WHEN** the database also holds a function, a trigger, a view, a

@@ -118,14 +118,23 @@ const throwNothingToInfer = (schemas: ReadonlyArray<string>): never =>
  * gap. One line per empty schema; the all-empty case is unchanged
  * (`throwNothingToInfer` above still refuses outright, before any file
  * is written).
+ *
+ * D106 R4-B4/#707: this line is suppressed for a schema
+ * `result.omittedSchemaNames` already names -- "nothing to infer" is
+ * false there: there *was* something, hejbro just could not carry its
+ * name, and the loss report's own `Omitted: schema …` line already
+ * says so with the real reason. Stating both would tell the reader two
+ * different stories about the same schema.
  */
 const emptySchemaLines = (
 	result: InferCatalogResult,
 	schemas: ReadonlyArray<string>,
 ): ReadonlyArray<string> => {
 	const withObjects = schemasWithInferredObjects(result);
+	const omitted = new Set(result.omittedSchemaNames);
 	return schemas
 		.filter((schemaName) => !withObjects.has(schemaName))
+		.filter((schemaName) => !omitted.has(schemaName))
 		.map(
 			(schemaName) =>
 				`Not inferred: nothing to infer in schema "${schemaName}".`,

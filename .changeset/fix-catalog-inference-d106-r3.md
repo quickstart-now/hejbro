@@ -16,7 +16,7 @@ database's own starter files stay byte-identical. When the catalog's
 own name isn't a valid hejbro SQL identifier, the reading falls back
 to the derived name and the loss report names the approximation.
 
-`@hejbro/core` exports `deriveForeignKeyName` and `isSqlName` (the
-same D36 rule `assertSqlName` enforces, as a boolean query) for
-callers that need the same derivation/validation rule this feature
+`@hejbro/core` exports `deriveForeignKeyName` and `assertSqlName` (the
+same D36 rule this feature validates a foreign key's own name against)
+for callers that need the same derivation/validation rule this feature
 uses internally.

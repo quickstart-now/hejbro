@@ -59,6 +59,7 @@ const resultFor = (
 	lossReport: [],
 	// unused by this suite -- emitDeclarationFiles never reads it.
 	sql: "",
+	omittedSchemaNames: [],
 });
 
 describe("emitDeclarationFiles / 2.1", () => {

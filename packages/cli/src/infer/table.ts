@@ -100,9 +100,18 @@ export type InferredTableFacts = {
 	readonly indexes: ReadonlyArray<InferredIndex>;
 };
 
+/** An index or check constraint omitted from its table's own declaration because its catalog name is not a valid hejbro SQL identifier (D106 R4-B1) -- costs that one object, never the table it lives on. */
+export type OmittedTableMember = {
+	readonly schema: string;
+	readonly table: string;
+	readonly sqlName: string;
+};
+
 export type InferredTableResult = {
 	readonly table: HejbroInput;
 	readonly losses: ReadonlyArray<ColumnLoss>;
+	readonly omittedChecks: ReadonlyArray<OmittedTableMember>;
+	readonly omittedIndexes: ReadonlyArray<OmittedTableMember>;
 };
 
 const FOREIGN_KEY_ACTION_TOKEN: Readonly<
@@ -146,20 +155,35 @@ const foreignKeyAction = (
 /**
  * D106 R3-B3 (CI-R3-05: `@hejbro/core` exports only the throwing
  * assertion, not a boolean query -- a boolean predicate is not
- * otherwise public surface this package needs, so it stays here,
- * wrapping `assertSqlName` in a `try`/`catch` rather than restating its
+ * otherwise public surface this package needs, so every caller here
+ * wraps `assertSqlName` in a `try`/`catch` rather than restating its
  * pattern): whether `name` round-trips through the DSL's own D36 rule.
- * `infer/loss-report.ts`'s `detectForeignKeyNameApproximations` is this
- * same check's report-side caller, so the two can never drift.
+ * Shared by every catalog-inference call site that must omit an object
+ * rather than let `assertSqlName` abort the whole reading (D106 R4-B1)
+ * -- a table, schema, index or check whose catalog name Postgres
+ * allowed but hejbro cannot express. A foreign key's own name is the
+ * one exception: it keeps its round-trip-or-derive fallback
+ * ({@link isExpressibleForeignKeyName}) rather than omission, since a
+ * constraint's name is a label on a relation that still has one, while
+ * a table/schema/index/check name is the object's own identity.
  */
-export const isExpressibleForeignKeyName = (name: string): boolean => {
+export const isExpressibleName = (name: string): boolean => {
 	try {
-		assertSqlName(name, "foreign key", null);
+		assertSqlName(name, "identifier", null);
 		return true;
 	} catch {
 		return false;
 	}
 };
+
+/**
+ * D106 R3-B3: whether a foreign key's own catalog name round-trips
+ * through the DSL's own D36 rule -- delegates to {@link isExpressibleName},
+ * kept as its own named predicate because `infer/loss-report.ts`'s
+ * `detectForeignKeyNameApproximations` is this same check's report-side
+ * caller, so the two can never drift.
+ */
+export const isExpressibleForeignKeyName = isExpressibleName;
 
 /**
  * D106 R3-B3: the catalog's own foreign key name, when it round-trips
@@ -346,6 +370,33 @@ export const inferTable = (facts: InferredTableFacts): InferredTableResult => {
 		declaredEntries.map((entry) => [entry.column.sqlName, entry.column.tsKey]),
 	);
 
+	// D106 R4-B1: a check/index whose own catalog name Postgres allowed but
+	// hejbro cannot express (D36) costs that one object, never the table --
+	// filtered here, outside the builder callback below, since `check()`/
+	// `index()` would otherwise throw `invalid-sql-name` and abort the
+	// whole table (unlike a foreign key's name, which falls back to a
+	// derived one instead of being omitted).
+	const expressibleChecks = facts.checks.filter((c) =>
+		isExpressibleName(c.name),
+	);
+	const omittedChecks: ReadonlyArray<OmittedTableMember> = facts.checks
+		.filter((c) => !isExpressibleName(c.name))
+		.map((c) => ({
+			schema: facts.schema.schemaName,
+			table: facts.tableName,
+			sqlName: c.name,
+		}));
+	const expressibleIndexes = facts.indexes.filter((idx) =>
+		isExpressibleName(idx.name),
+	);
+	const omittedIndexes: ReadonlyArray<OmittedTableMember> = facts.indexes
+		.filter((idx) => !isExpressibleName(idx.name))
+		.map((idx) => ({
+			schema: facts.schema.schemaName,
+			table: facts.tableName,
+			sqlName: idx.name,
+		}));
+
 	const builtTable = table(
 		facts.schema,
 		facts.tableName,
@@ -371,10 +422,10 @@ export const inferTable = (facts: InferredTableFacts): InferredTableResult => {
 				...optionalEntry("onDelete", foreignKeyAction(fk.onDelete)),
 				...optionalEntry("onUpdate", foreignKeyAction(fk.onUpdate)),
 			}));
-			const checks = facts.checks.map((c) =>
+			const checks = expressibleChecks.map((c) =>
 				check(c.name, sql.raw(c.expression)),
 			);
-			const indexes = facts.indexes.map((idx) => {
+			const indexes = expressibleIndexes.map((idx) => {
 				const columns = idx.columns.map((column) =>
 					indexColumnInput(column, columnRefBySqlName),
 				);
@@ -389,5 +440,5 @@ export const inferTable = (facts: InferredTableFacts): InferredTableResult => {
 		},
 	);
 
-	return { table: builtTable, losses };
+	return { table: builtTable, losses, omittedChecks, omittedIndexes };
 };

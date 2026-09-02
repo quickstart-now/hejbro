@@ -546,3 +546,84 @@ describe("inferTable / 1.4b non-self foreign keys (existingTable, D41)", () => {
 		);
 	});
 });
+
+// D106 R4-B1: a check or index whose catalog name Postgres allowed but
+// hejbro cannot express (D36) costs that one object, never the table --
+// unlike a table/schema name (compose.ts's own `partitionTables`/
+// `partitionSchemas`), a check/index lives inside an already-valid
+// table, so omitting it here is enough; nothing upstream needs to know.
+describe("inferTable / 1.4 check and index name omission (D106 R4-B1)", () => {
+	it("omits a check constraint whose catalog name is not a valid hejbro SQL identifier, keeping the table and its other checks", () => {
+		const facts: InferredTableFacts = {
+			...emptyTableFacts,
+			checks: [
+				{ name: "widgets_name_not_blank", expression: "(length(name) > 0)" },
+				{ name: "CK_Widgets", expression: "(true)" },
+			],
+		};
+
+		const result = inferTable(facts);
+		expect(result.omittedChecks).toEqual([
+			{ schema: "app", table: "widgets", sqlName: "CK_Widgets" },
+		]);
+		expect(result.losses).toEqual([]);
+
+		const migration = generateMigration({
+			declarations: [app, result.table],
+			previousSnapshot: emptySnapshot,
+		});
+		expect(migration.errors).toEqual([]);
+		expect(migration.sql).toContain('constraint "widgets_name_not_blank"');
+		expect(migration.sql).not.toContain("CK_Widgets");
+	});
+
+	it("omits an index whose catalog name is not a valid hejbro SQL identifier, keeping the table and its other indexes", () => {
+		const indexColumn = {
+			column: "id",
+			text: "id",
+			opclass: "uuid_ops",
+			opclassIsDefault: true,
+			descending: false,
+			nullsFirst: false,
+		};
+		const facts: InferredTableFacts = {
+			...emptyTableFacts,
+			indexes: [
+				{
+					name: "widgets_id_idx",
+					isUnique: false,
+					method: "btree",
+					predicate: null,
+					columns: [indexColumn],
+				},
+				{
+					name: "IX_Widgets",
+					isUnique: false,
+					method: "btree",
+					predicate: null,
+					columns: [indexColumn],
+				},
+			],
+		};
+
+		const result = inferTable(facts);
+		expect(result.omittedIndexes).toEqual([
+			{ schema: "app", table: "widgets", sqlName: "IX_Widgets" },
+		]);
+		expect(result.losses).toEqual([]);
+
+		const migration = generateMigration({
+			declarations: [app, result.table],
+			previousSnapshot: emptySnapshot,
+		});
+		expect(migration.errors).toEqual([]);
+		expect(migration.sql).toContain('"widgets_id_idx"');
+		expect(migration.sql).not.toContain("IX_Widgets");
+	});
+
+	it("reports no omission for a table whose checks and indexes are all expressible", () => {
+		const result = inferTable(emptyTableFacts);
+		expect(result.omittedChecks).toEqual([]);
+		expect(result.omittedIndexes).toEqual([]);
+	});
+});

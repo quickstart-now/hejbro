@@ -66,6 +66,7 @@ const snapshotWith = (tables: ReadonlyArray<TableSnapshot>): Snapshot => ({
 const resultFor = (
 	tables: ReadonlyArray<TableSnapshot>,
 	lossReport: ReadonlyArray<string> = [],
+	omittedSchemaNames: ReadonlyArray<string> = [],
 ): InferCatalogResult => ({
 	snapshot: snapshotWith(tables),
 	description: {
@@ -82,6 +83,7 @@ const resultFor = (
 	lossReport,
 	// unused by this suite -- runImport never reads it.
 	sql: "",
+	omittedSchemaNames,
 });
 
 const emptyResult: InferCatalogResult = {
@@ -89,6 +91,7 @@ const emptyResult: InferCatalogResult = {
 	description: { tables: [], roleNames: [] },
 	lossReport: [],
 	sql: "",
+	omittedSchemaNames: [],
 };
 
 const idColumn: TableSnapshot["columns"][number] = {
@@ -348,6 +351,55 @@ describe("runImport / 3.1", () => {
 		expect(outcome.exitCode).toBe(0);
 		expect(existsSync(join(cwd, "src/schema/app.schema.ts"))).toBe(true);
 		expect(existsSync(join(cwd, "src/schema/billing.schema.ts"))).toBe(false);
+		expect(outcome.stdout).toContain(
+			'Not inferred: nothing to infer in schema "billing".',
+		);
+	});
+
+	/**
+	 * D106 R4-B4/#707: a schema `Omitted: schema …` already names is not
+	 * "empty" -- it held something, hejbro just could not carry its own
+	 * name. Stating both lines side by side would tell the reader two
+	 * different, contradictory stories about the same schema. A genuinely
+	 * empty schema (named, holds nothing, not omitted for its name) keeps
+	 * getting the N7 line exactly as before -- each schema in this fixture
+	 * gets exactly its own line, never the other's.
+	 */
+	it("suppresses the empty-schema line for a schema the loss report already reports as omitted for its name, while a genuinely empty schema still gets its own line", async () => {
+		const outcome = await runImport(
+			cwd,
+			[
+				"--url",
+				"postgres://fixture",
+				"--schema",
+				"App",
+				"--schema",
+				"app",
+				"--schema",
+				"billing",
+				"--out",
+				"src/schema",
+			],
+			depsFor(
+				resultFor(
+					[table("app", "widgets", [idColumn])],
+					[
+						'Omitted: schema "App" -- its catalog name is not a valid hejbro SQL identifier.',
+					],
+					["App"],
+				),
+			),
+		);
+
+		expect(outcome.exitCode).toBe(0);
+		expect(outcome.stdout.some((line) => line.includes('schema "App"'))).toBe(
+			true,
+		);
+		expect(
+			outcome.stdout.some((line) =>
+				line.includes('Not inferred: nothing to infer in schema "App"'),
+			),
+		).toBe(false);
 		expect(outcome.stdout).toContain(
 			'Not inferred: nothing to infer in schema "billing".',
 		);
