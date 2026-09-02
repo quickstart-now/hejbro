@@ -233,16 +233,77 @@ check/inventory.ts`, `packages/cli/src/commands/{reset,raise}.ts` (skip),
       pre-marker reader test, which now throws `vendor-export-invalid`
       instead of returning), the writer test and the current-export
       reader test stay green (12/13).
-- [ ] 2.2 (~9m) `check` compares nothing about an unmanaged table and
-      omits it from the inventory. Includes the loader's own
-      characterization (planning error corrected: `loader.ts` collects
-      every `isTable()` export already, so an exported `existingTable()`
-      needs no loader change once group 1 lands — and `loader.ts`'s
-      vendored-contract refusal, R2-G5 5.12, keys on the module's
-      `contractMetadata`, not on `existing`, so it stays exactly as it
-      is). Failing tests: `loader.test.ts` — "an exported existing table
-      is loaded as a declaration"; `check-command.test.ts` — "an
-      unmanaged declaration is neither compared nor inventoried".
+- [x] 2.2 (~9m) `check` compares nothing about an unmanaged table and
+      omits it from the inventory.
+
+      **Name-collision measurement (lead-flagged, R1-03/R1-04), held**:
+      `check/inventory.ts` already had `UnmanagedTable`/
+      `unmanagedTables` — "a catalog table no declaration covers at
+      all," the opposite axis from this task's "declared but not
+      managed." Measured: the word reaches user-facing stdout
+      (`commands/check.ts:138`, `` `unmanaged table (not covered by any
+      declaration): ${schema}.${table}` ``), so this is an observable-
+      contract question, not an internal-naming one. **On hold for lead
+      judgement** — no text or type name touched this task (`check.ts`'s
+      line, `UnmanagedTable`/`unmanagedTables`, and this feature's own
+      `unmanaged` name all left exactly as they were); the lead's
+      provisional reading is that the two are not actually opposite (the
+      undeclared-vs-declared axis the existing text already names is the
+      real distinction), so (c) no-rename is likely, but the rename
+      itself (if any) and its own doc comment are a later, separate
+      commit once confirmed.
+
+      **`compare.ts`**: `compareTable` returns `[]` immediately for an
+      `unmanaged: true` node, before the catalog lookup even runs (zero
+      comparisons, not a shape-diff skip) — `LocalTableSnapshot` gains
+      the same optional `unmanaged?: true` mirror the rest of this
+      file's compact-format locals already use.
+      **`inventory.ts`**: needs no code change — measured, not assumed.
+      `declaredTableIdentities` already reads every `"table:"` snapshot
+      key regardless of managed/unmanaged, so an unmanaged declared
+      table's identity is already "declared" for this file's own
+      purposes and was never going to appear in `unmanagedTables` (that
+      inventory concept is catalog-vs-undeclared, and this table *is*
+      declared). Verified by mutant (b) below, not left untested just
+      because untouched.
+      **`loader.ts`**: no code change — `loadDeclarations`'s
+      `isHejbroInput` calls `isTable()` before any `declarationKind`
+      check, matching any `Table` regardless of `existing`, so an
+      exported `existingTable()` was already collected once group 1
+      landed. Characterization pin, **green on arrival** (not a failing
+      test — the plan's "failing test" wording predates group 1 landing
+      the loader-relevant half); load-bearing shown by mutant, not by
+      red.
+
+      Failing test (1, `compare.ts`'s own fix): `check-command.test.ts`
+      — three independent `it`s under "an unmanaged declaration is
+      neither compared nor inventoried" — "no difference is reported for
+      it" (①), "is absent from the inventory section" (②), "the exit
+      code is unaffected" (③), sharing one scenario (a declared unmanaged
+      table whose catalog counterpart has a genuinely different column
+      type — proves the skip runs before any shape comparison, not that
+      the shapes happened to agree). Split into three `it`s specifically
+      so a mutant that breaks only one side doesn't hide behind the
+      others.
+      Characterization pin (0 red, already true): `loader.test.ts` — "an
+      exported existing table is loaded as a declaration" (new fixture
+      `test/fixtures/existing-table/`, since `fixtures/basic`'s own table
+      count is asserted elsewhere and would break if extended).
+
+      Mutant (a), `compare.ts`'s skip removed: findings ① and exit-code
+      ③ go red (measured: 2/20), inventory ② stays green — proving ②
+      never depended on compare.ts at all.
+      Mutant (b), `inventory.ts`'s `declaredTableIdentities` narrowed to
+      exclude unmanaged tables (a probe mutant proving ②'s own test is
+      load-bearing despite no real code existing to remove): only ②
+      goes red (measured: 1/20), ① and ③ stay green — the reverse
+      independence, and the reason "no fix needed" above is a measured
+      claim, not an assumption.
+      Mutant (c), `loader.ts`'s `isHejbroInput` narrowed to
+      `isTable(value) && !getTableMeta(value).existing`: exactly 1 red
+      (the new loader test), the other 8 in that file stay green —
+      proves the characterization pin is load-bearing even though it
+      arrived green.
 - [ ] 2.3 (~5m) `reset` drops nothing of an unmanaged table and `raise`
       ignores it. Failing test: `reset-command.test.ts` — "reset drops no
       unmanaged table".
