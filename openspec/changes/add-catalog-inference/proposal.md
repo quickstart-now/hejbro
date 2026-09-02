@@ -39,9 +39,9 @@ else.
   schema, `table()` per table with the declared-looking column builders
   hejbro can map, `pgEnum` per enum — into a directory the command names
   and never overwrites, and prints the loss report. A starter, not a
-  round trip: the next `hejbro generate` against an empty snapshot
-  produces the migration that would create what the database already
-  has, which is what `baseline` then registers.
+  round trip: `hejbro baseline` then produces the migration that would
+  create what the database already has, marked in its banner so that
+  `migrate` registers it rather than runs it.
 - **`hejbro pull --db-url`**: the inferred payload fed to the same
   contract emitter the git channel uses; the contract carries an origin
   that names the database (no commit, no export hash) and a header line

@@ -36,9 +36,13 @@ open with a header carrying
 the loss report in full and the statement that the file is the
 repository's own from now on, and SHALL carry no clock- or
 machine-derived value, so importing the same database twice writes
-byte-identical files. A `generate` against an empty snapshot after an
-`import` SHALL emit the DDL that creates what the database already has,
-which `baseline` then registers.
+byte-identical files. After an `import`, `baseline` SHALL emit the DDL that creates what the
+database already has, marked in its own banner as describing objects
+that already exist, so that `migrate` registers that migration rather
+than runs it; `baseline` refuses once a project has any migration, so
+it is not something `generate` prepares work for. A `generate` against
+the same empty snapshot would emit the same statements, as a migration
+meant to run.
 
 #### Scenario: Declaration files never import each other in a cycle
 - **WHEN** two schemas' files would reference each other — by foreign
@@ -61,8 +65,9 @@ which `baseline` then registers.
 - **WHEN** `hejbro import --url <db> --out src/schema --schema app
   --schema billing` runs against a database holding both
 - **THEN** two declaration files are written, the loss report is
-  printed, and a following `generate` against an empty snapshot emits a
-  migration whose objects match the database's
+  printed, and a following `baseline` emits a first migration whose
+  objects match the database's, marked in its banner so that `migrate`
+  registers it rather than runs it
 
 #### Scenario: a column the DSL cannot name is left out and said so
 - **WHEN** a table holds a column whose SQL name no declaration key can
