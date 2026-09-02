@@ -163,6 +163,33 @@ export const seed = table(app, "seed", {
 export const authUsers = existingTable("auth", "users", { id: uuid() });
 `;
 
+// D106 R4, R4-NB1: the evaluator's own handover-then-adoption round trip
+// (evaluation.md's exact fixture shape, `k1.widgets`) -- a managed table
+// with a serial primary key, RLS and one policy, handed to the platform
+// and then adopted back.
+const HANDOVER_ADOPT_MANAGED_SOURCE = `import { literal, rls, schema, serial, table } from "hejbro";
+
+export const k1 = schema("k1");
+
+export const widgets = table(
+	k1,
+	"widgets",
+	{ id: serial().primaryKey() },
+	() => ({
+		rls: rls.enabled({
+			readLow: rls.policy("read_low").for("select").to("anon").using(literal(true)),
+		}),
+	}),
+);
+`;
+
+const HANDOVER_ADOPT_EXISTING_SOURCE = `import { existingTable, schema, uuid } from "hejbro";
+
+export const k1 = schema("k1");
+
+export const widgets = existingTable("k1", "widgets", { id: uuid() });
+`;
+
 /** [task 8.3] Two brand-new tables in one generate run -- a real,
  * two-statement migration file the fixture measures the statement order
  * of, rather than assumes. */
@@ -688,6 +715,83 @@ describe.each(PG_IMAGES)("apply engine live witness / %s", (image) => {
 
 			// R3-B1's own core observer: the chain the zero-statement
 			// migration's banner anchored still verifies clean.
+			const verify = await runCli(cwd, ["verify"]);
+			expect(verify.exitCode).toBe(0);
+		});
+	});
+
+	// D106 R4, R4-NB1: the evaluator's own end-to-end reproduction --
+	// handing a managed table to the platform, then adopting it back,
+	// used to fail on `migrate` (`relation "widgets_id_seq" already
+	// exists`, 42P07) because the adoption run's own `create sequence`
+	// collides with the one the handover left behind. Written now
+	// (intentionally red against the unfixed create path -- NB1's own
+	// fix is still an open A/C decision) so the fix, once it lands, has
+	// a live-server pin to turn green rather than a claim.
+	describe("R4-NB1: a handover-then-adoption round trip applies against a real server", () => {
+		const database = "handoveradopt";
+		let cwd = "";
+
+		beforeAll(async () => {
+			cwd = await createCliFixtureDir();
+			await runCli(cwd, ["init"]);
+			await writeFixtureFile(
+				cwd,
+				"src/app.schema.ts",
+				HANDOVER_ADOPT_MANAGED_SOURCE,
+			);
+			const generated = await runCli(cwd, ["generate"]);
+			if (generated.exitCode !== 0) {
+				throw new Error(
+					`fixture setup's own first \`hejbro generate\` failed: ${generated.stderr}`,
+				);
+			}
+			psqlCommand(container, "postgres", `create database ${database};`);
+		}, 60_000);
+
+		afterAll(async () => {
+			await removeCliFixtureDir(cwd);
+		});
+
+		it("registers the managed table, releases it, and re-adopts it, applying cleanly at every step", async () => {
+			const firstApply = await runCli(cwd, [
+				"migrate",
+				"--url",
+				hostUrl(database),
+			]);
+			expect(firstApply.exitCode).toBe(0);
+
+			// Handover: k1.widgets becomes existingTable().
+			await writeFixtureFile(
+				cwd,
+				"src/app.schema.ts",
+				HANDOVER_ADOPT_EXISTING_SOURCE,
+			);
+			const releaseGenerate = await runCli(cwd, ["generate"]);
+			expect(releaseGenerate.exitCode).toBe(0);
+			const releaseApply = await runCli(cwd, [
+				"migrate",
+				"--url",
+				hostUrl(database),
+			]);
+			expect(releaseApply.exitCode).toBe(0);
+
+			// Adoption: k1.widgets becomes managed again, same identity and
+			// shape -- the sequence the handover left behind is still there.
+			await writeFixtureFile(
+				cwd,
+				"src/app.schema.ts",
+				HANDOVER_ADOPT_MANAGED_SOURCE,
+			);
+			const adoptGenerate = await runCli(cwd, ["generate"]);
+			expect(adoptGenerate.exitCode).toBe(0);
+			const adoptApply = await runCli(cwd, [
+				"migrate",
+				"--url",
+				hostUrl(database),
+			]);
+			expect(adoptApply.exitCode).toBe(0);
+
 			const verify = await runCli(cwd, ["verify"]);
 			expect(verify.exitCode).toBe(0);
 		});
