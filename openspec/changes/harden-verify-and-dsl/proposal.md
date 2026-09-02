@@ -29,8 +29,12 @@ active change that owns them:
   with; the observation stays an observation (no cause is asserted).
 - The `function-declaration` spec states that a synthesized function
   declaration reaching `generate` is refused with
-  `synced-function-declared`, mirroring the table guard; the diagnostic
-  gains its documented entry where `check:diagnostic-xref` looks.
+  `synced-function-declared`, mirroring the table guard; the refusal
+  gains a documented entry in `skills/hejbro/references/polyrepo.md`
+  (`check:diagnostic-xref` itself reads no documentation — it only
+  cross-references `error[<code>]` string literals inside `src` against
+  each code's own `src` definition — so this is a skill-doc addition,
+  not something that gate looks at).
 - `.references()` thunks never resolve while `table()` runs — each is
   resolved exactly once, on the declaration's first `foreignKeys` read,
   after every declaration module has evaluated, so a cycle between
@@ -49,8 +53,9 @@ active change that owns them:
   scenario naming the artifact a mismatch points at.
 - `function-declaration` — ADDED: a synthesized declaration is refused by
   `generate`.
-- `table-declaration` — MODIFIED: column-level references resolve at
-  collection time; cross-file cycles load.
+- `table-declaration` — MODIFIED: column-level references resolve on
+  the declaration's first consumption; cross-file or same-file cycles
+  load.
 - `plpgsql-function-bodies` — ADDED: a projected returning is a returnable
   query.
 
@@ -59,7 +64,11 @@ active change that owns them:
 - Group 1: `packages/cli/src/commands/verify.ts`, `packages/core/src/engine/generate.ts`
   (message/doc only), diagnostic docs, tests.
 - Group 2: `packages/core/src/dsl/table.ts`, `packages/core/src/plpgsql/body-context.ts`,
-  `packages/cli/src/declare-emit/emit.ts` (comment only), tests. The CLI
-  loader is untouched — the fold moved to the declaration's own memoized
-  getter, not a loader collection step.
+  `packages/cli/src/declare-emit/emit.ts` (comment only); new tests
+  `packages/cli/test/loader-cycle.test.ts` and
+  `packages/core/test/dsl/references-fold.test.ts`; two existing tests
+  (`packages/core/test/dsl/cte-column-ref.test.ts`,
+  `packages/core/test/query/with.test.ts`) whose assertion point moved
+  with the fold. The CLI loader is untouched — the fold moved to the
+  declaration's own memoized getter, not a loader collection step.
 - Closes #632, #658 (function half), #669, #634.
