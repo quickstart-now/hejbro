@@ -344,15 +344,25 @@ file's origin is not part of the contract: that a consumer repository
 commonly receives one from elsewhere is a convention, not a coupling.
 
 Raising over a database this tool has already recorded history for
-SHALL be refused before anything runs, by that history alone. Raising
-over a database holding an object this tool did not create but has no
-record of is a collision this command cannot see in advance without
-reading the catalog, which it does not do; that case SHALL instead be
-refused net of a rolled-back attempt — the file's statements are sent
-inside the same transaction the successful path uses, and the server's
-own "already exists" failure is translated into this refusal rather than
-shown raw. Either way, the target's own declared objects are absent
-afterward and nothing from the file is left applied.
+SHALL be refused before anything runs, by that history alone, and this
+layer leaves nothing behind: no statement is sent, and no object of
+hejbro's own is created.
+
+Raising over a database holding an object this tool did not create but
+has no record of is a collision this command cannot see in advance
+without reading the catalog, which it does not do; that case SHALL
+instead be refused net of a rolled-back attempt — the file's statements
+are sent inside the same transaction the successful path uses, and the
+server's own "already exists" failure is translated into this refusal
+rather than shown raw. The target's own declared objects are absent
+afterward and nothing from the file is left applied — but this layer's
+refusal is not free of side effects the way the first is: the ledger's
+own bootstrap runs once, idempotently, outside that transaction (so the
+same successful path can write its own ledger row inside it), and that
+bootstrap has already run by the time the collision is discovered. A
+database refused this way is therefore left holding an empty
+`hejbro.migration_ledger` table and the `hejbro` schema it lives in,
+even though none of the file's own objects were created.
 
 The ledger SHALL record how the database was raised, with the `raised`
 origin (defined above), so a database created this way is not mistaken

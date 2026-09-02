@@ -122,11 +122,15 @@ const rethrowIfAlreadyExists = (
  * tolerates a table that does not exist yet (`{exists: false}`, the same
  * leniency `bootstrapLedger` itself does not need to run for) -- and
  * refuses if it already has history (6.2, layer 1) *before* this call
- * creates anything: a refused database no longer gains
- * `hejbro.migration_ledger` as a souvenir of the refusal. Only once past
- * that check does it bootstrap (idempotent, run once here since this
- * module is raise's own single entry point -- `ledger.ts`'s own "once per
- * apply run, not once per migration") and reuse `execute.ts`'s own
+ * creates anything: a database refused by the ledger precheck no longer
+ * gains `hejbro.migration_ledger` as a souvenir of the refusal. This does
+ * NOT hold for a layer-2 refusal (D106 m4) -- bootstrap below still runs,
+ * idempotently, before the catalog collision that layer discovers is
+ * ever reached, so that refusal's own database keeps the (empty) ledger
+ * table and schema this call created. Only once past the ledger-history
+ * check does it bootstrap (idempotent, run once here since this module
+ * is raise's own single entry point -- `ledger.ts`'s own "once per apply
+ * run, not once per migration") and reuse `execute.ts`'s own
  * `applyMigration` for everything else the spec asks: one transaction,
  * the advisory lock, the parameterless send, the transaction-control
  * precondition, and the ledger row (6.3) -- the same mechanism `migrate`
