@@ -48,7 +48,11 @@ loudly if not. That check's own remedy is `pnpm build --force`, not a
 plain `pnpm build`: turbo's cache is content-addressed, so a src file
 whose mtime moved without its content changing can still hit the cache,
 and a plain `pnpm build` then replays old logs without writing `dist`
-again.
+again. One more exception to "never go stale" (D106 R1 NB1, #677): an
+in-process test whose fixtures import `"hejbro"` and load through jiti
+(not vitest's own module graph) resolves that import via real Node
+module resolution to `dist`, same as a subprocess test — it needs the
+same `assertBuiltCli` dist-freshness guard (`packages/cli/test/loader-cycle.test.ts`).
 
 ## Repo map
 

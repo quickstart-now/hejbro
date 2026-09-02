@@ -106,6 +106,79 @@ describe("the client's fn (#587/G3)", () => {
 });
 
 /**
+ * D106 round 1, N3: the rewritten mismatched-call scenario's runtime
+ * clause ("a pre-built value carrying an extra property is refused at
+ * runtime by the argument-count check, never sent") had no observer —
+ * `fn-types.test.ts` only proves the compile-time excess-property check,
+ * which fires on a fresh object literal and never runs at all for a
+ * pre-built value. This is the missing runtime half: a *variable*, not a
+ * fresh literal, carrying one property the declaration doesn't name.
+ */
+describe("a pre-built value with an extra property is refused at runtime, before any SQL is sent (D106 round 1, N3)", () => {
+	const ExtraArgMetadata: ContractMetadata = {
+		commit: "abc123",
+		exportHash: "sha256:x",
+		roles: [],
+		tables: {},
+		functions: {
+			searchPosts: {
+				schema: "app",
+				name: "search_posts",
+				args: [
+					{
+						key: "status",
+						sqlName: "status",
+						typeNode: { typeName: "text" },
+						mode: null,
+						notNullElements: false,
+					},
+				],
+				returns: {
+					kind: "scalar",
+					typeNode: { typeName: "bigint" },
+					mode: "bigint",
+				},
+			},
+		},
+	};
+
+	type ExtraArgDatabase = {
+		readonly Tables: Record<string, never>;
+		readonly Functions: {
+			readonly searchPosts: {
+				readonly Args: { readonly status: string };
+				readonly Returns: bigint;
+			};
+		};
+	};
+
+	it("rejects with function-argument-count-mismatch and never reaches the driver", async () => {
+		const { driver } = recordingTransactionalDriver();
+		const client = createNameKeyedDb<ExtraArgDatabase>(
+			driver,
+			ExtraArgMetadata,
+		);
+
+		// A pre-built value, not a fresh object literal -- TypeScript's
+		// excess-property check only fires on a literal at the call site
+		// (`fn-types.test.ts`'s own compile-time observer), so a variable
+		// carrying an extra key is exactly the shape this runtime guard
+		// exists for.
+		const args = { status: "published", extra: "not declared" };
+
+		expect.assertions(3);
+		try {
+			await client.fn.searchPosts(args as never);
+			expect.unreachable("should have refused the extra property");
+		} catch (error) {
+			expect(error).toHaveProperty("code", "function-argument-count-mismatch");
+			expect((error as Error).message).toContain("search_posts");
+		}
+		expect(driver.execute).not.toHaveBeenCalled();
+	});
+});
+
+/**
  * A function's export name can equal a table's own SQL name (two
  * independently-sourced namespaces, forced into one merged record so
  * `db()`'s own classification can wire `fn` without a second renderer,
