@@ -154,8 +154,12 @@ the three things a handover also spares are created for it — a serial
 column's sequence, row-level security, its policies. **Not** created:
 the declaration's own indexes, check constraints, foreign keys, or
 primary key, even though the snapshot afterwards records them as if
-they were (#671) — an adopted table's declared shape beyond that
-three-item list needs its own follow-up run once that gap closes.
+they were (#671) — and because the snapshot already records them as
+present, no *later* `hejbro generate` run will ever diff them into DDL
+either, before or after #671 closes (a recorded object never appears
+"new" to a future diff). Closing that gap for an already-adopted table
+needs out-of-band DDL run directly against the database, or a
+hand-corrected snapshot — not a follow-up `hejbro generate`.
 Declaring a schema's tables with `table()`/`existingTable()` no longer
 has to stay a bare, unexported reference to work this way, the
 difference from before #605.
