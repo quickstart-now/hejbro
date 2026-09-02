@@ -284,10 +284,25 @@ export type GenerateMigrationsResult = {
 	 * `hasChanges` before this field existed had no way to notice.
 	 */
 	readonly snapshot: Snapshot;
+	/**
+	 * [D106 R3, J14] Whether `snapshot` differs from `options.previousSnapshot`
+	 * at all — a fact distinct from `hasChanges` ("is there DDL"), stated on
+	 * its own rather than left for a caller to infer from `snapshot` and
+	 * `previousSnapshot` itself or to reconcile against `hasChanges` reporting
+	 * "no change" while `migrations` still carries one (R3-B1's own
+	 * zero-statement migration: `hasChanges: false`, `snapshotChanged: true`).
+	 */
+	readonly snapshotChanged: boolean;
 	readonly errors: ReadonlyArray<HejbroError>;
 	readonly ambiguities: ReadonlyArray<RenameAmbiguity>;
 	readonly warnings: ReadonlyArray<Diagnostic>;
 };
+
+/** Structural equality of two snapshots' declared objects — the one fact {@link GenerateMigrationsResult.snapshotChanged} states, computed identically at every return site rather than three separately-reasoned comparisons. */
+const snapshotChangedFrom = (
+	snapshot: Snapshot,
+	previousSnapshot: Snapshot,
+): boolean => !sameJson(snapshot.objects, previousSnapshot.objects);
 
 /**
  * Builds the `declaredAt`-by-table-identity map `planRenames` attaches to
@@ -612,6 +627,10 @@ export const generateMigrations = (
 			migrations: [],
 			hasChanges: false,
 			snapshot: pipeline.snapshot,
+			snapshotChanged: snapshotChangedFrom(
+				pipeline.snapshot,
+				options.previousSnapshot,
+			),
 			errors: pipeline.errors,
 			ambiguities: pipeline.ambiguities,
 			warnings: pipeline.warnings,
@@ -631,15 +650,16 @@ export const generateMigrations = (
 		// disagreeing on a repository nobody edited (R3-B1). The fix is one
 		// migration carrying no statements, whose banner records the same
 		// before/after hashes any other migration's would.
-		const snapshotChanged = !sameJson(
-			pipeline.snapshot.objects,
-			options.previousSnapshot.objects,
+		const snapshotChanged = snapshotChangedFrom(
+			pipeline.snapshot,
+			options.previousSnapshot,
 		);
 		if (!snapshotChanged) {
 			return {
 				migrations: [],
 				hasChanges: false,
 				snapshot: pipeline.snapshot,
+				snapshotChanged: false,
 				errors: [],
 				ambiguities: [],
 				warnings: pipeline.warnings,
@@ -665,6 +685,7 @@ export const generateMigrations = (
 			],
 			hasChanges: false,
 			snapshot: pipeline.snapshot,
+			snapshotChanged: true,
 			errors: [],
 			ambiguities: [],
 			warnings: pipeline.warnings,
@@ -701,6 +722,10 @@ export const generateMigrations = (
 		migrations,
 		hasChanges: true,
 		snapshot: pipeline.snapshot,
+		snapshotChanged: snapshotChangedFrom(
+			pipeline.snapshot,
+			options.previousSnapshot,
+		),
 		errors: [],
 		ambiguities: [],
 		warnings: pipeline.warnings,

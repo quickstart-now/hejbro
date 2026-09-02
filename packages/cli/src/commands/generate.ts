@@ -18,7 +18,6 @@ import {
 	parseSnapshot,
 	renderSnapshot,
 	requiredKeysByKind,
-	sameJson,
 	throwHejbroError,
 } from "@hejbro/core";
 import { defineCommand } from "citty";
@@ -824,24 +823,22 @@ export const runGenerate = async (
 						stderr: null,
 					};
 				}
-				// D106 R2, R2-B2 / R3, R3-B1: `hasChanges` only tracks whether
-				// there is DDL to emit -- an existing-table marker change
-				// (handover, adoption, rename) can differ `firstPass.snapshot`
-				// from `previousSnapshot` with no statement at all. A truly
-				// unchanged snapshot is the one case this run has nothing at
-				// all to write; anything else falls through to the ordinary
-				// write-files path below, which now handles a no-DDL,
-				// snapshot-changed run identically to one with real changes --
-				// `generateMigrations`' own R3-B1 branch already gives
-				// `firstPass.migrations` exactly one zero-statement entry for
-				// it, so there is no separate write here to keep in sync with
-				// that path. This snapshot-identity check is this fix's own
-				// mutant target.
-				const snapshotUnchanged = sameJson(
-					firstPass.snapshot.objects,
-					previousSnapshot.objects,
-				);
-				if (snapshotUnchanged) {
+				// D106 R2, R2-B2 / R3, R3-B1+J14: `hasChanges` only tracks
+				// whether there is DDL to emit -- an existing-table marker
+				// change (handover, adoption, rename) can differ
+				// `firstPass.snapshot` from `previousSnapshot` with no
+				// statement at all. A truly unchanged snapshot
+				// (`!firstPass.snapshotChanged`, the one fact the core result
+				// itself states rather than this command re-deriving it) is
+				// the one case this run has nothing at all to write; anything
+				// else falls through to the ordinary write-files path below,
+				// which now handles a no-DDL, snapshot-changed run identically
+				// to one with real changes -- `generateMigrations`' own R3-B1
+				// branch already gives `firstPass.migrations` exactly one
+				// zero-statement entry for it, so there is no separate write
+				// here to keep in sync with that path. This snapshot-identity
+				// check is this fix's own mutant target.
+				if (!firstPass.snapshotChanged) {
 					if (exportEnabled) {
 						writeExportArtifact(firstPass.snapshot);
 					}

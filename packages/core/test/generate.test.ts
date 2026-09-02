@@ -5,7 +5,7 @@ import { pgEnum } from "../src/dsl/pg-enum";
 import { rls } from "../src/dsl/rls";
 import { schema } from "../src/dsl/schema";
 import { getTableMeta, table } from "../src/dsl/table";
-import { generateMigration } from "../src/engine/generate";
+import { generateMigration, generateMigrations } from "../src/engine/generate";
 import { eq, literal, now } from "../src/expr/operators";
 import { sql } from "../src/expr/sql-template";
 import { createDefaultRegistry } from "../src/kind/registry";
@@ -847,6 +847,39 @@ describe("an existing declaration emits nothing (add-unmanaged-objects, #605)", 
 			existing: true,
 			columns: [expect.objectContaining({ name: "id" })],
 		});
+	});
+
+	// D106 R3, J14: `hasChanges` ("is there DDL") and `snapshotChanged`
+	// ("does the snapshot differ from previousSnapshot at all") are two
+	// facts, not one -- a run that only moves an existing-table marker
+	// has to report `hasChanges: false` (nothing to diff into a
+	// statement) while still reporting `snapshotChanged: true` (R3-B1's
+	// own zero-statement migration exists to anchor exactly this case in
+	// the chain). A caller that could only read `hasChanges` before this
+	// field existed had no way to tell the two apart.
+	it("generateMigrations states hasChanges and snapshotChanged separately (D106 R3, J14)", () => {
+		const app = schema("uo1d");
+		const baseline = generateMigrations({
+			declarations: [app],
+			previousSnapshot: emptySnapshot,
+		});
+		const repeat = generateMigrations({
+			declarations: [app],
+			previousSnapshot: baseline.snapshot,
+		});
+		expect(repeat.hasChanges).toBe(false);
+		expect(repeat.snapshotChanged).toBe(false);
+		expect(repeat.migrations).toEqual([]);
+
+		const authUsers = existingTable("uo1d", "users", { id: uuid() });
+		const withMarker = generateMigrations({
+			declarations: [app, getTableMeta(authUsers)],
+			previousSnapshot: baseline.snapshot,
+		});
+		expect(withMarker.hasChanges).toBe(false);
+		expect(withMarker.snapshotChanged).toBe(true);
+		expect(withMarker.migrations).toHaveLength(1);
+		expect(withMarker.migrations[0]?.changes).toEqual([]);
 	});
 
 	// D106 R1, B1: `existingTable()` accepts any column builder, including
