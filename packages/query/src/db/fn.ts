@@ -5,12 +5,7 @@ import type {
 	Table,
 	TypeNode,
 } from "@hejbro/core";
-import {
-	getTableMeta,
-	qualifyName,
-	quoteIdentifier,
-	toSnakeCase,
-} from "@hejbro/core";
+import { getTableMeta, qualifyName, quoteIdentifier } from "@hejbro/core";
 import type { CompileResult } from "../compile/compile";
 import type { DriverRow, DriverSession } from "../driver/contract";
 import type { ColumnPlanEntry } from "./convert";
@@ -187,9 +182,9 @@ const assertArgCount = (
 
 /**
  * Maps a call's own named-argument object to the positional array
- * `declaration.args`'s own declared order expects — matched by *name*
- * (each declared argument's own `toSnakeCase`-transformed counterpart in
- * the caller's object), **never by the caller's own key insertion order**
+ * `declaration.args`'s own declared order expects — matched by each
+ * declared argument's own `key` directly against the caller's object key,
+ * **never by the caller's own key insertion order**
  * (`Object.values(namedArgs)` would silently swap two arguments if a
  * caller writes them in a different order than they were declared —
  * JS object key order is call-site-dependent, not declaration-order,
@@ -198,6 +193,16 @@ const assertArgCount = (
  * carry resolves to `undefined` positionally, exactly like any other
  * missing value this package already passes through to `liftOperand`
  * elsewhere.
+ *
+ * **Matches on `key`, not by re-deriving `argName` via `toSnakeCase`**
+ * (#587/G3): a `defineFunction()`-built declaration always satisfies
+ * `argName === toSnakeCase(key)` by construction (core's own
+ * `resolveArgs`), so the two matching strategies were indistinguishable
+ * for any *locally* declared function — the identity was coincidentally
+ * true, never required. A vendored function's declaration is
+ * *synthesized* from the contract's own carried facts (`key`/`sqlName`
+ * travel independently), so key-matching is the one strategy that holds
+ * for both origins without depending on that identity.
  */
 const resolvePositionalArgs = (
 	declaration: FunctionDeclaration,
@@ -205,9 +210,7 @@ const resolvePositionalArgs = (
 ): ReadonlyArray<unknown> => {
 	const callerKeys = Object.keys(namedArgs);
 	return declaration.args.map((argDecl) => {
-		const matchingKey = callerKeys.find(
-			(key) => toSnakeCase(key) === argDecl.argName,
-		);
+		const matchingKey = callerKeys.find((key) => key === argDecl.key);
 		if (matchingKey === undefined) {
 			return undefined;
 		}
