@@ -6,7 +6,7 @@ minutes; every task starts from its named red test. Verification (gates,
 
 ## 1. Verify identity and the synced-function spec (#677)
 
-- [ ] 1.1 (~7m) `[design]` `chain-tip-mismatch` names the migration file
+- [x] 1.1 (~7m) `[design]` `chain-tip-mismatch` names the migration file
       and the snapshot path (#632). Red: `packages/cli/test/verify.test.ts`
       — "a tip mismatch names the last migration and the snapshot path"
       (the golden pins the new text; the message stays an observation,
@@ -16,7 +16,7 @@ minutes; every task starts from its named red test. Verification (gates,
       sentence shape, add the two names).
       Files: `packages/cli/src/commands/verify.ts`, test, skill sentence
       if a reference quotes the message.
-- [ ] 1.2 (~6m) `synced-function-declared` is specified and documented
+- [x] 1.2 (~6m) `synced-function-declared` is specified and documented
       (#658, function half). Red: `packages/core/test/engine/function-authority-refusal.test.ts`
       already exists — add the assertion that the message names the
       function and the way forward (delta scenario). Premise corrected
