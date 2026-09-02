@@ -136,6 +136,7 @@ export const INFER_CATALOG_QUERIES = {
 		join pg_namespace n on n.oid = c.relnamespace
 		join pg_attribute a on a.attrelid = c.oid
 		where c.relkind in ('r','p') and a.attnum > 0 and not a.attisdropped
+		order by schema, "table", a.attnum
 	`,
 	foreignKeyDetails: `
 		select n.nspname as schema, c.relname as "table", con.conname as name,
@@ -154,6 +155,7 @@ export const INFER_CATALOG_QUERIES = {
 		join pg_class tc on tc.oid = con.confrelid
 		join pg_namespace tn on tn.oid = tc.relnamespace
 		where con.contype = 'f'
+		order by schema, "table", name
 	`,
 	checkExpressions: `
 		select n.nspname as schema, c.relname as "table", con.conname as name,
@@ -162,6 +164,7 @@ export const INFER_CATALOG_QUERIES = {
 		join pg_class c on c.oid = con.conrelid
 		join pg_namespace n on n.oid = c.relnamespace
 		where con.contype = 'c'
+		order by schema, "table", name
 	`,
 	indexDetails: `
 		select n.nspname as schema, c.relname as "table", ic.relname as name,
@@ -191,6 +194,7 @@ export const INFER_CATALOG_QUERIES = {
 		join pg_class ic on ic.oid = ix.indexrelid
 		join pg_namespace n on n.oid = c.relnamespace
 		join pg_am am on am.oid = ic.relam
+		order by schema, "table", name
 	`,
 	enumLabels: `
 		select n.nspname as schema, t.typname as name, e.enumlabel as label,
@@ -198,6 +202,7 @@ export const INFER_CATALOG_QUERIES = {
 		from pg_enum e
 		join pg_type t on t.oid = e.enumtypid
 		join pg_namespace n on n.oid = t.typnamespace
+		order by schema, name, "sortOrder"
 	`,
 	sequenceOwnership: `
 		select sn.nspname as "sequenceSchema", seqc.relname as "sequenceName",
@@ -219,6 +224,7 @@ export const INFER_CATALOG_QUERIES = {
 			on a.attrelid = dep.refobjid and a.attnum = dep.refobjsubid
 		join pg_sequence seq on seq.seqrelid = seqc.oid
 		where seqc.relkind = 'S' and dep.refobjsubid > 0
+		order by schema, "table", "column"
 	`,
 } as const satisfies Readonly<Record<string, string>>;
 

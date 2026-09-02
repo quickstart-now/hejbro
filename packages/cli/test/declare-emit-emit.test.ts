@@ -20,18 +20,31 @@ const widgetsTable: TableSnapshot = {
 	primaryKeyName: "widgets_pkey",
 };
 
-const snapshotWith = (tables: ReadonlyArray<TableSnapshot>): Snapshot => ({
+type EnumFactLike = {
+	readonly schema: string;
+	readonly name: string;
+	readonly values: ReadonlyArray<string>;
+};
+
+const snapshotWith = (
+	tables: ReadonlyArray<TableSnapshot>,
+	enumFacts: ReadonlyArray<EnumFactLike> = [],
+): Snapshot => ({
 	formatVersion: 8,
 	dialect: "postgres",
-	objects: Object.fromEntries(
-		tables.map((table) => [`table:${table.schema}.${table.name}`, table]),
-	),
+	objects: Object.fromEntries([
+		...tables.map(
+			(table) => [`table:${table.schema}.${table.name}`, table] as const,
+		),
+		...enumFacts.map((row) => [`enum:${row.schema}.${row.name}`, row] as const),
+	]),
 });
 
 const resultFor = (
 	tables: ReadonlyArray<TableSnapshot>,
+	enumFacts: ReadonlyArray<EnumFactLike> = [],
 ): InferCatalogResult => ({
-	snapshot: snapshotWith(tables),
+	snapshot: snapshotWith(tables, enumFacts),
 	description: {
 		tables: tables.map((table) => ({
 			schema: table.schema,
@@ -586,5 +599,224 @@ describe("emitDeclarationFiles / 2.1", () => {
 				{ schema: "y", source: 'import { x } from "./x.schema";' },
 			]),
 		).toBe(true);
+	});
+
+	/**
+	 * D106 B1 (CI-D106-R2-02): this same direct assertion already covers an
+	 * enum crossing too (`importedSchemasFrom`'s own regex only ever reads
+	 * the target of a `from "./<schema>.schema"` import line, whatever
+	 * symbol it names) -- what was missing was a *fixture* exercising an
+	 * enum crossing at all, which is exactly evaluation.md's own repro:
+	 * `app.users.kind` types against `audit.event_kind` (enum, app ->
+	 * audit), `audit.logs.user_id` references `app.users` (FK, audit ->
+	 * app).
+	 */
+	it('never emits a set of files whose imports form a cycle, when the cycle is closed by an enum reference rather than (or alongside) a foreign key (D106 B1, cli-commands: "Declaration files never import each other in a cycle")', () => {
+		const usersTable: TableSnapshot = {
+			schema: "app",
+			name: "users",
+			columns: [
+				{
+					name: "id",
+					typeNode: { typeName: "uuid" },
+					notNull: true,
+					primaryKey: true,
+				},
+				{
+					name: "kind",
+					typeNode: {
+						typeName: "enum",
+						enumSchema: "audit",
+						enumName: "event_kind",
+					},
+					notNull: true,
+				},
+			],
+			indexes: [],
+			foreignKeys: [],
+			primaryKeyName: "users_pkey",
+		};
+		const logsTable: TableSnapshot = {
+			schema: "audit",
+			name: "logs",
+			columns: [
+				{
+					name: "id",
+					typeNode: { typeName: "uuid" },
+					notNull: true,
+					primaryKey: true,
+				},
+				{ name: "user_id", typeNode: { typeName: "uuid" }, notNull: true },
+			],
+			indexes: [],
+			foreignKeys: [
+				{
+					name: "logs_user_id_fkey",
+					columns: ["user_id"],
+					referencesTable: "app.users",
+					referencesColumns: ["id"],
+				},
+			],
+			primaryKeyName: "logs_pkey",
+		};
+		const eventKind = {
+			schema: "audit",
+			name: "event_kind",
+			values: ["created", "updated"],
+		};
+
+		const files = emitDeclarationFiles(
+			resultFor([usersTable, logsTable], [eventKind]),
+		);
+		expect(hasImportCycle(files)).toBe(false);
+
+		const appFile = files.find((file) => file.schema === "app");
+		const auditFile = files.find((file) => file.schema === "audit");
+		if (appFile === undefined || auditFile === undefined) {
+			throw new Error("expected one file per schema");
+		}
+		// candidate B+A (lead verdict): the FK crossing (audit -> app) is
+		// preferred as the cut, so app's own enum reference keeps a real
+		// import and audit's own FK reference goes through a handle.
+		expect(appFile.source).toContain(
+			'import { eventKind } from "./audit.schema";',
+		);
+		expect(appFile.source).not.toContain("pgEnum(schema(");
+		expect(auditFile.source).not.toContain('from "./app.schema"');
+		expect(auditFile.source).toContain('existingTable("app", "users"');
+	});
+
+	it("picks the same edge to cut for an enum-crossing cycle regardless of catalog row order (D106 B1's own determinism condition)", () => {
+		const usersTable: TableSnapshot = {
+			schema: "app",
+			name: "users",
+			columns: [
+				{
+					name: "id",
+					typeNode: { typeName: "uuid" },
+					notNull: true,
+					primaryKey: true,
+				},
+				{
+					name: "kind",
+					typeNode: {
+						typeName: "enum",
+						enumSchema: "audit",
+						enumName: "event_kind",
+					},
+					notNull: true,
+				},
+			],
+			indexes: [],
+			foreignKeys: [],
+			primaryKeyName: "users_pkey",
+		};
+		const logsTable: TableSnapshot = {
+			schema: "audit",
+			name: "logs",
+			columns: [
+				{
+					name: "id",
+					typeNode: { typeName: "uuid" },
+					notNull: true,
+					primaryKey: true,
+				},
+				{ name: "user_id", typeNode: { typeName: "uuid" }, notNull: true },
+			],
+			indexes: [],
+			foreignKeys: [
+				{
+					name: "logs_user_id_fkey",
+					columns: ["user_id"],
+					referencesTable: "app.users",
+					referencesColumns: ["id"],
+				},
+			],
+			primaryKeyName: "logs_pkey",
+		};
+		const eventKind = {
+			schema: "audit",
+			name: "event_kind",
+			values: ["created", "updated"],
+		};
+
+		const forward = emitDeclarationFiles(
+			resultFor([usersTable, logsTable], [eventKind]),
+		);
+		const reversed = emitDeclarationFiles(
+			resultFor([logsTable, usersTable], [eventKind]),
+		);
+		expect(forward).toEqual(reversed);
+	});
+
+	it("carries a one-line constraint comment at the enum clone's own cut site, mirroring the FK handle's own comment (D106 B1)", () => {
+		const appA: TableSnapshot = {
+			schema: "app",
+			name: "a",
+			columns: [
+				{
+					name: "id",
+					typeNode: { typeName: "uuid" },
+					notNull: true,
+					primaryKey: true,
+				},
+				{
+					name: "kind",
+					typeNode: {
+						typeName: "enum",
+						enumSchema: "audit",
+						enumName: "status",
+					},
+					notNull: true,
+				},
+			],
+			indexes: [],
+			foreignKeys: [],
+			primaryKeyName: "a_pkey",
+		};
+		const auditB: TableSnapshot = {
+			schema: "audit",
+			name: "b",
+			columns: [
+				{
+					name: "id",
+					typeNode: { typeName: "uuid" },
+					notNull: true,
+					primaryKey: true,
+				},
+				{
+					name: "other_kind",
+					typeNode: {
+						typeName: "enum",
+						enumSchema: "app",
+						enumName: "category",
+					},
+					notNull: true,
+				},
+			],
+			indexes: [],
+			foreignKeys: [],
+			primaryKeyName: "b_pkey",
+		};
+		const enumFacts = [
+			{ schema: "audit", name: "status", values: ["created", "updated"] },
+			{ schema: "app", name: "category", values: ["x", "y"] },
+		];
+
+		const files = emitDeclarationFiles(resultFor([appA, auditB], enumFacts));
+		const withClone = files.find((file) =>
+			file.source.includes("pgEnum(schema("),
+		);
+		if (withClone === undefined) {
+			throw new Error("expected exactly one file to carry an enum clone");
+		}
+		expect(withClone.source).toContain(
+			"// Closes a declaration-file cycle -- importing the other file's own enum would close it the other way, so this column types against a local, unexported clone instead.",
+		);
+		const commentLine = withClone.source
+			.split("\n")
+			.findIndex((line) => line.includes("Closes a declaration-file cycle"));
+		const nextLine = withClone.source.split("\n")[commentLine + 1] ?? "";
+		expect(nextLine).toContain("pgEnum(schema(");
 	});
 });

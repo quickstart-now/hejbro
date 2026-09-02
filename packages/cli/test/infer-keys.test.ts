@@ -39,6 +39,29 @@ describe("inferColumnKeys / 1.1 collisions", () => {
 	});
 });
 
+describe("inferColumnKeys / D106 N2: the bare key goes to the round-trippable name, not whichever name happens to sort first physically", () => {
+	it("leaves the bare key on user_id when it comes first physically (control -- unchanged from before D106)", () => {
+		expect(inferColumnKeys(["user_id", "USER_ID"])).toEqual([
+			"userId",
+			"userId2",
+		]);
+	});
+
+	it("still leaves the bare key on user_id when it comes SECOND physically -- the exotic quoted sibling never costs it its own key", () => {
+		expect(inferColumnKeys(["USER_ID", "user_id"])).toEqual([
+			"userId2",
+			"userId",
+		]);
+	});
+
+	it("falls back to physical order only when neither colliding name round-trips at all", () => {
+		expect(inferColumnKeys(["User-Id", "user__id"])).toEqual([
+			"userId",
+			"userId2",
+		]);
+	});
+});
+
 describe("resolveIdentifierKeys / 2.1 (Q2, CI-G2-R1-06): the same casing+collision rule, seeded with reserved names", () => {
 	it("behaves exactly like inferColumnKeys when nothing is reserved", () => {
 		expect(resolveIdentifierKeys(["user_id", "USER_ID"])).toEqual(

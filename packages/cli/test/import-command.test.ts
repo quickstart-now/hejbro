@@ -210,6 +210,41 @@ describe("runImport / 3.1", () => {
 		expect(existsSync(join(cwd, "src/schema/billing.schema.ts"))).toBe(false);
 	});
 
+	/**
+	 * D106 N6: `safeFileBaseName` (`declare-emit/emit.ts`) folds every
+	 * character outside `[A-Za-z0-9_-]` to `_`, so schemas `"a.b"` and
+	 * `"a b"` both become `a_b` -- without a check across the *planned*
+	 * files themselves (not just against disk), the second write would
+	 * silently overwrite the first, and stdout would print `created ...`
+	 * twice for the same path.
+	 */
+	it("refuses before writing anything when two schemas' starter files would collide on the same path", async () => {
+		const result = resultFor([
+			table("a.b", "widgets", [idColumn]),
+			table("a b", "gadgets", [idColumn]),
+		]);
+
+		const outcome = await runImport(
+			cwd,
+			[
+				"--url",
+				"postgres://fixture",
+				"--schema",
+				"a.b",
+				"--schema",
+				"a b",
+				"--out",
+				"src/schema",
+			],
+			depsFor(result),
+		);
+
+		expect(outcome.exitCode).toBe(1);
+		expect(outcome.stderr).toContain("import-destination-collision");
+		expect(outcome.stderr).toContain("a_b.schema.ts");
+		expect(existsSync(join(cwd, "src/schema"))).toBe(false);
+	});
+
 	it("fails when the destination cannot be written, and writes nothing", async () => {
 		// `--out` names a path segment that is already a plain file, not a
 		// directory, so `mkdir` itself fails (ENOTDIR) before any file is
@@ -286,5 +321,35 @@ describe("runImport / 3.1", () => {
 		expect(outcome.stderr).toContain("import-nothing-to-infer");
 		expect(outcome.stderr).toContain("empty_schema");
 		expect(existsSync(join(cwd, "src/schema"))).toBe(false);
+	});
+
+	/**
+	 * D106 N7: when only *some* named schemas hold nothing, `import` wrote
+	 * a file for the ones that did and said nothing at all about the ones
+	 * that didn't -- no file, no diagnostic, no loss-report line. Only the
+	 * all-empty case (above) was ever announced.
+	 */
+	it("writes a file for the schema that has something and names the one that doesn't, rather than staying silent about it", async () => {
+		const outcome = await runImport(
+			cwd,
+			[
+				"--url",
+				"postgres://fixture",
+				"--schema",
+				"app",
+				"--schema",
+				"billing",
+				"--out",
+				"src/schema",
+			],
+			depsFor(resultFor([table("app", "widgets", [idColumn])])),
+		);
+
+		expect(outcome.exitCode).toBe(0);
+		expect(existsSync(join(cwd, "src/schema/app.schema.ts"))).toBe(true);
+		expect(existsSync(join(cwd, "src/schema/billing.schema.ts"))).toBe(false);
+		expect(outcome.stdout).toContain(
+			'Not inferred: nothing to infer in schema "billing".',
+		);
 	});
 });

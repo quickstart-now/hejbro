@@ -95,12 +95,13 @@ export type ExtensionRow = z.infer<typeof extensionRow>;
  * assert against the exact text sent to the driver.
  */
 export const CHECK_CATALOG_QUERIES = {
-	schemas: `select nspname as schema from pg_namespace`,
+	schemas: `select nspname as schema from pg_namespace order by schema`,
 	tables: `
 		select n.nspname as schema, c.relname as "table", c.relrowsecurity as rls
 		from pg_class c
 		join pg_namespace n on n.oid = c.relnamespace
 		where c.relkind in ('r','p')
+		order by schema, "table"
 	`,
 	columns: `
 		select n.nspname as schema, c.relname as "table", a.attname as name,
@@ -119,6 +120,7 @@ export const CHECK_CATALOG_QUERIES = {
 		left join pg_namespace btn on btn.oid = bt.typnamespace
 		left join pg_attrdef ad on ad.adrelid = a.attrelid and ad.adnum = a.attnum
 		where c.relkind in ('r','p') and a.attnum > 0 and not a.attisdropped
+		order by schema, "table", a.attnum
 	`,
 	constraints: `
 		select n.nspname as schema, c.relname as "table", con.conname as name,
@@ -133,6 +135,7 @@ export const CHECK_CATALOG_QUERIES = {
 		join pg_class c on c.oid = con.conrelid
 		join pg_namespace n on n.oid = c.relnamespace
 		where con.contype in ('p','u','f','c')
+		order by schema, "table", name
 	`,
 	indexes: `
 		select n.nspname as schema, c.relname as "table", ic.relname as name
@@ -140,33 +143,39 @@ export const CHECK_CATALOG_QUERIES = {
 		join pg_class c on c.oid = ix.indrelid
 		join pg_class ic on ic.oid = ix.indexrelid
 		join pg_namespace n on n.oid = c.relnamespace
+		order by schema, "table", name
 	`,
 	enums: `
 		select n.nspname as schema, t.typname as name
 		from pg_type t
 		join pg_namespace n on n.oid = t.typnamespace
 		where t.typtype = 'e'
+		order by schema, name
 	`,
 	sequences: `
 		select n.nspname as schema, c.relname as name
 		from pg_class c
 		join pg_namespace n on n.oid = c.relnamespace
 		where c.relkind = 'S'
+		order by schema, name
 	`,
 	functions: `
 		select n.nspname as schema, p.proname as name
 		from pg_proc p
 		join pg_namespace n on n.oid = p.pronamespace
+		order by schema, name
 	`,
 	views: `
 		select n.nspname as schema, c.relname as name
 		from pg_class c
 		join pg_namespace n on n.oid = c.relnamespace
 		where c.relkind in ('v','m')
+		order by schema, name
 	`,
 	policies: `
 		select schemaname as schema, tablename as "table", policyname as name
 		from pg_policies
+		order by schema, "table", name
 	`,
 	triggers: `
 		select n.nspname as schema, c.relname as "table", t.tgname as name
@@ -174,6 +183,7 @@ export const CHECK_CATALOG_QUERIES = {
 		join pg_class c on c.oid = t.tgrelid
 		join pg_namespace n on n.oid = c.relnamespace
 		where not t.tgisinternal
+		order by schema, "table", name
 	`,
 	// Not information_schema.role_table_grants (1.4): that view shows only
 	// the grants the connected role is party to (grantor/grantee/
@@ -192,6 +202,7 @@ export const CHECK_CATALOG_QUERIES = {
 		join pg_namespace n on n.oid = c.relnamespace
 		cross join lateral aclexplode(coalesce(c.relacl, acldefault('r', c.relowner))) as g
 		where c.relkind in ('r','p')
+		order by schema, "table", role, privilege
 	`,
 	schemaUsageGrants: `
 		select n.nspname as schema,
@@ -199,6 +210,7 @@ export const CHECK_CATALOG_QUERIES = {
 			g.privilege_type as privilege
 		from pg_namespace n
 		cross join lateral aclexplode(n.nspacl) as g
+		order by schema, role, privilege
 	`,
 	defaultTableGrants: `
 		select n.nspname as schema,
@@ -208,11 +220,12 @@ export const CHECK_CATALOG_QUERIES = {
 		join pg_namespace n on n.oid = d.defaclnamespace
 		cross join lateral aclexplode(d.defaclacl) as g
 		where d.defaclobjtype = 'r'
+		order by schema, role, privilege
 	`,
 	// pg_extension is ordinary catalog metadata (like pg_class/pg_namespace)
 	// -- globally readable, no aclexplode needed, role-independent the same
 	// way table/column existence already is (1.4's rule).
-	extensions: `select extname as name from pg_extension`,
+	extensions: `select extname as name from pg_extension order by name`,
 } as const satisfies Readonly<Record<string, string>>;
 
 export type Catalog = {

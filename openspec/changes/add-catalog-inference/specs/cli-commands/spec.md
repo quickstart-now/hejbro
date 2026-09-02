@@ -23,8 +23,11 @@ snake_case — SHALL be omitted from the starter files and named in the
 loss report together with its consequence: the table is only partly
 declared, and `check` reports that column until it is declared by hand
 or renamed in the database. The starter files' imports SHALL never form
-a cycle: where they would, the foreign keys in one direction are
-declared against unexported reference-only handles. Each file SHALL
+a cycle — and a reference to another file's enum counts as an import,
+exactly as a foreign key to another file's table does: where a cycle
+would form, the crossings in one direction are declared against
+unexported reference-only declarations, a handle for a table and a
+local copy of the enum for an enum. Each file SHALL
 open with a header carrying
 the loss report in full and the statement that the file is the
 repository's own from now on, and SHALL carry no clock- or
@@ -34,13 +37,14 @@ byte-identical files. A `generate` against an empty snapshot after an
 which `baseline` then registers.
 
 #### Scenario: Declaration files never import each other in a cycle
-- **WHEN** two schemas' files would reference each other, so their
-  imports would form a cycle
-- **THEN** the foreign keys in one of the two directions are declared
-  against reference-only handles that are not exported, whatever their
-  columns and actions, so the files' imports form no cycle, no table is
-  declared twice, and loading does not depend on which file the loader
-  reaches first
+- **WHEN** two schemas' files would reference each other — by foreign
+  key, by a column typed with the other file's enum, or one of each —
+  so their imports would form a cycle
+- **THEN** the crossings in one of the two directions are declared
+  against reference-only declarations that are not exported, whatever
+  their columns and actions: a handle for a table, a local copy for an
+  enum, so the files' imports form no cycle, nothing is declared twice,
+  and loading does not depend on which file the loader reaches first
 
 #### Scenario: A second import writes the same bytes
 - **WHEN** the same database is imported twice, into two empty
