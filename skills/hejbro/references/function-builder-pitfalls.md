@@ -65,6 +65,11 @@ recorded via `ctx.if`, not evaluated in JS.
   | the trigger sentinel (`defineTrigger`) | a trigger row (`new`/`old`) | `return new;` |
   | a scalar `TypeNode` | an expression — a column ref, an argument ref, a `` sql`…` `` fragment | `return <expr>;` |
 
+  A `.returning({...})`-final mutation — a projected `RETURNING`, not
+  just the bare no-arg form — is accepted the same way (#634); the
+  rendered `return query ...` carries exactly that projection's
+  `RETURNING` list, never the full row.
+
   Passing the wrong shape fails at declaration time with a named error
   (`scalar-return-expects-expression`,
   `scalar-return-in-non-scalar-function`), and a scalar-returning body

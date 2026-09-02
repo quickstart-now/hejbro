@@ -95,8 +95,13 @@ declaring the same column through both fails at declaration time:
 **Column-level**: `ownerId: uuid().notNull().references(() => users.id)`
 — one declaration feeds both the generated DDL and the query layer's
 relation types. The target must share the column's type family, and the
-thunk defers evaluation (import-order safety). It cannot express a
-referential action — no `onDelete`, no `onUpdate` (#514). A column that
+thunk defers evaluation (import-order safety, #669): it never runs
+inside `table()` itself, only on the declaration's first `foreignKeys`
+read, so two declaration files (or two tables in one file) that
+`.references()` each other resolve regardless of which one loads or is
+declared first — including a genuine circular import between two schema
+files. It cannot express a referential action — no `onDelete`, no
+`onUpdate` (#514). A column that
 needs one uses the `extras.foreignKeys` form **only** — declaring the
 same column through both fails at declaration time
 (`invalid-duplicate-foreign-key`: the constraint would emit twice), so

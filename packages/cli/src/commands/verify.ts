@@ -46,12 +46,19 @@ const VERIFY_DESCRIPTION =
  * `chain-tip-mismatch` texts, and the `diverged-migrations`/
  * `broken-chain` `Next:` lines below (verify's own framing of
  * `checkChain`'s codes). See `test/verify.test.ts` for the golden pins.
+ * `chain-tip-mismatch` was revised (#632/#677): it now names the tip
+ * migration and the snapshot path instead of relying on the
+ * identity-extraction heuristic to find a filename that was never in the
+ * text, and states only the observation, never a cause.
  */
 const snapshotStaleMessage = (snapshotPath: string): string =>
 	`the checked-in snapshot at "${snapshotPath}" does not match your declarations — either the declarations changed without a new migration, or the snapshot file was hand-edited. Next: run \`hejbro generate\` and commit the result (or, if the snapshot is correct and the declarations are wrong, restore the declarations you meant).`;
 
-const CHAIN_TIP_MISMATCH_MESSAGE =
-	"the migration chain's tip hash doesn't match the current snapshot — the last migration's \"snapshot:\" hash and the on-disk snapshot's own hash disagree, which means the snapshot or the last migration file was edited after the last `hejbro generate`. Next: restore the snapshot (and the last migration file, if it was edited) from version control — the snapshot is a derived file and should only ever change through `hejbro generate`.";
+const chainTipMismatchMessage = (
+	tipMigrationPath: string,
+	snapshotPath: string,
+): string =>
+	`the migration chain's tip hash doesn't match the current snapshot — "${tipMigrationPath}"'s "snapshot:" hash and the snapshot at "${snapshotPath}" disagree. Next: restore the snapshot (and "${tipMigrationPath}", if it was edited) from version control — the snapshot is a derived file and should only ever change through \`hejbro generate\`.`;
 
 /** States only the observation, never a cause (schema-export spec, R2-G3
  * 3.2): the export could be stale for any number of reasons (an edited
@@ -489,6 +496,12 @@ const runCheckDuplicateVersion = (
 
 type Check3Result = {
 	readonly report: ChainReport;
+	/** The last hash-bearing entry (directory order), for check 4's
+	 * chain-tip-mismatch identity — `null` for an empty chain. Carried
+	 * alongside `report` rather than re-derived from `report.tip` (a bare
+	 * hash) so check 4 never has to reconstruct "which file is the tip"
+	 * from a hash string alone. */
+	readonly tipEntry: ChainEntry | null;
 	readonly outcome: CheckOutcome;
 };
 
@@ -503,10 +516,13 @@ const runCheck3 = (
 	migrationsDir: string,
 	fileNames: ReadonlyArray<string>,
 ): Check3Result => {
-	const report = checkChain(readChainEntries(migrationsDirPath, fileNames));
+	const entries = readChainEntries(migrationsDirPath, fileNames);
+	const report = checkChain(entries);
+	const tipEntry = entries.at(-1) ?? null;
 	if (!report.ok) {
 		return {
 			report,
+			tipEntry,
 			outcome: {
 				ok: false,
 				error: hejbroError(
@@ -516,7 +532,7 @@ const runCheck3 = (
 			},
 		};
 	}
-	return { report, outcome: { ok: true } };
+	return { report, tipEntry, outcome: { ok: true } };
 };
 
 /** `null` when the duplicate-version check failed (chain order is undefined until every version is unique); otherwise runs check 3. */
@@ -532,17 +548,28 @@ const runCheck3IfEligible = (
 	return runCheck3(migrationsDirPath, migrationsDir, fileNames);
 };
 
-/** Check 4 (runs only when checks 1 and 3 both passed): the chain tip hash equals the on-disk snapshot's normalized hash (same normalization `generate` uses for `parent`). Trivially passes when there are no migrations yet (tip is null — nothing to compare). */
-const runCheck4 = (diskText: string, tip: string | null): CheckOutcome => {
-	if (tip === null) {
+/** Check 4 (runs only when checks 1 and 3 both passed): the chain tip hash equals the on-disk snapshot's normalized hash (same normalization `generate` uses for `parent`). Trivially passes when there are no migrations yet (`tipEntry` is null — nothing to compare). `migrationsDir` is config-relative, matching every other check's suggestion text. */
+const runCheck4 = (
+	diskText: string,
+	snapshotPath: string,
+	migrationsDir: string,
+	tipEntry: ChainEntry | null,
+): CheckOutcome => {
+	if (tipEntry === null) {
 		return { ok: true };
 	}
-	if (tip === normalizedSnapshotHash(diskText)) {
+	if (tipEntry.current === normalizedSnapshotHash(diskText)) {
 		return { ok: true };
 	}
 	return {
 		ok: false,
-		error: hejbroError("chain-tip-mismatch", CHAIN_TIP_MISMATCH_MESSAGE),
+		error: hejbroError(
+			"chain-tip-mismatch",
+			chainTipMismatchMessage(
+				migrationPath(migrationsDir, tipEntry.fileName),
+				snapshotPath,
+			),
+		),
 	};
 };
 
@@ -559,15 +586,22 @@ const runCheck2IfEligible = (
 	return runCheck2(declarations, check1DiskText, snapshotPath, registry);
 };
 
-/** `null` when check 1 failed, check 3 was itself skipped (duplicate-version failed), or check 3 ran but failed (check 4 needs a parseable snapshot and a linear chain); otherwise runs check 4. */
+/** `null` when check 1 failed, check 3 was itself skipped (duplicate-version failed), or check 3 ran but failed (check 4 needs a parseable snapshot and a linear chain); otherwise runs check 4. `snapshotPath`/`migrationsDir` are both config-relative, passed through for {@link chainTipMismatchMessage}. */
 const runCheck4IfEligible = (
 	check1DiskText: string | null,
+	snapshotPath: string,
+	migrationsDir: string,
 	check3: Check3Result | null,
 ): CheckOutcome | null => {
 	if (check1DiskText === null || check3 === null || !check3.report.ok) {
 		return null;
 	}
-	return runCheck4(check1DiskText, check3.report.tip);
+	return runCheck4(
+		check1DiskText,
+		snapshotPath,
+		migrationsDir,
+		check3.tipEntry,
+	);
 };
 
 /**
@@ -726,7 +760,12 @@ export const runVerify = async (
 			config.snapshotPath,
 			registry,
 		);
-		const check4 = runCheck4IfEligible(check1.diskText, check3);
+		const check4 = runCheck4IfEligible(
+			check1.diskText,
+			config.snapshotPath,
+			config.migrationsDir,
+			check3,
+		);
 		const exportCheck = runExportCheck(
 			cwd,
 			check1.diskText,
