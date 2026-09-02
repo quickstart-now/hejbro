@@ -81,10 +81,18 @@ same `assertBuiltCli` dist-freshness guard (`packages/cli/test/loader-cycle.test
 - **Tasks are sized and test-bound** (D88). `tasks.md` top-level groups
   are parallel-safe slices (no file overlap between groups). A task is
   estimated in pure work minutes (over 10 → split; 5 or under → merge),
-  names the failing test it starts from, and tasks that settle a contract
+  names the failing test it starts from — with inputs as wide as the
+  scenario's sentence: a universal claim starts from an input table, not
+  one example (D110) — and tasks that settle a contract
   detail (signature, error shape, key order, output format, SQL text) are
   marked `[design]` — their open decisions are settled with the owner
   before code. Verification is the definition of done, never a task.
+  A change whose input comes from outside hejbro's own output (a catalog
+  reading, a parsed file, a vendored artifact) has its piece reviewed
+  before merge by a context-free input constructor — delta scenarios and
+  public surface only, concrete inputs run, never the implementer's
+  reasoning — in place of the piece reviewer (D110); D106 stays the
+  archive gate.
   Durations land in `openspec/task-times.csv` when a group completes.
 - **Core purity is load-bearing.** If a change needs I/O in `@hejbro/core`,
   the design is being violated — stop and reconsider. Rule:
