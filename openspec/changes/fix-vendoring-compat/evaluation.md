@@ -225,3 +225,70 @@ Aug 29 against a `src` dated Sep 2; the same declarations pass through
 `generateMigration` from source. A build was deliberately not run (another
 team holds the gate slot), so those scenarios' compile claims were
 re-observed with the out-of-tree `tsc` runs above instead.
+
+## Round 1 disposition
+
+All five non-blocking findings are addressed on `fix-vendoring-d106-r1`
+(`2ca69702` docs, `157f75e2` tests). No shipped behavior changed: every
+fix either adds an observer the repository was missing or states a scope
+the delta had left implicit.
+
+**N1 — scope stated, the DDL gap left where it belongs.** "Every emitted
+key compiles" now says in the delta that it covers the emitted contract
+only, that the DDL side renders such an argument name unquoted, and that
+a declaration carrying one still produces invalid migration SQL. The
+`examples/cli-smoke` fixture's `my-arg` declaration carries a
+constraint-only comment pointing at #679, which the lead filed with the
+measured SQL. The requirement is not widened here: closing the gap means
+refusing a declaration shape, which is #679's decision to make.
+
+**N2 — the column half now reaches a real compiler.** The observer enters
+through the emitter's *other* input contract rather than the DSL, which
+D36 makes structurally incapable of producing such a key: the smoke test
+patches the `.hejbro/export/schema.json` table-fact column keys
+(`user-id`, `1st`, `class`, `a"b`) before `git commit` → `link` →
+`vendor`, then compiles the emitted contract with a real `tsc --noEmit
+--strict`. That is the path the scenario's WHEN already names ("an export
+whose table fact carries such a column key is read"), and a hand-edited
+`schema.json` is a real artifact — the reader validates `key` as
+`z.string()`, with no shape check.
+
+**N3 — the runtime clause is pinned.** A vendored `fn` called with a
+**pre-built** value (not a fresh object literal, so no excess-property
+check applies) carrying an undeclared property is refused with
+`function-argument-count-mismatch`, and the test asserts the driver's
+`execute` was never called — the "before any SQL is sent" half, which a
+rejection-code assertion alone would not prove.
+
+**N4 — prose restored rather than the branch pinned.** The scenario title
+"(unobservable until a second format exists)" is kept, and the
+requirement carries again the justification it had lost, now separating
+the two skew axes: the format-**number** axis stays structural (the
+description format has only ever been 1, so no export declaring a lower
+number was ever written, and the suite pins only the refusal side), while
+the **shape** axis is observed. Pinning was rejected on substance, not
+cost. First, a `descriptionFormat: 0` fixture would be a fabricated
+artifact, and this change's own discipline is that a compatibility
+promise is proven only by a genuine old-shape artifact — the pre-#587
+`schema.json` fixture was hand-written from `git show 518dcdde:…` for
+exactly that reason. Second, a pin would make the title's parenthetical
+false, and a MODIFIED delta cannot rename a scenario (renaming is
+REMOVED + ADDED), so it would trade one mismatch for another this change
+could not repair.
+
+**N5 — the upgrade path is documented.**
+`skills/hejbro/references/polyrepo.md` now says that after upgrading
+`hejbro` a consumer re-runs `vendor` to re-emit, because `vendor --check`
+compares recorded hashes and never re-emits, so a contract these fixes
+would change keeps reporting "up to date".
+
+**Observer status.** N3 and the delta/doc edits are green here
+(`packages/query/test/client/functions.test.ts`, targeted runs;
+`openspec validate --strict` valid, `show --diff` zero warnings, and both
+MODIFIED requirements still classify as MODIFIED after the prose edits).
+N2's observer **depends on built `dist`** — it spawns the built CLI. It
+passed in this worktree against the `dist` the group's own slot build
+produced, with no rebuild attempted (the team held no gate slot), and the
+reviewer's `TypeError: handler is not a function` did not reproduce. Its
+authoritative green is the lead's closing gate, which runs `build --force`
+before the full suite.
