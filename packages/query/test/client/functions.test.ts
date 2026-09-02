@@ -180,16 +180,30 @@ describe("a function export name equal to a table's SQL name (#587/G3)", () => {
 });
 
 /**
- * The recursion's own observer (#587/G3, requested after the first
- * collision test's mutant came back vacuous for a single-attempt
- * fallback -- see `buildFunctionKeyMap`'s own doc comment): a function
- * whose export name collides with a table's SQL name, where the
- * *first* fallback candidate (`buildFunctionKeyMap`'s own suffix
- * convention) is ALSO occupied, by a second, unrelated table. Assigning
- * the function's internal key correctly requires trying a second
- * candidate, not stopping after one fallback attempt -- the single
- * scenario the earlier "posts"-only fixture could never exercise
- * (there was nothing occupying its first fallback candidate).
+ * The recursion's own observer (#587/G3): a table-returning function's
+ * own `findTable` lookup (`db/fn.ts`) searches the merged schema record
+ * by VALUE (schema+name identity), not by key -- so a table silently
+ * evicted from that record by a colliding function key is genuinely
+ * undetectable through a scalar-returning collision (a select/insert/
+ * update/delete chain never looks the table up by name at all, and a
+ * scalar function's own SQL never references a target table either --
+ * both bypass the merged record's own key integrity entirely, which is
+ * exactly why the first collision test above, built with a scalar
+ * function, came back vacuous against both a no-avoidance and a
+ * single-attempt-fallback mutant). A table-returning function makes the
+ * eviction observable: `function-target-table-undeclared` fires the
+ * moment its own target table's value is missing from the record.
+ *
+ * Two tables, two functions, so this observes BOTH failure shapes a
+ * broken avoidance strategy can take, not just one:
+ * - `posts` / `posts#1` -- `posts#1` is exactly the first fallback
+ *   candidate `buildFunctionKeyMap`'s own suffix convention would try
+ *   for a "posts"-exported function colliding with the `posts` table.
+ * - function A, exported "posts", returns `setof posts` -- collides
+ *   with the `posts` table directly (attempt 0).
+ * - function B, exported "postsAlt", returns `setof posts#1`'s table
+ *   (SQL name "posts_alt") -- never collides with anything itself, but
+ *   sits exactly where A's own first fallback attempt would land.
  */
 describe("recursive collision avoidance beyond one fallback attempt (#587/G3)", () => {
 	const DoubleCollidingMetadata: ContractMetadata = {
@@ -210,13 +224,10 @@ describe("recursive collision avoidance beyond one fallback attempt (#587/G3)", 
 				},
 				foreignKeys: [],
 			},
-			// Occupies the first fallback candidate `buildFunctionKeyMap`
-			// would try for the colliding "posts" export -- a synthetic key
-			// (an SQL identifier could never literally read this way), on
-			// purpose: this fixture exists to exercise the abstract
-			// collision-avoidance mechanism itself, the same reasoning the
-			// `buildFunctionKeyMap` doc comment already gives for why the
-			// occupied set keeps growing across assignments.
+			// A synthetic key (an SQL identifier could never literally read
+			// this way), on purpose: occupies exactly the first fallback
+			// candidate `buildFunctionKeyMap`'s own suffix convention would
+			// try for the colliding "posts" export.
 			"posts#1": {
 				schema: "app",
 				name: "posts_alt",
@@ -234,13 +245,15 @@ describe("recursive collision avoidance beyond one fallback attempt (#587/G3)", 
 		functions: {
 			posts: {
 				schema: "app",
-				name: "count_posts",
+				name: "posts_page",
 				args: [],
-				returns: {
-					kind: "scalar",
-					typeNode: { typeName: "bigint" },
-					mode: "bigint",
-				},
+				returns: { kind: "table", schema: "app", name: "posts" },
+			},
+			postsAlt: {
+				schema: "app",
+				name: "posts_alt_page",
+				args: [],
+				returns: { kind: "table", schema: "app", name: "posts_alt" },
 			},
 		},
 	};
@@ -261,32 +274,35 @@ describe("recursive collision avoidance beyond one fallback attempt (#587/G3)", 
 		readonly Functions: {
 			readonly posts: {
 				readonly Args: Record<string, never>;
-				readonly Returns: bigint;
+				readonly Returns: ReadonlyArray<{ readonly id: string }>;
+			};
+			readonly postsAlt: {
+				readonly Args: Record<string, never>;
+				readonly Returns: ReadonlyArray<{ readonly id: string }>;
 			};
 		};
 	};
 
-	it("both tables and the function all survive when the first fallback candidate is also occupied", async () => {
-		const { driver, topLevelSent } = recordingTransactionalDriver({
-			rows: [{ result: "5" }],
+	it("both tables and both functions survive when the first fallback candidate is also occupied", async () => {
+		const { driver } = recordingTransactionalDriver({
+			rows: [{ id: "11111111-1111-1111-1111-111111111111" }],
 		});
 		const client = createNameKeyedDb<DoubleCollidingDatabase>(
 			driver,
 			DoubleCollidingMetadata,
 		);
 
-		// `.compile()` renders SQL without executing (no row-conversion
-		// dependence on the canned response shape) -- proves both tables
-		// kept their own real declaration, independent of the function call
-		// below.
 		expect(client.posts.select().compile().sql).toContain('from "app"."posts"');
 		expect(client["posts#1"].select().compile().sql).toContain(
 			'from "app"."posts_alt"',
 		);
 
-		const value = await client.fn.posts({});
+		const postsPage = await client.fn.posts({});
+		const postsAltPage = await client.fn.postsAlt({});
 
-		expect(value).toBe(5n);
-		expect(topLevelSent[0]?.sql).toContain("count_posts");
+		expect(postsPage).toEqual([{ id: "11111111-1111-1111-1111-111111111111" }]);
+		expect(postsAltPage).toEqual([
+			{ id: "11111111-1111-1111-1111-111111111111" },
+		]);
 	});
 });

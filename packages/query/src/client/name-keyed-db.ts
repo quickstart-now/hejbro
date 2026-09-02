@@ -339,12 +339,8 @@ const buildFunctionKeyMap = (
  * (never what the public `fn` façade is keyed by; {@link buildFn} handles
  * that translation).
  *
- * The spread order (tables, then functions) is load-bearing, not
- * incidental — reversing it silently lets a function's own remapped key
- * overwrite a table's real declaration under a colliding slot instead of
- * the other way around (measured: swapping the order breaks
- * `client.fn` lookups outright, `"is not a function"`, in
- * `functions.test.ts`'s own collision fixture). Never reverse it.
+ * Tables are spread first so a colliding function key never evicts a
+ * table — never reverse this order.
  */
 const buildInternalSchema = (
 	tables: Readonly<Record<string, DeclaredTable>>,
