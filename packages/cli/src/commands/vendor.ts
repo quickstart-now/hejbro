@@ -12,6 +12,7 @@ import { resolveExport } from "../vendor/fetch";
 import { withGitDiagnostic } from "../vendor/git-diagnostic";
 import type { LockResolvedBy, VendorLock } from "../vendor/lock";
 import {
+	assertLockNamesACommit,
 	assertLockWritable,
 	lockResolvedBy,
 	readLock,
@@ -71,6 +72,7 @@ const requireVendoredLock = (cwd: string): VendorLock => {
 			"hejbro vendor --check has nothing to compare against: this repository has never been vendored. Next: run `hejbro vendor` first.",
 		);
 	}
+	assertLockNamesACommit(lock, "hejbro vendor --check");
 	return lock;
 };
 
@@ -128,6 +130,7 @@ const buildContractOrigin = (
 	fetched: { readonly commit: string },
 	schemaText: string,
 ): ContractOrigin => ({
+	source: "git",
 	commit: fetched.commit,
 	exportHash: sha256Hex(schemaText),
 });
@@ -202,6 +205,7 @@ const runVendorUpdate = (
 	writeFileSync(vendorSqlPath(cwd), fetched.sqlText);
 	writeFileSync(vendorContractPath(cwd), contractText);
 	writeLock(cwd, {
+		generatedBy: "hejbro vendor",
 		resolvedFrom: fetched.ref,
 		resolvedBy,
 		commit: fetched.commit,

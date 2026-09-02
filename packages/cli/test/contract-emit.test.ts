@@ -20,6 +20,7 @@ describe("the metadata's runtime name map (5.1 follow-up, planner-confirmed)", (
 		const posts = table(app, "posts", { postId });
 		const payload = buildFixturePayload([app, posts]);
 		const source = emitContract(payload, {
+			source: "git",
 			commit: "abc123",
 			exportHash: "sha256:deadbeef",
 		});
@@ -52,6 +53,7 @@ describe("the metadata's runtime name map (5.1 follow-up, planner-confirmed)", (
 		});
 		const payload = buildFixturePayload([app, authors, posts]);
 		const source = emitContract(payload, {
+			source: "git",
 			commit: "abc123",
 			exportHash: "sha256:deadbeef",
 		});
@@ -64,7 +66,11 @@ describe("the metadata's runtime name map (5.1 follow-up, planner-confirmed)", (
 	});
 });
 
-const ORIGIN = { commit: "abc123", exportHash: "sha256:deadbeef" };
+const ORIGIN = {
+	source: "git" as const,
+	commit: "abc123",
+	exportHash: "sha256:deadbeef",
+};
 
 describe("emitContract", () => {
 	it("two runs against one commit are byte-identical", () => {

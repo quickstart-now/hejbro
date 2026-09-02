@@ -20,7 +20,11 @@ const app = schema("app");
 const buildRealContractSource = (): string => {
 	const posts = table(app, "posts", { id: uuid().primaryKey() });
 	const payload = buildFixturePayload([app, posts]);
-	return emitContract(payload, { commit: "abc123", exportHash: "sha256:x" });
+	return emitContract(payload, {
+		source: "git" as const,
+		commit: "abc123",
+		exportHash: "sha256:x",
+	});
 };
 
 let cwd: string;

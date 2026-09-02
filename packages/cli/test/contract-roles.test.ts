@@ -6,7 +6,11 @@ import { buildFixturePayload } from "./support/contract-fixture";
 
 const app = schema("app");
 
-const ORIGIN = { commit: "abc123", exportHash: "sha256:deadbeef" };
+const ORIGIN = {
+	source: "git" as const,
+	commit: "abc123",
+	exportHash: "sha256:deadbeef",
+};
 
 /**
  * Role names travelling with the contract (5.8) is a **metadata**
