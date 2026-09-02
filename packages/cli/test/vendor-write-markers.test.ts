@@ -37,7 +37,7 @@ describe("assertContractDestinationWritable / pull-marked contract", () => {
 		writeFileSync(contractPath, priorContract);
 
 		expect(() =>
-			assertContractDestinationWritable(contractPath, false),
+			assertContractDestinationWritable(contractPath, false, "hejbro vendor"),
 		).not.toThrow();
 	});
 
@@ -45,7 +45,7 @@ describe("assertContractDestinationWritable / pull-marked contract", () => {
 		writeFileSync(contractPath, "// hand-written, not this tool's own\n");
 
 		expect(() =>
-			assertContractDestinationWritable(contractPath, false),
+			assertContractDestinationWritable(contractPath, false, "hejbro vendor"),
 		).toThrow(
 			expect.objectContaining({ code: "vendor-destination-not-vendored" }),
 		);

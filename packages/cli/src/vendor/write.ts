@@ -27,6 +27,23 @@ export const isVendorLockText = (text: string): boolean =>
 	text.includes(VENDOR_LOCK_MARKER) || text.includes(PULL_LOCK_MARKER);
 
 /**
+ * D106 R3-N2: `vendor` and `pull` share this guard, but only `vendor`
+ * has a `--force` flag to offer as the way past it -- `pull` parses no
+ * such flag and always calls with `force: false`, so a message naming
+ * `--force` to a `pull` caller names something that does nothing.
+ * `commandName` picks the remedy that actually applies to whichever
+ * command is asking, without changing the guard itself.
+ */
+export type DestinationWritableCommand = "hejbro vendor" | "hejbro pull";
+
+const destinationRemedy = (commandName: DestinationWritableCommand): string => {
+	if (commandName === "hejbro vendor") {
+		return "or pass --force if overwriting it is what you want";
+	}
+	return `then rerun \`${commandName}\``;
+};
+
+/**
  * Refuses to write over `lockPath` when it already exists and doesn't
  * carry this tool's own mark — naming the path and both ways forward,
  * per the delta's own text — unless `force` is given. Writing nothing
@@ -39,6 +56,7 @@ export const isVendorLockText = (text: string): boolean =>
 export const assertVendorDestinationWritable = (
 	lockPath: string,
 	force: boolean,
+	commandName: DestinationWritableCommand,
 ): void => {
 	if (!existsSync(lockPath) || force) {
 		return;
@@ -49,7 +67,7 @@ export const assertVendorDestinationWritable = (
 	}
 	throwHejbroError(
 		"vendor-destination-not-vendored",
-		`"${lockPath}" already exists and doesn't look like a file \`hejbro vendor\` wrote. Next: remove it, or pass --force if overwriting it is what you want.`,
+		`"${lockPath}" already exists and doesn't look like a file \`hejbro vendor\` wrote. Next: remove it, ${destinationRemedy(commandName)}.`,
 	);
 };
 
@@ -70,6 +88,7 @@ export const assertVendorDestinationWritable = (
 export const assertContractDestinationWritable = (
 	contractPath: string,
 	force: boolean,
+	commandName: DestinationWritableCommand,
 ): void => {
 	if (!existsSync(contractPath) || force) {
 		return;
@@ -83,6 +102,6 @@ export const assertContractDestinationWritable = (
 	}
 	throwHejbroError(
 		"vendor-destination-not-vendored",
-		`"${contractPath}" already exists and doesn't look like a file \`hejbro vendor\` wrote. Next: remove it, or pass --force if overwriting it is what you want.`,
+		`"${contractPath}" already exists and doesn't look like a file \`hejbro vendor\` wrote. Next: remove it, ${destinationRemedy(commandName)}.`,
 	);
 };

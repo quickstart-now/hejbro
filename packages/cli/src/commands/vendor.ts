@@ -183,7 +183,11 @@ const runVendorUpdate = (
 	// originally missed, before any network work -- the same "guard
 	// runs first" order the lock's own guard already follows in
 	// `runVendor` below.
-	assertContractDestinationWritable(vendorContractPath(cwd), force);
+	assertContractDestinationWritable(
+		vendorContractPath(cwd),
+		force,
+		"hejbro vendor",
+	);
 	const warnings: string[] = [];
 	warnIfNonDefaultRef(resolvedBy, (message: string) => warnings.push(message));
 	// Runs *after* `resolveExport` below succeeds, deliberately: that
@@ -269,7 +273,7 @@ export const runVendor = (
 		// (reading the linked source, reaching the network), the same
 		// order every destination file's own guard runs in this codebase.
 		const force = argv.includes("--force");
-		assertLockWritable(cwd, force);
+		assertLockWritable(cwd, force, "hejbro vendor");
 		const source = requireLinkedSource(cwd);
 		return runVendorUpdate(cwd, source, flagValue(argv, "--ref"), force);
 	} catch (error) {
