@@ -1238,6 +1238,34 @@ const compareForeignKeys = (
 	return 0;
 };
 
+/**
+ * The declaration's `foreignKeys` getter body (#669): folds column-level
+ * `.references()` thunks on first read, memoized after -- never during
+ * `table()` itself, so a reference into a file the loader hasn't reached
+ * yet (or a not-yet-initialized same-file binding) only needs to be
+ * resolvable by the time something first asks for this table's foreign
+ * keys, not by the time this table is declared. Lives outside `table()`
+ * so its branch does not count against that function's CRAP budget.
+ */
+const memoizedForeignKeys = (
+	tableName: string,
+	columnEntries: ReadonlyArray<ColumnEntry>,
+	extrasForeignKeys: ReadonlyArray<ForeignKeyDeclaration>,
+): (() => ReadonlyArray<ForeignKeyDeclaration>) => {
+	const cache: { current: ReadonlyArray<ForeignKeyDeclaration> | null } = {
+		current: null,
+	};
+	return () => {
+		if (cache.current === null) {
+			cache.current = [
+				...foldColumnReferences(tableName, columnEntries),
+				...extrasForeignKeys,
+			].sort(compareForeignKeys);
+		}
+		return cache.current;
+	};
+};
+
 /** Rejects a column declared through both foreign-key paths (add-relational-reads guard) — without it the clash would still throw, but only later and name-centrically (`duplicate-foreign-key-name`); this guard fires earlier and names the COLUMN, which is what the user actually wrote twice. */
 const assertNoDoublyDeclaredReference = (
 	tableName: string,
@@ -1364,25 +1392,11 @@ export const table = <TColumns extends Record<string, ColumnBuilder>>(
 
 	const rls = resolveRls(owner, tableName, resolvedExtras.rls);
 
-	const foreignKeysCache: {
-		current: ReadonlyArray<ForeignKeyDeclaration> | null;
-	} = { current: null };
-	/** The declaration's own `foreignKeys` getter body (#669): folds
-	 * column-level `.references()` thunks on first read, memoized after --
-	 * never during `table()` itself, so a reference into a file the
-	 * loader hasn't reached yet (or a not-yet-initialized same-file
-	 * binding) only needs to be resolvable by the time something first
-	 * asks for this table's foreign keys, not by the time this table is
-	 * declared. */
-	const resolveForeignKeys = (): ReadonlyArray<ForeignKeyDeclaration> => {
-		if (foreignKeysCache.current === null) {
-			foreignKeysCache.current = [
-				...foldColumnReferences(tableName, columnEntries),
-				...extrasForeignKeys,
-			].sort(compareForeignKeys);
-		}
-		return foreignKeysCache.current;
-	};
+	const resolveForeignKeys = memoizedForeignKeys(
+		tableName,
+		columnEntries,
+		extrasForeignKeys,
+	);
 
 	const declaration: TableDeclaration = {
 		declarationKind: "table",
