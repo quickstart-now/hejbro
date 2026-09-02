@@ -409,10 +409,40 @@ only where Postgres's own transaction semantics require a boundary
 between statements the run produced. Generation SHALL be deterministic:
 the same declarations against the same snapshot SHALL produce
 byte-identical migration SQL, byte-identical snapshot bytes, and the same
-number of migration files, run anywhere, with no database connection. A
-run that finds no difference SHALL write no migration and no snapshot,
-report "no changes — snapshot already matches your declarations", and
-exit zero. `generate`'s flag surface carries the rename flags
+number of migration files, run anywhere, with no database connection.
+
+A run whose declarations produce a snapshot identical to the previous
+one SHALL write neither a migration nor a snapshot, report "no changes
+— snapshot already matches your declarations", and exit zero. A run
+that produces a **different** snapshot but no statement to write SHALL
+write the snapshot together with a migration carrying no statements,
+whose banner records the state before and after exactly as any other
+migration's does — so the chain stays anchored and a repository nobody
+edited still passes `hejbro verify` — and SHALL report the migration it
+wrote and that it carries no statements, and exit zero. That migration's
+name SHALL be derived from the difference between the two snapshots, by
+the same naming rules every other migration follows and as
+deterministically: the same pair of snapshots SHALL always produce the
+same name, never a generic fallback. A snapshot can move without any
+table changing hands — a declaration restating a table hejbro already
+records the same way — and such a run SHALL be named from the table
+whose record changed, exactly as deterministically. Only a run whose
+snapshot moved with no table's record changing at all is a fault in
+hejbro, and it SHALL be reported as a coded diagnostic naming itself as
+one, never as a crash.
+
+Whether a run has something to write is decided by comparing the
+snapshot it arrived at against the previous one, never by whether the
+migration SQL came out empty. An empty statement list decides what a
+migration *contains*, not whether one exists: a state hejbro recorded is
+a state the chain has to carry, or `verify` is left calling an untouched
+repository edited. Whether a run has something to write and whether it
+emitted any statement are two facts, not one: a run can have a snapshot
+to write and no statement to emit. Generation SHALL state each of them
+on its own, so that no caller has to infer one from the other or
+reconcile a result that reports no change while carrying a migration.
+
+`generate`'s flag surface carries the rename flags
 (identifying a rename that would otherwise diff as drop-plus-add) and
 the drop-confirmation flags (confirming a destructive change by the
 dropped object's name); those flags are `generate`'s own, which is why
@@ -425,7 +455,9 @@ disagree about what was declared. **This SHALL hold even when there is
 no difference to write a migration for**: a repository whose snapshot
 already matches its declarations has no other run that could ever
 produce its first export, so a no-difference run with the export
-enabled SHALL still write it (or refresh it, if one already exists).
+enabled SHALL still write it (or refresh it, if one already exists). An
+export SHALL describe the snapshot its own run arrived at, never the
+previous one.
 
 A run SHALL be split where it adds a value to an existing enum type and
 also emits that value into an expression the database resolves while
@@ -488,6 +520,23 @@ line SHALL NOT collapse them into one file.
   declarations
 - **THEN** no migration and no snapshot are written, the no-change line
   is reported, and the exit code is zero
+
+#### Scenario: A recorded declaration that emits nothing still anchors the chain
+- **WHEN** an `existingTable()` declaration is added to a repository
+  whose snapshot already matches its declarations, and `hejbro generate`
+  runs
+- **THEN** the snapshot is written with the table recorded as existing,
+  a migration carrying no statements is written alongside it, the report
+  names both, the exit code is zero — and `hejbro verify` run afterwards
+  passes, as does a later run that does emit statements
+
+#### Scenario: A changed existing declaration is named and anchored like any other
+- **WHEN** an `existingTable()` declaration's own columns change — a
+  column added, renamed or retyped — and `hejbro generate` runs
+- **THEN** the run does not fail, a migration carrying no statements is
+  written whose name says what changed about the declaration, the
+  snapshot records the new columns, and `hejbro verify` passes
+  afterwards
 
 #### Scenario: The export is written by the same run
 - **WHEN** generation runs with the export enabled and finds a
@@ -668,3 +717,48 @@ their source and their lock, and nothing else.
 #### Scenario: A field a command does not need is never demanded
 - **WHEN** a command that does not write migrations runs
 - **THEN** it does not fail for a missing migration-authoring field
+
+### Requirement: The apply commands leave existing declarations alone
+`hejbro check` SHALL compare nothing about an existing table — one the
+schema declares with `existingTable()` — and SHALL NOT list it in the
+unmanaged inventory. That inventory's sense of *unmanaged* is a table no
+declaration covers, and an existing declaration covers one: it claims a
+shape hejbro does not own. Its presence or absence in the database SHALL
+NOT affect the exit code.
+
+Not comparing it is a choice, not a failure, so it belongs in neither
+category the coverage-boundary rules already name: nothing about it
+could not be carried out, and its kind is comparable for every other
+table. `check` SHALL therefore name it in the report's
+coverage-boundary section as declared existing and not compared —
+"what it did not compare" covers a table it declined to compare as much
+as one it was unable to. That line SHALL NOT be a finding and SHALL NOT
+affect the exit code. Naming it is what keeps a passing report from
+being read as a guarantee about a shape `check` never looked at — so
+wherever the report summarises the objects that agreed, an existing
+declaration SHALL NOT be among them.
+
+`hejbro reset` SHALL drop nothing of an existing table, `hejbro
+baseline` SHALL write no statement for one, and `hejbro raise` SHALL be
+unaffected by such a declaration — it reads migration text and the
+ledger, never a declaration.
+
+#### Scenario: An existing declaration is neither compared nor inventoried
+- **WHEN** a schema declares a table with `existingTable()` and `hejbro
+  check` runs against a database where that table exists with a
+  different shape
+- **THEN** no difference is reported for it, it is absent from the
+  inventory section, and the exit code is unaffected
+
+#### Scenario: An existing declaration is named in the coverage boundary, never as a finding
+- **WHEN** a schema declares a table with `existingTable()` and `hejbro
+  check` runs
+- **THEN** the report's coverage-boundary section names that table as
+  declared existing and not compared, it is not a finding, it is absent
+  from the unmanaged inventory, and the exit code is unaffected
+
+#### Scenario: baseline and reset pass an existing declaration by
+- **WHEN** a schema declaring a table with `existingTable()` is
+  baselined, and a later `hejbro reset` runs against it
+- **THEN** the baseline migration carries no statement for that table,
+  and the reset drops nothing of it

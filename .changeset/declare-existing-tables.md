@@ -28,3 +28,10 @@ table itself, and creates exactly three things a handover also spares
 not yet create the declaration's own indexes, check constraints,
 foreign keys, or primary key, even though the snapshot afterwards
 records them as if it had (#671).
+
+A run whose snapshot moves without any statement — an `existingTable()`
+recorded, forgotten, released, adopted or reshaped, or an ordinary managed
+declaration merely restated (two `index()` or `check()` entries swapped in
+order) — writes a migration carrying no statements, named after the table
+(`restate_<table>` for the plain reorder), so `verify` stays anchored to
+the chain.
