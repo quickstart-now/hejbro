@@ -14,7 +14,7 @@ import {
 	computeTable,
 	renderTableEntry,
 } from "./tables";
-import { enumUnion } from "./ts-type";
+import { enumUnion, typeNodeNamesInterval } from "./ts-type";
 
 type EnumLookup = (schema: string, name: string) => ContractEnumFact | null;
 
@@ -105,11 +105,26 @@ import type { Driver } from "hejbro";
 import { createNameKeyedDb } from "hejbro";
 `;
 
-const renderHeader = (origin: ContractOrigin): string => {
+const baseHeader = (origin: ContractOrigin): string => {
 	if (origin.source === "git") {
 		return GIT_HEADER;
 	}
 	return DATABASE_HEADER;
+};
+
+/** Only when the emitted body actually names it (#661) — a contract with no `interval` fact carries no such import, an unused one a `noUnusedLocals` consumer would refuse. Applies to both headers alike: a `pull`-inferred contract's own `interval` column needs the same import a `vendor`-written one does. */
+const INTERVAL_VALUE_IMPORT_LINE =
+	'import type { IntervalValue } from "hejbro";\n';
+
+const renderHeader = (
+	origin: ContractOrigin,
+	needsInterval: boolean,
+): string => {
+	const base = baseHeader(origin);
+	if (!needsInterval) {
+		return base;
+	}
+	return `${base}${INTERVAL_VALUE_IMPORT_LINE}`;
 };
 
 const renderEnumEntry = (fact: {
@@ -300,6 +315,33 @@ const CREATE_DB_FACTORY = `export const createDb = (conn: Driver) =>
 \tcreateNameKeyedDb<Database>(conn, contractMetadata);`;
 
 /**
+ * Whether a table column, a function argument, or a scalar function
+ * return this contract carries names the `interval` value type (#661) —
+ * the three sources `renderHeader`'s conditional `IntervalValue` import
+ * decides from, each over its own already-computed `TypeNode` (never a
+ * fourth pass over the snapshot: `tables`/`functions` are the exact
+ * arrays the two renderers below already built).
+ */
+const contractNamesInterval = (
+	tables: ReadonlyArray<TableComputation>,
+	functions: ReadonlyArray<FunctionComputation>,
+): boolean => {
+	const columnNamesInterval = tables.some((table) =>
+		table.entries.some((entry) => typeNodeNamesInterval(entry.typeNode)),
+	);
+	const argNamesInterval = functions.some((fn) =>
+		fn.args.some((arg) => typeNodeNamesInterval(arg.typeNode)),
+	);
+	const returnsNamesInterval = functions.some((fn) => {
+		if (fn.returns.kind !== "scalar") {
+			return false;
+		}
+		return typeNodeNamesInterval(fn.returns.typeNode);
+	});
+	return columnNamesInterval || argNamesInterval || returnsNamesInterval;
+};
+
+/**
  * The contract file's full source (5.1's settled layout: one file,
  * `.hejbro/vendor/contract.ts`, alongside `schema.json`/`snapshot.sql`).
  * A pure function of `payload` and `origin` — two calls with the same
@@ -314,7 +356,8 @@ export const emitContract = (
 	const enumLookup = buildEnumLookup(enumsInSnapshot(payload.snapshot));
 	const tables = computeTables(payload, enumLookup);
 	const functions = computeFunctions(payload, tables, enumLookup);
-	return `${renderHeader(origin)}
+	const needsInterval = contractNamesInterval(tables, functions);
+	return `${renderHeader(origin, needsInterval)}
 ${renderDatabaseInterface(payload, tables, functions)}
 
 ${renderMetadata(origin, payload.roles, tables, functions)}

@@ -72,14 +72,28 @@ const linkHejbro = async (cwd: string): Promise<void> => {
 	await symlink(CLI_PACKAGE_ROOT, join(cwd, "node_modules", "hejbro"), "dir");
 };
 
-const SCHEMA_SOURCE = `import { bigint, defineFunction, schema, select, sql, table, text, uuid } from "hejbro";
+const SCHEMA_SOURCE = `import { bigint, defineFunction, interval, schema, select, sql, table, text, uuid } from "hejbro";
 
 export const app = schema("app");
 
 export const posts = table(app, "posts", {
 	id: uuid().primaryKey().defaultRandom(),
 	title: text().notNull(),
+	// #661: an interval column -- its value type (IntervalValue) must
+	// resolve in the vendored contract without a manual import.
+	checkIn: interval(),
 });
+
+// #661: a function argument naming interval, the second of the two
+// places the delta requires it to compile.
+export const waitFor = defineFunction(
+	app,
+	"wait_for",
+	{ args: { delay: interval() }, returns: bigint() },
+	(ctx) => {
+		ctx.return(sql\`1\`);
+	},
+);
 
 export const totalPosts = defineFunction(
 	app,

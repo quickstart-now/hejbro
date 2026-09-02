@@ -3,6 +3,7 @@ import {
 	bigint,
 	defineFunction,
 	defineTrigger,
+	interval,
 	schema,
 	select,
 	sql,
@@ -597,5 +598,107 @@ describe("a pre-functions fact drops out of the contract (#657)", () => {
 		expect(argsOnlySource).not.toContain("totalPosts");
 		expect(returnsOnlySource).toContain("readonly Functions: {};");
 		expect(returnsOnlySource).not.toContain("totalPosts");
+	});
+});
+
+const INTERVAL_IMPORT = 'import type { IntervalValue } from "hejbro";';
+
+/**
+ * #661: `IntervalValue` is imported only when the emitted body actually
+ * names it — decided structurally, over each fact's own `TypeNode`
+ * (`typeNodeNamesInterval`), never a scan of the rendered body text (a
+ * column keyed literally `IntervalValue` would false-positive that).
+ * Three independent sources feed the decision (a column, a function
+ * argument, a scalar function return), so each gets its own case; a
+ * fourth pins the no-interval golden, and a fifth proves the database
+ * (`pull`) header gets the same treatment as the git one.
+ */
+describe("the IntervalValue import is conditional on the contract actually naming it (#661)", () => {
+	it("a column naming interval adds the import", () => {
+		const posts = table(app, "posts", {
+			id: uuid().primaryKey().defaultRandom(),
+			checkIn: interval(),
+		});
+		const payload = buildFixturePayload([app, posts]);
+
+		const source = emitContract(payload, ORIGIN);
+
+		expect(source).toContain(INTERVAL_IMPORT);
+	});
+
+	it("a function argument naming interval adds the import", () => {
+		const posts = table(app, "posts", {
+			id: uuid().primaryKey().defaultRandom(),
+		});
+		const waitFor = defineFunction(
+			app,
+			"wait_for",
+			{ args: { delay: interval() }, returns: bigint() },
+			(ctx) => {
+				ctx.return(sql`1`);
+			},
+		);
+		const declarations: ReadonlyArray<HejbroInput> = [app, posts, waitFor];
+		const exportNames = new Map<HejbroInput, string>([
+			[posts, "posts"],
+			[waitFor, "waitFor"],
+		]);
+		const payload = buildFixturePayload(declarations, exportNames);
+
+		const source = emitContract(payload, ORIGIN);
+
+		expect(source).toContain(INTERVAL_IMPORT);
+	});
+
+	it("a scalar function return naming interval adds the import", () => {
+		const posts = table(app, "posts", {
+			id: uuid().primaryKey().defaultRandom(),
+		});
+		const totalDuration = defineFunction(
+			app,
+			"total_duration",
+			{ returns: interval() },
+			(ctx) => {
+				ctx.return(sql`interval '1 hour'`);
+			},
+		);
+		const declarations: ReadonlyArray<HejbroInput> = [
+			app,
+			posts,
+			totalDuration,
+		];
+		const exportNames = new Map<HejbroInput, string>([
+			[posts, "posts"],
+			[totalDuration, "totalDuration"],
+		]);
+		const payload = buildFixturePayload(declarations, exportNames);
+
+		const source = emitContract(payload, ORIGIN);
+
+		expect(source).toContain(INTERVAL_IMPORT);
+	});
+
+	it("a contract with no interval fact anywhere carries no such import (golden)", () => {
+		const payload = buildFixturePayload(buildDeclarations());
+
+		const source = emitContract(payload, ORIGIN);
+
+		expect(source).not.toContain(INTERVAL_IMPORT);
+	});
+
+	it("a database (pull) origin's header gets the same conditional import", () => {
+		const posts = table(app, "posts", {
+			id: uuid().primaryKey().defaultRandom(),
+			checkIn: interval(),
+		});
+		const payload = buildFixturePayload([app, posts]);
+
+		const source = emitContract(payload, {
+			source: "database",
+			database: "widgets_db",
+			schemas: ["app"],
+		});
+
+		expect(source).toContain(INTERVAL_IMPORT);
 	});
 });

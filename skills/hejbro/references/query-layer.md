@@ -591,6 +591,13 @@ const handle = db({ posts, searchByStatus }, driver);
 const rows = await handle.fn.searchByStatus({ status: "published" });
 ```
 
+A contract vendored from an export written before functions carried
+their argument and return facts (an older schema repository's `hejbro
+generate --export`) still reads: `hejbro vendor` carries every table as
+normal and simply omits that function from `Functions`/`fn`, rather
+than refusing the whole export — see `polyrepo.md` for the full
+vendoring loop.
+
 ## RLS execution context
 
 `db.as(context)` returns a handle scoped to that role/session context:

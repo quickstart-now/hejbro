@@ -72,13 +72,17 @@ starts from its named red test. Verification (gates, `openspec validate
       helper shared by `contract/tables.ts` and `contract/functions.ts`.
       Files: `packages/cli/src/contract/{tables,functions}.ts`, tests,
       `examples/cli-smoke/test/*`.
-- [ ] 1.5 (~7m) `interval` compiles in a vendored contract (#661). Red:
+- [x] 1.5 (~7m) `interval` compiles in a vendored contract (#661). Red:
       `examples/cli-smoke` real-`tsc` fixture with an `interval` column
       and an `interval` function argument (currently `IntervalValue`
-      unresolved). Green: `GENERATED_HEADER`/`renderHeader` imports the
-      value type from `hejbro` (measure the export name first;
-      `packages/cli/src/index.ts` must expose it) — or inline the
-      shape if it is not exported. Close: `.changeset/fix-vendoring-compat.md`
+      unresolved). Green (lead ruling): `renderHeader` adds `import type
+      { IntervalValue } from "hejbro";` **conditionally** — only when the
+      emitted body names it — to the git and database headers alike, and
+      a golden pins that a contract without an interval carries no such
+      import. Measured: `packages/cli/src/index.ts`'s `export type * from
+      "@hejbro/core"` already exposes `IntervalValue`, so the
+      inline-the-shape fallback is moot.
+      Close: `.changeset/fix-vendoring-compat.md`
       (`patch`), `skills/hejbro/references/query-layer.md` sentence on
       older exports still reading.
       Files: `packages/cli/src/contract/{ts-type,emit}.ts`,
