@@ -182,6 +182,37 @@ const indexesFor = (
 	);
 
 /**
+ * One table's own columns in physical order (`attnum`, via inference's
+ * `columnDetails`) with the TypeScript key 1.1's collision rule assigns
+ * each -- shared by `mergeTableFacts` (below) and `describeCatalog`
+ * (1.6), which both need the *same* ordering and keys: the collision
+ * rule is defined over one table's physical order, so computing it
+ * twice, differently, would silently disagree.
+ */
+export const orderedColumnsWithKeys = (
+	catalog: Catalog,
+	inferenceCatalog: InferenceCatalog,
+	schemaName: string,
+	tableName: string,
+): { readonly columns: ReadonlyArray<ColumnRow>; readonly tsKeys: ReadonlyArray<string> } => {
+	const columns = catalog.columns.filter(
+		(row) => row.schema === schemaName && row.table === tableName,
+	);
+	const positionByName = new Map(
+		inferenceCatalog.columnDetails
+			.filter((detail) => detail.schema === schemaName && detail.table === tableName)
+			.map((detail) => [detail.name, detail.position]),
+	);
+	const orderedColumns = [...columns].sort(
+		(a, b) => (positionByName.get(a.name) ?? 0) - (positionByName.get(b.name) ?? 0),
+	);
+	return {
+		columns: orderedColumns,
+		tsKeys: inferColumnKeys(orderedColumns.map((row) => row.name)),
+	};
+};
+
+/**
  * Groups the shared inventory (`Catalog`) and inference's own detail
  * reads (`InferenceCatalog`) into one `InferredTableFacts` per table --
  * the raw-row adapter tasks.md's group 1 header names, deferred until
@@ -198,23 +229,12 @@ export const mergeTableFacts = (
 		catalog.schemas.map((row) => [row.schema, declareSchema(row.schema)]),
 	);
 	return catalog.tables.map((tableRow) => {
-		const columns = catalog.columns.filter(
-			(row) => row.schema === tableRow.schema && row.table === tableRow.table,
+		const { columns: orderedColumns, tsKeys } = orderedColumnsWithKeys(
+			catalog,
+			inferenceCatalog,
+			tableRow.schema,
+			tableRow.table,
 		);
-		const positionByName = new Map(
-			inferenceCatalog.columnDetails
-				.filter(
-					(detail) =>
-						detail.schema === tableRow.schema &&
-						detail.table === tableRow.table,
-				)
-				.map((detail) => [detail.name, detail.position]),
-		);
-		const orderedColumns = [...columns].sort(
-			(a, b) =>
-				(positionByName.get(a.name) ?? 0) - (positionByName.get(b.name) ?? 0),
-		);
-		const tsKeys = inferColumnKeys(orderedColumns.map((row) => row.name));
 		const factsByColumn = orderedColumns.map((row) =>
 			columnFacts(row, inferenceCatalog, enumsByIdentity),
 		);
