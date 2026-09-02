@@ -10,8 +10,9 @@ never delivers.
 #### Scenario: A bare insert resolves to no rows, and says so in its type
 - **WHEN** a consumer awaits `client.<table>.insert(row)` through a
   vendored contract
-- **THEN** the promise resolves to an empty array, and assigning the
-  result to the table's row array fails to compile
+- **THEN** the promise resolves to an empty array and its awaited type is
+  exactly `ReadonlyArray<never>` — the table's row type is not what it
+  resolves to
 
 ### Requirement: A contract vendored before functions were carried still runs
 `createNameKeyedDb` SHALL accept contract metadata that carries no

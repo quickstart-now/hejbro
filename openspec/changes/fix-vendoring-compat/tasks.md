@@ -34,16 +34,24 @@ starts from its named red test. Verification (gates, `openspec validate
       `ContractMetadata`, read with `?? {}`.
       Files: `packages/query/src/client/contract-types.ts`,
       `packages/query/src/client/name-keyed-db.ts`, test.
-- [ ] 1.3 (~8m) `[design]` Bare `insert()`/`update()`/`delete()` type
+- [x] 1.3 (~8m) `[design]` Bare `insert()`/`update()`/`delete()` type
       as resolving to no rows (#654). Red:
       `packages/query/test/client/mutation-result.test.ts` — runtime:
       `await client.posts.insert(row)` resolves to `[]` with no
-      `RETURNING` in the recorded SQL; type: assigning the result to
-      `ReadonlyArray<Row>` is a compile error (`@ts-expect-error`,
-      the package's own idiom). Green: `NameKeyedTableClient.insert`
+      `RETURNING` in the recorded SQL; type: `expectTypeOf<Awaited<…>>()
+      .toEqualTypeOf<ReadonlyArray<never>>()` for each of `insert`,
+      `update` and `delete` — the three the requirement names, so none
+      of them is an unobserved SHALL. (Not `@ts-expect-error` on
+      assignment to `ReadonlyArray<Row>`: `ReadonlyArray<never>` is
+      assignable to it, so that directive would report itself unused —
+      lead ruling, delta THEN reworded to match.) The observer is
+      `pnpm check-types`, not vitest, which strips types.
+      Green: `NameKeyedTableClient.insert`
       returns `Promise<ReadonlyArray<never>>`;
-      `NameKeyedMutationChain<TRow>` resolves `ReadonlyArray<never>`
-      until a `.returning()` exists (it does not — #653 territory).
+      `NameKeyedMutationChain` resolves `ReadonlyArray<never>`
+      until a `.returning()` exists (it does not — #653 territory), and
+      drops its now-unused `TRow` parameter (lead ruling; the type is
+      not in the public barrel).
       Remove the `as unknown as` casts that let the type diverge.
       Files: `packages/query/src/client/name-keyed-db.ts`, test,
       `skills/hejbro/references/polyrepo.md` (one sentence).
