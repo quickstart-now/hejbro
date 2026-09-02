@@ -44,10 +44,37 @@ export type ContractTableMeta = {
 	readonly existing?: true;
 };
 
+/** One function argument's vendored facts — see `contract/functions.ts`'s own `FunctionArgMeta`. */
+export type ContractFunctionArgMeta = {
+	readonly key: string;
+	readonly sqlName: string;
+	readonly typeNode: TypeNode;
+	readonly mode: NumericMode | null;
+	readonly notNullElements: boolean;
+};
+
+/** A function's vendored return shape — see `contract/functions.ts`'s own `FunctionReturnsMeta`. A table return names the returned table's SQL identity, never its export name (`Database["Tables"]` is itself SQL-name-keyed). */
+export type ContractFunctionReturnsMeta =
+	| {
+			readonly kind: "scalar";
+			readonly typeNode: TypeNode;
+			readonly mode: NumericMode | null;
+	  }
+	| { readonly kind: "table"; readonly schema: string; readonly name: string };
+
+/** One function's vendored facts — see `contract/functions.ts`'s own `FunctionClientMeta`. */
+export type ContractFunctionMeta = {
+	readonly schema: string;
+	readonly name: string;
+	readonly args: ReadonlyArray<ContractFunctionArgMeta>;
+	readonly returns: ContractFunctionReturnsMeta;
+};
+
 /** `contractMetadata`'s own full shape — see `contract/emit.ts`'s `renderMetadata`. */
 export type ContractMetadata = {
 	readonly commit: string;
 	readonly exportHash: string;
 	readonly roles: ReadonlyArray<string>;
 	readonly tables: { readonly [tableName: string]: ContractTableMeta };
+	readonly functions: { readonly [exportName: string]: ContractFunctionMeta };
 };

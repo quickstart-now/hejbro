@@ -26,6 +26,34 @@ export const posts = table(app, "posts", {
 });
 `;
 
+const FUNCTION_SCHEMA_SOURCE = `import { bigint, defineFunction, schema, select, sql, table, text, uuid } from "hejbro";
+
+export const app = schema("app");
+
+export const posts = table(app, "posts", {
+	id: uuid().primaryKey().defaultRandom(),
+	title: text().notNull(),
+});
+
+export const totalPosts = defineFunction(
+	app,
+	"total_posts",
+	{ returns: bigint() },
+	(ctx) => {
+		ctx.return(sql\`1\`);
+	},
+);
+
+export const postById = defineFunction(
+	app,
+	"post_by_id",
+	{ args: { postId: uuid() }, returns: posts },
+	(ctx, args) => {
+		ctx.return(select(posts).where(sql\`\${posts.id} = \${args.postId}\`));
+	},
+);
+`;
+
 let cwd: string;
 
 beforeEach(async () => {
@@ -76,6 +104,42 @@ describe("hejbro generate --export", () => {
 		const format = JSON.parse(await readExportFile(cwd, "format.json"));
 		expect(typeof format.descriptionFormat).toBe("number");
 		expect(typeof format.snapshotFormat).toBe("number");
+	});
+
+	it("carries a function's argument keys and return shape through a real write", async () => {
+		await writeSchema(cwd, FUNCTION_SCHEMA_SOURCE);
+
+		const result = await runCli(cwd, ["generate", "--export"]);
+		expect(result.exitCode).toBe(0);
+
+		const description = JSON.parse(await readExportFile(cwd, "schema.json"));
+		const scalarFact = description.functions.find(
+			(f: { functionName: string }) => f.functionName === "total_posts",
+		);
+		expect(scalarFact.args).toEqual([]);
+		expect(scalarFact.returns).toEqual({
+			kind: "scalar",
+			typeNode: { typeName: "bigint" },
+			mode: "bigint",
+		});
+
+		const tableFact = description.functions.find(
+			(f: { functionName: string }) => f.functionName === "post_by_id",
+		);
+		expect(tableFact.args).toEqual([
+			{
+				key: "postId",
+				sqlName: "post_id",
+				typeNode: { typeName: "uuid" },
+				mode: null,
+				notNullElements: false,
+			},
+		]);
+		expect(tableFact.returns).toEqual({
+			kind: "table",
+			schemaName: "app",
+			tableName: "posts",
+		});
 	});
 
 	it("writes the export with no database reachable", async () => {

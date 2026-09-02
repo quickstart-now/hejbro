@@ -42,9 +42,22 @@ const post = await db.posts.select().where(eq(db.posts.columns.id, "some-id"));
 `createDb`'s return value has no `Table`-typed member anywhere in its
 public surface — a vendored contract cannot be passed anywhere a
 declaration-authority-carrying table is expected (`generateMigration`,
-`existingTable`, …). It carries only what a consumer needs to read and
-write rows: `columns` (plain expressions, usable with `eq`/`and`/`or`
-the same as any other query), `select`/`insert`/`update`/`delete`.
+`existingTable`, …). Tables carry `columns` (plain expressions, usable
+with `eq`/`and`/`or` the same as any other query), `select`/`insert`/
+`update`/`delete`.
+
+A vendored contract also carries every `defineFunction` declaration the
+schema repository exports, callable through `db.fn` — `createDb(driver)
+.fn.searchByStatus({ status: "published" })`, the same typed surface
+`query-layer.md` documents for a local `db()` handle. `db.as(context).fn`
+carries over unchanged: a scoped handle's `fn` calls the same vendored
+functions, inside that context's transaction.
+
+**Two different keying rules, not one.** `Tables` is keyed by the
+table's own SQL name (matching `db()`'s own table-name keying);
+`Functions` is keyed by the function's own **export name** from the
+schema module, never its SQL name. A reader who only sees one of the two
+groups tends to assume both follow the same rule — they don't.
 
 ## Existing tables cross the boundary too
 

@@ -1,7 +1,135 @@
 import { describe, expect, it } from "vitest";
 import { validateExport } from "../src/vendor/validate-export";
 
-const VALID_FORMAT = '{"descriptionFormat":1,"snapshotFormat":8}';
+const FORMAT_TEXT = '{"descriptionFormat":1,"snapshotFormat":8}';
+
+const SNAPSHOT = '{"formatVersion":8,"dialect":"postgres","objects":{}}';
+
+// One function per schemaText, deliberately: `z.array` fails the whole
+// array on any one element's mismatch, so a shared fixture would turn
+// every return kind red together under a mutant that drops only one
+// union member -- these stay isolated so each kind's own fixture is the
+// only one that can go red for that kind's own reason.
+const buildSchemaText = (functionFact: unknown): string =>
+	JSON.stringify({
+		tables: [],
+		functions: [functionFact],
+		roles: [],
+		snapshot: JSON.parse(SNAPSHOT),
+	});
+
+describe("validateExport", () => {
+	it("keeps a scalar-returning function's carried facts", () => {
+		const fact = {
+			schemaName: "app",
+			functionName: "total_posts",
+			exportName: "totalPosts",
+			args: [
+				{
+					key: "postId",
+					sqlName: "post_id",
+					typeNode: { typeName: "uuid" },
+					mode: null,
+					notNullElements: false,
+				},
+				{
+					key: "weight",
+					sqlName: "weight",
+					typeNode: { typeName: "bigint" },
+					mode: "number",
+					notNullElements: false,
+				},
+				{
+					key: "tags",
+					sqlName: "tags",
+					typeNode: { typeName: "array", element: { typeName: "text" } },
+					mode: null,
+					notNullElements: true,
+				},
+			],
+			returns: {
+				kind: "scalar",
+				typeNode: { typeName: "bigint" },
+				mode: "bigint",
+			},
+		};
+
+		const validated = validateExport(FORMAT_TEXT, buildSchemaText(fact));
+
+		expect(validated.payload.functions).toEqual([fact]);
+	});
+
+	it("keeps a table-returning function's carried facts", () => {
+		const fact = {
+			schemaName: "app",
+			functionName: "posts_by_status",
+			exportName: "postsByStatus",
+			args: [
+				{
+					key: "status",
+					sqlName: "status",
+					typeNode: { typeName: "text" },
+					mode: null,
+					notNullElements: false,
+				},
+			],
+			returns: { kind: "table", schemaName: "app", tableName: "posts" },
+		};
+
+		const validated = validateExport(FORMAT_TEXT, buildSchemaText(fact));
+
+		expect(validated.payload.functions).toEqual([fact]);
+	});
+
+	it("refuses an argument missing its declared type", () => {
+		const fact = {
+			schemaName: "app",
+			functionName: "total_posts",
+			exportName: "totalPosts",
+			args: [
+				{
+					key: "postId",
+					sqlName: "post_id",
+					mode: null,
+					notNullElements: false,
+				},
+			],
+			returns: null,
+		};
+
+		expect(() => validateExport(FORMAT_TEXT, buildSchemaText(fact))).toThrow(
+			/does not answer its own format/,
+		);
+	});
+
+	it("refuses a scalar return missing its declared type", () => {
+		const fact = {
+			schemaName: "app",
+			functionName: "total_posts",
+			exportName: "totalPosts",
+			args: [],
+			returns: { kind: "scalar", mode: "bigint" },
+		};
+
+		expect(() => validateExport(FORMAT_TEXT, buildSchemaText(fact))).toThrow(
+			/does not answer its own format/,
+		);
+	});
+
+	it("keeps a trigger-synthesized function's null return", () => {
+		const fact = {
+			schemaName: "app",
+			functionName: "posts_touch",
+			exportName: null,
+			args: [],
+			returns: null,
+		};
+
+		const validated = validateExport(FORMAT_TEXT, buildSchemaText(fact));
+
+		expect(validated.payload.functions).toEqual([fact]);
+	});
+});
 
 describe("validateExport — existing (add-unmanaged-objects, 2.1)", () => {
 	it("a current export's existing table reads back as existing", () => {
@@ -19,7 +147,7 @@ describe("validateExport — existing (add-unmanaged-objects, 2.1)", () => {
 			roles: [],
 			snapshot: { formatVersion: 8, dialect: "postgres", objects: {} },
 		});
-		const { payload } = validateExport(VALID_FORMAT, schema);
+		const { payload } = validateExport(FORMAT_TEXT, schema);
 		expect(payload.tables[0]?.existing).toBe(true);
 	});
 
@@ -44,7 +172,7 @@ describe("validateExport — existing (add-unmanaged-objects, 2.1)", () => {
 			roles: [],
 			snapshot: { formatVersion: 8, dialect: "postgres", objects: {} },
 		});
-		const { payload } = validateExport(VALID_FORMAT, olderSchema);
+		const { payload } = validateExport(FORMAT_TEXT, olderSchema);
 		expect(payload.tables[0]?.existing).toBe(false);
 	});
 });

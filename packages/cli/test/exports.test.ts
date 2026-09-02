@@ -1,6 +1,7 @@
 import * as core from "@hejbro/core";
 import * as query from "@hejbro/query";
 import { describe, expect, it } from "vitest";
+import { ENGINE, VOCABULARY } from "../src/core-surface";
 /**
  * Type-only presence check for names the facade must carry (task 7.9,
  * group 7 decision ①) -- a `tsc` error at this import if any name is
@@ -17,11 +18,139 @@ import type {
 	Db,
 	DbContext,
 	DeclaredCteMarker,
+	DeleteFinal,
 	ExecuteResult,
+	FunctionDeclaration,
+	InsertFinal,
+	LeftJoinedBrand,
+	ReturningProjection,
 	ScopedDb,
+	SelectLimited,
+	Table,
 	Tx,
+	TypeNode,
+	UntrackedJoins,
+	UpdateFinal,
 } from "../src/index";
 import * as hejbro from "../src/index";
+
+/** #471: the barrel's runtime export set, sorted -- regenerate by hand when the surface changes on purpose. */
+const HEJBRO_RUNTIME_EXPORTS: ReadonlyArray<string> = [
+	"HejbroError",
+	"and",
+	"asc",
+	"assertNoNulls",
+	"assertSchema",
+	"avg",
+	"between",
+	"bigint",
+	"bigserial",
+	"boolean",
+	"bytea",
+	"char",
+	"check",
+	"cidr",
+	"coalesce",
+	"columnDefault",
+	"columnGenerated",
+	"columnIdentity",
+	"columnNotNull",
+	"compile",
+	"count",
+	"createNameKeyedDb",
+	"cumeDist",
+	"date",
+	"db",
+	"defaultContextRendering",
+	"deferredStatement",
+	"defineConfig",
+	"defineFunction",
+	"defineTrigger",
+	"defineView",
+	"deleteFrom",
+	"denseRank",
+	"desc",
+	"doublePrecision",
+	"eq",
+	"existingTable",
+	"exists",
+	"expr",
+	"firstValue",
+	"foreignKeyActions",
+	"genRandomUuid",
+	"grant",
+	"gt",
+	"gte",
+	"ilike",
+	"inArray",
+	"index",
+	"indexMethods",
+	"inet",
+	"insert",
+	"integer",
+	"interval",
+	"isNotNull",
+	"isNull",
+	"json",
+	"jsonArrayFrom",
+	"jsonObjectFrom",
+	"jsonb",
+	"lag",
+	"lastValue",
+	"lead",
+	"leftJoinedBrand",
+	"like",
+	"literal",
+	"lt",
+	"lte",
+	"macaddr",
+	"max",
+	"min",
+	"ne",
+	"not",
+	"notBetween",
+	"notExists",
+	"notIlike",
+	"notInArray",
+	"notLike",
+	"now",
+	"nthValue",
+	"ntile",
+	"numeric",
+	"op",
+	"or",
+	"over",
+	"parseBannerBaseline",
+	"parseBannerHashes",
+	"parseBannerVersion",
+	"percentRank",
+	"pgEnum",
+	"predropStatement",
+	"rank",
+	"real",
+	"rls",
+	"roleName",
+	"rowNumber",
+	"schema",
+	"select",
+	"serial",
+	"smallint",
+	"smallserial",
+	"sql",
+	"statement",
+	"sum",
+	"table",
+	"text",
+	"throwMissingCapability",
+	"time",
+	"timestamp",
+	"timestamptz",
+	"timetz",
+	"update",
+	"uuid",
+	"varchar",
+	"withCte",
+];
 
 /** Referenced so the type-only import block above isn't flagged unused. */
 type _QueryTypesPresent = [
@@ -32,7 +161,22 @@ type _QueryTypesPresent = [
 	ScopedDb,
 	Tx,
 ];
-type _CoreTypesPresent = [DeclaredCteMarker];
+// #471: the type half of the curation is held by construction (`export
+// type *`); this block names the core types shipped specs reference as
+// reaching users, so the construction is checked, not assumed.
+type _CoreTypesPresent = [
+	DeclaredCteMarker,
+	LeftJoinedBrand<never>,
+	UntrackedJoins,
+	FunctionDeclaration,
+	Table,
+	TypeNode,
+	ReturningProjection,
+	SelectLimited,
+	InsertFinal,
+	UpdateFinal,
+	DeleteFinal,
+];
 /**
  * `AssertSchemaFinding` (extend-query-runtime, owner decision: named on
  * this surface, not re-exported as `check`'s own `Finding`) carries no
@@ -144,5 +288,61 @@ describe("hejbro facade (task 7.9)", () => {
 
 	it("exports assertSchema (task 2.7, extend-query-runtime), a live binding not a shadowed/renamed one", () => {
 		expect(typeof hejbro.assertSchema).toBe("function");
+	});
+});
+
+/**
+ * #471: the barrel's curation of core. Two lists, complete by
+ * construction -- a core runtime export in neither (or both) fails here,
+ * so a newcomer is classified before it ships -- and the barrel's own
+ * runtime export set pinned by set equality (the neon preset's
+ * `entry.test.ts` shape), so an addition or removal that skips the pin
+ * fails naming the difference.
+ */
+describe("hejbro barrel curation (#471)", () => {
+	// Namespace keys, not `typeof` probes: a binding can read as undefined
+	// while a module graph is still evaluating (measured: `fnv1aHex` did,
+	// under vitest's source alias), and a completeness check must see it.
+	const runtimeKeys = (
+		module: Record<string, unknown>,
+	): ReadonlyArray<string> => Object.keys(module).sort();
+
+	const vocabulary: ReadonlyArray<string> = VOCABULARY;
+	const engine: ReadonlyArray<string> = ENGINE;
+
+	it("classifies every runtime export of @hejbro/core exactly once", () => {
+		const coreKeys = runtimeKeys(core as Record<string, unknown>);
+		const classified = [...vocabulary, ...engine].sort();
+		const unclassified = coreKeys.filter(
+			(key) => !vocabulary.includes(key) && !engine.includes(key),
+		);
+		const twice = vocabulary.filter((key) => engine.includes(key));
+		const stale = classified.filter((key) => !coreKeys.includes(key));
+		expect({ unclassified, twice, stale }).toEqual({
+			unclassified: [],
+			twice: [],
+			stale: [],
+		});
+		expect(classified).toEqual(coreKeys);
+	});
+
+	it("re-exports every vocabulary name and no engine name", () => {
+		const barrel = hejbro as Record<string, unknown>;
+		const missing = vocabulary.filter((key) => !(key in barrel));
+		const leaked = engine.filter((key) => key in barrel);
+		expect({ missing, leaked }).toEqual({ missing: [], leaked: [] });
+		expect(typeof hejbro.real).toBe("function");
+		expect(typeof hejbro.leftJoinedBrand).not.toBe("undefined");
+		// `export type *` keeps every core name visible to the type checker as
+		// a type-only re-export, so the pin is a *value* use: that is what the
+		// curation removes, and what a user's autocomplete stops offering.
+		// @ts-expect-error renderExpr is core's engine, exported from hejbro as a type only (#471).
+		const _engineGone = hejbro.renderExpr;
+	});
+
+	it("pins the barrel's runtime export set by set equality", () => {
+		expect(runtimeKeys(hejbro as Record<string, unknown>)).toEqual(
+			HEJBRO_RUNTIME_EXPORTS,
+		);
 	});
 });

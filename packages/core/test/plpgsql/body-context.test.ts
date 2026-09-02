@@ -324,7 +324,13 @@ describe("body-context recording", () => {
 			},
 		);
 		expect(declaration.args).toEqual([
-			{ argName: "post_id", typeNode: { typeName: "uuid" } },
+			{
+				key: "postId",
+				argName: "post_id",
+				typeNode: { typeName: "uuid" },
+				mode: null,
+				notNullElements: false,
+			},
 		]);
 	});
 

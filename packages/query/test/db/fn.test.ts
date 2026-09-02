@@ -1,3 +1,4 @@
+import type { FunctionDeclaration } from "@hejbro/core";
 import {
 	bigint,
 	defineFunction,
@@ -241,6 +242,51 @@ describe("db.fn.* (task 4.9)", () => {
 		// $2" renders identically whether or not the two got swapped
 		// (batch A's params-vacuity lesson, repeated at this layer).
 		expect(sent[0]?.params).toEqual(["published", 10]);
+	});
+
+	it("matches a named argument by its declared key, not by re-deriving snake_case from the caller's own key (#587/G3)", async () => {
+		// A raw FunctionDeclaration, not defineFunction()-built: every real
+		// declaration satisfies argName === toSnakeCase(key) by construction
+		// (core's own resolveArgs), so that identity can never distinguish
+		// key-matching from toSnakeCase-matching using a real declaration --
+		// only a synthesized one (a vendored function, #587/G3) can ever
+		// break it, since its args come from the contract's own carried
+		// facts, not from re-deriving one from the other.
+		const rawFn: FunctionDeclaration = {
+			declarationKind: "function",
+			schemaName: "app",
+			functionName: "raw_search",
+			args: [
+				{
+					key: "postId",
+					argName: "totally_unrelated_sql_name_1",
+					typeNode: { typeName: "uuid" },
+					mode: null,
+					notNullElements: false,
+				},
+				{
+					key: "maxRows",
+					argName: "totally_unrelated_sql_name_2",
+					typeNode: { typeName: "integer" },
+					mode: null,
+					notNullElements: false,
+				},
+			],
+			returns: {
+				returnsKind: "scalar",
+				typeNode: { typeName: "uuid" },
+				mode: null,
+			},
+			security: "invoker",
+			body: { declarations: [], statements: [] },
+			declaredAt: null,
+		};
+		const { driver, sent } = recordingDriver([{ result: "ok" }]);
+		const handle = db({ rawFn }, driver);
+
+		await handle.fn.rawFn({ postId: "P1", maxRows: 10 });
+
+		expect(sent[0]?.params).toEqual(["P1", 10]);
 	});
 
 	it("returns-table rows are converted per the target table's declared columns (numeric mode), same as a whole-table select", async () => {

@@ -1,13 +1,13 @@
 import {
+	createDefaultRegistry,
+	emptySnapshot,
+	generateMigration,
+} from "@hejbro/core";
+import {
 	registerSupabaseKinds,
 	rlsUncachedAuthCallValidator,
 } from "@hejbro/supabase";
 import type { HejbroInput } from "hejbro";
-import {
-	createDefaultRegistry,
-	emptySnapshot,
-	generateMigration,
-} from "hejbro";
 import { describe, expect, it } from "vitest";
 import { declarations as appSchema } from "../src/app.schema";
 import { declarations as step1 } from "../src/steps/step-1.schema";

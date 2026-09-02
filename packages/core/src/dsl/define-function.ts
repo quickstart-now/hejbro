@@ -15,7 +15,7 @@ import type {
 } from "../types/column-builder";
 import type { TypeNode } from "../types/type-node";
 import type { SchemaDeclaration } from "./schema";
-import type { Table } from "./table";
+import type { Table, TableAuthority } from "./table";
 import { getTableMeta, isTable, toSnakeCase } from "./table";
 
 /** What a function can declare it returns — a table (`returns setof …`), the trigger sentinel (defineTrigger-only), or a scalar type, written as a raw `TypeNode` or a column builder (#433 — the same form `args` already accepts). */
@@ -33,8 +33,9 @@ export type FunctionReturns =
  * `defineTrigger`'s directly-constructed literal) only ever sets the
  * plain runtime fields, so without this a non-recursive mention of
  * `TArgs`/`TReturns` would exist nowhere at all — `args`/`returns` are
- * plain, already-resolved runtime shapes (`ReadonlyArray<{argName,
- * typeNode}>`, a `returnsKind` union) that never reference the generic
+ * plain, already-resolved runtime shapes (`ReadonlyArray<{key, argName,
+ * typeNode, mode, notNullElements}>`, a `returnsKind` union) that never
+ * reference the generic
  * parameters, not even recursively through another method the way
  * `ColumnBuilder`'s own chain methods do. Without this anchor,
  * `FunctionDeclaration<A>` and `FunctionDeclaration<B>` would be
@@ -79,8 +80,11 @@ export type FunctionDeclaration<
 	readonly schemaName: string;
 	readonly functionName: string;
 	readonly args: ReadonlyArray<{
+		readonly key: string;
 		readonly argName: string;
 		readonly typeNode: TypeNode;
+		readonly mode: NumericMode | null;
+		readonly notNullElements: boolean;
 	}>;
 	readonly returns:
 		| { readonly returnsKind: "trigger" }
@@ -98,6 +102,18 @@ export type FunctionDeclaration<
 	readonly security: "invoker" | "definer";
 	readonly body: FunctionBody;
 	readonly declaredAt: string | null;
+	/**
+	 * Absent for every `defineFunction()`/`defineTrigger()` call (real,
+	 * migration-owning declarations never set this) — reuses
+	 * {@link TableAuthority}'s own name and values so both families read as
+	 * one convention. Only a synthesized declaration built outside this
+	 * function (`@hejbro/query`'s `synthesizeFunction`, standing in for the
+	 * deleted `syncedTable()`-era constructor's function sibling) sets
+	 * `"usage"`, which `engine/generate.ts`'s runtime chokepoint refuses —
+	 * unlike a table, there is no `existing`-style flag or type-level
+	 * narrowing for a function, so this field is the only guard.
+	 */
+	readonly authority?: TableAuthority;
 	/** Type-only marker, never assigned — see {@link functionDeclarationBrand}. */
 	readonly [functionDeclarationBrand]?: {
 		readonly args: TArgs;
@@ -162,8 +178,11 @@ const resolveFunctionReturns = (
 
 type ResolvedArgs<TArgs extends Record<string, ColumnBuilder>> = {
 	readonly declarations: ReadonlyArray<{
+		readonly key: string;
 		readonly argName: string;
 		readonly typeNode: TypeNode;
+		readonly mode: NumericMode | null;
+		readonly notNullElements: boolean;
 	}>;
 	readonly refs: ArgRefs<TArgs>;
 };
@@ -180,13 +199,18 @@ const resolveArgs = <TArgs extends Record<string, ColumnBuilder>>(
 			key,
 			argName,
 			typeNode: builder.columnState.typeNode,
+			mode: builder.columnState.mode,
+			notNullElements: builder.columnState.notNullElements === true,
 			family: familyOfTypeNode(builder.columnState.typeNode),
 		};
 	});
 
 	const declarations = resolved.map((entry) => ({
+		key: entry.key,
 		argName: entry.argName,
 		typeNode: entry.typeNode,
+		mode: entry.mode,
+		notNullElements: entry.notNullElements,
 	}));
 
 	const refs = Object.fromEntries(
