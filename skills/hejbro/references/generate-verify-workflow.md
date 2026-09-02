@@ -78,9 +78,11 @@ restriction is about values added to a type that already existed).
 own entry point for `hejbro generate`. It returns `{ migrations,
 hasChanges, snapshot, snapshotChanged, errors, ambiguities, warnings }`,
 where `migrations` is `[]` when nothing at all needs writing, one entry
-for an ordinary run (including a zero-statement entry when only an
-existing-table marker moved — D106 R3, R3-B1 — its banner still anchors
-the chain), and two when the run above applies — each `GeneratedMigration`
+for an ordinary run (including a zero-statement entry when an
+existing-table's own marker moved (D106 R3, R3-B1) or its own declared
+shape changed — a column added, renamed or retyped (D106 R4, R4-B1) —
+its banner still anchors the chain), and two when the run above applies
+— each `GeneratedMigration`
 carries its own `sql`/`changes`/`snapshot`, and the top-level `snapshot`
 (D106 R2) is the state this run reached regardless, present even when
 `migrations` is `[]`. `hasChanges` and `snapshotChanged` (D106 R3, J14)
