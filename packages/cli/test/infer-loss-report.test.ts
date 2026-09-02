@@ -169,6 +169,51 @@ describe("buildLossReport / 1.7", () => {
 			"The loss ends when you link the schema repository.",
 		);
 	});
+
+	/**
+	 * D106 N3: nothing sorted the per-instance loss lines before this --
+	 * `typeLosses`/`standaloneSequences`/`uniqueIndexApproximations`/
+	 * `nextvalDefaults`/`undeclarableNameColumns` all followed whatever
+	 * order the catalog happened to return their source rows in. Fed here
+	 * in deliberately unsorted order; the report must still read
+	 * alphabetically by schema.table.column regardless.
+	 */
+	it("orders every per-instance loss line by schema.table.column, regardless of the order the facts arrived in", () => {
+		const report = buildLossReport({
+			...emptyFacts("import"),
+			typeLosses: [
+				{ schema: "app", table: "widgets", column: "z_col", sqlType: "point" },
+				{ schema: "app", table: "widgets", column: "a_col", sqlType: "point" },
+			],
+			standaloneSequences: [
+				{ schema: "app", name: "z_seq" },
+				{ schema: "app", name: "a_seq" },
+			],
+			uniqueIndexApproximations: [
+				{ schema: "app", table: "widgets", name: "z_key" },
+				{ schema: "app", table: "widgets", name: "a_key" },
+			],
+		});
+
+		const typeLossLines = report.filter((line) =>
+			line.includes("no column builder expresses it"),
+		);
+		expect(typeLossLines).toHaveLength(2);
+		expect(typeLossLines[0]).toContain("a_col");
+		expect(typeLossLines[1]).toContain("z_col");
+
+		const sequenceLines = report.filter((line) =>
+			line.includes("no column owns it"),
+		);
+		expect(sequenceLines[0]).toContain("a_seq");
+		expect(sequenceLines[1]).toContain("z_seq");
+
+		const approximationLines = report.filter((line) =>
+			line.includes("is inferred as a unique index"),
+		);
+		expect(approximationLines[0]).toContain("a_key");
+		expect(approximationLines[1]).toContain("z_key");
+	});
 });
 
 describe("detectUniqueIndexApproximations / 1.7", () => {

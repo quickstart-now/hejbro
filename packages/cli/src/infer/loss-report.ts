@@ -95,6 +95,20 @@ const guessedLine = (
 	return [base, `Guessed role names: ${roleNames.join(", ")}.`];
 };
 
+/**
+ * Sorts a copy by a caller-supplied string key (D106 N3) -- every
+ * per-instance loss-report line below is built from an array this
+ * module never controls the origin order of (a catalog reading, a
+ * `Promise.all` of several), so each is sorted here, explicitly, right
+ * before it is rendered, rather than trusting an upstream read to have
+ * stayed in a stable order all the way through.
+ */
+const sortedBy = <T>(
+	items: ReadonlyArray<T>,
+	keyOf: (item: T) => string,
+): ReadonlyArray<T> =>
+	[...items].sort((a, b) => keyOf(a).localeCompare(keyOf(b)));
+
 const countedKindLine = (
 	label: string,
 	count: number,
@@ -122,11 +136,17 @@ const notInferredLines = (
 	...countedKindLine("view(s)", summary.views.length),
 	...countedKindLine("policy expression(s)", summary.policies.length),
 	"Not inferred: grants beyond their role name.",
-	...typeLosses.map(
+	...sortedBy(
+		typeLosses,
+		(loss) => `${loss.schema}.${loss.table}.${loss.column}`,
+	).map(
 		(loss) =>
 			`Not inferred: column "${loss.schema}.${loss.table}.${loss.column}" (type "${loss.sqlType}") -- no column builder expresses it.`,
 	),
-	...standaloneSequences.map(
+	...sortedBy(
+		standaloneSequences,
+		(sequence) => `${sequence.schema}.${sequence.name}`,
+	).map(
 		(sequence) =>
 			`Not inferred: sequence "${sequence.schema}.${sequence.name}" -- no column owns it, and the DSL has no defineSequence() (D66).`,
 	),
@@ -140,11 +160,18 @@ const approximationLines = (
 	uniqueIndexApproximations: ReadonlyArray<UniqueIndexApproximation>,
 	nextvalDefaults: ReadonlyArray<NextvalDefaultApproximation>,
 ): ReadonlyArray<string> => [
-	...uniqueIndexApproximations.map(
+	...sortedBy(
+		uniqueIndexApproximations,
+		(approximation) =>
+			`${approximation.schema}.${approximation.table}.${approximation.name}`,
+	).map(
 		(approximation) =>
 			`Approximated: the UNIQUE constraint "${approximation.schema}.${approximation.table}.${approximation.name}" is inferred as a unique index of the same name -- re-creating it emits \`create unique index\`, not \`add constraint ... unique\`.`,
 	),
-	...nextvalDefaults.map(
+	...sortedBy(
+		nextvalDefaults,
+		(nextval) => `${nextval.schema}.${nextval.table}.${nextval.column}`,
+	).map(
 		(nextval) =>
 			`Approximated: column "${nextval.schema}.${nextval.table}.${nextval.column}" keeps its \`nextval('${nextval.sequence}')\` default as a raw expression, naming the sequence it does not own.`,
 	),
@@ -166,10 +193,14 @@ const undeclarableNameLines = (
 	columns: ReadonlyArray<UndeclarableNameColumn>,
 	command: LossReportFacts["command"],
 ): ReadonlyArray<string> => {
+	const ordered = sortedBy(
+		columns,
+		(column) => `${column.schema}.${column.table}.${column.sqlName}`,
+	);
 	if (command === "pull") {
-		return columns.map(undeclarableNameLineForPull);
+		return ordered.map(undeclarableNameLineForPull);
 	}
-	return columns.map(undeclarableNameLineForImport);
+	return ordered.map(undeclarableNameLineForImport);
 };
 
 const wayOutLine = (command: LossReportFacts["command"]): string => {

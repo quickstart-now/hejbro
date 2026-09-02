@@ -1,3 +1,5 @@
+import { toSnakeCase } from "@hejbro/core";
+
 /**
  * A column's TypeScript key, from its SQL name (catalog-inference delta,
  * "A catalog reading yields a snapshot and a marked description"):
@@ -60,32 +62,83 @@ const nextFreeSuffix = (
 	return tryFrom(2);
 };
 
-const resolveKey = (base: string, assigned: ReadonlySet<string>): string => {
-	if (assigned.has(base)) {
-		return nextFreeSuffix(base, assigned);
+/**
+ * Which of `namesInOrder`'s members sharing `base` as their own key keeps
+ * the bare key (D106 N2, corrected): never `reserved`'s to give (a plain
+ * name is never a source spelling to round-trip); otherwise whichever
+ * member's own name is what `base` round-trips back to via the DSL's own
+ * `table()`-derives-a-column's-SQL-name-from-its-key rule -- the one
+ * colliding name a declaration can still express -- so an exotic sibling
+ * (quoted, differently cased, punctuated) sorting before an ordinary one
+ * can never cost that ordinary column its own key. At most one member can
+ * ever satisfy the round trip (it fixes one specific spelling), so this
+ * is unambiguous whenever it fires; when none does (an exotic collision
+ * with no round-trippable member at all), the earliest-in-`namesInOrder`
+ * member is the fallback, matching this rule's own pre-D106 behavior for
+ * that case unchanged.
+ */
+const bareKeyWinnerIndex = (
+	namesInOrder: ReadonlyArray<string>,
+	base: string,
+	reserved: ReadonlySet<string>,
+): number | null => {
+	if (reserved.has(base)) {
+		return null;
 	}
-	return base;
+	const indices = namesInOrder
+		.map((name, index) => ({ name, index }))
+		.filter(({ name }) => baseTsKey(name) === base)
+		.map(({ index }) => index);
+	const roundTrippableIndex = indices.find(
+		(index) => toSnakeCase(base) === namesInOrder[index],
+	);
+	return roundTrippableIndex ?? indices[0] ?? null;
+};
+
+/** The bare key when `isWinner` still has it free, else the smallest free suffixed key -- no ternary (banned in this codebase). */
+const keyFor = (
+	isWinner: boolean,
+	base: string,
+	assigned: ReadonlySet<string>,
+): string => {
+	if (isWinner && !assigned.has(base)) {
+		return base;
+	}
+	return nextFreeSuffix(base, assigned);
 };
 
 /**
  * Resolves TypeScript identifiers for `namesInOrder`, seeded with
  * `reserved` (already-taken keys, e.g. a file's own import symbols,
- * 2.1/CI-G2-R1-06 Q2) -- the earliest name keeps its bare key unless
- * `reserved` already claims it, and each collision (with `reserved` or
- * an earlier name alike) is suffixed with the smallest free integer
- * from 2 upwards (catalog-inference delta's collision rule).
- * {@link inferColumnKeys} is this with an empty `reserved`.
+ * 2.1/CI-G2-R1-06 Q2) -- one member per colliding base key keeps the bare
+ * key ({@link bareKeyWinnerIndex}) unless `reserved` already claims it,
+ * and every other member (with `reserved` or a bare-key winner alike) is
+ * suffixed with the smallest free integer from 2 upwards, in
+ * `namesInOrder`'s own order (catalog-inference delta's collision rule,
+ * D106 N2-corrected). {@link inferColumnKeys} is this with an empty
+ * `reserved`.
  */
 export const resolveIdentifierKeys = (
 	namesInOrder: ReadonlyArray<string>,
 	reserved: ReadonlySet<string> = new Set(),
 ): ReadonlyArray<string> => {
+	const winnerIndexByBase = new Map(
+		[...new Set(namesInOrder.map(baseTsKey))].map(
+			(base) =>
+				[base, bareKeyWinnerIndex(namesInOrder, base, reserved)] as const,
+		),
+	);
 	const resolved = namesInOrder.reduce<{
 		readonly keys: ReadonlyArray<string>;
 		readonly assigned: ReadonlySet<string>;
 	}>(
-		(state, sqlName) => {
-			const key = resolveKey(baseTsKey(sqlName), state.assigned);
+		(state, sqlName, index) => {
+			const base = baseTsKey(sqlName);
+			const key = keyFor(
+				winnerIndexByBase.get(base) === index,
+				base,
+				state.assigned,
+			);
 			return {
 				keys: [...state.keys, key],
 				assigned: new Set([...state.assigned, key]),

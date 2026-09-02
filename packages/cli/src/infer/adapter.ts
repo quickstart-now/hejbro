@@ -117,13 +117,25 @@ const primaryKeyColumns = (
 			.flatMap((constraint) => constraint.columns),
 	);
 
+/**
+ * Sorted by constraint name explicitly here, not left to the catalog
+ * query's own row order to survive unchanged through this module's own
+ * filter/flatMap (D106 N3): the query is ordered too, but a name compare
+ * at the point each array is actually assembled is the one place this
+ * module states the determinism invariant itself, rather than trusting
+ * it to have propagated correctly from a different file.
+ */
+const byName = <T extends { readonly name: string }>(a: T, b: T): number =>
+	a.name.localeCompare(b.name);
+
 const foreignKeysFor = (
 	constraints: ReadonlyArray<ConstraintRow>,
 	inferenceCatalog: InferenceCatalog,
 	columnFactsByName: ReadonlyMap<string, InferredColumnFacts>,
 ): ReadonlyArray<InferredForeignKey> =>
-	constraints
+	[...constraints]
 		.filter((constraint) => constraint.type === "f")
+		.sort(byName)
 		.flatMap((constraint) => {
 			const detail = inferenceCatalog.foreignKeyDetails.find(
 				(row) =>
@@ -170,8 +182,9 @@ const checksFor = (
 	constraints: ReadonlyArray<ConstraintRow>,
 	inferenceCatalog: InferenceCatalog,
 ): InferredTableFacts["checks"] =>
-	constraints
+	[...constraints]
 		.filter((constraint) => constraint.type === "c")
+		.sort(byName)
 		.flatMap((constraint) => {
 			const detail = inferenceCatalog.checkExpressions.find(
 				(row) =>
@@ -189,12 +202,14 @@ const indexesFor = (
 	inferenceCatalog: InferenceCatalog,
 	primaryKeyConstraintName: string | undefined,
 ): ReadonlyArray<InferredIndex> =>
-	inferenceCatalog.indexDetails.filter(
-		(index) =>
-			index.schema === schema &&
-			index.table === table &&
-			index.name !== primaryKeyConstraintName,
-	);
+	inferenceCatalog.indexDetails
+		.filter(
+			(index) =>
+				index.schema === schema &&
+				index.table === table &&
+				index.name !== primaryKeyConstraintName,
+		)
+		.sort(byName);
 
 /**
  * One table's own columns in physical order (`attnum`, via inference's

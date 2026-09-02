@@ -144,11 +144,13 @@ const FIXTURE_DDL = `
 		"createdAt" timestamptz
 	);
 
-	-- CI-G1-R1-16 info: the delta's own "Two SQL names that collide on one
-	-- key are both described" scenario -- user_id keeps the plain key
-	-- (physical order), "USER_ID" gets the collision suffix, and since
-	-- toSnakeCase("userId2") is "user_id2" (not "USER_ID"), the second is
-	-- exactly as undeclarable as "createdAt", for a different reason.
+	-- CI-G1-R1-16 info, D106 N2-corrected: the delta's own "Two SQL names
+	-- that collide on one key are both described" scenario -- user_id
+	-- keeps the plain key (it is what "userId" round-trips back to, not
+	-- because it comes first physically), "USER_ID" gets the collision
+	-- suffix, and since toSnakeCase("userId2") is "user_id2" (not
+	-- "USER_ID"), the second is exactly as undeclarable as "createdAt",
+	-- for a different reason.
 	create table infer_probe.collision_probe (
 		user_id uuid,
 		"USER_ID" uuid
@@ -501,10 +503,11 @@ describe("inferFromCatalog / 1.8 single entry point", () => {
 	});
 
 	// The delta's own "Two SQL names that collide on one key are both
-	// described" scenario (CI-G1-R1-16 info) -- description carries both
-	// user_id and "USER_ID", but only the first (physical order, plain
-	// key) can round-trip; the loss report names the second.
-	it("a collision: both columns are described, but only the earliest-in-physical-order one reaches the snapshot", async () => {
+	// described" scenario (CI-G1-R1-16 info, D106 N2-corrected) --
+	// description carries both user_id and "USER_ID", but only user_id
+	// (what the bare key round-trips back to) reaches the snapshot; the
+	// loss report names the other.
+	it("a collision: both columns are described, but only the round-trippable one reaches the snapshot", async () => {
 		const result = await inferFromCatalog({
 			session: driver,
 			schemas: ["infer_probe"],
