@@ -17,6 +17,23 @@ const mountedVolumeNames = (container: string): ReadonlyArray<string> =>
 		.split(/\s+/)
 		.filter((name) => name.length > 0);
 
+/**
+ * `null` when `docker inspect` itself fails (a stopped/already-gone
+ * container, a transient Docker error) -- never let that abort the
+ * removal below (#709 R2: the whole point of this file is a cleanup
+ * step that must not skip its own cleanup because a *different* step
+ * failed first).
+ */
+const mountedVolumeNamesOrNull = (
+	container: string,
+): ReadonlyArray<string> | null => {
+	try {
+		return mountedVolumeNames(container);
+	} catch {
+		return null;
+	}
+};
+
 const existingVolumeNames = (): ReadonlyArray<string> =>
 	execFileSync("docker", ["volume", "ls", "-q"], { encoding: "utf-8" })
 		.split("\n")
@@ -36,13 +53,26 @@ const existingVolumeNames = (): ReadonlyArray<string> =>
  * half this check's value: "what's left, and from where" is exactly
  * what `docker rm -f -v` itself never tells you.
  *
+ * `docker inspect` runs *before* `rm`, so its own failure must never
+ * skip the removal it precedes -- `mountedVolumeNamesOrNull` swallows
+ * that one failure into `null`, but this function does not swallow it
+ * a second time: `rm -f -v` still runs either way, and a `null` read
+ * is reported afterward (not silently passed) as its own failure,
+ * since the volume attribution this function exists to prove was
+ * never actually checked.
+ *
  * Not shared with `packages/cli/test/docker-volumes.ts`'s own copy --
  * a test-only fix has no reason to add a new workspace dependency
  * between two otherwise-unrelated packages.
  */
 export const removeContainer = (container: string): void => {
-	const mounted = mountedVolumeNames(container);
+	const mounted = mountedVolumeNamesOrNull(container);
 	execFileSync("docker", ["rm", "-f", "-v", container], { stdio: "ignore" });
+	if (mounted === null) {
+		throw new Error(
+			`docker inspect failed for container "${container}" before it was removed -- it was still removed (rm -f -v), but its volumes were never confirmed freed. Next: check \`docker volume ls -qf dangling=true\` by hand.`,
+		);
+	}
 	if (mounted.length === 0) {
 		return;
 	}

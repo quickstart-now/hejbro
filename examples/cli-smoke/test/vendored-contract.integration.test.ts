@@ -265,9 +265,17 @@ const containerPort = (container: string): string => {
  * Not shared with the sibling copies in `packages/cli/test/
  * docker-volumes.ts`/`packages/pg/test/docker-volumes.ts` -- a single
  * call site here has no reason to add a cross-package dependency.
+ *
+ * `docker inspect` runs *before* `rm`, so its own failure must never
+ * skip the removal it precedes -- `mountedVolumeNamesOrNull` swallows
+ * that one failure into `null`, but this function does not swallow it
+ * a second time: `rm -f -v` still runs either way, and a `null` read
+ * is reported afterward as its own failure, since the volume
+ * attribution this function exists to prove was never actually
+ * checked.
  */
-const removeContainer = (container: string): void => {
-	const mounted = execFileSync(
+const mountedVolumeNames = (container: string): ReadonlyArray<string> =>
+	execFileSync(
 		"docker",
 		["inspect", "--format", "{{range .Mounts}}{{.Name}} {{end}}", container],
 		{ encoding: "utf-8" },
@@ -275,15 +283,34 @@ const removeContainer = (container: string): void => {
 		.trim()
 		.split(/\s+/)
 		.filter((name) => name.length > 0);
+
+const mountedVolumeNamesOrNull = (
+	container: string,
+): ReadonlyArray<string> | null => {
+	try {
+		return mountedVolumeNames(container);
+	} catch {
+		return null;
+	}
+};
+
+const existingVolumeNames = (): ReadonlyArray<string> =>
+	execFileSync("docker", ["volume", "ls", "-q"], { encoding: "utf-8" })
+		.split("\n")
+		.filter((name) => name.length > 0);
+
+const removeContainer = (container: string): void => {
+	const mounted = mountedVolumeNamesOrNull(container);
 	execFileSync("docker", ["rm", "-f", "-v", container], { stdio: "ignore" });
+	if (mounted === null) {
+		throw new Error(
+			`docker inspect failed for container "${container}" before it was removed -- it was still removed (rm -f -v), but its volumes were never confirmed freed. Next: check \`docker volume ls -qf dangling=true\` by hand.`,
+		);
+	}
 	if (mounted.length === 0) {
 		return;
 	}
-	const remaining = new Set(
-		execFileSync("docker", ["volume", "ls", "-q"], { encoding: "utf-8" })
-			.split("\n")
-			.filter((name) => name.length > 0),
-	);
+	const remaining = new Set(existingVolumeNames());
 	const stillPresent = mounted.filter((name) => remaining.has(name));
 	if (stillPresent.length === 0) {
 		return;
