@@ -250,8 +250,8 @@ repository itself isn't reachable: `hejbro pull --db-url ... --schema
 ...` reads the same catalog `import` does and writes into the same
 destination `hejbro vendor` does, marked with no commit so `vendor
 --check`/`outdated` refuse to compare it against one. Its own loss
-report prints the same way, ending instead with "Link the schema
-repository to declare it by hand" — `link` (then `vendor`) is what ends
+report prints the same way, ending instead with "The loss ends when
+you link the schema repository" — `link` (then `vendor`) is what ends
 a `pull`-sourced contract's own loss, the same role it plays for
 `import`'s undeclared column above. See that reference for the full
 shape.
