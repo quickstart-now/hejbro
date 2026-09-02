@@ -383,7 +383,7 @@ export {
 export type { JsonValue } from "./snapshot/stable-json";
 export { stableJson } from "./snapshot/stable-json";
 export { qualifyName, quoteIdentifier } from "./sql/identifier";
-export { isSqlName } from "./sql/identifier-rules";
+export { assertSqlName } from "./sql/identifier-rules";
 export { quoteStringLiteral } from "./sql/literal";
 export type {
 	BannerHashes,

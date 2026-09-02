@@ -10,12 +10,12 @@ import type {
 } from "@hejbro/core";
 import {
 	asc,
+	assertSqlName,
 	check,
 	desc,
 	existingTable,
 	index,
 	indexMethods,
-	isSqlName,
 	op,
 	sql,
 	table,
@@ -144,14 +144,31 @@ const foreignKeyAction = (
 	FOREIGN_KEY_ACTION_TOKEN[code];
 
 /**
+ * D106 R3-B3 (CI-R3-05: `@hejbro/core` exports only the throwing
+ * assertion, not a boolean query -- a boolean predicate is not
+ * otherwise public surface this package needs, so it stays here,
+ * wrapping `assertSqlName` in a `try`/`catch` rather than restating its
+ * pattern): whether `name` round-trips through the DSL's own D36 rule.
+ * `infer/loss-report.ts`'s `detectForeignKeyNameApproximations` is this
+ * same check's report-side caller, so the two can never drift.
+ */
+export const isExpressibleForeignKeyName = (name: string): boolean => {
+	try {
+		assertSqlName(name, "foreign key", null);
+		return true;
+	} catch {
+		return false;
+	}
+};
+
+/**
  * D106 R3-B3: the catalog's own foreign key name, when it round-trips
  * through the DSL's own D36 rule -- `undefined` (omit) otherwise, so
  * `resolveForeignKey` derives instead of throwing `invalid-sql-name` on
- * a database hejbro did not create. `foreignKeyNameApproximation`
- * (`loss-report.ts`) is this same check's report-side half.
+ * a database hejbro did not create.
  */
 const expressibleForeignKeyName = (name: string): string | undefined => {
-	if (isSqlName(name)) {
+	if (isExpressibleForeignKeyName(name)) {
 		return name;
 	}
 	return undefined;

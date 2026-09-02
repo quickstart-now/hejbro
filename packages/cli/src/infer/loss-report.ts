@@ -1,8 +1,9 @@
-import { deriveForeignKeyName, isSqlName } from "@hejbro/core";
+import { deriveForeignKeyName } from "@hejbro/core";
 import type { Catalog } from "../check/catalog";
 import type { ColumnLoss } from "./columns";
 import type { NotInferredSummary } from "./rest";
 import type { InferredTableFacts } from "./table";
+import { isExpressibleForeignKeyName } from "./table";
 
 export type UniqueIndexApproximation = {
 	readonly schema: string;
@@ -77,16 +78,16 @@ export type ForeignKeyNameApproximation = {
  * A foreign key whose catalog name isn't a valid hejbro SQL identifier
  * (D106 R3-B3) -- most often a database hejbro did not create, whose own
  * FK naming convention Postgres itself never enforces past NAMEDATALEN
- * and legality. `infer/table.ts`'s `expressibleForeignKeyName` is this
- * same D36 check's declaration-side half; this is the report-side one,
- * so the two can never drift (`isSqlName`, `@hejbro/core`).
+ * and legality. `infer/table.ts`'s `isExpressibleForeignKeyName` is this
+ * same D36 check both sides call, so the declaration-side and the
+ * report-side can never drift.
  */
 export const detectForeignKeyNameApproximations = (
 	tables: ReadonlyArray<InferredTableFacts>,
 ): ReadonlyArray<ForeignKeyNameApproximation> =>
 	tables.flatMap((table) =>
 		table.foreignKeys.flatMap((fk) => {
-			if (isSqlName(fk.name)) {
+			if (isExpressibleForeignKeyName(fk.name)) {
 				return [];
 			}
 			return [
