@@ -345,7 +345,12 @@ describe("catalog-inference / D106 R4-B1: a bad name costs the object, not the r
 				"utf8",
 			);
 			expect(secondContractSource).toBe(contractSource);
-			expect(second.stdout).toBe(first.stdout);
+			// The report itself, not the whole run's stdout -- `pull`'s own
+			// stdout carries no destination path (the vendor directory is a
+			// fixed convention, never printed), so this line would in fact
+			// already agree byte for byte; scoped to the report anyway, for
+			// the same reason import's own determinism check is (D106 R4-B4).
+			expect(reportLines(second.stdout)).toEqual(reportLines(first.stdout));
 		} finally {
 			await removeCliFixtureDir(cwd);
 			await removeCliFixtureDir(secondCwd);
