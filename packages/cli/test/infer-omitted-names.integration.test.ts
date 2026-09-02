@@ -179,6 +179,33 @@ afterAll(() => {
 const fixtureUrl = (): string =>
 	`postgres://postgres@127.0.0.1:${hostPort}/${DATABASE}`;
 
+/**
+ * `import`'s own stdout also carries a `created <path>` line, and the
+ * delta's own determinism promise ("importing the same database twice
+ * writes byte-identical files") is about the loss report, not that
+ * path -- comparing the whole `stdout` string across two runs into two
+ * *different* `--out` directories would always disagree on that one
+ * line. Collected by an inclusive allowlist of the report's own line
+ * prefixes, not by excluding `created `: an exclusion silently stops
+ * working the moment a prefix elsewhere changes, an inclusion only
+ * needs updating when the report gains a new kind of line, and either
+ * way this test itself would need touching (`buildLossReport`'s own
+ * ordering feeds this file's own header, R2-N3).
+ */
+const REPORT_LINE_PREFIXES = [
+	"Guessed:",
+	"Not inferred:",
+	"Approximated:",
+	"Omitted:",
+	"The loss ends",
+];
+const reportLines = (stdout: string): ReadonlyArray<string> =>
+	stdout
+		.split("\n")
+		.filter((line) =>
+			REPORT_LINE_PREFIXES.some((prefix) => line.startsWith(prefix)),
+		);
+
 describe("catalog-inference / D106 R4-B1: a bad name costs the object, not the reading", () => {
 	it("import: writes app.schema.ts for the ordinary sibling table, writes nothing for the invalid schema, and names all four omissions -- deterministically", async () => {
 		const cwd = await createCliFixtureDir();
@@ -264,7 +291,11 @@ describe("catalog-inference / D106 R4-B1: a bad name costs the object, not the r
 				"utf8",
 			);
 			expect(secondSource).toBe(schemaSource);
-			expect(second.stdout).toBe(first.stdout);
+			// The report itself, not the whole run's stdout (which also
+			// carries `created src/schema.../app.schema.ts` -- a genuinely
+			// different line between two different `--out` directories, by
+			// construction of this very test).
+			expect(reportLines(second.stdout)).toEqual(reportLines(first.stdout));
 		} finally {
 			await removeCliFixtureDir(cwd);
 		}
