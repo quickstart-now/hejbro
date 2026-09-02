@@ -2,6 +2,7 @@ import {
 	existsSync,
 	mkdirSync,
 	mkdtempSync,
+	readdirSync,
 	readFileSync,
 	rmSync,
 	writeFileSync,
@@ -248,6 +249,20 @@ describe("runImport / 3.1", () => {
 		expect(outcome.stderr).toContain("--schema");
 		expect(outcome.stderr).toContain("--schema public");
 		expect(existsSync(join(cwd, "src/schema"))).toBe(false);
+	});
+
+	it("refuses to guess the destination when --out is not given, and writes nothing", async () => {
+		const outcome = await runImport(
+			cwd,
+			["--url", "postgres://fixture", "--schema", "app"],
+			depsFor(resultFor([table("app", "widgets", [idColumn])])),
+		);
+
+		expect(outcome.exitCode).toBe(1);
+		expect(outcome.stderr).toContain("import-destination-missing");
+		expect(outcome.stderr).toContain("--out");
+		// nothing was ever written -- the fixture's own fresh temp dir stays empty.
+		expect(readdirSync(cwd)).toEqual([]);
 	});
 
 	it("fails when the named schemas hold nothing to infer, and writes no files", async () => {
