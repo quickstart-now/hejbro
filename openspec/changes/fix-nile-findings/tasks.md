@@ -90,13 +90,13 @@ of `openspec show fix-nile-findings --diff` hold.
   Green: `check.ts` derives the mode from `config.presets`, threads it to
   `compareCheckConstraint`, and appends the boundary line for the run.
   Files: `packages/cli/src/commands/check.ts`, the test.
-- [ ] 2.4 ~7m — Red: `packages/cli/test/check-live.integration.test.ts`
+- [x] 2.4 ~7m — Red: `packages/cli/test/check-live.integration.test.ts`
   (Docker) with a fake `explainUnavailable` preset against real Postgres:
   the reporter's `length(btrim(name)) > 0` constraint agrees, an `in (...)`
   constraint is not compared, and exit codes follow. Green: nothing beyond
   2.1–2.3 unless the witness finds a normalization gap.
   Files: the integration test.
-- [ ] 2.5 ~6m — Red: none runnable (documentation); the definition of done
+- [x] 2.5 ~6m — Red: none runnable (documentation); the definition of done
   is `openspec validate fix-nile-findings --strict` green. Green:
   `skills/hejbro/references/nile-preset.md` "check on Nile" paragraph
   (what agrees, what is reported as not compared, the restatement advice),
