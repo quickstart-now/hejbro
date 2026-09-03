@@ -116,11 +116,37 @@ export const detectForeignKeyNameApproximations = (
 		}),
 	);
 
-/** A column whose SQL name no declaration key can reproduce (CI-G1-R1-06 (C)) -- `import` omits it from the starter file; `pull` never does, its own contract carries every column regardless. */
+/**
+ * A column whose SQL name a declaration cannot carry, for one of two
+ * different reasons ({@link cause}) -- excluded from both commands' own
+ * snapshot (CI-G1-R1-16, `compose.ts`'s `tablesExcludingUndeclarableNames`),
+ * so neither `import`'s starter file nor `pull`'s contract ever carries
+ * it (the type doc this replaces claimed `pull`'s own contract carried
+ * every column regardless -- false: `contract/from-catalog.ts`'s own
+ * `computeTable`/`buildColumnEntries` iterate the snapshot's columns,
+ * never the description's, so an excluded column is simply never
+ * reached there either).
+ */
 export type UndeclarableNameColumn = {
 	readonly schema: string;
 	readonly table: string;
 	readonly sqlName: string;
+	/**
+	 * Which half of `isNameDeclarable` (`compose.ts`) failed, set there
+	 * where both halves are already in hand rather than re-derived here
+	 * (D106 R6-N1). `"noDeclarationKey"`: no key produces this SQL name
+	 * back at all (`toSnakeCase` never yields it -- a quoted
+	 * `"createdAt"`'s shape). `"identifierRuleRejects"`: a key does
+	 * produce this name back, but D36 itself refuses it (the
+	 * leading-underscore `_id` shape). Both have the same, and only,
+	 * remedy: renaming in the database. `buildColumnEntries`
+	 * (`core/src/dsl/table.ts`) derives every column's SQL name from its
+	 * key and accepts no explicit override, so no hand-written
+	 * declaration -- in this repository or a linked one -- can carry
+	 * either kind of name; "declared by hand" was never a real remedy
+	 * for either cause.
+	 */
+	readonly cause: "noDeclarationKey" | "identifierRuleRejects";
 };
 
 /**
@@ -166,12 +192,17 @@ export type OmittedCheck = {
 
 /**
  * A foreign key whose own name is a valid hejbro SQL identifier, but
- * whose *target* table or schema was itself omitted (D106 R5-B1) --
+ * whose *target*'s own schema or table name is not (D106 R6-B1) --
  * `existingTable(fk.targetSchema, fk.targetTable, …)` would otherwise
- * assert a name the reading already decided it could not carry,
- * aborting the whole reading over a reference into an object one
- * report line up already says is gone. Costs that foreign key alone;
- * the table holding it and everything else on it are still declared.
+ * assert a name the reading already knows it cannot carry, aborting
+ * the whole reading over a reference into an object one report line up
+ * already says has no declaration. A target this run simply never read
+ * (a schema `--schema` did not name) is not this case: its own name is
+ * fine, so the foreign key survives instead, declared against an
+ * `existingTable` handle (`declare-emit/emit.ts`'s own
+ * `mustDeferForeignKey`) rather than a real cross-file import. Costs
+ * that foreign key alone; the table holding it and everything else on
+ * it are still declared.
  */
 export type OmittedForeignKey = {
 	readonly schema: string;
@@ -306,15 +337,25 @@ const approximationLines = (
 	EXPRESSION_APPROXIMATION_LINE,
 ];
 
-/** import's own consequence: the table is left only partly declared, and `check` keeps reporting the column until it is declared by hand or renamed in the database. */
+/** D106 R6-N1: the reason clause `cause` actually earned, never one sentence stretched to cover both. */
+const undeclarableColumnReason = (
+	cause: UndeclarableNameColumn["cause"],
+): string => {
+	if (cause === "identifierRuleRejects") {
+		return "a key does produce this name back, but it is not a valid hejbro SQL identifier";
+	}
+	return "no declaration key produces this SQL name back";
+};
+
+/** import's own consequence: the table is left only partly declared, and `check` keeps reporting the column until it is renamed in the database -- the only remedy that exists for either cause (D106 R6-N1: "declared by hand" never was one). */
 const undeclarableNameLineForImport = (
 	column: UndeclarableNameColumn,
 ): string =>
-	`Omitted: column "${column.schema}.${column.table}.${column.sqlName}" -- its SQL name has no declaration key. The table "${column.schema}.${column.table}" is only partly declared, and \`check\` reports this column until it is declared by hand or renamed in the database.`;
+	`Omitted: column "${column.schema}.${column.table}.${column.sqlName}" -- ${undeclarableColumnReason(column.cause)}. The table "${column.schema}.${column.table}" is only partly declared, and \`check\` reports this column until it is renamed in the database.`;
 
-/** pull's own consequence (CI-G1-R1-16): `contract/emit.ts` drops any table fact with no matching snapshot node, so a column excluded from the snapshot cannot reach the contract at all, regardless of what the description carries -- `link` is the only way out. */
+/** pull's own consequence (CI-G1-R1-16): `contract/from-catalog.ts`'s own `computeTable`/`buildColumnEntries` iterate the snapshot's columns, never the description's, so a column excluded from the snapshot never reaches the contract -- renaming in the database, then linking the schema repository, is the only way out (D106 R6-N1: not "declared by hand", for either cause). */
 const undeclarableNameLineForPull = (column: UndeclarableNameColumn): string =>
-	`Omitted: column "${column.schema}.${column.table}.${column.sqlName}" -- its SQL name has no declaration key, so it cannot be carried in the contract. Link the schema repository to declare it by hand.`;
+	`Omitted: column "${column.schema}.${column.table}.${column.sqlName}" -- ${undeclarableColumnReason(column.cause)}, so it cannot be carried in the contract. Rename the column in the database, then link the schema repository.`;
 
 /** Excluded from both commands' snapshots (CI-G1-R1-16) -- neither can carry a column under a name the database does not have. Only the consequence sentence differs. */
 const undeclarableNameLines = (
@@ -455,18 +496,20 @@ const omittedForeignKeyRemedyForPull = (
 };
 
 /**
- * D106 R5-B1: a foreign key whose own name is fine but whose *target*
- * was omitted -- costs that one foreign key, never the table holding
- * it (which is still declared, minus this one relation) nor the whole
- * reading. Named by the target's own identity and kind, since "which
- * kind of object is missing" changes nothing about *why* — only about
- * what un-omitting it requires.
+ * D106 R6-B1: a foreign key whose own name is fine but whose *target*'s
+ * own name is not -- costs that one foreign key, never the table
+ * holding it (which is still declared, minus this one relation) nor
+ * the whole reading. Named by the target's own identity and kind,
+ * since "which kind of object's name is bad" changes nothing about
+ * *why* -- only about what fixing it requires. A target this run
+ * simply never read is never named here at all (it is kept, not
+ * omitted -- see {@link OmittedForeignKey}).
  */
 const omittedForeignKeyLineForImport = (fk: OmittedForeignKey): string =>
-	`Omitted: foreign key "${fk.schema}.${fk.table}.${fk.name}" -- references ${fk.targetKind} "${fk.target}", which this reading left out. Next: ${omittedForeignKeyRemedyForImport(fk.targetKind)}`;
+	`Omitted: foreign key "${fk.schema}.${fk.table}.${fk.name}" -- references ${fk.targetKind} "${fk.target}", whose catalog name is not a valid hejbro SQL identifier, so no declaration can carry it. Next: ${omittedForeignKeyRemedyForImport(fk.targetKind)}`;
 
 const omittedForeignKeyLineForPull = (fk: OmittedForeignKey): string =>
-	`Omitted: foreign key "${fk.schema}.${fk.table}.${fk.name}" -- references ${fk.targetKind} "${fk.target}", which this reading left out. ${omittedForeignKeyRemedyForPull(fk.targetKind)}`;
+	`Omitted: foreign key "${fk.schema}.${fk.table}.${fk.name}" -- references ${fk.targetKind} "${fk.target}", whose catalog name is not a valid hejbro SQL identifier, so no declaration can carry it. ${omittedForeignKeyRemedyForPull(fk.targetKind)}`;
 
 const omittedForeignKeyLines = (
 	foreignKeys: ReadonlyArray<OmittedForeignKey>,
@@ -487,6 +530,28 @@ const wayOutLine = (command: LossReportFacts["command"]): string => {
 		return "The loss ends when you link the schema repository.";
 	}
 	return "The loss ends when you hand-edit the starter declarations.";
+};
+
+/**
+ * D106 R6-N3: a caller that must add lines to an already-built report
+ * (`commands/import.ts`'s own empty-schema lines, known only once
+ * `emitDeclarationFiles` has run, after `buildLossReport` already
+ * closed with the way-out line) needs them placed *before* the way-out
+ * line, which SHALL stay the report's own last line -- located here by
+ * identity (`wayOutLine(command)`), never by an assumed index, so
+ * there is no throw path in a command and no assumption that some
+ * index is the last one. The way-out line appears exactly once, as
+ * `buildLossReport`'s own final element, so removing every line equal
+ * to it and re-appending it is exact, not approximate.
+ */
+export const withReportLinesBeforeWayOut = (
+	report: ReadonlyArray<string>,
+	command: LossReportFacts["command"],
+	extraLines: ReadonlyArray<string>,
+): ReadonlyArray<string> => {
+	const wayOut = wayOutLine(command);
+	const withoutWayOut = report.filter((line) => line !== wayOut);
+	return [...withoutWayOut, ...extraLines, wayOut];
 };
 
 /**

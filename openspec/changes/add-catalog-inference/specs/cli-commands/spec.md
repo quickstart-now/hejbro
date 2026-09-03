@@ -24,14 +24,21 @@ schema was found and could not be carried is the one useful thing such
 a run has to say, and it is not the same statement as "nothing is
 there". The files SHALL declare what
 the reading inferred with the DSL's own builders, and the command SHALL
-print the loss report. A column whose SQL name no declaration key can
-produce — the DSL derives a column's SQL name from its key by
-snake_case — or whose name the DSL's own identifier rule rejects, such
-as the leading-underscore `_id` a key does produce back, SHALL be
-omitted from the starter files and named in the
-loss report together with its consequence: the table is only partly
-declared, and `check` reports that column until it is declared by hand
-or renamed in the database. A foreign key's own catalog name SHALL survive into the starter
+print the loss report. A column the DSL cannot name SHALL be omitted
+from the starter files and named in the loss report with the reason it
+could not be carried — and the two reasons are different and SHALL be
+told apart: either no declaration key produces that SQL name back (the
+DSL derives a column's SQL name from its key by snake_case, so a quoted
+`"createdAt"` has no key that yields it), or a key does produce it back
+and the DSL's own identifier rule rejects the name itself, as it
+rejects the leading-underscore `_id`. The consequence is the same for
+both and SHALL be stated with the line: the table is only partly
+declared, and `check` reports that column until it is renamed in the
+database. Renaming is the only way out there is, and the report SHALL
+offer no other — the DSL derives every column's SQL name from its
+TypeScript key and accepts no explicit name beside it, so no
+hand-written declaration can carry either kind of name, in this
+repository or in a linked one. A foreign key's own catalog name SHALL survive into the starter
 declaration — written out where it differs from the name the DSL would
 derive, left implicit where it does not — because `check` compares
 foreign keys by name, and a database hejbro did not create names them
@@ -44,7 +51,12 @@ a cycle — and a reference to another file's enum counts as an import,
 exactly as a foreign key to another file's table does: where a cycle
 would form, the crossings in one direction are declared against
 unexported reference-only declarations, a handle for a table and a
-local copy of the enum for an enum. Each file SHALL
+local copy of the enum for an enum. A foreign key into a table no
+starter file declares — one whose schema this run never named — SHALL
+be declared against such a handle too, for a different reason: there is
+no file to import its target from. A starter file therefore never names
+a table this run did not read except through a handle of its own. Each
+file SHALL
 open with a header carrying
 the loss report in full and the statement that the file is the
 repository's own from now on, and SHALL carry no clock- or
@@ -87,18 +99,21 @@ meant to run.
   produce, such as a quoted `"createdAt"` (the DSL derives a column's
   SQL name from its key by snake_case)
 - **THEN** the starter file leaves that column out, the loss report
-  names it and its table, and states the consequence: the table is only
-  partly declared, and `check` reports that column until it is declared
-  by hand or renamed in the database
+  names it and its table, gives that column's own reason — no
+  declaration key produces that SQL name back — and states the
+  consequence: the table is only partly declared, and `check` reports
+  that column until it is renamed in the database
 
 #### Scenario: a column the DSL rejects by name is left out the same way
 - **WHEN** a table holds a column named `_id`, whose inferred key
   produces that same SQL name back but whose name the DSL's own
   identifier rule rejects
 - **THEN** the run completes exactly as it does for a name no key can
-  produce: the starter file leaves that column out, the loss report
+  produce — the starter file leaves that column out, the loss report
   names it with its table and consequence, and every other column of
-  that table is declared
+  that table is declared — but the report gives this column's own
+  reason, that the identifier rule rejects a name a key does produce
+  back, rather than saying no key produces it
 
 #### Scenario: import refuses to guess which schemas to read
 - **WHEN** `hejbro import --url <db> --out src/schema` runs with no

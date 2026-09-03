@@ -192,20 +192,18 @@ describe("isNameDeclarable / D106 R5-B2", () => {
 	});
 });
 
-// D106 R5-B1: a foreign key's own name being fine is not enough --
-// `referencesFor` (`infer/table.ts`) used to build an `existingTable`
-// handle against the target regardless of whether the reading itself
-// kept it, aborting the whole reading on a name it had already decided
-// to omit one report line up.
-describe("partitionForeignKeys / D106 R5-B1", () => {
+// D106 R6-B1: a foreign key is omitted for exactly the reason every
+// other object in this module is -- its *target*'s own name is one a
+// declaration cannot carry. Whether the target's schema was ever named
+// on `--schema` is a different question this function no longer asks:
+// a target this run simply never read keeps its foreign key (declared
+// against an `existingTable` handle, `declare-emit/emit.ts`'s own
+// concern), it is never omitted here.
+describe("partitionForeignKeys / D106 R6-B1", () => {
 	it("keeps a foreign key whose target table survived", () => {
 		const orders = tableFacts("orders", [foreignKeyTo("app", "widgets")]);
 		const widgets = tableFacts("widgets");
-		const result = partitionForeignKeys(
-			[orders, widgets],
-			new Set(["app.orders", "app.widgets"]),
-			new Set(),
-		);
+		const result = partitionForeignKeys([orders, widgets]);
 
 		expect(result.omittedForeignKeys).toEqual([]);
 		expect(
@@ -213,15 +211,26 @@ describe("partitionForeignKeys / D106 R5-B1", () => {
 		).toHaveLength(1);
 	});
 
+	it("keeps a foreign key into a table in a schema the run did not name", () => {
+		// `ext.users` is not one of `tables` at all -- this run never read
+		// schema "ext" -- and both names are perfectly ordinary lower
+		// snake_case, so nothing about them is inexpressible.
+		const orders = tableFacts("orders", [
+			foreignKeyTo("ext", "users", "fk_owner"),
+		]);
+		const result = partitionForeignKeys([orders]);
+
+		expect(result.omittedForeignKeys).toEqual([]);
+		expect(result.tables[0]?.foreignKeys).toEqual([
+			foreignKeyTo("ext", "users", "fk_owner"),
+		]);
+	});
+
 	it("omits a foreign key whose target table was itself omitted, naming the target as a table", () => {
 		const orders = tableFacts("orders", [
 			foreignKeyTo("app", "Widgets", "fk_widget"),
 		]);
-		const result = partitionForeignKeys(
-			[orders],
-			new Set(["app.orders"]),
-			new Set(),
-		);
+		const result = partitionForeignKeys([orders]);
 
 		expect(result.omittedForeignKeys).toEqual([
 			{
@@ -239,11 +248,7 @@ describe("partitionForeignKeys / D106 R5-B1", () => {
 		const orders = tableFacts("orders", [
 			foreignKeyTo("App", "orders", "fk_owner"),
 		]);
-		const result = partitionForeignKeys(
-			[orders],
-			new Set(["app.orders"]),
-			new Set(["App"]),
-		);
+		const result = partitionForeignKeys([orders]);
 
 		expect(result.omittedForeignKeys).toEqual([
 			{
@@ -257,11 +262,11 @@ describe("partitionForeignKeys / D106 R5-B1", () => {
 		expect(result.tables[0]?.foreignKeys).toEqual([]);
 	});
 
-	it("keeps a self-referencing foreign key even when the table's own identity is absent from the surviving set argument", () => {
+	it("keeps a self-referencing foreign key", () => {
 		const widgets = tableFacts("widgets", [
 			foreignKeyTo("app", "widgets", "fk_parent"),
 		]);
-		const result = partitionForeignKeys([widgets], new Set(), new Set());
+		const result = partitionForeignKeys([widgets]);
 
 		expect(result.omittedForeignKeys).toEqual([]);
 		expect(result.tables[0]?.foreignKeys).toHaveLength(1);

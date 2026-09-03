@@ -480,4 +480,64 @@ describe("runImport / 3.1", () => {
 			rmSync(cwd2, { recursive: true, force: true });
 		}
 	});
+
+	/**
+	 * D106 R6-N3: `withEmptySchemaLines` used to append the empty-schema
+	 * line after `buildLossReport` had already closed with the way-out
+	 * line, so the way-out line was no longer the report's own last line
+	 * -- in stdout or in the header, identically (R2-N3's own parity
+	 * property). The injected `lossReport` here is shaped exactly like a
+	 * real `buildLossReport("import")` call's own output: guessed facts,
+	 * then the way-out line last -- proving the fix holds for the report
+	 * `withEmptySchemaLines` actually receives, not a hand-picked shape.
+	 */
+	it("prints the empty-schema line before the way out, in stdout and in every file header alike", async () => {
+		const guessedLine =
+			"Guessed: TypeScript keys from SQL names, the default numeric mode, and unknown array-element nullability (read as nullable).";
+		const wayOut = "The loss ends when you hand-edit the starter declarations.";
+		const billingLine = 'Not inferred: nothing to infer in schema "billing".';
+		const result = resultFor(
+			[table("app", "widgets", [idColumn])],
+			[guessedLine, wayOut],
+		);
+
+		const outcome = await runImport(
+			cwd,
+			[
+				"--url",
+				"postgres://fixture",
+				"--schema",
+				"app",
+				"--schema",
+				"billing",
+				"--out",
+				"src/schema",
+			],
+			depsFor(result),
+		);
+
+		expect(outcome.exitCode).toBe(0);
+		// The way-out line is the report's own last line -- stdout's true
+		// last element, since nothing follows the report there.
+		expect(outcome.stdout.at(-1)).toBe(wayOut);
+
+		const expectedReportOrder = [guessedLine, billingLine, wayOut];
+		const stdoutReportLines = outcome.stdout.filter((line) =>
+			expectedReportOrder.includes(line),
+		);
+		expect(stdoutReportLines).toEqual(expectedReportOrder);
+
+		// Round-2 parity: the written file's own header carries the same
+		// report lines, in the same order, as stdout's own report half.
+		const schemaSource = readFileSync(
+			join(cwd, "src/schema/app.schema.ts"),
+			"utf8",
+		);
+		const fileLines = schemaSource.split("\n");
+		const headerIndices = expectedReportOrder.map((line) =>
+			fileLines.indexOf(` * ${line}`),
+		);
+		expect(headerIndices.every((index) => index !== -1)).toBe(true);
+		expect(headerIndices).toEqual([...headerIndices].sort((a, b) => a - b));
+	});
 });

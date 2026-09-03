@@ -969,3 +969,130 @@ describe("emitDeclarationFiles / D106 R3-B3: a foreign key's own catalog name", 
 		);
 	});
 });
+
+describe("emitDeclarationFiles / D106 R6-B1", () => {
+	it("declares a foreign key into a table this run never read through an unexported existingTable handle", () => {
+		const orders: TableSnapshot = {
+			schema: "app",
+			name: "orders",
+			columns: [
+				{
+					name: "id",
+					typeNode: { typeName: "uuid" },
+					notNull: true,
+					primaryKey: true,
+				},
+				{ name: "owner_id", typeNode: { typeName: "uuid" }, notNull: true },
+			],
+			indexes: [],
+			// "ext.users" is not among this snapshot's own tables -- this run
+			// never read schema "ext" at all (not omitted for a bad name:
+			// both "ext" and "users" are ordinary lower snake_case).
+			foreignKeys: [
+				{
+					name: "orders_owner_id_fkey",
+					columns: ["owner_id"],
+					referencesTable: "ext.users",
+					referencesColumns: ["id"],
+				},
+			],
+			primaryKeyName: "orders_pkey",
+		};
+
+		const files = emitDeclarationFiles(resultFor([orders]));
+		expect(files).toHaveLength(1);
+		const [file] = files;
+		if (file === undefined) {
+			throw new Error("expected exactly one emitted file");
+		}
+
+		// The handle's own preamble line has no "export const" of its own,
+		// so it sits in the text just before this table's own call -- the
+		// block this table owns starts at whichever comes first.
+		const preambleStart = file.source.indexOf("\nconst ");
+		const callStart = file.source.indexOf("export const orders = table(");
+		if (callStart === -1) {
+			throw new Error(
+				`expected "export const orders = table(" in the emitted source:\n${file.source}`,
+			);
+		}
+		const candidateStarts = [preambleStart, callStart].filter(
+			(index) => index !== -1,
+		);
+		const ordersBlock = file.source.slice(Math.min(...candidateStarts));
+
+		const handleMatch = ordersBlock.match(
+			/const (\w+) = existingTable\("ext", "users", \{[^}]*\}\);/,
+		);
+		if (handleMatch === null) {
+			throw new Error(
+				`expected an existingTable("ext", "users", ...) handle in orders's own block:\n${ordersBlock}`,
+			);
+		}
+		const [, handleIdentifier] = handleMatch;
+
+		expect(ordersBlock).not.toContain('from "./ext.schema"');
+		expect(ordersBlock).toContain(
+			`references: { table: ${handleIdentifier}, columns: [${handleIdentifier}.id] }`,
+		);
+	});
+
+	/**
+	 * D106 R6-B1 commit 5.5's own interaction risk: `compose.ts` now
+	 * declares one `existingTable` handle per out-of-scope target as a
+	 * top-level entry, so `result.snapshot` carries an `existing: true`
+	 * node for it -- `tablesInSnapshot` (`contract/read-snapshot.ts`)
+	 * carries no filter of its own, so without one here this run would
+	 * write a real `src/schema/ext.schema.ts`, undoing the very scoping
+	 * this round defends. This is a unit-level observer for that filter
+	 * -- previously only the Docker witness caught this.
+	 */
+	it("writes no file for an existing-marked table this run never read, and no cross-file import for it either", () => {
+		const orders: TableSnapshot = {
+			schema: "app",
+			name: "orders",
+			columns: [
+				{
+					name: "id",
+					typeNode: { typeName: "uuid" },
+					notNull: true,
+					primaryKey: true,
+				},
+				{ name: "owner_id", typeNode: { typeName: "uuid" }, notNull: true },
+			],
+			indexes: [],
+			foreignKeys: [
+				{
+					name: "orders_owner_id_fkey",
+					columns: ["owner_id"],
+					referencesTable: "ext.users",
+					referencesColumns: ["id"],
+				},
+			],
+			primaryKeyName: "orders_pkey",
+		};
+		// `compose.ts`'s own `buildExistingTableHandle` -- the exact shape
+		// `outOfScopeHandlesFor` appends to `generateMigration`'s own
+		// declarations for a target outside the survivor set.
+		const extUsers: TableSnapshot = {
+			schema: "ext",
+			name: "users",
+			columns: [{ name: "id", typeNode: { typeName: "text" } }],
+			indexes: [],
+			foreignKeys: [],
+			primaryKeyName: "",
+			existing: true,
+		};
+
+		const files = emitDeclarationFiles(resultFor([orders, extUsers]));
+
+		expect(files).toHaveLength(1);
+		expect(files.some((file) => file.schema === "ext")).toBe(false);
+		const [file] = files;
+		if (file === undefined) {
+			throw new Error("expected exactly one emitted file");
+		}
+		expect(file.schema).toBe("app");
+		expect(file.source).not.toContain('from "./ext.schema"');
+	});
+});

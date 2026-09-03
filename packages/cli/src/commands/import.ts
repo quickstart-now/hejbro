@@ -16,6 +16,7 @@ import { asHejbroError } from "../errors";
 import { collectFlagValues, normalizeEqualsFlags } from "../flags";
 import type { InferCatalogOptions, InferCatalogResult } from "../infer/compose";
 import { inferFromCatalog } from "../infer/compose";
+import { withReportLinesBeforeWayOut } from "../infer/loss-report";
 
 const IMPORT_DESCRIPTION =
 	"Write one starter declaration file per schema from a live database's catalog.";
@@ -199,14 +200,21 @@ const emptySchemaLines = (
  * `--schema` list (both known before `emitDeclarationFiles` runs), so
  * folding them into `result.lossReport` here -- before emission -- makes
  * every written file's header carry the same full report the terminal
- * does, with the same one array feeding both.
+ * does, with the same one array feeding both. D106 R6-N3:
+ * `withReportLinesBeforeWayOut` (`infer/loss-report.ts`) places them
+ * before the way-out line rather than simply appending them, so that
+ * line stays the report's own last one here too.
  */
 const withEmptySchemaLines = (
 	result: InferCatalogResult,
 	schemas: ReadonlyArray<string>,
 ): InferCatalogResult => ({
 	...result,
-	lossReport: [...result.lossReport, ...emptySchemaLines(result, schemas)],
+	lossReport: withReportLinesBeforeWayOut(
+		result.lossReport,
+		"import",
+		emptySchemaLines(result, schemas),
+	),
 });
 
 const targetPath = (out: string, file: DeclareEmitFile): string =>

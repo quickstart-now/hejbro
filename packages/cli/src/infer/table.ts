@@ -1,6 +1,7 @@
 import type {
 	ColumnBuilder,
 	ColumnRef,
+	DeclaredTable,
 	HejbroInput,
 	IndexBuilder,
 	IndexColumnInput,
@@ -10,12 +11,12 @@ import type {
 } from "@hejbro/core";
 import {
 	asc,
-	assertSqlName,
 	check,
 	desc,
 	existingTable,
 	index,
 	indexMethods,
+	isSqlName,
 	op,
 	sql,
 	table,
@@ -153,28 +154,19 @@ const foreignKeyAction = (
 	FOREIGN_KEY_ACTION_TOKEN[code];
 
 /**
- * D106 R3-B3 (CI-R3-05: `@hejbro/core` exports only the throwing
- * assertion, not a boolean query -- a boolean predicate is not
- * otherwise public surface this package needs, so every caller here
- * wraps `assertSqlName` in a `try`/`catch` rather than restating its
- * pattern): whether `name` round-trips through the DSL's own D36 rule.
- * Shared by every catalog-inference call site that must omit an object
- * rather than let `assertSqlName` abort the whole reading (D106 R4-B1)
- * -- a table, schema, index or check whose catalog name Postgres
- * allowed but hejbro cannot express. A foreign key's own name is the
- * one exception: it keeps its round-trip-or-derive fallback
+ * Whether `name` round-trips through the DSL's own D36 rule -- asks
+ * `@hejbro/core`'s own `isSqlName` directly, the one predicate for that
+ * question, rather than restating its pattern. Shared by every
+ * catalog-inference call site that must omit an object rather than let
+ * `assertSqlName` abort the whole reading (D106 R4-B1) -- a table,
+ * schema, index or check whose catalog name Postgres allowed but hejbro
+ * cannot express. A foreign key's own name is the one exception: it
+ * keeps its round-trip-or-derive fallback
  * ({@link isExpressibleForeignKeyName}) rather than omission, since a
- * constraint's name is a label on a relation that still has one, while
- * a table/schema/index/check name is the object's own identity.
+ * constraint's name is a label on a relation that still exists, while a
+ * table/schema/index/check name is the object's own identity.
  */
-export const isExpressibleName = (name: string): boolean => {
-	try {
-		assertSqlName(name, "identifier", null);
-		return true;
-	} catch {
-		return false;
-	}
-};
+export const isExpressibleName = isSqlName;
 
 /**
  * D106 R3-B3: whether a foreign key's own catalog name round-trips
@@ -264,16 +256,71 @@ const builderForExistingColumn = (
 };
 
 /**
+ * One `existingTable` handle (D41), shared by every foreign key in this
+ * run that targets the same identity -- {@link columnKeyBySqlName} lets
+ * a caller holding only one foreign key's own (smaller) column subset
+ * find its `ColumnRef`s on the shared handle, which was built from the
+ * *union* every such foreign key contributes (D106 R6-B1 commit 5.5).
+ */
+export type ExistingTableHandle = {
+	readonly table: DeclaredTable;
+	readonly columnKeyBySqlName: ReadonlyMap<string, string>;
+};
+
+/**
+ * Builds one `existingTable` handle for `targetSchema`.`targetTable`
+ * from `columns` (the union of every referencing foreign key's own
+ * `targetColumns`, already deduplicated by SQL name) -- ordered here by
+ * SQL column name, deterministically, so the same target's columns
+ * arrive in the same order regardless of which foreign key's own catalog
+ * row happened to list one first (D106 R6-B1 commit 5.5: two import
+ * runs, or import and pull over the same database, must mint the same
+ * handle).
+ */
+export const buildExistingTableHandle = (
+	targetSchema: string,
+	targetTable: string,
+	columns: ReadonlyArray<InferredForeignKeyTargetColumn>,
+): ExistingTableHandle => {
+	const orderedColumns = [...columns].sort((a, b) =>
+		a.sqlName.localeCompare(b.sqlName),
+	);
+	const targetKeys = inferColumnKeys(
+		orderedColumns.map((column) => column.sqlName),
+	);
+	const columnsRecord: Record<string, ColumnBuilder> = Object.fromEntries(
+		orderedColumns.map((column, position) => [
+			targetKeys[position],
+			builderForExistingColumn(column.facts),
+		]),
+	);
+	const table = existingTable(targetSchema, targetTable, columnsRecord);
+	const columnKeyBySqlName = new Map(
+		orderedColumns.map((column, position) => [
+			column.sqlName,
+			targetKeys[position] as string,
+		]),
+	);
+	return { table, columnKeyBySqlName };
+};
+
+/**
  * The `references` half of a foreign key: this table's own `t` for a
- * self-reference (`table` omitted, core's own D52 rule), or a fresh
- * `existingTable` reference-only handle (D41) for any other table --
- * built here, on demand, so this table's own construction never waits
- * on the target table's real object.
+ * self-reference (`table` omitted, core's own D52 rule); the *shared*
+ * handle `existingHandles` already built for this target's identity
+ * when one exists (D106 R6-B1 commit 5.5: a target this run never read,
+ * so the object a foreign key references has to *be* the object
+ * `compose.ts` separately declares, or the snapshot would carry two
+ * disagreeing nodes for the same identity); a fresh, on-demand
+ * `existingTable` reference-only handle (D41) otherwise -- the ordinary
+ * case, an in-scope target that is separately declared as a real table
+ * elsewhere, where this table's own construction must not wait on it.
  */
 const referencesFor = (
 	fk: InferredForeignKey,
 	facts: InferredTableFacts,
 	columnRefBySqlName: ReadonlyMap<string, ColumnRef>,
+	existingHandles: ReadonlyMap<string, ExistingTableHandle>,
 ): { readonly table?: Table; readonly columns: ReadonlyArray<ColumnRef> } => {
 	const isSelf =
 		fk.targetSchema === facts.schema.schemaName &&
@@ -283,6 +330,17 @@ const referencesFor = (
 			columns: fk.targetColumns.map(
 				(col) => columnRefBySqlName.get(col.sqlName) as ColumnRef,
 			),
+		};
+	}
+	const shared = existingHandles.get(`${fk.targetSchema}.${fk.targetTable}`);
+	if (shared !== undefined) {
+		const sharedRefs = shared.table as unknown as Record<string, ColumnRef>;
+		return {
+			table: shared.table,
+			columns: fk.targetColumns.map((col) => {
+				const key = shared.columnKeyBySqlName.get(col.sqlName) as string;
+				return sharedRefs[key] as ColumnRef;
+			}),
 		};
 	}
 	const targetKeys = inferColumnKeys(
@@ -334,7 +392,10 @@ const indexColumnInput = (
  * from the table and reported as a loss (catalog-inference delta) rather
  * than failing the whole table.
  */
-export const inferTable = (facts: InferredTableFacts): InferredTableResult => {
+export const inferTable = (
+	facts: InferredTableFacts,
+	existingHandles: ReadonlyMap<string, ExistingTableHandle> = new Map(),
+): InferredTableResult => {
 	const declarations: ReadonlyArray<{
 		readonly column: InferredTableColumn;
 		readonly result: ColumnDeclarationResult;
@@ -412,7 +473,12 @@ export const inferTable = (facts: InferredTableFacts): InferredTableResult => {
 				columns: fk.sourceColumns.map(
 					(name) => columnRefBySqlName.get(name) as ColumnRef,
 				),
-				references: referencesFor(fk, facts, columnRefBySqlName),
+				references: referencesFor(
+					fk,
+					facts,
+					columnRefBySqlName,
+					existingHandles,
+				),
 				// D106 R3-B3: the catalog's own name, when expressible --
 				// omitted (derives) otherwise, same `exactOptionalPropertyTypes`
 				// shape the actions below already use.

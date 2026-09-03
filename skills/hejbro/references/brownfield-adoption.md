@@ -264,10 +264,14 @@ is not (everything it holds — columns, checks, indexes, foreign
 keys — is left undeclared with it); an **index** or a **check
 constraint** whose own name is not (each is never mentioned again,
 since `check` compares only what is declared); and a **foreign key**
-whose own target table or schema was itself omitted for one of the
-reasons above — the relationship is left out and named, naming the
+whose own *target*'s name — its schema, or its table — is not one
+hejbro can carry — the relationship is left out and named, naming the
 missing target, while the column that carried it stays declared as a
-plain column. `import` never hides any of this: every
+plain column. A foreign key into a schema `import`/`pull` simply never
+named is a different case, not an omission: its target's own name may
+be perfectly ordinary, so the relationship is kept, declared against an
+unexported handle to a table this repository does not declare, and the
+report says nothing about it. `import` never hides any of this: every
 file's own header carries the full report, and the same report prints
 to the terminal on every run, ending with the way out ("The loss ends
 when you hand-edit the starter declarations"). Two schemas whose

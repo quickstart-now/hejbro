@@ -50,13 +50,33 @@ rule predicting it, since two rules that disagree is precisely how a
 reading stops where it should have omitted: a quoted `"createdAt"`
 fails both halves, while a leading-underscore `_id` passes the round
 trip and fails the rule — the very case a rule predicting the DSL's
-answer got wrong — and both are omitted and named. A table or schema left out takes the
-objects it holds with it, and the foreign keys that point at it: a
-surviving declaration SHALL never reference an object this reading
-omitted, and the report SHALL never announce an approximation for one.
-Leaving such an object out SHALL never stop the reading — everything
-else in the named schemas is still inferred — and the loss report SHALL
-name each of them. A column named there is
+answer got wrong — and both are omitted and named. A table or schema left out for a name
+no declaration can carry takes the objects it holds with it, and the
+foreign keys that point at it: a surviving declaration SHALL never
+reference an object this reading omitted for its name, and the report
+SHALL never announce an approximation for one. A target that lies
+outside the schemas the run named is a different case and SHALL be
+kept: it was not omitted but unread, and its own name may be one a
+declaration carries perfectly well — such a reference SHALL survive
+into the starter declarations and into the contract alike, carried as a
+reference to a table this repository does not declare, with nothing
+said about it in the loss report, since nothing was lost. The reading
+SHALL carry such a target in the snapshot it yields as a table it names
+but does not declare, so that neither consumer of one reading loses the
+reference: the starter declarations name it through a reference-only
+handle they do not export, and the contract names it through the
+relation and the foreign-key metadata. The contract SHALL NOT give that
+target an entry of its own among its tables — a table this run never
+read has no column set and no types the contract could state without
+guessing at them, and a contract that guesses is worse than one that
+says only what it knows. Which tables
+a reading kept is therefore never what decides a reference's fate;
+whether the target's own name can be carried is — a hosted database's
+platform schemas are exactly the ones a run leaves unnamed, so reading
+scope as omission would drop the most ordinary reference such a
+database has. Leaving an object out for its name SHALL never stop the
+reading — everything else in the named schemas is still inferred — and
+the loss report SHALL name each of them. A column named there is
 still described: the description records what the database holds, and
 the snapshot records what a declaration can express.
 
@@ -93,6 +113,18 @@ the snapshot records what a declaration can express.
   loss report names the foreign key together with the omitted object it
   points at and what to do about that object, and no approximation is
   announced for anything the reading omitted
+
+#### Scenario: A reference into a schema the run did not name is kept
+- **WHEN** a table in a named schema holds a foreign key into a table in
+  a schema the run did not name, whose schema and table names a
+  declaration can carry
+- **THEN** the reading keeps that foreign key: the starter declaration
+  references its target through a reference-only handle it does not
+  export, the pulled contract carries the reference both as a relation
+  and in its foreign-key metadata while giving that target no entry of
+  its own among its tables, the loss report says nothing about it, and a
+  following `baseline` emits the constraint with the rest — while no
+  starter file is written for the schema the run never named
 
 #### Scenario: Two tables sharing a constraint name keep their own expressions
 - **WHEN** two tables in one schema each carry a check constraint of the
