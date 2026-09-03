@@ -661,3 +661,82 @@ describe("runInit / a file in a configured path's ancestor chain stops the run (
 		}
 	});
 });
+
+// D106 R1 N2: two configured fields resolving to the same path let the
+// run create one artifact and then report the other as already present
+// -- a repair run reading a broken project as whole. Resolved paths are
+// compared before anything is created, not the raw spellings.
+describe("runInit / a configuration whose fields resolve to the same path (D106 R1 N2)", () => {
+	it("refuses a configuration whose fields resolve to the same path", async () => {
+		await writeFile(
+			configPath(),
+			'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "migrations", snapshotPath: "migrations" };\n',
+		);
+
+		const result = await runInit(cwd);
+
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toBe(
+			'error[init-path-conflict]: migrations\n  "migrations" is named by both migrationsDir and snapshotPath. Next: point them at two different paths, then rerun `hejbro init`.',
+		);
+		expect(existsSync(join(cwd, "migrations"))).toBe(false);
+	});
+
+	it("refuses the same shared path even when one field's spelling carries a trailing slash", async () => {
+		await writeFile(
+			configPath(),
+			'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "mig/", snapshotPath: "mig" };\n',
+		);
+
+		const result = await runInit(cwd);
+
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toBe(
+			'error[init-path-conflict]: mig\n  "mig" is named by both migrationsDir and snapshotPath. Next: point them at two different paths, then rerun `hejbro init`.',
+		);
+	});
+
+	it("refuses a snapshotPath that resolves to the configuration file itself", async () => {
+		await writeFile(
+			configPath(),
+			'export default { entry: ["src/**/*.schema.ts"], snapshotPath: "hejbro.config.ts" };\n',
+		);
+
+		const result = await runInit(cwd);
+
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toBe(
+			'error[init-path-conflict]: hejbro.config.ts\n  "hejbro.config.ts" is named by both hejbro.config.ts and snapshotPath. Next: point them at two different paths, then rerun `hejbro init`.',
+		);
+		expect(existsSync(join(cwd, "migrations"))).toBe(false);
+	});
+
+	it("creates both artifacts when their configured paths differ (control)", async () => {
+		await writeFile(
+			configPath(),
+			'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "migrations", snapshotPath: "hejbro.snapshot.json" };\n',
+		);
+
+		const result = await runInit(cwd);
+
+		expect(result.exitCode).toBe(0);
+		expect(result.report).toContain("created migrations/");
+		expect(result.report).toContain("created hejbro.snapshot.json");
+	});
+
+	it("reports both fields not configured when neither is set (control)", async () => {
+		await writeFile(
+			configPath(),
+			'export default { entry: ["src/**/*.schema.ts"] };\n',
+		);
+
+		const result = await runInit(cwd);
+
+		expect(result.exitCode).toBe(0);
+		expect(result.report).toEqual([
+			"skipped hejbro.config.ts (exists)",
+			"migrationsDir not configured",
+			"snapshotPath not configured",
+		]);
+	});
+});

@@ -282,7 +282,7 @@ Groups 1 and 2 are merged, so this group shares a file with neither.
       has already written the migrations directory.
       Files: `packages/cli/src/commands/init.ts`, its test.
 
-- [ ] 3.3 (~8m) `[design]` Two configured fields naming one path stop the
+- [x] 3.3 (~8m) `[design]` Two configured fields naming one path stop the
       run. Red: `packages/cli/test/init.test.ts` — "refuses a
       configuration whose fields resolve to the same path". Input table:
 

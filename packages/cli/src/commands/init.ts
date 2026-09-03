@@ -137,6 +137,27 @@ function throwAncestorConflict(
 }
 
 /** Builds and throws the `init-path-conflict`-coded, enriched plain
+ * `HejbroError` for two configured fields whose resolved paths are the
+ * same node (D106 R1 N2): creating the first would make the second's
+ * own `existsSync` check report it as already present -- "tells a
+ * repair run that a broken project is whole", the very thing this
+ * command's idempotence promise forbids. Labelled with {@link fileLabel}
+ * (D106 R1 lead-approved option A extended, same reasoning as
+ * {@link throwAncestorConflict}): no user spelled this one shared path
+ * for both fields at once, so there is no single field's own spelling
+ * to preserve. */
+function throwDuplicatePath(
+	label: string,
+	firstField: string,
+	secondField: string,
+): never {
+	return throwHejbroError(
+		"init-path-conflict",
+		`"${label}" is named by both ${firstField} and ${secondField}. Next: point them at two different paths, then rerun \`hejbro init\`.`,
+	);
+}
+
+/** Builds and throws the `init-path-conflict`-coded, enriched plain
  * `HejbroError` for a `stat` failure other than "nothing is there"
  * (D106 R1 B1) -- an `EACCES`/`ELOOP`/etc, named by the operating
  * system's own code instead of the raw Node stack this CLI's
@@ -247,6 +268,41 @@ const checkAncestors = (cwd: string, artifact: Artifact): void => {
 		throwAncestorConflict(label, artifact.fieldName, outcome.actualKind);
 	}
 	throwStatFailed(label, artifact.fieldName, outcome.code);
+};
+
+type ArtifactPair = readonly [Artifact, Artifact];
+
+/** Every unordered pair of `artifacts`, each appearing once, in the
+ * artifacts' own relative order -- built with `flatMap`/`slice`, never
+ * a nested loop (`check:bans`). */
+const artifactPairs = (
+	artifacts: ReadonlyArray<Artifact>,
+): ReadonlyArray<ArtifactPair> =>
+	artifacts.flatMap((artifact, index) =>
+		artifacts.slice(index + 1).map((other): ArtifactPair => [artifact, other]),
+	);
+
+/** Refuses before creating anything: two planned artifacts whose
+ * resolved paths are the same node (D106 R1 N2). Compared after
+ * stripping trailing separators -- the comparison is of resolved
+ * paths, not of spellings (`"mig/"` and `"mig"` name the same path). */
+const checkNoDuplicatePaths = (
+	cwd: string,
+	artifacts: ReadonlyArray<Artifact>,
+): void => {
+	const duplicate = artifactPairs(artifacts).find(
+		([a, b]) =>
+			stripTrailingSeparators(a.path) === stripTrailingSeparators(b.path),
+	);
+	if (duplicate === undefined) {
+		return;
+	}
+	const [first, second] = duplicate;
+	throwDuplicatePath(
+		fileLabel(cwd, first.path),
+		first.fieldName,
+		second.fieldName,
+	);
 };
 
 /** Refuses before creating anything (checked for every planned artifact
@@ -459,14 +515,18 @@ export const runInit = async (cwd: string): Promise<InitResult> => {
 		// Every planned artifact's path kind is checked before any of
 		// them is created -- a conflict discovered on the snapshot must
 		// not leave a just-created config file or migrations directory
-		// behind it. The ancestor chain (D106 R1 N1) is checked before
-		// the leaf's own kind (3.1/checkPathKind): a leaf blocked by a
-		// file ancestor is named by that ancestor, not by the leaf.
+		// behind it. Two fields resolving to the same path (D106 R1 N2)
+		// are checked first: creating one would make the other's own
+		// existsSync check see it as already present. The ancestor chain
+		// (D106 R1 N1) is checked before the leaf's own kind (3.1/
+		// checkPathKind): a leaf blocked by a file ancestor is named by
+		// that ancestor, not by the leaf.
 		const plannedArtifacts: ReadonlyArray<Artifact> = [
 			configArtifact,
 			migrationsArtifact,
 			snapshotArtifact,
 		].filter((artifact): artifact is Artifact => artifact !== null);
+		checkNoDuplicatePaths(cwd, plannedArtifacts);
 		plannedArtifacts.forEach((artifact) => {
 			checkAncestors(cwd, artifact);
 			checkPathKind(cwd, artifact);
