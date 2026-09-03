@@ -114,7 +114,10 @@ the declared objects it references, so a table carrying a foreign key to
 another declared table comes after that table, whichever order their
 identities sort in, and a mutually referencing pair — which no order
 satisfies — keeps its existing identity order. A reset's drops are the
-reverse of this order (migration-apply).
+reverse of this order (migration-apply). The migration's own name SHALL
+NOT follow it: the name is derived from the change list as it stands
+before this dependency refinement — kind order, then identity — so that
+refining the order a run emits never renames the file a run writes.
 
 A run whose declarations produce a snapshot identical to the previous
 one SHALL write neither a migration nor a snapshot, report "no changes

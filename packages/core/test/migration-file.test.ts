@@ -461,6 +461,65 @@ describe("deriveSlug", () => {
 	it("falls back to migration when there are no changes", () => {
 		expect(deriveSlug([])).toBe("migration");
 	});
+
+	// #753 R75: `diffSnapshots`' same-kind dependency refinement (task 1.2)
+	// reorders a migration's own change list before `deriveSlug` ever sees
+	// it -- the slug SHALL NOT follow that reorder, so a build's committed
+	// migration name stays stable across a hejbro version that only
+	// changes statement order, never what changed.
+	it("the dependency refinement does not change a migration's slug", () => {
+		// a run the refinement reorders: two tables, one referencing the
+		// other, handed to deriveSlug in the refined (dependency-first)
+		// order -- identity order would put "app.task_schedules" first.
+		const refinedTasksFirst: ReadonlyArray<KindChange> = [
+			{
+				kind: "table",
+				operation: "alter",
+				identity: "app.tasks",
+				previous: {},
+				next: {},
+				notes: ['column "closed_at" added'],
+			},
+			{
+				kind: "table",
+				operation: "create",
+				identity: "app.task_schedules",
+				previous: null,
+				next: {},
+				notes: [],
+			},
+		];
+		expect(deriveSlug(refinedTasksFirst)).toBe("add_task_schedules");
+
+		// a run the refinement never touches (a single change, or a
+		// same-kind group already in identity order) -- regression pin
+		// against the same-kind-topological-order case the tests above
+		// already cover.
+		expect(deriveSlug([createChange])).toBe("add_posts");
+
+		// a drop-only run, refined order (a referencing table dropped
+		// before the table it references) puts "app.posts" first even
+		// though "app.comments" sorts first by identity.
+		const refinedDropsPostsFirst: ReadonlyArray<KindChange> = [
+			{
+				kind: "table",
+				operation: "drop",
+				identity: "app.posts",
+				previous: {},
+				next: null,
+				notes: [],
+			},
+			{
+				kind: "table",
+				operation: "drop",
+				identity: "app.comments",
+				previous: {},
+				next: null,
+				notes: [],
+			},
+		];
+		expect(deriveSlug(refinedDropsPostsFirst)).toBe("drop_comments");
+	});
 });
 
 describe("deriveExistingTransitionSlug (D106 R3, J13)", () => {

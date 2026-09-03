@@ -363,6 +363,47 @@ green, refactor). Estimates are pure work minutes (D88).
       `examples/postgres/migrations/*`, `examples/supabase/migrations/*`
       (regenerated, not hand-edited).
 
+- [ ] 3.10 (~6m) The delta's cycle sentence — two declared tables that
+      reference each other drop in their existing identity order, and the
+      refusal the database then raises is reported through the coded
+      failure — has no real-Postgres witness: the unit rows fake the
+      driver, and 1.5's two cases are an ordered pair and an
+      outside-the-declarations dependant. Add a third case to
+      `packages/cli/test/apply-reset.integration.test.ts`, against the
+      same container and the same gating: a mutually referencing pair
+      migrated successfully (creation is legal), then `reset
+      --confirm-drop` — asserts a non-zero exit, `reset-drop-failed`
+      carrying the database's own `2BP01` reason, both tables still
+      standing, and `hejbro status` afterward still reporting the
+      migration applied. Files:
+      `packages/cli/test/apply-reset.integration.test.ts`.
+
+- [ ] 3.11 (~9m) **[design]** A migration's name follows the order the
+      run emits, because the slug is taken from the first entry of the
+      same array the dependency refinement permutes — so refining the
+      emitted order renames a committed migration (measured: a step that
+      creates one table and alters another changes its own file name).
+      The name SHALL instead be derived from the change list as it stands
+      *before* the refinement: kind order, then identity. Settle where
+      that happens — the refinement only permutes within contiguous
+      same-kind runs, so re-sorting each such run by identity inside the
+      slug derivation reproduces the pre-refinement order without
+      threading a second array through the generation pipeline; prefer
+      that over widening the generated-migration type. Red:
+      `packages/core/test/diff-engine.test.ts` (or the slug's own test
+      file), new case *"the dependency refinement does not change a
+      migration's slug"*, over an input table: a run whose first change
+      the refinement moves (create one table, alter another that
+      references it); a run the refinement leaves alone (regression pin);
+      a drop-only run whose first change the refinement moves; and a run
+      whose moved first change is an `alter`, not a `create` — the
+      refinement groups creates and alters together, so an alter-only
+      run can move the slug too. `examples/{postgres,supabase}`'s chain tests, green
+      with their committed file names unchanged, are the second witness.
+      Files: `packages/core/src/sql/migration-file.ts`,
+      `packages/core/src/engine/diff-engine.ts` (only if the derivation
+      needs the kind grouping), and their tests.
+
 ## Close-out (not a group)
 
 The changeset, `openspec/task-times.csv`, the README stamps
