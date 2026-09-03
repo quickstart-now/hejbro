@@ -115,6 +115,80 @@ export default defineConfig({
 });
 `;
 
+// #752: fixtures for the sixth check (registered preset validators).
+// `nilePreset` refuses at `hejbro generate` time, so every "refused"
+// scenario here generates *without* the preset first (a valid, matching
+// snapshot), then registers the preset by rewriting the config — the same
+// sequence a real repository hits when it adopts a preset after its
+// declarations and snapshot already exist.
+const NILE_CONFIG_SOURCE = `import { defineConfig } from "hejbro";
+import { nilePreset } from "@hejbro/nile";
+
+export default defineConfig({
+	entry: ["src/**/*.schema.ts"],
+	migrationsDir: "migrations",
+	snapshotPath: "hejbro.snapshot.json",
+	prefixStrategy: "timestamp",
+	presets: [nilePreset],
+});
+`;
+
+// The issue's own reported example (#752): a tenant-aware table (a
+// `tenant_id uuid` column) whose primary key excludes it.
+const NILE_BAD_PK_SCHEMA = `import { schema, table, text, uuid } from "hejbro";
+
+export const app = schema("app");
+
+export const items = table(app, "items", {
+	id: uuid().primaryKey().defaultRandom(),
+	tenantId: uuid().notNull(),
+	title: text().notNull(),
+});
+`;
+
+// The same table, corrected: tenant_id joins the primary key, so every
+// registered nile validator accepts it.
+const NILE_VALID_TENANT_SCHEMA = `import { schema, table, uuid } from "hejbro";
+
+export const app = schema("app");
+
+export const items = table(app, "items", {
+	id: uuid().primaryKey(),
+	tenantId: uuid().primaryKey(),
+});
+`;
+
+// Two tenant-aware tables, each refused by a *different* nile validator in
+// the same run (nile-tenant-primary-key-missing and
+// nile-serial-in-tenant-table) — task 2.2's "verify reports every refusal,
+// counts the check once" case.
+const NILE_TWO_REFUSALS_SCHEMA = `import { schema, serial, table, uuid } from "hejbro";
+
+export const app = schema("app");
+
+export const items = table(app, "items", {
+	id: uuid().primaryKey().defaultRandom(),
+	tenantId: uuid().notNull(),
+});
+
+export const events = table(app, "events", {
+	id: serial().primaryKey(),
+	tenantId: uuid().notNull(),
+});
+`;
+
+// An existing @hejbro/supabase preset refusal (D38 reserved-schema),
+// generated without the preset first, same adoption sequence as the nile
+// fixtures above.
+const AUTH_SCHEMA_TABLE = `import { schema, table, uuid } from "hejbro";
+
+export const authSchema = schema("auth");
+
+export const sessions = table(authSchema, "sessions", {
+	id: uuid().primaryKey().defaultRandom(),
+});
+`;
+
 const PARENT_PREFIX = "-- parent-snapshot: ";
 const SNAPSHOT_PREFIX = "-- snapshot: ";
 
@@ -1050,5 +1124,129 @@ export const projects = table(app, "projects", {
 		// not unknown-kind (registry.get's "no such kind" check, which
 		// only fires once a kind name is looked up during diffing).
 		expect(result.stderr).toContain("error[unowned-declaration]");
+	});
+});
+
+// #752: `verify` runs every registered preset's validators as a sixth
+// check, over the same declared snapshot its existing snapshot-parity
+// check already builds, and refuses with the identical coded error
+// `generate` would raise for the same declaration.
+describe("hejbro verify — sixth check: registered preset validators (#752)", () => {
+	it("passes with no preset registered, even though the declaration a preset would later refuse already exists (today's behavior, unaffected)", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(NILE_BAD_PK_SCHEMA);
+		await runCli(cwd, ["generate"]);
+
+		const result = await runCli(cwd, ["verify"]);
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("verify: 5 checks passed");
+		expect(result.stdout).not.toContain("preset");
+	});
+
+	it("fails with generate's own nile-tenant-primary-key-missing once the preset is registered against a still-matching snapshot", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(NILE_BAD_PK_SCHEMA);
+		await runCli(cwd, ["generate"]);
+
+		// The snapshot on disk still matches the declarations byte for byte
+		// (registering a preset never changes what generate would emit for
+		// an already-accepted declaration set), so checks 1-4 all still
+		// pass -- only the new sixth check can catch this.
+		await writeFixtureFile(cwd, "hejbro.config.ts", NILE_CONFIG_SOURCE);
+
+		const result = await runCli(cwd, ["verify"]);
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain("error[nile-tenant-primary-key-missing]");
+		expect(result.stderr).not.toContain("skipped:");
+
+		const generated = await runCli(cwd, ["generate"]);
+		expect(generated.exitCode).toBe(1);
+		expect(generated.stderr).toContain(
+			"error[nile-tenant-primary-key-missing]",
+		);
+	});
+
+	it("fails with generate's own reserved-schema error for an existing @hejbro/supabase preset refusal", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(AUTH_SCHEMA_TABLE);
+		await runCli(cwd, ["generate"]);
+
+		await writeFixtureFile(
+			cwd,
+			"hejbro.config.ts",
+			CONFIG_WITH_SUPABASE_PRESET_SOURCE,
+		);
+
+		const result = await runCli(cwd, ["verify"]);
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain("error[reserved-schema]");
+	});
+
+	it('passes as "verify: 6 checks passed" with a preset registered when every declaration satisfies every registered validator', async () => {
+		await runCli(cwd, ["init"]);
+		await writeFixtureFile(cwd, "hejbro.config.ts", NILE_CONFIG_SOURCE);
+		await writeSchema(NILE_VALID_TENANT_SCHEMA);
+		await runCli(cwd, ["generate"]);
+
+		const result = await runCli(cwd, ["verify"]);
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("verify: 6 checks passed");
+	});
+
+	it('counts as "verify: 7 checks passed" when both the export check and the preset check apply in the same run', async () => {
+		await runCli(cwd, ["init"]);
+		await writeFixtureFile(cwd, "hejbro.config.ts", NILE_CONFIG_SOURCE);
+		await writeSchema(NILE_VALID_TENANT_SCHEMA);
+		await runCli(cwd, ["generate", "--export"]);
+
+		const result = await runCli(cwd, ["verify"]);
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("verify: 7 checks passed");
+	});
+
+	it("reports every refusal when two different registered validators each refuse in the same run, but counts the preset check once", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(NILE_TWO_REFUSALS_SCHEMA);
+		await runCli(cwd, ["generate"]);
+		await writeFixtureFile(cwd, "hejbro.config.ts", NILE_CONFIG_SOURCE);
+
+		const result = await runCli(cwd, ["verify"]);
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain("error[nile-tenant-primary-key-missing]");
+		expect(result.stderr).toContain("error[nile-serial-in-tenant-table]");
+		expect(result.stderr).toContain(
+			"verify: 1 of 6 checks failed — fix the errors above and rerun `hejbro verify`.",
+		);
+	});
+
+	// 2.3: the cross-command parity witness #752 itself states as the
+	// acceptance criterion -- generate and verify refuse the identical
+	// declaration with the identical coded error. Compares only the coded
+	// message body, never the surrounding `verify:`/`generate:` summary
+	// line (differs by design) or the diagnostic's `at`/identity line
+	// (verify's identity heuristic is a separate, pre-existing concern,
+	// unrelated to #752).
+	it("verify and generate agree on the identical coded error for the same refused declaration", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(NILE_BAD_PK_SCHEMA);
+		await runCli(cwd, ["generate"]);
+		await writeFixtureFile(cwd, "hejbro.config.ts", NILE_CONFIG_SOURCE);
+
+		const verifyResult = await runCli(cwd, ["verify"]);
+		const generateResult = await runCli(cwd, ["generate"]);
+		expect(verifyResult.exitCode).toBe(1);
+		expect(generateResult.exitCode).toBe(1);
+
+		const code = "nile-tenant-primary-key-missing";
+		const messageBody = (stderr: string): string => {
+			const headerIndex = stderr.indexOf(`error[${code}]:`);
+			expect(headerIndex).toBeGreaterThanOrEqual(0);
+			const afterHeader = stderr.slice(headerIndex).split("\n");
+			return (afterHeader[1] ?? "").trim();
+		};
+
+		expect(messageBody(verifyResult.stderr)).toBe(
+			messageBody(generateResult.stderr),
+		);
 	});
 });

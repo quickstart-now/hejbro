@@ -18,6 +18,7 @@ const CLI_PACKAGE_ROOT = join(import.meta.dirname, "..", "..");
 export const CLI_PATH = join(CLI_PACKAGE_ROOT, "dist", "cli.js");
 const CLI_INDEX_PATH = join(CLI_PACKAGE_ROOT, "dist", "index.js");
 const SUPABASE_PACKAGE_ROOT = join(CLI_PACKAGE_ROOT, "..", "supabase");
+const NILE_PACKAGE_ROOT = join(CLI_PACKAGE_ROOT, "..", "nile");
 const CORE_PACKAGE_ROOT = join(CLI_PACKAGE_ROOT, "..", "core");
 
 /** The most recent mtime (ms since epoch) of any file under `dir`, recursively. */
@@ -102,7 +103,7 @@ export type CliRun = {
 	readonly stderr: string;
 };
 
-/** Creates a fresh tmp dir with `node_modules/hejbro` symlinked back to this package's real root, so a fixture's `import { ... } from "hejbro"` (U2 self-import cycle) resolves exactly as an installed dependency would. Also symlinks `node_modules/@hejbro/supabase`, so a preset fixture's `import { supabasePreset, storageBucket } from "@hejbro/supabase"` resolves — `hejbro`'s own `dependencies` never include `@hejbro/supabase` (it's a devDependency of the CLI package used only by these fixtures, D55). Caller is responsible for `rm`-ing the returned path. */
+/** Creates a fresh tmp dir with `node_modules/hejbro` symlinked back to this package's real root, so a fixture's `import { ... } from "hejbro"` (U2 self-import cycle) resolves exactly as an installed dependency would. Also symlinks `node_modules/@hejbro/supabase` and `node_modules/@hejbro/nile`, so a preset fixture's `import { supabasePreset, storageBucket } from "@hejbro/supabase"` or `import { nilePreset } from "@hejbro/nile"` resolves — neither is in `hejbro`'s own `dependencies` (both are devDependencies of the CLI package used only by these fixtures, D55/#752). Caller is responsible for `rm`-ing the returned path. */
 export const createCliFixtureDir = async (): Promise<string> => {
 	const cwd = await mkdtemp(join(tmpdir(), "hejbro-cli-"));
 	await mkdir(join(cwd, "node_modules", "@hejbro"), { recursive: true });
@@ -110,6 +111,11 @@ export const createCliFixtureDir = async (): Promise<string> => {
 	await symlink(
 		SUPABASE_PACKAGE_ROOT,
 		join(cwd, "node_modules", "@hejbro", "supabase"),
+		"dir",
+	);
+	await symlink(
+		NILE_PACKAGE_ROOT,
+		join(cwd, "node_modules", "@hejbro", "nile"),
 		"dir",
 	);
 	return cwd;

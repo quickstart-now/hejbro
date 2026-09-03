@@ -54,6 +54,7 @@
 		"zod": "^4.4.3"
 	},
 	"devDependencies": {
+		"@hejbro/nile": "workspace:*",
 		"@hejbro/pg": "workspace:*",
 		"@hejbro/supabase": "workspace:*",
 		"@vitest/coverage-v8": "catalog:",
