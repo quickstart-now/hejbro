@@ -128,11 +128,17 @@ it `not null` in a later migration.
 
 ## `hejbro verify`
 
-Five checks, entirely from checked-out files — no live database
-connection: snapshot parses, no two migration files share a version,
-declarations match the snapshot, the migration chain is linear (no
-diverged/broken parent links), and the chain's tip hash matches the
-snapshot. Run it in CI. See
+Five checks always run, entirely from checked-out files — no live
+database connection: snapshot parses, no two migration files share a
+version, declarations match the snapshot, the migration chain is linear
+(no diverged/broken parent links), and the chain's tip hash matches the
+snapshot. Two more can apply on top, independently, each still file/
+declaration-based rather than a database connection: the export-
+freshness check (only when `generate --export` is in use) and every
+registered preset's own validators (only when the active config
+registers at least one preset) — up to seven checks in one run, whichever
+apply; a config with neither never mentions either and reports the same
+five it always has. Run it in CI. See
 `packages/cli/src/commands/verify.ts` (guide page lands in #109).
 
 The **local Docker round-trip** (`pnpm roundtrip` in an example package)
@@ -167,14 +173,16 @@ guarantee.
 
 ### What `verify` tells you here, and what it doesn't
 
-`hejbro verify`'s five checks are entirely file-based (see above) — a
-green `verify` after a failed apply confirms your migration *history* is
+`hejbro verify`'s checks are entirely file/declaration-based (see
+above, including the export and preset-validator checks) — a green
+`verify` after a failed apply confirms your migration *history* is
 internally consistent (unique versions, a parseable snapshot, a linear
-hash chain, a matching tip hash). It says nothing about the live
-database: the same five checks pass identically whether the last
-migration was fully applied, half applied, or never run at all. There is
-no sixth check and no database-inspecting option — `verify` cannot see a
-database, by design.
+hash chain, a matching tip hash) and, where they apply, that the export
+and every registered preset's validators still agree with your
+declarations. It says nothing about the live database: the same checks
+pass identically whether the last migration was fully applied, half
+applied, or never run at all. There is no database-inspecting check or
+option — `verify` cannot see a database, by design.
 
 ### A straight retry is not automatically safe
 
