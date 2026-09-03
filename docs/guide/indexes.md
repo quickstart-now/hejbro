@@ -57,8 +57,8 @@ create index "docs_data_idx" on "app"."docs" using gin ("data" jsonb_path_ops);
 create index "docs_created_at_idx" on "app"."docs" using brin ("created_at");
 create index "docs_owner_id_idx" on "app"."docs" using hash ("owner_id");
 create index "docs_body_trgm_idx" on "app"."docs" using gin ("body" gin_trgm_ops);
-create index "users_email_lower_idx" on "app"."users" ((lower("app"."users"."email")));
-create unique index "users_email_lower_live_uidx" on "app"."users" ((lower("app"."users"."email"))) where "app"."users"."deleted_at" is null;
+create index "users_email_lower_idx" on "app"."users" ((lower("users"."email")));
+create unique index "users_email_lower_live_uidx" on "app"."users" ((lower("users"."email"))) where "users"."deleted_at" is null;
 ```
 
 Later, `hejbro generate --rename app.users.email=email_address` retargets
@@ -119,7 +119,7 @@ index("docs_body_trgm_idx").using("gin").on(op(t.body, "gin_trgm_ops"));
 column; Postgres' own order is `<column or (expression)> [<opclass>]
 [asc|desc] [nulls first|last]`, so `op(desc(t.col, { nulls: "first" }), "c")`
 renders `"col" c desc nulls first`. `op` also wraps an expression, not just
-a column — ``op(sql`lower(${t.email})`, "c")`` renders `(lower("app"."users"."email")) c`.
+a column — ``op(sql`lower(${t.email})`, "c")`` renders `(lower("users"."email")) c`.
 
 ## Expression indexes
 
@@ -133,7 +133,7 @@ index("users_email_lower_idx").on(sql`lower(${t.email})`);
 ```
 
 ```sql
-create index "users_email_lower_idx" on "app"."users" ((lower("app"."users"."email")));
+create index "users_email_lower_idx" on "app"."users" ((lower("users"."email")));
 ```
 
 The double parentheses follow Postgres' `index_elem` grammar for a column
@@ -164,7 +164,7 @@ alter table "app"."users" rename column "email" to "email_address";
 ```
 
 The snapshot's expression is retargeted to
-`lower("app"."users"."email_address")`; no index DDL is emitted — no drop,
+`lower("users"."email_address")`; no index DDL is emitted — no drop,
 no create, just the column rename above — and no ambiguity error.
 
 ## Extensions
