@@ -74,13 +74,10 @@ describe("assertSessionStateConformance (task 1.4/1.5, #481)", () => {
 		// but blurs the diagnostic.
 		let caught: unknown;
 		try {
-			assertSessionStateConformance(
-				capabilitiesWithSessionState(true, true),
-				{
-					recordedForOneExecute: [{ sql: "select 1", params: [] }],
-					callerStatement: { sql: "select 1", params: [] },
-				},
-			);
+			assertSessionStateConformance(capabilitiesWithSessionState(true, true), {
+				recordedForOneExecute: [{ sql: "select 1", params: [] }],
+				callerStatement: { sql: "select 1", params: [] },
+			});
 		} catch (error) {
 			caught = error;
 		}
@@ -131,29 +128,23 @@ describe("assertSessionStateConformance (task 1.4/1.5, #481)", () => {
 		// anything through its setup hook, positive `capabilities` claim
 		// notwithstanding.
 		expect(() =>
-			assertSessionStateConformance(
-				capabilitiesWithSessionState(true, true),
-				{
-					recordedForSetupSession: [],
-				},
-			),
+			assertSessionStateConformance(capabilitiesWithSessionState(true, true), {
+				recordedForSetupSession: [],
+			}),
 		).toThrowError(/session-state/);
 
 		// Positive: the setup hook sent something -- the kit reads no pin
 		// SQL text (same as the false tier), only that the hook is where
 		// this tier's settings actually travel.
 		expect(() =>
-			assertSessionStateConformance(
-				capabilitiesWithSessionState(true, true),
-				{
-					recordedForSetupSession: [
-						{
-							sql: "set intervalstyle to 'postgres'; set bytea_output to 'hex'",
-							params: [],
-						},
-					],
-				},
-			),
+			assertSessionStateConformance(capabilitiesWithSessionState(true, true), {
+				recordedForSetupSession: [
+					{
+						sql: "set intervalstyle to 'postgres'; set bytea_output to 'hex'",
+						params: [],
+					},
+				],
+			}),
 		).not.toThrow();
 	});
 
@@ -357,16 +348,13 @@ describe("assertSessionStateConformance (task 1.4/1.5, #481)", () => {
 		// refused outright, not silently accepted as a passing envelope.
 		let caught: unknown;
 		try {
-			assertSessionStateConformance(
-				capabilitiesWithSessionState(false, true),
-				{
-					recordedForOneExecute: [
-						{ sql: "set intervalstyle to 'postgres'", params: [] },
-						{ sql: "select 1", params: [] },
-					],
-					callerStatement: { sql: "select 1", params: [] },
-				},
-			);
+			assertSessionStateConformance(capabilitiesWithSessionState(false, true), {
+				recordedForOneExecute: [
+					{ sql: "set intervalstyle to 'postgres'", params: [] },
+					{ sql: "select 1", params: [] },
+				],
+				callerStatement: { sql: "select 1", params: [] },
+			});
 		} catch (error) {
 			caught = error;
 		}

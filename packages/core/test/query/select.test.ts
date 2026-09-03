@@ -185,7 +185,7 @@ describe("a whole-table projection is qualified once a join is in scope (#552)",
 		);
 	});
 
-	it("one inner join qualifies every projected column, the same form an object projection's own column reference already renders -- posts and comments both declare \"id\", the exact shape #552 was filed over: unqualified, this is SQL a server refuses as ambiguous (42702)", () => {
+	it('one inner join qualifies every projected column, the same form an object projection\'s own column reference already renders -- posts and comments both declare "id", the exact shape #552 was filed over: unqualified, this is SQL a server refuses as ambiguous (42702)', () => {
 		const query = select(posts).innerJoin(
 			comments,
 			eq(comments.postId, posts.id),

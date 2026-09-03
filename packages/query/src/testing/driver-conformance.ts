@@ -172,12 +172,17 @@ const assertTransactionEnvelopeConformance = (
 	const callerIndex = recordedOnConnection.findIndex(
 		(statement) => statement.sql === callerStatement.sql,
 	);
-	const precedingStatements =
-		callerIndex < 0 ? [] : recordedOnConnection.slice(0, callerIndex);
-	const scan = precedingStatements.reduce<EnvelopeScanState>(
-		foldEnvelopeScan,
-		{ openIndex: undefined, sawStatementSinceOpen: false },
+	// `Math.max(callerIndex, 0)` -- never a ternary (house rule): -1 (not
+	// found) and 0 (found first) both collapse to an empty slice, which is
+	// the correct prefix for "not found" too (nothing precedes it either).
+	const precedingStatements = recordedOnConnection.slice(
+		0,
+		Math.max(callerIndex, 0),
 	);
+	const scan = precedingStatements.reduce<EnvelopeScanState>(foldEnvelopeScan, {
+		openIndex: undefined,
+		sawStatementSinceOpen: false,
+	});
 	if (scan.openIndex === undefined) {
 		throwConformanceViolation(
 			"session-state:false+interactive-transactions:true",
