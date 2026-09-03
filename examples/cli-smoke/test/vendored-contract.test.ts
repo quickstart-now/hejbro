@@ -346,9 +346,12 @@ describe("a vendored contract type-checks against the real, installed hejbro pac
 				return {
 					...fn,
 					// biome-ignore lint/suspicious/noExplicitAny: see above.
-					args: fn.args.map((arg: any) =>
-						arg.sqlName === myArgSqlName ? { ...arg, key: "my-arg" } : arg,
-					),
+					args: fn.args.map((arg: any) => {
+						if (arg.sqlName !== myArgSqlName) {
+							return arg;
+						}
+						return { ...arg, key: "my-arg" };
+					}),
 				};
 			}),
 		};

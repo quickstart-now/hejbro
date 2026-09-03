@@ -450,9 +450,12 @@ describe("non-identifier keys are quoted in the emitted contract (#662)", () => 
 		const echoArgFact = requireFunctionFact(payload, "echoArg");
 		const patchedFunction = {
 			...echoArgFact,
-			args: echoArgFact.args.map((arg) =>
-				arg.sqlName === myArgSqlName ? { ...arg, key: "my-arg" } : arg,
-			),
+			args: echoArgFact.args.map((arg) => {
+				if (arg.sqlName !== myArgSqlName) {
+					return arg;
+				}
+				return { ...arg, key: "my-arg" };
+			}),
 		};
 		// `posts`/`echoArg` are the only declared table/function, so the
 		// patched arrays replace `payload.tables`/`payload.functions`

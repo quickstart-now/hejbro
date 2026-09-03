@@ -325,9 +325,11 @@ describe("an argument key whose derived name is not a hejbro SQL name is refused
 	}> = [
 		{ label: "a hyphen", args: { "my-arg": uuid() } },
 		{ label: "a leading digit", args: { "2nd": uuid() } },
+		// biome-ignore lint/style/useNamingConvention: adversarial upper-case key under test.
 		{ label: "an upper-case first letter", args: { Weight: uuid() } },
 		{ label: "a space", args: { "my arg": uuid() } },
 		{ label: "a double quote", args: { 'q"k': uuid() } },
+		// biome-ignore lint/style/useNamingConvention: adversarial non-ASCII key under test.
 		{ label: "a non-ASCII letter", args: { café: uuid() } },
 		{
 			label: "__proto__ as a computed own key",
@@ -359,6 +361,7 @@ describe("an argument key whose derived name is not a hejbro SQL name is refused
 			defineFunction(
 				app,
 				"echo_arg",
+				// biome-ignore lint/style/useNamingConvention: adversarial upper-case key under test.
 				{ args: { Weight: uuid() }, returns: { typeName: "uuid" } },
 				(ctx) => {
 					ctx.return(sql`null`);
