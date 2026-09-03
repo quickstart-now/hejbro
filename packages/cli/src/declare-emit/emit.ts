@@ -716,6 +716,18 @@ export type TableRenderContext = {
 
 const INDENT = "\t";
 
+/**
+ * The extras callback's own parameter name -- read here, and nowhere
+ * else, by both the one place that writes it (`renderExtrasBlock`) and
+ * the one place that must know it exists (`reservedIdentifiers`, below,
+ * D106 R7-B1): a table whose identifier would collide with this name is
+ * declared under a different one instead, since a reference to it from
+ * inside the callback would otherwise resolve to the callback's own
+ * column proxy rather than the table, and the file would load as
+ * nothing at all.
+ */
+const EXTRAS_CALLBACK_PARAM = "t";
+
 const extrasBlockEntry = (
 	label: string,
 	entries: ReadonlyArray<string>,
@@ -730,7 +742,7 @@ const renderExtrasBlock = (extrasEntries: ReadonlyArray<string>): string => {
 	if (extrasEntries.length === 0) {
 		return "";
 	}
-	return `,\n${INDENT}(t) => ({\n${extrasEntries.join("\n")}\n${INDENT}})`;
+	return `,\n${INDENT}(${EXTRAS_CALLBACK_PARAM}) => ({\n${extrasEntries.join("\n")}\n${INDENT}})`;
 };
 
 /** One `foreignKeys` array entry, with the constraint comment (c) carries directly above it -- `null` for every (a)/(b) entry. */
@@ -1169,7 +1181,10 @@ type FilePlan = {
 	readonly handleIdentifiers: ReadonlyMap<string, string>;
 	/** Keyed `${ownIdentity} ${enumIdentity}` -- one per D106 B1 enum clone this file's own tables need. */
 	readonly enumCloneIdentifiers: ReadonlyMap<string, string>;
+	/** This file's own `import { … } from "hejbro"` line's symbol list, and nothing else -- `resolveFileIdentifiers`/`localNamespaceOf` read {@link reservedIdentifiers} instead (D106 R7-B1: this set used to answer both questions, so a name only the *identifier* side needed reserved -- the extras callback's own parameter -- had nowhere to go without also, wrongly, appearing in this import line). */
 	readonly vocabulary: ReadonlySet<string>;
+	/** `vocabulary` plus every other name this file's own emitted text binds outside a declaration (D106 R7-B1: today, only the extras callback's own parameter) -- what a local identifier or an import alias must not collide with. */
+	readonly reservedIdentifiers: ReadonlySet<string>;
 };
 
 const addToMultiMap = (
@@ -1208,15 +1223,17 @@ const neededCrossFileTableReferences = (
 
 /**
  * One file's own identifier namespace (schema + its enums + its tables +
- * its (c) handles, in that order), resolved against `reserved` -- this
- * file's own hejbro-vocabulary usage (the barrel symbols it imports,
- * `table`/`uuid`/…), so a local table or enum identifier can never
- * collide with one of them. Cross-file collisions (CI-G2-R1-09: two
- * schemas both naming a table `users`, one referencing the other) are no
- * longer this function's concern: since D106 R2-B2 a file's own
- * identifiers are settled with no knowledge of any other file at all,
- * and a colliding cross-file *import* is aliased afterward
- * (`resolveAliasesFor`, below) rather than reserved here.
+ * its (c) handles, in that order), resolved against `reserved` -- the
+ * caller's own `reservedIdentifiers` (D106 R7-B1): this file's own
+ * hejbro-vocabulary usage (the barrel symbols it imports, `table`/
+ * `uuid`/…) plus every other name its emitted text binds outside a
+ * declaration (the extras callback's own parameter), so a local table
+ * or enum identifier can never collide with any of them. Cross-file
+ * collisions (CI-G2-R1-09: two schemas both naming a table `users`, one
+ * referencing the other) are no longer this function's concern: since
+ * D106 R2-B2 a file's own identifiers are settled with no knowledge of
+ * any other file at all, and a colliding cross-file *import* is aliased
+ * afterward (`resolveAliasesFor`, below) rather than reserved here.
  */
 const resolveFileIdentifiers = (
 	schemaName: string,
@@ -1479,7 +1496,7 @@ export const emitDeclarationFiles = (
 	/**
 	 * One file's own plan: its tables, enums, (c) handles and enum
 	 * clones, and the identifiers `resolveFileIdentifiers` settles for
-	 * all of them against this file's own hejbro-vocabulary usage alone
+	 * all of them against this file's own `reservedIdentifiers` alone
 	 * (D106 R2-B2 -- no cross-file knowledge here at all).
 	 */
 	const buildFilePlan = (schemaName: string): FilePlan => {
@@ -1552,6 +1569,11 @@ export const emitDeclarationFiles = (
 				...renderTable(table, dryRunContext).symbols,
 			]),
 		]);
+		/** D106 R7-B1: `vocabulary` plus the extras callback's own parameter -- the question `resolveFileIdentifiers`/`localNamespaceOf` actually ask ("what name is already taken here") is wider than "what do we import from hejbro", and `hejbroImportLine` (below) is the one reader that must keep asking the narrower one. */
+		const reservedIdentifiers = new Set<string>([
+			...vocabulary,
+			EXTRAS_CALLBACK_PARAM,
+		]);
 
 		const resolved = resolveFileIdentifiers(
 			schemaName,
@@ -1559,7 +1581,7 @@ export const emitDeclarationFiles = (
 			schemaTables,
 			schemaHandles,
 			schemaEnumClones,
-			vocabulary,
+			reservedIdentifiers,
 		);
 
 		return {
@@ -1570,6 +1592,7 @@ export const emitDeclarationFiles = (
 			schemaHandles,
 			schemaEnumClones,
 			vocabulary,
+			reservedIdentifiers,
 			...resolved,
 		};
 	};
@@ -1747,7 +1770,7 @@ export const emitDeclarationFiles = (
 		return nextFreeSuffix(aliasBase, usedNames);
 	};
 
-	/** Every name this file's own declarations already occupy -- its schema/enum/table/handle/enum-clone identifiers plus the hejbro-barrel vocabulary it uses -- the starting `usedNames` an import alias must avoid. */
+	/** Every name this file's own declarations already occupy -- its schema/enum/table/handle/enum-clone identifiers plus every name {@link FilePlan.reservedIdentifiers} carries (the hejbro-barrel vocabulary it uses, and the extras callback's own parameter, D106 R7-B1) -- the starting `usedNames` an import alias must avoid. */
 	const localNamespaceOf = (plan: FilePlan): ReadonlySet<string> =>
 		new Set([
 			plan.schemaIdentifier,
@@ -1755,7 +1778,7 @@ export const emitDeclarationFiles = (
 			...plan.tableIdentifiers.values(),
 			...plan.handleIdentifiers.values(),
 			...plan.enumCloneIdentifiers.values(),
-			...plan.vocabulary,
+			...plan.reservedIdentifiers,
 		]);
 
 	/** This file's own `identity -> name used in this file's own source` map -- the owner's bare name when nothing collides, an alias otherwise. */
