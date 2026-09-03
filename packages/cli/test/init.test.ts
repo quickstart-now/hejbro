@@ -2,10 +2,19 @@ import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { runInit } from "../src/commands/init";
+import { assertBuiltCli } from "./support/cli-runner";
 
 let cwd: string;
+
+// #687 made `runInit` read an existing hejbro.config.ts through
+// `loadConfig`, which -- once that config imports "hejbro" (the template
+// `runInit` itself writes) -- resolves via real Node module resolution
+// to `dist`, the same as a subprocess test (D106 R1 NB1, #677). This
+// file needs the same dist-freshness guard every other in-process test
+// with that shape already carries (link.test.ts, vendor.test.ts, etc.).
+beforeAll(assertBuiltCli);
 
 beforeEach(async () => {
 	cwd = await mkdtemp(join(tmpdir(), "hejbro-init-"));
@@ -49,21 +58,6 @@ describe("runInit", () => {
 
 	it("second run reports three skips, exits 0, and leaves files byte-identical", async () => {
 		await runInit(cwd);
-		// The template `runInit` just wrote imports "hejbro" (U2's
-		// self-import cycle), which only resolves in a project that has
-		// "hejbro" installed -- true for a real user, not for this bare
-		// tmp dir (measured: unresolvable here even at the deepest
-		// possible ancestor under this package's own node_modules,
-		// dist-build-independent of location). Swapped for a
-		// field-equivalent plain default export so the second run's own
-		// contract (three skips, byte-identical) is exercised without
-		// that dependency; the template's own content is separately
-		// pinned by "writes a hejbro.config.ts using defineConfig with
-		// the documented defaults" above.
-		await writeFile(
-			configPath(),
-			'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "migrations", snapshotPath: "hejbro.snapshot.json", presets: [] };\n',
-		);
 		const [configBefore, snapshotBefore] = await Promise.all([
 			readFile(configPath(), "utf8"),
 			readFile(snapshotPath(), "utf8"),
@@ -87,11 +81,6 @@ describe("runInit", () => {
 
 	it("fills only the missing artifacts when some already exist", async () => {
 		await runInit(cwd);
-		// Same substitution as the "second run" case above, same reason.
-		await writeFile(
-			configPath(),
-			'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "migrations", snapshotPath: "hejbro.snapshot.json", presets: [] };\n',
-		);
 		await rm(snapshotPath());
 
 		const result = await runInit(cwd);
