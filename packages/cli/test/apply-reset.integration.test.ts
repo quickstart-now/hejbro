@@ -160,6 +160,30 @@ export const tasks = table(
 );
 `;
 
+// [task 3.10, #753] A genuine two-table cycle -- cyc.left_t and
+// cyc.right_t each reference the other. `table()`'s `extras`-style
+// `foreignKeys` resolves `references: { table }` eagerly, so a mutual
+// pair can't be built that way (each table would need the other's
+// object to already exist); the column-level `.references(() => ...)`
+// sugar (add-relational-reads, D102) defers the thunk to first read
+// instead ("import-order safety", `packages/core/src/dsl/table.ts`),
+// which is exactly what a mutual pair needs regardless of which table's
+// `table()` call runs first.
+const CYCLE_SCHEMA_SOURCE = `import { schema, table, uuid } from "hejbro";
+
+export const cyc = schema("cyc");
+
+export const leftT = table(cyc, "left_t", {
+	id: uuid().primaryKey().defaultRandom(),
+	rightId: uuid().references(() => rightT.id),
+});
+
+export const rightT = table(cyc, "right_t", {
+	id: uuid().primaryKey().defaultRandom(),
+	leftId: uuid().references(() => leftT.id),
+});
+`;
+
 const CONFIRM_DROP_PATTERN = /--confirm-drop (\S+) to confirm/;
 
 /**
@@ -280,6 +304,69 @@ describe("hejbro reset — live witness (#753, task 1.5)", () => {
 				// Nothing dropped -- the whole transaction rolled back.
 				expect(rows[0]?.tasks).not.toBeNull();
 				expect(rows[0]?.projects).not.toBeNull();
+			} finally {
+				await driver.client.end();
+			}
+
+			const status = await runCli(cwd, ["status", "--url", hostUrl(database)]);
+			expect(status.exitCode).toBe(0);
+			expect(status.stdout).toContain("recorded as applied:");
+			expect(status.stdout).toContain("nothing pending");
+		} finally {
+			await removeCliFixtureDir(cwd);
+		}
+	}, 60_000);
+
+	// [task 3.10, #753] The delta's cycle sentence -- "no order satisfies
+	// both, so they drop in their existing identity order, and a
+	// resulting refusal is reported through the coded failure" -- has no
+	// real-Postgres witness yet: the unit rows fake the driver, and the
+	// two cases above are an ordered pair and an outside-the-declarations
+	// dependent. A mutual pair's creation is legal (both `create table`
+	// statements land before either `add constraint`, on the deferred
+	// stage); its drop, in either identity order, is not -- whichever
+	// table drops first, the other's still-standing foreign key refuses
+	// it.
+	it("fails to drop a genuine two-table cycle even though creating it was legal, reports the coded error, and leaves status showing every migration applied", async () => {
+		const database = "reset_cycle";
+		psqlCommand("postgres", `create database ${database};`);
+		const cwd = await createCliFixtureDir();
+		try {
+			await runCli(cwd, ["init"]);
+			await writeFixtureFile(cwd, "src/cycle.schema.ts", CYCLE_SCHEMA_SOURCE);
+			await runCli(cwd, ["generate"]);
+			const migrate = await runCli(cwd, [
+				"migrate",
+				"--url",
+				hostUrl(database),
+			]);
+			expect(migrate.exitCode).toBe(0);
+
+			const refused = await runCli(cwd, ["reset", "--url", hostUrl(database)]);
+			expect(refused.exitCode).toBe(1);
+			const confirmation = extractRequiredConfirmation(refused.stderr);
+
+			const result = await runCli(cwd, [
+				"reset",
+				"--url",
+				hostUrl(database),
+				"--confirm-drop",
+				confirmation,
+			]);
+			expect(result.exitCode).toBe(1);
+			expect(result.stderr).toContain("error[reset-drop-failed]");
+			expect(result.stderr).toContain("(2BP01)");
+
+			const driver = pgDriver(hostUrl(database));
+			try {
+				const rows = await driver.execute({
+					sql: "select to_regclass('cyc.left_t') as left_t, to_regclass('cyc.right_t') as right_t",
+					params: [],
+					kind: "sql",
+				});
+				// Nothing dropped -- the whole transaction rolled back.
+				expect(rows[0]?.left_t).not.toBeNull();
+				expect(rows[0]?.right_t).not.toBeNull();
 			} finally {
 				await driver.client.end();
 			}
