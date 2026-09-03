@@ -1036,4 +1036,63 @@ describe("emitDeclarationFiles / D106 R6-B1", () => {
 			`references: { table: ${handleIdentifier}, columns: [${handleIdentifier}.id] }`,
 		);
 	});
+
+	/**
+	 * D106 R6-B1 commit 5.5's own interaction risk: `compose.ts` now
+	 * declares one `existingTable` handle per out-of-scope target as a
+	 * top-level entry, so `result.snapshot` carries an `existing: true`
+	 * node for it -- `tablesInSnapshot` (`contract/read-snapshot.ts`)
+	 * carries no filter of its own, so without one here this run would
+	 * write a real `src/schema/ext.schema.ts`, undoing the very scoping
+	 * this round defends. This is a unit-level observer for that filter
+	 * -- previously only the Docker witness caught this.
+	 */
+	it("writes no file for an existing-marked table this run never read, and no cross-file import for it either", () => {
+		const orders: TableSnapshot = {
+			schema: "app",
+			name: "orders",
+			columns: [
+				{
+					name: "id",
+					typeNode: { typeName: "uuid" },
+					notNull: true,
+					primaryKey: true,
+				},
+				{ name: "owner_id", typeNode: { typeName: "uuid" }, notNull: true },
+			],
+			indexes: [],
+			foreignKeys: [
+				{
+					name: "orders_owner_id_fkey",
+					columns: ["owner_id"],
+					referencesTable: "ext.users",
+					referencesColumns: ["id"],
+				},
+			],
+			primaryKeyName: "orders_pkey",
+		};
+		// `compose.ts`'s own `buildExistingTableHandle` -- the exact shape
+		// `outOfScopeHandlesFor` appends to `generateMigration`'s own
+		// declarations for a target outside the survivor set.
+		const extUsers: TableSnapshot = {
+			schema: "ext",
+			name: "users",
+			columns: [{ name: "id", typeNode: { typeName: "text" } }],
+			indexes: [],
+			foreignKeys: [],
+			primaryKeyName: "",
+			existing: true,
+		};
+
+		const files = emitDeclarationFiles(resultFor([orders, extUsers]));
+
+		expect(files).toHaveLength(1);
+		expect(files.some((file) => file.schema === "ext")).toBe(false);
+		const [file] = files;
+		if (file === undefined) {
+			throw new Error("expected exactly one emitted file");
+		}
+		expect(file.schema).toBe("app");
+		expect(file.source).not.toContain('from "./ext.schema"');
+	});
 });

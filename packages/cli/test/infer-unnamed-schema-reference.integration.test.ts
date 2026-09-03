@@ -304,6 +304,27 @@ describe("import / D106 R6-B1: a foreign key into a schema the run did not name"
 			expect(migrationSql).toContain(
 				'alter table "app"."orders" add constraint "orders_owner_id_fkey" foreign key ("owner_id") references "ext"."users" ("id");',
 			);
+
+			// D106 R6-B1 commit 5.5's own premise, settled by measurement
+			// rather than left as "reasoned, not measured": does a *loaded*
+			// starter file's own regenerate step gain a snapshot node for a
+			// target this run never read, the same way compose.ts's own
+			// direct reading now does? The handle `emitDeclarationFiles`
+			// wrote into app.schema.ts is unexported, so no loader collects
+			// it as its own declaration -- this reads the real
+			// hejbro.snapshot.json `generate` just wrote to check that
+			// belief against the real file-loaded pipeline, not only
+			// against compose.ts's own in-memory one.
+			const snapshotContent = await readFile(
+				join(cwd, "hejbro.snapshot.json"),
+				"utf8",
+			);
+			const writtenSnapshot = JSON.parse(snapshotContent) as {
+				readonly objects: Record<string, unknown>;
+			};
+			expect(Object.hasOwn(writtenSnapshot.objects, "table:ext.users")).toBe(
+				false,
+			);
 		} finally {
 			await removeCliFixtureDir(cwd);
 		}
