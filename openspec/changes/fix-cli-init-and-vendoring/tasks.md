@@ -39,7 +39,7 @@ Files this group owns: `packages/cli/src/commands/init.ts`,
       create a path they will not read. The absolute-looking row is
       pinned for that reason: `join` is the contract, not `resolve`.
       Files: `packages/cli/src/commands/init.ts`, its test.
-- [ ] 1.2 (~8m) `[design]` A configuration that cannot be read stops the
+- [x] 1.2 (~8m) `[design]` A configuration that cannot be read stops the
       run before anything is created. Red:
       `packages/cli/test/init.test.ts` — "creates nothing when the
       configuration beside it cannot be read", two rows: a

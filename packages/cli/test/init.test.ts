@@ -213,3 +213,42 @@ describe("runInit / configured paths (#687)", () => {
 		},
 	);
 });
+
+describe("runInit / unreadable configuration (#687)", () => {
+	type UnreadableConfigRow = {
+		readonly label: string;
+		readonly configContent: string;
+		readonly expectedCode: string;
+	};
+
+	// Lead ruling (sealed): a configuration that exists but cannot be
+	// read fails with the same coded diagnostic loadConfig already
+	// raises for every other command -- no default-path fallback (that
+	// would recreate #687's own defect through a different door) and no
+	// new code minted.
+	const rows: ReadonlyArray<UnreadableConfigRow> = [
+		{
+			label: "an import that does not resolve",
+			configContent:
+				'import { defineConfig } from "a-package-that-does-not-exist";\n\nexport default defineConfig({ entry: ["src/**/*.schema.ts"] });\n',
+			expectedCode: "config-load-failed",
+		},
+		{
+			label: "a default export that does not match the configuration shape",
+			configContent: "export default { entry: 42 };\n",
+			expectedCode: "invalid-config",
+		},
+	];
+
+	it.each(rows)(
+		"creates nothing when the configuration beside it cannot be read ($label)",
+		async ({ configContent, expectedCode }) => {
+			await writeFile(configPath(), configContent);
+			const result = await runInit(cwd);
+			expect(result.exitCode).toBe(1);
+			expect(result.stderr).toContain(`error[${expectedCode}]`);
+			expect(existsSync(join(cwd, "migrations"))).toBe(false);
+			expect(existsSync(snapshotPath())).toBe(false);
+		},
+	);
+});

@@ -2,6 +2,9 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { emptySnapshot, renderSnapshot } from "@hejbro/core";
 import { defineCommand } from "citty";
+import { fromHejbroError, renderDiagnostics } from "../diagnostics";
+import { asHejbroError } from "../errors";
+import { identityFromMessage } from "../identity";
 import { loadConfig } from "../loader";
 
 const CONFIG_FILE_NAME = "hejbro.config.ts";
@@ -19,10 +22,14 @@ export default defineConfig({
 });
 `;
 
-/** `hejbro init`'s per-artifact report + always-0 exit code (decision U7). */
+/** `hejbro init`'s per-artifact report (decision U7), extended (#687) with
+ * the house `exitCode`/`stderr` shape `commands/link.ts` already uses:
+ * `runInit` mints no diagnostic code of its own, it only relays
+ * `loadConfig`'s. */
 export type InitResult = {
 	readonly report: ReadonlyArray<string>;
-	readonly exitCode: 0;
+	readonly exitCode: 0 | 1;
+	readonly stderr: string | null;
 };
 
 type FileArtifact = {
@@ -98,35 +105,49 @@ const resolveDestinations = (
  * as a safe "repair missing pieces" command.
  */
 export const runInit = async (cwd: string): Promise<InitResult> => {
+	const fallbackIdentity = "init";
 	const configFilePath = join(cwd, CONFIG_FILE_NAME);
-	const config = existsSync(configFilePath)
-		? (await loadConfig(cwd, undefined)).config
-		: null;
-	const { migrationsDirPath, snapshotFilePath } = resolveDestinations(
-		cwd,
-		config,
-	);
-	const artifacts: ReadonlyArray<Artifact> = [
-		{
-			kind: "file",
-			label: CONFIG_FILE_NAME,
-			path: configFilePath,
-			content: CONFIG_FILE_CONTENT,
-		},
-		{
-			kind: "dir",
-			label: dirLabel(cwd, migrationsDirPath),
-			path: migrationsDirPath,
-		},
-		{
-			kind: "file",
-			label: fileLabel(cwd, snapshotFilePath),
-			path: snapshotFilePath,
-			content: renderSnapshot(emptySnapshot),
-		},
-	];
-	const report = artifacts.map((artifact) => applyArtifact(artifact));
-	return { report, exitCode: 0 };
+	try {
+		const config = existsSync(configFilePath)
+			? (await loadConfig(cwd, undefined)).config
+			: null;
+		const { migrationsDirPath, snapshotFilePath } = resolveDestinations(
+			cwd,
+			config,
+		);
+		const artifacts: ReadonlyArray<Artifact> = [
+			{
+				kind: "file",
+				label: CONFIG_FILE_NAME,
+				path: configFilePath,
+				content: CONFIG_FILE_CONTENT,
+			},
+			{
+				kind: "dir",
+				label: dirLabel(cwd, migrationsDirPath),
+				path: migrationsDirPath,
+			},
+			{
+				kind: "file",
+				label: fileLabel(cwd, snapshotFilePath),
+				path: snapshotFilePath,
+				content: renderSnapshot(emptySnapshot),
+			},
+		];
+		const report = artifacts.map((artifact) => applyArtifact(artifact));
+		return { report, exitCode: 0, stderr: null };
+	} catch (error) {
+		const hejbroError = asHejbroError(error);
+		const diagnostic = fromHejbroError(
+			hejbroError,
+			identityFromMessage(hejbroError.message, fallbackIdentity),
+		);
+		return {
+			report: [],
+			exitCode: 1,
+			stderr: renderDiagnostics([diagnostic], null),
+		};
+	}
 };
 
 /** The `hejbro init` citty subcommand — prints {@link runInit}'s report, one line per artifact. */
@@ -139,6 +160,9 @@ export const initCommand = defineCommand({
 	run: async () => {
 		const result = await runInit(process.cwd());
 		result.report.map((line) => console.log(line));
+		if (result.stderr !== null) {
+			console.error(result.stderr);
+		}
 		process.exitCode = result.exitCode;
 	},
 });
