@@ -29,9 +29,11 @@ where a transaction opens and ends reads SQL's own transaction-control
 statements only; the check still reads no driver's own settings text. A
 statement is recognized by the transaction-control keyword it leads
 with, not by its exact text, so the ordinary spellings of opening and
-ending a transaction are all seen. Each statement is classified by its
-own leading keyword and batches are not split: several statements sent
-as one string are read as the single statement that string begins with. A statement that only manipulates a
+ending a transaction are all seen. A statement is classified by the word
+its own text leads with, and a string is never split on `;` — so a
+string carrying several statements leads with a word that still carries
+the separator, which belongs to no vocabulary, and a batched opening or
+ending is recognized as neither. A statement that only manipulates a
 savepoint — establishing one, releasing one, or rolling back to one —
 neither opens nor ends a transaction, and counts as an ordinary
 statement here. The refusal above reads which record the caller handed
