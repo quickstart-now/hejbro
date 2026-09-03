@@ -519,6 +519,33 @@ describe("deriveSlug", () => {
 			},
 		];
 		expect(deriveSlug(refinedDropsPostsFirst)).toBe("drop_comments");
+
+		// a run whose true first change is itself an alter, not a create --
+		// R73(i)'s own reason this needs its own row: the refinement groups
+		// create and alter together (both are `operation !== "drop"`), so
+		// an all-alter pair reorders exactly the same way a create+alter
+		// pair does. Mirrors the real golden case this bug came from
+		// (app-posts/step-2.sql): two alters, refined order puts
+		// "app.posts" first even though "app.comments" sorts first.
+		const refinedAltersPostsFirst: ReadonlyArray<KindChange> = [
+			{
+				kind: "table",
+				operation: "alter",
+				identity: "app.posts",
+				previous: {},
+				next: {},
+				notes: ['index "posts_published_at_idx" dropped'],
+			},
+			{
+				kind: "table",
+				operation: "alter",
+				identity: "app.comments",
+				previous: {},
+				next: {},
+				notes: ['foreign key "comments_post_id_fk" added'],
+			},
+		];
+		expect(deriveSlug(refinedAltersPostsFirst)).toBe("alter_comments");
 	});
 });
 
