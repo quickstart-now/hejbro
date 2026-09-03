@@ -1,4 +1,5 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -18,8 +19,8 @@ const configPath = () => join(cwd, "hejbro.config.ts");
 const snapshotPath = () => join(cwd, "hejbro.snapshot.json");
 
 describe("runInit", () => {
-	it("creates all three artifacts in a fresh directory and reports them created", () => {
-		const result = runInit(cwd);
+	it("creates all three artifacts in a fresh directory and reports them created", async () => {
+		const result = await runInit(cwd);
 		expect(result.exitCode).toBe(0);
 		expect(result.report).toEqual([
 			"created hejbro.config.ts",
@@ -29,7 +30,7 @@ describe("runInit", () => {
 	});
 
 	it("writes a hejbro.config.ts using defineConfig with the documented defaults", async () => {
-		runInit(cwd);
+		await runInit(cwd);
 		const content = await readFile(configPath(), "utf8");
 		expect(content).toContain('import { defineConfig } from "hejbro";');
 		expect(content).toContain('entry: ["src/**/*.schema.ts"]');
@@ -40,20 +41,35 @@ describe("runInit", () => {
 	});
 
 	it("writes the empty snapshot via renderSnapshot(emptySnapshot)", async () => {
-		runInit(cwd);
+		await runInit(cwd);
 		const content = await readFile(snapshotPath(), "utf8");
 		expect(content).toContain('"formatVersion": 8');
 		expect(content).toContain('"objects": {}');
 	});
 
 	it("second run reports three skips, exits 0, and leaves files byte-identical", async () => {
-		runInit(cwd);
+		await runInit(cwd);
+		// The template `runInit` just wrote imports "hejbro" (U2's
+		// self-import cycle), which only resolves in a project that has
+		// "hejbro" installed -- true for a real user, not for this bare
+		// tmp dir (measured: unresolvable here even at the deepest
+		// possible ancestor under this package's own node_modules,
+		// dist-build-independent of location). Swapped for a
+		// field-equivalent plain default export so the second run's own
+		// contract (three skips, byte-identical) is exercised without
+		// that dependency; the template's own content is separately
+		// pinned by "writes a hejbro.config.ts using defineConfig with
+		// the documented defaults" above.
+		await writeFile(
+			configPath(),
+			'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "migrations", snapshotPath: "hejbro.snapshot.json", presets: [] };\n',
+		);
 		const [configBefore, snapshotBefore] = await Promise.all([
 			readFile(configPath(), "utf8"),
 			readFile(snapshotPath(), "utf8"),
 		]);
 
-		const second = runInit(cwd);
+		const second = await runInit(cwd);
 		expect(second.exitCode).toBe(0);
 		expect(second.report).toEqual([
 			"skipped hejbro.config.ts (exists)",
@@ -70,10 +86,15 @@ describe("runInit", () => {
 	});
 
 	it("fills only the missing artifacts when some already exist", async () => {
-		runInit(cwd);
+		await runInit(cwd);
+		// Same substitution as the "second run" case above, same reason.
+		await writeFile(
+			configPath(),
+			'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "migrations", snapshotPath: "hejbro.snapshot.json", presets: [] };\n',
+		);
 		await rm(snapshotPath());
 
-		const result = runInit(cwd);
+		const result = await runInit(cwd);
 		expect(result.exitCode).toBe(0);
 		expect(result.report).toEqual([
 			"skipped hejbro.config.ts (exists)",
@@ -81,4 +102,114 @@ describe("runInit", () => {
 			"created hejbro.snapshot.json",
 		]);
 	});
+});
+
+describe("runInit / configured paths (#687)", () => {
+	type ConfiguredDirRow = {
+		readonly label: string;
+		readonly configContent: string | null;
+		readonly expectedRelativeDir: string;
+		readonly expectedReportLine: string;
+	};
+
+	// D110 input table: absent config, config present but the field
+	// omitted (falls back), a nested value, the same value with a
+	// trailing slash, and a leading slash -- both spellings still land
+	// under `join(cwd, value)` (D2 pin), never treated as absolute.
+	const migrationsDirRows: ReadonlyArray<ConfiguredDirRow> = [
+		{
+			label: "no hejbro.config.ts",
+			configContent: null,
+			expectedRelativeDir: "migrations",
+			expectedReportLine: "created migrations/",
+		},
+		{
+			label: "config present, migrationsDir omitted",
+			configContent: `export default { entry: ["src/**/*.schema.ts"] };\n`,
+			expectedRelativeDir: "migrations",
+			expectedReportLine: "created migrations/",
+		},
+		{
+			label: 'migrationsDir: "db/migrations"',
+			configContent: `export default { entry: ["src/**/*.schema.ts"], migrationsDir: "db/migrations" };\n`,
+			expectedRelativeDir: "db/migrations",
+			expectedReportLine: "created db/migrations/",
+		},
+		{
+			label: 'migrationsDir: "db/migrations/"',
+			configContent: `export default { entry: ["src/**/*.schema.ts"], migrationsDir: "db/migrations/" };\n`,
+			expectedRelativeDir: "db/migrations",
+			expectedReportLine: "created db/migrations/",
+		},
+		{
+			label: 'migrationsDir: "/db/migrations"',
+			configContent: `export default { entry: ["src/**/*.schema.ts"], migrationsDir: "/db/migrations" };\n`,
+			expectedRelativeDir: "db/migrations",
+			expectedReportLine: "created db/migrations/",
+		},
+	];
+
+	it.each(migrationsDirRows)(
+		"creates the migrations directory and reports it at the configured path ($label)",
+		async ({ configContent, expectedRelativeDir, expectedReportLine }) => {
+			if (configContent !== null) {
+				await writeFile(configPath(), configContent);
+			}
+			const result = await runInit(cwd);
+			expect(result.report).toContain(expectedReportLine);
+			expect(existsSync(join(cwd, expectedRelativeDir))).toBe(true);
+		},
+	);
+
+	type ConfiguredFileRow = {
+		readonly label: string;
+		readonly configContent: string | null;
+		readonly expectedRelativeFile: string;
+		readonly expectedReportLine: string;
+	};
+
+	const snapshotPathRows: ReadonlyArray<ConfiguredFileRow> = [
+		{
+			label: "no hejbro.config.ts",
+			configContent: null,
+			expectedRelativeFile: "hejbro.snapshot.json",
+			expectedReportLine: "created hejbro.snapshot.json",
+		},
+		{
+			label: "config present, snapshotPath omitted",
+			configContent: `export default { entry: ["src/**/*.schema.ts"] };\n`,
+			expectedRelativeFile: "hejbro.snapshot.json",
+			expectedReportLine: "created hejbro.snapshot.json",
+		},
+		{
+			label: 'snapshotPath: "db/hejbro.snapshot.json"',
+			configContent: `export default { entry: ["src/**/*.schema.ts"], snapshotPath: "db/hejbro.snapshot.json" };\n`,
+			expectedRelativeFile: "db/hejbro.snapshot.json",
+			expectedReportLine: "created db/hejbro.snapshot.json",
+		},
+		{
+			label: 'snapshotPath: "snap/state.json"',
+			configContent: `export default { entry: ["src/**/*.schema.ts"], snapshotPath: "snap/state.json" };\n`,
+			expectedRelativeFile: "snap/state.json",
+			expectedReportLine: "created snap/state.json",
+		},
+		{
+			label: 'snapshotPath: "/snap/state.json"',
+			configContent: `export default { entry: ["src/**/*.schema.ts"], snapshotPath: "/snap/state.json" };\n`,
+			expectedRelativeFile: "snap/state.json",
+			expectedReportLine: "created snap/state.json",
+		},
+	];
+
+	it.each(snapshotPathRows)(
+		"creates the snapshot file and reports it at the configured path ($label)",
+		async ({ configContent, expectedRelativeFile, expectedReportLine }) => {
+			if (configContent !== null) {
+				await writeFile(configPath(), configContent);
+			}
+			const result = await runInit(cwd);
+			expect(result.report).toContain(expectedReportLine);
+			expect(existsSync(join(cwd, expectedRelativeFile))).toBe(true);
+		},
+	);
 });
