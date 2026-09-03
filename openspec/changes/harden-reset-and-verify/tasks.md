@@ -437,7 +437,7 @@ flight; no file overlap concern. Definition of done per task: `pnpm check`,
 `pnpm check-types`, `pnpm test` green with `TURBO_FORCE=1`; the delta
 scenarios of `openspec show harden-reset-and-verify --diff` hold.
 
-- [ ] 4.1 [design] ~9m — **B1.** Red: `packages/cli/test/apply-reset.integration.test.ts`
+- [x] 4.1 [design] ~9m — **B1.** Red: `packages/cli/test/apply-reset.integration.test.ts`
   case (c) "declared objects applied without hejbro (no
   `hejbro.migration_ledger`)": `reset --confirm-drop` drops every managed
   object, exits 0, and its message does not claim a ledger was cleared; and
@@ -449,8 +449,18 @@ scenarios of `openspec show harden-reset-and-verify --diff` hold.
   (one read), clears the ledger only when it exists, never catches an error
   inside the transaction, and words its success line by what it did
   ("dropped every object your declarations manage" plus "and cleared the
-  ledger" only when it did). Files: `packages/cli/src/apply/reset.ts`,
-  `packages/cli/src/apply/ledger.ts`, the two tests.
+  ledger" only when it did). The success line lives in
+  `commands/reset.ts`'s own `SUCCESS_LINE`, not in `applyReset`, so
+  `applyReset` returns `{ ledgerCleared: boolean }` and the command picks
+  the wording from it (lead-approved: the file list below adds the two
+  files that carries; not a contract change — this task's own green
+  already requires the wording to move). Both wordings are pinned, one in
+  the command's own unit test and one in the live case. Files:
+  `packages/cli/src/apply/reset.ts`, `packages/cli/src/apply/ledger.ts`,
+  `packages/cli/src/commands/reset.ts`, and the tests
+  (`packages/cli/test/apply-reset.test.ts`,
+  `packages/cli/test/apply-reset.integration.test.ts`,
+  `packages/cli/test/reset-command.test.ts`).
 - [ ] 4.2 ~8m — **N2 + N3.** Red: `packages/cli/test/apply-reset.test.ts`
   input table for `reset-drop-failed`: (i) a driver error carrying a
   `detail` ("view lab.outside_view depends on table lab.b_parent") → the

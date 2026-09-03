@@ -55,10 +55,21 @@ const managedSnapshot = buildSnapshot(
  * `{ thrown }` wrapper, not the bare value, so `undefined` itself can be
  * asserted as a thrown value without being mistaken for "no failure
  * configured".
+ *
+ * `ledgerDeleteFailure` (D106 R1, B1, #753 reopened): when set, the
+ * ledger's own `delete from` statement throws `ledgerDeleteFailure.thrown`
+ * instead of succeeding, independent of `dropFailure` -- standing in for
+ * the ledger delete failing even though `select to_regclass(...)` already
+ * answered "this table exists" (the exact edge the fix must not swallow).
+ * `ledgerBootstrapped` tracks whether `create schema`/`create table` ever
+ * ran (mirroring `bootstrapLedger`'s own two statements), so the fake's
+ * `select to_regclass(...)` branch can answer honestly instead of always
+ * claiming the ledger exists.
  */
 const makeFakeDriver = (
 	databaseName = "testdb",
 	dropFailure?: { readonly thrown: unknown },
+	ledgerDeleteFailure?: { readonly thrown: unknown },
 ): {
 	readonly driver: Driver;
 	readonly calls: CompileResult[];
@@ -66,6 +77,7 @@ const makeFakeDriver = (
 } => {
 	const calls: CompileResult[] = [];
 	const ledgerRows: string[] = [];
+	const ledgerState = { bootstrapped: false };
 	const session: DriverSession = {
 		execute: async (compiled): Promise<ReadonlyArray<DriverRow>> => {
 			calls.push(compiled);
@@ -73,7 +85,14 @@ const makeFakeDriver = (
 			if (sql.startsWith("select current_database()")) {
 				return [{ name: databaseName }];
 			}
+			if (sql.startsWith("select to_regclass(")) {
+				if (ledgerState.bootstrapped) {
+					return [{ reg: "hejbro.migration_ledger" }];
+				}
+				return [{ reg: null }];
+			}
 			if (sql.startsWith("create schema") || sql.startsWith("create table")) {
+				ledgerState.bootstrapped = true;
 				return [];
 			}
 			if (sql.startsWith("insert into")) {
@@ -81,6 +100,9 @@ const makeFakeDriver = (
 				return [];
 			}
 			if (sql.startsWith("delete from")) {
+				if (ledgerDeleteFailure !== undefined) {
+					throw ledgerDeleteFailure.thrown;
+				}
 				ledgerRows.length = 0;
 				return [];
 			}
@@ -448,6 +470,59 @@ describe("applyReset — a hejbro-coded failure inside the transaction keeps its
 			thrown: "the database just closed the connection",
 		});
 		await seedLedger(driver);
+
+		const error: unknown = await applyReset(
+			driver,
+			managedSnapshot,
+			registry,
+			"testdb:2",
+		).catch((caught: unknown) => caught);
+
+		expect(error).toBeInstanceOf(HejbroError);
+		expect((error as HejbroError).code).toBe("reset-drop-failed");
+	});
+});
+
+describe("applyReset — a ledger that was never bootstrapped still lets every drop through (D106 R1, B1, #753 reopened)", () => {
+	it("drops every declared object and reports the ledger was NOT cleared, when the ledger table does not exist", async () => {
+		// No `seedLedger` here: `bootstrapLedger` never ran, mirroring B1's
+		// own reproduction (every migration applied outside hejbro, so
+		// `hejbro.migration_ledger` never existed).
+		const { driver, calls } = makeFakeDriver();
+
+		const result = await applyReset(
+			driver,
+			managedSnapshot,
+			registry,
+			"testdb:2",
+		);
+
+		expect(result).toEqual({ ledgerCleared: false });
+		const ddlCalls = calls.filter((call) =>
+			call.sql.toLowerCase().includes("drop table"),
+		);
+		expect(
+			ddlCalls.some((call) => call.sql.includes('drop table "app"."managed"')),
+		).toBe(true);
+		expect(
+			calls.some((call) => call.sql.toLowerCase().startsWith("delete from")),
+		).toBe(false);
+	});
+
+	it("a ledger-delete failure surfaces as reset-drop-failed, never swallowed into a silent COMMIT", async () => {
+		const { driver } = makeFakeDriver("testdb", undefined, {
+			thrown: Object.assign(
+				new Error('relation "hejbro.migration_ledger" does not exist'),
+				{ code: "42P01" },
+			),
+		});
+		// Bootstrapped, so `select to_regclass(...)` answers "exists" -- the
+		// delete below is the one this fix must not let a caught-and-ignored
+		// 42P01 turn into a false success (B1's own root cause).
+		await driver.transaction(async (session) => {
+			await bootstrapLedger(session);
+			await recordAppliedMigration(session, "0001_add_managed.sql", "applied");
+		});
 
 		const error: unknown = await applyReset(
 			driver,

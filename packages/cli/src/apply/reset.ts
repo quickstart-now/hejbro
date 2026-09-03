@@ -9,7 +9,7 @@ import {
 } from "@hejbro/core";
 import type { Driver } from "@hejbro/query";
 import { codeSuffix, driverErrorCode, driverErrorReason } from "./execute";
-import { clearLedger } from "./ledger";
+import { clearLedgerRows, ledgerTableExists } from "./ledger";
 
 /**
  * [task 5.1] Every object `reset` would drop, in dependency order --
@@ -206,19 +206,36 @@ const throwResetDropFailed = (error: unknown): never => {
 	);
 };
 
+/** What one {@link applyReset} call actually did to the ledger -- `false` both when there was nothing to drop and when the ledger table never existed (D106 R1, B1): the caller (`commands/reset.ts`) reports "cleared the ledger" only when this is `true`, never as a blanket claim. */
+export type ResetOutcome = { readonly ledgerCleared: boolean };
+
 /**
  * Returns a database to the state before any migration was applied
  * (spec): refuses an empty declaration set outright (task 18.1, before
  * anything is sent), drops every declared object (5.1) inside one
  * transaction, refusing first without an exact confirmation bound to the
  * live database's own name (5.2), then empties the ledger (5.3,
- * `clearLedger` -- every row, never the ledger table itself, which is
+ * `clearLedgerRows` -- every row, never the ledger table itself, which is
  * hejbro's own bookkeeping and not a declared object, so this
  * requirement's own "only what the declarations manage" protects it
  * too) **together with** the drops it records (task 18.1, D106 M6): a
  * reset that would drop nothing writes nothing, the ledger included, so
  * the "nothing to drop needs no confirmation" carve-out above is a
  * genuine no-op rather than a silent, unconfirmed ledger clear.
+ *
+ * [D106 R1, B1, #753 reopened] `ledgerTableExists` is read once, through
+ * `driver` directly, before the transaction even opens -- a database
+ * whose migrations were all applied outside hejbro (`psql -f`, an
+ * external pipeline) never bootstraps the ledger, and the transaction
+ * below now only ever attempts `clearLedgerRows` when this read already
+ * confirmed the table is there. Nothing inside the transaction catches an
+ * error: a ledger-delete failure that happens anyway is a genuine one and
+ * propagates like any other drop failure, into {@link throwResetDropFailed}
+ * below, rather than being swallowed into a rollback nobody is told about
+ * (B1's own root cause -- `clearLedger`'s 42P01 leniency, reached from
+ * inside this same transaction, left it aborted with no error surfaced,
+ * and a plain `COMMIT` on an aborted transaction is a rollback Postgres
+ * never reports as a failure).
  *
  * A drop the database refuses (task 1.4, #753) -- an object outside the
  * declarations still depending on the one being dropped, most commonly --
@@ -231,7 +248,7 @@ export const applyReset = async (
 	currentSnapshot: Snapshot,
 	registry: KindRegistry,
 	confirmed: string | undefined,
-): Promise<void> => {
+): Promise<ResetOutcome> => {
 	assertDeclarationsNotEmpty(currentSnapshot);
 	const changes = planReset(currentSnapshot, registry);
 	const databaseName = await currentDatabaseName(driver);
@@ -242,14 +259,19 @@ export const applyReset = async (
 	// sent, rather than racing throwResetDropFailed's own rethrow-if-
 	// HejbroError guard to keep its code.
 	const sql = sqlToDrop(changes, currentSnapshot, registry);
+	if (sql === null) {
+		return { ledgerCleared: false };
+	}
+	const ledgerExists = await ledgerTableExists(driver);
 	try {
-		await driver.transaction(async (session) => {
-			if (sql !== null) {
-				await session.execute({ sql, params: [], kind: "sql" });
-				await clearLedger(session);
+		return await driver.transaction(async (session) => {
+			await session.execute({ sql, params: [], kind: "sql" });
+			if (ledgerExists) {
+				await clearLedgerRows(session);
 			}
+			return { ledgerCleared: ledgerExists };
 		});
 	} catch (error) {
-		throwResetDropFailed(error);
+		return throwResetDropFailed(error);
 	}
 };

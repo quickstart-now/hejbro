@@ -1,4 +1,9 @@
-import type { CompileResult, DriverRow, DriverSession } from "@hejbro/query";
+import type {
+	CompileResult,
+	Driver,
+	DriverRow,
+	DriverSession,
+} from "@hejbro/query";
 
 /*
  * [design, task 1.1] The error codes `add-apply-engine` raises, settled
@@ -322,6 +327,44 @@ export const recordAppliedMigration = async (
 };
 
 /**
+ * [D106 R1, B1, #753 reopened] Whether `hejbro.migration_ledger` exists,
+ * read through `driver` directly -- never inside a transaction, and
+ * always before one opens. `reset`'s own drop-then-clear transaction needs
+ * this answer BEFORE it decides whether to attempt the delete at all: a
+ * database whose migrations were all applied outside hejbro (`psql -f`,
+ * an external pipeline -- both valid apply paths this project documents)
+ * never bootstraps the ledger, and a delete against a table that was never
+ * created would otherwise be the one statement inside that transaction
+ * whose failure this module used to catch (see {@link clearLedger}'s own
+ * leniency) -- silently aborting every drop before it (B1's own root
+ * cause: a caught 42P01 left the transaction aborted, and a plain COMMIT
+ * on an aborted transaction is a rollback Postgres never reports as an
+ * error).
+ */
+export const ledgerTableExists = async (driver: Driver): Promise<boolean> => {
+	const rows = await driver.execute({
+		sql: `select to_regclass('${LEDGER_SCHEMA}.${LEDGER_TABLE}') as "reg"`,
+		params: [],
+		kind: "sql",
+	});
+	return rows[0]?.reg != null;
+};
+
+/**
+ * [D106 R1, B1, #753 reopened] The same delete {@link clearLedger} sends,
+ * without its 42P01 leniency -- a caller reaching this SHALL already know
+ * the table exists ({@link ledgerTableExists}, read before the transaction
+ * this runs inside), so a failure here is a genuine one and SHALL
+ * propagate, never be swallowed into a silent no-op that leaves the
+ * transaction's earlier statements (the drops) uncommitted but unreported.
+ */
+export const clearLedgerRows = async (
+	session: DriverSession,
+): Promise<void> => {
+	await exec(session, `delete from ${QUALIFIED_LEDGER_TABLE}`);
+};
+
+/**
  * [group 5, task 5.3] Empties the ledger -- every row, not a selected
  * subset: `reset` drops every declared object, so nothing this tool
  * applied is still standing afterward, and the next `migrate` run SHALL
@@ -336,10 +379,16 @@ export const recordAppliedMigration = async (
  * too. A ledger that was never bootstrapped (42P01) is already empty of
  * rows in every sense that matters here, so this is a silent no-op for
  * it, the same leniency `readLedger` already extends to an absent table.
+ *
+ * [D106 R1, B1] `reset` itself no longer calls this -- it checks
+ * {@link ledgerTableExists} first and calls {@link clearLedgerRows}
+ * directly, so a failure inside its own transaction is never this
+ * function's leniency to swallow. This export and its leniency stay for
+ * a caller with no such precondition of its own.
  */
 export const clearLedger = async (session: DriverSession): Promise<void> => {
 	try {
-		await exec(session, `delete from ${QUALIFIED_LEDGER_TABLE}`);
+		await clearLedgerRows(session);
 	} catch (error) {
 		if (isUndefinedTableError(error)) {
 			return;
