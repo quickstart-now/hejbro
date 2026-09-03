@@ -26,7 +26,16 @@ SHALL be refused rather than passed, because it cannot tell settings
 sent before the transaction opened, where a transaction-local setting is
 discarded without applying, from settings sent inside it. Recognizing
 where a transaction opens and ends reads SQL's own transaction-control
-statements only; the check still reads no driver's own settings text.
+statements only; the check still reads no driver's own settings text. A
+statement is recognized by the transaction-control keyword it leads
+with, not by its exact text, so the ordinary spellings of opening and
+ending a transaction are all seen. A statement that only manipulates a
+savepoint — establishing one, releasing one, or rolling back to one —
+neither opens nor ends a transaction, and counts as an ordinary
+statement here. The refusal above reads which record the caller handed
+over, not the statements inside it: a record taken where transaction
+control is visible but carrying none is judged against the obligation
+and fails it, rather than being refused as the wrong record.
 
 The check SHALL read which tier applies from the driver's own
 capabilities declaration, never from a choice the caller makes
@@ -74,7 +83,8 @@ modify this requirement.
 - **WHEN** such a driver is checked against an observation that records
   only the statements crossing the driver's own execute contract, where
   a transaction's opening never appears
-- **THEN** the check refuses, rather than applying the obligation to
+- **THEN** the check refuses on which record it was handed rather than
+  on what that record contains, instead of applying the obligation to
   statements that cannot show where the transaction begins
 
 ### Requirement: Vanilla driver pins IntervalStyle at checkout

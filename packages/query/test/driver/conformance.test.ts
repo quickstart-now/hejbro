@@ -304,6 +304,162 @@ describe("assertSessionStateConformance (task 1.4/1.5, #481)", () => {
 			outcome: "pass" as const,
 			callerStatementOverride: { sql: "select 'begin here'", params: [] },
 		},
+		// Closing spellings measured against a real server (task 4.1):
+		// each of these ends the transaction there, but a whole-statement
+		// match on the bare word "commit"/"rollback"/"end" alone misses
+		// every one of them -- a driver sending the settings, then one of
+		// these, then the caller with nothing reopening a transaction
+		// wrongly passes today (the caller runs outside any transaction,
+		// and `SET LOCAL` outside one is discarded with a warning). Each
+		// row here is exactly that shape, so "the caller's own statement
+		// was not sent inside an open transaction" (message 1) is what a
+		// leading-keyword match must report.
+		{
+			name: "closing spelling: 'COMMIT;' (uppercase, trailing semicolon) ends the transaction -- caught, not silently passed",
+			recordedOnConnection: [
+				{ sql: "begin", params: [] },
+				{ sql: "set intervalstyle to 'postgres'", params: [] },
+				{ sql: "COMMIT;", params: [] },
+				{ sql: "select 1", params: [] },
+			],
+			outcome: "violation" as const,
+			expectedMessage: /was not sent inside an open transaction/,
+		},
+		{
+			name: "closing spelling: 'commit work' ends the transaction -- caught, not silently passed",
+			recordedOnConnection: [
+				{ sql: "begin", params: [] },
+				{ sql: "set intervalstyle to 'postgres'", params: [] },
+				{ sql: "commit work", params: [] },
+				{ sql: "select 1", params: [] },
+			],
+			outcome: "violation" as const,
+			expectedMessage: /was not sent inside an open transaction/,
+		},
+		{
+			name: "closing spelling: 'commit transaction' ends the transaction -- caught, not silently passed",
+			recordedOnConnection: [
+				{ sql: "begin", params: [] },
+				{ sql: "set intervalstyle to 'postgres'", params: [] },
+				{ sql: "commit transaction", params: [] },
+				{ sql: "select 1", params: [] },
+			],
+			outcome: "violation" as const,
+			expectedMessage: /was not sent inside an open transaction/,
+		},
+		{
+			name: "closing spelling: 'end transaction' ends the transaction -- caught, not silently passed",
+			recordedOnConnection: [
+				{ sql: "begin", params: [] },
+				{ sql: "set intervalstyle to 'postgres'", params: [] },
+				{ sql: "end transaction", params: [] },
+				{ sql: "select 1", params: [] },
+			],
+			outcome: "violation" as const,
+			expectedMessage: /was not sent inside an open transaction/,
+		},
+		{
+			name: "closing spelling: 'abort' ends the transaction -- caught, not silently passed",
+			recordedOnConnection: [
+				{ sql: "begin", params: [] },
+				{ sql: "set intervalstyle to 'postgres'", params: [] },
+				{ sql: "abort", params: [] },
+				{ sql: "select 1", params: [] },
+			],
+			outcome: "violation" as const,
+			expectedMessage: /was not sent inside an open transaction/,
+		},
+		// Opening spellings measured against a real server (task 4.1):
+		// each of these opens a transaction there, but a whole-statement
+		// match on the bare words "begin"/"start transaction" alone
+		// wrongly refuses every one of them -- a driver that opens with
+		// one of these, sends its settings, then the caller, all inside
+		// one real transaction, is wrongly failed today.
+		{
+			name: "opening spelling: 'begin work' opens the transaction -- recognized, not wrongly refused",
+			recordedOnConnection: [
+				{ sql: "begin work", params: [] },
+				{ sql: "set intervalstyle to 'postgres'", params: [] },
+				{ sql: "select 1", params: [] },
+				{ sql: "commit", params: [] },
+			],
+			outcome: "pass" as const,
+		},
+		{
+			name: "opening spelling: 'begin transaction' opens the transaction -- recognized, not wrongly refused",
+			recordedOnConnection: [
+				{ sql: "begin transaction", params: [] },
+				{ sql: "set intervalstyle to 'postgres'", params: [] },
+				{ sql: "select 1", params: [] },
+				{ sql: "commit", params: [] },
+			],
+			outcome: "pass" as const,
+		},
+		{
+			name: "opening spelling: 'begin isolation level serializable' opens the transaction -- recognized, not wrongly refused",
+			recordedOnConnection: [
+				{ sql: "begin isolation level serializable", params: [] },
+				{ sql: "set intervalstyle to 'postgres'", params: [] },
+				{ sql: "select 1", params: [] },
+				{ sql: "commit", params: [] },
+			],
+			outcome: "pass" as const,
+		},
+		{
+			name: "opening spelling: 'start transaction read only' opens the transaction -- recognized, not wrongly refused",
+			recordedOnConnection: [
+				{ sql: "start transaction read only", params: [] },
+				{ sql: "set intervalstyle to 'postgres'", params: [] },
+				{ sql: "select 1", params: [] },
+				{ sql: "commit", params: [] },
+			],
+			outcome: "pass" as const,
+		},
+		{
+			name: "opening spelling: 'BEGIN;' (uppercase, trailing semicolon) opens the transaction -- recognized, not wrongly refused",
+			recordedOnConnection: [
+				{ sql: "BEGIN;", params: [] },
+				{ sql: "set intervalstyle to 'postgres'", params: [] },
+				{ sql: "select 1", params: [] },
+				{ sql: "commit", params: [] },
+			],
+			outcome: "pass" as const,
+		},
+		// Savepoint statements (task 4.1) -- none of the three is a
+		// transaction boundary, `rollback to savepoint s` especially:
+		// its own leading word is "rollback", the same word that ends a
+		// transaction bare, so a naive prefix match would wrongly treat
+		// it as closing the transaction it's actually running inside.
+		{
+			name: "savepoint: 'savepoint s' is an ordinary statement, not a boundary",
+			recordedOnConnection: [
+				{ sql: "begin", params: [] },
+				{ sql: "savepoint s", params: [] },
+				{ sql: "select 1", params: [] },
+				{ sql: "commit", params: [] },
+			],
+			outcome: "pass" as const,
+		},
+		{
+			name: "savepoint: 'release savepoint s' is an ordinary statement, not a boundary",
+			recordedOnConnection: [
+				{ sql: "begin", params: [] },
+				{ sql: "release savepoint s", params: [] },
+				{ sql: "select 1", params: [] },
+				{ sql: "commit", params: [] },
+			],
+			outcome: "pass" as const,
+		},
+		{
+			name: "savepoint: 'rollback to savepoint s' is an ordinary statement, not a boundary -- the trap a naive 'starts with rollback' match would fall into",
+			recordedOnConnection: [
+				{ sql: "begin", params: [] },
+				{ sql: "rollback to savepoint s", params: [] },
+				{ sql: "select 1", params: [] },
+				{ sql: "commit", params: [] },
+			],
+			outcome: "pass" as const,
+		},
 	])(
 		"the transaction-envelope obligation for interactive-transactions:true + session-state:false -- $name",
 		({

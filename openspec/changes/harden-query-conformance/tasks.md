@@ -161,6 +161,41 @@ Inside group 1, 1.2 makes 1.3's test red, so 1.3 follows it.
       `packages/query/src/db/db.ts`,
       `packages/query/test/db/execute-result-type.test.ts`.
 
+## 4. Review repairs
+
+- [x] 4.1 (~9m) **[design]** Transaction control is recognized by the
+      keyword a statement leads with, after normalizing (trim, lower-case,
+      drop a trailing semicolon): `begin`/`start transaction` open,
+      `commit`/`rollback`/`abort`/`end` close. A statement that only
+      manipulates a savepoint is neither. Settles which spellings the kit
+      sees, which the requirement now states. Red:
+      `packages/query/test/driver/conformance.test.ts`, the envelope input
+      table gains rows for the five closing spellings measured to end a
+      transaction on a real server (`COMMIT;`, `commit work`,
+      `commit transaction`, `end transaction`, `abort` — each must be
+      caught, all five pass today), the four opening spellings that are
+      wrongly refused today (`begin work`, `begin transaction`,
+      `begin isolation level serializable`, `start transaction read only`,
+      plus `BEGIN;`), and three savepoint rows (`savepoint s`,
+      `release savepoint s`, `rollback to savepoint s` — none of them a
+      boundary). The existing `do $$ begin … end $$` and string-literal
+      rows stay as the controls that the leading-keyword match must not
+      swallow. Re-run mutants M1–M3 afterwards (commit, mutate,
+      `git checkout --`). Files:
+      `packages/query/src/testing/driver-conformance.ts`,
+      `packages/query/test/driver/conformance.test.ts`.
+- [ ] 4.2 (~5m) The two corrected set-operation scenarios get the
+      observers they name: a `tsc` pin for the whole-table form (identical
+      to the branch read alone) and one for the object-projection form
+      (the left branch's keys, widened with null). No production change —
+      `ExecuteResult` keeps the untracked widening, which is what the
+      corrected sentence describes. **No red is available**, so the
+      discriminating check is the mutant: switch the branch's second type
+      argument to `never` and the object-projection pin must fail while
+      the whole-table pin stays green. Evidence is `check-types`, not the
+      test runner. Files:
+      `packages/query/test/db/execute-result-type.test.ts`.
+
 ## Close-out (not a group)
 
 The changeset, `openspec/task-times.csv`, and the README stamps
