@@ -158,7 +158,15 @@ create schema shop;
 -- shape: R4 #710 (table-level omission, on its own) crossed with R5-B1 /
 -- R5-N2 #711 (a live foreign key into it, and a UNIQUE constraint on it)
 -- -- "Widgets" is CamelCase, so its own name is not a valid hejbro SQL
--- identifier.
+-- identifier. R5-B1 and R5-N2 are two DIFFERENT variables this one
+-- fixture carries at once, not one bug under two names: confirmed
+-- (lead's own build --force'd measurement, 2026-09-03, stack frame
+-- `referencesFor`/`existingTable`) that today's abort is the R5-B1
+-- path -- shop.orders' own inbound foreign key into "Widgets" -- the
+-- UNIQUE constraint below (R5-N2) never gets the chance to be its own
+-- defect on this fixture, since the reading aborts before reaching it.
+-- Kept anyway: R5-N2 stays its own observation target once #711 lands
+-- and R5-B1's abort no longer masks it.
 create table shop."Widgets" (
 	id serial primary key,
 	sku text not null,

@@ -343,17 +343,19 @@ describe.each(PG_IMAGES)("brownfield corpus / %s", (image) => {
 					cwd,
 					importArgs(url(), ["shop"], "src/schema"),
 				);
-				// red on dev until #711: R5-B1 and/or R5-N2 (#711) -- both
-				// concern this same fixture (a UNIQUE constraint on, and a
-				// foreign key into, an omitted table), and this run alone
-				// does not establish which of the two paths this
-				// particular abort goes through -- that needs a
-				// build --force'd measurement (pending the lead's slot),
-				// not this witness's own build. Captured verbatim against
-				// postgres:17-alpine, 2026-09-03, tip 36520086 (dev), this
-				// worktree's own build (packages/cli/dist/cli.js mtime
-				// 08:40:41 KST, newest packages/cli/src file 08:21:46 KST,
-				// packages/ status clean against dev tip):
+				// red on dev until #711: R5-B1 (#711), confirmed -- the
+				// lead's own build --force'd dist (2026-09-03) ran
+				// `import --schema shop` directly against a live
+				// container and the abort's own stack frame is
+				// `referencesFor`'s `existingTable(fk.targetSchema,
+				// fk.targetTable, ...)` -- i.e. shop.orders.widget_id's
+				// inbound reference into the omitted "Widgets", not the
+				// UNIQUE constraint on "Widgets" itself (R5-N2, a
+				// different variable this same fixture also carries --
+				// see seed/brownfield.sql's own comment on "Widgets").
+				// Same red on both PG15 and PG17. Captured verbatim
+				// against postgres:17-alpine, 2026-09-03, tip 36520086
+				// (dev):
 				//
 				//   error[invalid-sql-name]: Widgets
 				//     table name "Widgets" is not a valid hejbro SQL
