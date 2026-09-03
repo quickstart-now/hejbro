@@ -453,7 +453,7 @@ const omittedTableLines = (
  * report is the only place this omission is ever said out loud.
  */
 const omittedIndexLine = (index: OmittedIndex): string =>
-	`Omitted: index "${index.schema}.${index.table}.${index.sqlName}" -- its catalog name is not a valid hejbro SQL identifier, so no declaration can carry it under the same name \`check\` would compare it by. hejbro will not mention it again -- \`check\` compares only what is declared, so declare it by hand or rename it in the database.`;
+	`Omitted: index "${index.schema}.${index.table}.${index.sqlName}" -- its catalog name is not a valid hejbro SQL identifier, so no declaration can carry it under the same name \`check\` would compare it by. hejbro will not mention it again -- \`check\` compares only what is declared, so rename it in the database to bring it back; a hand-written declaration under a different name only adds a second one.`;
 
 const omittedIndexLines = (
 	indexes: ReadonlyArray<OmittedIndex>,
@@ -465,7 +465,7 @@ const omittedIndexLines = (
 
 /** A check constraint's own name is compared by `check` the same way an index's is (see {@link omittedIndexLine}) -- omission costs only this check, and a vendored contract never carries checks either; nothing in `check` scans for one no declaration names, so this run's own report is the only place this omission is ever said out loud (#707). */
 const omittedCheckLine = (check: OmittedCheck): string =>
-	`Omitted: check constraint "${check.schema}.${check.table}.${check.sqlName}" -- its catalog name is not a valid hejbro SQL identifier, so no declaration can carry it under the same name \`check\` would compare it by. hejbro will not mention it again -- \`check\` compares only what is declared, so declare it by hand or rename it in the database.`;
+	`Omitted: check constraint "${check.schema}.${check.table}.${check.sqlName}" -- its catalog name is not a valid hejbro SQL identifier, so no declaration can carry it under the same name \`check\` would compare it by. hejbro will not mention it again -- \`check\` compares only what is declared, so rename it in the database to bring it back; a hand-written declaration under a different name only adds a second one.`;
 
 const omittedCheckLines = (
 	checks: ReadonlyArray<OmittedCheck>,

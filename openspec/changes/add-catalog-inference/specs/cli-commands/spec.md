@@ -55,7 +55,20 @@ local copy of the enum for an enum. A foreign key into a table no
 starter file declares — one whose schema this run never named — SHALL
 be declared against such a handle too, for a different reason: there is
 no file to import its target from. A starter file therefore never names
-a table this run did not read except through a handle of its own. Each
+a table this run did not read except through a handle of its own, and it
+SHALL carry one handle per target rather than one per foreign key,
+however many of its keys point there: a handle names a table, not a
+relation, and the reading that produces them counts them the same way —
+two artifacts of one reading that count the same thing differently
+disagree about which of them is right. No
+identifier a starter file declares or imports SHALL collide with a name
+the file's own emitted text already binds, the extras callback's own
+parameter included: a table whose identifier would collide with it is
+declared under another identifier instead, because a shadowed reference
+inside a callback resolves to that callback's column proxy rather than
+to the table, and the file then loads as nothing at all — a failure that
+reaches the reader as a load error naming the file, never as a report
+line about the table. Each
 file SHALL
 open with a header carrying
 the loss report in full and the statement that the file is the
@@ -78,6 +91,15 @@ meant to run.
   their columns and actions: a handle for a table, a local copy for an
   enum, so the files' imports form no cycle, nothing is declared twice,
   and loading does not depend on which file the loader reaches first
+
+#### Scenario: A table named like the emitted callback's parameter still loads
+- **WHEN** a reading covers a table whose identifier would collide with
+  the parameter the emitted extras callback binds — the table declared in
+  the file that references it, the table imported from another file, or
+  the table on the declared side of a cut cycle
+- **THEN** each of the three files is written with that table under an
+  identifier that does not collide, and each loads through the loader
+  `generate` itself uses and type-checks, in every entry order
 
 #### Scenario: A second import writes the same bytes
 - **WHEN** the same database is imported twice, into two empty

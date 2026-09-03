@@ -550,13 +550,21 @@ const renderForeignKey = (
  * the extras callback's own `t`, never a module-level identifier. The
  * handle itself generalizes to same-file and cross-file alike:
  * `existingTable` takes its target's schema and table as string
- * literals, never an import. This base name (before this file's own
- * casing+collision pass) is deterministic in the target identity and
- * this FK's own name, so two handles in one file never collide by
- * accident.
+ * literals, never an import.
+ *
+ * D106 R7-N4: keyed by the target's own identity alone, not by which
+ * foreign key asked for it first -- a handle names a table, not a
+ * relation, so two foreign keys (from the same table or different
+ * ones) that reference the same target share the one handle, the same
+ * rule `compose.ts`'s own `outOfScopeHandlesFor` states for the
+ * reading's own snapshot and for the same reason: two objects sharing
+ * one identity is the defect, not the fix. This base name (before this
+ * file's own casing+collision pass) is deterministic in the target
+ * identity alone, so it never collides with any other target's own
+ * handle in the same file.
  */
-export const handleBaseNameFor = (fk: ForeignKeySnapshot): string =>
-	`${fk.referencesTable.replace(".", "_")}_${fk.name}_ref`;
+export const handleBaseNameFor = (targetIdentity: string): string =>
+	`${targetIdentity.replace(".", "_")}_ref`;
 
 /**
  * D106 B1's own unexported `pgEnum` clone base name (before this file's own
@@ -656,23 +664,20 @@ export const mustDeferEnumReference = (
 	return context.isEnumCrossingOnBackEdge(table, enumSchema, enumIdentityValue);
 };
 
-/** One table's own FKs split into the two settled branches (CI-G2-R1-16, widened D106 R6-B1): handled (every cycle-closing edge, plus every edge into a schema this run never read, each paired with its own handle's base name -- {@link mustDeferForeignKey}'s three rules) and everything else -- self-references, same-schema non-closing references, and a cross-schema reference whose file pair is acyclic -- left on the ordinary `extras` path. */
+/** One table's own FKs split into the two settled branches (CI-G2-R1-16, widened D106 R6-B1): handled (every cycle-closing edge, plus every edge into a schema this run never read -- {@link mustDeferForeignKey}'s three rules) and everything else -- self-references, same-schema non-closing references, and a cross-schema reference whose file pair is acyclic -- left on the ordinary `extras` path. D106 R7-N4: no longer carries a handle base name per entry -- a handle names a *target*, shared by every handled foreign key that references it, so its base name is computed once per target ({@link handleBaseNameFor}) at the file-level aggregation point (`schemaHandles`), not once per foreign key here. */
 export type ForeignKeyClassification = {
 	readonly isHandled: (fk: ForeignKeySnapshot) => boolean;
-	readonly handled: ReadonlyArray<{
-		readonly fk: ForeignKeySnapshot;
-		readonly handleBaseName: string;
-	}>;
+	readonly handled: ReadonlyArray<ForeignKeySnapshot>;
 };
 
 export const classifyForeignKeys = (
 	table: TableSnapshot,
 	mustDeferContext: Parameters<typeof mustDeferForeignKey>[2],
 ): ForeignKeyClassification => {
-	const handled = table.foreignKeys
-		.filter((fk) => mustDeferForeignKey(table, fk, mustDeferContext))
-		.map((fk) => ({ fk, handleBaseName: handleBaseNameFor(fk) }));
-	const handledSet = new Set(handled.map((entry) => entry.fk));
+	const handled = table.foreignKeys.filter((fk) =>
+		mustDeferForeignKey(table, fk, mustDeferContext),
+	);
+	const handledSet = new Set(handled);
 	return {
 		isHandled: (fk) => handledSet.has(fk),
 		handled,
@@ -716,6 +721,18 @@ export type TableRenderContext = {
 
 const INDENT = "\t";
 
+/**
+ * The extras callback's own parameter name -- read here, and nowhere
+ * else, by both the one place that writes it (`renderExtrasBlock`) and
+ * the one place that must know it exists (`reservedIdentifiers`, below,
+ * D106 R7-B1): a table whose identifier would collide with this name is
+ * declared under a different one instead, since a reference to it from
+ * inside the callback would otherwise resolve to the callback's own
+ * column proxy rather than the table, and the file would load as
+ * nothing at all.
+ */
+const EXTRAS_CALLBACK_PARAM = "t";
+
 const extrasBlockEntry = (
 	label: string,
 	entries: ReadonlyArray<string>,
@@ -730,7 +747,7 @@ const renderExtrasBlock = (extrasEntries: ReadonlyArray<string>): string => {
 	if (extrasEntries.length === 0) {
 		return "";
 	}
-	return `,\n${INDENT}(t) => ({\n${extrasEntries.join("\n")}\n${INDENT}})`;
+	return `,\n${INDENT}(${EXTRAS_CALLBACK_PARAM}) => ({\n${extrasEntries.join("\n")}\n${INDENT}})`;
 };
 
 /** One `foreignKeys` array entry, with the constraint comment (c) carries directly above it -- `null` for every (a)/(b) entry. */
@@ -739,15 +756,51 @@ type ForeignKeyEntryRender = {
 	readonly comment: string | null;
 };
 
-/** (c)'s own constraint (CI-G2-R1-16, lead-approved wording: state the constraint only, never the round's own process history). */
+/**
+ * D106 R7-N3: why a foreign key's own handle exists -- a property of the
+ * *target*, not of any one foreign key that reaches it (D106 R7-N4 already
+ * made handles per-target; a target either was declared by this run
+ * somewhere, in which case every handle into it exists only to cut an
+ * import cycle, or it was not, in which case no handle into it could ever
+ * mean anything else). `mustDeferForeignKey`'s own three rules collapse
+ * to exactly these two reasons: its same-schema and cross-schema-back-edge
+ * branches are both a cycle cut, its "schema never read" branch is the
+ * other.
+ */
+type HandleReason = "cycleCut" | "unreadTarget";
+
+/** (c)'s own constraint when the target was declared by this run (CI-G2-R1-16, lead-approved wording: state the constraint only, never the round's own process history). */
 const HANDLE_CONSTRAINT_COMMENT =
 	"// Closes a declaration-file cycle -- any live reference to the other table, thunked or immediate, evaluates before that file finishes initializing, so this FK stays on a reference-only handle instead.";
 
-const commentForForeignKeyEntry = (isHandled: boolean): string | null => {
-	if (isHandled) {
+/** (c)'s own constraint when the target was never declared by this run at all (D106 R7-N3). */
+const UNREAD_TARGET_CONSTRAINT_COMMENT =
+	"// The target's schema was never read by this run -- there is no file to import it from, so this FK stays on a reference-only handle that names the table directly instead.";
+
+const commentForForeignKeyEntry = (
+	reason: HandleReason | null,
+): string | null => {
+	if (reason === "cycleCut") {
 		return HANDLE_CONSTRAINT_COMMENT;
 	}
+	if (reason === "unreadTarget") {
+		return UNREAD_TARGET_CONSTRAINT_COMMENT;
+	}
 	return null;
+};
+
+/** D106 R7-N3: `null` when `fk` isn't deferred at all; otherwise the reason its handle exists, read off whether the target is among this run's own tables (see {@link HandleReason}'s own doc comment). */
+const handleReasonFor = (
+	isHandled: boolean,
+	targetIsKnown: boolean,
+): HandleReason | null => {
+	if (!isHandled) {
+		return null;
+	}
+	if (targetIsKnown) {
+		return "cycleCut";
+	}
+	return "unreadTarget";
 };
 
 /**
@@ -782,18 +835,30 @@ const renderForeignKeysBlock = (
 	];
 };
 
-/** (c)'s own unexported `existingTable` handle (D41) -- carries only the FK's own target columns, matching `infer/table.ts`'s own `referencesFor` (1.4b): a reference-only handle never needs its target's full column set. */
+/**
+ * (c)'s own unexported `existingTable` handle (D41) -- carries the
+ * *union* of every referencing foreign key's own target columns (D106
+ * R7-N4: one handle per target, not one per foreign key, so every
+ * foreign key sharing a target must find its own columns on the one
+ * object declared), matching `infer/table.ts`'s own `referencesFor`
+ * (1.4b): a reference-only handle never needs its target's full column
+ * set, only what this file's own foreign keys actually reference.
+ * `referencedColumns` arrives already deduplicated and ordered by SQL
+ * column name (`schemaHandles`, below) -- deterministic regardless of
+ * which foreign key's own catalog row happened to name a column first.
+ */
 const renderExistingTableHandle = (
-	fk: ForeignKeySnapshot,
+	targetIdentity: string,
+	referencedColumns: ReadonlyArray<string>,
 	handleIdentifier: string,
 	targetTable: TableSnapshot | undefined,
 	targetTsKeyFor: (sqlName: string) => string,
 	enumRef: (enumSchema: string, enumName: string) => string,
 ): TypeRender => {
-	const [fallbackSchema, fallbackTable] = fk.referencesTable.split(".");
+	const [fallbackSchema, fallbackTable] = targetIdentity.split(".");
 	const targetSchema = targetTable?.schema ?? fallbackSchema ?? "";
 	const targetTableName = targetTable?.name ?? fallbackTable ?? "";
-	const columnRenders = fk.referencesColumns.map((columnName) => {
+	const columnRenders = referencedColumns.map((columnName) => {
 		const columnSnapshot = targetTable?.columns.find(
 			(column) => column.name === columnName,
 		);
@@ -944,24 +1009,17 @@ export const renderTable = (
 		),
 	}));
 
-	const handleRenders = classification.handled.map(({ fk }) => {
-		const handleIdentifier = context.handleIdentifierFor(ownIdentity, fk.name);
-		const targetTable = context.tablesByIdentity.get(fk.referencesTable);
-		return {
-			fk,
-			handleIdentifier,
-			render: renderExistingTableHandle(
-				fk,
-				handleIdentifier,
-				targetTable,
-				(sqlName) => context.tsKeyFor(fk.referencesTable, sqlName),
-				context.enumRef,
-			),
-		};
-	});
+	// D106 R7-N4: the handle's own declaration is rendered once per
+	// *target*, at the file level (`schemaHandles`), not once per
+	// foreign key here -- this table only needs to know which shared
+	// identifier each of its own handled foreign keys resolves to.
 	const handleIdentifierForFk = new Map(
-		handleRenders.map(
-			({ fk, handleIdentifier }) => [fk, handleIdentifier] as const,
+		classification.handled.map(
+			(fk) =>
+				[
+					fk,
+					context.handleIdentifierFor(ownIdentity, fk.referencesTable),
+				] as const,
 		),
 	);
 
@@ -969,6 +1027,10 @@ export const renderTable = (
 		table.foreignKeys.map((fk) => {
 			const isSelf = fk.referencesTable === ownIdentity;
 			const isHandled = classification.isHandled(fk);
+			const handleReason = handleReasonFor(
+				isHandled,
+				context.tablesByIdentity.has(fk.referencesTable),
+			);
 			const text = renderForeignKey(fk, {
 				isSelf,
 				targetIdentifier: resolveForeignKeyTargetIdentifier(
@@ -983,7 +1045,7 @@ export const renderTable = (
 				targetTsKeyFor: (sqlName: string) =>
 					context.tsKeyFor(fk.referencesTable, sqlName),
 			});
-			return { text, comment: commentForForeignKeyEntry(isHandled) };
+			return { text, comment: commentForForeignKeyEntry(handleReason) };
 		});
 
 	const indexRenders = table.indexes.map((index) =>
@@ -1025,13 +1087,11 @@ export const renderTable = (
 		...columnRenders.flatMap(({ render }) => [...render.symbols]),
 		...indexRenders.flatMap((render) => [...render.symbols]),
 		...checkRenders.flatMap((render) => [...render.symbols]),
-		...handleRenders.flatMap(({ render }) => [...render.symbols]),
 		...enumCloneRenders.flatMap(({ render }) => [...render.symbols]),
 	]);
-	const preamble = [
-		...enumCloneRenders.map(({ render }) => render.call),
-		...handleRenders.map(({ render }) => render.call),
-	];
+	// D106 R7-N4: no handle-declaration text here -- that is rendered once
+	// per target at the file level, alongside every other table's own.
+	const preamble = [...enumCloneRenders.map(({ render }) => render.call)];
 
 	return { preamble, call, symbols };
 };
@@ -1140,10 +1200,11 @@ const enumIdentitiesIn = (
 	return [];
 };
 
+/** D106 R7-N4: one per target *identity* this file's own handled foreign keys reach, not one per foreign key -- `referencedColumns` is the union across every one of them, deduplicated and sorted by SQL column name. */
 type HandleNeed = {
-	readonly ownIdentity: string;
-	readonly fk: ForeignKeySnapshot;
+	readonly targetIdentity: string;
 	readonly handleBaseName: string;
+	readonly referencedColumns: ReadonlyArray<string>;
 };
 
 /** D106 B1 (CI-D106-R2-02): one unexported local `pgEnum` clone this file's own tables need, the enum analogue of {@link HandleNeed}. */
@@ -1165,11 +1226,14 @@ type FilePlan = {
 	readonly schemaIdentifier: string;
 	readonly enumIdentifiers: ReadonlyMap<string, string>;
 	readonly tableIdentifiers: ReadonlyMap<string, string>;
-	/** Keyed `${ownIdentity} ${foreignKeyName}` -- one per (c) handle this file's own tables need. */
+	/** Keyed by the target's own identity alone (D106 R7-N4) -- one per (c) handle this file's own tables need, shared by every foreign key that references it. */
 	readonly handleIdentifiers: ReadonlyMap<string, string>;
 	/** Keyed `${ownIdentity} ${enumIdentity}` -- one per D106 B1 enum clone this file's own tables need. */
 	readonly enumCloneIdentifiers: ReadonlyMap<string, string>;
+	/** This file's own `import { … } from "hejbro"` line's symbol list, and nothing else -- `resolveFileIdentifiers`/`localNamespaceOf` read {@link reservedIdentifiers} instead (D106 R7-B1: this set used to answer both questions, so a name only the *identifier* side needed reserved -- the extras callback's own parameter -- had nowhere to go without also, wrongly, appearing in this import line). */
 	readonly vocabulary: ReadonlySet<string>;
+	/** `vocabulary` plus every other name this file's own emitted text binds outside a declaration (D106 R7-B1: today, only the extras callback's own parameter) -- what a local identifier or an import alias must not collide with. */
+	readonly reservedIdentifiers: ReadonlySet<string>;
 };
 
 const addToMultiMap = (
@@ -1183,8 +1247,8 @@ const addToMultiMap = (
 	return map;
 };
 
-const handleNeedKey = (ownIdentity: string, foreignKeyName: string): string =>
-	`${ownIdentity} ${foreignKeyName}`;
+/** D106 R7-N4: the target's own identity, and nothing else -- {@link HandleNeed} is now keyed purely by which table a handle references, not by which foreign key asked for it. */
+const handleNeedKey = (targetIdentity: string): string => targetIdentity;
 
 /** D106 B1's own key shape for {@link EnumCloneNeed}, the enum analogue of {@link handleNeedKey}. */
 const enumCloneNeedKey = (
@@ -1208,15 +1272,17 @@ const neededCrossFileTableReferences = (
 
 /**
  * One file's own identifier namespace (schema + its enums + its tables +
- * its (c) handles, in that order), resolved against `reserved` -- this
- * file's own hejbro-vocabulary usage (the barrel symbols it imports,
- * `table`/`uuid`/…), so a local table or enum identifier can never
- * collide with one of them. Cross-file collisions (CI-G2-R1-09: two
- * schemas both naming a table `users`, one referencing the other) are no
- * longer this function's concern: since D106 R2-B2 a file's own
- * identifiers are settled with no knowledge of any other file at all,
- * and a colliding cross-file *import* is aliased afterward
- * (`resolveAliasesFor`, below) rather than reserved here.
+ * its (c) handles, in that order), resolved against `reserved` -- the
+ * caller's own `reservedIdentifiers` (D106 R7-B1): this file's own
+ * hejbro-vocabulary usage (the barrel symbols it imports, `table`/
+ * `uuid`/…) plus every other name its emitted text binds outside a
+ * declaration (the extras callback's own parameter), so a local table
+ * or enum identifier can never collide with any of them. Cross-file
+ * collisions (CI-G2-R1-09: two schemas both naming a table `users`, one
+ * referencing the other) are no longer this function's concern: since
+ * D106 R2-B2 a file's own identifiers are settled with no knowledge of
+ * any other file at all, and a colliding cross-file *import* is aliased
+ * afterward (`resolveAliasesFor`, below) rather than reserved here.
  */
 const resolveFileIdentifiers = (
 	schemaName: string,
@@ -1265,7 +1331,7 @@ const resolveFileIdentifiers = (
 		schemaHandles.map(
 			(need, index) =>
 				[
-					handleNeedKey(need.ownIdentity, need.fk.name),
+					handleNeedKey(need.targetIdentity),
 					identifiers[handleOffset + index] ?? need.handleBaseName,
 				] as const,
 		),
@@ -1479,22 +1545,44 @@ export const emitDeclarationFiles = (
 	/**
 	 * One file's own plan: its tables, enums, (c) handles and enum
 	 * clones, and the identifiers `resolveFileIdentifiers` settles for
-	 * all of them against this file's own hejbro-vocabulary usage alone
+	 * all of them against this file's own `reservedIdentifiers` alone
 	 * (D106 R2-B2 -- no cross-file knowledge here at all).
 	 */
 	const buildFilePlan = (schemaName: string): FilePlan => {
 		const schemaTables = tablesBySchema.get(schemaName) ?? [];
 		const schemaEnums = enumsBySchema.get(schemaName) ?? [];
-		const schemaHandles: ReadonlyArray<HandleNeed> = schemaTables.flatMap(
-			(table) => {
-				const ownIdentity = tableIdentity(table.schema, table.name);
-				return classificationFor(table).handled.map((entry) => ({
-					ownIdentity,
-					fk: entry.fk,
-					handleBaseName: entry.handleBaseName,
-				}));
-			},
-		);
+		/**
+		 * D106 R7-N4: one need per target *identity*, not one per
+		 * (owning table, foreign key) pair -- grouped here across every
+		 * one of this file's own tables, the same rule `compose.ts`'s
+		 * own `outOfScopeHandlesFor` states for the reading's own
+		 * snapshot: two foreign keys into one target resolve to the one
+		 * object that gets declared, never two objects sharing an
+		 * identity. `referencedColumns` is the union of every one of
+		 * those foreign keys' own target columns, deduplicated and
+		 * ordered by SQL column name so two runs (or two entry orders)
+		 * mint the same handle regardless of which foreign key's own
+		 * catalog row named a column first.
+		 */
+		const handledColumnsByTarget = schemaTables
+			.flatMap((table) => classificationFor(table).handled)
+			.reduce((map, fk) => {
+				const columns = map.get(fk.referencesTable) ?? new Set<string>();
+				fk.referencesColumns.forEach((column) => {
+					columns.add(column);
+				});
+				map.set(fk.referencesTable, columns);
+				return map;
+			}, new Map<string, Set<string>>());
+		const schemaHandles: ReadonlyArray<HandleNeed> = [
+			...handledColumnsByTarget.entries(),
+		]
+			.sort(([a], [b]) => a.localeCompare(b))
+			.map(([targetIdentity, columns]) => ({
+				targetIdentity,
+				handleBaseName: handleBaseNameFor(targetIdentity),
+				referencedColumns: [...columns].sort((a, b) => a.localeCompare(b)),
+			}));
 		const schemaEnumClones: ReadonlyArray<EnumCloneNeed> = [
 			...new Map(
 				schemaTables.flatMap((table) => {
@@ -1548,9 +1636,29 @@ export const emitDeclarationFiles = (
 				schemaEnums.length > 0 || schemaEnumClones.length > 0,
 				"pgEnum",
 			),
+			// D106 R7-N4: a handle's own declaration is no longer part of
+			// any one table's own dry-run render (below) -- it is
+			// file-level now, so its own symbols (`existingTable`, and
+			// `text` on a target column this run never read) are
+			// collected here instead.
+			...schemaHandles.flatMap((need) => [
+				...renderExistingTableHandle(
+					need.targetIdentity,
+					need.referencedColumns,
+					"handle",
+					tablesByIdentity.get(need.targetIdentity),
+					(sqlName) => sqlName,
+					() => "enum",
+				).symbols,
+			]),
 			...schemaTables.flatMap((table) => [
 				...renderTable(table, dryRunContext).symbols,
 			]),
+		]);
+		/** D106 R7-B1: `vocabulary` plus the extras callback's own parameter -- the question `resolveFileIdentifiers`/`localNamespaceOf` actually ask ("what name is already taken here") is wider than "what do we import from hejbro", and `hejbroImportLine` (below) is the one reader that must keep asking the narrower one. */
+		const reservedIdentifiers = new Set<string>([
+			...vocabulary,
+			EXTRAS_CALLBACK_PARAM,
 		]);
 
 		const resolved = resolveFileIdentifiers(
@@ -1559,7 +1667,7 @@ export const emitDeclarationFiles = (
 			schemaTables,
 			schemaHandles,
 			schemaEnumClones,
-			vocabulary,
+			reservedIdentifiers,
 		);
 
 		return {
@@ -1570,6 +1678,7 @@ export const emitDeclarationFiles = (
 			schemaHandles,
 			schemaEnumClones,
 			vocabulary,
+			reservedIdentifiers,
 			...resolved,
 		};
 	};
@@ -1603,14 +1712,15 @@ export const emitDeclarationFiles = (
 			),
 		),
 	);
+	/** D106 R7-N4: `foreignKeyName` widened to `targetIdentity` -- `ownIdentity` still selects which file's own `handleIdentifiers` map to read (a target's own identity alone can't, since the target itself may be in a schema this run never read at all), but the key within that map is the target's identity, shared by every foreign key that references it. */
 	const handleIdentifierFor = (
 		ownIdentity: string,
-		foreignKeyName: string,
+		targetIdentity: string,
 	): string => {
 		const plan = fileOfTable.get(ownIdentity);
 		return (
-			plan?.handleIdentifiers.get(handleNeedKey(ownIdentity, foreignKeyName)) ??
-			foreignKeyName
+			plan?.handleIdentifiers.get(handleNeedKey(targetIdentity)) ??
+			targetIdentity
 		);
 	};
 	const enumCloneIdentifierFor = (
@@ -1747,7 +1857,7 @@ export const emitDeclarationFiles = (
 		return nextFreeSuffix(aliasBase, usedNames);
 	};
 
-	/** Every name this file's own declarations already occupy -- its schema/enum/table/handle/enum-clone identifiers plus the hejbro-barrel vocabulary it uses -- the starting `usedNames` an import alias must avoid. */
+	/** Every name this file's own declarations already occupy -- its schema/enum/table/handle/enum-clone identifiers plus every name {@link FilePlan.reservedIdentifiers} carries (the hejbro-barrel vocabulary it uses, and the extras callback's own parameter, D106 R7-B1) -- the starting `usedNames` an import alias must avoid. */
 	const localNamespaceOf = (plan: FilePlan): ReadonlySet<string> =>
 		new Set([
 			plan.schemaIdentifier,
@@ -1755,7 +1865,7 @@ export const emitDeclarationFiles = (
 			...plan.tableIdentifiers.values(),
 			...plan.handleIdentifiers.values(),
 			...plan.enumCloneIdentifiers.values(),
-			...plan.vocabulary,
+			...plan.reservedIdentifiers,
 		]);
 
 	/** This file's own `identity -> name used in this file's own source` map -- the owner's bare name when nothing collides, an alias otherwise. */
@@ -1850,6 +1960,27 @@ export const emitDeclarationFiles = (
 		const hejbroImportLine = `import { ${[...plan.vocabulary].sort().join(", ")} } from "hejbro";`;
 		const schemaDeclLine = `export const ${plan.schemaIdentifier} = schema(${JSON.stringify(plan.schemaName)});`;
 
+		/**
+		 * D106 R7-N4: rendered once per target here, at the file level --
+		 * never inside any one table's own render, which would declare
+		 * the same identifier again for every other table that also
+		 * references it. The real, resolved identifier (`plan.handleIdentifiers`)
+		 * replaces the dry run's own placeholder used to size `vocabulary`
+		 * above.
+		 */
+		const handleDeclarationTexts = plan.schemaHandles.map(
+			(need) =>
+				renderExistingTableHandle(
+					need.targetIdentity,
+					need.referencedColumns,
+					plan.handleIdentifiers.get(handleNeedKey(need.targetIdentity)) ??
+						need.handleBaseName,
+					tablesByIdentity.get(need.targetIdentity),
+					(sqlName) => tsKeyFor(need.targetIdentity, sqlName),
+					identifierForEnum,
+				).call,
+		);
+
 		const tableSections = tableRenders.flatMap((render) => [
 			...render.preamble.map((line) => `\n${line}`),
 			`\n${render.call}`,
@@ -1863,6 +1994,7 @@ export const emitDeclarationFiles = (
 			"",
 			schemaDeclLine,
 			...enumTexts.map((render) => `\n${render.call}`),
+			...handleDeclarationTexts.map((text) => `\n${text}`),
 			...tableSections,
 		];
 

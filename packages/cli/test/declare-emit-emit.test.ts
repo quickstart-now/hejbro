@@ -241,7 +241,7 @@ describe("emitDeclarationFiles / 2.1", () => {
 		expect(billingFile.source).not.toContain('from "./app.schema"');
 		expect(billingFile.source).toContain('existingTable("app", "a"');
 		expect(billingFile.source).toContain(
-			"references: { table: appABAIdFkeyRef, columns: [appABAIdFkeyRef.id] }",
+			"references: { table: appARef, columns: [appARef.id] }",
 		);
 		expect(billingFile.source).not.toContain(".references(() =>");
 	});
@@ -311,7 +311,7 @@ describe("emitDeclarationFiles / 2.1", () => {
 		expect(file.source).toContain("references: { table: y, columns: [y.id] }");
 		expect(file.source).toContain('existingTable("app", "x"');
 		expect(file.source).toContain(
-			"references: { table: appXYXIdFkeyRef, columns: [appXYXIdFkeyRef.id] }",
+			"references: { table: appXRef, columns: [appXRef.id] }",
 		);
 		expect(file.source).not.toContain(".references(() =>");
 	});
@@ -446,7 +446,7 @@ describe("emitDeclarationFiles / 2.1", () => {
 		expect(billingFile.source).not.toContain(".references(() =>");
 		expect(billingFile.source).toContain("// Closes a declaration-file cycle");
 		expect(billingFile.source).toContain(
-			"references: { table: appABAIdFkeyRef, columns: [appABAIdFkeyRef.id, appABAIdFkeyRef.b_id] }",
+			"references: { table: appARef, columns: [appARef.id, appARef.b_id] }",
 		);
 
 		// app.a's own edge to billing.b is the schema graph's forward
@@ -1094,5 +1094,225 @@ describe("emitDeclarationFiles / D106 R6-B1", () => {
 		}
 		expect(file.schema).toBe("app");
 		expect(file.source).not.toContain('from "./ext.schema"');
+	});
+});
+
+describe("emitDeclarationFiles / D106 R7-N4", () => {
+	it("declares one handle for a target two foreign keys share", () => {
+		const orders: TableSnapshot = {
+			schema: "app",
+			name: "orders",
+			columns: [
+				{
+					name: "id",
+					typeNode: { typeName: "uuid" },
+					notNull: true,
+					primaryKey: true,
+				},
+				{ name: "owner_id", typeNode: { typeName: "uuid" }, notNull: true },
+			],
+			indexes: [],
+			// "ext.users" is not among this snapshot's own tables -- both
+			// `orders` and `invoices` below reach it through their own
+			// unread-target foreign key, and must share the one handle.
+			foreignKeys: [
+				{
+					name: "orders_owner_id_fkey",
+					columns: ["owner_id"],
+					referencesTable: "ext.users",
+					referencesColumns: ["id"],
+				},
+			],
+			primaryKeyName: "orders_pkey",
+		};
+		const invoices: TableSnapshot = {
+			schema: "app",
+			name: "invoices",
+			columns: [
+				{
+					name: "id",
+					typeNode: { typeName: "uuid" },
+					notNull: true,
+					primaryKey: true,
+				},
+				{ name: "billed_to", typeNode: { typeName: "uuid" }, notNull: true },
+			],
+			indexes: [],
+			foreignKeys: [
+				{
+					name: "invoices_billed_to_fkey",
+					columns: ["billed_to"],
+					referencesTable: "ext.users",
+					referencesColumns: ["id"],
+				},
+			],
+			primaryKeyName: "invoices_pkey",
+		};
+
+		const files = emitDeclarationFiles(resultFor([orders, invoices]));
+		expect(files).toHaveLength(1);
+		const [file] = files;
+		if (file === undefined) {
+			throw new Error("expected exactly one emitted file");
+		}
+
+		const handleMatches = [
+			...file.source.matchAll(
+				/const (\w+) = existingTable\("ext", "users", \{[^}]*\}\);/g,
+			),
+		];
+		expect(handleMatches).toHaveLength(1);
+		const [firstMatch] = handleMatches;
+		const handleIdentifier = firstMatch?.[1];
+		if (handleIdentifier === undefined) {
+			throw new Error(
+				`expected an existingTable("ext", "users", ...) handle:\n${file.source}`,
+			);
+		}
+
+		expect(
+			file.source.split(
+				`references: { table: ${handleIdentifier}, columns: [${handleIdentifier}.id] }`,
+			),
+		).toHaveLength(3);
+	});
+
+	it("carries the union of two different columns when two keys into the same target reference different columns", () => {
+		const orders: TableSnapshot = {
+			schema: "app",
+			name: "orders",
+			columns: [
+				{
+					name: "id",
+					typeNode: { typeName: "uuid" },
+					notNull: true,
+					primaryKey: true,
+				},
+				{ name: "owner_id", typeNode: { typeName: "uuid" }, notNull: true },
+			],
+			indexes: [],
+			// "ext.users" is not among this snapshot's own tables. `orders`
+			// and `invoices` each reach a *different* one of its columns --
+			// "first key wins" would drop whichever column the other key
+			// alone needs, so this is the case that actually discriminates
+			// a union from a naive single-key dedup.
+			foreignKeys: [
+				{
+					name: "orders_owner_id_fkey",
+					columns: ["owner_id"],
+					referencesTable: "ext.users",
+					referencesColumns: ["id"],
+				},
+			],
+			primaryKeyName: "orders_pkey",
+		};
+		const invoices: TableSnapshot = {
+			schema: "app",
+			name: "invoices",
+			columns: [
+				{
+					name: "id",
+					typeNode: { typeName: "uuid" },
+					notNull: true,
+					primaryKey: true,
+				},
+				{
+					name: "legacy_ref",
+					typeNode: { typeName: "uuid" },
+					notNull: true,
+				},
+			],
+			indexes: [],
+			foreignKeys: [
+				{
+					name: "invoices_legacy_ref_fkey",
+					columns: ["legacy_ref"],
+					referencesTable: "ext.users",
+					referencesColumns: ["code"],
+				},
+			],
+			primaryKeyName: "invoices_pkey",
+		};
+
+		const files = emitDeclarationFiles(resultFor([orders, invoices]));
+		expect(files).toHaveLength(1);
+		const [file] = files;
+		if (file === undefined) {
+			throw new Error("expected exactly one emitted file");
+		}
+
+		const handleMatches = [
+			...file.source.matchAll(
+				/const (\w+) = existingTable\("ext", "users", \{([^}]*)\}\);/g,
+			),
+		];
+		expect(handleMatches).toHaveLength(1);
+		const [firstMatch] = handleMatches;
+		const handleIdentifier = firstMatch?.[1];
+		const columnsObject = firstMatch?.[2];
+		if (handleIdentifier === undefined || columnsObject === undefined) {
+			throw new Error(
+				`expected an existingTable("ext", "users", ...) handle:\n${file.source}`,
+			);
+		}
+
+		// The single handle carries both columns -- the union -- even
+		// though each key on its own only ever named one of them.
+		expect(columnsObject).toContain("code: text()");
+		expect(columnsObject).toContain("id: text()");
+
+		// Each key still references only its own column, not the union.
+		expect(file.source).toContain(
+			`references: { table: ${handleIdentifier}, columns: [${handleIdentifier}.id] }`,
+		);
+		expect(file.source).toContain(
+			`references: { table: ${handleIdentifier}, columns: [${handleIdentifier}.code] }`,
+		);
+		expect(file.source).not.toContain(
+			`columns: [${handleIdentifier}.id, ${handleIdentifier}.code]`,
+		);
+		expect(file.source).not.toContain(
+			`columns: [${handleIdentifier}.code, ${handleIdentifier}.id]`,
+		);
+	});
+});
+
+describe("emitDeclarationFiles / D106 R7-N3", () => {
+	it("comments an unread target's handle without claiming a cycle", () => {
+		const orders: TableSnapshot = {
+			schema: "app",
+			name: "orders",
+			columns: [
+				{
+					name: "id",
+					typeNode: { typeName: "uuid" },
+					notNull: true,
+					primaryKey: true,
+				},
+				{ name: "owner_id", typeNode: { typeName: "uuid" }, notNull: true },
+			],
+			indexes: [],
+			// "ext.users" is not among this snapshot's own tables -- this
+			// run never read schema "ext" at all, so the handle this FK
+			// goes through exists for a different reason than a cycle cut.
+			foreignKeys: [
+				{
+					name: "orders_owner_id_fkey",
+					columns: ["owner_id"],
+					referencesTable: "ext.users",
+					referencesColumns: ["id"],
+				},
+			],
+			primaryKeyName: "orders_pkey",
+		};
+
+		const files = emitDeclarationFiles(resultFor([orders]));
+		const [file] = files;
+		if (file === undefined) {
+			throw new Error("expected exactly one emitted file");
+		}
+
+		expect(file.source).not.toContain("Closes a declaration-file cycle");
+		expect(file.source).toContain("schema was never read by this run");
 	});
 });

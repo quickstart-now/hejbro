@@ -254,8 +254,10 @@ column whose SQL name no declaration key can produce, either because
 it doesn't round-trip through snake_case (a quoted `"createdAt"`) or
 because the key it round-trips to is itself one the DSL's own
 identifier rule still rejects (a leading-underscore `_id`) — `check`
-keeps reporting that column as undeclared until it's added by hand or
-renamed in the database. Beyond a column, five further kinds of
+keeps reporting that column as undeclared until it's renamed in the
+database: the DSL derives every column's SQL name from its TypeScript
+key and accepts no override, so no declaration, hand-written or not,
+can carry either kind of name. Beyond a column, five further kinds of
 catalog name cost hejbro the object that carries it: a **schema**
 whose own name is not a valid hejbro SQL identifier (everything it
 holds — tables, enums, sequences — is omitted with it, unreported by
@@ -299,9 +301,11 @@ destination `hejbro vendor` does, marked with no commit so `vendor
 --check`/`outdated` refuse to compare it against one. Its own loss
 report prints the same way, ending instead with "The loss ends when
 you link the schema repository" — `link` (then `vendor`) is what ends
-a `pull`-sourced contract's own loss, the same role it plays for
-`import`'s undeclared column above. See that reference for the full
-shape.
+most of a `pull`-sourced contract's own loss, but not a column whose
+SQL name no declaration key can produce (above): no repository's own
+declaration, linked or not, can carry that name either, so only
+renaming the column in the database ends that one, the same remedy
+`import` needs. See that reference for the full shape.
 
 ## Where this is enforced
 

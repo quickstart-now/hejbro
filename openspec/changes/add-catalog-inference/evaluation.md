@@ -2131,3 +2131,440 @@ against its own measurements, which is the check this change has now
 been saved by more than once. Three of the four were claims about
 *evidence* rather than about the code — the easiest kind of sentence to
 write loosely, because nothing in a green suite contradicts it.
+
+## Round 7
+
+### Verdict
+
+BLOCKING 1 / NON-BLOCKING 5 / OK 22
+
+(24 delta scenarios: `catalog-inference` 8 — the round-6 correction added
+"A reference into a schema the run did not name is kept" — `cli-commands`
+10, `schema-vendoring` 3, `table-declaration` 3. Two scenarios are
+blocked by one finding. Every round-6 finding is closed in the code and
+in the delta; R6-N1's own remedy correction never reached the skill,
+which still offers the remedy that correction retracted. The blocking
+finding is not in this round's own subject at all: the unnamed-schema
+reference the round-6 correction added works end to end, live, through
+`import` → `generate` → `check` and through `pull` → `tsc`. What fails
+is older and much smaller — a starter file that names a table `t` cannot
+be loaded by anything, because the emitter's own extras callback
+parameter is also `t`.)
+
+### Round-6 findings re-checked
+
+- **R6-B1 — a foreign key into a schema the run did not name was
+  dropped — CLOSED, measured end to end.** Live (one throwaway
+  `postgres:17`): `app.orders/invoices/audit → ext.users`,
+  `app.audit → ext2.accounts`, `--schema app` only. `import` writes
+  `app.schema.ts` alone (no `ext.schema.ts`), declares every reference
+  against an unexported `existingTable` handle, prints no `Omitted:`
+  line, and two runs are byte-identical. The file loads through the
+  production loader (`hejbro generate`: "loaded 5 declarations" — the
+  handles are not collected), the migration carries
+  `alter table "app"."orders" add constraint "orders_user_id_fkey"
+  foreign key ("user_id") references "ext"."users" ("id");`, the written
+  `hejbro.snapshot.json` holds no `table:ext.users` node, and `hejbro
+  check --url` against the source database reports "no differences".
+  `pull --db-url --schema app` puts `ext.users`/`ext2.accounts` in both
+  `Relationships` and `contractMetadata.tables.*.foreignKeys`, gives
+  neither an entry under `Tables`, says nothing about them in the loss
+  report, and the emitted contract passes a real `tsc --strict` (exit 0).
+- **R6-N1 — one sentence for two causes, and a remedy that does not
+  exist — CLOSED in the code and the delta, STILL OPEN in the skill
+  (R7-N1).** Measured on `s2.exotic`: `_id`, `_created_at`, `_9lives`
+  now read "a key does produce this name back, but it is not a valid
+  hejbro SQL identifier"; `a_` and `"createdAt"` read "no declaration
+  key produces this SQL name back"; every line's only remedy is
+  renaming in the database, for both commands
+  (`undeclarableColumnReason`, `loss-report.ts:341-358`). No
+  "declared by hand" survives on any of the four column lines.
+- **R6-N2 — a comment recording a repealed decision — CLOSED.**
+  `isExpressibleName = isSqlName` (`infer/table.ts:169`), with
+  `isExpressibleForeignKeyName` delegating to it (`:178`); no
+  `try`/`catch` and no local pattern —
+  `grep -rn '\^\[a-z\]' packages/cli/src packages/core/src` returns one
+  doc-comment citation in `compose.ts:141` and core's own
+  `SQL_NAME_PATTERN`, nothing else.
+- **R6-N3 — the way out was no longer the last line — CLOSED.**
+  `withReportLinesBeforeWayOut` (`loss-report.ts:547-555`). Measured for
+  `--schema s5 --schema s11`: `Not inferred: nothing to infer in schema
+  "s11".` then `The loss ends when you hand-edit the starter
+  declarations.` — identical in stdout and in `s5.schema.ts`'s header,
+  the way-out line last in both. Also last in the `--schema App`
+  refusal's own stdout, and in `pull`'s.
+- **R6-N4 — the release notes never mentioned the check-expression
+  swap — CLOSED.** `.changeset/fix-catalog-inference-d106-r5.md` now
+  closes with a paragraph in the file's own voice ("Two tables in the
+  same schema that each carry a check constraint of the same name no
+  longer swap expressions … DDL the source database itself refused").
+  `.changeset/fix-catalog-inference-d106-r6.md` (patch) covers this
+  round's own three user-visible fixes.
+- **R6-N5 — an enum type's catalog name — STILL OPEN by decision
+  (#712).** Re-measured: `create type s7."Status" as enum ('a','b')`
+  reaches the snapshot (`enum:s7.Status`) and the DDL
+  (`create type "s7"."Status" as enum ('a', 'b');`) with no loss-report
+  line, while a table/schema/index/check of that shape is omitted and
+  named. Reported, not classified: no delta scenario speaks to an enum's
+  own name.
+
+### Blocking
+
+**R7-B1 — a starter file that names a table `t` cannot be loaded by
+anything: the emitted extras callback's own parameter shadows it.**
+`renderExtrasBlock` (`declare-emit/emit.ts:733`) hardcodes the
+parameter name `t` (`,\n\t(t) => ({…})`), and the file-level identifier
+namespace that keeps a declaration from colliding —
+`resolveFileIdentifiers`' own `reserved` set and `localNamespaceOf`
+(`:1750-1759`), which together carry the schema, enum, table, handle and
+enum-clone identifiers plus the hejbro barrel vocabulary — does not
+contain `"t"`. So a table whose identifier is `t` keeps that name, and
+every reference to it from inside an extras callback resolves to the
+callback's own column proxy instead of the table.
+
+Minimal input, measured live against `postgres:17` through the built
+`dist/cli.js` (one schema, two tables, both ordinary lower snake_case,
+nothing omitted, no cycle):
+
+```sql
+create schema m1;
+create table m1.t      (id uuid primary key);
+create table m1.orders (id uuid primary key, t_id uuid references m1.t(id));
+```
+```
+$ hejbro import --url <db> --schema m1 --out src/schema
+created src/schema/m1.schema.ts          # exit 0, loss report clean
+```
+```ts
+export const t = table(m1, "t", { id: uuid().notNull().primaryKey() });
+
+export const orders = table(m1, "orders", { id: …, tId: uuid() },
+  (t) => ({
+    foreignKeys: [{ columns: [t.tId], references: { table: t, columns: [t.id] }, name: "orders_t_id_fkey" }],
+  }),
+);
+```
+```
+$ hejbro generate
+error[declaration-load-failed]: src/schema/m1.schema.ts
+  failed to load "src/schema/m1.schema.ts": Cannot read properties of
+  undefined (reading 'schema'). Next: check that every import in this
+  file resolves — …
+```
+The written file does not type-check either: `tsc --noEmit --strict`
+over it fails with `TS2345 … Property '[tableMeta]' is missing in type
+'TableColumns<…>'` — `references.table` is the proxy, not a `Table`.
+The diagnostic's own remedy ("check that every import in this file
+resolves") points at a cause that is not the cause.
+
+The cross-file form needs no table of its own named `t`, only an
+imported one: with `k1.t` and `k2.orders → k1.t` under
+`--schema k1 --schema k2`, `k2.schema.ts` emits
+`import { t } from "./k1.schema";` — unaliased, because `resolveAliasesFor`
+only aliases against `localNamespaceOf`, and `k2`'s own identifiers are
+`k2`/`orders` — and the same shadowing kills the file. The cyclic form
+fails too (`h1.a`/`h1.b → h2.t`, `h2.t → h1.a`): the cut is placed in
+`h2.schema.ts`, `h1.schema.ts` imports `t` bare, and loading fails in
+every entry order.
+
+Not a regression from the round-6 correction: none of the three failing
+inputs produces an `existingTable` handle on the failing side (the `m1`
+and `k1`/`k2` files contain no handle at all), so the path predates
+commit 5.5 and belongs to the R2-B2 alias rule that has shipped since
+`ecc533fb`.
+
+Contradicts:
+- `cli-commands` › import writes starter declarations › **"A database is
+  imported into starter files"** — "a following `baseline` emits a first
+  migration whose objects match the database's". `baseline` (and
+  `generate`, and `check`) never reaches a migration: the file cannot be
+  loaded. The requirement's own "The files SHALL declare what the
+  reading inferred with the DSL's own builders" is what fails, on a
+  table whose name D36 accepts and which no report line mentions.
+- `cli-commands` › … › **"Declaration files never import each other in a
+  cycle"** — "…and loading does not depend on which file the loader
+  reaches first". For the `h1`/`h2` cycle the cut is correct and the
+  import graph is acyclic, and loading still fails — in every order.
+
+Scope: `import` only. `pull --db-url --schema m1` over the same database
+is unaffected (the contract is emitted from the snapshot, never from the
+declaration text) and carries `referencedRelation: "m1.t"` correctly.
+
+No suite covers it: `declare-emit-emit.test.ts:235` pins the closest
+shape (`import { b } from "./billing.schema";`) with a table named `b`;
+no fixture anywhere in the suite names a table `t` and then references
+it, and every cycle fixture that does name a table `t` references the
+*other* file's table, where the alias rule fires for an unrelated reason
+(the file's own table is also `t`).
+
+### Non-blocking
+
+**R7-N1 — the skill still offers the remedy the round-6 correction
+retracted.** `skills/hejbro/references/brownfield-adoption.md:253-257`:
+"`check` keeps reporting that column as undeclared until it's **added by
+hand** or renamed in the database", and `:300-303` says `link` ends a
+`pull`-sourced contract's loss "the same role it plays for `import`'s
+undeclared column above". Both are the sentences R6-N1 removed from the
+code and the delta on measurement (`buildColumnEntries` derives every
+column's SQL name from its key and accepts no override, so no
+hand-written declaration in this repository *or a linked one* can carry
+either kind of name; `table(schema("x"), "t", { _id: uuid() })` throws
+`invalid-sql-name`, re-measured). The round-6 disposition's own sentence
+"The delta and the skill say the same" is true of the delta and false of
+the skill. The skill's other bands are current: its Approximated four
+match `approximationLines` exactly, its Omitted six match
+`buildLossReport`'s six kinds, and its cycle paragraph and its new
+"a foreign key into a schema `import`/`pull` simply never named is a
+different case, not an omission" paragraph both match the shipped
+behaviour.
+
+**R7-N2 — two of the six `Omitted:` lines still say "declare it by
+hand", which D36 makes impossible.** `omittedIndexLine`
+(`loss-report.ts:455-456`) and `omittedCheckLine` (`:467-468`) both end
+"…so declare it by hand or rename it in the database", one clause after
+stating "no declaration can carry it under the same name `check` would
+compare it by". Measured: `index("IX_Widgets")` and
+`check("CK_Widgets", …)` both throw `invalid-sql-name`, so the only
+thing a hand-written declaration can do is declare a *different* object
+under a valid name — which `generate` then emits as a second index /
+second constraint beside the one in the database. This is the same false
+remedy R6-N1 removed from the column lines, left standing on the index
+and check lines. No delta clause fixes these two lines' wording (the
+requirement says only that the report "says what to do about it"), so
+drift rather than contradiction.
+
+**R7-N3 — the starter file tells the reader a cycle was closed when no
+cycle exists.** Every handle-backed foreign key carries
+`HANDLE_CONSTRAINT_COMMENT` (`declare-emit/emit.ts:741-742`):
+"Closes a declaration-file cycle -- any live reference to the other
+table … evaluates before that file finishes initializing …". Measured in
+the written `app.schema.ts` for `app.orders → ext.users`, where `ext`
+was simply never named: there is no cycle, no other file, and nothing to
+initialize. The delta states the distinction explicitly — "A foreign key
+into a table no starter file declares … SHALL be declared against such a
+handle too, **for a different reason**: there is no file to import its
+target from" — and `mustDeferForeignKey`'s own two branches keep them
+apart in code while the emitted comment collapses them.
+
+**R7-N4 — one handle per foreign key in the emitted text, one per target
+in the snapshot.** `outOfScopeHandlesFor` (`compose.ts:377-410`) builds
+exactly one `existingTable` per target identity, and its own comment
+states why ("two keys into one target must resolve to the one object
+that gets declared, never two objects sharing an identity"). The emitter
+resolves a handle per `(owning table identity, FK name)`
+(`handleIdentifierFor`, `emit.ts:705-708`), so the written
+`app.schema.ts` carries three separate
+`existingTable("ext", "users", { id: text() })` constants —
+`extUsersOrdersUserIdFkeyRef`, `extUsersInvoicesUserIdFkeyRef`,
+`extUsersAuditWhoFkeyRef` — for the one target. Nothing measurable
+breaks (the handles are unexported, `generate` loads 5 declarations, the
+DDL and `check` are correct, two runs are byte-identical), and the
+cycle scenario's "nothing is declared twice" is satisfied in the loader's
+sense; the two artifacts of one reading simply disagree about a rule one
+of them states as load-bearing.
+
+**R7-N5 — an enum type's catalog name is still the one identifier D36
+never reaches (#712).** Re-measured this round (see the round-6 re-check
+above); reported, not classified, since no delta scenario speaks to it —
+the same decision rounds 5 and 6 recorded.
+
+### Verified scenarios
+
+- `catalog-inference` › A catalog reading yields a snapshot and a marked description › **Tables and enums are inferred** — OK. Live two-schema readings with cross-schema foreign keys, a check, an index and enums (`app`+`ext`, `s3`, `s7`, `s10`): every table, column, key and constraint is recorded, `enum:s7.kind`/`enum:s7.Status` carry their values, and the report's `Guessed:` line names the guessed keys.
+- `catalog-inference` › … › **Two SQL names that collide on one key are both described** — OK. `s4.collide` (`user_id`, quoted `USER_ID`, `user_id2`): the description carries all three (`userId`/`userId3`/`userId2`), the two declarable columns keep their own bare keys, only `USER_ID` is named in the report, and `inferColumnKeys` gives the same assignment under four different physical orders.
+- `catalog-inference` › … › **A name no declaration can carry costs that object, not the run** — OK. Schema `"App"`, table `s1."Widgets"` (carrying `"IX_Widgets"`, `"CK_Widgets"`, a UNIQUE and `"FK_Widgets_Owner"`): every ordinary sibling still inferred, starter and contract still written, one `Omitted:` line per object with its own consequence and an adopter-facing remedy, and no `Approximated:` line for the UNIQUE on the omitted table.
+- `catalog-inference` › … › **A reference into an omitted object is omitted with it** — OK. `s1.orders → s1."Widgets"` names the table and the table remedy; `s1.orders → "App".orders` names `references schema "App"` and the schema remedy, identically whether or not `"App"` is on `--schema`; `orders_owner_id_fkey` survives; two runs byte-identical.
+- `catalog-inference` › … › **A reference into a schema the run did not name is kept** — OK. See the R6-B1 re-check above: handle in the starter, relation and foreign-key metadata in the contract, no `Tables` entry for `ext.users`, no loss-report line, no `ext.schema.ts`, and `baseline`/`generate` emits `references "ext"."users" ("id")`.
+- `catalog-inference` › … › **Two tables sharing a constraint name keep their own expressions** — OK. `s3.a pos (x > 0)` / `s3.b pos (y < 0)`: each snapshot carries its own expression, and the emitted DDL was executed against a fresh database on the same server, where `pg_get_constraintdef` reads back `CHECK ((x > 0))` and `CHECK ((y < 0))`.
+- `catalog-inference` › … › **What is not inferred is named** — OK. `n1` holding two functions, a trigger, a view, a policy, a `point` column and an unowned sequence: five counted `Not inferred:` lines plus the blanket grants line, the column named with its type, the sequence named with the D66 reason; none reaches the snapshot.
+- `catalog-inference` › The loss is announced, with the way out › **The report names the way out** — OK. Every measured report carries Guessed / Not inferred / Approximated / Omitted and closes with the way-out line — `pull`'s "The loss ends when you link the schema repository."
+- `cli-commands` › import writes starter declarations › **Declaration files never import each other in a cycle** — BLOCKING (R7-B1). The cut itself is right in every graph measured (a three-schema chain with an enum edge, its mirror with the enum on another edge, two overlapping two-cycles, a four-schema mixed graph): imports are acyclic, the cut carries an unexported handle or enum clone, `generate` loads every declaration, and four entry orders over the four-schema graph produce byte-identical SQL and snapshot. It fails on the `h1`/`h2` cycle, where the file that imports the cut's other side imports a table named `t`.
+- `cli-commands` › … › **A second import writes the same bytes** — OK. `--schema app` and `--schema s1 --schema App` each imported twice into empty directories: identical byte for byte, headers carrying the full report and the repository-owns-it sentence, no clock- or machine-derived value.
+- `cli-commands` › … › **A database is imported into starter files** — BLOCKING (R7-B1). Two schemas, two files, report printed, and `baseline` right after `import` emits the database's own DDL with its own foreign-key names (`comments_post_id_fkey`, `notes_post_id_fk`), banner-marked, after which `hejbro check --url` against the source database reports "no differences" — unless a target table is named `t`, where nothing loads at all.
+- `cli-commands` › … › **a column the DSL cannot name is left out and said so** — OK. `"createdAt"`, `a_` and `od*/d` are excluded, named with table, own reason and consequence; every other column of each table stays declared; the `*/`-bearing line is escaped in the file header (`od*\/d`) under its own header sentence, and the file parses and loads.
+- `cli-commands` › … › **a column the DSL rejects by name is left out the same way** — OK, reason now correct. `_id`, `_created_at`, `_9lives` omitted and named with "a key does produce this name back, but it is not a valid hejbro SQL identifier"; `label` still declared.
+- `cli-commands` › … › **import refuses to guess which schemas to read** — OK. `import-schema-missing` names `--schema` and "most commonly --schema public" before any connection; `--out` has its own `import-destination-missing`.
+- `cli-commands` › … › **The named schemas hold nothing to infer** — OK. `--schema s11` (an empty schema): `import-nothing-to-infer` naming it, exit 1, empty stdout, destination not created.
+- `cli-commands` › … › **Every named schema was omitted for its name** — OK. `--schema App`: `import-nothing-declarable` (its own code), the `Omitted: schema "App" …` line on stdout with its way out and the way-out line last, `existsSync(out) === false`.
+- `cli-commands` › … › **import never overwrites** — OK. `import-destination-exists` naming the file, the pre-existing bytes unchanged; an unwritable destination raises `import-destination-unwritable` naming the path and the real `EACCES`.
+- `cli-commands` › pull reads a database as the marked fallback › **A contract is pulled from a database** — OK. Header says inferred-from-a-database, `Tables` carry the guessed keys (`userId` from `user_id`), the loss report prints and ends with `link`; the contract type-checks under a real `tsc --strict` for both an ordinary schema and one referencing an unread schema.
+- `schema-vendoring` › **pull writes where vendor writes** — OK. `.hejbro/vendor/{contract.ts,schema.json,snapshot.sql}` plus a root `hejbro.lock` carrying `generatedBy: "hejbro pull"`; a second `pull` into the same repository succeeds; a `contract.ts` that does not look vendored is refused with `vendor-destination-not-vendored` whose remedy names `hejbro pull`, not a flag it does not have.
+- `schema-vendoring` › **A database-sourced contract says so and carries no commit** — OK. `source: "database"`, `database: "r7"`, `schemas: ["s5"]`, no `commit`; `ContractMetadata` (`query/src/client/contract-types.ts:81-104`) is a `source`-discriminated union whose git arm keeps `source` optional, so a pre-#604 contract still type-checks against `createNameKeyedDb`.
+- `schema-vendoring` › **outdated refuses a database-sourced contract** — OK. `hejbro outdated` and `hejbro vendor --check` both exit 1 with `vendor-origin-not-a-commit`, naming the database and `hejbro link <repository>` as the way forward.
+- `table-declaration` › **A named foreign key keeps its name** — OK. An explicit `name: "fk_custom_name"` reaches both the snapshot node and `add constraint "fk_custom_name"`; no derived name appears.
+- `table-declaration` › **An unnamed foreign key is unchanged** — OK. The same declaration without a name emits `articles_author_id_fk`, and a catalog name equal to the derived one is never written into the starter (`s5.notes`).
+- `table-declaration` › **Renaming the table leaves an explicit name alone** — OK. Renaming `blog.posts` → `blog.articles`: with an explicit name the rendered SQL is the table rename plus `rename constraint "posts_pkey" to "articles_pkey"` and nothing for the foreign key; with a derived name it additionally renders `rename constraint "posts_author_id_fk" to "articles_author_id_fk"`.
+
+### Method
+
+- Read `openspec show add-catalog-inference --diff` in full, then the named surface: `packages/cli/src/{commands/{import,pull}.ts,infer/{compose,table,loss-report}.ts,declare-emit/emit.ts,contract/{emit,tables,from-catalog,read-snapshot}.ts}`, `packages/core/src/{sql/identifier-rules.ts,dsl/*.ts,index.ts}`, `packages/query/src/client/contract-types.ts`, `skills/hejbro/references/brownfield-adoption.md`, `.changeset/{add-catalog-inference,fix-catalog-inference-d106-r3,-r4,-r5,-r6}.md`. Only rounds 1-6 of `evaluation.md` were read (findings + dispositions), as claims.
+- Live witness, one throwaway `postgres:17` container (`docker system df` first: 3 stopped containers, 6 volumes, none this suite's; `docker rm -v` after, leaving the pre-existing containers and `supabase_*` volumes untouched). One database with 30 fixture schemas: the unnamed-schema set (`app`/`ext`/`ext2`, two tables into one unread target and one table into two), the omitted set (`"App"`, `s1."Widgets"` with `"IX_Widgets"`/`"CK_Widgets"`/UNIQUE/`"FK_Widgets_Owner"`), exotic columns (`_id`, `_created_at`, `_9lives`, `a_`, `"createdAt"`, `od*/d`), duplicate check names, a CamelCase enum, colliding keys, default `_fkey` names, an empty schema, five cycle graphs, and the not-inferred set. Driven both in-process from `src` (`inferFromCatalog`, `runImport`, `runPull`) and through the built `dist/cli.js` in throwaway projects under `/private/tmp` (`init`/`import`/`generate`/`baseline`/`check`/`pull`/`outdated`/`vendor --check`), all deleted afterwards.
+- The emitted `s3` DDL was executed against a second, fresh database on the same server, and `pg_get_constraintdef` read back both `pos` checks with their own expressions.
+- In-process probes created, run and deleted in the same tool call (`packages/cli/test/_r7probe*.test.ts`, eight batches). No repository file other than this one was modified; `git status --porcelain` shows only `evaluation.md`.
+- Suites run: `infer-compose`, `infer-loss-report`, `infer-tables`, `infer-keys`, `infer-adapter`, `import-command`, `pull-command`, `declare-emit-{emit,file-cycle,topo-order}`, `contract-{from-catalog,origin}`, `outdated-database-origin`, `vendor-lock-origin`, `exports` — 15 files / 155 tests green; `packages/core` `rename-plan`, `identifier-rules` — 2 files / 50 tests green.
+- Not run: `pnpm build`, `pnpm install`, full-workspace `pnpm test`/`check-types`, the Docker-gated `*.integration.test.ts` files (each starts its own container; this round used one container of its own instead, and re-measured what those witnesses assert directly).
+
+## Round 7 disposition
+
+The blocking finding and four of the five non-blocking ones are fixed
+here; N5 stays with #712, the same decision rounds 5 and 6 recorded.
+Six reds, every one behavioural — a file that fails to load, a count
+that comes back two instead of one, an assertion on rendered text
+failing against the old text — and four mutants, each with both halves
+stated before it ran. There are no signature reds in this round, which
+is the one measurable difference from round 6's evidence.
+
+Gate (2026-09-03, on `2394bd16`): `pnpm build --force` 7/7 tasks, 0
+cached; then, first and alone on that real build,
+`declare-emit-callback-shadow.test.ts` — the blocking finding's own
+observer — 3/3; `pnpm --filter hejbro test:integration` 12 files / 70
+passed, 2 todo; `TURBO_FORCE=1 pnpm check` 724 files; unfiltered
+`TURBO_FORCE=1 pnpm check-types` 17/17 tasks, 0 cached; `TURBO_FORCE=1
+pnpm test` 17/17 tasks (`hejbro` 89 files / 787 tests, `cli-smoke` 2
+files / 6); `pnpm check:bans` 235 files; `pnpm check:crap` ok, 0 of 1617
+functions over CRAP 5, README unchanged; `changeset status` pending
+minor across the fixed group; `check:tasktime` current. Docker residue
+of this round's own runs: none. `upstream/dev` was re-fetched and is
+unchanged at `310d2290`, so there is no merge-in and the gate's tip is
+the branch's tip.
+
+### R7-B1 — a starter file naming a table `t` could not be loaded
+
+Fixed by giving the file's identifier namespace the one name it did not
+know about. `renderExtrasBlock` binds a parameter in the text it emits;
+nothing reserved that name, so a table whose identifier matched it kept
+the identifier, and every reference to it from inside a callback
+resolved to the callback's own column proxy. The file then failed to
+load at all (`Cannot read properties of undefined (reading 'schema')`)
+and failed `tsc` with `TS2345` — a whole starter file lost to a name,
+with no report line mentioning it, on a table name D36 accepts.
+
+The parameter is now a constant that `renderExtrasBlock` and the
+namespace both read, so the emitter and the namespace cannot drift, and
+it is reserved unconditionally. A conditional reservation was
+considered and rejected: the correct condition is "any table *in this
+file* emits a callback", not "this table does", because the shadowing
+crosses tables — and a cross-table condition of that shape is what made
+round 6's blocking finding wrong. The measured saving was zero (no
+fixture or example anywhere names a table, schema or enum `t` in a file
+the emitter renders), so the branch would have bought risk and nothing
+else.
+
+**The first attempt at this fix was wrong, and the way it was wrong is
+worth recording.** The reservation was added to the set the plan named,
+`vocabulary` — which is also, literally, the barrel import list: the
+emitted `import { … } from "hejbro"` line is rendered by joining it. The
+patch produced files importing a symbol `hejbro` does not export. That
+is the same defect as round 6's blocking finding at a different scale:
+**one value answering two questions.** There it was one set answering
+both "which tables survived this reading" and "may this reference be
+declared"; here it was one set answering both "what do we import from
+the barrel" and "what names are taken in this file". Both times the
+answer was to give each question its own value rather than to add a
+condition — `vocabulary` kept its meaning and a derived
+`reservedIdentifiers` took over the two readers that answer the
+collision question, leaving the import line untouched.
+
+Pins: `declare-emit-callback-shadow.test.ts`, three cases — the table
+declared in the file that references it, the table imported from another
+file, and the table on the declared side of a cut cycle, that last one
+asserted in both entry orders, since the delta's claim is that loading
+does not depend on which file the loader reaches first. Each emits the
+files, loads them through the same loader `generate` uses, and
+type-checks them. The mutant (namespace pointed back at the barrel
+vocabulary) failed exactly those three and left every other emitter test
+green.
+
+### R7-N4 — one handle per foreign key in the text, one per target in the reading
+
+The emitter keyed a handle by `(owning table, foreign key name)` while
+the reading built one per target identity and said in its own comment
+why that is the rule. Three `existingTable("ext","users",…)` constants
+for one target were measured in a written file. Handles are now keyed by
+target, named for the target rather than for whichever relation needed
+one first, and their columns are the union of what every key into that
+target references — the same rule, stated once on each side.
+
+This was fixed before N3 deliberately: once a handle belongs to a
+target, "why does this handle exist" is a property of the target rather
+than of a relation, so two keys into one target can no longer imply two
+different reasons. The ordering removed a state N3 would otherwise have
+had to describe correctly.
+
+Pins: one handle for a target two keys share, and — added after the
+first version was found undiscriminating — a case where the two keys
+reference *different* columns, so the union is load-bearing. That
+second case matters: without it, a "first key wins" dedup passes every
+test in the suite, and the mutant proving it drops a column
+(`expected ' code: text() ' to contain 'id: text()'`) is what shows the
+pin can fail.
+
+### R7-N3 — the emitted comment claimed a cycle that did not exist
+
+`commentForForeignKeyEntry` took a boolean, which flattened a three-way
+distinction that `mustDeferForeignKey` still holds. Every handle
+therefore told the reader a declaration-file cycle had been closed,
+including handles that exist because the target's schema was never read
+— where there is no cycle, no other file, and nothing to initialise. The
+boolean is now the reason itself, and the two reasons render their own
+sentences. No delta changed: the requirement already separates the two
+cases in prose, which is exactly why the emitted comment collapsing them
+was drift rather than contradiction.
+
+### R7-N2 — a remedy the identifier rule makes impossible, still on two lines
+
+The omitted-index and omitted-check lines offered "declare it by hand or
+rename it in the database" one clause after saying no declaration can
+carry that name. Renaming is the only remedy, and the lines now say so,
+with one clause for the trap the reviewer measured: a hand-written
+declaration *can* be added under a different, valid name, and `generate`
+then emits a second index or constraint beside the one already in the
+database. This is the same false remedy round 6 removed from the column
+lines, and round 6 removed it only there.
+
+### R7-N1 — the skill still offered the remedy the code had retracted
+
+Round 6's disposition said "the delta and the skill say the same". It
+was true of the delta. Two places in the brownfield reference still
+offered a hand-written declaration, and one claimed `link` ends this
+loss the way it ends the others. Both now say what the code says:
+renaming in the database is the only way out for a name no declaration
+can carry, in this repository or a linked one, because the DSL derives
+every column's SQL name from its TypeScript key and accepts no override.
+The general claim about `link` is kept — it is true of every other kind
+of loss — and only the comparison is corrected.
+
+### R7-N5 — an enum type's catalog name
+
+Untouched, with #712, for the third round running.
+
+### What this round corrected in itself
+
+Three, recorded on the same principle as round 6's: how a round catches
+its own mistakes is evidence about the round.
+
+The **planner's approved mechanism was wrong**, and the instruction that
+caught it was "if any existing emitted bytes move, stop and report".
+They moved on the first run, the implementer stopped with the patch
+uncommitted, and the cause — the reserved set being also the barrel
+import list — was found before anything was built or committed. The fix
+that shipped is a different mechanism from the one the plan named.
+
+The **first version of the handle-union pin could not fail.** Both keys
+in it referenced the same column, so a "first key wins" dedup would have
+passed it; the implementer said so in its own report rather than
+banking the green, and the case was rebuilt with two different columns
+and mutant-verified. The finding this round is closing is itself about
+two artifacts counting the same thing differently, so a pin that cannot
+tell one count from two would have been a poor way to close it.
+
+A **guard was stepped around once and then retired.** After a revert
+bumped a source file's mtime past `dist`, the dist-freshness guard was
+satisfied by touching `dist` rather than rebuilding — sound at the time
+(the guard is about content staleness and the content was correct), but
+once a later commit moved that file's content the same move would have
+been false. The loader test was then left unrun rather than run
+dishonestly, and it was the first thing measured on the gate's real
+build. Reported as a judgement call, not as a procedure: the general
+rule is that a guard stepped around needs the argument written down,
+and the moment the argument stops holding, the run waits for the build.
