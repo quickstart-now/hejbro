@@ -171,8 +171,12 @@ export const items = table(app, "items", {
 	tenantId: uuid().notNull(),
 });
 
+// No primary key at all -- nileTenantPrimaryKeyValidator only fires on a
+// tenant-aware table that declares one (a table with none is untouched,
+// per its own doc comment), keeping this table's own refusal to exactly
+// nile-serial-in-tenant-table, not also nile-tenant-primary-key-missing.
 export const events = table(app, "events", {
-	id: serial().primaryKey(),
+	id: serial(),
 	tenantId: uuid().notNull(),
 });
 `;
@@ -1204,7 +1208,7 @@ describe("hejbro verify — sixth check: registered preset validators (#752)", (
 		expect(result.stdout).toContain("verify: 7 checks passed");
 	});
 
-	it("reports every refusal when two different registered validators each refuse in the same run, but counts the preset check once", async () => {
+	it("reports every refusal when two different registered validators each refuse in the same run, telling the two tables apart, but counts the preset check once", async () => {
 		await runCli(cwd, ["init"]);
 		await writeSchema(NILE_TWO_REFUSALS_SCHEMA);
 		await runCli(cwd, ["generate"]);
@@ -1212,11 +1216,23 @@ describe("hejbro verify — sixth check: registered preset validators (#752)", (
 
 		const result = await runCli(cwd, ["verify"]);
 		expect(result.exitCode).toBe(1);
-		expect(result.stderr).toContain("error[nile-tenant-primary-key-missing]");
-		expect(result.stderr).toContain("error[nile-serial-in-tenant-table]");
+		// task 3.1 (#753 review): each diagnostic's own identity names its
+		// own table -- both used to print the same truncated `: app`
+		// (verify's own stale identityFromMessage lacked generate.ts's
+		// adjacent-quoted-pair handling), which is indistinguishable
+		// between the two refusals.
+		expect(result.stderr).toContain(
+			"error[nile-tenant-primary-key-missing]: app.items",
+		);
+		expect(result.stderr).toContain(
+			"error[nile-serial-in-tenant-table]: app.events",
+		);
 		expect(result.stderr).toContain(
 			"verify: 1 of 6 checks failed — fix the errors above and rerun `hejbro verify`.",
 		);
+		// task 3.1: the `at` line is cwd-relative, never the machine's own
+		// absolute fixture path.
+		expect(result.stderr).not.toContain(cwd);
 	});
 
 	// 2.3: the cross-command parity witness #752 itself states as the

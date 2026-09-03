@@ -34,6 +34,7 @@ import { fromHejbroError, renderDiagnostics } from "../diagnostics";
 import { asHejbroError } from "../errors";
 import { compareExport } from "../export-compare";
 import { sha256Hex } from "../hash";
+import { identityFromMessage } from "../identity";
 import type { LoadedDeclarations } from "../loader";
 import { loadConfig, loadDeclarations } from "../loader";
 import { buildRegistry, configValidators } from "../presets";
@@ -255,31 +256,80 @@ export type VerifyResult = {
 	readonly stderr: string | null;
 };
 
-const FIRST_QUOTED_SUBSTRING = /"([^"]+)"/;
+/**
+ * `declaredAt` (core's `captureDeclarationSite`) is always an absolute
+ * path or `file://` URL -- V8 stack traces have no notion of "relative
+ * to what." Stripping `cwd` here keeps the CLI's own "no absolute paths
+ * in output" rule, mirroring `generate.ts`'s own
+ * `relativizeLocation`/`relativizeDeclaredAt` (task 3.1, #753 review:
+ * verify's own diagnostics carried the machine's own absolute path
+ * where generate's never did).
+ */
+const FILE_URL_PREFIX = "file://";
 
-/** Same identity-extraction heuristic as generate.ts's toDiagnostic (see rename-diagnostics/generate.ts for the fuller rationale): every verify message leads with the path/filename it's about inside the first `"..."`. */
-const identityFromMessage = (message: string, fallback: string): string => {
-	const match = FIRST_QUOTED_SUBSTRING.exec(message);
-	if (match === null) {
-		return fallback;
+const stripFileUrlPrefix = (location: string): string => {
+	if (location.startsWith(FILE_URL_PREFIX)) {
+		return location.slice(FILE_URL_PREFIX.length);
 	}
-	return match[1] ?? fallback;
+	return location;
 };
 
+const relativizeLocation = (location: string, cwd: string): string => {
+	const withoutFileUrl = stripFileUrlPrefix(location);
+	const cwdPrefix = `${cwd}/`;
+	if (withoutFileUrl.startsWith(cwdPrefix)) {
+		return withoutFileUrl.slice(cwdPrefix.length);
+	}
+	return withoutFileUrl;
+};
+
+const relativizeDeclaredAt = (
+	declaredAt: string | null,
+	cwd: string,
+): string | null => {
+	if (declaredAt === null) {
+		return null;
+	}
+	return relativizeLocation(declaredAt, cwd);
+};
+
+/**
+ * Rebuilt via the factory, not `{ ...error, declaredAt: ... }` --
+ * `HejbroError` is an `Error` subclass, and `Error.prototype.message` is
+ * own-but-non-enumerable, so an object spread silently drops it (same
+ * reasoning as `generate.ts`'s own `toDiagnostic`, which this mirrors:
+ * task 3.1 replaces verify's own stale, non-adjacent-pair-aware
+ * `identityFromMessage` copy with the shared `../identity.ts` helper
+ * `generate.ts` already uses, so two different tables refused in the
+ * same run are told apart by their diagnostic headers instead of both
+ * printing the same truncated identity).
+ */
 const errorDiagnostic = (
 	error: HejbroError,
 	fallbackIdentity: string,
+	cwd: string,
 ): Diagnostic =>
-	fromHejbroError(error, identityFromMessage(error.message, fallbackIdentity));
+	fromHejbroError(
+		hejbroError(
+			error.code,
+			error.message,
+			relativizeDeclaredAt(error.declaredAt, cwd),
+		),
+		identityFromMessage(error.message, fallbackIdentity),
+	);
 
 /** A single, loader-precondition failure (config/entry) — rendered as its own early exit, before any of the 4 checks run (reviewer-confirmed: these are preconditions of the whole command, not one of the 4). */
 const preconditionErrorResult = (
 	error: HejbroError,
 	fallbackIdentity: string,
+	cwd: string,
 ): VerifyResult => ({
 	exitCode: 1,
 	stdout: [],
-	stderr: renderDiagnostics([errorDiagnostic(error, fallbackIdentity)], null),
+	stderr: renderDiagnostics(
+		[errorDiagnostic(error, fallbackIdentity, cwd)],
+		null,
+	),
 });
 
 /** Every migration file's hash-chain lines, in directory-sorted order — files with no hash lines at all (pre-Phase-5 history) are silently skipped, matching checkChain's "caller filters the unhashed prefix" contract. Exported (G7, #613): `migrate`/`status` read the same chain this way rather than a second copy of this walk. */
@@ -928,9 +978,11 @@ export const runVerify = async (
 
 		const diagnostics = [
 			...failures.map((failure) =>
-				errorDiagnostic(failure.error, fallbackIdentity),
+				errorDiagnostic(failure.error, fallbackIdentity, cwd),
 			),
-			...presetErrors.map((error) => errorDiagnostic(error, fallbackIdentity)),
+			...presetErrors.map((error) =>
+				errorDiagnostic(error, fallbackIdentity, cwd),
+			),
 		];
 		const skippedLines = [
 			check3SkipLine(check3),
@@ -952,7 +1004,7 @@ export const runVerify = async (
 			stderr: renderDiagnostics(diagnostics, summary),
 		};
 	} catch (error) {
-		return preconditionErrorResult(asHejbroError(error), fallbackIdentity);
+		return preconditionErrorResult(asHejbroError(error), fallbackIdentity, cwd);
 	}
 };
 
