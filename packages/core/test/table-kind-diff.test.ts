@@ -505,7 +505,7 @@ describe("tableKind.diff — checks", () => {
 		// node's internal shape.
 		expect(snap.checks?.map((c) => c.name)).toEqual(["posts_status_check"]);
 		expect(snap.checks?.map(checkExpression)).toEqual([
-			`"app"."posts"."status" in ('draft', 'published')`,
+			`"posts"."status" in ('draft', 'published')`,
 		]);
 	});
 
@@ -573,9 +573,7 @@ describe("tableKind.serialize — index columns and where (v3, D51)", () => {
 		expect(firstIndex.unique).toBe(true);
 		// where is a structured node (D67/D70); assert the final SQL via
 		// indexWhere, the same accessor emit uses.
-		expect(indexWhere(firstIndex)).toBe(
-			'"app"."posts"."published_at" is not null',
-		);
+		expect(indexWhere(firstIndex)).toBe('"posts"."published_at" is not null');
 	});
 
 	// #284 US1 (T011): access method — serialize writes `method` for a
@@ -647,8 +645,9 @@ describe("tableKind.serialize — index columns and where (v3, D51)", () => {
 		expect(renderExpr(decodeExprNode(column.expression))).toBe(
 			'lower("app"."posts"."email")',
 		);
-		// indexColumnExpression is the accessor emit/preset code actually uses.
-		expect(indexColumnExpression(column)).toBe('lower("app"."posts"."email")');
+		// indexColumnExpression is the accessor emit/preset code actually uses
+		// (table-bound, unlike plain renderExpr above).
+		expect(indexColumnExpression(column)).toBe('lower("posts"."email")');
 	});
 });
 
