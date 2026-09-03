@@ -206,7 +206,7 @@ Inside group 1, 1.2 makes 1.3's test red, so 1.3 follows it.
 
 ## 5. Observers the review found missing
 
-- [ ] 5.1 (~7m) The checkout scenario's first clause gets an observer: a
+- [x] 5.1 (~7m) The checkout scenario's first clause gets an observer: a
       decorator that returns a NEW driver value carrying its own hook does
       not reach the base's checkout. Red:
       `packages/pg/test/driver.test.ts`, new case — spread the real
