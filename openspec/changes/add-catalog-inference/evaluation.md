@@ -1385,3 +1385,210 @@ constructor happens to assert.
 - In-process probes (created, run and deleted in the same tool call, `packages/cli/test/_r5probe*.test.ts`; `git status --porcelain` shows only `evaluation.md`): a fake `DriverSession` answering `CHECK_CATALOG_QUERIES` + `INFER_CATALOG_QUERIES` by exact text, driving `inferFromCatalog` for the omitted-object matrix, `emitContract`/`exportPayloadFromCatalog` for the contract, `runImport` end to end (fake connection, real inference) for the two refusal paths and header/stdout parity, `buildInventory` for the `stillReportedInInventory` claim, and two cycle graphs emitted to `/private/tmp` and loaded from every entry point with the production `jiti` (deleted afterwards).
 - Suites: `packages/core` 99 files / 1508 tests green; `packages/query` 64 files / 857 tests green; `packages/cli` 564 passed, 189 skipped (docker-gated), **24 files failing only on the dist-freshness guard** — the single distinct error is "`@hejbro/core`'s dist/ is older than its src/ (stale build)", read not fixed per this round's brief. Every measurement above therefore runs from `src`; the only `dist` use is `jiti`'s own resolution of `"hejbro"` in the cycle-load probe, where the loaded surface (`schema`/`table`/`pgEnum`/`uuid`) predates this change.
 - `node scripts/check-diagnostic-xref.mjs` (227 codes, ok) and `node scripts/check-bans.mjs` (235 files, ok). Not run: `pnpm build`, `pnpm install`, full-workspace `pnpm test`/`check-types` (another team holds the gate slot).
+
+## Round 5 disposition
+
+All three blocking findings and four of the five non-blocking ones are
+fixed in this correction; N5 is split out as its own issue by an
+explicit decision, not deferred by omission. Every fix carries a pin,
+and every pin was mutant-verified — the mutant restored to the defect
+under test, the suite run, and exactly the intended test(s) observed to
+fail — so a pin that cannot fail is never counted as a pin.
+
+Gate (lead close-out, 2026-09-03 23:57–00:03Z UTC, on 13b1440b = the correction's tip 63ddde97 with `upstream/dev` 8d096cab merged in and the ledger row): `pnpm build --force`, `check`, unfiltered `check-types` (16/16), full `pnpm test` (87 files, 766 tests), `check:bans`, `check:crap` (README unchanged), `smoke:pack-install`, `changeset status`, `check:tasktime`, `check:next-marker`, `check:fixed-group`, `check:diagnostic-xref` — all green. The `hejbro` integration suite on PG15 failed on one assertion in the new witness that was wider than the sentence it measured (`not.toContain("_id")` matched `widgets_name_idx`; the emitted declaration was correct); the assertion was narrowed to the `legacy` block in 600360d7 (test-only; the seven sibling assertions were checked and left as they were, mutant-verified), and the integration suites were re-run on that tip: PG15 11 files, 66 passed, 2 todo, PG17 11 files, 66 passed, 2 todo, with the four new witness cases (foreign key into an omitted table that also carries a UNIQUE, foreign key into an omitted schema, a leading-underscore column, the all-omitted refusal) executing for the first time. Dangling anonymous volumes: 0 before and after.
+
+### R5-B1 — a foreign key into an omitted table or schema aborted the run
+
+Fixed by taking the reference out with its target. The reading already
+dropped an object whose catalog name no declaration can carry; it now
+drops the foreign keys that point at such an object too, so a surviving
+table is never declared against something the reading omitted, and
+`referencesFor` never reaches `existingTable(...)` with a name D36
+cannot carry. The omission is announced rather than silent:
+
+```
+Omitted: foreign key "<schema>.<table>.<name>" -- references <kind>
+"<target>", which this reading left out. Next: <the target's own way out>
+```
+
+The remedy repeats the target's, so the line tells an adopter what to
+change (rename in the database, then re-run `import`; for `pull`, rename
+then link the schema repository) rather than what to declare.
+
+Measured live from a fresh build against `dev`'s own source: importing
+one schema whose surviving `orders` references an omitted `"Widgets"`
+exits 1 with `invalid-sql-name`, the frame being `referencesFor`'s
+`existingTable(...)` call. The reading stopped on the reference, not on
+the object — which is the whole of this finding, and the reason a
+correction that only filters declarations was not enough.
+
+B1, N2 and N3 were treated as one defect rather than three symptoms:
+each was a place where "which tables survived this reading" was decided
+separately. The correction gives that fact a single owner,
+`survivingTableIdentities`, computed once in `infer/compose.ts` and read
+by the foreign-key partition and by the approximation detectors alike.
+A narrower set, `tablesWithReachableForeignKeys`, feeds the detectors
+that speak about foreign keys, so a key removed because its target was
+omitted cannot also be announced as an approximation: one object, one
+line.
+
+Pins: `infer-compose.test.ts` — `tableFacts` gained a `foreignKeys`
+parameter and a `foreignKeyTo` helper (the round-5 report noted the
+helper could only build `foreignKeys: []`, which is why no suite could
+have caught this), with four cases for `partitionForeignKeys`
+(surviving target, omitted target table, omitted target schema,
+self-reference). Live witness: `infer-omitted-names.integration.test.ts`
+gained `app.line_items`, carrying one key into an omitted table and one
+into an omitted schema.
+
+### R5-B2 — a leading-underscore column name aborted the run
+
+Fixed by removing the second judge. Declarability was decided by
+`isNameRoundTrippable` while the DSL decided it again, three frames
+later, with `assertSqlName`; `_id` is precisely the name the two
+disagree about (it round-trips, and D36 rejects it). `isSqlName` is now
+exported from `@hejbro/core` and consulted directly:
+`isNameDeclarable = isNameRoundTrippable && isSqlName`. Round-tripping
+is not discarded — it remains the second half of the question, since a
+name the rule accepts is still undeclarable if no key produces it back
+(`"createdAt"` fails both halves; `_id` fails only the rule).
+
+This retracts the round-3 disposition's "`isSqlName` stays
+module-private". That decision is what created the second judge, and
+R4-B1 and R5-B2 are both its consequences. D36 itself is untouched: an
+`^_` column is omitted and named, not admitted by loosening the rule.
+
+The new export is classified in `exports.test.ts` and registered in
+`cli/src/core-surface.ts`. `skills/hejbro` is **not** updated for it, by
+decision: `isSqlName` is ENGINE-classified — it is not part of the
+surface a schema author writes — and the same was done for
+`assertSqlName` and `deriveForeignKeyName` in round 3. The skill is
+still touched in this correction, for N1's own reason. Recorded here so
+the decision is visible rather than inferred from a diff.
+
+Pins: a unit pin for `isNameDeclarable` in `packages/cli/test/infer-compose.test.ts` (three shapes, mutant-verified);
+live witness `infer-omitted-names.integration.test.ts` gained
+`app.legacy(_id, label)`, where `_id` is omitted and named while `label`
+is declared — the table is partly declared, not lost.
+
+### R5-B3 — two tables sharing a check name swapped expressions
+
+Fixed by matching the table as well: `checksFor` in `infer/adapter.ts`
+looked a check expression up by schema and constraint name alone, and
+Postgres only requires that name to be unique per table. The defect is
+older than this change and silent — no loss-report line mentioned it,
+and the DDL `baseline` would emit was rejected by the server the
+declarations came from.
+
+The class was swept, not just the instance. Every other lookup in
+`infer/adapter.ts` was checked: `findColumnDetail`,
+`findSequenceOwnership`, the constraint-detail lookup inside
+`foreignKeysFor`, `indexesFor`, and `orderedColumnsWithKeys` — five
+sites, all already matching on schema and table. `checksFor` was the
+only one missing it. Recorded because "we looked and found nothing" is
+otherwise indistinguishable from "we did not look".
+
+Pin: `infer-constraints.test.ts` — two tables in one schema with a check
+of the same name, each keeping its own expression.
+
+### R5-N1 — the skill's Omitted band was stale
+
+Fixed in `skills/hejbro/references/brownfield-adoption.md`. The band now
+names all five omission kinds the loss report renders — schema, table,
+index, check constraint, and (new in this correction) a foreign key into
+an omitted object — and the column entry gained the `_id` shape beside
+the `"createdAt"` one. The wording was written against what
+`loss-report.ts` actually renders: a skill that claims more than the
+code is a broken user contract, not a documentation nit. This is the
+second consecutive round in which a band of this page went stale
+(R4-N1 was the Approximated band next door).
+
+### R5-N2 — the UNIQUE approximation spoke about omitted tables
+
+Fixed by giving `detectUniqueIndexApproximations` the surviving-table
+set its three sibling detectors already received; it was the only one
+still reading the schema-filtered catalog.
+
+An abort was reported through the lead during this correction (a built
+CLI on `dev`, a UNIQUE constraint on a CamelCase table, exiting 1 with
+`invalid-sql-name`) and was first read as this detector's. It is not:
+measured again from a fresh build against `dev`'s own source, the frame
+is `referencesFor`'s own `existingTable(fk.targetSchema,
+fk.targetTable, …)`, reached because the fixture's surviving
+`shop.orders` holds a foreign key into the omitted `shop."Widgets"`.
+That is R5-B1's path, and B1's fix is what closes it. The two readings
+never contradicted each other: the unit probe that failed to reproduce
+the abort had no inbound foreign key, so it could not reach the frame
+that throws — a fixture difference, not a disagreement about the code.
+
+What this detector's own fix changes is narrower and remains its own:
+an approximation announced about a table the reading omitted.
+
+Pins: `infer-unique-on-omitted-table.test.ts` — one test asserting all
+three of no abort, no approximation line, and the omission line present;
+plus the existing R5-N2 case in `infer-loss-report.test.ts`. Removing
+the surviving-table filter fails exactly those two. Live witness:
+`app."Widgets"` gained `unique (sku)`, with the starter asserted not to
+carry `Widgets_sku_key`.
+
+### R5-N3 — an all-omitted run said "nothing to infer"
+
+Fixed by refusing with a reason of its own. `import` now separates two
+statements that were being made with one code: a named schema that is
+genuinely empty still raises `import-nothing-to-infer`, while a run in
+which every named schema was omitted for its own name raises the new
+`import-nothing-declarable`, naming those schemas and the way out
+(rename in the database, then rerun). The loss report's `Omitted: schema
+…` lines are printed with the refusal — the refusal is built without
+throwing, so the diagnostic and the report reach the user together
+rather than the former discarding the latter.
+
+The refusal happens before any write, and before the destination
+directory is created: an earlier measurement of the exit-0 variant found
+it left an empty `--out` directory behind, and a run that produced
+nothing should leave nothing. The pin asserts all four of exit code 1,
+the new code, the `Omitted: schema` line on stdout, and
+`existsSync(out) === false`.
+
+`pull` keeps its asymmetry deliberately: it has no such refusal and
+prints the line, because its contract is to write a contract, not
+starter files — there is no "produced nothing" state to refuse.
+
+Pin: `import-command.test.ts` (replacing the earlier exit-0 case).
+
+### R5-N4 — the foreign-key name rule was stated without its exception
+
+Fixed in the delta text; no code change. `cli-commands` now states the
+exception the code has implemented since round 3: a catalog name D36
+cannot carry at all is declared under the derived name and announced as
+an approximation, because a foreign key's name is a label on a
+constraint the declaration still expresses, not the constraint's own
+identity — which is why a table or schema of the same shape is omitted
+instead. `catalog-inference`'s approximation enumeration gained that
+kind. Cross-checked against `expressibleForeignKeyName` and
+`detectForeignKeyNameApproximations`, which name both the catalog name
+and the derived one.
+
+### R5-N5 — an enum's catalog name is not held to D36
+
+Split out as **#712**, by decision rather than by omission. It shares a
+root with B2 (which identifier rule applies where), but its user-visible
+consequence differs in kind: not one column or one table, but an entire
+enum type reaching the starter file and the emitted DDL under a name
+`--rename`/`--confirm-drop` cannot address. Settling "carry, or
+omit-and-name" for enums inside this correction would have decided it
+by proximity to a bug rather than on its own terms.
+
+### Delta changes in this correction
+
+`catalog-inference`: declarability defined as one rule — core's own
+identifier rule, consulted, plus the key producing the name back —
+rather than a prediction of it; omission extended to the foreign keys
+that point at an omitted object, with no approximation announced for
+anything omitted; the foreign-key-name approximation added to the
+enumeration; two scenarios added (a reference into an omitted object,
+two tables sharing a constraint name). `cli-commands`: the undeclarable
+column clause extended to a name the rule rejects; the two refusal
+reasons given separate codes and the destination left untouched; the
+foreign-key-name exception stated; two scenarios added (a name the DSL
+rejects, every named schema omitted).
