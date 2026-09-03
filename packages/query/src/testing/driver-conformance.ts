@@ -31,15 +31,25 @@ export type ConformanceStatement = {
 
 /**
  * What a caller hands {@link assertSessionStateConformance} — exactly one
- * of the two shapes below, never both, never neither. Which one is
- * *required* is decided by `capabilities["session-state"]`, not by which
- * fields happen to be present: a caller that records the wrong shape for
- * the driver's actual declaration is a conformance failure, not a type
- * escape hatch.
+ * of the three shapes below, never more than one, never none. Which one is
+ * *required* is decided by `capabilities["session-state"]` together with
+ * `capabilities["interactive-transactions"]`, not by which fields happen
+ * to be present: a caller that records the wrong shape for the driver's
+ * actual declaration is a conformance failure, not a type escape hatch.
+ * `recordedOnConnection` is the shape required for `session-state: false`
+ * combined with `interactive-transactions: true` — every statement the
+ * driver emits on its own connection, transaction control included, since
+ * that tier's obligation lives in the transaction envelope and the plain
+ * `recordedForOneExecute` shape (scoped to one `execute()` call) cannot
+ * show it.
  */
 export type ConformanceObservation =
 	| {
 			readonly recordedForOneExecute: ReadonlyArray<ConformanceStatement>;
+			readonly callerStatement: ConformanceStatement;
+	  }
+	| {
+			readonly recordedOnConnection: ReadonlyArray<ConformanceStatement>;
 			readonly callerStatement: ConformanceStatement;
 	  }
 	| {
@@ -61,30 +71,166 @@ function throwConformanceViolation(tier: string, reason: string): never {
 
 /**
  * The `session-state: false` tier's own obligation (driver-contract: "A
- * driver without session state guarantees its own statements") — the
- * caller's own compiled statement must be the LAST thing sent for that
- * one `execute()` call, with at least one entry ahead of it. Matched by
+ * driver without session state guarantees its own statements") — some
+ * statement precedes the caller's own compiled statement for that one
+ * `execute()` call; nothing is asserted about what follows it (a
+ * transaction-wrapping driver's trailing `COMMIT` conforms). Matched by
  * `sql` text only (never `params`): a settings statement and the
  * caller's own statement never share SQL text, so this is enough to
  * place the caller's statement without the kit ever needing to know what
- * the settings text actually is. Internal -- {@link assertSessionStateConformance}
+ * the settings text actually is.
+ *
+ * Blind spot: this observation is taken at the driver's own execute
+ * contract (the `CompileResult` domain), where a transaction's own
+ * opening never appears -- it cannot tell a pin sent before a transaction
+ * opens from one sent after it, and both record identically here. That
+ * distinction is exactly what a `session-state: false` driver also
+ * declaring `interactive-transactions: true` needs, since a
+ * transaction-local setting sent before the transaction opens is
+ * discarded without applying -- {@link assertTransactionEnvelopeConformance}
+ * is that tier's own obligation, and applies instead of this one for
+ * that declaration. Internal -- {@link assertSessionStateConformance}
  * is the one exported surface.
  */
 const assertFalseTierConformance = (
 	recordedForOneExecute: ReadonlyArray<ConformanceStatement>,
 	callerStatement: ConformanceStatement,
 ): void => {
-	const last = recordedForOneExecute[recordedForOneExecute.length - 1];
-	if (last === undefined || last.sql !== callerStatement.sql) {
+	const index = recordedForOneExecute.findIndex(
+		(statement) => statement.sql === callerStatement.sql,
+	);
+	if (index <= 0) {
 		throwConformanceViolation(
 			"session-state:false",
-			"the caller's own statement was not the last thing sent for this execution.",
+			"nothing preceded the caller's own statement in what was sent for this execution -- a session-state:false driver must carry the settings with every execution, not just declare the capability false.",
 		);
 	}
-	if (recordedForOneExecute.length < 2) {
+};
+
+/**
+ * SQL's own transaction-control vocabulary, recognized by the keyword a
+ * normalized statement (trimmed, lower-cased, one or more trailing
+ * semicolons dropped) leads with — never a substring, so a function
+ * body's own `do $$ begin … end $$` or a caller statement carrying one
+ * of these words inside a string literal reads as an ordinary
+ * statement. The kit still reads no driver's own settings text; this is
+ * the one exception, and it stays scoped to SQL's own control words. A
+ * savepoint statement (`savepoint s`, `release savepoint s`, `rollback
+ * to savepoint s`) is ordinary too — `rollback to …` is excluded from
+ * the bare `rollback` closer by name, so a savepoint rollback is never
+ * mistaken for ending the enclosing transaction. Observation limit:
+ * this still can't see a driver-decorated opener or closer whose own
+ * leading word isn't in this vocabulary. A statement is classified by
+ * the word its text leads with once that text is trimmed, lower-cased,
+ * and stripped of any trailing semicolons; a string is never split on
+ * an interior `;`.
+ */
+type TransactionControlKind = "open" | "end" | undefined;
+
+const normalizeStatement = (sql: string): string =>
+	sql
+		.trim()
+		.toLowerCase()
+		.replace(/;+\s*$/, "")
+		.trim();
+
+/** Bare closers -- a single-word statement leading with one of these always ends the transaction; `rollback` is handled separately in {@link isTransactionEnd} since `rollback to …` (a savepoint rollback) does not. */
+const BARE_END_WORDS = new Set(["commit", "abort", "end"]);
+
+const isTransactionOpen = (
+	leadingWord: string | undefined,
+	secondWord: string | undefined,
+): boolean =>
+	leadingWord === "begin" ||
+	(leadingWord === "start" && secondWord === "transaction");
+
+const isTransactionEnd = (
+	leadingWord: string | undefined,
+	secondWord: string | undefined,
+): boolean =>
+	(leadingWord !== undefined && BARE_END_WORDS.has(leadingWord)) ||
+	(leadingWord === "rollback" && secondWord !== "to");
+
+const transactionControlKind = (sql: string): TransactionControlKind => {
+	const [leadingWord, secondWord] = normalizeStatement(sql).split(/\s+/);
+	if (isTransactionOpen(leadingWord, secondWord)) {
+		return "open";
+	}
+	if (isTransactionEnd(leadingWord, secondWord)) {
+		return "end";
+	}
+	return undefined;
+};
+
+/**
+ * The envelope-tracking fold `assertTransactionEnvelopeConformance` scans
+ * with, statement by statement, up to (not including) the caller's own:
+ * `openIndex` is the position of the nearest transaction-opening statement
+ * seen since the last close (`undefined` outside any open transaction),
+ * and `sawStatementSinceOpen` is whether at least one ordinary statement
+ * followed it.
+ */
+type EnvelopeScanState = {
+	readonly openIndex: number | undefined;
+	readonly sawStatementSinceOpen: boolean;
+};
+
+const foldEnvelopeScan = (
+	state: EnvelopeScanState,
+	statement: ConformanceStatement,
+	index: number,
+): EnvelopeScanState => {
+	const kind = transactionControlKind(statement.sql);
+	if (kind === "open") {
+		return { openIndex: index, sawStatementSinceOpen: false };
+	}
+	if (kind === "end") {
+		return { openIndex: undefined, sawStatementSinceOpen: false };
+	}
+	if (state.openIndex === undefined) {
+		return state;
+	}
+	return { ...state, sawStatementSinceOpen: true };
+};
+
+/**
+ * The transaction-envelope obligation (driver-contract: "Every declared
+ * tier's obligation is machine-verified in this repository", the
+ * session-state:false + interactive-transactions:true addendum) — the
+ * transaction that carries the caller's own statement must have opened
+ * before it, some statement (the settings) must follow that opening, and
+ * no transaction may have ended in between. What follows the caller's own
+ * statement is unconstrained, same as the plain false tier. Internal --
+ * {@link assertSessionStateConformance} is the one exported surface.
+ */
+const assertTransactionEnvelopeConformance = (
+	recordedOnConnection: ReadonlyArray<ConformanceStatement>,
+	callerStatement: ConformanceStatement,
+): void => {
+	const callerIndex = recordedOnConnection.findIndex(
+		(statement) => statement.sql === callerStatement.sql,
+	);
+	// `Math.max(callerIndex, 0)` -- never a ternary (house rule): -1 (not
+	// found) and 0 (found first) both collapse to an empty slice, which is
+	// the correct prefix for "not found" too (nothing precedes it either).
+	const precedingStatements = recordedOnConnection.slice(
+		0,
+		Math.max(callerIndex, 0),
+	);
+	const scan = precedingStatements.reduce<EnvelopeScanState>(foldEnvelopeScan, {
+		openIndex: undefined,
+		sawStatementSinceOpen: false,
+	});
+	if (scan.openIndex === undefined) {
 		throwConformanceViolation(
-			"session-state:false",
-			"the caller's statement was the only thing sent -- a session-state:false driver must carry the settings with every execution, not just declare the capability false.",
+			"session-state:false+interactive-transactions:true",
+			"the caller's own statement was not sent inside an open transaction -- this tier must send the caller's statement inside the same transaction that carries its settings, after the transaction opens and before any transaction ends.",
+		);
+	}
+	if (!scan.sawStatementSinceOpen) {
+		throwConformanceViolation(
+			"session-state:false+interactive-transactions:true",
+			"no statement was sent between the transaction's own opening and the caller's own statement -- a transaction-local setting sent before the transaction opens is discarded without applying, so the settings must land inside the same transaction that carries the caller's statement.",
 		);
 	}
 };
@@ -107,36 +253,80 @@ const assertTrueTierConformance = (
 };
 
 /**
- * The kit's one exported entry point. `capabilities["session-state"]`
- * decides which tier's obligation applies and which half of `observation`
- * it reads — never the other way around, and never inferred from
- * `observation`'s own shape as a substitute for reading the declaration.
- * A `true` declaration checked against a false-tier-shaped observation
- * (or the reverse) is a conformance failure in its own right: the caller
- * recorded the wrong thing for what this driver actually declares.
+ * The `session-state: true` tier's own shape check, then its obligation --
+ * split out from {@link assertSessionStateConformance} (CRAP #154: the
+ * combined router+shape+obligation function's own cyclomatic complexity
+ * crossed the CRAP≤5 gate) so each tier's shape guard lives beside the
+ * obligation it guards, and the router stays a router. Internal.
  */
-export const assertSessionStateConformance = (
-	capabilities: DriverCapabilities,
+const assertTrueTierShapeThenConformance = (
 	observation: ConformanceObservation,
 ): void => {
-	if (capabilities["session-state"]) {
-		if (!("recordedForSetupSession" in observation)) {
-			throwConformanceViolation(
-				"session-state:true",
-				"capabilities declares session-state true, but this driver was checked with a false-tier observation (recordedForOneExecute/callerStatement) instead of recordedForSetupSession.",
-			);
-		}
-		assertTrueTierConformance(observation.recordedForSetupSession);
-		return;
+	if (!("recordedForSetupSession" in observation)) {
+		throwConformanceViolation(
+			"session-state:true",
+			"capabilities declares session-state true, but this driver was checked with a false-tier observation instead of recordedForSetupSession.",
+		);
 	}
-	if (!("callerStatement" in observation)) {
+	assertTrueTierConformance(observation.recordedForSetupSession);
+};
+
+/** The envelope tier's own shape check, then its obligation -- see {@link assertTrueTierShapeThenConformance}'s own doc for why this split exists. Internal. */
+const assertEnvelopeTierShapeThenConformance = (
+	observation: ConformanceObservation,
+): void => {
+	if (!("recordedOnConnection" in observation)) {
+		throwConformanceViolation(
+			"session-state:false+interactive-transactions:true",
+			"capabilities declares session-state false with interactive-transactions true, but this driver was checked with an observation that cannot show transaction control -- recordedOnConnection/callerStatement is required for this declaration.",
+		);
+	}
+	assertTransactionEnvelopeConformance(
+		observation.recordedOnConnection,
+		observation.callerStatement,
+	);
+};
+
+/** The plain `session-state: false` tier's own shape check, then its obligation -- see {@link assertTrueTierShapeThenConformance}'s own doc for why this split exists. Internal. */
+const assertFalseTierShapeThenConformance = (
+	observation: ConformanceObservation,
+): void => {
+	if (!("recordedForOneExecute" in observation)) {
 		throwConformanceViolation(
 			"session-state:false",
-			"capabilities declares session-state false, but this driver was checked with a true-tier observation (recordedForSetupSession) instead of recordedForOneExecute/callerStatement.",
+			"capabilities declares session-state false, but this driver was checked with a true-tier or envelope-tier observation instead of recordedForOneExecute/callerStatement.",
 		);
 	}
 	assertFalseTierConformance(
 		observation.recordedForOneExecute,
 		observation.callerStatement,
 	);
+};
+
+/**
+ * The kit's one exported entry point -- a router only (CRAP #154: each
+ * tier's own shape check moved beside its obligation, see
+ * {@link assertTrueTierShapeThenConformance} and its two siblings).
+ * `capabilities["session-state"]` together with
+ * `capabilities["interactive-transactions"]` decides which tier's
+ * obligation applies and which one of the three shapes of `observation`
+ * it reads — never the other way around, and never inferred from
+ * `observation`'s own shape as a substitute for reading the declaration.
+ * A declaration checked against an observation shaped for a different
+ * tier (in any direction) is a conformance failure in its own right: the
+ * caller recorded the wrong thing for what this driver actually declares.
+ */
+export const assertSessionStateConformance = (
+	capabilities: DriverCapabilities,
+	observation: ConformanceObservation,
+): void => {
+	if (capabilities["session-state"]) {
+		assertTrueTierShapeThenConformance(observation);
+		return;
+	}
+	if (capabilities["interactive-transactions"]) {
+		assertEnvelopeTierShapeThenConformance(observation);
+		return;
+	}
+	assertFalseTierShapeThenConformance(observation);
 };

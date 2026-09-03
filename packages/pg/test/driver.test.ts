@@ -733,6 +733,29 @@ describe("pgDriver setupSession IntervalStyle pin (owner decision ④, task 5.5)
 			"select 1",
 		]);
 	});
+
+	it("a decorator that returns a NEW driver value carrying its own hook never reaches the base's checkout -- the base keeps reading its own member (task 5.1, #531)", async () => {
+		const { pool, calls } = stubPoolWithClient();
+		const driver = pgDriver(pool);
+		const spy = vi.fn(async () => {});
+		// the repository's own spread-decorator idiom -- a NEW value
+		// carrying its own hook, the driver value it decorated left
+		// unchanged (contrast with the in-place case just above, which
+		// mutates `driver.setupSession` on the SAME object the checkout
+		// guard closed over).
+		const wrapped = { ...driver, setupSession: spy };
+
+		await wrapped.execute({ sql: "select 1", params: [], kind: "sql" });
+
+		// the checkout guard's own closure reads `driver`'s member --
+		// `driver` itself, never touched, still carries the base hook, so
+		// the spy sitting on `wrapped` is never reached.
+		expect(spy).not.toHaveBeenCalled();
+		expect(calls.map(sqlTextOf)).toEqual([
+			"set intervalstyle to 'postgres'; set bytea_output to 'hex'",
+			"select 1",
+		]);
+	});
 });
 
 describe("pgDriver conforms to the driver contract (#481, task 1.7)", () => {

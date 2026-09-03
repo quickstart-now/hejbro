@@ -380,13 +380,39 @@ const distinctKeyword = (
 	return `select distinct on (${columns})`;
 };
 
+/**
+ * A whole-table projection's own columns, quoted -- bare when the select
+ * carries no join (the byte-identical pin), qualified by the select's own
+ * `from` once one does, in the same text {@link renderFromNode} renders
+ * that `from` with (a table schema-qualified, a CTE reference bare), so
+ * this agrees character for character with an object projection's column
+ * reference over the same source. Ambiguity is exactly what qualification
+ * closes: two joined tables sharing a column name render unqualified SQL
+ * a server rejects (42702) without it (#552).
+ */
+const renderAllColumns = (
+	columnNames: ReadonlyArray<string>,
+	from: FromNode,
+	hasJoin: boolean,
+): string => {
+	if (!hasJoin) {
+		return columnNames.map(quoteIdentifier).join(", ");
+	}
+	const qualifier = renderFromNode(from);
+	return columnNames
+		.map((columnName) => `${qualifier}.${quoteIdentifier(columnName)}`)
+		.join(", ");
+};
+
 const renderProjection = (
 	projection: ProjectionNode,
+	from: FromNode,
+	hasJoin: boolean,
 	scope: ReadonlyArray<FromNode | DeclaredCteMarker>,
 ): string => {
 	switch (projection.projectionKind) {
 		case "allColumns":
-			return projection.columnNames.map(quoteIdentifier).join(", ");
+			return renderAllColumns(projection.columnNames, from, hasJoin);
 		case "constantOne":
 			return "1";
 		case "columns":
@@ -492,7 +518,7 @@ const renderSelectClauses = (
 		.join(" ");
 
 	const clauses = [
-		`${distinctKeyword(query.distinct, scope)} ${renderProjection(query.projection, scope)}`,
+		`${distinctKeyword(query.distinct, scope)} ${renderProjection(query.projection, query.from, query.joins.length > 0, scope)}`,
 		clauseAfterProjection ?? "",
 		`from ${renderFromNode(query.from)}`,
 		joinsSql,

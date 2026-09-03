@@ -5,6 +5,7 @@ import type {
 	Role,
 	SelectLimited,
 	SelectProjection,
+	SetOpStage,
 	Table,
 	UpdateFinal,
 } from "@hejbro/core";
@@ -195,6 +196,19 @@ const rolesOf = (
  *   does not have this defect: measured against `unknown`, `never`, a
  *   single `Table`, and a `Table | Table` union (each with and without
  *   `| undefined`), it returns every one of them unchanged.
+ * - A core-built set-operation stage (`select(a).union(select(b))` and
+ *   its sibling combinators, core's `query/select.ts`, task 3.1/#551)
+ *   structurally extends {@link SetOpStage}, which carries
+ *   `projectionInput` for the LEFT branch only — core's own combinators
+ *   return the left branch's projection and carry no type for the right
+ *   one, so the per-key widening {@link SelectResult}'s chain path can do
+ *   (both branches resolved) isn't expressible here. This resolves
+ *   {@link SelectResult}<TProjection> — {@link UntrackedJoins} implicit
+ *   via its default, since a set-op stage carries no left-joined
+ *   tracking of its own to pass through, the same fail-safe widening a
+ *   select that never called `leftJoin` takes. `SetOpStage`'s own
+ *   `orderBy()`/`limit()` return `SetOpStage<TProjection>` again, so a
+ *   further-chained stage resolves identically.
  * - An `insert()`/`update()`/`deleteFrom()` chain (any stage —
  *   `InsertConflictable`/`InsertReturnable`/`InsertFinal` and their
  *   update/delete equivalents all structurally carry `TTable`/
@@ -220,22 +234,24 @@ export type ExecuteResult<TStatement> =
 		infer TLeftJoined
 	>
 		? ReadonlyArray<SelectResult<TProjection, Exclude<TLeftJoined, undefined>>>
-		: TStatement extends InsertFinal<
-					infer TTable extends Table,
-					infer TReturning
-				>
-			? ReadonlyArray<ReturningRow<TTable, TReturning>>
-			: TStatement extends UpdateFinal<
+		: TStatement extends SetOpStage<infer TProjection extends SelectProjection>
+			? ReadonlyArray<SelectResult<TProjection>>
+			: TStatement extends InsertFinal<
 						infer TTable extends Table,
 						infer TReturning
 					>
 				? ReadonlyArray<ReturningRow<TTable, TReturning>>
-				: TStatement extends DeleteFinal<
+				: TStatement extends UpdateFinal<
 							infer TTable extends Table,
 							infer TReturning
 						>
 					? ReadonlyArray<ReturningRow<TTable, TReturning>>
-					: ReadonlyArray<DriverRow>;
+					: TStatement extends DeleteFinal<
+								infer TTable extends Table,
+								infer TReturning
+							>
+						? ReadonlyArray<ReturningRow<TTable, TReturning>>
+						: ReadonlyArray<DriverRow>;
 
 /**
  * A `db()` handle. `execute` is every other db operation's foundation —
