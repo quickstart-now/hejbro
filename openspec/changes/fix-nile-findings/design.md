@@ -50,9 +50,14 @@ carry the contract, this file carries the shape the implementation takes.
   reference (`"projects"."name"` / `"lab"."projects"."name"` → `"name"`);
   unquote an identifier only when it is a plain lower-case identifier that
   Postgres would render unquoted; strip a `::type` cast the server appended
-  directly to a string literal. Nothing else — in particular no paren removal
-  inside the text and no keyword folding, because those can equate different
-  meanings.
+  directly to a string literal; fold letter case to lower **outside** quoted
+  identifiers and string literals (lead ruling R80, after the review measured
+  the catalog re-rendering `is not null` as `IS NOT NULL`) — SQL is
+  case-insensitive outside quotes and the server already folds an unquoted
+  identifier, so this is the one addition that cannot change a meaning:
+  `'Done'` ≠ `'done'` and `"Name"` ≠ `"name"` stay unequal. Nothing else — in
+  particular no paren removal inside the text, because that can equate
+  different meanings.
 - **Outcome**: equal → agrees (no finding); unequal → `check-not-compared`
   finding carrying both texts and a `Next:` naming the restatement in the
   catalog's spelling. Never a `differs` from text. The coverage boundary gains

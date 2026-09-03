@@ -744,6 +744,75 @@ describe("compareCheckConstraint / 3.5 text comparison", () => {
 		expect(explainCallCount(calls)).toBe(0);
 	});
 
+	// fix-nile-findings, #755, lead ruling R80: the sixth normalization
+	// step, added after review measured that a real catalog folds a
+	// keyword back to upper-case (`is not null` -> `IS NOT NULL`) -- without
+	// it, this ordinary declaration would report not-compared on Nile.
+	it("agrees after folding a keyword's letter case alone", async () => {
+		const posts = table(
+			app,
+			"posts",
+			{ id: uuid().primaryKey(), name: text() },
+			(t) => ({
+				checks: [check("posts_name_check", isNotNull(t.name))],
+			}),
+		);
+		const snapshot = buildTestSnapshot([posts]);
+		const declaredExpression = declaredCheckExpression(
+			snapshot,
+			"app.posts",
+			"posts_name_check",
+		);
+		const { session } = makeFakeSession({
+			metadata: { expression: "(name IS NOT NULL)", convalidated: true },
+		});
+
+		const findings = await compareCheckConstraint(
+			session,
+			withPostsTable(),
+			"app",
+			"posts",
+			"posts_name_check",
+			declaredExpression,
+			"text",
+		);
+
+		expect(findings).toEqual([]);
+	});
+
+	it("is not compared when only a string literal's letter case differs (never folded)", async () => {
+		const posts = table(
+			app,
+			"posts",
+			{ id: uuid().primaryKey(), status: text() },
+			(t) => ({
+				checks: [check("posts_status_check", eq(t.status, "Done"))],
+			}),
+		);
+		const snapshot = buildTestSnapshot([posts]);
+		const declaredExpression = declaredCheckExpression(
+			snapshot,
+			"app.posts",
+			"posts_status_check",
+		);
+		const { session } = makeFakeSession({
+			metadata: { expression: `"posts"."status" = 'done'`, convalidated: true },
+		});
+
+		const findings = await compareCheckConstraint(
+			session,
+			withPostsTable(),
+			"app",
+			"posts",
+			"posts_status_check",
+			declaredExpression,
+			"text",
+		);
+
+		expect(findings).toHaveLength(1);
+		expect(findings[0]?.error).toMatchObject({ code: "check-not-compared" });
+	});
+
 	it("agrees after stripping one enclosing parenthesis pair alone", async () => {
 		const posts = table(
 			app,

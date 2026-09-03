@@ -74,8 +74,46 @@ const notComparedByTextFinding = (
 	),
 });
 
-/** A run of whitespace outside a single-quoted string literal — `''` is the SQL escape for an embedded quote, never a literal boundary. */
+/** A single-quoted string literal — `''` is the SQL escape for an embedded quote, never a literal boundary. */
 const STRING_LITERAL = /'(?:[^']|'')*'/g;
+
+/** A double-quoted identifier — `""` is the SQL escape for an embedded quote, never an identifier boundary. */
+const QUOTED_IDENTIFIER = /"(?:[^"]|"")*"/g;
+
+/** Either a string literal or a quoted identifier — the one pattern every "outside quotes" step (whitespace, letter case) shares, so the two rules can never drift apart from scanning content differently. */
+const PROTECTED_SPAN = new RegExp(
+	`${STRING_LITERAL.source}|${QUOTED_IDENTIFIER.source}`,
+	"g",
+);
+
+/**
+ * Applies `transform` to every run of `text` that falls outside a match of
+ * `spanPattern`, leaving matched spans themselves untouched -- the shared
+ * scanner behind every "outside quotes" normalization step, so a literal's
+ * or an identifier's own quoted content is never rewritten by a step that
+ * isn't specifically about quoting itself (design.md's own "outside
+ * string literals" wording, generalized to also cover quoted
+ * identifiers where a step needs that).
+ */
+const transformOutsideSpans = (
+	text: string,
+	spanPattern: RegExp,
+	transform: (segment: string) => string,
+): string => {
+	const spans = Array.from(text.matchAll(spanPattern));
+	const { result, consumedTo } = spans.reduce(
+		(state, match) => {
+			const start = match.index ?? 0;
+			const before = transform(text.slice(state.consumedTo, start));
+			return {
+				result: state.result + before + match[0],
+				consumedTo: start + match[0].length,
+			};
+		},
+		{ result: "", consumedTo: 0 },
+	);
+	return result + transform(text.slice(consumedTo));
+};
 
 /**
  * Collapses whitespace to a single space, run outside every string literal
@@ -83,21 +121,10 @@ const STRING_LITERAL = /'(?:[^']|'')*'/g;
  * spacing is content, not layout, so `'a  b'` and `'a b'` must stay
  * distinguishable.
  */
-const collapseWhitespaceOutsideLiterals = (text: string): string => {
-	const literals = Array.from(text.matchAll(STRING_LITERAL));
-	const { collapsed, consumedTo } = literals.reduce(
-		(state, match) => {
-			const start = match.index ?? 0;
-			const before = text.slice(state.consumedTo, start).replace(/\s+/g, " ");
-			return {
-				collapsed: state.collapsed + before + match[0],
-				consumedTo: start + match[0].length,
-			};
-		},
-		{ collapsed: "", consumedTo: 0 },
-	);
-	return (collapsed + text.slice(consumedTo).replace(/\s+/g, " ")).trim();
-};
+const collapseWhitespaceOutsideLiterals = (text: string): string =>
+	transformOutsideSpans(text, STRING_LITERAL, (segment) =>
+		segment.replace(/\s+/g, " "),
+	).trim();
 
 /** String-literal contents replaced with same-length filler, so a paren inside a literal never perturbs the balance scan below (indices stay aligned with the original text). */
 const maskStringLiterals = (text: string): string =>
@@ -188,24 +215,45 @@ const stripStringLiteralCast = (text: string): string =>
 	text.replace(/('(?:[^']|'')*')::[a-zA-Z_][a-zA-Z0-9_]*/g, "$1");
 
 /**
- * The fixed five-step normalization (design.md, "check without EXPLAIN")
- * — whitespace outside string literals; one enclosing parenthesis pair;
- * the declaring table's own qualifier on a column reference; identifier
- * quoting where the identifier would render unquoted anyway; a type cast
- * the server appended to a string literal — and nothing else, applied in
- * this fixed order.
+ * Folds letter case to lower-case outside both quoted identifiers and
+ * string literals (design.md, normalization step 6, lead ruling R80) --
+ * the one addition to the original five steps, and the only one proven
+ * meaning-preserving: SQL keywords and unquoted identifiers are already
+ * case-insensitive (the server folds an unquoted identifier to
+ * lower-case itself), so the two spellings were always the same
+ * statement. A quoted identifier's or a string literal's own case is
+ * content, never folded -- `"Name"` stays distinguishable from `"name"`,
+ * and `'Done'` from `'done'`. Runs last: step 4 already unquoted every
+ * identifier this step could otherwise have needed to skip, so there is
+ * no ordering conflict between the two.
+ */
+const foldCaseOutsideQuotes = (text: string): string =>
+	transformOutsideSpans(text, PROTECTED_SPAN, (segment) =>
+		segment.toLowerCase(),
+	);
+
+/**
+ * The fixed six-step normalization (design.md, "check without EXPLAIN";
+ * step 6 added by lead ruling R80) — whitespace outside string literals;
+ * one enclosing parenthesis pair; the declaring table's own qualifier on
+ * a column reference; identifier quoting where the identifier would
+ * render unquoted anyway; a type cast the server appended to a string
+ * literal; letter case outside quoted identifiers and string literals —
+ * and nothing else, applied in this fixed order.
  */
 const normalizeCheckText = (
 	text: string,
 	schema: string,
 	table: string,
 ): string =>
-	stripStringLiteralCast(
-		unquotePlainIdentifiers(
-			stripTableQualifier(
-				stripEnclosingParens(collapseWhitespaceOutsideLiterals(text)),
-				schema,
-				table,
+	foldCaseOutsideQuotes(
+		stripStringLiteralCast(
+			unquotePlainIdentifiers(
+				stripTableQualifier(
+					stripEnclosingParens(collapseWhitespaceOutsideLiterals(text)),
+					schema,
+					table,
+				),
 			),
 		),
 	);

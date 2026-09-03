@@ -3,7 +3,7 @@
 ### Requirement: An expression is compared through the server's own rendering
 Where `check` compares an expression — a check constraint, an index
 predicate, a generated column — it SHALL obtain the rendering of **both**
-the declared expression and the database's own expression from **one**
+the declared expression and the database's own expression from **one
 statement**, and compare those.
 
 One statement, not two sent to one connection: a driver is free to pool
@@ -39,8 +39,9 @@ plan a statement, no rendering can be obtained. There, and only there,
 catalog's own text after a fixed normalization — whitespace outside
 string literals, one parenthesis pair enclosing the whole text, the
 enclosing table's qualifier on a column reference, identifier quoting
-where the identifier would render unquoted anyway, and a type cast the
-server appended to a string literal — and nothing else. Texts equal after
+where the identifier would render unquoted anyway, a type cast the
+server appended to a string literal, and letter case outside quoted
+identifiers and string literals — and nothing else. Texts equal after
 that normalization SHALL count as agreeing. Texts that still differ SHALL
 be reported as **not compared**, carrying both texts and a `Next:` that
 names restating the declaration in the catalog's own spelling; they SHALL
