@@ -496,6 +496,62 @@ describe("assertSessionStateConformance (task 1.4/1.5, #481)", () => {
 			],
 			outcome: "pass" as const,
 		},
+		// Two edges the leading-keyword rule opens, neither observed
+		// before this task (4.4): an opener needs BOTH its words, and the
+		// scan covers only what precedes the caller's own occurrence. Both
+		// already hold; a row that flips to "pass" here is a hole, not a
+		// nicety -- only the third row below is expected to conform.
+		{
+			name: "an opener needs both words: a bare 'start' is not an opener, so the envelope has none",
+			recordedOnConnection: [
+				{ sql: "start", params: [] },
+				{ sql: "set intervalstyle to 'postgres'", params: [] },
+				{ sql: "select 1", params: [] },
+			],
+			outcome: "violation" as const,
+			expectedMessage: /was not sent inside an open transaction/,
+		},
+		{
+			name: "an opener needs both words: 'select starting_batch()' in the same position is an ordinary statement, not an opener",
+			recordedOnConnection: [
+				{ sql: "select starting_batch()", params: [] },
+				{ sql: "set intervalstyle to 'postgres'", params: [] },
+				{ sql: "select 1", params: [] },
+			],
+			outcome: "violation" as const,
+			expectedMessage: /was not sent inside an open transaction/,
+		},
+		{
+			name: "the scan covers only what precedes the caller: a caller whose own statement is literally 'commit' still conforms inside an otherwise correct envelope",
+			recordedOnConnection: [
+				{ sql: "begin", params: [] },
+				{ sql: "set intervalstyle to 'postgres'", params: [] },
+				{ sql: "commit", params: [] },
+			],
+			outcome: "pass" as const,
+			callerStatementOverride: { sql: "commit", params: [] },
+		},
+		{
+			name: "the scan covers only what precedes the caller: an earlier occurrence of the caller's own text is taken as the caller, even though a later, properly-enveloped occurrence exists",
+			recordedOnConnection: [
+				{ sql: "select 1", params: [] },
+				{ sql: "begin", params: [] },
+				{ sql: "set intervalstyle to 'postgres'", params: [] },
+				{ sql: "select 1", params: [] },
+			],
+			outcome: "violation" as const,
+			expectedMessage: /was not sent inside an open transaction/,
+		},
+		{
+			name: "the scan covers only what precedes the caller: a caller whose own statement is literally 'begin' is still excluded from its own prefix, so nothing precedes it",
+			recordedOnConnection: [
+				{ sql: "begin", params: [] },
+				{ sql: "select 1", params: [] },
+			],
+			outcome: "violation" as const,
+			expectedMessage: /was not sent inside an open transaction/,
+			callerStatementOverride: { sql: "begin", params: [] },
+		},
 	])(
 		"the transaction-envelope obligation for interactive-transactions:true + session-state:false -- $name",
 		({

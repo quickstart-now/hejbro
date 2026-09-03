@@ -204,6 +204,20 @@ Inside group 1, 1.2 makes 1.3's test red, so 1.3 follows it.
       opener. Red: `packages/query/test/driver/conformance.test.ts`, three
       rows added to the envelope input table. Files: that file.
 
+- [x] 4.4 (~5m) Two edges the leading-keyword rule opens, neither of them
+      observed today: that an opener needs **both** its words, and that
+      the scan covers only what precedes the caller's own statement. Both
+      hold in the current code; nothing fails if either stops holding.
+      Red: `packages/query/test/driver/conformance.test.ts`, five rows —
+      a bare `start` ahead of the settings (not an opener, so the envelope
+      has none: violation), `select starting_batch()` in the same position
+      (ordinary: violation), a caller whose own statement is `commit`
+      inside an otherwise correct envelope (conforms — the scan stops at
+      the caller), a record where the caller's own text also appears
+      earlier (the earlier occurrence is taken as the caller: violation),
+      and a caller whose own statement is `begin` (violation). A row that
+      flips to conforming is a hole, not a nicety. Files: that file.
+
 ## 5. Observers the review found missing
 
 - [x] 5.1 (~7m) The checkout scenario's first clause gets an observer: a
