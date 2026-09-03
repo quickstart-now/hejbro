@@ -318,6 +318,103 @@ describe("scalar-returning functions (#424)", () => {
 	});
 });
 
+describe("an argument key whose derived name is not a hejbro SQL name is refused (#679)", () => {
+	const rejectedCases: ReadonlyArray<{
+		readonly label: string;
+		readonly args: Record<string, ColumnBuilder>;
+	}> = [
+		{ label: "a hyphen", args: { "my-arg": uuid() } },
+		{ label: "a leading digit", args: { "2nd": uuid() } },
+		{ label: "an upper-case first letter", args: { Weight: uuid() } },
+		{ label: "a space", args: { "my arg": uuid() } },
+		{ label: "a double quote", args: { 'q"k': uuid() } },
+		{ label: "a non-ASCII letter", args: { café: uuid() } },
+		{
+			label: "__proto__ as a computed own key",
+			args: { ["__proto__"]: uuid() },
+		},
+		{ label: "the empty string", args: { "": uuid() } },
+	];
+
+	it.each(rejectedCases)(
+		"refuses an argument key with $label with invalid-sql-name",
+		({ args }) => {
+			expect(
+				codeOf(() =>
+					defineFunction(
+						app,
+						"echo_arg",
+						{ args, returns: { typeName: "uuid" } },
+						(ctx) => {
+							ctx.return(sql`null`);
+						},
+					),
+				),
+			).toBe("invalid-sql-name");
+		},
+	);
+
+	it("names the function, the declared key and the derived name in the refusal", () => {
+		expect(() =>
+			defineFunction(
+				app,
+				"echo_arg",
+				{ args: { Weight: uuid() }, returns: { typeName: "uuid" } },
+				(ctx) => {
+					ctx.return(sql`null`);
+				},
+			),
+		).toThrowError(
+			/argument "Weight" of function app\.echo_arg name "_weight" is not a valid hejbro SQL identifier.*Next: rename the argument "Weight" of function app\.echo_arg to snake_case\./s,
+		);
+	});
+
+	it("a camelCase key still declares its snake_case argument (control)", () => {
+		const fn = defineFunction(
+			app,
+			"touch_post_delay",
+			{
+				args: { postId: uuid(), delay: bigint({ mode: "number" }) },
+				returns: posts,
+			},
+			(ctx) => {
+				ctx.return(select(posts));
+			},
+		);
+		expect(fn.args).toEqual([
+			{
+				key: "postId",
+				argName: "post_id",
+				typeNode: { typeName: "uuid" },
+				mode: null,
+				notNullElements: false,
+			},
+			{
+				key: "delay",
+				argName: "delay",
+				typeNode: { typeName: "bigint" },
+				mode: "number",
+				notNullElements: false,
+			},
+		]);
+	});
+
+	it("a reserved word keeps its own refusal, not the SQL-name refusal (control)", () => {
+		expect(
+			codeOf(() =>
+				defineFunction(
+					app,
+					"echo_order",
+					{ args: { order: uuid() }, returns: { typeName: "uuid" } },
+					(ctx) => {
+						ctx.return(sql`null`);
+					},
+				),
+			),
+		).toBe("reserved-local-name");
+	});
+});
+
 describe("a returns builder with notNullElements is refused (#433)", () => {
 	it("rejects notNullElements at a returns position", () => {
 		expect(

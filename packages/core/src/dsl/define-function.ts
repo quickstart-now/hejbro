@@ -8,6 +8,7 @@ import type { FunctionBody } from "../plpgsql/body-ast";
 import type { BodyContext } from "../plpgsql/body-context";
 import { recordBodyWithGuard } from "../plpgsql/body-context";
 import { assertValidLocalName } from "../plpgsql/reserved";
+import { assertSqlName } from "../sql/identifier-rules";
 import type {
 	BuilderFamily,
 	ColumnBuilder,
@@ -194,6 +195,11 @@ const resolveArgs = <TArgs extends Record<string, ColumnBuilder>>(
 ): ResolvedArgs<TArgs> => {
 	const resolved = Object.entries(args ?? {}).map(([key, builder]) => {
 		const argName = toSnakeCase(key);
+		assertSqlName(
+			argName,
+			`argument "${key}" of function ${identity}`,
+			declaredAt,
+		);
 		assertValidLocalName(argName, identity, declaredAt);
 		return {
 			key,
