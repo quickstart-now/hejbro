@@ -1176,4 +1176,103 @@ describe("emitDeclarationFiles / D106 R7-N4", () => {
 			),
 		).toHaveLength(3);
 	});
+
+	it("carries the union of two different columns when two keys into the same target reference different columns", () => {
+		const orders: TableSnapshot = {
+			schema: "app",
+			name: "orders",
+			columns: [
+				{
+					name: "id",
+					typeNode: { typeName: "uuid" },
+					notNull: true,
+					primaryKey: true,
+				},
+				{ name: "owner_id", typeNode: { typeName: "uuid" }, notNull: true },
+			],
+			indexes: [],
+			// "ext.users" is not among this snapshot's own tables. `orders`
+			// and `invoices` each reach a *different* one of its columns --
+			// "first key wins" would drop whichever column the other key
+			// alone needs, so this is the case that actually discriminates
+			// a union from a naive single-key dedup.
+			foreignKeys: [
+				{
+					name: "orders_owner_id_fkey",
+					columns: ["owner_id"],
+					referencesTable: "ext.users",
+					referencesColumns: ["id"],
+				},
+			],
+			primaryKeyName: "orders_pkey",
+		};
+		const invoices: TableSnapshot = {
+			schema: "app",
+			name: "invoices",
+			columns: [
+				{
+					name: "id",
+					typeNode: { typeName: "uuid" },
+					notNull: true,
+					primaryKey: true,
+				},
+				{
+					name: "legacy_ref",
+					typeNode: { typeName: "uuid" },
+					notNull: true,
+				},
+			],
+			indexes: [],
+			foreignKeys: [
+				{
+					name: "invoices_legacy_ref_fkey",
+					columns: ["legacy_ref"],
+					referencesTable: "ext.users",
+					referencesColumns: ["code"],
+				},
+			],
+			primaryKeyName: "invoices_pkey",
+		};
+
+		const files = emitDeclarationFiles(resultFor([orders, invoices]));
+		expect(files).toHaveLength(1);
+		const [file] = files;
+		if (file === undefined) {
+			throw new Error("expected exactly one emitted file");
+		}
+
+		const handleMatches = [
+			...file.source.matchAll(
+				/const (\w+) = existingTable\("ext", "users", \{([^}]*)\}\);/g,
+			),
+		];
+		expect(handleMatches).toHaveLength(1);
+		const [firstMatch] = handleMatches;
+		const handleIdentifier = firstMatch?.[1];
+		const columnsObject = firstMatch?.[2];
+		if (handleIdentifier === undefined || columnsObject === undefined) {
+			throw new Error(
+				`expected an existingTable("ext", "users", ...) handle:\n${file.source}`,
+			);
+		}
+
+		// The single handle carries both columns -- the union -- even
+		// though each key on its own only ever named one of them.
+		expect(columnsObject).toContain("code: text()");
+		expect(columnsObject).toContain("id: text()");
+
+		// Each key still references only its own column, not the union.
+		expect(file.source).toContain(
+			`references: { table: ${handleIdentifier}, columns: [${handleIdentifier}.id] }`,
+		);
+		expect(file.source).toContain(
+			`references: { table: ${handleIdentifier}, columns: [${handleIdentifier}.code] }`,
+		);
+		expect(file.source).not.toContain(
+			`columns: [${handleIdentifier}.id, ${handleIdentifier}.code]`,
+		);
+		expect(file.source).not.toContain(
+			`columns: [${handleIdentifier}.code, ${handleIdentifier}.id]`,
+		);
+	});
 });
