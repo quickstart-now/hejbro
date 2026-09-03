@@ -21,7 +21,7 @@ create table "app"."task_schedules" (
 	"due_at" timestamp with time zone,
 	"reminder_at" timestamp with time zone,
 	constraint "task_schedules_pkey" primary key ("task_id"),
-	constraint "task_schedules_reminder_before_due" check ("app"."task_schedules"."reminder_at" < "app"."task_schedules"."due_at")
+	constraint "task_schedules_reminder_before_due" check ("task_schedules"."reminder_at" < "task_schedules"."due_at")
 );
 
 create index "task_schedules_due_at_idx" on "app"."task_schedules" ("due_at" desc);

@@ -25,6 +25,6 @@ alter table "app"."attachment_blobs" enable row level security;
 
 drop policy if exists "attachment_blobs_read_own" on "app"."attachment_blobs";
 
-create policy "attachment_blobs_read_own" on "app"."attachment_blobs" for select to "authenticated" using (exists (select 1 from "app"."attachments" inner join "app"."profiles" on "app"."profiles"."id" = "app"."attachments"."profile_id" where ("app"."attachments"."id" = "app"."attachment_blobs"."attachment_id") and ("app"."profiles"."user_id" = (select auth.uid()))));
+create policy "attachment_blobs_read_own" on "app"."attachment_blobs" for select to "authenticated" using (exists (select 1 from "app"."attachments" inner join "app"."profiles" on "profiles"."id" = "attachments"."profile_id" where ("attachments"."id" = "attachment_blobs"."attachment_id") and ("profiles"."user_id" = (select auth.uid()))));
 
 alter table "app"."attachment_blobs" add constraint "attachment_blobs_attachment_id_fk" foreign key ("attachment_id") references "app"."attachments" ("id") on delete cascade;
