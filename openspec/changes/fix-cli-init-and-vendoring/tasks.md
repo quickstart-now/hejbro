@@ -348,7 +348,7 @@ Groups 1 and 2 are merged, so this group shares a file with neither.
       refuse a correct program.
       Files: `packages/query/src/client/name-keyed-db.ts`, its test.
 
-- [ ] 3.6 (~6m) The skill documents the codes this surface raises and the
+- [x] 3.6 (~6m) The skill documents the codes this surface raises and the
       three column names TypeScript will not let a caller write. No test:
       the observer is the file — `references/query-layer.md`'s Errors
       table carries a row for none of these codes today, and "public API
