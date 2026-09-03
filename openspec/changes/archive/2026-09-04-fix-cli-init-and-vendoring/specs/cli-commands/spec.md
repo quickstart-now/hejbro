@@ -14,7 +14,12 @@ snapshot and the configuration. A path holding the other kind SHALL stop
 the run with a coded failure naming that path and the kind expected
 there, creating nothing — reporting it as present would tell a repair
 run that a broken project is whole, and replacing it would be the
-overwrite this command never does. A path a configuration spells as a
+overwrite this command never does. The same refusal SHALL cover a path
+an artifact would have to be created inside, and a configuration that
+names one path for two artifacts: neither can be satisfied, and one of
+them would otherwise be reported as already present. Every one of these
+checks SHALL be made before anything is created, so a refused run leaves
+the project as it found it. A path a configuration spells as a
 directory SHALL be refused the same way when the artifact is a file:
 the commands that read that file resolve the same spelling and look
 inside a directory that cannot hold it, so creating anything for such a
@@ -80,6 +85,14 @@ from `generate`.
 - **THEN** the run fails naming that path and the kind expected there,
   nothing is created, and the run does not report the artifact as
   already present
+
+#### Scenario: A path that cannot hold the artifact stops the run before anything is created
+- **WHEN** `hejbro init` runs where a regular file sits where a
+  directory holding a configured artifact would have to be, or where
+  the configuration names one path for both the migrations directory
+  and the snapshot
+- **THEN** the run fails naming the path it cannot use, and nothing is
+  created — including the artifacts whose own paths were usable
 
 #### Scenario: A configuration that cannot be read stops the run
 - **WHEN** `hejbro init` runs beside a `hejbro.config.ts` whose import

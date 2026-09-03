@@ -480,3 +480,313 @@ describe("runInit / path-kind conflicts and unconfigured fields (#687)", () => {
 		]);
 	});
 });
+
+// D106 R1 B1: a configured migrations directory spelled with a trailing
+// separator hid the file sitting there from checkPathKind's presence
+// check (existsSync("mig/") on a file at "mig" is false), so the run
+// reached mkdirSync's raw ENOTDIR crash instead of the coded refusal.
+describe("runInit / a trailing separator does not hide the node at a configured path (D106 R1 B1)", () => {
+	it.each(["mig/", "mig//"])(
+		"refuses a configured migrations directory spelled %j when a file sits at mig",
+		async (configuredValue) => {
+			await writeFile(
+				configPath(),
+				`export default { entry: ["src/**/*.schema.ts"], migrationsDir: ${JSON.stringify(configuredValue)} };\n`,
+			);
+			await writeFile(join(cwd, "mig"), "not a directory");
+
+			const result = await runInit(cwd);
+
+			expect(result.exitCode).toBe(1);
+			expect(result.stderr).toBe(
+				'error[init-path-conflict]: mig/\n  "mig/" was expected to be a directory for migrationsDir, but a file is there. Next: move or remove the existing file at "mig", then rerun `hejbro init`.',
+			);
+			expect(existsSync(snapshotPath())).toBe(false);
+		},
+	);
+
+	it("refuses a configured migrations directory spelled with a trailing slash when a file sits at the nested path", async () => {
+		await writeFile(
+			configPath(),
+			'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "db/mig/" };\n',
+		);
+		await mkdir(join(cwd, "db"), { recursive: true });
+		await writeFile(join(cwd, "db", "mig"), "not a directory");
+
+		const result = await runInit(cwd);
+
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toBe(
+			'error[init-path-conflict]: db/mig/\n  "db/mig/" was expected to be a directory for migrationsDir, but a file is there. Next: move or remove the existing file at "db/mig", then rerun `hejbro init`.',
+		);
+		expect(existsSync(snapshotPath())).toBe(false);
+	});
+
+	it("still creates a configured migrations directory spelled with a trailing slash when nothing sits there (control)", async () => {
+		await writeFile(
+			configPath(),
+			'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "mig/" };\n',
+		);
+
+		const result = await runInit(cwd);
+
+		expect(result.exitCode).toBe(0);
+		expect(result.report).toContain("created mig/");
+		expect(statSync(join(cwd, "mig")).isDirectory()).toBe(true);
+	});
+
+	it("still skips a configured migrations directory spelled with a trailing slash that already exists (control)", async () => {
+		await writeFile(
+			configPath(),
+			'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "mig/" };\n',
+		);
+		await mkdir(join(cwd, "mig"), { recursive: true });
+
+		const result = await runInit(cwd);
+
+		expect(result.exitCode).toBe(0);
+		expect(result.report).toContain("skipped mig/ (exists)");
+	});
+
+	it("keeps the plain-spelled refusal message text unchanged (control)", async () => {
+		await writeFile(
+			configPath(),
+			'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "mig" };\n',
+		);
+		await writeFile(join(cwd, "mig"), "not a directory");
+
+		const result = await runInit(cwd);
+
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain(
+			'"mig/" was expected to be a directory for migrationsDir, but a file is there.',
+		);
+	});
+});
+
+// D106 R1 N1: a file sitting in a configured path's ancestor chain (not
+// the leaf itself) let mkdirSync's raw stack through, and in the
+// snapshot-field variant had already created migrations/ before that
+// crash -- the ancestor's own kind is now checked, before anything is
+// created and before the leaf's own kind check (3.1), naming the actual
+// blocking ancestor instead of the leaf.
+describe("runInit / a file in a configured path's ancestor chain stops the run (D106 R1 N1)", () => {
+	it("refuses when the configured snapshot path's own directory is a file", async () => {
+		await writeFile(
+			configPath(),
+			'export default { entry: ["src/**/*.schema.ts"], snapshotPath: "db/snap.json" };\n',
+		);
+		await writeFile(join(cwd, "db"), "not a directory");
+
+		const result = await runInit(cwd);
+
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toBe(
+			'error[init-path-conflict]: db\n  "db" was expected to be a directory to hold snapshotPath, but a file is there. Next: move or remove the existing file at "db", then rerun `hejbro init`.',
+		);
+		expect(existsSync(join(cwd, "migrations"))).toBe(false);
+	});
+
+	it("refuses when the configured migrations directory's own parent is a file", async () => {
+		await writeFile(
+			configPath(),
+			'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "db/mig" };\n',
+		);
+		await writeFile(join(cwd, "db"), "not a directory");
+
+		const result = await runInit(cwd);
+
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toBe(
+			'error[init-path-conflict]: db\n  "db" was expected to be a directory to hold migrationsDir, but a file is there. Next: move or remove the existing file at "db", then rerun `hejbro init`.',
+		);
+		expect(existsSync(snapshotPath())).toBe(false);
+	});
+
+	it("names the first non-directory ancestor on the way, not the leaf, when the file sits further up", async () => {
+		await writeFile(
+			configPath(),
+			'export default { entry: ["src/**/*.schema.ts"], snapshotPath: "a/b/c/snap.json" };\n',
+		);
+		await writeFile(join(cwd, "a"), "not a directory");
+
+		const result = await runInit(cwd);
+
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toBe(
+			'error[init-path-conflict]: a\n  "a" was expected to be a directory to hold snapshotPath, but a file is there. Next: move or remove the existing file at "a", then rerun `hejbro init`.',
+		);
+	});
+
+	it("creates nothing at all when one field's ancestor is a file, even though the other field's own path is fine", async () => {
+		await writeFile(
+			configPath(),
+			'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "migrations", snapshotPath: "db/snap.json" };\n',
+		);
+		await writeFile(join(cwd, "db"), "not a directory");
+
+		const result = await runInit(cwd);
+
+		expect(result.exitCode).toBe(1);
+		expect(existsSync(join(cwd, "migrations"))).toBe(false);
+		expect(existsSync(join(cwd, "db", "snap.json"))).toBe(false);
+	});
+
+	it("a directory sitting at the configured snapshot path's own parent is unaffected (control)", async () => {
+		await writeFile(
+			configPath(),
+			'export default { entry: ["src/**/*.schema.ts"], snapshotPath: "db/snap.json" };\n',
+		);
+		await mkdir(join(cwd, "db"), { recursive: true });
+
+		const result = await runInit(cwd);
+
+		expect(result.exitCode).toBe(0);
+		expect(result.report).toContain("created db/snap.json");
+	});
+
+	it("an escaping path whose own ancestor is real and outside the project is unaffected (control)", async () => {
+		await writeFile(
+			configPath(),
+			'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "../out/mig" };\n',
+		);
+
+		try {
+			const result = await runInit(cwd);
+
+			expect(result.exitCode).toBe(0);
+			expect(result.report).toContain("created ../out/mig/");
+		} finally {
+			await rm(join(cwd, "..", "out"), { recursive: true, force: true });
+		}
+	});
+});
+
+// D106 R1 N2: two configured fields resolving to the same path let the
+// run create one artifact and then report the other as already present
+// -- a repair run reading a broken project as whole. Resolved paths are
+// compared before anything is created, not the raw spellings.
+describe("runInit / a configuration whose fields resolve to the same path (D106 R1 N2)", () => {
+	it("refuses a configuration whose fields resolve to the same path", async () => {
+		await writeFile(
+			configPath(),
+			'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "migrations", snapshotPath: "migrations" };\n',
+		);
+
+		const result = await runInit(cwd);
+
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toBe(
+			'error[init-path-conflict]: migrations\n  "migrations" is named by both migrationsDir and snapshotPath. Next: point them at two different paths, then rerun `hejbro init`.',
+		);
+		expect(existsSync(join(cwd, "migrations"))).toBe(false);
+	});
+
+	it("refuses the same shared path even when one field's spelling carries a trailing slash", async () => {
+		await writeFile(
+			configPath(),
+			'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "mig/", snapshotPath: "mig" };\n',
+		);
+
+		const result = await runInit(cwd);
+
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toBe(
+			'error[init-path-conflict]: mig\n  "mig" is named by both migrationsDir and snapshotPath. Next: point them at two different paths, then rerun `hejbro init`.',
+		);
+	});
+
+	it("refuses a snapshotPath that resolves to the configuration file itself", async () => {
+		await writeFile(
+			configPath(),
+			'export default { entry: ["src/**/*.schema.ts"], snapshotPath: "hejbro.config.ts" };\n',
+		);
+
+		const result = await runInit(cwd);
+
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toBe(
+			'error[init-path-conflict]: hejbro.config.ts\n  "hejbro.config.ts" is named by both hejbro.config.ts and snapshotPath. Next: point them at two different paths, then rerun `hejbro init`.',
+		);
+		expect(existsSync(join(cwd, "migrations"))).toBe(false);
+	});
+
+	it("creates both artifacts when their configured paths differ (control)", async () => {
+		await writeFile(
+			configPath(),
+			'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "migrations", snapshotPath: "hejbro.snapshot.json" };\n',
+		);
+
+		const result = await runInit(cwd);
+
+		expect(result.exitCode).toBe(0);
+		expect(result.report).toContain("created migrations/");
+		expect(result.report).toContain("created hejbro.snapshot.json");
+	});
+
+	it("reports both fields not configured when neither is set (control)", async () => {
+		await writeFile(
+			configPath(),
+			'export default { entry: ["src/**/*.schema.ts"] };\n',
+		);
+
+		const result = await runInit(cwd);
+
+		expect(result.exitCode).toBe(0);
+		expect(result.report).toEqual([
+			"skipped hejbro.config.ts (exists)",
+			"migrationsDir not configured",
+			"snapshotPath not configured",
+		]);
+	});
+});
+
+// D106 R1 N3: a directory sitting where hejbro.config.ts belongs reached
+// the loader before its own kind was checked, so it failed as
+// config-load-failed (an import-resolution diagnostic) instead of this
+// command's own init-path-conflict.
+describe("runInit / a directory sitting where the configuration file belongs (D106 R1 N3)", () => {
+	it("refuses a directory sitting where the configuration file belongs", async () => {
+		await mkdir(configPath(), { recursive: true });
+
+		const result = await runInit(cwd);
+
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toBe(
+			'error[init-path-conflict]: hejbro.config.ts\n  "hejbro.config.ts" was expected to be a file for hejbro.config.ts, but a directory is there. Next: move or remove the existing directory at "hejbro.config.ts", then rerun `hejbro init`.',
+		);
+		expect(existsSync(join(cwd, "migrations"))).toBe(false);
+		expect(existsSync(snapshotPath())).toBe(false);
+	});
+
+	it("loads a readable configuration as today (control)", async () => {
+		await writeFile(
+			configPath(),
+			'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "db/migrations" };\n',
+		);
+
+		const result = await runInit(cwd);
+
+		expect(result.exitCode).toBe(0);
+		expect(result.report).toContain("created db/migrations/");
+	});
+
+	it("keeps config-load-failed unchanged for an unresolvable import (control)", async () => {
+		await writeFile(
+			configPath(),
+			'import "nope-pkg-xyz";\nexport default { entry: ["src/**/*.schema.ts"] };\n',
+		);
+
+		const result = await runInit(cwd);
+
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain("error[config-load-failed]");
+	});
+
+	it("scaffolds as today when nothing sits at the configuration path (control)", async () => {
+		const result = await runInit(cwd);
+
+		expect(result.exitCode).toBe(0);
+		expect(result.report).toContain("created hejbro.config.ts");
+	});
+});
