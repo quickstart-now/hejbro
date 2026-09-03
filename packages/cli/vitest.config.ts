@@ -20,6 +20,9 @@ export default defineConfig({
 			...configDefaults.exclude,
 			"test/**/*integration.test.ts",
 			"test/integration/**",
+			// #673 candidate `c`: moved to vitest.types.config.ts's own
+			// `test:types` turbo task, run after this one.
+			"test/**/*.types.test.ts",
 		],
 		// Informational only -- #154 scopes the CRAP gate to @hejbro/core and
 		// @hejbro/supabase, not this package. This in-process number
