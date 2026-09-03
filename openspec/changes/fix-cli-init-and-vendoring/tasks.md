@@ -252,7 +252,7 @@ Groups 1 and 2 are merged, so this group shares a file with neither.
       diagnostics print no absolute path (D57).
       Files: `packages/cli/src/commands/init.ts`, its test.
 
-- [ ] 3.2 (~9m) `[design]` A path an artifact must be created inside
+- [x] 3.2 (~9m) `[design]` A path an artifact must be created inside
       stops the run before anything is created. Red:
       `packages/cli/test/init.test.ts` — "refuses when a directory an
       artifact needs is a file, and creates nothing". Input table:

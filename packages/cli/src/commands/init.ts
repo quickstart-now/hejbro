@@ -114,6 +114,23 @@ function throwSpelledAsDirectory(label: string, fieldName: string): never {
 }
 
 /** Builds and throws the `init-path-conflict`-coded, enriched plain
+ * `HejbroError` for a file sitting in a planned artifact's own ancestor
+ * chain (D106 R1 N1) -- distinct wording from {@link throwPathConflict}
+ * (`to hold ${fieldName}` rather than `for ${fieldName}`) because
+ * `label` here is an ancestor of the field's own configured path, not
+ * that path itself. */
+function throwAncestorConflict(
+	label: string,
+	fieldName: string,
+	actualKind: NodeKind,
+): never {
+	return throwHejbroError(
+		"init-path-conflict",
+		`"${label}" was expected to be a directory to hold ${fieldName}, but a ${actualKind} is there. Next: move or remove the existing ${actualKind} at "${label}", then rerun \`hejbro init\`.`,
+	);
+}
+
+/** Builds and throws the `init-path-conflict`-coded, enriched plain
  * `HejbroError` for a `stat` failure other than "nothing is there"
  * (D106 R1 B1) -- an `EACCES`/`ELOOP`/etc, named by the operating
  * system's own code instead of the raw Node stack this CLI's
@@ -159,6 +176,66 @@ const statOutcomeAt = (path: string): StatOutcome => {
 		}
 		return { kind: "stat-failed", code };
 	}
+};
+
+type AncestorOutcome =
+	| { readonly kind: "ok" }
+	| {
+			readonly kind: "conflict";
+			readonly path: string;
+			readonly actualKind: NodeKind;
+	  }
+	| {
+			readonly kind: "stat-failed";
+			readonly path: string;
+			readonly code: string;
+	  };
+
+/** Walks `path`'s own chain of parents upward (never `path` itself --
+ * callers pass an artifact's `dirname`), continuing past both `ENOENT`
+ * ("nothing there yet") and `ENOTDIR` (a `stat` below a file ancestor
+ * fails this way too, D106 R1 N1 -- stopping there instead of
+ * continuing up would name the deepest segment tried, not the file
+ * actually blocking the chain) until a `stat` succeeds. Recursive,
+ * never a loop (`check:bans`); `dirname` of the filesystem root is
+ * itself, which ends the recursion even in the case nothing on the way
+ * up ever exists. */
+const walkAncestors = (path: string): AncestorOutcome => {
+	try {
+		const stat = statSync(path);
+		if (stat.isDirectory()) {
+			return { kind: "ok" };
+		}
+		return { kind: "conflict", path, actualKind: "file" };
+	} catch (error) {
+		const code = errorCode(error);
+		if (code === "ENOENT" || code === "ENOTDIR") {
+			const parent = dirname(path);
+			if (parent === path) {
+				return { kind: "ok" };
+			}
+			return walkAncestors(parent);
+		}
+		return { kind: "stat-failed", path, code };
+	}
+};
+
+/** Refuses before creating anything: a file sitting somewhere in a
+ * planned artifact's own directory chain, not just at its leaf
+ * (D106 R1 N1). Runs before {@link checkPathKind}: a leaf whose own
+ * `stat` also fails with `ENOTDIR` (because an ancestor, not the leaf,
+ * is the file) is named here by the ancestor that actually blocks it,
+ * instead of by the leaf with a bare OS code. */
+const checkAncestors = (cwd: string, artifact: Artifact): void => {
+	const outcome = walkAncestors(dirname(artifact.path));
+	if (outcome.kind === "ok") {
+		return;
+	}
+	const label = dirLabel(cwd, outcome.path);
+	if (outcome.kind === "conflict") {
+		throwAncestorConflict(label, artifact.fieldName, outcome.actualKind);
+	}
+	throwStatFailed(label, artifact.fieldName, outcome.code);
 };
 
 /** Refuses before creating anything (checked for every planned artifact
@@ -371,13 +448,18 @@ export const runInit = async (cwd: string): Promise<InitResult> => {
 		// Every planned artifact's path kind is checked before any of
 		// them is created -- a conflict discovered on the snapshot must
 		// not leave a just-created config file or migrations directory
-		// behind it.
+		// behind it. The ancestor chain (D106 R1 N1) is checked before
+		// the leaf's own kind (3.1/checkPathKind): a leaf blocked by a
+		// file ancestor is named by that ancestor, not by the leaf.
 		const plannedArtifacts: ReadonlyArray<Artifact> = [
 			configArtifact,
 			migrationsArtifact,
 			snapshotArtifact,
 		].filter((artifact): artifact is Artifact => artifact !== null);
-		plannedArtifacts.map((artifact) => checkPathKind(cwd, artifact));
+		plannedArtifacts.forEach((artifact) => {
+			checkAncestors(cwd, artifact);
+			checkPathKind(cwd, artifact);
+		});
 
 		const report = [
 			applyArtifact(configArtifact),

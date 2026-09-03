@@ -565,3 +565,102 @@ describe("runInit / a trailing separator does not hide the node at a configured 
 		);
 	});
 });
+
+// D106 R1 N1: a file sitting in a configured path's ancestor chain (not
+// the leaf itself) let mkdirSync's raw stack through, and in the
+// snapshot-field variant had already created migrations/ before that
+// crash -- the ancestor's own kind is now checked, before anything is
+// created and before the leaf's own kind check (3.1), naming the actual
+// blocking ancestor instead of the leaf.
+describe("runInit / a file in a configured path's ancestor chain stops the run (D106 R1 N1)", () => {
+	it("refuses when the configured snapshot path's own directory is a file", async () => {
+		await writeFile(
+			configPath(),
+			'export default { entry: ["src/**/*.schema.ts"], snapshotPath: "db/snap.json" };\n',
+		);
+		await writeFile(join(cwd, "db"), "not a directory");
+
+		const result = await runInit(cwd);
+
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain(
+			'"db/" was expected to be a directory to hold snapshotPath, but a file is there. Next: move or remove the existing file at "db/", then rerun `hejbro init`.',
+		);
+		expect(existsSync(join(cwd, "migrations"))).toBe(false);
+	});
+
+	it("refuses when the configured migrations directory's own parent is a file", async () => {
+		await writeFile(
+			configPath(),
+			'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "db/mig" };\n',
+		);
+		await writeFile(join(cwd, "db"), "not a directory");
+
+		const result = await runInit(cwd);
+
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain(
+			'"db/" was expected to be a directory to hold migrationsDir, but a file is there. Next: move or remove the existing file at "db/", then rerun `hejbro init`.',
+		);
+		expect(existsSync(snapshotPath())).toBe(false);
+	});
+
+	it("names the first non-directory ancestor on the way, not the leaf, when the file sits further up", async () => {
+		await writeFile(
+			configPath(),
+			'export default { entry: ["src/**/*.schema.ts"], snapshotPath: "a/b/c/snap.json" };\n',
+		);
+		await writeFile(join(cwd, "a"), "not a directory");
+
+		const result = await runInit(cwd);
+
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain(
+			'"a/" was expected to be a directory to hold snapshotPath, but a file is there. Next: move or remove the existing file at "a/", then rerun `hejbro init`.',
+		);
+		expect(result.stderr).not.toContain("a/b/c/snap.json");
+	});
+
+	it("creates nothing at all when one field's ancestor is a file, even though the other field's own path is fine", async () => {
+		await writeFile(
+			configPath(),
+			'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "migrations", snapshotPath: "db/snap.json" };\n',
+		);
+		await writeFile(join(cwd, "db"), "not a directory");
+
+		const result = await runInit(cwd);
+
+		expect(result.exitCode).toBe(1);
+		expect(existsSync(join(cwd, "migrations"))).toBe(false);
+		expect(existsSync(join(cwd, "db", "snap.json"))).toBe(false);
+	});
+
+	it("a directory sitting at the configured snapshot path's own parent is unaffected (control)", async () => {
+		await writeFile(
+			configPath(),
+			'export default { entry: ["src/**/*.schema.ts"], snapshotPath: "db/snap.json" };\n',
+		);
+		await mkdir(join(cwd, "db"), { recursive: true });
+
+		const result = await runInit(cwd);
+
+		expect(result.exitCode).toBe(0);
+		expect(result.report).toContain("created db/snap.json");
+	});
+
+	it("an escaping path whose own ancestor is real and outside the project is unaffected (control)", async () => {
+		await writeFile(
+			configPath(),
+			'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "../out/mig" };\n',
+		);
+
+		try {
+			const result = await runInit(cwd);
+
+			expect(result.exitCode).toBe(0);
+			expect(result.report).toContain("created ../out/mig/");
+		} finally {
+			await rm(join(cwd, "..", "out"), { recursive: true, force: true });
+		}
+	});
+});
