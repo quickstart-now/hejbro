@@ -1,7 +1,21 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import {
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import {
+	listTsFilesRecursively,
+	parseGapsIn,
+	type ReadFile,
+	testDirsUnder,
+	violationsIn,
+} from "./support/repo-test-file-scan";
 
 /**
  * #709: `docker rm -f <container>` (no `-v`) removes the container but
@@ -36,110 +50,31 @@ const findRepoRoot = (dir: string): string => {
 
 const REPO_ROOT = findRepoRoot(dirname(THIS_FILE));
 
-/** Every `.ts` file under `dir`, recursively -- `packages/nile/test/integration/…` is two levels deep, so a single-level `readdir` would miss it. */
-const listTsFilesRecursively = (dir: string): ReadonlyArray<string> => {
-	if (!existsSync(dir)) {
-		return [];
-	}
-	return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-		const full = join(dir, entry.name);
-		if (entry.isDirectory()) {
-			return listTsFilesRecursively(full);
-		}
-		if (entry.name.endsWith(".ts")) {
-			return [full];
-		}
-		return [];
-	});
-};
+/** The extracted scan module's own path -- excluded by identity for the same reason as `THIS_FILE`: it must stay free to document the pattern without a future one-line example turning it into a self-reported violation. */
+const SCAN_MODULE_FILE = join(
+	dirname(THIS_FILE),
+	"support",
+	"repo-test-file-scan.ts",
+);
 
-/** Every package/example's own `test` directory -- `pnpm-workspace.yaml`'s own two globs (`packages/*`, `examples/*`), scoped to the `test` subdirectory each may or may not have. */
-const testDirsUnder = (groupDir: string): ReadonlyArray<string> =>
-	readdirSync(join(REPO_ROOT, groupDir), { withFileTypes: true })
-		.filter((entry) => entry.isDirectory())
-		.map((entry) => join(REPO_ROOT, groupDir, entry.name, "test"));
-
+/** `pnpm-workspace.yaml`'s own two globs (`packages/*`, `examples/*`), scoped to the `test` subdirectory each may or may not have. */
 const candidateFiles: ReadonlyArray<string> = [
-	...testDirsUnder("packages"),
-	...testDirsUnder("examples"),
+	...testDirsUnder(REPO_ROOT, "packages"),
+	...testDirsUnder(REPO_ROOT, "examples"),
 ].flatMap(listTsFilesRecursively);
 
-/**
- * An argument-array literal whose *first* element is `"rm"` (or
- * `'rm'`/`` `rm` ``) -- anchored to right after `[` (only whitespace
- * between), not merely "contains `rm` somewhere before the next `]`":
- * a bare `[` earlier in a file (inside an unrelated string like
- * `"error["`, or a doc comment's own `[<code>]`) is not an array
- * literal at all, and an unanchored scan matched forward past it to
- * whatever `]` came next -- confirmed as a false positive against
- * `support/cli-runner.ts`'s own `startsWith("error[")` while writing
- * this test. `[^\]]` already excludes `]` but not newlines, so a
- * literal spanning several lines (`["rm",\n\t"-f",\n\tCONTAINER]`) is
- * still captured without needing the `s` flag; none of the 17 real
- * instances nest a `[` inside (plain strings and identifiers only).
- */
-const RM_ARRAY = /\[\s*["'`]rm["'`][^\]]*\]/g;
-const HAS_V_FLAG = /["'`]-v["'`]/;
-
-type Violation = {
-	readonly file: string;
-	readonly line: number;
-};
-
-const lineOf = (content: string, index: number): number =>
-	content.slice(0, index).split("\n").length;
-
-const violationsIn = (filePath: string): ReadonlyArray<Violation> => {
-	const content = readFileSync(filePath, "utf8");
-	return [...content.matchAll(RM_ARRAY)]
-		.filter((match) => !HAS_V_FLAG.test(match[0]))
-		.map((match) => ({
-			file: filePath,
-			line: lineOf(content, match.index ?? 0),
-		}));
-};
-
-/**
- * `RM_ARRAY`'s own `[^\]]*` excludes `]` but not `[`, so a *nested*
- * `]` (a call like `["rm", "-f", names[0]]`) ends the match early --
- * right at `names[0]`'s own closing bracket, never the array's real
- * one. That truncated match still contains the `"rm"` literal (so it
- * is never simply *missing*), but whatever comes after the nested `]`
- * -- including a `"-v"` placed there -- falls outside it, and
- * `violationsIn`'s own `HAS_V_FLAG` check reads only the truncated
- * text: a compliant call can be flagged as a violation, or one that
- * truncates before its `"rm"` origin is even reachable could pass
- * unread, depending on where the nested bracket falls. Either way the
- * verdict stops being about the real array. A truncated match is
- * detectable on its own terms, without re-deriving the true array:
- * its own bracket count is unbalanced (an extra `[` from the nested
- * reference with no `]` inside the match to close it, since the one
- * `]` present closed that reference, not the array) -- a genuine,
- * un-nested call always matches exactly one `[` and one `]`.
- */
-const isBalanced = (text: string): boolean =>
-	(text.match(/\[/g) ?? []).length === (text.match(/\]/g) ?? []).length;
-
-const parseGapsIn = (filePath: string): ReadonlyArray<Violation> => {
-	const content = readFileSync(filePath, "utf8");
-	return [...content.matchAll(RM_ARRAY)]
-		.filter((match) => !isBalanced(match[0]))
-		.map((match) => ({
-			file: filePath,
-			line: lineOf(content, match.index ?? 0),
-		}));
-};
-
 describe("docker rm hygiene / #709", () => {
-	// This file's own rule-description prose above contains the literal
-	// "rm" in quotes several times -- excluded by identity, not by a
-	// narrower regex, since the rule itself must stay simple.
-	const scanned = candidateFiles.filter((file) => file !== THIS_FILE);
+	// Excluded by identity so this file and the scan module it drives
+	// stay free to describe the rule in prose without every future edit
+	// having to keep re-checking themselves against their own pattern.
+	const scanned = candidateFiles.filter(
+		(file) => file !== THIS_FILE && file !== SCAN_MODULE_FILE,
+	);
 
 	it("every docker rm array literal in packages/*/test and examples/*/test carries -v", () => {
 		expect(scanned.length).toBeGreaterThan(0);
 
-		const violations = scanned.flatMap(violationsIn);
+		const violations = scanned.flatMap((file) => violationsIn(file));
 		const report = violations
 			.map((v) => `${v.file}:${v.line}`)
 			.sort()
@@ -149,7 +84,7 @@ describe("docker rm hygiene / #709", () => {
 	});
 
 	it("the -v rule parses every docker rm call it can see -- no nested-] blind spot", () => {
-		const gaps = scanned.flatMap(parseGapsIn);
+		const gaps = scanned.flatMap((file) => parseGapsIn(file));
 		const report = gaps
 			.map((g) => `${g.file}:${g.line}`)
 			.sort()
@@ -159,5 +94,104 @@ describe("docker rm hygiene / #709", () => {
 			gaps,
 			`the -v rule could not parse this docker rm call -- simplify the array literal or extend the rule:\n${report}`,
 		).toEqual([]);
+	});
+});
+
+/**
+ * #744: `declare-emit-callback-shadow.test.ts` builds its own fixture
+ * inside `packages/cli/test/_tmp-callback-shadow-*` and tears it down at
+ * the end of its run; under parallel vitest workers, the describe above
+ * can list one of those files and then find it gone by the time it
+ * reads it. These cases drive the extracted scan functions directly,
+ * against a disposable root outside the scanned tree, so the race never
+ * has to actually happen to prove the fix.
+ */
+describe("repo-test-file-scan skip & ENOENT tolerance / #744", () => {
+	let scratchRoot: string;
+
+	beforeEach(() => {
+		scratchRoot = mkdtempSync(join(tmpdir(), "repo-test-file-scan-"));
+	});
+
+	afterEach(() => {
+		rmSync(scratchRoot, { recursive: true, force: true });
+	});
+
+	const writeFixture = (relativePath: string, content: string): string => {
+		const full = join(scratchRoot, relativePath);
+		mkdirSync(dirname(full), { recursive: true });
+		writeFileSync(full, content, "utf8");
+		return full;
+	};
+
+	// Built at runtime, never as a literal array in this file's own
+	// source: this file lives inside the tree the describe above scans,
+	// so a non-compliant array written directly here would flag itself.
+	const rmCallText = (rest: ReadonlyArray<string>): string =>
+		`${"["}${JSON.stringify("rm")}, ${rest
+			.map((entry) => JSON.stringify(entry))
+			.join(", ")}${"]"}`;
+
+	const withoutVFlag = rmCallText(["-f", "container"]);
+	const withVFlag = rmCallText(["-f", "-v", "container"]);
+
+	const enoentRead: ReadFile = () => {
+		throw Object.assign(new Error("ENOENT: no such file or directory"), {
+			code: "ENOENT",
+		});
+	};
+
+	it.each([
+		{
+			name: "(i) a plain compliant call reports no violation",
+			content: withVFlag,
+			readFile: undefined,
+			expectedCount: 0,
+		},
+		{
+			name: "(v) a plain non-compliant call reports exactly one violation -- the skip does not over-eat",
+			content: withoutVFlag,
+			readFile: undefined,
+			expectedCount: 1,
+		},
+		{
+			name: "(iv) a listed file gone by read time is treated as absent, not a violation",
+			content: withoutVFlag,
+			readFile: enoentRead,
+			expectedCount: 0,
+		},
+	])("$name", ({ content, readFile, expectedCount }) => {
+		const file = writeFixture("test/case.ts", content);
+		expect(violationsIn(file, readFile)).toHaveLength(expectedCount);
+		expect(parseGapsIn(file, readFile)).toHaveLength(0);
+	});
+
+	it("a non-ENOENT read error still propagates -- the tolerance is narrow, not a catch-all", () => {
+		const file = writeFixture("test/other-error.ts", withoutVFlag);
+		const throwingRead: ReadFile = () => {
+			throw new Error("EACCES: permission denied");
+		};
+		expect(() => violationsIn(file, throwingRead)).toThrow(/permission denied/);
+	});
+
+	it("(ii)/(iii) a file under _tmp-* or .uo-contract is never listed, so it is never opened", () => {
+		writeFixture("test/_tmp-shadow-abc/fixture.ts", withoutVFlag);
+		writeFixture("test/.uo-contract/cache.ts", withoutVFlag);
+		writeFixture("test/plain.ts", withVFlag);
+
+		const opened: string[] = [];
+		const recordingRead: ReadFile = (filePath) => {
+			opened.push(filePath);
+			return withVFlag;
+		};
+
+		const files = listTsFilesRecursively(join(scratchRoot, "test"));
+		files.flatMap((file) => violationsIn(file, recordingRead));
+
+		expect(files.some((file) => file.includes("_tmp-shadow-abc"))).toBe(false);
+		expect(files.some((file) => file.includes(".uo-contract"))).toBe(false);
+		expect(opened.some((file) => file.includes("_tmp-shadow-abc"))).toBe(false);
+		expect(opened.some((file) => file.includes(".uo-contract"))).toBe(false);
+		expect(opened).toContain(join(scratchRoot, "test", "plain.ts"));
 	});
 });

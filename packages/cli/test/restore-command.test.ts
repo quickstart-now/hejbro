@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 import { sha256Hex } from "../src/hash";
 import { CLI_VERSION } from "../src/version";
+import { transcript } from "./support/call-transcript";
 import {
 	assertBuiltCli,
 	createCliFixtureDir,
@@ -13,6 +14,14 @@ import {
 	writeFixtureFile,
 } from "./support/cli-runner";
 import { GIT_TEST_ENV } from "./support/git-fixture";
+
+/** A spawn failure without a numeric `status` (signal kill, ENOENT) is recorded as exit code 1. */
+const exitCodeOf = (status: number | undefined): number => {
+	if (typeof status === "number") {
+		return status;
+	}
+	return 1;
+};
 
 beforeAll(assertBuiltCli);
 
@@ -59,12 +68,47 @@ const FIXED_COMMIT_DATE_ENV = {
 	GIT_COMMITTER_DATE: "2026-01-01T10:00:00Z",
 };
 
-const git = (cwd: string, args: ReadonlyArray<string>): string =>
-	execFileSync("git", args, {
-		cwd,
-		encoding: "utf8",
-		env: FIXED_COMMIT_DATE_ENV,
-	});
+/**
+ * #533 G2.5/G2.3b: unlike `git-fixture.ts`'s own `runGit`, this call was
+ * never caught -- a `cwd` not yet (or no longer) a real git repository
+ * under parallel workers propagates git's raw stderr as an uncaught
+ * `execFileSync` error. Behavior is unchanged (still throws, so no
+ * existing assertion here can start passing/failing differently); the
+ * call is now recorded into the transcript either way, so a failure this
+ * causes carries its own argv/cwd/exit code/stderr in the dump instead
+ * of only vitest's own "Error: Command failed" line.
+ */
+const git = (cwd: string, args: ReadonlyArray<string>): string => {
+	try {
+		const stdout = execFileSync("git", args, {
+			cwd,
+			encoding: "utf8",
+			env: FIXED_COMMIT_DATE_ENV,
+		});
+		transcript.record({
+			argv: ["git", ...args],
+			cwd,
+			exitCode: 0,
+			stdout,
+			stderr: "",
+		});
+		return stdout;
+	} catch (error) {
+		const execError = error as {
+			readonly stdout?: string;
+			readonly stderr?: string;
+			readonly status?: number;
+		};
+		transcript.record({
+			argv: ["git", ...args],
+			cwd,
+			exitCode: exitCodeOf(execError.status),
+			stdout: execError.stdout ?? "",
+			stderr: execError.stderr ?? String(error),
+		});
+		throw error;
+	}
+};
 
 /** The sole `.sql` file under `cwd/migrations` — every fixture below generates exactly one migration before tampering with it. */
 const soleMigrationFileName = async (cwd: string): Promise<string> => {

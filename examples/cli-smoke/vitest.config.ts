@@ -13,15 +13,24 @@ export default defineConfig({
 			...configDefaults.exclude,
 			"test/**/*integration.test.ts",
 			"test/integration/**",
+			// #673 candidate `c`: moved to vitest.types.config.ts's own
+			// `test:types` turbo task, run after this one.
+			"test/**/*.types.test.ts",
 		],
-		// The e2e test drives the built CLI via child_process (not
-		// in-process), so no dedupe trick is needed here — see
+		// Every case here drives the built CLI via child_process (not
+		// in-process), so no dedupe trick is needed — see
 		// packages/cli/test/support/cli-runner.ts for the fuller
-		// rationale this fixture's own runner mirrors. Every case here
-		// spawns the built CLI several times and a real `tsc`; under a
-		// full parallel `pnpm test` on a shared runner one case measured
-		// 30.09s against the old 30s ceiling (#673) — the ceiling is for
-		// a hang, not for a slow but healthy run.
+		// rationale this fixture's own runner mirrors.
+		//
+		// G3.2 (2026-09-04): kept at 120_000, half of #730's raise --
+		// `e2e.types.test.ts` (the other tsc-spawning file) moved to
+		// vitest.types.config.ts's own 30s, but this file's own suite is
+		// now just `vendored-contract.test.ts` (§2's 2026-09-04
+		// correction: it spawns a real `tsc` too, `TSC_PATH`/`execFile`),
+		// which stays in the contended `test` phase and measured
+		// 24 168ms at 32 burners here (c32-L1.log) -- only 1.24x headroom
+		// under a 30s ceiling, and the same suite that measured 30.09s on
+		// GitHub's own runner (#673, PR #289 run 33720669210).
 		testTimeout: 120_000,
 	},
 });

@@ -215,5 +215,14 @@ lands its entry in the same commit or PR as the change.
       refreshed too (`pnpm check:tasktime`). CI enforces this on one
       matrix leg only, so it surfaces as a single-leg failure long
       after the change looks green locally
+- [ ] A subprocess-spawning suite timed out under `pnpm test` → a timeout
+      is the last thing to raise; measure the load first (#673). Three
+      files spawn `tsc`: `packages/cli/test/declare-emit-callback-shadow.types.test.ts`
+      and `examples/cli-smoke/test/e2e.types.test.ts` run in the
+      `test:types` phase after `turbo run test` (isolated, 30s ceiling);
+      `examples/cli-smoke/test/vendored-contract.test.ts` stays in the
+      contended phase under its 120s ceiling (24s at 32 burners, 30s on
+      GitHub's runner). Counting two instead of three is the mistake the
+      measurement itself made once
 - [ ] Owner-driven change carries its `blackbox/` entry in the same PR
 - [ ] PR body lists the commits to be squashed

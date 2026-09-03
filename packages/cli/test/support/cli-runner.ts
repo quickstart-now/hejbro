@@ -4,6 +4,7 @@ import { existsSync, readdirSync, statSync } from "node:fs";
 import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { transcript } from "./call-transcript";
 
 // Shared tmp-dir + built-CLI runner for generate-command.test.ts and
 // golden.test.ts. Drives `dist/cli.js` via child_process rather than
@@ -159,15 +160,35 @@ export const runCli = async (
 			{ cwd, env: options?.env ?? process.env },
 			(error, stdout, stderr) => {
 				if (error === null) {
+					// #533 G2.3b: recorded unconditionally, unlike the
+					// console.error below -- a call that succeeds still
+					// belongs in the transcript, since the test that made
+					// it can fail on its own assertions about this stdout.
+					transcript.record({
+						argv: [CLI_PATH, ...args],
+						cwd,
+						exitCode: 0,
+						stdout,
+						stderr,
+					});
 					resolve({ exitCode: 0, stdout, stderr });
 					return;
 				}
 				const exitCode = exitCodeFrom(error);
+				transcript.record({
+					argv: [CLI_PATH, ...args],
+					cwd,
+					exitCode,
+					stdout,
+					stderr,
+				});
 				// Keep the full child stderr in the report even when the test's
 				// own assertions don't inspect it — a flaky failure otherwise
 				// leaves no trace of what the spawned CLI actually printed (#102).
 				// Skip the log for hejbro's own diagnostics: those are expected
-				// non-zero exits a negative-path test asserted on.
+				// non-zero exits a negative-path test asserted on. This is a
+				// narrower, separate decision from the transcript's own
+				// recording above (never filtered) -- see call-transcript.ts.
 				if (!isHejbroDiagnostic(stderr)) {
 					console.error(`[cli-runner] exit ${exitCode}\n${stderr}`);
 				}

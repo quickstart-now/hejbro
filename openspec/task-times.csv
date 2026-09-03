@@ -769,3 +769,14 @@ date,change-id,task-id,group,est_min,actual_min,waited_user_min,notes
 2026-09-04,harden-reset-and-verify,3.7-fix,3,,6,0,one-word doc correction from the review's last round; actual = commit span be6836bc..d6840ebe, no stopwatch
 2026-09-04,harden-reset-and-verify,close-out,-,,4,0,merge-in + install/build + changeset commit; tool-log estimate, deliberately not the d6840ebe..e6e97c58 commit span, which holds a session handover
 2026-09-04,harden-reset-and-verify,close-out-docs,-,,2,0,extension-interface reference + SKILL.md link; measured from date -u stamps 17:25:27..17:26:45
+2026-09-03,fix-test-infra-contention,G0.1,0,10,12,0,"ti team: measurement baseline (docker system df, versions) before run 1 — plain cycle, no OpenSpec change"
+2026-09-03,fix-test-infra-contention,G0.2,0,5,35,0,"ti team: candidate matrix a/b/c prepared; overage = the c respin"
+2026-09-03,fix-test-infra-contention,G1.1,1,5,0,0,"ti team: [design] direction and pin form ruled by the lead before the task opened"
+2026-09-03,fix-test-infra-contention,G1.2-1.5,1,10,14,0,"ti team (#744): scan extracted + _tmp-*/.uo-contract skip + never-opened pin; red shown by hand-applied mutants (G1.4), not a separate failing commit — do not read as a TDD-ordered series; actual = commit span ffcb6674..459ab769 plus the mutant round"
+2026-09-03,fix-test-infra-contention,G2.1,2,5,8,0,"ti team (#533): [design] settled by the planner from the source (cli-runner logged only non-zero exits; isHejbroDiagnostic suppressed error stderr)"
+2026-09-03,fix-test-infra-contention,G2.2-2.3c,2,10,22,0,"ti team (#533): failure-capture harness + call transcript + permanent setupFiles wiring (R58-2/3); actual = commit span 94cfec16..568a8922"
+2026-09-03,fix-test-infra-contention,G2.4,2,10,45,0,"ti team (#533): reproduction attempts, 10 at 16 burners + 3 full runs at 32 — not reproduced; issue stays open (R58 session-end a)"
+2026-09-03,fix-test-infra-contention,G3.1-3.2,3,10,6,0,"ti team (#673): winner c (test:types phase after turbo run test) + half ceiling revert (R59) as one commit f4c9a7a6; measurement time is G3.3"
+2026-09-03,fix-test-infra-contention,G3.3,3,0,180,0,"ti team (#673): overhead row — 32-burner measurement series (base/b/c ×3 + final 3 runs on the real tree, 305/322/379s); waits on the machine, not pure work"
+2026-09-04,fix-test-infra-contention,G4.1,4,6,4,0,"lead close-out: AGENTS.md before-claiming-done line naming all three tsc-spawning files and which two moved"
+2026-09-04,fix-test-infra-contention,G4.3,4,8,10,0,"lead close-out: ledger rows reconstructed from plan.md and commit timestamps after the piece dissolved (actuals marked by source in notes); badges restamped"

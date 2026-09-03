@@ -4,10 +4,10 @@
 [![CRAP ≤ 5 · 0 / 1641](https://img.shields.io/badge/CRAP%20%E2%89%A4%205-0%20%2F%201641-brightgreen)](#status)
 <!-- crap-badge:end -->
 <!-- tasktime-badges:start -->
-[![tasks · 596 done](https://img.shields.io/badge/tasks-596%20done-blue)](openspec/task-times.csv)
+[![tasks · 601 done](https://img.shields.io/badge/tasks-601%20done-blue)](openspec/task-times.csv)
 [![avg task · 12m](https://img.shields.io/badge/avg%20task-12m-blue)](openspec/task-times.csv)
 [![estimate · 1.22x](https://img.shields.io/badge/estimate-1.22x-blue)](openspec/task-times.csv)
-[![overhead · 32%](https://img.shields.io/badge/overhead-32%25-blue)](openspec/task-times.csv)
+[![overhead · 33%](https://img.shields.io/badge/overhead-33%25-blue)](openspec/task-times.csv)
 <!-- tasktime-badges:end -->
 
 > hej (Swedish: "hello") + bro (Swedish: "bridge") — hello, bridge.
@@ -199,11 +199,16 @@ Guides: [getting started](docs/guide/getting-started.md) ·
 ## For agents
 
 ```bash
-npx skills add quickstart-now/hejbro
+npx skills add quickstart-now/hejbro -s hejbro
 ```
 
 Teaches an agent the declaration DSL, the "no real JS control flow inside
 function bodies" pitfall, and the `generate`/`verify` workflow.
+
+Keep the `-s hejbro`: the skills CLI also discovers this repository's own
+`.claude/skills/` (the `openspec-*` commands and `roundtrip-verification`
+that develop hejbro), and without the selector it installs those too,
+overwriting same-named skills you already have from `openspec init`.
 
 ## Built AI-natively
 
