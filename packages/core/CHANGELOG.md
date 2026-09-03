@@ -1,5 +1,380 @@
 # @hejbro/core
 
+## 0.2.0-pre.0
+
+### Minor Changes
+
+- 6b3cc7f: Selects aggregate and group. `count()`, `countWhere(expr)`, `min`, `max`,
+  `sum` and `avg`, with `groupBy(...)` and `having(condition)` in SQL's own
+  clause order — `having` exists only after `groupBy`, and
+  `orderBy`/`limit`/`offset` still follow it.
+  
+  The result types match what arrives: `count` is a `bigint` (converted,
+  not the text the driver hands back for `int8`), `min`/`max` keep their
+  argument's own declared type, and `sum`/`avg` stay at the numeric
+  family's widest honest type because Postgres promotes them by the
+  argument's exact type. Window functions remain tracked in #416.
+- 5aebe5c: Array ergonomics: declare non-null array elements with a constraint that backs the claim — `.array().notNullElements()` emits a `CHECK` named `<column>_no_null_elements` and narrows the element type from `T | null` to `T` on read and write — and narrow nullable-element arrays at runtime with the new `assertNoNulls`, which throws naming the first null index and never filters.
+- 65936ca: Common table expressions: `withCte((w) => { ... })` (and `handle.with(...)`
+  on a `db()` handle, the same callback) declares a `WITH` statement.
+  `w.as(name, query, options?)` declares an entry and hands back a typed
+  reference usable as a `from` source anywhere a table would go (never as a
+  join target); an entry may reference an earlier entry, never a later one
+  or itself. `w.asRecursive(name, anchor, (self) => recursiveTerm, options?)`
+  declares a recursive entry — the anchor fixes the CTE's own row type
+  (Postgres's own rule), and the recursive term is checked for
+  union-compatibility with the anchor (the same rule `.union()` already
+  applies between two branches: matching keys required, each key free to be
+  computed differently on either side, e.g. a window function). The
+  recursive branch's own combinator surface is narrowed to `union`/
+  `unionAll` only, so the four measured postgres:17 rejections (whole-set
+  `order by`/`limit`/`offset`, `intersect`/`except` as the combinator) are
+  unrepresentable rather than merely guarded. `options?.materialized` is a
+  tri-state hint rendering `MATERIALIZED`/`NOT MATERIALIZED`/neither, on
+  either kind of entry. Views, column ordering, the rename engine, and the
+  Supabase RLS validator all widen to see through a `WITH` wrapper to its
+  real tables.
+- 9963d04: Generated-family columns: declare stored computed columns with `.generatedAlwaysAs(...)` and identity columns with `.generatedAlwaysAsIdentity(options?)` / `.generatedByDefaultAsIdentity(options?)` (sequence options included) — emitted with the full Postgres grammar, diffed with precise identity alters, snapshot format version 7, and insert/update input types that exclude the columns Postgres itself refuses to write.
+- 9f58667: Selects paginate and de-duplicate. `.offset(n)` chains after `limit` (or
+  stands alone), `.distinct()` collapses duplicate rows, and
+  `.distinctOn(...columns)` takes one row per group — the row the
+  statement's `order by` puts first, Postgres's own semantics, first-class
+  rather than pushed to the `sql` escape hatch. Row counts render inline,
+  never as bind parameters, the rule `limit` already followed.
+  
+  **Snapshot format moves to 8**: a view body's select now records its
+  `offset` and `distinct`, so an older build refuses a version-8 snapshot
+  loudly instead of diffing a paginated view as if it had neither (#437).
+- e530909: Column-level foreign keys: `.references(() => users.id)` declares the same foreign key the `extras` path does — one declaration feeds the DDL and the type layer (the query layer's relation derivation reads the edge). Self-referencing and composite foreign keys, and `onDelete`/`onUpdate` actions, stay on `extras`; declaring both over one column fails loudly. Snapshot format version bumps to 7: foreign keys are recorded in canonical, declaration-form-independent order (v6 was never released). The nested-read base layer lands too: `jsonArrayFrom(subselect)`/`jsonObjectFrom(subselect)` compile to visible correlated subqueries (`compile()` shows every cast), with `bigint`/`numeric` values text-cast so precision survives the JSON round trip. `@hejbro/pg` now also pins `bytea_output` to `'hex'` at session setup (alongside the existing `intervalstyle` pin), so nested `bytea` values arrive in one deterministic shape. The sugar layer lands with it: `.related({ comments: true, author: true })` derives the same correlated reads from declared foreign keys (reverse keys = schema-map names, forward = the FK column minus its `Id` tail), rows arrive fully revived (nested `bigint` stays `bigint`, datetimes arrive as `Date`, `date` at local midnight), and ambiguous or unknown keys fail to type-check and throw.
+- 27d5554: Set operations land on the query surface: `.union()`, `.unionAll()`, `.intersect()`, `.intersectAll()`, `.except()`, and `.exceptAll()` combine selects (nesting composes) into one statement with whole-set `orderBy`/`limit` (rendered as output column names — Postgres's own set-op rule), fully visible through `compile()`. Branch row compatibility is enforced at the type level (mismatched keys fail to compile); results type as the left branch's keys with per-column unions and OR'd nullability, and rows convert per the left branch's declarations. A set-operation query is a valid view body: it round-trips structurally through the snapshot (no format-version change) and the view's columns resolve from the left branch.
+- 31c7ffd: Window functions: `over(target, spec)` attaches a `partitionBy`/`orderBy`
+  window specification to an existing aggregate (`count()`, `sum(x)`,
+  `min(x)`, `max(x)`, `avg(x)`) or one of eleven new window-only
+  constructors — `rowNumber`, `rank`, `denseRank`, `percentRank`,
+  `cumeDist`, `ntile`, `lag`, `lead`, `firstValue`, `lastValue`, `nthValue`.
+  A window-only call has no meaning on its own; it only type-checks once
+  `over()` wraps it. `rowNumber`/`rank`/`denseRank` read back as `bigint`
+  (Postgres's own `int8`), `percentRank`/`cumeDist`/`ntile` as `number`,
+  and `lag`/`lead`/`firstValue`/`lastValue`/`nthValue` as their argument's
+  own declared type. Windows render under Postgres's default frame — frame
+  clauses stay out of scope (#416). `where`/`groupBy`/`having`, an
+  aggregate's own argument, and every declaration site that stores an
+  expression (a column default, a generated column, an index expression or
+  predicate, a check constraint, an RLS policy) reject a window function
+  with a build-time diagnostic instead of a raw driver error.
+- e6c802c: D106 R3-B3: a foreign key can now carry an explicit `name`
+  (`extras.foreignKeys`'s own optional field, validated per D36 the same
+  way `index()`'s optional name already is) — `hejbro import`/`pull` set
+  it automatically whenever a database's own foreign key name is
+  expressible, so a database hejbro did not create (most often named
+  `<table>_<column>_fkey`, Postgres's own default) keeps its real
+  constraint name through `generate`/`check` instead of drifting
+  permanently to hejbro's own derived `<table>_<columns>_fk`. A name
+  identical to the derived one is never written, so a hejbro-created
+  database's own starter files stay byte-identical. When the catalog's
+  own name isn't a valid hejbro SQL identifier, the reading falls back
+  to the derived name and the loss report names the approximation.
+  
+  `@hejbro/core` exports `deriveForeignKeyName` and `assertSqlName` (the
+  same D36 rule this feature validates a foreign key's own name against)
+  for callers that need the same derivation/validation rule this feature
+  uses internally.
+- 2146480: `@hejbro/core` exports `isSqlName` (the same D36 rule `assertSqlName`
+  enforces, as a boolean query), so a caller that must decide whether a
+  name is declarable has one rule to ask, not a second, hand-rolled copy
+  of it. `import`/`pull` now use it to decide the same question `table()`
+  itself already enforces: a column whose SQL name begins with an
+  underscore (`_id`) round-trips through its own TypeScript key but is
+  not a valid hejbro identifier, and used to abort the entire reading;
+  it is now omitted and named in the loss report instead, like every
+  other name a declaration cannot carry.
+  
+  `import`/`pull` no longer abort when a foreign key's own *target*
+  table or schema has a name a declaration cannot carry: that one
+  relation is left out and named in the loss report (its own name is
+  still declared as a column), and the rest of the database is still
+  read. A `UNIQUE` constraint on an omitted table is no longer announced
+  as an approximation for an object the same report says was never
+  inferred, and a database whose named schemas are all omitted for their
+  own names now refuses with its own diagnostic -- naming the reason in
+  the loss report first -- instead of the misleading "found no table,
+  enum, or sequence to infer": that message is now reserved for schemas
+  that genuinely hold nothing, never for one hejbro just couldn't name.
+  Either way, nothing is written and the `--out` directory is never
+  created.
+  
+  Two tables in the same schema that each carry a check constraint of
+  the same name no longer swap expressions: `import`/`pull` used to
+  attach the wrong table's own check condition to whichever table came
+  second, so the starter file declared a check asserting against columns
+  that table doesn't have -- DDL the source database itself refused.
+  Each table's own check expression is now read correctly, regardless of
+  what its check constraints happen to be named.
+- aad5078: Fixes from an adversarial review of the day's nested-transaction and
+  `hejbro baseline` merges (#445).
+  
+  A second nested transaction started on the same `tx` while the first is
+  still in flight now fails fast with `concurrent-nested-transaction`,
+  before any savepoint statement is sent — concurrent siblings used to
+  interleave one `SAVEPOINT` sequence on a single connection, silently
+  discarding one sibling's work or aborting the whole transaction
+  depending on the interleaving. A `RELEASE` that fails after a swallowed
+  statement error now attempts `ROLLBACK TO` and surfaces
+  `savepoint-release-failed` advising rethrow over swallow, instead of a
+  bare `query-execution-failed`. A synchronously throwing nested callback
+  now rolls back like a rejected one, and a rolled-back savepoint is
+  released too, so no savepoint outlives the nested transaction that
+  created it on any exit path. `savepoint-rollback-failed`'s message no
+  longer asserts a false outcome.
+  
+  `hejbro baseline` over declarations that load but export nothing now
+  fails with `baseline-nothing-to-adopt` instead of reporting a false "no
+  changes" success and writing nothing; `--rename`/`--confirm-drop` are
+  dropped from its `--help` and refused pre-parse with
+  `baseline-flag-not-applicable`, since a baseline diffs against an empty
+  snapshot and has nothing to rename or drop. `parseBannerBaseline` joins
+  `parseBannerHashes`/`parseBannerVersion` as a public parser for the
+  `-- baseline:` banner marker, matching its own prefix only.
+  
+  `ctx.return()` inside a plpgsql function/trigger body now dispatches by
+  brand before duck-typing, so a table with a column literally named
+  `exprNode` no longer misroutes `ctx.return(ctx.new)` down the expression
+  path.
+- 32a8f11: A mutation chain that never calls `.returning()` now resolves to
+  `ReadonlyArray<never>` instead of the table's row type. The runtime
+  value was always an empty array (the statement carries no `returning`
+  clause, and hejbro never adds one implicitly); the type now says so, so
+  code that read rows off `await db.insert(t).values(row)` fails to
+  compile where it previously compiled and read `undefined`. Call
+  `.returning()` or `.returning({ … })` to get rows back. `.returning()`
+  with no projection still resolves every declared column. The bare type
+  names (`InsertFinal<T>`, `InsertChainFinal<T>`, `ReturningRow<T>`, and
+  their update/delete counterparts) keep meaning every declared column;
+  only the stage a chain sits at before `.returning()` carries the
+  never-requested instantiation.
+- dafb897: Pre-0.2.0 hardening of the query surface (the `harden-query-surface`
+  change; the fixed group moves all six packages). A declared index's
+  `.on(...)` column must now belong to the table declaring the index —
+  a plain column reference resolved from another table's declaration
+  fails with `foreign-column-ref`, naming the foreign column, instead of
+  passing silently or misdiagnosing a same-named collision as unknown
+  (#464). Core's own `union()`/`unionAll()`/`intersect()`/`intersectAll()`/
+  `except()`/`exceptAll()` now type-check branch key-set compatibility
+  the same way the query package's chain surface and a recursive term
+  already did, refusing a mismatched key set at build time instead of
+  compiling a statement the server would reject (#487). Two branches — or
+  a recursive CTE's anchor and recursive term — whose projections list the
+  same key SET in a different ORDER are now refused at build time too,
+  naming both orders and the first disagreeing position: `keyof` has no
+  key order, so this half of #487 was previously silent data corruption
+  (the wrong column's values under the right column's name) rather than a
+  build error. `orderBy` (a select's own, a window's `over(...)` spec, and
+  a set operation's whole-set order) accepts `asc(column)`/`desc(column)`
+  with an optional `nulls: "first" | "last"` placement, the same vocabulary
+  a declared index's column order already used, closing the gap where a
+  query previously had no way to spell an explicit nulls placement at all
+  (#470); `OrderByTerm` gains an optional `nulls` field, additive-compact
+  and format-version-neutral. `countWhere(expr)` is removed rather than
+  renamed (#469): it read as a predicate filter but actually counted rows
+  where the operand was non-null, the one invented name among the
+  aggregate vocabulary, and a real `FILTER (WHERE ...)` construct is
+  tracked as a follow-up rather than shipped under that name — `count()`
+  now accepts an optional operand directly. The recursive-term compatibility
+  requirement's own justification is corrected (the shipped text
+  overclaimed both an aggregate and a window function are legal there;
+  measured, the aggregate half is refused by Postgres) and its documented
+  scope is narrowed with two measured divergences (#489, partially closed):
+  nullability alone diverging between anchor and recursive term is
+  deliberately still accepted, while a same-family declared-type divergence
+  (e.g. `numeric` against `bigint`) remains a known, tracked gap rather than
+  a claimed-closed one.
+- 1aa05f2: Narrows left-join nullability (#307): an object-projection field and a
+  `returning()` field now follow their declared nullability instead of
+  always widening to `| null` — a projected `.notNull()` column types as
+  non-null unless its own table was actually left-joined in the same
+  statement, and `returning()` is always non-null-exact, since a mutation
+  has no join grammar to leave uncertain. This is a type-narrowing change
+  only: generated SQL, snapshots, and runtime behavior are unchanged, and
+  existing code that already widened its own annotations (or never
+  narrowed a field it could now narrow) keeps compiling — only code that
+  asserted a now-provably-non-null field was still `| null` can break.
+  
+  Aggregates and window functions stay nullable regardless of any join
+  (an empty aggregate or a partition boundary can still produce `null`).
+  So do **object-projection** fields read in a position that cannot see
+  the surrounding statement's joins — inside a nested read, a CTE body, a
+  view body, or a hand-written `SelectResult`. Whole-table rows in those
+  same positions are untouched: a `jsonArrayFrom(select(table))` element
+  and a `related()` row carry declared nullability exactly as they always
+  have.
+- 71033ca: Nested transactions run on savepoints. The `tx` handle a transaction
+  callback receives now carries its own `transaction()`: it brackets the
+  nested callback with `SAVEPOINT` / `RELEASE SAVEPOINT`, rolls back to the
+  savepoint on a throw and rethrows the error unchanged, all on the same
+  connection. A rolled-back nested transaction leaves the enclosing one
+  usable, so the outer callback can catch and carry on. Calling
+  `transaction()` on the db handle from inside a callback still fails —
+  that would take a second connection out of the pool — and its message now
+  points at `tx.transaction(...)` (#313).
+- 6345323: A plpgsql body can execute a statement for its side effect, a dropped
+  statement builder is caught instead of silently disappearing, and a
+  `defineFunction`'s scalar `returns` accepts a column builder.
+  
+  `ctx.execute(<select | insert | update | delete>)` records a statement in
+  body order, rendered `perform <sql>;` for a select (plpgsql's own rule
+  for a bare `SELECT`) and `<sql>;` for a mutation; a mutation ending in
+  `.returning()` is refused (`execute-expects-no-returning`), since
+  plpgsql's `perform`/bare form has no `into` clause to receive returned
+  rows. A statement builder constructed inside a body and never passed to
+  a consumer (`ctx.execute`, `ctx.return`, `ctx.row`/`ctx.rowOrNull`/
+  `ctx.forEach`, `exists`/`notExists`/`jsonArrayFrom`/`jsonObjectFrom`, a
+  set-operation combinator, or `defineView`) now fails the declaration
+  with `statement-builder-unused` instead of silently generating a body
+  missing that statement (#423, #426). `ctx.if`/`elseIf` also widen to
+  accept the same `Condition` union a query-side `where(...)` already
+  does, so a `sql` fragment reads as a body condition too.
+  
+  `defineFunction`'s `returns` accepts a column builder wherever it
+  accepts a raw type node, matching what `args` already accepts (#433):
+  `returns: varchar({ length: 10 })` keeps its length, an enum keeps its
+  identity, and a `$type`-branded `jsonb` return keeps its brand, all the
+  way through to `db.fn`'s own call result type. A declared numeric mode
+  (`bigint({ mode: "number" })`) now reaches `db.fn`'s runtime conversion
+  instead of always falling back to the type's own default. A `returns`
+  builder carrying `.notNullElements()` is refused
+  (`returns-not-null-elements-unsupported`): a returns clause derives no
+  backing CHECK, so the flag would promise something nothing enforces.
+- 232293e: Object projections keep their declared column types. `select({ total:
+  posts.amount }, posts)` reads `total` as `bigint` rather than the
+  family-wide `number | bigint | string`, a projected
+  `jsonb().$type<T>()` column as `T` rather than `unknown`, and an array
+  column as its declared element array — recovered from the column
+  reference's own declaration link, so `returning({...})` improves with it.
+  Fields still type as nullable: a left join can null any of them (#307).
+- 67ebf69: Generic type surfaces for `defineFunction` and the mutation builders
+  (#293, tasks 4.10/4.11-mutation): `FunctionDeclaration` now carries a
+  second, defaulted `TArgs`/`TReturns` type parameter pair recording the
+  declared `args` shape and `returns` target, and `InsertFinal`/
+  `UpdateFinal`/`DeleteFinal` (and their `*Returnable`/`*Filterable`
+  intermediates) now carry defaulted `TTable`/`TReturning` parameters
+  tracking the target table and the `.returning(...)` projection through
+  `insert`/`update`/`deleteFrom`'s whole chain. Both are additive,
+  phantom-typed (an optional marker field that is never actually
+  assigned, so it is simply absent from the runtime object — not merely
+  hidden from enumeration) narrowing-only changes — every existing
+  non-generic consumer
+  (`function-kind.ts`, `define-trigger.ts`, `render-body.ts`) keeps
+  compiling unchanged against the bare, defaulted type names, and no
+  runtime shape, generated SQL, or snapshot changes. This lets
+  `@hejbro/query`'s `Db.execute(...)` resolve the exact row shape for
+  `insert(...)`/`update(...)`/`deleteFrom(...)` statements the same way
+  it already does for `select(...)`.
+- 4be9551: Column builder type surface for query-layer type inference (#293): a
+  second, defaulted `TMeta` type parameter on `ColumnBuilder` carries the
+  declared type name, `notNull`/default visibility, numeric width mode
+  (`bigint({mode})`/`numeric({mode})`, mirroring Drizzle's surface), and
+  a jsonb `$type<T>()` brand — narrowing only, never past the column's
+  own base type — all additive, no change to generated SQL, snapshots,
+  or existing declarations. `NumericMode`, `BigintConfig`, `BaseTsType`,
+  and `IntervalValue` are now exported from `@hejbro/core`'s public
+  surface — `BaseTsType` is the declared-type → TypeScript mapping
+  `$type<T>()` constrains against, and `IntervalValue` is the structured
+  value an `interval` column reads back as.
+- d3c39bc: Query-vocabulary gaps for the query layer (#293): `leftJoin()` on the
+  select builder (new `joinKind: "left"` — snapshot codec accepts it, the
+  renderer emits `left join`) and `returning({ alias: expr })` object
+  projections on insert/update/delete (no-arg `returning()` keeps the
+  every-column explicit list; an empty projection throws
+  `empty-returning`).
+- 34afb30: `json`, `jsonb` and `bytea` columns take raw values. An insert or update
+  accepts any JSON-serializable value for a json column and a `Uint8Array`
+  for a bytea column — hejbro serializes and encodes them, and the declared
+  type decides between a `json` and a `jsonb` cast, so a `json` column never
+  acquires jsonb's key reordering. A `.$type<T>()` brand now narrows the
+  write as well as the read: a branded column accepts its own `T` and
+  nothing wider. `sql` still works everywhere, and arrays of these three
+  element types remain `sql`-only (#425).
+
+### Patch Changes
+
+- 5f8b97f: Refuse an empty on-conflict target: `onConflictDoNothing()` with no
+  columns (or `onConflictDoUpdate` with an empty `target`) now fails fast
+  with `empty-conflict-target` instead of rendering `on conflict ()` —
+  SQL Postgres rejects at parse time.
+- 46b902c: `sql` fragments are accepted in every condition position. Select `where`,
+  join `on`, update and delete `where`, `related()`'s `where`, and the
+  `and`/`or`/`not` combinators now take the same
+  `Expr<"boolean"> | Expr<"unknown">` union — exported as `Condition` —
+  that `check()`, partial indexes and RLS policies have always taken, so a
+  predicate the typed operators cannot express needs no cast to reach a
+  query (#386).
+- 28aec17: Refuse a scalar `ctx.return(<expr>)` whose type family can never convert to the declared `returns` family, at declaration time, with `scalar-return-family-mismatch`. The refusal table holds only pairs measured on Postgres 17 as failing for every value — a pair Postgres accepts for some values stays accepted, a `sql` fragment is never family-checked, and text/bytea returns accept every family.
+- effda0a: `MutationRow` (the raw `insert()`/`update()` row type) no longer carries a key for a stored generated column or a `generated always as identity` column — matching the query layer's input types and the database's own refusal, so a write Postgres will certainly reject fails to compile instead of failing at runtime.
+- 70e68cc: `generateMigration` now expands a raw `TableDeclaration` input exactly like a whole `Table`: its RLS block, policies, and serial sequences are emitted, and an `existingTable` declaration is rejected — previously the raw form silently dropped the first three and skipped the guard.
+- 387a2cc: Fixes an adversarial-review defect cluster in `SelectNode` traversal
+  (#444): a literal inside `groupBy`/`having`/`distinct on` now becomes a
+  bind parameter instead of splicing into the SQL text; a foreign
+  reference in one of those clauses throws `foreign-column-ref` instead
+  of rendering wrong SQL; a rename now retargets those clauses in a
+  stored view's query, closing a no-leftover-diff gap; a pre-`groupBy` v8
+  snapshot decodes leniently instead of raw-`TypeError`ing; RLS
+  declaration-time scope checks and `@hejbro/supabase`'s
+  `rls-uncached-auth-call` validator now see `auth.uid()` inside those
+  clauses too. `min`/`max` keep their argument's read type but not its
+  `ColumnRef`-ness, so an aggregate stops type-checking where a
+  declaration API requires a real column reference — a compile-time
+  failure now, instead of a silent wrong value at apply time. A written
+  `null` reaches a `json`/`jsonb` column as SQL NULL, not the JSON
+  document `null`; the JSON document `null` stays reachable through the
+  `sql` escape hatch. An aggregate cell (`count()`/`min`/`max`) inside a
+  nested read now casts and revives losslessly past `2^53`, the same
+  guarantee a direct column already had.
+  
+  This lands as `patch`, not `major`, even though the proposal calls the
+  `min`/`max` change breaking: it is a type *narrowing* on an unreleased
+  surface (code that compiled and failed wrong at apply time now fails to
+  compile, the fix), and the `json`/`jsonb` null semantics ride on
+  `write-json-and-bytea`, which has not shipped — no released contract
+  moves, and `major` is not used before 1.0.
+- ef00b1b: Four fixes (#677):
+  
+  - `hejbro verify`'s `chain-tip-mismatch` now names the migration file
+    whose `snapshot:` hash is the chain tip and the snapshot path it
+    disagrees with, instead of misreading the message's own quoted
+    `"snapshot:"` substring as the identity (#632).
+  - `synced-function-declared` (a synthesized function declaration reaching
+    `generate`) is now specified and documented, mirroring the existing
+    table guard (#658, function half) — the error text itself was already
+    correct.
+  - A column-level `.references(() => target.column)` thunk no longer runs
+    during `table()` itself — it resolves on the declaration's first
+    `foreignKeys` read instead, so two declaration files (or two tables in
+    one file) that reference each other now load under either order,
+    including a genuine circular import between two schema files. Previously
+    this crashed with a TDZ error (same file) or "Cannot read properties of
+    undefined" (cross-file), regardless of which side was declared first
+    (#669).
+  - `ctx.return` now accepts a mutation ending in a projected
+    `.returning({...})`, exactly as it already accepted the bare
+    `.returning()` form — the rendered `return query ...` carries exactly
+    the projected `RETURNING` list (#634).
+- 0f19390: Enum columns type as their declared values. `pgEnum` is now generic over
+  its values, so `pgEnum(app, "post_status", ["draft", "published"]).
+  column()` reads back as `"draft" | "published"` and accepts only those
+  literals as a write — previously it typed as bare `string` in both
+  directions, and an undeclared value compiled and failed at the database
+  (#422).
+- 7bbdc8b: Index declarations gain three capabilities they lacked: an access method (`index().using("gin" | "hash" | "gist" | "spgist" | "brin" | "hnsw" | "ivfflat")`, with `btree` the unchanged default), an operator class per column (`op(column, "jsonb_path_ops" | "gin_trgm_ops" | …)`, composable with `asc`/`desc`), and expression indexes (`.on(sql\`lower(${t.email})\`)`, requiring an explicit index name since there's no column to derive one from). Every invalid combination — an unknown method, `unique` on a non-B-tree method, an invalid operator-class identifier, an expression referencing another table or a subquery, an unnamed expression index — fails at declaration time with a message naming the fix. Expression columns are stored in the snapshot as structured nodes, so `--rename` retargets the identifiers inside them exactly like partial-index predicates and CHECK expressions already do. A 0.1.1 project that only uses B-tree indexes regenerates unchanged: the snapshot format stays 5, and the new fields are additive and absent by default.
+- 7c472b7: Internal refactor, no observable behavior change: `packages/core/src/kind/emit-helpers.ts` gains `requireNext`/`requirePrevious`/`requireBoth`, absorbing 31 byte-identical `invalid-kind-change` guards across the ten built-in kinds (#472); `packages/core/src/expr/expr-children.ts` (internal, not exported) gives a single child-position registry for `ExprNode`, replacing four separate handler tables in `walk.ts`, `render-sql.ts`, and `retarget.ts` that restated the same positions (#473). Every guard's existing message text, style, and check order is preserved exactly, including the two combined-message and two opposite-order sites; every `ExprNode` walker's traversal order (window's `fn`/`partitionBy`/`orderBy` included) is unchanged.
+- 221d650: relicense from MIT to the Apache License 2.0 (owner decision, #570): every published package now carries the Apache-2.0 text as `LICENSE`, a `NOTICE` file with the copyright line, and `"license": "Apache-2.0"` in its manifest. Versions already published under MIT stay MIT; this and later versions are Apache-2.0. No runtime behavior change.
+- 9394b37: Internal: the rename planner (`engine/rename-plan.ts`, 2,129 lines) is decomposed into cohesive modules under `engine/rename/` — no behavior change, no API change; the module path and every export stay put.
+- b2be9b9: Scalar-returning functions can be written, and the wrong return shape is
+  refused at declaration time. `ctx.return(expr)` renders `return <expr>;`
+  for a function declared with a scalar `returns` type; returning a query
+  from one now fails with `scalar-return-expects-expression` instead of
+  emitting `return query …`, which Postgres rejects at apply time. A scalar
+  body that never returns fails with `scalar-return-missing` (#424).
+
 ## 0.1.1
 
 ### Patch Changes
