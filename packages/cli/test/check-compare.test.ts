@@ -430,6 +430,7 @@ describe("compareCatalog / a serial column's owned-sequence default (#716)", () 
 		expect(findings[0]?.identity).toBe("app.t.id");
 		expect(findings[0]?.error).toMatchObject({ code: "check-object-differs" });
 		expect(findings[0]?.error.message).toContain("nextval('app.t_id_seq')");
+		expect(findings[0]?.error.message).toContain("but the database has none.");
 	});
 
 	it("reports a serial column whose database default calls a different sequence (d)", () => {
@@ -459,6 +460,15 @@ describe("compareCatalog / a serial column's owned-sequence default (#716)", () 
 		expect(findings).toHaveLength(1);
 		expect(findings[0]?.identity).toBe("app.t.id");
 		expect(findings[0]?.error).toMatchObject({ code: "check-object-differs" });
+		// Pins the direction, not just the shape (#716 follow-up): before the
+		// fix this same length/code pair was already produced by the
+		// declared-null branch ("...has no default, but the database has
+		// one"), which never names *this* column's own owned sequence and
+		// would still pass a check that stopped at length/code.
+		expect(findings[0]?.error.message).toContain("nextval('app.t_id_seq')");
+		expect(findings[0]?.error.message).toContain(
+			"nextval('other_seq'::regclass)",
+		);
 	});
 
 	it("still accepts a plain column's own cast default (e, regression)", () => {
