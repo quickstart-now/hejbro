@@ -95,7 +95,7 @@ Inside group 1, 1.2 makes 1.3's test red, so 1.3 follows it.
 
 ## 2. Whole-table projection under a join
 
-- [ ] 2.1 (~9m) **[design]** A whole-table projection renders each column
+- [x] 2.1 (~9m) **[design]** A whole-table projection renders each column
       qualified by the select's own from-source when the select carries
       at least one join, and unchanged when it carries none. Settles the
       rendered text: the qualifier is the from-source as the `from`
