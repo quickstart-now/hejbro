@@ -429,3 +429,57 @@ member, the same category `ownerTableIdentity` already documents there —
 task 3.2 above is the *count*-shaped doc fix verify's own review found,
 a separate correction in the same file) land in one close-out commit at
 PR time.
+
+## 4. D106 round-1 correction (evaluation.md, Round 1: B1, N1, N2, N3, N5)
+
+Tracks as #753 (reopened for the correction). Group 4 is the only group in
+flight; no file overlap concern. Definition of done per task: `pnpm check`,
+`pnpm check-types`, `pnpm test` green with `TURBO_FORCE=1`; the delta
+scenarios of `openspec show harden-reset-and-verify --diff` hold.
+
+- [ ] 4.1 [design] ~9m — **B1.** Red: `packages/cli/test/apply-reset.integration.test.ts`
+  case (c) "declared objects applied without hejbro (no
+  `hejbro.migration_ledger`)": `reset --confirm-drop` drops every managed
+  object, exits 0, and its message does not claim a ledger was cleared; and
+  a unit test in `packages/cli/test/apply-reset.test.ts` (or the nearest
+  existing reset unit file) with a fake driver whose `delete from
+  hejbro.migration_ledger` raises 42P01 — the transaction must not reach
+  `COMMIT` after a swallowed error. Green: `applyReset` asks
+  `select to_regclass('hejbro.migration_ledger')` before the transaction
+  (one read), clears the ledger only when it exists, never catches an error
+  inside the transaction, and words its success line by what it did
+  ("dropped every object your declarations manage" plus "and cleared the
+  ledger" only when it did). Files: `packages/cli/src/apply/reset.ts`,
+  `packages/cli/src/apply/ledger.ts`, the two tests.
+- [ ] 4.2 ~8m — **N2 + N3.** Red: `packages/cli/test/apply-reset.test.ts`
+  input table for `reset-drop-failed`: (i) a driver error carrying a
+  `detail` ("view lab.outside_view depends on table lab.b_parent") → the
+  message carries that detail verbatim after the server's reason; (ii) no
+  detail → message unchanged from today; (iii) the failed object is
+  referenced by another *declared* object (the cycle case) → the `Next:`
+  line says the dependent is among the declarations and names the
+  identity-order fallback, never "an object outside your declarations";
+  (iv) the outside-dependent case keeps today's `Next:`. Green: thread the
+  driver error's `detail` through `describeDriverError`/the reset error
+  builder; choose the `Next:` by whether the drop target's dependents are
+  in the diff. Files: `packages/cli/src/apply/reset.ts`,
+  `packages/cli/src/apply/execute.ts` (only if `driverErrorReason` needs a
+  detail sibling), the test.
+- [ ] 4.3 ~6m — **N1 + N5.** Red: `openspec validate harden-reset-and-verify
+  --strict` after the edit and `packages/skills/test/links.test.ts`. Green:
+  `openspec/changes/harden-reset-and-verify/specs/migration-apply/spec.md`
+  — replace "A reset's drops are the reverse of this order" with a sentence
+  stating drops run in reverse *dependency* order (a dependent before what
+  it depends on, computed from the same references), not the literal
+  reverse of the create sequence; `skills/hejbro/references/generate-verify-workflow.md`
+  — one paragraph on `reset`: drop order, `reset-drop-failed` (rolled back,
+  ledger untouched, `status` truthful), and that a declared cycle is
+  refused by the server and reported the same way. Files: the delta spec,
+  the reference.
+- [ ] 4.4 ~5m — Red: none runnable. Green: `## Round 1 disposition` appended
+  to `openspec/changes/harden-reset-and-verify/evaluation.md` (B1 fixed in
+  4.1; N1 in 4.3; N2/N3 in 4.2; N4 → #776; N5 in 4.3), and
+  `.changeset/fix-reset-d106-r1.md` (`hejbro: patch`, user-facing sentence:
+  `reset` on a database that was never migrated by hejbro now drops the
+  declared objects instead of reporting success and doing nothing). Files:
+  evaluation.md, the changeset.
