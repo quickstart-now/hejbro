@@ -602,6 +602,52 @@ describe("detectUniqueIndexApproximations / 1.7", () => {
 
 		expect(detectUniqueIndexApproximations(catalog, new Set())).toEqual([]);
 	});
+
+	// D106 R8-N1/#724: R5-N2's shape one level down -- a surviving table's
+	// own UNIQUE constraint still announced an approximation even when
+	// the constraint's own name (not the table's) is not a valid hejbro
+	// SQL identifier, two lines above the `Omitted: index …` line that
+	// says the very same object was never inferred. Both constraints
+	// share one table, so the surviving-table filter alone cannot tell
+	// them apart -- only the constraint's own name does.
+	it("names an ordinary UNIQUE constraint on a surviving table, but not a sibling whose own name is not a valid hejbro SQL identifier", () => {
+		const catalog: Catalog = {
+			schemas: [],
+			tables: [],
+			columns: [],
+			constraints: [
+				{
+					schema: "app",
+					table: "pairs",
+					name: "pairs_a_b_unique",
+					type: "u",
+					columns: ["a", "b"],
+				},
+				{
+					schema: "app",
+					table: "pairs",
+					name: "UQ_Code",
+					type: "u",
+					columns: ["code"],
+				},
+			],
+			indexes: [],
+			enums: [],
+			sequences: [],
+			functions: [],
+			views: [],
+			policies: [],
+			triggers: [],
+			tableGrants: [],
+			schemaUsageGrants: [],
+			defaultTableGrants: [],
+			extensions: [],
+		};
+
+		expect(
+			detectUniqueIndexApproximations(catalog, new Set(["app.pairs"])),
+		).toEqual([{ schema: "app", table: "pairs", name: "pairs_a_b_unique" }]);
+	});
 });
 
 describe("detectNextvalDefaultApproximations / 1.7", () => {
@@ -664,6 +710,74 @@ describe("detectNextvalDefaultApproximations / 1.7", () => {
 				table: "legacy",
 				column: "external_id",
 				sequence: "app.orphan_seq",
+			},
+		]);
+	});
+
+	// D106 R8-N1/#724: R5-N2's shape one level down -- a column omitted
+	// for its own name still announced that it "keeps its nextval(...)
+	// default", reaching neither the starter nor the contract. Both
+	// columns share one surviving table, so only the column's own name
+	// (not the table's) tells them apart.
+	it("names a nextval default only on a column whose own name a declaration can carry", () => {
+		const tables: ReadonlyArray<InferredTableFacts> = [
+			{
+				schema: { declarationKind: "schema", schemaName: "nx" },
+				tableName: "t1",
+				columns: [
+					{
+						sqlName: "free_id",
+						tsKey: "freeId",
+						isPrimaryKey: false,
+						facts: {
+							schema: "nx",
+							table: "t1",
+							name: "free_id",
+							sqlType: "integer",
+							baseTypeName: "int4",
+							isArray: false,
+							notNull: false,
+							catalogDefault: "nextval('nx.free_seq'::regclass)",
+							identityKind: "",
+							generatedKind: "",
+							identityOptions: null,
+							isSerialOwned: false,
+							enumDeclaration: null,
+						},
+					},
+					{
+						sqlName: "_bad",
+						tsKey: "_bad",
+						isPrimaryKey: false,
+						facts: {
+							schema: "nx",
+							table: "t1",
+							name: "_bad",
+							sqlType: "integer",
+							baseTypeName: "int4",
+							isArray: false,
+							notNull: false,
+							catalogDefault: "nextval('nx.free_seq'::regclass)",
+							identityKind: "",
+							generatedKind: "",
+							identityOptions: null,
+							isSerialOwned: false,
+							enumDeclaration: null,
+						},
+					},
+				],
+				foreignKeys: [],
+				checks: [],
+				indexes: [],
+			},
+		];
+
+		expect(detectNextvalDefaultApproximations(tables)).toEqual([
+			{
+				schema: "nx",
+				table: "t1",
+				column: "free_id",
+				sequence: "nx.free_seq",
 			},
 		]);
 	});

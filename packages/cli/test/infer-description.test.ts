@@ -166,9 +166,9 @@ describe("describeCatalog / 1.6", () => {
 	 * D106 R3-B2: a third, ordinary column `user_id2` has its own distinct
 	 * base key `userId2` -- exactly the suffix the `user_id`/`USER_ID`
 	 * collision would otherwise hand out next. `user_id2` must keep its
-	 * own bare key regardless: `compose.ts`'s own exclusion rule
-	 * (`isNameRoundTrippable`, private to that module and reachable
-	 * end-to-end only through a live catalog read) is exactly
+	 * own bare key regardless: `table.ts`'s own exclusion rule
+	 * (`isNameRoundTrippable`, reachable end-to-end only through a live
+	 * catalog read) is exactly
 	 * `toSnakeCase(tsKey) === sqlName`, so asserting that round trip here
 	 * is this suite's own way of pinning "never mis-reported as
 	 * undeclarable" without a database.

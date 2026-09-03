@@ -2,7 +2,6 @@ import { schema } from "@hejbro/core";
 import { describe, expect, it } from "vitest";
 import type { Catalog } from "../src/check/catalog";
 import {
-	isNameDeclarable,
 	partitionForeignKeys,
 	partitionSchemas,
 	partitionTables,
@@ -12,6 +11,7 @@ import type {
 	InferredForeignKey,
 	InferredTableFacts,
 } from "../src/infer/table";
+import { isNameDeclarable } from "../src/infer/table";
 
 const emptyCatalog = (): Catalog => ({
 	schemas: [],

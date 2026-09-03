@@ -12,7 +12,7 @@ import { isExpressibleName } from "../src/infer/table";
  * and `assertSqlName` share the same underlying predicate for every
  * input). `a_` is a valid identifier (starts `[a-z]`, only
  * `[a-z0-9_]` after) even though it fails the *round-trip* predicate
- * `infer/compose.ts`'s `isNameRoundTrippable` asks -- a different
+ * `infer/table.ts`'s `isNameRoundTrippable` asks -- a different
  * question this file does not cover.
  */
 const NAME_CASES: ReadonlyArray<readonly [string, boolean]> = [

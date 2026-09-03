@@ -126,6 +126,15 @@ the snapshot records what a declaration can express.
   following `baseline` emits the constraint with the rest — while no
   starter file is written for the schema the run never named
 
+#### Scenario: No approximation is announced for an object omitted for its name
+- **WHEN** a table the reading keeps carries a UNIQUE constraint whose
+  own name no declaration can carry, and a column whose name no
+  declaration can carry holds a `nextval` default
+- **THEN** the report names each of them as omitted and announces no
+  approximation for either — while an ordinary UNIQUE constraint on that
+  same table is still announced as the unique index it becomes, so the
+  rule removes the contradiction without silencing the report
+
 #### Scenario: Two tables sharing a constraint name keep their own expressions
 - **WHEN** two tables in one schema each carry a check constraint of the
   same name, which Postgres allows because a constraint name is unique
