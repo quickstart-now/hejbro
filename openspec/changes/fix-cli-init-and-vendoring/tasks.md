@@ -176,7 +176,7 @@ one-way documentation cross-check is unaffected by adding a sibling.
       covering all three fixes in user-facing terms, the guard among
       them. Files:
       `packages/query/src/db/fn.ts`, its test, the changeset.
-- [ ] 2.3 (~10m) `[design]` A column fact the description holds under a
+- [x] 2.3 (~10m) `[design]` A column fact the description holds under a
       key with object-literal meaning reaches the contract. Red:
       `packages/cli/test/contract-emit.test.ts` — "carries the facts a
       description holds under a __proto__ column key", driven through

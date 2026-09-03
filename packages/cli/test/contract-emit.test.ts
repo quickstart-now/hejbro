@@ -26,6 +26,7 @@ import type {
 	ValidatedExportPayload,
 	ValidatedFunctionFact,
 } from "../src/vendor/validate-export";
+import { validateExport } from "../src/vendor/validate-export";
 import { buildFixturePayload } from "./support/contract-fixture";
 
 const app = schema("app");
@@ -821,6 +822,95 @@ describe("contractMetadata's emitted keys survive as own properties (#697, R2-N2
 			const functions = contractMetadata.functions as Record<string, unknown>;
 			expect(Object.hasOwn(functions, key)).toBe(true);
 			expect(Object.keys(functions)).toContain(key);
+		},
+	);
+});
+
+const VALIDATE_EXPORT_FORMAT_TEXT =
+	'{"descriptionFormat":1,"snapshotFormat":8}';
+
+/**
+ * A hand-written `schema.json` naming a single column under `columnKey`
+ * -- the description's own key/mode (`protoKey`/`"string"`) differ from
+ * what a fallback would recover (the SQL name itself, and a `null`
+ * mode), so the two are only indistinguishable if the description's own
+ * fact survived `validateExport`'s reading (#697, R2-N2 sibling: the
+ * loss lives in the reader, so this drives the real pipeline rather
+ * than an in-memory payload).
+ */
+const buildSchemaTextWithColumnKey = (columnKey: string): string =>
+	JSON.stringify({
+		tables: [
+			{
+				schemaName: "app",
+				tableName: "posts",
+				exportName: "posts",
+				columns: {
+					[columnKey]: {
+						key: "protoKey",
+						mode: "string",
+						notNullElements: false,
+					},
+				},
+				existing: false,
+			},
+		],
+		functions: [],
+		roles: [],
+		snapshot: {
+			formatVersion: 8,
+			dialect: "postgres",
+			objects: {
+				"table:app.posts": {
+					schema: "app",
+					name: "posts",
+					columns: [
+						{
+							name: columnKey,
+							typeNode: { typeName: "numeric", precision: null, scale: null },
+						},
+					],
+					indexes: [],
+					foreignKeys: [],
+				},
+			},
+		},
+	});
+
+describe("a description's column fact reaches the contract under any column key (#697, R2-N2 sibling)", () => {
+	type ColumnKeyRow = {
+		readonly label: string;
+		readonly columnKey: string;
+	};
+
+	// D110 input table: the defect, plus a look-alike and a plain
+	// control -- each column fact's own key ("protoKey") and mode
+	// ("string") differ from what column.name/null (the fallback) would
+	// produce, so only a correct read produces them.
+	const rows: ReadonlyArray<ColumnKeyRow> = [
+		{ label: "__proto__ (the defect)", columnKey: "__proto__" },
+		{ label: "constructor (control)", columnKey: "constructor" },
+		{ label: "plain (control)", columnKey: "plain" },
+	];
+
+	it.each(rows)(
+		"carries the description's own key and mode for a $label column key",
+		async ({ columnKey }) => {
+			const schemaText = buildSchemaTextWithColumnKey(columnKey);
+			const { payload } = validateExport(
+				VALIDATE_EXPORT_FORMAT_TEXT,
+				schemaText,
+			);
+
+			const source = emitContract(payload, ORIGIN);
+			const { contractMetadata } = await importEmittedMetadata(source);
+
+			const tables = contractMetadata.tables as Record<
+				string,
+				{ readonly columns: Record<string, { readonly mode: unknown }> }
+			>;
+			expect(Object.hasOwn(tables.posts?.columns ?? {}, "protoKey")).toBe(true);
+			expect(tables.posts?.columns.protoKey?.mode).toBe("string");
 		},
 	);
 });

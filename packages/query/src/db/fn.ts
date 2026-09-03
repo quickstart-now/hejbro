@@ -203,11 +203,11 @@ const assertArgCount = (
  * declaration doesn't (a caller-side typo TypeScript never checked --
  * plain JS, an `any`, a `JSON.parse`d object) used to pass the count
  * check alone and silently resolve to `undefined` for the argument it
- * was misspelling (#697, R2-N1). Named by the caller's own key order,
- * the first unknown key found -- there can be at most one past
- * `assertArgCount`'s equal-length check, but "first by caller order"
- * matches the loader's own "name the first failing entry" convention
- * regardless.
+ * was misspelling (#697, R2-N1). Equal length does not bound this to
+ * one -- `{user_id, lmt}` against a declared `{userId, limit}` names two
+ * unknown keys -- so this names only the first, by the caller's own key
+ * order, matching the loader's own "name the first failing entry"
+ * convention.
  */
 const assertArgNames = (
 	declaration: FunctionDeclaration,
