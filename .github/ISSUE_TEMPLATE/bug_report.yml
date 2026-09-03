@@ -1,0 +1,67 @@
+name: Bug report
+description: Something hejbro generated, applied, checked or refused is wrong.
+title: "<command or surface>: <what went wrong, in one line>"
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. One issue per defect is preferred — a batch
+        of findings is welcome too; the maintainers split it. See
+        `CONTRIBUTING.md` → "Reporting a problem".
+  - type: input
+    id: version
+    attributes:
+      label: hejbro version
+      description: "`npx hejbro n` prints it, or read it from your lockfile (e.g. `0.2.0-pre.0`)."
+      placeholder: 0.2.0-pre.0
+    validations:
+      required: true
+  - type: dropdown
+    id: provider
+    attributes:
+      label: Provider / driver
+      description: Where the SQL ran or was checked against.
+      options:
+        - Postgres (vanilla, `@hejbro/pg`)
+        - Supabase (`@hejbro/supabase`)
+        - Neon (`@hejbro/neon`)
+        - Nile (`@hejbro/nile`)
+        - Not database-related (generate / verify / DSL only)
+        - Other (say which below)
+    validations:
+      required: true
+  - type: input
+    id: postgres
+    attributes:
+      label: Postgres version
+      description: "`select version();` on the target database, if one was involved."
+      placeholder: PostgreSQL 17.5
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal declaration and command
+      description: The smallest `hejbro.config.ts` + schema module + command that shows the problem. Paste code, not screenshots.
+      render: ts
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected
+      description: What you expected hejbro to generate, apply, report or refuse.
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual
+      description: What happened instead — the generated SQL, the full diagnostic (code and `Next:` line), or the server's error with its SQLSTATE.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else
+      description: Workarounds you found, related findings, or what you measured on the platform.
