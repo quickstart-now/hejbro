@@ -460,6 +460,42 @@ describe("assertSessionStateConformance (task 1.4/1.5, #481)", () => {
 			],
 			outcome: "pass" as const,
 		},
+		// Three spellings the leading-keyword rule newly decides (task
+		// 4.3), pinned so the rule's own edges are stated by tests rather
+		// than inferred -- all three already pass under the leading-word
+		// match; this task's job is naming them, not fixing anything.
+		{
+			name: "closing spelling: 'commit and chain' ends the transaction -- caught, not silently passed",
+			recordedOnConnection: [
+				{ sql: "begin", params: [] },
+				{ sql: "set intervalstyle to 'postgres'", params: [] },
+				{ sql: "commit and chain", params: [] },
+				{ sql: "select 1", params: [] },
+			],
+			outcome: "violation" as const,
+			expectedMessage: /was not sent inside an open transaction/,
+		},
+		{
+			name: "closing spelling: 'rollback and chain' ends the transaction -- caught, not silently passed",
+			recordedOnConnection: [
+				{ sql: "begin", params: [] },
+				{ sql: "set intervalstyle to 'postgres'", params: [] },
+				{ sql: "rollback and chain", params: [] },
+				{ sql: "select 1", params: [] },
+			],
+			outcome: "violation" as const,
+			expectedMessage: /was not sent inside an open transaction/,
+		},
+		{
+			name: "opening spelling: leading whitespace and a newline ('\\n\\tBEGIN\\n') is still an opener -- recognized, not wrongly refused",
+			recordedOnConnection: [
+				{ sql: "\n\tBEGIN\n", params: [] },
+				{ sql: "set intervalstyle to 'postgres'", params: [] },
+				{ sql: "select 1", params: [] },
+				{ sql: "commit", params: [] },
+			],
+			outcome: "pass" as const,
+		},
 	])(
 		"the transaction-envelope obligation for interactive-transactions:true + session-state:false -- $name",
 		({

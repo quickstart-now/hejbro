@@ -196,6 +196,41 @@ Inside group 1, 1.2 makes 1.3's test red, so 1.3 follows it.
       test runner. Files:
       `packages/query/test/db/execute-result-type.test.ts`.
 
+- [x] 4.3 (~4m) Three spellings the leading-keyword rule newly decides,
+      pinned so the rule's edges are stated by tests rather than inferred:
+      `commit and chain` and `rollback and chain` end a transaction (both
+      measured to discard a transaction-local setting on a real server),
+      and an opener carrying leading whitespace and a newline is still an
+      opener. Red: `packages/query/test/driver/conformance.test.ts`, three
+      rows added to the envelope input table. Files: that file.
+
+## 5. Observers the review found missing
+
+- [ ] 5.1 (~7m) The checkout scenario's first clause gets an observer: a
+      decorator that returns a NEW driver value carrying its own hook does
+      not reach the base's checkout. Red:
+      `packages/pg/test/driver.test.ts`, new case — spread the real
+      `pgDriver` into `{ ...driver, setupSession: spy }`, run `execute`
+      through it, and assert the wire is the base's own two pin statements
+      followed by the caller's statement with the spy never called. **No
+      red is available** (this pins behavior that already holds), so the
+      discriminating mutant is named instead: make the decorator ALSO
+      overwrite the base's member in place — the thing the scenario denies
+      — and this case must fail while the existing in-place case at
+      `driver.test.ts:711` stays green. `packages/pg/src` is not edited.
+      Files: `packages/pg/test/driver.test.ts`.
+- [ ] 5.2 (~5m) The set-operation pins stop measuring themselves. The
+      existing expectation is written as `ReadonlyArray<SelectResult<
+      Projection>>` — the same type expression the implementation
+      evaluates — so it holds however that expression resolves. Replace it
+      with an independent oracle: the type of the same handle executing
+      the left branch alone. Red: `packages/query/test/db/
+      execute-result-type.test.ts` — against the honest oracle the
+      whole-table row passes and, with the fixture's column changed to a
+      `notNull` one, the object-projection row states the widening
+      explicitly rather than hiding it in an already-nullable column.
+      Evidence is `check-types`. Files: that file.
+
 ## Close-out (not a group)
 
 The changeset, `openspec/task-times.csv`, and the README stamps
