@@ -11,7 +11,7 @@ of `openspec show fix-nile-findings --diff` hold.
 
 ## 1. Table-bound column references render by table and column (#754)
 
-- [ ] 1.1 [design] ~9m — Red: `packages/core/test/expr/render-table-bound.test.ts`
+- [x] 1.1 [design] ~9m — Red: `packages/core/test/expr/render-table-bound.test.ts`
   (new) with an input table spanning the requirement: a top-level ref; a ref
   inside a `sql` template chunk; a ref inside `exists(...)` to the outer table
   and to the subquery's own table (both two-part, the `from` target three-part);
@@ -22,7 +22,7 @@ of `openspec show fix-nile-findings --diff` hold.
   `renderTableBoundExpr(node, outerScope?)`.
   Files: `packages/core/src/expr/render-sql.ts`, `packages/core/src/index.ts`,
   the new test.
-- [ ] 1.2 ~8m — Red: the four expectations in
+- [x] 1.2 ~8m — Red: the four expectations in
   `packages/core/test/table-kind-emit.test.ts` that pin a check, an
   `alter table … add constraint … check`, a partial-index predicate and an
   expression index (lines ~649/681/717/887) rewritten to the two-part form,
@@ -33,7 +33,7 @@ of `openspec show fix-nile-findings --diff` hold.
   rebuild comparison stays like-for-like.
   Files: `packages/core/src/kinds/table-snapshot.ts`,
   `packages/core/src/snapshot/column-order.ts`, the two tests.
-- [ ] 1.3 ~7m — Red: `packages/core/test/policy-kind.test.ts`'s top-level
+- [x] 1.3 ~7m — Red: `packages/core/test/policy-kind.test.ts`'s top-level
   (`using ("posts"."published_at" is not null)`), `with check`, and
   correlated-`exists` expectations rewritten to the delta scenario's text;
   `packages/core/test/not-null-elements.test.ts`'s
@@ -41,7 +41,7 @@ of `openspec show fix-nile-findings --diff` hold.
   `policyWithCheck` render through the table-bound entry with the policy's
   table still in the outer scope.
   Files: `packages/core/src/kinds/policy-kind.ts`, the two tests.
-- [ ] 1.4 ~9m — Red: `examples/postgres/test/chain.test.ts` and
+- [x] 1.4 ~9m — Red: `examples/postgres/test/chain.test.ts` and
   `examples/supabase/test/chain.test.ts` (committed migration text vs
   regenerated), `packages/core/test/golden` cases whose `expected/` carry a
   check, partial index, expression index or policy, and any
@@ -52,7 +52,7 @@ of `openspec show fix-nile-findings --diff` hold.
   confirm `hejbro.snapshot.json` in both examples is byte-identical.
   Files: `examples/*/migrations/*.sql`, `packages/core/test/golden/cases/*/expected/*`,
   the listed tests.
-- [ ] 1.5 ~6m — Red: `packages/skills/test` (or the skill's own check) is
+- [x] 1.5 ~6m — Red: `packages/skills/test` (or the skill's own check) is
   not applicable; the red test here is the delta scenario "A view body is
   unchanged" pinned in `packages/core/test/view-kind.test.ts` (an existing
   three-part expectation that must stay green). Green: one sentence in
@@ -64,14 +64,14 @@ of `openspec show fix-nile-findings --diff` hold.
 
 ## 2. `check` compares by text where the preset says the server cannot plan (#755)
 
-- [ ] 2.1 [design] ~6m — Red: `packages/nile/test/preset.test.ts` "declares
+- [x] 2.1 [design] ~6m — Red: `packages/nile/test/preset.test.ts` "declares
   explainUnavailable" and `packages/core/test/engine/preset.test.ts` (or
   the nearest existing preset-shape test) "a preset without the field is a
   Preset". Green: `Preset.explainUnavailable?: true` in
   `packages/core/src/engine/preset.ts`; `nilePreset` carries it.
   Files: `packages/core/src/engine/preset.ts`, `packages/nile/src/preset.ts`,
   the two tests.
-- [ ] 2.2 [design] ~9m — Red: `packages/cli/test/check-expression.test.ts`
+- [x] 2.2 [design] ~9m — Red: `packages/cli/test/check-expression.test.ts`
   new describe "3.5 text comparison" with an input table: equal after each
   normalization step alone (whitespace; one enclosing paren pair; two-part
   and three-part table qualifier; quoted vs unquoted plain identifier;
@@ -83,7 +83,7 @@ of `openspec show fix-nile-findings --diff` hold.
   `"text"` normalizing both sides; the not-compared reason and `Next:` for
   the text mode.
   Files: `packages/cli/src/check/expression.ts`, the test.
-- [ ] 2.3 ~8m — Red: `packages/cli/test/check-command.test.ts` with a fake
+- [x] 2.3 ~8m — Red: `packages/cli/test/check-command.test.ts` with a fake
   preset declaring `explainUnavailable`: the run never issues an `explain`
   statement, the coverage boundary carries the text-comparison line, and a
   config without the declaration issues `explain` exactly as before.
