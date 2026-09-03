@@ -166,12 +166,17 @@ export type OmittedCheck = {
 
 /**
  * A foreign key whose own name is a valid hejbro SQL identifier, but
- * whose *target* table or schema was itself omitted (D106 R5-B1) --
+ * whose *target*'s own schema or table name is not (D106 R6-B1) --
  * `existingTable(fk.targetSchema, fk.targetTable, …)` would otherwise
- * assert a name the reading already decided it could not carry,
- * aborting the whole reading over a reference into an object one
- * report line up already says is gone. Costs that foreign key alone;
- * the table holding it and everything else on it are still declared.
+ * assert a name the reading already knows it cannot carry, aborting
+ * the whole reading over a reference into an object one report line up
+ * already says has no declaration. A target this run simply never read
+ * (a schema `--schema` did not name) is not this case: its own name is
+ * fine, so the foreign key survives instead, declared against an
+ * `existingTable` handle (`declare-emit/emit.ts`'s own
+ * `mustDeferForeignKey`) rather than a real cross-file import. Costs
+ * that foreign key alone; the table holding it and everything else on
+ * it are still declared.
  */
 export type OmittedForeignKey = {
 	readonly schema: string;
@@ -455,18 +460,20 @@ const omittedForeignKeyRemedyForPull = (
 };
 
 /**
- * D106 R5-B1: a foreign key whose own name is fine but whose *target*
- * was omitted -- costs that one foreign key, never the table holding
- * it (which is still declared, minus this one relation) nor the whole
- * reading. Named by the target's own identity and kind, since "which
- * kind of object is missing" changes nothing about *why* — only about
- * what un-omitting it requires.
+ * D106 R6-B1: a foreign key whose own name is fine but whose *target*'s
+ * own name is not -- costs that one foreign key, never the table
+ * holding it (which is still declared, minus this one relation) nor
+ * the whole reading. Named by the target's own identity and kind,
+ * since "which kind of object's name is bad" changes nothing about
+ * *why* -- only about what fixing it requires. A target this run
+ * simply never read is never named here at all (it is kept, not
+ * omitted -- see {@link OmittedForeignKey}).
  */
 const omittedForeignKeyLineForImport = (fk: OmittedForeignKey): string =>
-	`Omitted: foreign key "${fk.schema}.${fk.table}.${fk.name}" -- references ${fk.targetKind} "${fk.target}", which this reading left out. Next: ${omittedForeignKeyRemedyForImport(fk.targetKind)}`;
+	`Omitted: foreign key "${fk.schema}.${fk.table}.${fk.name}" -- references ${fk.targetKind} "${fk.target}", whose catalog name is not a valid hejbro SQL identifier, so no declaration can carry it. Next: ${omittedForeignKeyRemedyForImport(fk.targetKind)}`;
 
 const omittedForeignKeyLineForPull = (fk: OmittedForeignKey): string =>
-	`Omitted: foreign key "${fk.schema}.${fk.table}.${fk.name}" -- references ${fk.targetKind} "${fk.target}", which this reading left out. ${omittedForeignKeyRemedyForPull(fk.targetKind)}`;
+	`Omitted: foreign key "${fk.schema}.${fk.table}.${fk.name}" -- references ${fk.targetKind} "${fk.target}", whose catalog name is not a valid hejbro SQL identifier, so no declaration can carry it. ${omittedForeignKeyRemedyForPull(fk.targetKind)}`;
 
 const omittedForeignKeyLines = (
 	foreignKeys: ReadonlyArray<OmittedForeignKey>,

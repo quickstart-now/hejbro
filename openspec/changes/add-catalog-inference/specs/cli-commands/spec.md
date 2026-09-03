@@ -44,7 +44,12 @@ a cycle — and a reference to another file's enum counts as an import,
 exactly as a foreign key to another file's table does: where a cycle
 would form, the crossings in one direction are declared against
 unexported reference-only declarations, a handle for a table and a
-local copy of the enum for an enum. Each file SHALL
+local copy of the enum for an enum. A foreign key into a table no
+starter file declares — one whose schema this run never named — SHALL
+be declared against such a handle too, for a different reason: there is
+no file to import its target from. A starter file therefore never names
+a table this run did not read except through a handle of its own. Each
+file SHALL
 open with a header carrying
 the loss report in full and the statement that the file is the
 repository's own from now on, and SHALL carry no clock- or

@@ -571,19 +571,24 @@ export const enumCloneBaseNameFor = (
 
 /**
  * Whether `fk` must never be an immediate reference (must instead go
- * through a handle, {@link handleBaseNameFor}) -- two different rules,
- * by whether `fk` stays inside one file:
+ * through a handle, {@link handleBaseNameFor}) -- three rules, by what
+ * `fk`'s own target is:
  *
  * - same schema (same file): the table-level topological order's own
  *   closing-edge rule (CI-G2-R1-05) -- a same-module declaration order
  *   problem; a self-reference is never on it.
- * - different schema (different file): `fk`'s own crossing direction is
- *   a *back edge* of the schema-level graph (CI-G2-R1-18, lead-adopted
- *   refinement over R1-16's own first cut: only the back edge a
- *   deterministic DFS over schema names finds needs a handle, not every
- *   crossing on the cycle -- severing that one edge already makes the
- *   remaining import graph acyclic, so the other direction keeps a real,
- *   type-carrying cross-file import).
+ * - different schema, and a schema this run read (different file):
+ *   `fk`'s own crossing direction is a *back edge* of the schema-level
+ *   graph (CI-G2-R1-18, lead-adopted refinement over R1-16's own first
+ *   cut: only the back edge a deterministic DFS over schema names finds
+ *   needs a handle, not every crossing on the cycle -- severing that
+ *   one edge already makes the remaining import graph acyclic, so the
+ *   other direction keeps a real, type-carrying cross-file import).
+ * - a schema this run never read at all (`targetSchemaOf` returns
+ *   `undefined`, D106 R6-B1): there is no file, in this run or any
+ *   other, this table could import that target from -- a real
+ *   reference is not an option regardless of cycles, so this always
+ *   defers, unconditionally.
  */
 export const mustDeferForeignKey = (
 	table: TableSnapshot,
@@ -613,7 +618,7 @@ export const mustDeferForeignKey = (
 		);
 	}
 	if (targetSchema === undefined) {
-		return false;
+		return true;
 	}
 	return context.isSchemaCrossingOnBackEdge(table, fk, targetSchema);
 };
@@ -651,7 +656,7 @@ export const mustDeferEnumReference = (
 	return context.isEnumCrossingOnBackEdge(table, enumSchema, enumIdentityValue);
 };
 
-/** One table's own FKs split into the two settled branches (CI-G2-R1-16): handled (every cycle-closing edge, paired with its own handle's base name) and everything else -- self-references, same-schema non-closing references, and a cross-schema reference whose file pair is acyclic -- left on the ordinary `extras` path. */
+/** One table's own FKs split into the two settled branches (CI-G2-R1-16, widened D106 R6-B1): handled (every cycle-closing edge, plus every edge into a schema this run never read, each paired with its own handle's base name -- {@link mustDeferForeignKey}'s three rules) and everything else -- self-references, same-schema non-closing references, and a cross-schema reference whose file pair is acyclic -- left on the ordinary `extras` path. */
 export type ForeignKeyClassification = {
 	readonly isHandled: (fk: ForeignKeySnapshot) => boolean;
 	readonly handled: ReadonlyArray<{

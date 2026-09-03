@@ -254,20 +254,18 @@ export const withInventorySignal = (
 		stillReportedInInventory: schemasWithOtherDeclarations.has(table.schema),
 	}));
 
-/** A self-reference (`table` omitted, core's own D52 rule) is always into a surviving table -- the table holding it is one, by construction of this being called on a table that survived far enough to reach here. */
-const isSelfReference = (
-	fk: InferredForeignKey,
-	facts: InferredTableFacts,
-): boolean =>
-	fk.targetSchema === facts.schema.schemaName &&
-	fk.targetTable === facts.tableName;
-
-/** Whether the target was left out because its own table name was inexpressible, or because its whole schema was -- the schema check first, since a schema-level omission already explains why the table under it never reached `survivingTableIdentities` either. */
+/**
+ * Whether the target was left out because its own table name was
+ * inexpressible, or because its whole schema was -- the schema check
+ * first, since a schema-level omission already explains why the table
+ * under it can never be named either. (A self-reference never reaches
+ * this: the table holding it already passed {@link partitionTables},
+ * so its own schema and table names are both expressible.)
+ */
 const targetKindFor = (
-	targetSchema: string,
-	omittedSchemaNames: ReadonlySet<string>,
+	fk: InferredForeignKey,
 ): OmittedForeignKey["targetKind"] => {
-	if (omittedSchemaNames.has(targetSchema)) {
+	if (!isExpressibleName(fk.targetSchema)) {
 		return "schema";
 	}
 	return "table";
@@ -289,34 +287,29 @@ export type ForeignKeyPartition = {
 };
 
 /**
- * D106 R5-B1: a foreign key whose *target* table or schema was itself
- * omitted still built an `existingTable` handle against a name
- * `assertSqlName` could not carry, aborting the whole reading --
- * `partitionSchemas`/`partitionTables` filtered the omitted object out
- * of the declarations, never the references *into* it. Checked here
- * against `survivingTableIdentities`, the same set every other survival
- * question in this module answers from -- not a second, independent
- * judgment of which tables exist.
+ * D106 R6-B1: a foreign key is omitted for exactly the reason every
+ * other object in this module is -- its own name (here, its *target*'s
+ * own schema and table names) is not one a declaration can carry.
+ * Whether the target's schema was ever named on `--schema` is a
+ * different question, and not this function's to ask: a target this
+ * run simply never read is not omitted -- it is kept, and
+ * `declare-emit/emit.ts`'s own `mustDeferForeignKey` declares it
+ * against an `existingTable` handle instead of a real cross-file
+ * import, because there is no file to import it from. Checking the
+ * target's own names, rather than membership in a surviving-table set,
+ * is what tells the two cases apart (D106 R6-B1: the survivor-set
+ * check could not).
  */
 export const partitionForeignKeys = (
 	tables: ReadonlyArray<InferredTableFacts>,
-	survivingTableIdentities: ReadonlySet<string>,
-	omittedSchemaNames: ReadonlySet<string>,
 ): ForeignKeyPartition => {
-	const isReachable = (
-		fk: InferredForeignKey,
-		facts: InferredTableFacts,
-	): boolean => {
-		if (isSelfReference(fk, facts)) {
-			return true;
-		}
-		return survivingTableIdentities.has(`${fk.targetSchema}.${fk.targetTable}`);
-	};
+	const isCarryable = (fk: InferredForeignKey): boolean =>
+		isExpressibleName(fk.targetSchema) && isExpressibleName(fk.targetTable);
 	const omittedForeignKeys = tables.flatMap((facts) =>
 		facts.foreignKeys
-			.filter((fk) => !isReachable(fk, facts))
+			.filter((fk) => !isCarryable(fk))
 			.map((fk) => {
-				const targetKind = targetKindFor(fk.targetSchema, omittedSchemaNames);
+				const targetKind = targetKindFor(fk);
 				return {
 					schema: facts.schema.schemaName,
 					table: facts.tableName,
@@ -329,7 +322,7 @@ export const partitionForeignKeys = (
 	return {
 		tables: tables.map((facts) => ({
 			...facts,
-			foreignKeys: facts.foreignKeys.filter((fk) => isReachable(fk, facts)),
+			foreignKeys: facts.foreignKeys.filter((fk) => isCarryable(fk)),
 		})),
 		omittedForeignKeys,
 	};
@@ -425,11 +418,7 @@ export const inferFromCatalog = async (
 		tablePartition.omittedTables,
 		schemasWithOtherDeclarations,
 	);
-	const foreignKeyPartition = partitionForeignKeys(
-		mergedTables,
-		survivingTableIdentities,
-		new Set(schemaPartition.omittedSchemas.map((schema) => schema.sqlName)),
-	);
+	const foreignKeyPartition = partitionForeignKeys(mergedTables);
 	const tablesWithReachableForeignKeys = foreignKeyPartition.tables;
 
 	const snapshotTables = tablesExcludingUndeclarableNames(

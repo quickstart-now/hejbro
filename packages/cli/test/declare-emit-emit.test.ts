@@ -969,3 +969,71 @@ describe("emitDeclarationFiles / D106 R3-B3: a foreign key's own catalog name", 
 		);
 	});
 });
+
+describe("emitDeclarationFiles / D106 R6-B1", () => {
+	it("declares a foreign key into a table this run never read through an unexported existingTable handle", () => {
+		const orders: TableSnapshot = {
+			schema: "app",
+			name: "orders",
+			columns: [
+				{
+					name: "id",
+					typeNode: { typeName: "uuid" },
+					notNull: true,
+					primaryKey: true,
+				},
+				{ name: "owner_id", typeNode: { typeName: "uuid" }, notNull: true },
+			],
+			indexes: [],
+			// "ext.users" is not among this snapshot's own tables -- this run
+			// never read schema "ext" at all (not omitted for a bad name:
+			// both "ext" and "users" are ordinary lower snake_case).
+			foreignKeys: [
+				{
+					name: "orders_owner_id_fkey",
+					columns: ["owner_id"],
+					referencesTable: "ext.users",
+					referencesColumns: ["id"],
+				},
+			],
+			primaryKeyName: "orders_pkey",
+		};
+
+		const files = emitDeclarationFiles(resultFor([orders]));
+		expect(files).toHaveLength(1);
+		const [file] = files;
+		if (file === undefined) {
+			throw new Error("expected exactly one emitted file");
+		}
+
+		// The handle's own preamble line has no "export const" of its own,
+		// so it sits in the text just before this table's own call -- the
+		// block this table owns starts at whichever comes first.
+		const preambleStart = file.source.indexOf("\nconst ");
+		const callStart = file.source.indexOf("export const orders = table(");
+		if (callStart === -1) {
+			throw new Error(
+				`expected "export const orders = table(" in the emitted source:\n${file.source}`,
+			);
+		}
+		const candidateStarts = [preambleStart, callStart].filter(
+			(index) => index !== -1,
+		);
+		const ordersBlock = file.source.slice(Math.min(...candidateStarts));
+
+		const handleMatch = ordersBlock.match(
+			/const (\w+) = existingTable\("ext", "users", \{[^}]*\}\);/,
+		);
+		if (handleMatch === null) {
+			throw new Error(
+				`expected an existingTable("ext", "users", ...) handle in orders's own block:\n${ordersBlock}`,
+			);
+		}
+		const [, handleIdentifier] = handleMatch;
+
+		expect(ordersBlock).not.toContain('from "./ext.schema"');
+		expect(ordersBlock).toContain(
+			`references: { table: ${handleIdentifier}, columns: [${handleIdentifier}.id] }`,
+		);
+	});
+});

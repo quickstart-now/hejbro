@@ -323,6 +323,63 @@ describe("buildLossReport / 1.7", () => {
 		expect(line).not.toContain("left undeclared");
 	});
 
+	// D106 R6-B1: the line's own reason must match what actually happened
+	// -- the target was never "left out" of anything (that phrasing
+	// belonged to the survivor-set rule this round replaced); its own
+	// catalog name is simply not one a declaration can carry, the same
+	// reason every sibling omission line states.
+	it("import: names an omitted foreign key by its target's inexpressible name, not by claiming it was left out", () => {
+		const report = buildLossReport({
+			...emptyFacts("import"),
+			omittedForeignKeys: [
+				{
+					schema: "app",
+					table: "orders",
+					name: "fk_widget",
+					targetKind: "table",
+					target: "app.Widgets",
+				},
+			],
+		});
+
+		const line = report.find((entry) =>
+			entry.includes('foreign key "app.orders.fk_widget"'),
+		);
+		expect(line).toBeDefined();
+		expect(line).toContain('references table "app.Widgets"');
+		expect(line).toContain(
+			"whose catalog name is not a valid hejbro SQL identifier, so no declaration can carry it",
+		);
+		expect(line).not.toContain("which this reading left out");
+		expect(line).toContain("rename the table in the database");
+	});
+
+	it("pull: names an omitted foreign key by its target's inexpressible name, not by claiming it was left out", () => {
+		const report = buildLossReport({
+			...emptyFacts("pull"),
+			omittedForeignKeys: [
+				{
+					schema: "app",
+					table: "orders",
+					name: "fk_owner",
+					targetKind: "schema",
+					target: "App",
+				},
+			],
+		});
+
+		const line = report.find((entry) =>
+			entry.includes('foreign key "app.orders.fk_owner"'),
+		);
+		expect(line).toBeDefined();
+		expect(line).toContain('references schema "App"');
+		expect(line).toContain(
+			"whose catalog name is not a valid hejbro SQL identifier, so no declaration can carry it",
+		);
+		expect(line).not.toContain("which this reading left out");
+		expect(line).toContain("Rename the schema in the database");
+	});
+
 	it("names an omitted index, its table, and says hejbro will not mention it again -- the same line for both commands, since a contract never carries indexes", () => {
 		const facts = {
 			omittedIndexes: [
