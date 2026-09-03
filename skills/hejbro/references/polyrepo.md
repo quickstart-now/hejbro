@@ -51,7 +51,13 @@ with `eq`/`and`/`or` the same as any other query), `select`/`insert`/
 `update`/`delete`. A bare `insert`/`update`/`delete` (no `.returning()`
 — not yet exposed on this surface) sends no `RETURNING` clause and
 types as resolving to `ReadonlyArray<never>`, never the table's row
-type; read written rows back with a second `select`.
+type; read written rows back with a second `select`. A column named
+`constructor`, `toString` or `hasOwnProperty` is carried faithfully by
+the contract, but TypeScript resolves those names on every object
+type, so a fresh `insert`/`update` write literal against such a table
+cannot type-check even when the property is declared optional —
+TypeScript's own rule, not the emitter's: a schema should not name a
+column that way.
 
 A vendored contract also carries every `defineFunction` declaration the
 schema repository exports, callable through `db.fn` — `createDb(driver)

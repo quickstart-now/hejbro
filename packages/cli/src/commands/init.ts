@@ -1,4 +1,10 @@
-import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
+import {
+	existsSync,
+	mkdirSync,
+	type Stats,
+	statSync,
+	writeFileSync,
+} from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { emptySnapshot, renderSnapshot, throwHejbroError } from "@hejbro/core";
 import { defineCommand } from "citty";
@@ -59,29 +65,43 @@ const expectedKindOf = (artifact: Artifact): NodeKind => {
 	return "file";
 };
 
-const kindAt = (path: string): NodeKind => {
-	if (statSync(path).isDirectory()) {
+const kindOfStat = (stat: Stats): NodeKind => {
+	if (stat.isDirectory()) {
 		return "directory";
 	}
 	return "file";
 };
 
+/** A configured path's trailing `/`s dropped before it is stat'd -- POSIX
+ * `stat()` on a path spelled with a trailing separator refuses with
+ * `ENOTDIR` when the node there is a file (D106 R1 B1), which made
+ * `existsSync` report "nothing there" and let a later `mkdirSync` throw a
+ * raw, uncoded stack instead of this command's own diagnostic. */
+const stripTrailingSeparators = (path: string): string =>
+	path.replace(/\/+$/, "");
+
 /** Builds and throws the `init-path-conflict`-coded, enriched plain
  * `HejbroError` (lead-approved): a configured path exists but holds the
  * wrong kind of node for what it's supposed to be. Nothing is ever
  * replaced, so this stops the run rather than reporting the path as
- * already present. Names `label` (relative to `cwd`, D57/Task 14 --
- * this CLI's own diagnostics never print an absolute path), not the
- * resolved absolute path `checkPathKind` actually stat'd. */
+ * already present. The header and the main sentence name `label`
+ * exactly as the user configured it (relative to `cwd`, D57/Task 14 --
+ * this CLI's own diagnostics never print an absolute path); the `Next:`
+ * clause names the real node instead (D106 R1, lead-approved option A):
+ * a directory-style label always carries a trailing separator
+ * (`dirLabel`) even when the node found there is a file, and a file
+ * cannot be "at" a path spelled with one, so the actionable path in
+ * `Next:` drops it. */
 function throwPathConflict(
 	label: string,
 	fieldName: string,
 	expectedKind: NodeKind,
 	actualKind: NodeKind,
 ): never {
+	const realLabel = stripTrailingSeparators(label);
 	return throwHejbroError(
 		"init-path-conflict",
-		`"${label}" was expected to be a ${expectedKind} for ${fieldName}, but a ${actualKind} is there. Next: move or remove the existing ${actualKind} at "${label}", then rerun \`hejbro init\`.`,
+		`"${label}" was expected to be a ${expectedKind} for ${fieldName}, but a ${actualKind} is there. Next: move or remove the existing ${actualKind} at "${realLabel}", then rerun \`hejbro init\`.`,
 	);
 }
 
@@ -99,12 +119,202 @@ function throwSpelledAsDirectory(label: string, fieldName: string): never {
 	);
 }
 
+/** Builds and throws the `init-path-conflict`-coded, enriched plain
+ * `HejbroError` for a file sitting in a planned artifact's own ancestor
+ * chain (D106 R1 N1) -- distinct wording from {@link throwPathConflict}
+ * (`to hold ${fieldName}` rather than `for ${fieldName}`) because
+ * `label` here is an ancestor of the field's own configured path, not
+ * that path itself. */
+function throwAncestorConflict(
+	label: string,
+	fieldName: string,
+	actualKind: NodeKind,
+): never {
+	return throwHejbroError(
+		"init-path-conflict",
+		`"${label}" was expected to be a directory to hold ${fieldName}, but a ${actualKind} is there. Next: move or remove the existing ${actualKind} at "${label}", then rerun \`hejbro init\`.`,
+	);
+}
+
+/** Builds and throws the `init-path-conflict`-coded, enriched plain
+ * `HejbroError` for two configured fields whose resolved paths are the
+ * same node (D106 R1 N2): creating the first would make the second's
+ * own `existsSync` check report it as already present -- "tells a
+ * repair run that a broken project is whole", the very thing this
+ * command's idempotence promise forbids. Labelled with {@link fileLabel}
+ * (D106 R1 lead-approved option A extended, same reasoning as
+ * {@link throwAncestorConflict}): no user spelled this one shared path
+ * for both fields at once, so there is no single field's own spelling
+ * to preserve. */
+function throwDuplicatePath(
+	label: string,
+	firstField: string,
+	secondField: string,
+): never {
+	return throwHejbroError(
+		"init-path-conflict",
+		`"${label}" is named by both ${firstField} and ${secondField}. Next: point them at two different paths, then rerun \`hejbro init\`.`,
+	);
+}
+
+/** Builds and throws the `init-path-conflict`-coded, enriched plain
+ * `HejbroError` for a `stat` failure other than "nothing is there"
+ * (D106 R1 B1) -- an `EACCES`/`ELOOP`/etc, named by the operating
+ * system's own code instead of the raw Node stack this CLI's
+ * diagnostics never print (D57). */
+function throwStatFailed(
+	label: string,
+	fieldName: string,
+	code: string,
+): never {
+	return throwHejbroError(
+		"init-path-conflict",
+		`"${label}" could not be checked for ${fieldName} (${code}). Next: check permissions on "${label}", then rerun \`hejbro init\`.`,
+	);
+}
+
+/** The operating system's own error code off a caught `fs` failure, or
+ * `"unknown"` when the thrown value carries none -- never the raw error
+ * object, which a diagnostic must not print (D57). */
+const errorCode = (error: unknown): string => {
+	if (error !== null && typeof error === "object" && "code" in error) {
+		return String((error as NodeJS.ErrnoException).code);
+	}
+	return "unknown";
+};
+
+type StatOutcome =
+	| { readonly kind: "absent" }
+	| { readonly kind: "present"; readonly actualKind: NodeKind }
+	| { readonly kind: "stat-failed"; readonly code: string };
+
+/** `stat`'s own three outcomes at `path` (already trailing-separator-
+ * stripped by the caller, D106 R1 B1): the node's kind, "nothing is
+ * there" (`ENOENT` only), or any other failure, carried as data instead
+ * of being decided by a bare `existsSync` that a trailing separator can
+ * make silently `false` for a file that is really there. */
+const statOutcomeAt = (path: string): StatOutcome => {
+	try {
+		return { kind: "present", actualKind: kindOfStat(statSync(path)) };
+	} catch (error) {
+		const code = errorCode(error);
+		if (code === "ENOENT") {
+			return { kind: "absent" };
+		}
+		return { kind: "stat-failed", code };
+	}
+};
+
+type AncestorOutcome =
+	| { readonly kind: "ok" }
+	| {
+			readonly kind: "conflict";
+			readonly path: string;
+			readonly actualKind: NodeKind;
+	  }
+	| {
+			readonly kind: "stat-failed";
+			readonly path: string;
+			readonly code: string;
+	  };
+
+/** Walks `path`'s own chain of parents upward (never `path` itself --
+ * callers pass an artifact's `dirname`), continuing past both `ENOENT`
+ * ("nothing there yet") and `ENOTDIR` (a `stat` below a file ancestor
+ * fails this way too, D106 R1 N1 -- stopping there instead of
+ * continuing up would name the deepest segment tried, not the file
+ * actually blocking the chain) until a `stat` succeeds. Recursive,
+ * never a loop (`check:bans`); `dirname` of the filesystem root is
+ * itself, which ends the recursion even in the case nothing on the way
+ * up ever exists. */
+const walkAncestors = (path: string): AncestorOutcome => {
+	try {
+		const stat = statSync(path);
+		if (stat.isDirectory()) {
+			return { kind: "ok" };
+		}
+		return { kind: "conflict", path, actualKind: "file" };
+	} catch (error) {
+		const code = errorCode(error);
+		if (code === "ENOENT" || code === "ENOTDIR") {
+			const parent = dirname(path);
+			if (parent === path) {
+				return { kind: "ok" };
+			}
+			return walkAncestors(parent);
+		}
+		return { kind: "stat-failed", path, code };
+	}
+};
+
+/** Refuses before creating anything: a file sitting somewhere in a
+ * planned artifact's own directory chain, not just at its leaf
+ * (D106 R1 N1). Runs before {@link checkPathKind}: a leaf whose own
+ * `stat` also fails with `ENOTDIR` (because an ancestor, not the leaf,
+ * is the file) is named here by the ancestor that actually blocks it,
+ * instead of by the leaf with a bare OS code. Labelled with
+ * {@link fileLabel} (no trailing separator, D106 R1 lead-approved
+ * option A extended to ancestors): unlike a leaf's own field, no user
+ * ever spelled this path with a trailing slash for this function to
+ * preserve -- it is derived from a nested field's own value, so both
+ * the quote and the `Next:` clause name the one real path. */
+const checkAncestors = (cwd: string, artifact: Artifact): void => {
+	const outcome = walkAncestors(dirname(artifact.path));
+	if (outcome.kind === "ok") {
+		return;
+	}
+	const label = fileLabel(cwd, outcome.path);
+	if (outcome.kind === "conflict") {
+		throwAncestorConflict(label, artifact.fieldName, outcome.actualKind);
+	}
+	throwStatFailed(label, artifact.fieldName, outcome.code);
+};
+
+type ArtifactPair = readonly [Artifact, Artifact];
+
+/** Every unordered pair of `artifacts`, each appearing once, in the
+ * artifacts' own relative order -- built with `flatMap`/`slice`, never
+ * a nested loop (`check:bans`). */
+const artifactPairs = (
+	artifacts: ReadonlyArray<Artifact>,
+): ReadonlyArray<ArtifactPair> =>
+	artifacts.flatMap((artifact, index) =>
+		artifacts.slice(index + 1).map((other): ArtifactPair => [artifact, other]),
+	);
+
+/** Refuses before creating anything: two planned artifacts whose
+ * resolved paths are the same node (D106 R1 N2). Compared after
+ * stripping trailing separators -- the comparison is of resolved
+ * paths, not of spellings (`"mig/"` and `"mig"` name the same path). */
+const checkNoDuplicatePaths = (
+	cwd: string,
+	artifacts: ReadonlyArray<Artifact>,
+): void => {
+	const duplicate = artifactPairs(artifacts).find(
+		([a, b]) =>
+			stripTrailingSeparators(a.path) === stripTrailingSeparators(b.path),
+	);
+	if (duplicate === undefined) {
+		return;
+	}
+	const [first, second] = duplicate;
+	throwDuplicatePath(
+		fileLabel(cwd, first.path),
+		first.fieldName,
+		second.fieldName,
+	);
+};
+
 /** Refuses before creating anything (checked for every planned artifact
  * before any of them is created): a file artifact whose own path is
  * spelled as a directory, or an existing path that is the wrong kind
  * of node for what `artifact` names. init resolves the same way
  * `generate` does and never normalizes the configured value away --
- * a trailing separator on a file field is refused, not trimmed. */
+ * a trailing separator on a file field is refused, not trimmed. The
+ * presence/kind check itself does strip trailing separators before
+ * stat'ing (D106 R1 B1): a directory field honours `"mig/"` the same as
+ * `"mig"`, so the check that path is inspected under must too, or a file
+ * sitting there escapes it and reaches a raw `mkdirSync` crash instead. */
 const checkPathKind = (cwd: string, artifact: Artifact): void => {
 	const expectedKind = expectedKindOf(artifact);
 	if (expectedKind === "file" && artifact.path.endsWith("/")) {
@@ -112,16 +322,19 @@ const checkPathKind = (cwd: string, artifact: Artifact): void => {
 		// trailing slash the message needs to show; `dirLabel` keeps it.
 		throwSpelledAsDirectory(dirLabel(cwd, artifact.path), artifact.fieldName);
 	}
-	if (!existsSync(artifact.path)) {
+	const outcome = statOutcomeAt(stripTrailingSeparators(artifact.path));
+	if (outcome.kind === "absent") {
 		return;
 	}
-	const actualKind = kindAt(artifact.path);
-	if (actualKind !== expectedKind) {
+	if (outcome.kind === "stat-failed") {
+		throwStatFailed(artifact.label, artifact.fieldName, outcome.code);
+	}
+	if (outcome.kind === "present" && outcome.actualKind !== expectedKind) {
 		throwPathConflict(
 			artifact.label,
 			artifact.fieldName,
 			expectedKind,
-			actualKind,
+			outcome.actualKind,
 		);
 	}
 };
@@ -273,7 +486,20 @@ const reportLineFor = (
 export const runInit = async (cwd: string): Promise<InitResult> => {
 	const fallbackIdentity = "init";
 	const configFilePath = join(cwd, CONFIG_FILE_NAME);
+	const configArtifact: Artifact = {
+		kind: "file",
+		label: CONFIG_FILE_NAME,
+		path: configFilePath,
+		content: CONFIG_FILE_CONTENT,
+		fieldName: "hejbro.config.ts",
+	};
 	try {
+		// The configuration's own kind is checked before it is loaded
+		// (D106 R1 N3): the requirement already names the configuration
+		// among the artifacts whose wrong-kind path stops the run, but
+		// the loader would otherwise answer first, with a config-load-
+		// failed diagnostic about import resolution instead of this one.
+		checkPathKind(cwd, configArtifact);
 		const config = await readExistingConfig(cwd, configFilePath);
 		const configPresent = config !== null;
 		const migrationsField = resolveField(
@@ -289,26 +515,28 @@ export const runInit = async (cwd: string): Promise<InitResult> => {
 			DEFAULT_SNAPSHOT_PATH,
 		);
 
-		const configArtifact: Artifact = {
-			kind: "file",
-			label: CONFIG_FILE_NAME,
-			path: configFilePath,
-			content: CONFIG_FILE_CONTENT,
-			fieldName: "hejbro.config.ts",
-		};
 		const migrationsArtifact = buildMigrationsArtifact(cwd, migrationsField);
 		const snapshotArtifact = buildSnapshotArtifact(cwd, snapshotField);
 
 		// Every planned artifact's path kind is checked before any of
 		// them is created -- a conflict discovered on the snapshot must
 		// not leave a just-created config file or migrations directory
-		// behind it.
+		// behind it. Two fields resolving to the same path (D106 R1 N2)
+		// are checked first: creating one would make the other's own
+		// existsSync check see it as already present. The ancestor chain
+		// (D106 R1 N1) is checked before the leaf's own kind (3.1/
+		// checkPathKind): a leaf blocked by a file ancestor is named by
+		// that ancestor, not by the leaf.
 		const plannedArtifacts: ReadonlyArray<Artifact> = [
 			configArtifact,
 			migrationsArtifact,
 			snapshotArtifact,
 		].filter((artifact): artifact is Artifact => artifact !== null);
-		plannedArtifacts.map((artifact) => checkPathKind(cwd, artifact));
+		checkNoDuplicatePaths(cwd, plannedArtifacts);
+		plannedArtifacts.forEach((artifact) => {
+			checkAncestors(cwd, artifact);
+			checkPathKind(cwd, artifact);
+		});
 
 		const report = [
 			applyArtifact(configArtifact),

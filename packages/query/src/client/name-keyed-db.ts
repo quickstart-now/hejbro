@@ -209,6 +209,38 @@ const buildTableClient = <
 });
 
 /**
+ * Names the language itself reads off any value, regardless of what a
+ * contract vendors (D106 R1 N8): `await`/`Promise.resolve` read `then`
+ * to decide whether to chain a promise (an `async` function that
+ * `return`s the client reads it), `String()`/template interpolation and
+ * `console.log`-style inspection read `toString` and `constructor`,
+ * equality/coercion reads `valueOf`, and `JSON.stringify` reads
+ * `toJSON`. A guard with no exception for these would refuse a correct,
+ * ordinary use of the client value itself. An own property (checked
+ * first, always) still wins over this list -- a contract that does
+ * vendor a table or function under one of these names is unaffected.
+ */
+const JS_PROTOCOL_NAMES: ReadonlySet<string> = new Set([
+	"then",
+	"toString",
+	"valueOf",
+	"constructor",
+	"toJSON",
+]);
+
+/**
+ * Whether `prop` names a member `obj` actually has -- an own property
+ * (`Object.hasOwn`, never `prop in obj`: the `in` operator also matches
+ * an *inherited* `Object.prototype` member like `hasOwnProperty` or
+ * `__proto__`, which lets a lookup of a name the contract never vendors
+ * silently resolve to `Object.prototype` instead of refusing, D106 R1
+ * N8) or one of the {@link JS_PROTOCOL_NAMES} the language itself reads
+ * off any value.
+ */
+const isKnownMember = (obj: object, prop: string): boolean =>
+	Object.hasOwn(obj, prop) || JS_PROTOCOL_NAMES.has(prop);
+
+/**
  * Refuses an unknown table by name, naming the contract's own vendored
  * list — never a raw "Cannot read properties of undefined" crash (R2-G6
  * 6.8, "errors name the contract, not internals"). Reachable when a
@@ -224,7 +256,7 @@ const buildTableClient = <
 const wrapWithTableGuard = <T extends object>(target: T): T =>
 	new Proxy(target, {
 		get(obj, prop, receiver) {
-			if (typeof prop === "string" && !(prop in obj)) {
+			if (typeof prop === "string" && !isKnownMember(obj, prop)) {
 				const known = Object.keys(obj)
 					.filter((key) => key !== "as" && key !== "fn")
 					.sort();
@@ -272,7 +304,7 @@ const buildTables = <TDatabase extends DatabaseShape>(
 const wrapWithFunctionGuard = <T extends object>(target: T): T =>
 	new Proxy(target, {
 		get(obj, prop, receiver) {
-			if (typeof prop === "string" && !(prop in obj)) {
+			if (typeof prop === "string" && !isKnownMember(obj, prop)) {
 				const known = Object.keys(obj).sort();
 				const buildList = (): string => {
 					if (known.length === 0) {
