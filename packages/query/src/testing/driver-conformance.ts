@@ -215,43 +215,44 @@ const assertTrueTierConformance = (
 };
 
 /**
- * The kit's one exported entry point. `capabilities["session-state"]`
- * together with `capabilities["interactive-transactions"]` decides which
- * tier's obligation applies and which one of the three shapes of
- * `observation` it reads — never the other way around, and never inferred
- * from `observation`'s own shape as a substitute for reading the
- * declaration. A declaration checked against an observation shaped for a
- * different tier (in any direction) is a conformance failure in its own
- * right: the caller recorded the wrong thing for what this driver
- * actually declares.
+ * The `session-state: true` tier's own shape check, then its obligation --
+ * split out from {@link assertSessionStateConformance} (CRAP #154: the
+ * combined router+shape+obligation function's own cyclomatic complexity
+ * crossed the CRAP≤5 gate) so each tier's shape guard lives beside the
+ * obligation it guards, and the router stays a router. Internal.
  */
-export const assertSessionStateConformance = (
-	capabilities: DriverCapabilities,
+const assertTrueTierShapeThenConformance = (
 	observation: ConformanceObservation,
 ): void => {
-	if (capabilities["session-state"]) {
-		if (!("recordedForSetupSession" in observation)) {
-			throwConformanceViolation(
-				"session-state:true",
-				"capabilities declares session-state true, but this driver was checked with a false-tier observation instead of recordedForSetupSession.",
-			);
-		}
-		assertTrueTierConformance(observation.recordedForSetupSession);
-		return;
-	}
-	if (capabilities["interactive-transactions"]) {
-		if (!("recordedOnConnection" in observation)) {
-			throwConformanceViolation(
-				"session-state:false+interactive-transactions:true",
-				"capabilities declares session-state false with interactive-transactions true, but this driver was checked with an observation that cannot show transaction control -- recordedOnConnection/callerStatement is required for this declaration.",
-			);
-		}
-		assertTransactionEnvelopeConformance(
-			observation.recordedOnConnection,
-			observation.callerStatement,
+	if (!("recordedForSetupSession" in observation)) {
+		throwConformanceViolation(
+			"session-state:true",
+			"capabilities declares session-state true, but this driver was checked with a false-tier observation instead of recordedForSetupSession.",
 		);
-		return;
 	}
+	assertTrueTierConformance(observation.recordedForSetupSession);
+};
+
+/** The envelope tier's own shape check, then its obligation -- see {@link assertTrueTierShapeThenConformance}'s own doc for why this split exists. Internal. */
+const assertEnvelopeTierShapeThenConformance = (
+	observation: ConformanceObservation,
+): void => {
+	if (!("recordedOnConnection" in observation)) {
+		throwConformanceViolation(
+			"session-state:false+interactive-transactions:true",
+			"capabilities declares session-state false with interactive-transactions true, but this driver was checked with an observation that cannot show transaction control -- recordedOnConnection/callerStatement is required for this declaration.",
+		);
+	}
+	assertTransactionEnvelopeConformance(
+		observation.recordedOnConnection,
+		observation.callerStatement,
+	);
+};
+
+/** The plain `session-state: false` tier's own shape check, then its obligation -- see {@link assertTrueTierShapeThenConformance}'s own doc for why this split exists. Internal. */
+const assertFalseTierShapeThenConformance = (
+	observation: ConformanceObservation,
+): void => {
 	if (!("recordedForOneExecute" in observation)) {
 		throwConformanceViolation(
 			"session-state:false",
@@ -262,4 +263,32 @@ export const assertSessionStateConformance = (
 		observation.recordedForOneExecute,
 		observation.callerStatement,
 	);
+};
+
+/**
+ * The kit's one exported entry point -- a router only (CRAP #154: each
+ * tier's own shape check moved beside its obligation, see
+ * {@link assertTrueTierShapeThenConformance} and its two siblings).
+ * `capabilities["session-state"]` together with
+ * `capabilities["interactive-transactions"]` decides which tier's
+ * obligation applies and which one of the three shapes of `observation`
+ * it reads — never the other way around, and never inferred from
+ * `observation`'s own shape as a substitute for reading the declaration.
+ * A declaration checked against an observation shaped for a different
+ * tier (in any direction) is a conformance failure in its own right: the
+ * caller recorded the wrong thing for what this driver actually declares.
+ */
+export const assertSessionStateConformance = (
+	capabilities: DriverCapabilities,
+	observation: ConformanceObservation,
+): void => {
+	if (capabilities["session-state"]) {
+		assertTrueTierShapeThenConformance(observation);
+		return;
+	}
+	if (capabilities["interactive-transactions"]) {
+		assertEnvelopeTierShapeThenConformance(observation);
+		return;
+	}
+	assertFalseTierShapeThenConformance(observation);
 };
