@@ -50,6 +50,12 @@ SHALL drop in their existing identity order instead, and a resulting
 refusal from the database is reported through the coded failure the next
 paragraph states.
 
+The order this reverses is the one generation itself emits: within a
+kind, a declared object SHALL be created after the declared objects it
+references, so a table carrying a foreign key to another declared table
+is created after that table, and a mutually referencing pair keeps its
+existing identity order there too.
+
 A drop that fails SHALL leave the database and the ledger exactly as
 they were: the drops and the ledger's own clearing run inside one
 transaction, so a failure partway through rolls all of it back, and the
