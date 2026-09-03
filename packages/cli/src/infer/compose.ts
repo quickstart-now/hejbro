@@ -3,8 +3,6 @@ import {
 	schema as declareSchema,
 	emptySnapshot,
 	generateMigration,
-	isSqlName,
-	toSnakeCase,
 } from "@hejbro/core";
 import type { DriverSession } from "@hejbro/query";
 import type { Catalog } from "../check/catalog";
@@ -42,6 +40,8 @@ import {
 	buildExistingTableHandle,
 	inferTable,
 	isExpressibleName,
+	isNameDeclarable,
+	isNameRoundTrippable,
 } from "./table";
 
 export type InferSourceCommand = "import" | "pull";
@@ -129,33 +129,6 @@ const filterInferenceCatalogToSchemas = (
 		sequenceOwnership: bySchema(inferenceCatalog.sequenceOwnership, included),
 	};
 };
-
-/**
- * `toSnakeCase(tsKey) === sqlName` -- the exact fact `table()` itself
- * derives a column's SQL name from its key by (CI-G1-R1-06 (C)/
- * CI-G1-R1-08 (C)): a guessed key that does not survive this round
- * trip cannot express its own source column's spelling. Necessary, not
- * sufficient (D106 R5-B2): a name can round-trip and still fail D36 --
- * `"_id"` is its own round-trip fixed point (`toSnakeCase` never
- * strips a leading `_`) but `table()`'s own `assertSqlName` rejects it
- * (`^[a-z]`, not `^[a-z_]`) three frames later. {@link isNameDeclarable}
- * is the actual gate; this predicate alone underestimates what
- * `undeclarableNameColumnsFor` must catch.
- */
-const isNameRoundTrippable = (sqlName: string, tsKey: string): boolean =>
-	toSnakeCase(tsKey) === sqlName;
-
-/**
- * D106 R5-B2: whether a column can actually reach a declaration --
- * round-trippable *and* a name `table()`'s own `assertSqlName` (D36)
- * would accept, checked here with the same rule `@hejbro/core` itself
- * enforces (`isSqlName`, exported for exactly this) rather than a
- * second, hand-rolled copy of it. Two different rules answering "can
- * this be declared" is the gap this round's own findings (R5-B1,
- * R5-B2) both trace to.
- */
-export const isNameDeclarable = (sqlName: string, tsKey: string): boolean =>
-	isNameRoundTrippable(sqlName, tsKey) && isSqlName(sqlName);
 
 /**
  * Neither command's snapshot can carry a column under a name the

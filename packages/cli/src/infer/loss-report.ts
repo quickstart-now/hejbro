@@ -3,7 +3,11 @@ import type { Catalog } from "../check/catalog";
 import type { ColumnLoss } from "./columns";
 import type { NotInferredSummary } from "./rest";
 import type { InferredTableFacts } from "./table";
-import { isExpressibleForeignKeyName } from "./table";
+import {
+	isExpressibleForeignKeyName,
+	isExpressibleName,
+	isNameDeclarable,
+} from "./table";
 
 export type UniqueIndexApproximation = {
 	readonly schema: string;
@@ -21,7 +25,14 @@ export type UniqueIndexApproximation = {
  * schema-filtered catalog rows with no such filter, so a UNIQUE
  * constraint on a table the reading itself omitted (an invalid name)
  * still announced an approximation for an object the very next report
- * line said was never inferred at all.
+ * line said was never inferred at all. The constraint's own name is
+ * asked too (D106 R8-N1/#724): the surviving-table filter alone cannot
+ * tell a validly named constraint from a sibling whose own name is
+ * not -- the same `isExpressibleName` (D36) rule `table.ts`'s own
+ * `omittedIndexes` already asks of this same object (a UNIQUE
+ * constraint's backing index carries its identical name), asked here
+ * so the report-side half never disagrees with the declaration-side
+ * one about which UNIQUE constraints exist at all.
  */
 export const detectUniqueIndexApproximations = (
 	catalog: Catalog,
@@ -32,6 +43,7 @@ export const detectUniqueIndexApproximations = (
 		.filter((constraint) =>
 			survivingTableIdentities.has(`${constraint.schema}.${constraint.table}`),
 		)
+		.filter((constraint) => isExpressibleName(constraint.name))
 		.map((constraint) => ({
 			schema: constraint.schema,
 			table: constraint.table,
@@ -54,13 +66,25 @@ const NEXTVAL_DEFAULT = /^nextval\('([^']+)'::regclass\)$/;
  * relationship makes it that column's own, so 1.3 never converts it to
  * a `serial`-family builder. Named here as the approximation it is:
  * the raw default round-trips the SQL exactly, but the sequence itself
- * stays unexpressed as a declaration (D66).
+ * stays unexpressed as a declaration (D66). The column's own name is
+ * asked too (D106 R8-N1/#724, the same shape as
+ * {@link detectUniqueIndexApproximations}'s own constraint-name check,
+ * one level down): a column no declaration can carry reaches neither
+ * the starter file nor the contract (`compose.ts`'s own
+ * `tablesExcludingUndeclarableNames` excludes it there), so it must
+ * never be announced as keeping a default it will never actually have
+ * a chance to keep. `isNameDeclarable` is the same rule that exclusion
+ * uses, asked here directly rather than through a second, narrower
+ * filter on the table list this detector receives.
  */
 export const detectNextvalDefaultApproximations = (
 	tables: ReadonlyArray<InferredTableFacts>,
 ): ReadonlyArray<NextvalDefaultApproximation> =>
 	tables.flatMap((table) =>
 		table.columns.flatMap((column) => {
+			if (!isNameDeclarable(column.sqlName, column.tsKey)) {
+				return [];
+			}
 			if (column.facts.isSerialOwned || column.facts.catalogDefault === null) {
 				return [];
 			}
@@ -132,9 +156,10 @@ export type UndeclarableNameColumn = {
 	readonly table: string;
 	readonly sqlName: string;
 	/**
-	 * Which half of `isNameDeclarable` (`compose.ts`) failed, set there
-	 * where both halves are already in hand rather than re-derived here
-	 * (D106 R6-N1). `"noDeclarationKey"`: no key produces this SQL name
+	 * Which half of `isNameDeclarable` (`table.ts`) failed, set in
+	 * `compose.ts`'s own `undeclarableColumnCause`, where both halves
+	 * are already in hand rather than re-derived here (D106 R6-N1).
+	 * `"noDeclarationKey"`: no key produces this SQL name
 	 * back at all (`toSnakeCase` never yields it -- a quoted
 	 * `"createdAt"`'s shape). `"identifierRuleRejects"`: a key does
 	 * produce this name back, but D36 itself refuses it (the

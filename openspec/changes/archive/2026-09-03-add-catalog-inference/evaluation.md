@@ -2568,3 +2568,325 @@ dishonestly, and it was the first thing measured on the gate's real
 build. Reported as a judgement call, not as a procedure: the general
 rule is that a guard stepped around needs the argument written down,
 and the moment the argument stops holding, the run waits for the build.
+
+## Round 8
+
+### Verdict
+
+BLOCKING 0 / NON-BLOCKING 2 / OK 24
+
+(24 delta scenarios: `catalog-inference` 8, `cli-commands` 10,
+`schema-vendoring` 3, `table-declaration` 3 — the same set round 7
+reviewed. Every round-7 finding is closed in the code, in the delta and
+in the skill; the round-7 blocking finding is closed end to end, live,
+for all three of its shapes plus three the pin does not cover (a schema
+named `t`, an enum named `t`, a table named `table` in a schema named
+`text`). Neither non-blocking finding is in this round's own subject:
+one is R5-N2's exact shape one level down — the report still announces
+two kinds of approximation for objects the very next band says the
+reading omitted — and the other is #712, carried unchanged for a fourth
+round.)
+
+### Round-7 findings re-checked
+
+- **R7-B1 — a starter file naming a table `t` could not be loaded —
+  CLOSED, measured live in all three shapes and three more.**
+  `EXTRAS_CALLBACK_PARAM` (`declare-emit/emit.ts:734`) is now the one
+  constant `renderExtrasBlock` (`:750`) writes and `reservedIdentifiers`
+  (`:1659-1662`) reserves, unconditionally, and `resolveFileIdentifiers`
+  /`localNamespaceOf` read `reservedIdentifiers` while `hejbroImportLine`
+  (`:1960`) still reads `vocabulary` — the two questions have two values.
+  Live against one throwaway `postgres:17`, through the built
+  `dist/cli.js`: `m1.t` + `m1.orders → m1.t` emits
+  `export const t2 = table(m1, "t", …)` and references `t2` from inside
+  the callback; `k1.t` ← `k2.orders` emits
+  `import { t2 } from "./k1.schema";` (no bare `t` to alias, because
+  `k1` reserved it too); the `h1.a`/`h1.b → h2.t`, `h2.t → h1.a` cycle
+  cuts in `h2.schema.ts` and `h1.schema.ts` imports `t2`. All seven
+  emitted files load through the production loader's own `jiti` as their
+  own entry, all pass `tsc --noEmit --strict`, `hejbro baseline` renders
+  `references "h2"."t" ("id")`/`references "k1"."t" ("id")`/
+  `references "m1"."t" ("id")`, and `hejbro check --url` against the
+  source database reports "no differences". Beyond the pin: a **schema**
+  named `t` holding `t`/`t2`/`t3`/`users` emits
+  `schema→t4, table t→t5, t2→t2, t3→t3, users→users`, byte-identical
+  across two runs, loads and type-checks; an **enum** named `t` beside a
+  table `t2` emits `pgEnum→t3, table→t2`; a column key `t` beside a table
+  `t` is untouched (a column key is a property, not a binding); and a
+  schema `text` holding tables `table` and `uuid` emits
+  `text2`/`table2`/`uuid2` and type-checks.
+- **R7-N1 — the skill still offered the retracted remedy — CLOSED.**
+  `skills/hejbro/references/brownfield-adoption.md:257-260` now reads
+  "`check` keeps reporting that column as undeclared until it's renamed
+  in the database: the DSL derives every column's SQL name from its
+  TypeScript key and accepts no override, so no declaration, hand-written
+  or not, can carry either kind of name", and `:298-303` keeps the
+  general `link` claim while excepting exactly this loss ("but not a
+  column whose SQL name no declaration key can produce … only renaming
+  the column in the database ends that one"). `grep -rn 'by hand'
+  skills/hejbro` returns no "added by hand" anywhere. The skill's other
+  bands still match: Approximated's four are `approximationLines`' four,
+  Omitted's six are `buildLossReport`'s six, and its cycle and
+  never-named-schema paragraphs match what was measured.
+- **R7-N2 — two `Omitted:` lines offered a remedy D36 makes impossible —
+  CLOSED.** `omittedIndexLine` (`loss-report.ts:455`) and
+  `omittedCheckLine` (`:467`) now end "… so rename it in the database to
+  bring it back; a hand-written declaration under a different name only
+  adds a second one." Measured verbatim in stdout and in the starter
+  header for `s1.owners.IX_Owners` and `s1.owners.CK_Owners`. No
+  "declare it by hand" survives in `loss-report.ts`.
+- **R7-N3 — the emitted comment claimed a cycle that did not exist —
+  CLOSED.** `HandleReason` (`emit.ts:773-808`) is the reason itself, read
+  off `tablesByIdentity.has(fk.referencesTable)`. Measured: `app.orders/
+  invoices/audit → ext.users` and `app.audit → ext2.accounts` (schemas
+  never named) each carry "The target's schema was never read by this run
+  -- there is no file to import it from, so this FK stays on a
+  reference-only handle that names the table directly instead."; the
+  `h2.t → h1.a` cut carries "Closes a declaration-file cycle …". No file
+  measured this round claims a cycle where none exists.
+- **R7-N4 — one handle per foreign key in the text, one per target in
+  the reading — CLOSED, counted on both sides.** In-process over the
+  same reading: `SNAPSHOT_EXISTING = [["table:ext.users",["code","id"]],
+  ["table:ext2.accounts",["id"]]]` and `TEXT_HANDLES =
+  [const extUsersRef = existingTable("ext","users",{ code: text(), id:
+  text() }), const ext2AccountsRef = existingTable("ext2","accounts",
+  { id: text() })]` — two and two, with the column union load-bearing
+  (`ext.users` is reached by `orders.user_id → id`, `invoices.user_code →
+  code` and `audit.who → id`). Two runs byte-identical; `--schema app
+  --schema app2` and `--schema app2 --schema app` byte-identical. A
+  second file that also references `ext.users` declares its own single
+  handle — which is what the delta asks for ("a handle of its own",
+  "**A starter file** … SHALL carry one handle per target"), not a
+  regression of this finding.
+- **R7-N5 — an enum type's catalog name — STILL OPEN by decision
+  (#712).** Re-measured: `create type s7."Status" as enum ('a','b')`
+  reaches the snapshot (`enum:s7.Status`), the starter
+  (`export const status = pgEnum(s7, "Status", ["a","b"])`) and the DDL,
+  with an empty `Omitted:`/`Approximated:` band, while a table, schema,
+  index or check of that shape is omitted and named. Reported, not
+  classified: no delta scenario speaks to an enum's own name.
+
+### Blocking
+
+None.
+
+### Non-blocking
+
+**R8-N1 — the report still announces approximations for objects the
+reading omitted: R5-N2's own shape, one level down.** Two detectors
+filter by surviving *table* and by nothing narrower, so an object the
+report's own next band says was left out is announced two lines earlier
+as an approximation that was made.
+
+1. `detectUniqueIndexApproximations` (`infer/loss-report.ts:26-38`)
+   filters `survivingTableIdentities` only — never whether the
+   constraint's own name is one D36 can carry. Measured live
+   (`nn.uq` holding `constraint "UQ_Code" unique (code)` and
+   `constraint uq_code2 unique (id, code)`, `import --schema nn`):
+
+   ```
+   Approximated: the UNIQUE constraint "nn.uq.UQ_Code" is inferred as a unique
+     index of the same name -- re-creating it emits `create unique index`, not
+     `add constraint ... unique`.
+   Omitted: index "nn.uq.UQ_Code" -- its catalog name is not a valid hejbro SQL
+     identifier, so no declaration can carry it under the same name `check` would
+     compare it by. hejbro will not mention it again …
+   ```
+   The emitted `nn.schema.ts` carries `indexes: [index("uq_code2")
+   .unique().on(t.id, t.code)]` and nothing for `UQ_Code`. So the
+   approximation line is false on both halves: nothing was inferred, and
+   re-creating it emits nothing at all.
+
+2. `detectNextvalDefaultApproximations` (`:59-81`) walks
+   `tablesWithReachableForeignKeys`' own `table.columns` — the same list
+   `undeclarableNameColumnsFor` (`compose.ts:544`) then filters — so a
+   column omitted for its name still announces its kept default.
+   Measured (`nx.t1 (id, _bad int default nextval('nx.free_seq'), ok int
+   default nextval(…))`), identically under `import` and under `pull`:
+
+   ```
+   Approximated: column "nx.t1._bad" keeps its `nextval('nx.free_seq')` default
+     as a raw expression, naming the sequence it does not own.
+   Omitted: column "nx.t1._bad" -- a key does produce this name back, but it is
+     not a valid hejbro SQL identifier. …
+   ```
+   `_bad` reaches neither the starter file nor the contract, so it keeps
+   no default of any kind.
+
+The delta says both halves of this out loud — `catalog-inference` ›
+"A catalog reading yields a snapshot and a marked description": "a
+surviving declaration SHALL never reference an object this reading
+omitted for its name, and **the report SHALL never announce an
+approximation for one**"; and "The loss is announced, with the way out":
+the report names "**every approximation the reading made**", of which
+these two are not. Classified non-blocking rather than blocking because
+no scenario's own WHEN reaches this input: the sentence carrying the
+SHALL sits in a paragraph about a table or schema taking its contents
+with it, and the scenario that states the clause ("A reference into an
+omitted object is omitted with it") fires only on a foreign key into an
+omitted target — where shipped behaviour is correct (measured:
+`fz.keep` holding `constraint "FK_Keep_Gone" → fz."Gone"` prints the
+`Omitted: foreign key` line and no `Approximated:` line at all).
+
+What is right today is the boundary R5-N2 drew: a UNIQUE constraint or a
+`nextval` default on an omitted *table* produces no approximation
+(measured: `nx."Gone".c default nextval(…)` is silent). The rule simply
+was not carried down to an omitted *index name* or an omitted *column*.
+
+**R8-N2 — an enum type's catalog name is still the one identifier D36
+never reaches (#712).** Re-measured this round (see the R7-N5 re-check).
+Reported, not classified, for the fourth round running: no delta
+scenario speaks to an enum's own name, so this is a gap in the delta as
+much as in the code.
+
+### Verified scenarios
+
+- `catalog-inference` › A catalog reading yields a snapshot and a marked description › **Tables and enums are inferred** — OK. Live readings over `k1`/`k2`/`h1`/`h2`/`t`/`e1`/`e2`, `app`/`app2`, `nn`, `s7`, `ca`/`cb`/`cc`: every table, column, key, check, index and enum recorded (`enum:s7.Status`, `enum:s7.kind`, `enum:e1.t`, `enum:ca.mood`), the `Guessed:` line naming the guessed keys, and `hejbro check --url` reporting "no differences" after `baseline`.
+- `catalog-inference` › … › **Two SQL names that collide on one key are both described** — OK. `s4.collide` (`user_id`, `"USER_ID"`, `user_id2`): the description carries `user_id=>userId`, `USER_ID=>userId3`, `user_id2=>userId2` — the bare key to the round-trippable column, the suffix skipping past an unrelated column's own base key — while the snapshot carries `["user_id","user_id2"]` and only `USER_ID` is named in the report.
+- `catalog-inference` › … › **A name no declaration can carry costs that object, not the run** — OK. Schema `"App"`, table `s1."Widgets"` (with `"IX_Widgets"`, `"CK_Widgets"`, `"FK_Widgets_Owner"`), index `s1.owners."IX_Owners"`, check `s1.owners."CK_Owners"`, table `nx."Gone"`, table `fz."Gone"`: every ordinary sibling still inferred, starter and contract still written, one `Omitted:` line per object with its own consequence and a database-rename remedy, nothing announced for the objects that went with an omitted table.
+- `catalog-inference` › … › **A reference into an omitted object is omitted with it** — OK. `s1.orders → s1."Widgets"` names the table and the table remedy; `s1.orders → "App".orders` names `references schema "App"` and the schema remedy; `s1.orders.orders_owner_id_fkey` survives; `fz.keep."FK_Keep_Gone" → fz."Gone"` is dropped with no `Approximated:` line despite its own unexpressible name; two runs byte-identical.
+- `catalog-inference` › … › **A reference into a schema the run did not name is kept** — OK. `app`/`app2` → `ext.users`/`ext2.accounts` with `--schema app [--schema app2]`: unexported handles in the starter, `Relationships` + `contractMetadata.tables.*.foreignKeys` in the contract, no `Tables` entry for either target, no loss-report line, no `ext.schema.ts`, and `baseline` emitting `references "ext"."users" ("id")` / `("code")` / `references "ext2"."accounts" ("id")`.
+- `catalog-inference` › … › **Two tables sharing a constraint name keep their own expressions** — OK, measured end to end. `s3.a pos (x > 0)` / `s3.b pos (y < 0)` → `import` → `baseline` emits `constraint "pos" check ((x > 0))` and `constraint "pos" check ((y < 0))`; that migration was executed against a fresh database on the same server, where `pg_get_constraintdef` reads back `CHECK ((x > 0))` for `s3.a` and `CHECK ((y < 0))` for `s3.b`.
+- `catalog-inference` › … › **What is not inferred is named** — OK. `n1` holding a function, a view, a `point` column and an unowned sequence: `Not inferred: 1 function(s)`, `1 view(s)`, the blanket grants line, `column "n1.geo.p" (type "point")`, `sequence "n1.orphan_seq" … the DSL has no defineSequence() (D66)`; none reaches the snapshot.
+- `catalog-inference` › The loss is announced, with the way out › **The report names the way out** — OK. Every measured report closes with its own way-out line — `pull`'s "The loss ends when you link the schema repository.", `import`'s "The loss ends when you hand-edit the starter declarations." — last in stdout, last in every file header, and still last after `--schema nx --schema s11` appends `Not inferred: nothing to infer in schema "s11".`
+- `cli-commands` › import writes starter declarations › **Declaration files never import each other in a cycle** — OK. The chorded three-schema graph (`ca.a → cc.c`, `cb.b → ca.a`, `cc.c → cb.b`, `cc.c` typed with `ca.mood`) cuts at `cb` (`const caARef = existingTable("ca","a",{id:uuid()})`) and clones the enum in `cc` (`const caMoodEnum = pgEnum(schema("ca"), "mood", ["u","v"])`), leaving the imports `ca→cc→cb` acyclic; the `h1`/`h2` cycle cuts in `h2`. Every file loads as its own entry through the production loader's own `jiti` and type-checks.
+- `cli-commands` › … › **A table named like the emitted callback's parameter still loads** — OK. All three shapes measured live through `dist/cli.js` (see the R7-B1 re-check), plus three the pin does not cover.
+- `cli-commands` › … › **A second import writes the same bytes** — OK. `--schema app`, `--schema s1 --schema App`, `--schema t` each imported twice into empty directories: identical byte for byte; `--schema app --schema app2` identical to `--schema app2 --schema app`; every header carries the full report and the repository-owns-it sentence, with no clock- or machine-derived value.
+- `cli-commands` › … › **A database is imported into starter files** — OK. Seven schemas in one run → seven files, report printed, `baseline` emitting the database's own DDL banner-marked ("This migration describes objects your database already has", `-- baseline: …`), after which `hejbro check --url` against the source database reports "no differences".
+- `cli-commands` › … › **a column the DSL cannot name is left out and said so** — OK. `"createdAt"`, `a_`, `"USER_ID"` and `od."od*/d"` are excluded and named with table, own reason ("no declaration key produces this SQL name back") and consequence; the `*/`-bearing line is escaped in the header (`od*\/d`) and the file parses, loads and type-checks; every other column of each table stays declared.
+- `cli-commands` › … › **a column the DSL rejects by name is left out the same way** — OK. `_id`, `_created_at`, `_9lives`, `_bad` named with "a key does produce this name back, but it is not a valid hejbro SQL identifier"; `label`/`ok` still declared; both kinds offer only a database rename.
+- `cli-commands` › … › **import refuses to guess which schemas to read** — OK. `import-schema-missing` names `--schema` and "most commonly --schema public" before any connection; `--out` has its own `import-destination-missing`.
+- `cli-commands` › … › **The named schemas hold nothing to infer** — OK. `--schema s11`: `import-nothing-to-infer` naming it, exit 1, no stdout, destination not created.
+- `cli-commands` › … › **Every named schema was omitted for its name** — OK, measured live. `--schema App` (its only table `App.orders` perfectly ordinary): `import-nothing-declarable` — its own code, distinct from the empty one — the `Omitted: schema "App" …` line with its way out on stdout, the way-out line last, and the destination directory not created.
+- `cli-commands` › … › **import never overwrites** — OK. `import-destination-exists` naming `o/s1.schema.ts`, the pre-existing bytes unchanged (same md5); an unwritable destination raises `import-destination-unwritable` naming the path and the real `EACCES`.
+- `cli-commands` › pull reads a database as the marked fallback › **A contract is pulled from a database** — OK. Header says inferred-from-a-database, `Tables` carry the guessed keys (`userCode` from `user_code`), the loss report prints and ends with `link`; the contract passes `tsc --noEmit --strict`.
+- `schema-vendoring` › **pull writes where vendor writes** — OK. `.hejbro/vendor/{contract.ts,schema.json,snapshot.sql}` plus a root `hejbro.lock` carrying `"generatedBy": "hejbro pull"`, `"database": "r8"`, `"schemas": ["app"]`; a second `pull` into the same repository succeeds; two independent repositories pulled from the same database are byte-identical; a `contract.ts` that does not look vendored is refused with `vendor-destination-not-vendored` and left untouched.
+- `schema-vendoring` › **A database-sourced contract says so and carries no commit** — OK. `source: "database"`, `database: "r8"`, `schemas: ["app"]`, no `commit`. `ContractMetadata` (`query/src/client/contract-types.ts:90-104`) is a `source`-discriminated union whose git arm keeps `source` optional — a `{roles,tables,commit,exportHash}` literal with no `source`, one with `source:"git"`, and the database shape all type-check under a real `tsc --strict`.
+- `schema-vendoring` › **outdated refuses a database-sourced contract** — OK. `hejbro outdated` and `hejbro vendor --check` both fail with `vendor-origin-not-a-commit`, naming the database and "`hejbro link <repository>` … then `hejbro vendor`"; `hejbro link` then succeeds.
+- `table-declaration` › **A named foreign key keeps its name** — OK. A hand-written `name: "fk_custom_name"` emits `add constraint "fk_custom_name" foreign key ("author_id") references "blog"."authors" ("id")`; no derived name appears. From a catalog: `tags_post_id_fkey` (≠ derived) is written as `name: "tags_post_id_fkey"` and re-emitted verbatim.
+- `table-declaration` › **An unnamed foreign key is unchanged** — OK. The same declaration without a name emits `posts_author_id_fk`; a catalog name equal to the derived one (`nn.notes.notes_post_id_fk`) is left implicit in the starter, and `FK_Links_Post` — the D36 exception — is declared under the derived name with its own `Approximated:` line naming both.
+- `table-declaration` › **Renaming the table leaves an explicit name alone** — OK. Renaming `blog.posts` → `blog.articles`: with an explicit name the migration is the table rename plus `rename constraint "posts_pkey" to "articles_pkey"` and nothing for the foreign key; without one it additionally renders `rename constraint "posts_author_id_fk" to "articles_author_id_fk"`.
+
+### Method
+
+- Read `openspec show add-catalog-inference --diff` in full, then the named surface: `packages/cli/src/{commands/{import,pull}.ts, infer/{compose,table,loss-report,column-keys}.ts, declare-emit/emit.ts}`, `packages/core/src/{sql/identifier-rules.ts,dsl/table.ts,index.ts}`, `packages/query/src/client/contract-types.ts`, `skills/hejbro/references/brownfield-adoption.md`, `.changeset/fix-catalog-inference-d106-r7.md`. Only rounds 1-7 of `evaluation.md` were read (findings + dispositions), as claims.
+- Live witness, one throwaway `postgres:17` container (`docker system df` first: 3 stopped containers, 6 volumes, none this suite's; `docker rm -v` after, leaving `pgrx-builder`/`ne-wsproxy`/`ne-pg` and the `supabase_*` volumes exactly as found). One database with ~30 fixture schemas: the `t`-name set (`m1`, `k1`/`k2`, `h1`/`h2`, a schema `t` holding `t`/`t2`/`t3`/`users`, an enum `t` in `e1` with `e2.t`, a schema `text` holding `table`/`uuid`), the unread-target set (`app`/`app2`/`ext`/`ext2`), the omitted set (`"App"`, `s1."Widgets"` and its index/check/FK, `nx."Gone"`, `fz."Gone"`), the approximation set (`nn` with `_fkey`/`_fk`/`"FK_Links_Post"` names and two UNIQUE constraints, `nx` with unowned `nextval` defaults), exotic columns (`s2`, `od."od*/d"`), a duplicate check name (`s3`), a CamelCase enum (`s7`), colliding keys (`s4`), an empty schema (`s11`), a chorded three-schema cycle with an enum edge (`ca`/`cb`/`cc`), and the not-inferred set (`n1`).
+- Driven through the built `dist/cli.js` in throwaway projects under `/private/tmp/r8` (`init`/`import`/`generate`/`baseline`/`check`/`pull`/`outdated`/`vendor --check`/`link`), all deleted afterwards; nothing was written into the repository root. Emitted files were loaded through the production loader's own `jiti` (`createJiti(path)`, one per file, `fsCache`/`moduleCache` off) with **each** file as its own entry, and type-checked with the workspace's real `tsc --noEmit --strict`.
+- The `s3` baseline DDL was executed against a second, fresh database on the same server; `pg_get_constraintdef` read back both `pos` checks with their own expressions.
+- In-process probes created, run and deleted in the same tool call (`packages/cli/test/_r8probe*.test.ts`, four batches) for the snapshot-vs-text handle counts, the description-vs-snapshot column sets, and the multi-directory loader sweep. No repository file other than this one was modified; `git status --porcelain` shows only `evaluation.md`.
+- Suites run: `infer-{compose,loss-report,tables,keys,adapter,constraints}`, `import-command`, `pull-command`, `declare-emit-{emit,file-cycle,topo-order,callback-shadow,enum-cycle-load}`, `contract-{from-catalog,origin}`, `outdated-database-origin`, `vendor-lock-origin`, `exports` — 18 files / 193 tests green; `packages/core` `table-surface`, `rename-plan`, `table-kind-diff`, `identifier-rules` — 4 files / 108 tests green.
+- Not run: `pnpm build`, `pnpm install`, full-workspace `pnpm test`/`check-types`, the Docker-gated `*.integration.test.ts` files (this round used one container of its own and re-measured what those witnesses assert directly).
+
+## Round 8 disposition
+
+The review is clean: no blocking finding, and every round-7 finding
+closed in the code, the delta and the skill. Of the two non-blocking
+findings, R8-N1 is fixed on this branch (#724) and R8-N2 is #712,
+carried by decision for the fourth round running. This is the last
+round; what follows the fix is the archive.
+
+**A correction to the report's own framing, recorded here rather than
+in it.** The report counts 24 delta scenarios with `cli-commands` at 10,
+describing them as "the same set round 7 reviewed". Round 7's own
+correction added one to that capability — *A table named like the
+emitted callback's parameter still loads* — so the count was inherited
+rather than re-derived. **The set round 8 actually reviewed was 25**:
+`catalog-inference` 8, `cli-commands` 11, `schema-vendoring` 3,
+`table-declaration` 3 — counted on the tip the reviewer read — and since
+neither non-blocking finding blocks a scenario, all 25 are OK. **The
+branch now carries 26**, because R8-N1's own fix below adds a ninth
+`catalog-inference` scenario; that one is in the archived specs and was,
+by construction, never in front of an adversarial round. Both numbers
+are stated because they answer different questions, and a reader lining
+this paragraph up against the archived specs would otherwise find an
+off-by-one and have no way to tell which kind it was. The report is
+committed unedited — a reviewer's record is not ours to rewrite — and
+the correction lives here. Nine counting errors in this change have been
+closed by writing the members before the number; this is the tenth,
+caught the same way, and the eleventh was caught in this very paragraph
+by the same cross-check.
+
+### R8-N1 — an approximation announced for what the reading omitted
+
+Two detectors filtered by *surviving table* and never asked whether the
+name itself was one a declaration can carry, so the report announced a
+UNIQUE constraint "inferred as a unique index of the same name" two
+lines above the line saying that index was omitted for that very name,
+and announced a `nextval` default kept by a column excluded for its
+name. Both lines were false on both halves — nothing was inferred, and
+nothing was kept.
+
+Both detectors now ask the same rule the omission band asks:
+`isExpressibleName` on the constraint's own name, `isNameDeclarable` on
+the column's. That required moving `isNameDeclarable` (and the private
+round-trip half it is built from) out of `compose.ts` into `table.ts`:
+`compose.ts` already imports these detectors from `loss-report.ts`, so
+the predicate could not live where the reading happens without making
+the import graph circular. It now sits where every caller on either side
+already imports from, and the move was proved behaviour-preserving
+before either detector changed.
+
+**The fix that was specified first is not the fix that shipped.** The
+plan said to feed the `nextval` detector the already-filtered list the
+snapshot is built from — true by construction, and the shape this team
+normally prefers. The implementer measured that the wiring lives inside
+an async, session-taking orchestrator with no synchronous seam, so that
+version could be pinned only by an integration test and would have
+shipped with no unit-level observer at all. Between a fix nothing
+observes and a fix a red can reach, this round took the second: the
+guarantee sits in the detectors, where a unit test fails when it is
+removed, and it holds for every caller rather than for one call site.
+Deliberately **not** also guarded at the call site — two guards for one
+property means a wiring regression hides behind whichever one still
+works.
+
+Pins: each red carries its own control in the same test — a validly
+named UNIQUE beside `"UQ_Code"` on one surviving table, a declarable
+`nextval` column beside `_bad` on another — so the assertion proves the
+band still speaks as well as that it stopped lying. A fix of this shape
+can pass by silencing the band, and a control in a separate test can
+pass independently of the case it is meant to guard. The mutant (both
+filters removed) failed exactly those two and left the file's other 25
+green.
+
+### R8-N2 — an enum type's catalog name
+
+#712, unchanged, for the fourth round. No delta scenario speaks to an
+enum's own name, so it is reported and tracked rather than classified.
+
+### What is archived unresolved
+
+Named here because the archive is where someone will look for it:
+
+- *Two tables sharing a constraint name keep their own expressions* and
+  *Every named schema was omitted for its name* are pinned by unit tests
+  and by no standing witness of our own. Both were measured live by the
+  round-6, round-7 and round-8 reviewers — including executing the
+  emitted DDL against a fresh database — so the behaviour is known good;
+  what is missing is a witness in this repository's own suite.
+- The foreign-key-name D36 exception has no scenario heading of its own
+  and is verified by cross-reading the two functions that implement it.
+- The wiring inside `inferFromCatalog` that decides which table list
+  reaches each detector has no regression test of its own. After this
+  round it does not carry the property that used to depend on it, but
+  the wiring itself is still unobserved.
+- **This round's own correction was never reviewed by an adversarial
+  round.** Every earlier round's fix was read by the round that
+  followed; round 8's has no successor, because round 8 is the one that
+  came back clean. What that leaves unreviewed is small and stated
+  plainly: two detector filters asking a predicate that already existed,
+  one predicate moved between modules to keep the import graph acyclic,
+  one delta scenario, and a changeset. It is pinned by two tests that
+  each carry their own control and by a mutant that fails exactly those
+  two. Anyone reopening this change should start there rather than
+  assume the gate covered it.
+
+  The rule that closes this, settled by the owner-delegate rather than
+  invented here: **when a clean round's own non-blocking correction
+  widens no contract and only makes the code obey a sentence the delta
+  already carried, the gate does not reopen — that correction is covered
+  by the archive pull request's own review instead.** Without a stated
+  rule, "correct, then review the correction" has no termination
+  condition; with it, the loop ends where the correction stops changing
+  what the specification promises.
+- #712, above.

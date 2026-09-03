@@ -22,6 +22,7 @@ import {
 	table,
 	text,
 	throwHejbroError,
+	toSnakeCase,
 } from "@hejbro/core";
 import { inferColumnKeys } from "./column-keys";
 import type {
@@ -189,6 +190,39 @@ const expressibleForeignKeyName = (name: string): string | undefined => {
 	}
 	return undefined;
 };
+
+/**
+ * `toSnakeCase(tsKey) === sqlName` -- the exact fact `table()` itself
+ * derives a column's SQL name from its key by (CI-G1-R1-06 (C)/
+ * CI-G1-R1-08 (C)): a guessed key that does not survive this round
+ * trip cannot express its own source column's spelling. Necessary, not
+ * sufficient (D106 R5-B2): a name can round-trip and still fail D36 --
+ * `"_id"` is its own round-trip fixed point (`toSnakeCase` never
+ * strips a leading `_`) but `assertSqlName` rejects it (`^[a-z]`, not
+ * `^[a-z_]`) three frames later. {@link isNameDeclarable} is the
+ * actual gate; this predicate alone underestimates it. Exported (moved
+ * here from `compose.ts`, D106 R8-N1/#724) because `compose.ts`'s own
+ * `undeclarableColumnCause` still needs this half alone, to tell its
+ * two causes apart, once {@link isNameDeclarable} itself has already
+ * failed.
+ */
+export const isNameRoundTrippable = (sqlName: string, tsKey: string): boolean =>
+	toSnakeCase(tsKey) === sqlName;
+
+/**
+ * D106 R5-B2: whether a column can actually reach a declaration --
+ * round-trippable *and* a name {@link isExpressibleName} (D36) would
+ * accept. Moved here from `compose.ts` (D106 R8-N1/#724) so `loss-
+ * report.ts`'s own `detectNextvalDefaultApproximations` can ask the
+ * same question `detectUniqueIndexApproximations` asks of a UNIQUE
+ * constraint's own name there, without `compose.ts` and
+ * `loss-report.ts` importing each other in a cycle -- `compose.ts`
+ * already imports from this module, and `loss-report.ts` already does
+ * too, so this is where every caller on either side can reach it from
+ * one direction.
+ */
+export const isNameDeclarable = (sqlName: string, tsKey: string): boolean =>
+	isNameRoundTrippable(sqlName, tsKey) && isExpressibleName(sqlName);
 
 /** Postgres's own default nulls placement for a direction -- ASC sorts nulls last, DESC sorts nulls first; only a placement that disagrees with its own direction's default is ever declared explicitly. */
 const nullsOverride = (
