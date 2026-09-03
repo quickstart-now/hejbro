@@ -158,7 +158,18 @@ const dirLabel = (cwd: string, path: string): string => {
 	return `${rel}/`;
 };
 
-const fileLabel = (cwd: string, path: string): string => relative(cwd, path);
+/** A file's report/refusal label -- `./` when the resolved path is
+ * `cwd` itself (`snapshotPath: ""`/`"."`), same reasoning as
+ * {@link dirLabel}: an empty relative path names nothing on its own,
+ * and a refusal naming it needs a real identifier to print (D57-enriched
+ * messages carry a short one, never an empty string). */
+const fileLabel = (cwd: string, path: string): string => {
+	const rel = relative(cwd, path);
+	if (rel === "") {
+		return "./";
+	}
+	return rel;
+};
 
 /** A configured field's destination: `resolved` when the configuration
  * names it (or there is no configuration at all, which falls back to

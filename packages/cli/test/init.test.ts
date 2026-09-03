@@ -342,6 +342,27 @@ describe("runInit / path-kind conflicts and unconfigured fields (#687)", () => {
 		expect(existsSync(join(cwd, "migrations"))).toBe(false);
 	});
 
+	// Regression pin (reviewer-observed on 1bc19b32): an empty relative
+	// label rendered as a bare "" in the refusal, leaving an empty
+	// identifier and an unfollowable "move or remove ... at """ line --
+	// the same D1 "./" fold the report line already applies must reach
+	// the refusal label too.
+	it.each(["", "."])(
+		"names the project directory as ./ in the refusal, never a bare empty string (snapshotPath: %j)",
+		async (emptyValue) => {
+			await writeFile(
+				configPath(),
+				`export default { entry: ["src/**/*.schema.ts"], snapshotPath: ${JSON.stringify(emptyValue)} };\n`,
+			);
+
+			const result = await runInit(cwd);
+
+			expect(result.exitCode).toBe(1);
+			expect(result.stderr).toContain("./");
+			expect(result.stderr).not.toContain('""');
+		},
+	);
+
 	it("refuses a snapshotPath spelled as a directory even when nothing sits there yet", async () => {
 		await writeFile(
 			configPath(),
