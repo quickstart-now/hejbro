@@ -329,7 +329,7 @@ green, refactor). Estimates are pure work minutes (D88).
       of 5 checks failed`) is untouched, since it is already scoped to a
       project with neither. Files: `docs/guide/ci.md`.
 
-- [ ] 3.8 (~5m) `applyReset`'s own catch re-codes **every** failure the
+- [x] 3.8 (~5m) `applyReset`'s own catch re-codes **every** failure the
       transaction raises as `reset-drop-failed`, including a `HejbroError`
       the transaction itself already coded — so
       `reset-migration-not-singular` (raised inside the transaction, its
@@ -351,7 +351,7 @@ green, refactor). Estimates are pure work minutes (D88).
       `packages/cli/src/apply/reset.ts`,
       `packages/cli/test/apply-reset.test.ts`.
 
-- [ ] 3.9 (~6m) The create-side ordering change moves the committed
+- [x] 3.9 (~6m) The create-side ordering change moves the committed
       example migrations too, not only `packages/core`'s goldens:
       `examples/postgres` and `examples/supabase`'s chain tests
       ("regenerating … reproduces the committed migrations") both fail
@@ -363,7 +363,7 @@ green, refactor). Estimates are pure work minutes (D88).
       `examples/postgres/migrations/*`, `examples/supabase/migrations/*`
       (regenerated, not hand-edited).
 
-- [ ] 3.10 (~6m) The delta's cycle sentence — two declared tables that
+- [x] 3.10 (~6m) The delta's cycle sentence — two declared tables that
       reference each other drop in their existing identity order, and the
       refusal the database then raises is reported through the coded
       failure — has no real-Postgres witness: the unit rows fake the
@@ -378,7 +378,7 @@ green, refactor). Estimates are pure work minutes (D88).
       migration applied. Files:
       `packages/cli/test/apply-reset.integration.test.ts`.
 
-- [ ] 3.11 (~9m) **[design]** A migration's name follows the order the
+- [x] 3.11 (~9m) **[design]** A migration's name follows the order the
       run emits, because the slug is taken from the first entry of the
       same array the dependency refinement permutes — so refining the
       emitted order renames a committed migration (measured: a step that
