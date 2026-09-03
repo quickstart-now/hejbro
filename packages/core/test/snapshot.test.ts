@@ -3,6 +3,7 @@ import { pgEnum } from "../src/dsl/pg-enum";
 import type { SchemaDeclaration } from "../src/dsl/schema";
 import { schema } from "../src/dsl/schema";
 import { getTableMeta, table } from "../src/dsl/table";
+import { generateMigration } from "../src/engine/generate";
 import type { ObjectKind } from "../src/kind/object-kind";
 import {
 	createDefaultRegistry,
@@ -11,6 +12,9 @@ import {
 } from "../src/kind/registry";
 import { schemaKind } from "../src/kinds/schema-kind";
 import { tableKind } from "../src/kinds/table-kind";
+import type { TableSnapshot } from "../src/kinds/table-snapshot";
+import { tableExisting } from "../src/kinds/table-snapshot";
+import type { Snapshot } from "../src/snapshot/snapshot";
 import {
 	buildSnapshot,
 	emptySnapshot,
@@ -23,16 +27,16 @@ const app = schema("app");
 const registry = createDefaultRegistry();
 
 describe("emptySnapshot", () => {
-	it("has version 5, postgres dialect, and no objects", () => {
+	it("has version 8, postgres dialect, and no objects", () => {
 		expect(emptySnapshot).toEqual({
-			formatVersion: 5,
+			formatVersion: 8,
 			dialect: "postgres",
 			objects: {},
 		});
 	});
 
-	it("renders with the v5 version marker (D68)", () => {
-		expect(renderSnapshot(emptySnapshot)).toContain(`"formatVersion": 5`);
+	it("renders with the v8 version marker (#437)", () => {
+		expect(renderSnapshot(emptySnapshot)).toContain(`"formatVersion": 8`);
 	});
 });
 
@@ -187,7 +191,7 @@ describe("renderSnapshot / parseSnapshot", () => {
 		);
 	});
 
-	it("rejects a v4 snapshot (the immediately prior format) as older, not misparsed as current (D68)", () => {
+	it("rejects a v4 snapshot as older, not misparsed as current (D68) — no longer the immediately prior format after D100's v6 bump, but still older", () => {
 		const raw = JSON.stringify({
 			formatVersion: 4,
 			dialect: "postgres",
@@ -198,6 +202,38 @@ describe("renderSnapshot / parseSnapshot", () => {
 				code: "unsupported-snapshot-version",
 				message: expect.stringContaining(
 					"snapshot version 4 is older than this build supports",
+				),
+			}),
+		);
+	});
+
+	it("rejects a v5 snapshot as older, not misparsed as current (D100) — two formats behind after #437's v8 bump, still older", () => {
+		const raw = JSON.stringify({
+			formatVersion: 5,
+			dialect: "postgres",
+			objects: {},
+		});
+		expect(() => parseSnapshot(raw)).toThrowError(
+			expect.objectContaining({
+				code: "unsupported-snapshot-version",
+				message: expect.stringContaining(
+					"snapshot version 5 is older than this build supports",
+				),
+			}),
+		);
+	});
+
+	it("rejects a v6 snapshot (the immediately prior format) as older, not misparsed as current (add-relational-reads D1)", () => {
+		const raw = JSON.stringify({
+			formatVersion: 6,
+			dialect: "postgres",
+			objects: {},
+		});
+		expect(() => parseSnapshot(raw)).toThrowError(
+			expect.objectContaining({
+				code: "unsupported-snapshot-version",
+				message: expect.stringContaining(
+					"snapshot version 6 is older than this build supports",
 				),
 			}),
 		);
@@ -229,7 +265,7 @@ describe("renderSnapshot / parseSnapshot", () => {
 	});
 
 	it("rejects a snapshot with a missing objects map", () => {
-		const raw = JSON.stringify({ formatVersion: 5, dialect: "postgres" });
+		const raw = JSON.stringify({ formatVersion: 8, dialect: "postgres" });
 		expect(() => parseSnapshot(raw)).toThrowError(/objects/i);
 	});
 
@@ -247,7 +283,7 @@ describe("renderSnapshot / parseSnapshot", () => {
 		["a number", 42],
 	])("rejects a snapshot entry that is %s, not an object", (_label, value) => {
 		const raw = JSON.stringify({
-			formatVersion: 5,
+			formatVersion: 8,
 			dialect: "postgres",
 			objects: { "table:app.posts": value },
 		});
@@ -379,7 +415,7 @@ describe("parseSnapshot requiredKeys (D79, #159)", () => {
 		node: Record<string, unknown>,
 	): string =>
 		JSON.stringify({
-			formatVersion: 5,
+			formatVersion: 8,
 			dialect: "postgres",
 			objects: { [`${kind}:fixture`]: node },
 		});
@@ -435,5 +471,45 @@ describe("parseSnapshot requiredKeys (D79, #159)", () => {
 		const { schema: _omitted, ...withoutSchema } = validEnum;
 		const raw = rawSnapshotWith("enum", withoutSchema);
 		expect(() => parseSnapshot(raw)).not.toThrow();
+	});
+});
+
+describe("an older snapshot's tables are still managed (add-unmanaged-objects, D33 compact rule)", () => {
+	it("an older snapshot's tables are still managed", () => {
+		// Hand-written, not built by buildSnapshot -- a snapshot this
+		// package's own serializer produces already carries the marker one
+		// way or the other, so it can never stand in for a file written
+		// before the marker existed (it would prove nothing about that
+		// case). This is a real pre-add-unmanaged-objects v8 file: no
+		// `existing` key on the table node at all.
+		const olderSnapshot: Snapshot = {
+			formatVersion: 8,
+			dialect: "postgres",
+			objects: {
+				"schema:app": { name: "app" },
+				"table:app.posts": {
+					schema: "app",
+					name: "posts",
+					columns: [{ name: "id", typeNode: { typeName: "uuid" } }],
+					indexes: [],
+					foreignKeys: [],
+				},
+			},
+		};
+		expect(
+			tableExisting(olderSnapshot.objects["table:app.posts"] as TableSnapshot),
+		).toBe(false);
+
+		// The behavioral proof: reading it as managed means a run that
+		// declares nothing sees a real table to drop -- if tableExisting
+		// misread the absent field as existing, the DDL-blocking guard
+		// would swallow this drop silently, and every table in every
+		// user's pre-existing snapshot would fall out of management on
+		// upgrade.
+		const result = generateMigration({
+			declarations: [],
+			previousSnapshot: olderSnapshot,
+		});
+		expect(result.sql).toContain('drop table "app"."posts"');
 	});
 });

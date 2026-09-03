@@ -3,10 +3,12 @@ import {
 	defineFunction,
 	defineTrigger,
 	eq,
+	insert,
 	isNotNull,
 	isNull,
 	schema,
 	select,
+	sql,
 	table,
 	uuid,
 } from "../../src/index";
@@ -20,6 +22,20 @@ const comments = table(app, "comments", {
 
 const triggerConfig = {
 	name: "comments_single_depth",
+	timing: "before" as const,
+	events: ["insert"] as const,
+	forEach: "row" as const,
+};
+
+// #445/R4: a column literally named after the internal expression field
+// `isExpr` duck-types on -- the exact shape that made `ctx.return(ctx.new)`
+// misfire down the expression path instead of the trigger-row path.
+const tricky = table(app, "tricky", {
+	id: uuid().primaryKey(),
+	exprNode: uuid(),
+});
+const trickyTriggerConfig = {
+	name: "tricky_guard",
 	timing: "before" as const,
 	events: ["insert"] as const,
 	forEach: "row" as const,
@@ -246,6 +262,42 @@ describe("body-context recording", () => {
 		).toThrowError(/isn't a trigger row/);
 	});
 
+	it("a trigger row is returned as a ref even when the table has a column named exprNode (#445/R4)", () => {
+		const declaration = defineTrigger(
+			tricky,
+			trickyTriggerConfig,
+			(ctx, { new: row }) => {
+				ctx.return(row);
+			},
+		);
+		const [returnStmt] = declaration.functionDeclaration.body.statements;
+		expect(returnStmt).toEqual({ stmtKind: "returnRef", refName: "new" });
+	});
+
+	it("a trigger row returned from a scalar-returning declaration still fails with scalar-return-expects-expression (#445/R4, delta: shape errors survive the reordering)", () => {
+		// #445/R4 review R-f: a trigger row has no type-legal path into a
+		// scalar declaration's ctx.return() at all (hence the type-escape
+		// directive a few lines down) -- capturing one via a trigger body
+		// is the only way to reproduce this, so this fixture defends the
+		// runtime guard for a consumer who bypasses the types, not a shape
+		// a well-typed caller could ever construct.
+		const captured: { row?: unknown } = {};
+		defineTrigger(comments, triggerConfig, (_ctx, { new: row }) => {
+			captured.row = row;
+		});
+		expect(() =>
+			defineFunction(
+				app,
+				"bad_scalar_from_trigger_row",
+				{ returns: { typeName: "integer" } },
+				(ctx) => {
+					// @ts-expect-error — a TriggerRow isn't a valid ctx.return() argument for a scalar function
+					ctx.return(captured.row);
+				},
+			),
+		).toThrowError(/received a query or trigger row/);
+	});
+
 	it("unknown update-of column throws unknown-trigger-column", () => {
 		expect(() =>
 			defineTrigger(
@@ -272,7 +324,13 @@ describe("body-context recording", () => {
 			},
 		);
 		expect(declaration.args).toEqual([
-			{ argName: "post_id", typeNode: { typeName: "uuid" } },
+			{
+				key: "postId",
+				argName: "post_id",
+				typeNode: { typeName: "uuid" },
+				mode: null,
+				notNullElements: false,
+			},
 		]);
 	});
 
@@ -389,5 +447,67 @@ describe("body-context recording", () => {
 				ctx.return(row);
 			}),
 		).toThrowError(/isn't a plain column reference/);
+	});
+
+	it("an executed insert with returning is refused", () => {
+		expect(() =>
+			defineTrigger(comments, triggerConfig, (ctx, { new: row }) => {
+				ctx.execute(
+					insert(comments).values({ postId: row.postId }).returning(),
+				);
+				ctx.return(row);
+			}),
+		).toThrowError(/ctx\.execute\(\).*returning/);
+	});
+
+	it("an executed insert without returning is recorded as an execute statement", () => {
+		const declaration = defineTrigger(
+			comments,
+			triggerConfig,
+			(ctx, { new: row }) => {
+				ctx.execute(insert(comments).values({ postId: row.postId }));
+				ctx.return(row);
+			},
+		);
+		const [executeStmt] = declaration.functionDeclaration.body.statements;
+		expect(executeStmt?.stmtKind).toBe("execute");
+	});
+
+	it("ctx.execute() of a value that isn't a statement builder throws execute-expects-statement", () => {
+		expect(() =>
+			defineTrigger(comments, triggerConfig, (ctx, { new: row }) => {
+				// @ts-expect-error — a trigger row isn't a valid ctx.execute() argument
+				ctx.execute(row);
+			}),
+		).toThrowError(/isn't a select, insert, update or delete builder/);
+	});
+
+	it("a sql fragment is a body condition", () => {
+		const declaration = defineTrigger(
+			comments,
+			triggerConfig,
+			(ctx, { new: row }) => {
+				ctx
+					.if(sql`${row.postId} is not null`, () => {
+						ctx.raise("has a post");
+					})
+					.elseIf(sql`${row.id} is not null`, () => {
+						ctx.raise("has an id");
+					});
+				ctx.return(row);
+			},
+		);
+		const [ifStmt] = declaration.functionDeclaration.body.statements;
+		expect(ifStmt?.stmtKind).toBe("if");
+	});
+
+	it("a query returned from a trigger body is refused", () => {
+		expect(() =>
+			defineTrigger(comments, triggerConfig, (ctx, { new: row }) => {
+				ctx.return(select(comments).where(eq(comments.id, row.id)));
+			}),
+		).toThrowError(
+			/must return a trigger row.*Next: run the statement with ctx\.execute/,
+		);
 	});
 });

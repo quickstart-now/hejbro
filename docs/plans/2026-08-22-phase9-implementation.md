@@ -1051,3 +1051,22 @@ After A, B, D (and F if it lands) are on `dev` and the Version Packages PR shows
 - **Whole-row `*` is never the fix** for a column-list defect (D81, owner). If a rendering shortcut tempts, fix the derivation.
 - **Consumer conditions stay undiluted in the dogfood repository**: npm install, own tsconfig, own git history. Anything that links to the workspace or shares tooling is no longer a dogfood and goes somewhere else.
 - **Owner-approved CLI texts are pinned for a reason**: change them only with the owner, and put the proposed wording in the plan or the PR body first.
+
+---
+
+## Landed (2026-08-22)
+
+| Plan item | Landed as |
+|-----------|-----------|
+| plan | #270 |
+| A — #261 (D81) | #277 (plus one review-found fix: the oracle maps column renames on a table renamed in the same run; same-type mid-insert regression test; fresh-build test) |
+| B — #269 | #273 (string form kept as deprecated on 0.1.x, `patch` — owner decision) |
+| C — #262, #263 | #276 (also fixed stale "four checks" wording in `docs/guide/ci.md` and the skills reference) |
+| D — #264, #265 | #275 (Task 13: citty renders a `required: false` positional as `[OPTIONS] [N]`; Task 14: root detection via `parent === undefined`) |
+| E — #266 | `hejbro-dogfood` PRs #1 (scenario set v1 + first pass on 0.1.0: 02/03 FAIL = #261), #2 (#220 same-second note), #3 (second pass on 0.1.1: 8/8 PASS, 0 warnings) |
+| F — #267 | not landable (TS 7.0 has no Compiler API yet → `check:crap` crashes); #258 closed, #271/#272 dependabot ignore until 7.1 |
+| G — #278 (added during the phase) | #280 |
+| release — #268 | 0.1.1 via #274 + #279, OIDC publish verified, `NPM_TOKEN` deleted |
+
+Plan deviations, all recorded in the PR bodies: Task 4 `KindChange.operation`, Task 8 CLI tests drive the built CLI (`runCli`), Task 7 golden filenames are 0-based (`from-empty`/`step-1`/`step-2`; the "fresh build keeps declaration order" point moved to a unit test), Task 13 `[N]`. #260 stays open by the owner's decision.
+

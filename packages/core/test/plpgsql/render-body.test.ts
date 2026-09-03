@@ -14,6 +14,7 @@ import {
 	schema,
 	select,
 	table,
+	text,
 	timestamptz,
 	update,
 	uuid,
@@ -28,6 +29,10 @@ const comments = table(app, "comments", {
 const posts = table(app, "posts", {
 	id: uuid().primaryKey(),
 	publishedAt: timestamptz(),
+});
+const auditLog = table(app, "audit_log", {
+	id: uuid().primaryKey(),
+	tableName: text().notNull(),
 });
 
 describe("renderFunctionSql", () => {
@@ -124,6 +129,33 @@ describe("renderFunctionSql", () => {
 		expect(sql).toMatch(/\treturn query insert into .*returning .*;/);
 	});
 
+	// #634: `ctx.return` used to accept only the bare `.returning()` form
+	// (`ReturnableQuery`'s three mutation members defaulted `TReturning` to
+	// `undefined`) -- a projected `.returning({...})`, the canonical form
+	// per the body requirement, failed to compile. `ReturnableQuery` now
+	// accepts `ReturningProjection | undefined`; this measures the
+	// rendered body, not just that it compiles, so a fix that widens the
+	// type but drops the projection at render time still fails here.
+	it("renders a definer function with a projected returning, and the RETURNING list stays the projection", () => {
+		const declaration = defineFunction(
+			"app",
+			"create_post_returning_id",
+			{ args: {}, returns: posts, security: "definer" },
+			(ctx) => {
+				ctx.return(
+					insert(posts)
+						.values({ publishedAt: now() })
+						.returning({ id: posts.id }),
+				);
+			},
+		);
+
+		const sql = renderFunctionSql(declaration);
+		expect(sql).toMatch(/\treturn query insert into .*;/);
+		expect(sql).toContain('returning "app"."posts"."id" as "id"');
+		expect(sql).not.toContain('"published_at" as "published_at"');
+	});
+
 	it("renders a definer function with a delete-returning-query statement", () => {
 		const declaration = defineFunction(
 			"app",
@@ -180,6 +212,60 @@ describe("renderFunctionSql", () => {
 				"$function$;",
 			].join("\n"),
 		);
+	});
+
+	it("runs an audit insert for effect, then returns the trigger row (#426)", () => {
+		const trigger = defineTrigger(
+			posts,
+			{
+				name: "audit_posts",
+				timing: "after",
+				events: ["update"],
+				forEach: "row",
+			},
+			(ctx, { new: row }) => {
+				ctx.execute(insert(auditLog).values({ tableName: "posts" }));
+				ctx.return(row);
+			},
+		);
+
+		expect(renderFunctionSql(trigger.functionDeclaration)).toBe(
+			[
+				'create or replace function "app"."audit_posts_fn"()',
+				"returns trigger",
+				"language plpgsql",
+				"as $function$",
+				"begin",
+				'\tinsert into "app"."audit_log" ("table_name") values (\'posts\');',
+				"\treturn new;",
+				"end;",
+				"$function$;",
+			].join("\n"),
+		);
+	});
+
+	it("a select executed for effect becomes perform", () => {
+		const trigger = defineTrigger(
+			posts,
+			{
+				name: "notify_posts",
+				timing: "after",
+				events: ["update"],
+				forEach: "row",
+			},
+			(ctx, { new: row }) => {
+				ctx.execute(
+					select({ id: posts.id }, posts).where(eq(posts.id, row.id)),
+				);
+				ctx.return(row);
+			},
+		);
+
+		const sql = renderFunctionSql(trigger.functionDeclaration);
+		expect(sql).toContain(
+			'\tperform "app"."posts"."id" as "id" from "app"."posts" where "app"."posts"."id" = new.id;',
+		);
+		expect(sql).not.toMatch(/\n\tselect /);
 	});
 
 	it("guards against a body whose rendered SQL contains the dollar-quote tag", () => {

@@ -3,8 +3,16 @@
 	"compilerOptions": {
 		"moduleResolution": "bundler",
 		"module": "esnext",
-		"noEmit": true
+		"noEmit": true,
+		"allowImportingTsExtensions": true
 	},
-	"include": ["src", "test", "vitest.config.ts", "tsdown.config.ts"],
+	"include": [
+		"src",
+		"test",
+		"vitest.config.ts",
+		"vitest.integration.config.ts",
+		"vitest.shared.ts",
+		"tsdown.config.ts"
+	],
 	"exclude": ["test/fixtures"]
 }

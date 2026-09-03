@@ -1,5 +1,5 @@
 {
-	"$schema": "https://biomejs.dev/schemas/2.5.9/schema.json",
+	"$schema": "https://biomejs.dev/schemas/2.5.10/schema.json",
 	"vcs": {
 		"enabled": true,
 		"clientKind": "git",
@@ -7,7 +7,7 @@
 	},
 	"files": {
 		"ignoreUnknown": false,
-		"includes": ["**"]
+		"includes": ["**", "!.changeset/pre.json"]
 	},
 	"formatter": {
 		"enabled": true,
@@ -74,6 +74,58 @@
 									},
 									{
 										"selector": { "kind": "typeProperty" },
+										"match": ".*"
+									}
+								]
+							}
+						}
+					}
+				}
+			}
+		},
+		{
+			"includes": [
+				"packages/query/src/client/**",
+				"packages/query/test/client/**",
+				"packages/query/test/exports.test.ts"
+			],
+			"linter": {
+				"rules": {
+					"style": {
+						"useNamingConvention": {
+							"level": "error",
+							"options": {
+								"strictCase": false,
+								"conventions": [
+									{
+										"selector": { "kind": "objectLiteralProperty" },
+										"match": ".*"
+									},
+									{
+										"selector": { "kind": "typeProperty" },
+										"match": ".*"
+									}
+								]
+							}
+						}
+					}
+				}
+			}
+		},
+		{
+			"includes": [
+				"packages/skills/test/fixtures/preludes/polyrepo-contract.ts"
+			],
+			"linter": {
+				"rules": {
+					"style": {
+						"useNamingConvention": {
+							"level": "error",
+							"options": {
+								"strictCase": false,
+								"conventions": [
+									{
+										"selector": { "kind": "typeMember" },
 										"match": ".*"
 									}
 								]

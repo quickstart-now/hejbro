@@ -34,8 +34,8 @@ export type {
 	IndexColumn,
 	IndexColumnInput,
 } from "./dsl/index-builder";
-export { asc, desc, index } from "./dsl/index-builder";
-export type { EnumDeclaration } from "./dsl/pg-enum";
+export { asc, desc, index, op } from "./dsl/index-builder";
+export type { EnumDeclaration, EnumValues } from "./dsl/pg-enum";
 export { pgEnum } from "./dsl/pg-enum";
 export type {
 	PolicyCommand,
@@ -50,11 +50,15 @@ export { roleName } from "./dsl/role";
 export type { SchemaDeclaration } from "./dsl/schema";
 export { schema } from "./dsl/schema";
 export type {
+	DeclaredTable,
 	ForeignKeyAction,
 	ForeignKeyDeclaration,
 	ForeignKeyInput,
 	ForeignKeyReferenceTarget,
+	IndexColumnDeclaration,
+	IndexColumnOrigin,
 	IndexDeclaration,
+	IndexMethod,
 	IndexNulls,
 	Table,
 	TableColumns,
@@ -64,6 +68,7 @@ export type {
 export {
 	foreignKeyActions,
 	getTableMeta,
+	indexMethods,
 	isTable,
 	table,
 	tableMeta,
@@ -83,7 +88,7 @@ export {
 	planDuplicateVersionFix,
 } from "./engine/duplicate-version-fix";
 export type { HejbroInput } from "./engine/generate";
-export { generateMigration } from "./engine/generate";
+export { generateMigration, generateMigrations } from "./engine/generate";
 export type { Preset } from "./engine/preset";
 export { presetValidators, registerPresets } from "./engine/preset";
 export type {
@@ -109,36 +114,49 @@ export {
 	hejbroError,
 	throwHejbroError,
 } from "./error";
+export type { Aggregated, ReadAs } from "./expr/aggregate";
+export { avg, count, max, min, readAsBrand, sum } from "./expr/aggregate";
 export type {
 	BetweenNode,
 	ColumnRef,
 	ColumnRefNode,
 	ComparisonNode,
 	ComparisonOperator,
+	Condition,
+	CteRefNode,
 	DeleteNode,
 	ExistsNode,
 	Expr,
 	ExprNode,
+	FromNode,
 	FunctionCallNode,
 	InListNode,
 	InsertNode,
+	JoinKind,
 	JoinNode,
 	LiteralNode,
 	LogicalNode,
 	NotNode,
+	NullsPlacement,
 	NullTestNode,
 	OnConflictNode,
 	OrderByTerm,
+	OrderedTerm,
 	PlpgsqlRefNode,
 	ProjectionNode,
 	QueryNode,
 	RawSqlNode,
 	ReturningNode,
+	SelectExprNode,
 	SelectNode,
+	SetOpNode,
 	SqlTemplateChunk,
 	SqlTemplateNode,
 	TableRefNode,
 	UpdateNode,
+	WindowNode,
+	WithEntryNode,
+	WithNode,
 } from "./expr/ast";
 export {
 	columnRef,
@@ -146,7 +164,11 @@ export {
 	expr,
 	isExpr,
 } from "./expr/ast";
-export { decodeExprNode } from "./expr/codec";
+export {
+	decodeExprNode,
+	decodeQueryNode,
+	encodeQueryNode,
+} from "./expr/codec";
 export { liftLiteral, liftOperand, renderLiteral } from "./expr/literal";
 export {
 	and,
@@ -173,6 +195,7 @@ export {
 	now,
 	or,
 } from "./expr/operators";
+export type { DeclaredCteMarker } from "./expr/render-sql";
 export {
 	collectColumnRefs,
 	renderDelete,
@@ -181,9 +204,16 @@ export {
 	renderQuery,
 	renderSelect,
 	renderSelectInto,
+	renderSetOp,
 	renderTableRef,
 	renderUpdate,
 } from "./expr/render-sql";
+export type { ClauseTraversal } from "./expr/select-children";
+export {
+	replaceSelectChildExprs,
+	SELECT_CLAUSE_TRAVERSALS,
+	selectChildExprs,
+} from "./expr/select-children";
 export type { SqlInterpolation } from "./expr/sql-template";
 export { sql } from "./expr/sql-template";
 export type {
@@ -192,7 +222,26 @@ export type {
 	SqlTypeFamily,
 } from "./expr/type-family";
 export { familyOfTypeNode, sqlTypeFamilies } from "./expr/type-family";
-export { someDeepExprNode } from "./expr/walk";
+export {
+	existsChildExprs,
+	selectExprChildExprs,
+	someDeepExprNode,
+} from "./expr/walk";
+export type { WindowFunctionCall, WindowSpec } from "./expr/window";
+export {
+	cumeDist,
+	denseRank,
+	firstValue,
+	lag,
+	lastValue,
+	lead,
+	nthValue,
+	ntile,
+	over,
+	percentRank,
+	rank,
+	rowNumber,
+} from "./expr/window";
 export type { KeyedDiff } from "./kind/diff-helpers";
 export { diffByKey, sameJson } from "./kind/diff-helpers";
 export type {
@@ -227,7 +276,20 @@ export type {
 	SequenceSnapshot,
 } from "./kinds/sequence-kind";
 export { sequenceKind } from "./kinds/sequence-kind";
-export { tableKind } from "./kinds/table-kind";
+export { deriveForeignKeyName, tableKind } from "./kinds/table-kind";
+export type {
+	ColumnSnapshot,
+	ForeignKeySnapshot,
+	IdentitySnapshot,
+	TableSnapshot,
+} from "./kinds/table-snapshot";
+export {
+	columnDefault,
+	columnGenerated,
+	columnIdentity,
+	columnNotNull,
+	tableIdentity,
+} from "./kinds/table-snapshot";
 export type {
 	TriggerEventSnapshot,
 	TriggerSnapshot,
@@ -253,6 +315,8 @@ export type {
 export { fnv1aHex } from "./plpgsql/body-hash";
 export type { TriggerSnapshotShape } from "./plpgsql/render-body";
 export { renderFunctionSql, renderTriggerSql } from "./plpgsql/render-body";
+export type { LeftJoinedBrand, UntrackedJoins } from "./query/left-joined";
+export { leftJoinedBrand } from "./query/left-joined";
 export type {
 	DeleteFilterable,
 	DeleteFinal,
@@ -262,20 +326,50 @@ export type {
 	InsertReturnable,
 	MutationRow,
 	MutationValue,
+	ReturningProjection,
 	UpdateFilterable,
 	UpdateFinal,
 	UpdateReturnable,
 } from "./query/mutate";
 export { deleteFrom, insert, update } from "./query/mutate";
 export type {
+	FromSource,
+	NestedReadMarker,
 	OrderTermInput,
+	SelectDistinctable,
 	SelectFiltered,
+	SelectGrouped,
+	SelectHaving,
 	SelectJoinable,
 	SelectLimited,
+	SelectLimitedThenOffset,
+	SelectOffsetted,
 	SelectOrdered,
 	SelectProjection,
+	SetOpBranch,
+	SetOpResult,
+	SetOpStage,
 } from "./query/select";
-export { exists, notExists, select } from "./query/select";
+export {
+	exists,
+	jsonArrayFrom,
+	jsonObjectFrom,
+	nestedReadBrand,
+	notExists,
+	resolveOrderTerm,
+	select,
+} from "./query/select";
+export { assertSameSetOpKeyOrder } from "./query/set-op-key-order";
+export type {
+	CteBuilder,
+	CteEntryOptions,
+	CteFieldRef,
+	CteReference,
+	CteRowEnvironment,
+	CteRowMeta,
+	WithStage,
+} from "./query/with";
+export { cteRowMeta, isCteReference, withCte } from "./query/with";
 export type { ColumnOrderOracle } from "./snapshot/column-order";
 export { computeColumnOrder, noColumnOrder } from "./snapshot/column-order";
 export type { Snapshot } from "./snapshot/snapshot";
@@ -289,6 +383,7 @@ export {
 export type { JsonValue } from "./snapshot/stable-json";
 export { stableJson } from "./snapshot/stable-json";
 export { qualifyName, quoteIdentifier } from "./sql/identifier";
+export { assertSqlName, isSqlName } from "./sql/identifier-rules";
 export { quoteStringLiteral } from "./sql/literal";
 export type {
 	BannerHashes,
@@ -296,11 +391,13 @@ export type {
 	MigrationPrefixStrategy,
 } from "./sql/migration-file";
 export {
+	deriveExistingTransitionSlug,
 	deriveSlug,
 	findDuplicateVersionGroups,
 	migrationFileName,
 	migrationPrefixStrategies,
 	migrationVersionOf,
+	parseBannerBaseline,
 	parseBannerHashes,
 	parseBannerVersion,
 	renderBanner,
@@ -312,13 +409,21 @@ export {
 	predropStatement,
 	statement,
 } from "./sql/statement";
+export { assertNoNulls } from "./types/assert-no-nulls";
 export type {
 	BuilderFamily,
 	ColumnBuilder,
+	ColumnReadType,
 	ColumnState,
+	NumericMode,
+	OriginBrand,
 } from "./types/column-builder";
-export { createColumnBuilder } from "./types/column-builder";
+export {
+	columnOriginBrand,
+	createColumnBuilder,
+} from "./types/column-builder";
 export type {
+	BigintConfig,
 	CharConfig,
 	NumericConfig,
 	VarcharConfig,
@@ -351,5 +456,10 @@ export {
 	uuid,
 	varchar,
 } from "./types/column-builder-factories";
+export {
+	canonicalizeInterval,
+	serializeInterval,
+} from "./types/interval-serialize";
+export type { BaseTsType, IntervalValue } from "./types/ts-type-map";
 export type { SimpleTypeName, TypeNode } from "./types/type-node";
 export { renderTypeNode, simpleTypeNames } from "./types/type-node";

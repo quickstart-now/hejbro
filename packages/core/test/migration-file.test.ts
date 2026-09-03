@@ -1,10 +1,20 @@
 import { describe, expect, it } from "vitest";
+// #445/R5 review R-e: imported separately from core's own public index, not
+// just "../src/sql/migration-file" like every other symbol below -- the
+// delta's own requirement is that this parser is exposed PUBLICLY, and
+// nothing here proves that without importing it the same way a consumer
+// would.
+import { parseBannerBaseline as parseBannerBaselineFromIndex } from "../src/index";
 import type { KindChange } from "../src/kind/object-kind";
+import type { Snapshot } from "../src/snapshot/snapshot";
+import type { JsonValue } from "../src/snapshot/stable-json";
 import {
+	deriveExistingTransitionSlug,
 	deriveSlug,
 	findDuplicateVersionGroups,
 	migrationFileName,
 	migrationVersionOf,
+	parseBannerBaseline,
 	parseBannerHashes,
 	parseBannerVersion,
 	renderBanner,
@@ -77,6 +87,21 @@ describe("renderBanner", () => {
 	it("renders create/alter/drop markers with alter notes bracketed", () => {
 		expect(renderBanner([createChange, alterChange, dropChange])).toBe(
 			'-- hejbro migration\n-- + table app.posts [new]\n-- ~ table app.posts [column "slug" added]\n-- - view app.old [dropped]',
+		);
+	});
+
+	it("marks a baseline directly under the version line (#385)", () => {
+		expect(renderBanner([createChange], undefined, "0.2.0", true)).toBe(
+			"-- hejbro migration\n-- hejbro: 0.2.0\n-- baseline: these objects already exist — register this migration as applied, do not run it\n-- + table app.posts [new]",
+		);
+	});
+
+	it("omits the baseline line for an ordinary migration", () => {
+		expect(
+			renderBanner([createChange], undefined, "0.2.0", false),
+		).not.toContain("-- baseline:");
+		expect(renderBanner([createChange], undefined, "0.2.0")).not.toContain(
+			"-- baseline:",
 		);
 	});
 
@@ -216,6 +241,102 @@ describe("parseBannerVersion", () => {
 	});
 });
 
+describe("parseBannerBaseline (#445/R5)", () => {
+	it("reads the baseline marker back off a rendered banner, and reports its absence on an ordinary migration", () => {
+		const baselineSql = renderBanner(
+			[createChange],
+			undefined,
+			undefined,
+			true,
+		);
+		const ordinarySql = renderBanner([createChange]);
+		expect(parseBannerBaseline(baselineSql)).toBe(true);
+		expect(parseBannerBaseline(ordinarySql)).toBe(false);
+	});
+
+	it("stays true even with a version line and a hash chain also present, and false for a hash-chained non-baseline migration", () => {
+		const baselineSql = renderBanner(
+			[createChange],
+			{ parent: "sha256:aaaa", current: "sha256:bbbb" },
+			"0.1.0",
+			true,
+		);
+		const nonBaselineSql = renderBanner(
+			[createChange],
+			{ parent: "sha256:aaaa", current: "sha256:bbbb" },
+			"0.1.0",
+		);
+		expect(parseBannerBaseline(baselineSql)).toBe(true);
+		expect(parseBannerBaseline(nonBaselineSql)).toBe(false);
+	});
+
+	it("is exported from core's own public index, not just its defining module (#445/R5 review R-e)", () => {
+		const baselineSql = renderBanner(
+			[createChange],
+			undefined,
+			undefined,
+			true,
+		);
+		expect(parseBannerBaselineFromIndex(baselineSql)).toBe(true);
+		expect(parseBannerBaselineFromIndex).toBe(parseBannerBaseline);
+	});
+
+	it("ignores an unrelated banner line that happens to contain the word 'baseline'", () => {
+		// a `false` guard: parsing must key on the exact known prefix, not a
+		// loose substring match that an unrelated line could accidentally
+		// trip (e.g. a future kind's own note text).
+		const sql = "-- hejbro migration\n-- ~ table app.posts [baseline notes]";
+		expect(parseBannerBaseline(sql)).toBe(false);
+	});
+
+	it("still reports true for a differently-worded baseline line -- the prefix is the contract, not the guidance prose", () => {
+		// simulates an already-written migration whose prose predates a
+		// future wording change: matching the whole rendered sentence
+		// (instead of just the "-- baseline:" prefix) would silently
+		// report `false` here, telling an apply tool to RUN a migration
+		// that must only ever be registered.
+		const sql =
+			"-- hejbro migration\n-- baseline: an earlier wording of this same guidance\n-- + table app.posts [new]";
+		expect(parseBannerBaseline(sql)).toBe(true);
+	});
+});
+
+/**
+ * Forward compatibility (R2-G4, 4.11): a banner line no current parser
+ * recognizes at all -- distinct from the coverage `parseBannerHashes`'s
+ * own "#229 unknown-line tolerance" test carries, which only proves that
+ * *other known* prefixes (the version line) don't confuse a parser
+ * reading its own. This restores the guard 2.10 removed along with
+ * `parseBannerManifestFormat` (the manifest banner line was this test's
+ * only "genuinely unknown to everyone" fixture) -- the property itself
+ * survives the manifest capability's own withdrawal and is required by
+ * the shipped `migration-format` spec ("an unrecognized banner line is
+ * ignored").
+ */
+describe("an unrecognized banner line does not break the parsers that read the others", () => {
+	it("every current parser still reads its own line with a fabricated, nobody-recognizes-it line mixed in", () => {
+		const rendered = renderBanner(
+			[createChange],
+			{ parent: "sha256:aaaa", current: "sha256:bbbb" },
+			"0.1.0",
+			true,
+		);
+		const [marker, ...rest] = rendered.split("\n");
+		const withUnknownLine = [
+			marker,
+			"-- some-future-line: unknown",
+			...rest,
+		].join("\n");
+
+		expect(parseBannerVersion(withUnknownLine)).toBe("0.1.0");
+		expect(parseBannerBaseline(withUnknownLine)).toBe(true);
+		expect(parseBannerHashes(withUnknownLine)).toEqual({
+			parent: "sha256:aaaa",
+			current: "sha256:bbbb",
+		});
+	});
+});
+
 describe("renderMigrationPrefix", () => {
 	it("renders just the prefix half, matching migrationFileName's own prefix (#220)", () => {
 		expect(
@@ -339,5 +460,215 @@ describe("deriveSlug", () => {
 	});
 	it("falls back to migration when there are no changes", () => {
 		expect(deriveSlug([])).toBe("migration");
+	});
+});
+
+describe("deriveExistingTransitionSlug (D106 R3, J13)", () => {
+	const emptySnapshot: Snapshot = {
+		formatVersion: 8,
+		dialect: "postgres",
+		objects: {},
+	};
+
+	const managedNode: JsonValue = { schema: "app", name: "widgets" };
+	const existingNode: JsonValue = {
+		schema: "app",
+		name: "widgets",
+		existing: true,
+	};
+
+	const snapshotWith = (key: string, node: JsonValue | undefined): Snapshot => {
+		if (node === undefined) {
+			return emptySnapshot;
+		}
+		return { ...emptySnapshot, objects: { [key]: node } };
+	};
+
+	it("names 'record_<table>' when a table's own existing marker appears (added declaration)", () => {
+		const previous = snapshotWith("table:app.widgets", undefined);
+		const next = snapshotWith("table:app.widgets", existingNode);
+		expect(deriveExistingTransitionSlug(previous, next)).toBe("record_widgets");
+	});
+
+	it("names 'forget_<table>' when a table's own existing marker disappears (removed declaration)", () => {
+		const previous = snapshotWith("table:app.widgets", existingNode);
+		const next = snapshotWith("table:app.widgets", undefined);
+		expect(deriveExistingTransitionSlug(previous, next)).toBe("forget_widgets");
+	});
+
+	it("names 'release_<table>' for a handover (managed -> existing, same identity)", () => {
+		const previous = snapshotWith("table:app.widgets", managedNode);
+		const next = snapshotWith("table:app.widgets", existingNode);
+		expect(deriveExistingTransitionSlug(previous, next)).toBe(
+			"release_widgets",
+		);
+	});
+
+	it("names 'adopt_<table>' for an adoption (existing -> managed, same identity)", () => {
+		const previous = snapshotWith("table:app.widgets", existingNode);
+		const next = snapshotWith("table:app.widgets", managedNode);
+		expect(deriveExistingTransitionSlug(previous, next)).toBe("adopt_widgets");
+	});
+
+	it("uses the last dot-segment of the identity, not the full schema-qualified key", () => {
+		const previous = snapshotWith("table:billing.ledger", undefined);
+		const next = snapshotWith("table:billing.ledger", {
+			schema: "billing",
+			name: "ledger",
+			existing: true,
+		});
+		expect(deriveExistingTransitionSlug(previous, next)).toBe("record_ledger");
+	});
+
+	it("picks the first transition in stable sorted key order when several tables move at once", () => {
+		const previous: Snapshot = { ...emptySnapshot, objects: {} };
+		const next: Snapshot = {
+			...emptySnapshot,
+			objects: {
+				"table:app.zebra": { schema: "app", name: "zebra", existing: true },
+				"table:app.aardvark": {
+					schema: "app",
+					name: "aardvark",
+					existing: true,
+				},
+			},
+		};
+		// "app.aardvark" sorts before "app.zebra" -- the first difference in
+		// that order wins, not declaration or object-literal order.
+		expect(deriveExistingTransitionSlug(previous, next)).toBe(
+			"record_aardvark",
+		);
+	});
+
+	// D106 R4, R4-B1: both sides marked existing, but the declared columns
+	// differ -- the fifth transition, reached only when the two sides'
+	// content actually differs (not by side-category alone, unlike the
+	// other four).
+	it("names 'reshape_<table>' when both sides are existing but the declared shape differs", () => {
+		const previous = snapshotWith("table:auth.users", existingNode);
+		const next = snapshotWith("table:auth.users", {
+			...existingNode,
+			columns: [{ name: "email" }],
+		});
+		expect(deriveExistingTransitionSlug(previous, next)).toBe("reshape_users");
+	});
+
+	it("keeps scanning past an unchanged existing:existing table to find the real mover, even when it sorts first", () => {
+		const previous: Snapshot = {
+			...emptySnapshot,
+			objects: {
+				"table:app.same_shape": existingNode,
+				"table:app.zzz_reshaped": existingNode,
+			},
+		};
+		const next: Snapshot = {
+			...emptySnapshot,
+			objects: {
+				// Sorts before "app.zzz_reshaped" but carries no content
+				// difference -- must be skipped, not mistaken for the mover.
+				"table:app.same_shape": existingNode,
+				"table:app.zzz_reshaped": { ...existingNode, columns: [{ name: "x" }] },
+			},
+		};
+		expect(deriveExistingTransitionSlug(previous, next)).toBe(
+			"reshape_zzz_reshaped",
+		);
+	});
+
+	it("throws a coded HejbroError, not a raw Error, when the two snapshots carry no explaining transition at all (D106 R4, R4-B1)", () => {
+		const same = snapshotWith("table:app.widgets", managedNode);
+		expect(() => deriveExistingTransitionSlug(same, same)).toThrow(
+			expect.objectContaining({
+				name: "HejbroError",
+				code: "existing-transition-not-found",
+			}),
+		);
+	});
+
+	// D106 R5, R5-B1/J17: a managed:managed table whose own record moved
+	// (e.g. an index/check declaration reorder, R5-B1's own repro) has no
+	// side-category transition -- tier 2's raw content comparison names it
+	// `restate_<table>` instead, deliberately not claiming *why* it moved.
+	describe("restate fallback (D106 R5, R5-B1, J17)", () => {
+		it("names 'restate_<table>' when a managed table's own content differs with no classifiable transition", () => {
+			const previous = snapshotWith("table:app.widgets", {
+				schema: "app",
+				name: "widgets",
+				indexes: [{ name: "widgets_a_idx" }, { name: "widgets_b_idx" }],
+			});
+			const next = snapshotWith("table:app.widgets", {
+				schema: "app",
+				name: "widgets",
+				indexes: [{ name: "widgets_b_idx" }, { name: "widgets_a_idx" }],
+			});
+			expect(deriveExistingTransitionSlug(previous, next)).toBe(
+				"restate_widgets",
+			);
+		});
+
+		it("keeps scanning past an unchanged managed:managed table to find the real mover, even when it sorts first", () => {
+			const unchangedNode: JsonValue = { schema: "app", name: "aaa" };
+			const previous: Snapshot = {
+				...emptySnapshot,
+				objects: {
+					"table:app.aaa": unchangedNode,
+					"table:app.zzz": {
+						schema: "app",
+						name: "zzz",
+						indexes: [{ name: "a" }],
+					},
+				},
+			};
+			const next: Snapshot = {
+				...emptySnapshot,
+				objects: {
+					// Sorts before "app.zzz" but carries no content difference.
+					"table:app.aaa": unchangedNode,
+					"table:app.zzz": {
+						schema: "app",
+						name: "zzz",
+						indexes: [{ name: "b" }],
+					},
+				},
+			};
+			expect(deriveExistingTransitionSlug(previous, next)).toBe("restate_zzz");
+		});
+
+		it("prefers a real existing-marker transition over an unrelated restate candidate in the same run, regardless of key order", () => {
+			// "app.aaa" (restate candidate) sorts before "app.zzz" (a real
+			// transition) -- tier 1 must still find "zzz" first, since it
+			// scans every key for a classifiable transition before tier 2
+			// ever runs, not "whichever tier finds a match first per key".
+			const previous: Snapshot = {
+				...emptySnapshot,
+				objects: {
+					"table:app.aaa": {
+						schema: "app",
+						name: "aaa",
+						indexes: [{ name: "a" }],
+					},
+					"table:app.zzz": managedNode,
+				},
+			};
+			const next: Snapshot = {
+				...emptySnapshot,
+				objects: {
+					"table:app.aaa": {
+						schema: "app",
+						name: "aaa",
+						indexes: [{ name: "b" }],
+					},
+					"table:app.zzz": { ...existingNode, name: "zzz" },
+				},
+			};
+			expect(deriveExistingTransitionSlug(previous, next)).toBe("release_zzz");
+		});
+
+		it("throwing still requires no table's raw content to differ at all, unaffected by the restate tier", () => {
+			const same = snapshotWith("table:app.widgets", managedNode);
+			expect(() => deriveExistingTransitionSlug(same, same)).toThrow(
+				expect.objectContaining({ code: "existing-transition-not-found" }),
+			);
+		});
 	});
 });

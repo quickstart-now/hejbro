@@ -1,10 +1,13 @@
 import type { PolicyCommand, PolicyDeclaration } from "../dsl/rls";
-import { throwHejbroError } from "../error";
 import type { ExprNode, TableRefNode } from "../expr/ast";
 import { decodeExprNode, encodeExprNode } from "../expr/codec";
 import { renderExpr } from "../expr/render-sql";
 import { createOrDropDiff, sameJson } from "../kind/diff-helpers";
-import { dispatchEmit } from "../kind/emit-helpers";
+import {
+	dispatchEmit,
+	requireNext,
+	requirePrevious,
+} from "../kind/emit-helpers";
 import type { KindChange, ObjectKind } from "../kind/object-kind";
 import type { JsonValue } from "../snapshot/stable-json";
 import {
@@ -14,6 +17,7 @@ import {
 } from "../sql/identifier";
 import type { SqlStatement } from "../sql/statement";
 import { predropStatement, statement } from "../sql/statement";
+import { tableIdentity } from "./table-snapshot";
 
 /**
  * A policy's serialized snapshot node. **Compact** (Task 3 audit / D33):
@@ -195,13 +199,7 @@ const withCheckField = (
  */
 /** `create policy` (plus its own idempotent-guard drop, #122/A′ — not a real drop, see the doc comment above `policyKind`) for a `create` change. */
 const emitCreateChange = (change: KindChange): ReadonlyArray<SqlStatement> => {
-	if (change.next === null) {
-		return throwHejbroError(
-			"invalid-kind-change",
-			"policy create change is missing its next snapshot.",
-		);
-	}
-	const nextSnapshot = asPolicySnapshot(change.next);
+	const nextSnapshot = asPolicySnapshot(requireNext(change));
 	return [
 		statement(dropPolicySql(nextSnapshot, true)),
 		statement(createPolicySql(nextSnapshot)),
@@ -210,13 +208,10 @@ const emitCreateChange = (change: KindChange): ReadonlyArray<SqlStatement> => {
 
 /** A real drop (D75, `predrop` stage) followed by `create policy` (`main` stage) for an `alter` change — Postgres has no `alter policy` for clause/role/command changes (idempotent recreate, spec §6.5). */
 const emitAlterChange = (change: KindChange): ReadonlyArray<SqlStatement> => {
-	if (change.next === null) {
-		return throwHejbroError(
-			"invalid-kind-change",
-			"policy alter change is missing its next snapshot.",
-		);
-	}
-	const nextSnapshot = asPolicySnapshot(change.next);
+	// #472 trap 2: `previous` is never checked here — an alter change with a
+	// missing previous snapshot is not this guard's business, and adding a
+	// requirePrevious "for symmetry" would turn a passing case into a throw.
+	const nextSnapshot = asPolicySnapshot(requireNext(change));
 	return [
 		predropStatement(dropPolicySql(nextSnapshot, false)),
 		statement(createPolicySql(nextSnapshot)),
@@ -224,17 +219,11 @@ const emitAlterChange = (change: KindChange): ReadonlyArray<SqlStatement> => {
 };
 
 /** A real drop (D75, `predrop` stage) for a `drop` change. */
-const emitDropChange = (change: KindChange): ReadonlyArray<SqlStatement> => {
-	if (change.previous === null) {
-		return throwHejbroError(
-			"invalid-kind-change",
-			"policy drop change is missing its previous snapshot.",
-		);
-	}
-	return [
-		predropStatement(dropPolicySql(asPolicySnapshot(change.previous), false)),
-	];
-};
+const emitDropChange = (change: KindChange): ReadonlyArray<SqlStatement> => [
+	predropStatement(
+		dropPolicySql(asPolicySnapshot(requirePrevious(change)), false),
+	),
+];
 
 export const policyKind: ObjectKind<PolicyDeclaration> = {
 	kind: "policy",
@@ -291,4 +280,8 @@ export const policyKind: ObjectKind<PolicyDeclaration> = {
 			},
 			change,
 		),
+	ownerTableIdentity: (node) => {
+		const snapshot = asPolicySnapshot(node);
+		return tableIdentity(snapshot.schema, snapshot.table);
+	},
 };

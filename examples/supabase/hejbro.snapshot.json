@@ -1,6 +1,6 @@
 {
 	"dialect": "postgres",
-	"formatVersion": 5,
+	"formatVersion": 8,
 	"objects": {
 		"grant:app.all-tables-privileges.anon": {
 			"grantKind": "all-tables-privileges",
@@ -58,10 +58,13 @@
 				"negated": false,
 				"nodeKind": "exists",
 				"query": {
+					"distinct": null,
 					"from": {
 						"schema": "app",
 						"table": "attachments"
 					},
+					"groupBy": [],
+					"having": null,
 					"joins": [
 						{
 							"joinKind": "inner",
@@ -88,6 +91,7 @@
 						}
 					],
 					"limit": null,
+					"offset": null,
 					"orderBy": [],
 					"projection": {
 						"projectionKind": "constant-one"
@@ -144,12 +148,16 @@
 				"negated": false,
 				"nodeKind": "exists",
 				"query": {
+					"distinct": null,
 					"from": {
 						"schema": "app",
 						"table": "profiles"
 					},
+					"groupBy": [],
+					"having": null,
 					"joins": [],
 					"limit": null,
+					"offset": null,
 					"orderBy": [],
 					"projection": {
 						"projectionKind": "constant-one"
@@ -483,12 +491,16 @@
 			],
 			"name": "profiles_public",
 			"query": {
+				"distinct": null,
 				"from": {
 					"schema": "app",
 					"table": "profiles"
 				},
+				"groupBy": [],
+				"having": null,
 				"joins": [],
 				"limit": null,
+				"offset": null,
 				"orderBy": [],
 				"projection": {
 					"columns": [

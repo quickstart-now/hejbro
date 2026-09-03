@@ -2,17 +2,22 @@
 	"name": "example-postgres",
 	"version": "0.0.0",
 	"private": true,
-	"description": "Showcase: a generic team-workspace schema on plain Postgres — tables, CHECK constraints, partial and ordered indexes, a self-referencing FK, RLS, a trigger, grants, a view — with a four-step migration history and a local Docker round-trip.",
+	"description": "Showcase: a generic team-workspace schema on plain Postgres \u2014 tables, CHECK constraints, partial and ordered indexes, a self-referencing FK, RLS, a trigger, grants, a view \u2014 with a four-step migration history and a local Docker round-trip.",
 	"type": "module",
 	"scripts": {
 		"check-types": "tsc --noEmit",
 		"test": "vitest run",
+		"test:integration": "vitest run --config vitest.integration.config.ts",
 		"roundtrip": "sh ../../scripts/roundtrip.sh . seed/roles.sql"
 	},
 	"dependencies": {
+		"@hejbro/core": "workspace:*",
+		"@hejbro/pg": "workspace:*",
 		"hejbro": "workspace:*"
 	},
 	"devDependencies": {
+		"@types/pg": "^8.23.1",
+		"pg": "^8.23.0",
 		"typescript": "catalog:",
 		"vitest": "catalog:"
 	}

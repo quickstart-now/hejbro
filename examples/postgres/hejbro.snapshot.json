@@ -1,7 +1,17 @@
 {
 	"dialect": "postgres",
-	"formatVersion": 5,
+	"formatVersion": 8,
 	"objects": {
+		"function:app.audit_task_status_change": {
+			"args": [],
+			"bodyHash": "419e25f3",
+			"bodySql": "create or replace function \"app\".\"audit_task_status_change\"()\nreturns trigger\nlanguage plpgsql\nas $function$\nbegin\n\tinsert into \"app\".\"task_status_audit\" (\"task_id\", \"old_status\", \"new_status\") values (new.id, old.status, new.status);\n\treturn new;\nend;\n$function$;",
+			"language": "plpgsql",
+			"name": "audit_task_status_change",
+			"returns": "trigger",
+			"schema": "app",
+			"security": "invoker"
+		},
 		"function:app.comments_enforce_single_depth": {
 			"args": [],
 			"bodyHash": "64e69873",
@@ -280,12 +290,16 @@
 				"negated": false,
 				"nodeKind": "exists",
 				"query": {
+					"distinct": null,
 					"from": {
 						"schema": "app",
 						"table": "projects"
 					},
+					"groupBy": [],
+					"having": null,
 					"joins": [],
 					"limit": null,
+					"offset": null,
 					"orderBy": [],
 					"projection": {
 						"projectionKind": "constant-one"
@@ -443,17 +457,6 @@
 			"foreignKeys": [
 				{
 					"columns": [
-						"task_id"
-					],
-					"name": "comments_task_id_fk",
-					"onDelete": "cascade",
-					"referencesColumns": [
-						"id"
-					],
-					"referencesTable": "app.tasks"
-				},
-				{
-					"columns": [
 						"parent_id"
 					],
 					"name": "comments_parent_id_fk",
@@ -462,6 +465,17 @@
 						"id"
 					],
 					"referencesTable": "app.comments"
+				},
+				{
+					"columns": [
+						"task_id"
+					],
+					"name": "comments_task_id_fk",
+					"onDelete": "cascade",
+					"referencesColumns": [
+						"id"
+					],
+					"referencesTable": "app.tasks"
 				}
 			],
 			"indexes": [],
@@ -555,7 +569,37 @@
 				}
 			],
 			"foreignKeys": [],
-			"indexes": [],
+			"indexes": [
+				{
+					"columns": [
+						{
+							"expression": {
+								"chunks": [
+									{
+										"chunkKind": "text",
+										"text": "lower("
+									},
+									{
+										"chunkKind": "expr",
+										"expr": {
+											"column": "email",
+											"nodeKind": "column-ref",
+											"schema": "app",
+											"table": "members"
+										}
+									},
+									{
+										"chunkKind": "text",
+										"text": ")"
+									}
+								],
+								"nodeKind": "sql-template"
+							}
+						}
+					],
+					"name": "members_email_lower_idx"
+				}
+			],
 			"name": "members",
 			"primaryKeyName": "members_pkey",
 			"schema": "app"
@@ -771,6 +815,63 @@
 			],
 			"name": "task_schedules",
 			"primaryKeyName": "task_schedules_pkey",
+			"schema": "app"
+		},
+		"table:app.task_status_audit": {
+			"columns": [
+				{
+					"default": {
+						"args": [],
+						"function": "gen_random_uuid",
+						"nodeKind": "function-call",
+						"schema": null
+					},
+					"name": "id",
+					"notNull": true,
+					"primaryKey": true,
+					"typeNode": {
+						"typeName": "uuid"
+					}
+				},
+				{
+					"name": "task_id",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "uuid"
+					}
+				},
+				{
+					"name": "old_status",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "text"
+					}
+				},
+				{
+					"name": "new_status",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "text"
+					}
+				},
+				{
+					"default": {
+						"args": [],
+						"function": "now",
+						"nodeKind": "function-call",
+						"schema": null
+					},
+					"name": "changed_at",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "timestamptz"
+					}
+				}
+			],
+			"foreignKeys": [],
+			"indexes": [],
+			"name": "task_status_audit",
+			"primaryKeyName": "task_status_audit_pkey",
 			"schema": "app"
 		},
 		"table:app.task_tags": {
@@ -991,6 +1092,12 @@
 					"typeNode": {
 						"typeName": "timestamptz"
 					}
+				},
+				{
+					"name": "metadata",
+					"typeNode": {
+						"typeName": "jsonb"
+					}
 				}
 			],
 			"foreignKeys": [
@@ -1035,6 +1142,16 @@
 							"nodeKind": "literal"
 						}
 					}
+				},
+				{
+					"columns": [
+						{
+							"name": "metadata",
+							"opclass": "jsonb_path_ops"
+						}
+					],
+					"method": "gin",
+					"name": "tasks_metadata_idx"
 				}
 			],
 			"name": "tasks",
@@ -1060,6 +1177,22 @@
 			"table": "comments",
 			"timing": "before"
 		},
+		"trigger:app.tasks.audit_task_status_change": {
+			"events": [
+				{
+					"columns": [
+						"status"
+					],
+					"event": "update"
+				}
+			],
+			"forEach": "row",
+			"function": "audit_task_status_change",
+			"name": "audit_task_status_change",
+			"schema": "app",
+			"table": "tasks",
+			"timing": "after"
+		},
 		"view:app.open_tasks": {
 			"columns": [
 				"id",
@@ -1068,16 +1201,21 @@
 				"status",
 				"priority",
 				"estimate_hours",
-				"closed_at"
+				"closed_at",
+				"metadata"
 			],
 			"name": "open_tasks",
 			"query": {
+				"distinct": null,
 				"from": {
 					"schema": "app",
 					"table": "tasks"
 				},
+				"groupBy": [],
+				"having": null,
 				"joins": [],
 				"limit": null,
+				"offset": null,
 				"orderBy": [],
 				"projection": {
 					"columns": [
@@ -1087,7 +1225,8 @@
 						"status",
 						"priority",
 						"estimate_hours",
-						"closed_at"
+						"closed_at",
+						"metadata"
 					],
 					"projectionKind": "all-columns"
 				},

@@ -149,8 +149,12 @@ export const defineTrigger = <TTable extends Table>(
 		new: buildTriggerRow(target, "new"),
 		old: buildTriggerRow(target, "old"),
 	};
-	const functionBody = recordBodyWithGuard(identity, declaredAt, (ctx) =>
-		body(ctx, rows),
+	const functionBody = recordBodyWithGuard(
+		identity,
+		declaredAt,
+		"trigger",
+		null,
+		(ctx) => body(ctx, rows),
 	);
 
 	const functionDeclaration: FunctionDeclaration = {

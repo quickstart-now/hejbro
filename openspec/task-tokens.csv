@@ -1,0 +1,15 @@
+date,change-id,group,role_sessions,input_tokens,output_tokens,cache_read_tokens,cache_creation_tokens,notes
+2026-08-26,add-query-layer,2,planner+implementer+reviewer,1796,881848,198693193,2047406,measured at PR open from the three team session transcripts (898 requests); lead-session tokens not piece-attributable
+2026-08-26,add-query-layer,3,planner+implementer+reviewer,5012,2178887,987613223,5164833,measured at PR open from the three team session transcripts (2506 requests); lead-session tokens not piece-attributable
+2026-08-26,add-query-layer,4,planner+implementer+reviewer,5334,2206258,1014513008,5031214,measured at PR open from the three team session transcripts (2667 requests); lead-session tokens not piece-attributable
+2026-08-27,add-query-layer,6,planner+implementer+reviewer,1834,941124,139406221,1940670,measured at PR open from the three team session transcripts (917 requests); lead-session tokens not piece-attributable
+2026-08-27,add-query-layer,5,planner+implementer+reviewer,3040,1342057,429846957,2927846,measured at PR open from the three team session transcripts (1520 requests); lead-session tokens not piece-attributable
+2026-08-27,add-query-layer,7,planner+implementer+reviewer,3768,1700360,804775808,3462806,measured at PR open from the three team session transcripts (1884 requests); lead-session tokens not piece-attributable
+2026-08-28,add-array-ergonomics,2,planner+implementer+reviewer,984,348504,41555478,1236342,measured at PR open from the three team session transcripts (492 requests); lead-session tokens not piece-attributable
+2026-08-28,add-array-ergonomics,1,planner+implementer+reviewer,1436,532315,109270062,2043667,measured at PR open from the three team session transcripts (718 requests); lead-session tokens not piece-attributable
+2026-08-28,add-array-ergonomics,3,planner+implementer+reviewer,876,380247,37795410,1297911,measured at PR open from the three team session transcripts (438 requests); lead-session tokens not piece-attributable
+2026-08-28,add-array-ergonomics,4,planner+implementer+reviewer,542,209944,16232000,833377,measured at PR open from the three team session transcripts (271 requests); lead-session tokens not piece-attributable
+2026-08-28,add-generated-columns,1,planner+implementer+reviewer,1102,490457,72700150,2070023,measured at PR open from the three team session transcripts (551 requests); lead-session tokens not piece-attributable
+2026-08-28,add-generated-columns,3,planner+implementer+reviewer,1134,524661,73671973,1904579,measured at PR open from the three team session transcripts (567 requests); lead-session tokens not piece-attributable
+2026-08-28,add-generated-columns,2,planner+implementer+reviewer,2884,1101074,498296820,3232307,measured at PR open from the three team session transcripts (1442 requests); lead-session tokens not piece-attributable
+2026-08-28,add-generated-columns,4,planner+implementer+reviewer,1054,512097,72206367,1686204,measured at PR open from the three team session transcripts (527 requests); lead-session tokens not piece-attributable

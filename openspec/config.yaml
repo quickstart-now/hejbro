@@ -1,0 +1,35 @@
+schema: spec-driven
+
+context: |
+  Language: en
+  All artifacts must be written in en.
+  Keep OpenSpec structural headings and SHALL/MUST keywords in English.
+
+rules:
+  proposal:
+    - Open decisions are settled with the project owner before approval; approval gates implementation
+    - Decision rationale goes to the design spec's owner-gated decision log (docs/specs/), not into openspec artifacts
+  specs:
+    - Delta specs state the present contract only — no issue numbers, change ids, measurement labels, or renaming narratives in requirement or scenario text; measured facts stay inline, unlabeled
+  tasks:
+    - Top-level groups are parallel-safe slices — no file overlap between groups
+    - "Each top-level group gets a GitHub tracking issue (sub-issue of the change's issue): filed before the group's team starts, In Progress at start, closed when the group's PR merges — tasks.md stays the execution truth; the issue is the board-visible layer, and leaf tasks are never mirrored into issues"
+    - Estimate pure work minutes on each task line ("~8m"); over 10 minutes → split, 5 or under → merge into a neighbor (consult openspec/task-times.csv)
+    - Every leaf task names the failing test it starts from (test file + case name) and the files it touches — no separate "Tests" group
+    - Mark tasks that settle a contract detail (signature, error shape, key order, output format, SQL text) as [design]
+    - No verification tasks ("run the suite", "confirm unchanged") — verification is the definition of done for every task
+
+operations:
+  apply:
+    guidance:
+      - Execute each task test-first (red test named on the task, minimal green, refactor). The red test's inputs are as wide as the scenario's sentence — a universal claim ("never", "any", "every") starts from an input table that spans it, not from the one example the scenario shows (D110)
+      - A running task that overruns its estimate is never stopped or re-split — overruns correct the next estimate
+      - "Divergence tripwires — stop and escalate to the owner the moment any fires: a red test cannot be derived from the spec scenario; going green would contradict another delta scenario; settling a [design] detail would alter the approved contract. Divergence means the spec is presumed wrong until the owner rules"
+      - Repair in place after the owner rules — intent unchanged → update the artifacts (any-direction ripple) and continue this apply; intent changed or scope exploded → a new change (update preserves context, a new change provides clarity)
+      - Review is spec-bound — the reviewer reads the delta spec scenarios against the implementation (openspec show --diff); divergence found in review escalates like any tripwire
+      - "A change whose input comes from outside hejbro's own output (a catalog reading, a parsed file, a vendored artifact) is reviewed before its piece merges by a context-free input constructor — spawned with the delta scenarios and the public surface only, never the implementer's reasoning or the planner's framing — who constructs concrete inputs and runs them; this fills the piece reviewer role for that class of change (D110). D106's post-merge review stays the archive gate"
+  archive:
+    guidance:
+      - "Adversarial spec-only review gates the archive (D106): after the change's PRs merge and before archiving, a context-free session — zero piece context, never a piece-team member, a different model family from the piece's planner when practical — reads ONLY the change's delta specs and the public surface (skills/hejbro, exported API, generated artifacts), never the proposal rationale, design notes, or implementation reasoning. A finding that a delta scenario contradicts shipped behavior blocks the archive until repaired or owner-ruled; every other finding files as a tracked sub-issue of the phase that will handle it. The evaluator's report lands as evaluation.md in the change directory so the archive preserves it"
+      - Append one line per task to openspec/task-times.csv before archiving
+      - Close the tracking issue and confirm the durations landed

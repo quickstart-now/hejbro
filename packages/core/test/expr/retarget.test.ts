@@ -1,7 +1,17 @@
 import { describe, expect, it } from "vitest";
-import type { ExprNode, SelectNode } from "../../src/expr/ast";
+import type {
+	ExprNode,
+	SelectNode,
+	SetOpNode,
+	WithNode,
+} from "../../src/expr/ast";
 import type { RenameTarget } from "../../src/expr/retarget";
-import { retargetExprNode, retargetSelectNode } from "../../src/expr/retarget";
+import {
+	retargetExprNode,
+	retargetSelectNode,
+	retargetSetOpNode,
+	retargetWithNode,
+} from "../../src/expr/retarget";
 import { buildUnrelatedCase, REACHABLE_NODE_KINDS } from "./reachable-kinds";
 
 const tableRenameTarget: RenameTarget = {
@@ -256,6 +266,10 @@ describe("retargetExprNode (#110 item 7/18: rename retargeting)", () => {
 					},
 				],
 				limit: 1,
+				offset: null,
+				groupBy: [],
+				having: null,
+				distinct: null,
 			},
 		};
 		const retargeted = retargetExprNode(node, tableRenameTarget);
@@ -274,6 +288,97 @@ describe("retargetExprNode (#110 item 7/18: rename retargeting)", () => {
 			literal: { literalKind: "boolean", value: true },
 		};
 		expect(retargetExprNode(node, tableRenameTarget)).toBe(node);
+	});
+});
+
+// add-window-functions task 1.5: the exhaustive registries force a handler
+// to be WRITTEN, not to DESCEND -- `window: (node) => node` compiles and
+// passes the it.each unrelated-rename loop above just as well as a real
+// descent would. This is the hand-written positive-descent proof the
+// registries can't provide on their own.
+describe("retargetExprNode window descent (#416/D104 task 1.5)", () => {
+	const buildWindow = (partitionBy: ReadonlyArray<ExprNode>): ExprNode => ({
+		nodeKind: "window",
+		fn: {
+			nodeKind: "functionCall",
+			schemaName: null,
+			functionName: "rank",
+			args: [],
+		},
+		partitionBy,
+		orderBy: [],
+	});
+
+	it("a column referenced only inside over()'s partitionBy is rewritten by a rename", () => {
+		const node = buildWindow([
+			{
+				nodeKind: "columnRef",
+				schemaName: "app",
+				tableName: "posts",
+				columnName: "title",
+			},
+		]);
+		expect(retargetExprNode(node, columnRenameTarget)).toEqual(
+			buildWindow([
+				{
+					nodeKind: "columnRef",
+					schemaName: "app",
+					tableName: "posts",
+					columnName: "headline",
+				},
+			]),
+		);
+	});
+
+	it("a column referenced only inside over()'s orderBy is rewritten by a rename", () => {
+		const buildOrderedWindow = (columnName: string): ExprNode => ({
+			nodeKind: "window",
+			fn: {
+				nodeKind: "functionCall",
+				schemaName: null,
+				functionName: "rank",
+				args: [],
+			},
+			partitionBy: [],
+			orderBy: [
+				{
+					expr: {
+						nodeKind: "columnRef",
+						schemaName: "app",
+						tableName: "posts",
+						columnName,
+					},
+					direction: "asc",
+				},
+			],
+		});
+		expect(
+			retargetExprNode(buildOrderedWindow("title"), columnRenameTarget),
+		).toEqual(buildOrderedWindow("headline"));
+	});
+
+	it("a column referenced only inside the windowed function's own argument is rewritten by a rename", () => {
+		const node: ExprNode = {
+			nodeKind: "window",
+			fn: {
+				nodeKind: "functionCall",
+				schemaName: null,
+				functionName: "sum",
+				args: [
+					{
+						nodeKind: "columnRef",
+						schemaName: "app",
+						tableName: "posts",
+						columnName: "title",
+					},
+				],
+			},
+			partitionBy: [],
+			orderBy: [],
+		};
+		const retargeted = retargetExprNode(node, columnRenameTarget);
+		expect(JSON.stringify(retargeted)).toContain('"headline"');
+		expect(JSON.stringify(retargeted)).not.toContain('"title"');
 	});
 });
 
@@ -296,8 +401,12 @@ describe("retargetSelectNode (#157 item 96: same identity-preservation disciplin
 		from: { schemaName: "app", tableName: "posts" },
 		joins: [],
 		where: whereClause,
+		groupBy: [],
+		having: null,
 		orderBy: [],
 		limit: null,
+		offset: null,
+		distinct: null,
 	});
 
 	it.each(REACHABLE_NODE_KINDS)(
@@ -370,8 +479,12 @@ describe('retargetSelectNode with a "columns" projection (defineView\'s own colu
 		from: { schemaName: "app", tableName: "posts" },
 		joins: [],
 		where: null,
+		groupBy: [],
+		having: null,
 		orderBy: [],
 		limit: null,
+		offset: null,
+		distinct: null,
 	});
 
 	it("retargets the matching column's own expr, leaving an unrelated column entry's reference untouched", () => {
@@ -425,5 +538,260 @@ describe('retargetSelectNode with a "columns" projection (defineView\'s own colu
 		]);
 		const retargeted = retargetSelectNode(query, columnRenameTarget);
 		expect(retargeted).toBe(query);
+	});
+});
+
+// #444 F3: retargetSelectNode used to hand-list projection/from/joins/
+// where/orderBy only, missing groupBy/having/distinct on -- a rename left
+// stale identifiers behind in those three clauses.
+describe("retargetSelectNode groupBy/having/distinctOn (#444 F3)", () => {
+	const renamedRef: ExprNode = {
+		nodeKind: "columnRef",
+		schemaName: "app",
+		tableName: "posts",
+		columnName: "title",
+	};
+	const buildQuery = (fields: {
+		readonly groupBy?: ReadonlyArray<ExprNode>;
+		readonly having?: ExprNode | null;
+		readonly distinct?: SelectNode["distinct"];
+	}): SelectNode => ({
+		queryKind: "select",
+		projection: { projectionKind: "allColumns", columnNames: ["id"] },
+		from: { schemaName: "app", tableName: "posts" },
+		joins: [],
+		where: null,
+		groupBy: fields.groupBy ?? [],
+		having: fields.having ?? null,
+		orderBy: [],
+		limit: null,
+		offset: null,
+		distinct: fields.distinct ?? null,
+	});
+
+	it("retargets a column reference inside groupBy/having/distinctOn", () => {
+		const query = buildQuery({
+			groupBy: [renamedRef],
+			having: renamedRef,
+			distinct: { distinctKind: "on", columns: [renamedRef] },
+		});
+		const retargeted = retargetSelectNode(query, columnRenameTarget);
+		const renamed: ExprNode = { ...renamedRef, columnName: "headline" };
+		expect(retargeted.groupBy).toEqual([renamed]);
+		expect(retargeted.having).toEqual(renamed);
+		expect(retargeted.distinct).toEqual({
+			distinctKind: "on",
+			columns: [renamed],
+		});
+	});
+
+	it("returns the exact same reference when groupBy/having/distinctOn mention no renamed column", () => {
+		const unrelated: ExprNode = {
+			nodeKind: "columnRef",
+			schemaName: "app",
+			tableName: "posts",
+			columnName: "id",
+		};
+		const query = buildQuery({
+			groupBy: [unrelated],
+			having: unrelated,
+			distinct: { distinctKind: "on", columns: [unrelated] },
+		});
+		const retargeted = retargetSelectNode(query, columnRenameTarget);
+		expect(retargeted).toBe(query);
+		expect(retargeted.groupBy).toBe(query.groupBy);
+		expect(retargeted.having).toBe(query.having);
+		expect(retargeted.distinct).toBe(query.distinct);
+	});
+});
+
+describe("set-op retarget (add-set-operations task 1.4)", () => {
+	it("retargets both branches and returns the same reference when unrelated", () => {
+		const base: SetOpNode = {
+			queryKind: "setOp",
+			operator: "union",
+			all: false,
+			left: {
+				queryKind: "select",
+				projection: { projectionKind: "allColumns", columnNames: ["id"] },
+				from: { schemaName: "app", tableName: "posts" },
+				joins: [],
+				where: null,
+				groupBy: [],
+				having: null,
+				orderBy: [],
+				limit: null,
+				offset: null,
+				distinct: null,
+			},
+			right: {
+				queryKind: "select",
+				projection: { projectionKind: "allColumns", columnNames: ["id"] },
+				from: { schemaName: "app", tableName: "others" },
+				joins: [],
+				where: null,
+				groupBy: [],
+				having: null,
+				orderBy: [],
+				limit: null,
+				offset: null,
+				distinct: null,
+			},
+			orderBy: [],
+			limit: null,
+			offset: null,
+		};
+		const renamed = retargetSetOpNode(base, {
+			oldSchema: "app",
+			oldTable: "posts",
+			newSchema: "app",
+			newTable: "entries",
+			oldColumn: null,
+			newColumn: null,
+		});
+		expect(JSON.stringify(renamed)).toContain('"entries"');
+		expect(JSON.stringify(renamed)).not.toContain('"posts"');
+		const untouched = retargetSetOpNode(base, {
+			oldSchema: "app",
+			oldTable: "elsewhere",
+			newSchema: "app",
+			newTable: "nowhere",
+			oldColumn: null,
+			newColumn: null,
+		});
+		expect(untouched).toBe(base);
+	});
+});
+
+describe("set-op right-branch rename (review F5)", () => {
+	it("a rename touching only the right branch retargets it", () => {
+		const leaf = (tableName: string): SelectNode => ({
+			queryKind: "select",
+			projection: { projectionKind: "allColumns", columnNames: ["id"] },
+			from: { schemaName: "app", tableName },
+			joins: [],
+			where: null,
+			groupBy: [],
+			having: null,
+			orderBy: [],
+			limit: null,
+			offset: null,
+			distinct: null,
+		});
+		const node: SetOpNode = {
+			queryKind: "setOp",
+			operator: "union",
+			all: false,
+			left: leaf("keepers"),
+			right: leaf("movers"),
+			orderBy: [],
+			limit: null,
+			offset: null,
+		};
+		const renamed = retargetSetOpNode(node, {
+			oldSchema: "app",
+			oldTable: "movers",
+			newSchema: "app",
+			newTable: "settlers",
+			oldColumn: null,
+			newColumn: null,
+		});
+		expect(renamed).not.toBe(node);
+		expect(JSON.stringify(renamed.right)).toContain('"settlers"');
+		expect(JSON.stringify(renamed.left)).toContain('"keepers"');
+	});
+});
+
+describe("retargetWithNode (add-ctes tasks 2.2/2.3/2.4)", () => {
+	const anchor: SelectNode = {
+		queryKind: "select",
+		projection: { projectionKind: "constantOne" },
+		from: { schemaName: "app", tableName: "posts" },
+		joins: [],
+		where: null,
+		groupBy: [],
+		having: null,
+		orderBy: [],
+		limit: null,
+		offset: null,
+		distinct: null,
+	};
+
+	// task 2.3, positive descent proof: the registry forces retargetWithNode
+	// to be *written*, not to *descend* -- `with: (node) => node` would
+	// compile and pass every reference-identity check just as well as this
+	// does. Only a rewritten column, reached through an entry's own body
+	// (never touched by the top-level identifier-only pass), proves it
+	// actually walks in.
+	it("a column referenced only inside a CTE body is rewritten by a rename", () => {
+		const entryQuery: SelectNode = {
+			...anchor,
+			where: {
+				nodeKind: "columnRef",
+				schemaName: "app",
+				tableName: "posts",
+				columnName: "id",
+			},
+		};
+		const node: WithNode = {
+			queryKind: "with",
+			ctes: [{ name: "recent", query: entryQuery, materialized: null }],
+			recursive: false,
+			body: anchor,
+		};
+		const retargeted = retargetWithNode(node, tableRenameTarget);
+		expect(retargeted).not.toBe(node);
+		const retargetedEntryQuery = retargeted.ctes[0]?.query;
+		expect(retargetedEntryQuery?.queryKind).toBe("select");
+		expect((retargetedEntryQuery as SelectNode | undefined)?.where).toEqual({
+			nodeKind: "columnRef",
+			schemaName: "app",
+			tableName: "articles",
+			columnName: "id",
+		});
+	});
+
+	// task 2.4, the negative pin -- the sentinel-schema hazard D105 rejected
+	// an alternative over: a rename identifies its target by schema and
+	// table together, and a CTE has neither, so a same-named CTE (and its
+	// own column references) must be left exactly alone.
+	it("a table rename leaves a same-named CTE alone", () => {
+		const body: SelectNode = {
+			...anchor,
+			from: { cteName: "posts" },
+			projection: {
+				projectionKind: "columns",
+				columns: [
+					{
+						alias: "id",
+						expr: {
+							nodeKind: "columnRef",
+							schemaName: null,
+							tableName: "posts",
+							columnName: "id",
+						},
+					},
+				],
+			},
+		};
+		const node: WithNode = {
+			queryKind: "with",
+			ctes: [{ name: "posts", query: anchor, materialized: null }],
+			recursive: false,
+			body,
+		};
+		const retargeted = retargetWithNode(node, tableRenameTarget);
+		expect(retargeted.body).toBe(body);
+		expect(retargeted.body).toEqual(body);
+	});
+
+	it("returns the exact same reference when nothing in the list or body matches", () => {
+		const node: WithNode = {
+			queryKind: "with",
+			ctes: [{ name: "recent", query: anchor, materialized: null }],
+			recursive: false,
+			body: anchor,
+		};
+		expect(retargetWithNode(node, columnRenameTarget)).toBe(node);
 	});
 });

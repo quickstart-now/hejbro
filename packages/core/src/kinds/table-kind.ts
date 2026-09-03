@@ -1,6 +1,9 @@
 import type {
 	ForeignKeyAction,
+	ForeignKeyDeclaration,
+	IndexColumnDeclaration,
 	IndexDeclaration,
+	IndexMethod,
 	IndexNulls,
 	TableDeclaration,
 } from "../dsl/table";
@@ -10,7 +13,11 @@ import type { KeyedDiff } from "../kind/diff-helpers";
 import { createOrDropDiff, diffByKey } from "../kind/diff-helpers";
 import type { ObjectKind, SerializeContext } from "../kind/object-kind";
 import type { JsonValue } from "../snapshot/stable-json";
-import type { ColumnState } from "../types/column-builder";
+import type {
+	ColumnState,
+	IdentityKind,
+	IdentityState,
+} from "../types/column-builder";
 import type { TypeNode } from "../types/type-node";
 import { isSerialTypeNode, serialBaseType } from "../types/type-node";
 import { emitTableSql } from "./table-kind-emit";
@@ -18,11 +25,17 @@ import type {
 	CheckSnapshot,
 	ColumnSnapshot,
 	ForeignKeySnapshot,
+	IdentitySnapshot,
 	IndexColumnSnapshot,
 	IndexSnapshot,
 	TableSnapshot,
 } from "./table-snapshot";
-import { asTableSnapshot, tableChecks, tableIdentity } from "./table-snapshot";
+import {
+	asTableSnapshot,
+	tableChecks,
+	tableExisting,
+	tableIdentity,
+} from "./table-snapshot";
 
 /** Derives an index's default name from its owning table and columns — shared with `engine/rename-plan.ts`'s drift guard (Phase 5). */
 export const deriveIndexName = (
@@ -81,22 +94,21 @@ export const deriveUniqueName = (
 ): string => `${tableName}_${columnName}_key`;
 
 /**
- * `primaryKey` implies `notNull` once a column is materialized into a
- * snapshot -- and so does a `serial`/`smallserial`/`bigserial` type (#23/
- * D66): confirmed against a real Postgres (`pg_dump` on a table declaring
- * `bigserial`/`smallserial` columns with neither `.primaryKey()` nor
- * `.notNull()` chained still showed `NOT NULL` on both) that the
- * pseudo-type sugar itself carries the constraint, independent of
- * primary-key status. None of the three serial factories set `notNull` on
- * their own construction, so without this, a bare `serial()` column would
- * materialize as nullable -- a column a real Postgres would never let
- * exist.
+ * `primaryKey`, a `serial`/`smallserial`/`bigserial` type (#23/D66,
+ * confirmed against `pg_dump`), and an identity (D100, not yet
+ * witnessed — group 4; both kinds alike) all imply `notNull` once a
+ * column is materialized into a snapshot, even when the declaration
+ * itself never called `.notNull()`.
  */
 const materializeNotNull = (columnState: ColumnState): boolean => {
 	if (columnState.primaryKey) {
 		return true;
 	}
 	if (isSerialTypeNode(columnState.typeNode)) {
+		return true;
+	}
+	// Every identity column is NOT NULL by Postgres rule, both kinds alike.
+	if (columnState.identity !== undefined) {
 		return true;
 	}
 	return columnState.notNull;
@@ -120,6 +132,29 @@ const materializeTypeNode = (columnState: ColumnState): TypeNode => {
 	return columnState.typeNode;
 };
 
+/**
+ * The `name` entries' names, in order — an expression entry (R5) names no
+ * column of its own and is retargeted on rename, not renamed by name, so
+ * it contributes nothing to derived-name recomputation (R7/R10b). Generic
+ * over both `IndexColumnDeclaration` (`dsl/table.ts`) and
+ * `IndexColumnSnapshot` (`table-snapshot.ts`) — they share this shape —
+ * so `dsl/table.ts`'s own validation and `engine/rename-plan.ts`'s rename
+ * plumbing both import this one implementation instead of each keeping
+ * their own copy (the same "shared with engine/rename-plan.ts" relationship
+ * {@link deriveIndexName} already has).
+ */
+export const namedIndexColumnNames = (
+	columns: ReadonlyArray<
+		{ readonly name: string } | { readonly expression: unknown }
+	>,
+): ReadonlyArray<string> =>
+	columns.flatMap((column) => {
+		if ("name" in column) {
+			return [column.name];
+		}
+		return [];
+	});
+
 const resolveIndexName = (
 	tableName: string,
 	index: IndexDeclaration,
@@ -127,10 +162,18 @@ const resolveIndexName = (
 	if (index.indexName !== null) {
 		return index.indexName;
 	}
-	return deriveIndexName(
-		tableName,
-		index.columns.map((column) => column.name),
-	);
+	return deriveIndexName(tableName, namedIndexColumnNames(index.columns));
+};
+
+/** D106 R3-B3, the foreign-key twin of {@link resolveIndexName}: an explicit name (validated per D36 at declaration time) wins, else derive from the owning table and local columns. */
+const resolveForeignKeyName = (
+	tableName: string,
+	foreignKey: ForeignKeyDeclaration,
+): string => {
+	if (foreignKey.name !== null) {
+		return foreignKey.name;
+	}
+	return deriveForeignKeyName(tableName, foreignKey.columns);
 };
 
 /** Encodes a column's default expression into its snapshot form (D67/D70) — `null` when the column has no default. */
@@ -141,6 +184,29 @@ const encodeColumnDefaultExpr = (
 		return null;
 	}
 	return encodeExprNode(columnState.defaultValue);
+};
+
+/** Encodes a `.generatedAlwaysAs(...)` column's own expression into its snapshot form (D100), mirroring {@link encodeColumnDefaultExpr} — `null` when the column isn't generated. */
+const encodeColumnGeneratedExpr = (
+	columnState: ColumnState,
+): JsonValue | null => {
+	if (columnState.generated === undefined) {
+		return null;
+	}
+	return encodeExprNode(columnState.generated);
+};
+
+/**
+ * `columnState.identity.kind`'s camelCase→kebab map for the snapshot
+ * boundary (D57/D100) — table-kind-local, mirroring `expr/codec.ts`'s
+ * `NODE_KIND_TO_SNAPSHOT` precedent (`"all-columns"`), since this token
+ * has nothing to do with the expression codec.
+ */
+const IDENTITY_KIND_TO_SNAPSHOT: Readonly<
+	Record<IdentityKind, IdentitySnapshot["kind"]>
+> = {
+	always: "always",
+	byDefault: "by-default",
 };
 
 /** `{ notNull: true }` when the column is not-null, else `{}` — the compact-snapshot building block (Task 3 audit / D33): a `false`-default field is never recorded. */
@@ -191,12 +257,55 @@ const defaultField = (
 	return { default: value };
 };
 
+/** `{ generated: <node> }` when the column is a stored computed column, else `{}` (compact snapshot, D100) — mirrors {@link defaultField}. */
+const generatedField = (
+	value: JsonValue | null,
+): Pick<ColumnSnapshot, "generated"> => {
+	if (value === null) {
+		return {};
+	}
+	return { generated: value };
+};
+
+/**
+ * `{ identity: { kind, ...options } }` when the column declares an
+ * identity, else `{}` (compact snapshot, D100). `options` is spread
+ * as-is: `columnState.identity.options` already carries exactly the keys
+ * the declaration set (`IdentityOptions`' own optional fields, built by
+ * the `generatedAlwaysAsIdentity`/`generatedByDefaultAsIdentity`
+ * factories) — declaration-is-truth, never filled in with a Postgres
+ * default the declaration never mentioned (design decision 3).
+ */
+const identityField = (
+	identity: IdentityState | undefined,
+): Pick<ColumnSnapshot, "identity"> => {
+	if (identity === undefined) {
+		return {};
+	}
+	return {
+		identity: {
+			kind: IDENTITY_KIND_TO_SNAPSHOT[identity.kind],
+			...identity.options,
+		},
+	};
+};
+
 /** @see notNullField */
 const indexUniqueField = (value: boolean): Pick<IndexSnapshot, "unique"> => {
 	if (!value) {
 		return {};
 	}
 	return { unique: true };
+};
+
+/** `{ method: <method> }` for a non-btree access method, else `{}` (compact snapshot — `btree`, Postgres' own default, is never recorded, SC-004). */
+const methodField = (
+	value: IndexMethod | null,
+): Pick<IndexSnapshot, "method"> => {
+	if (value === null || value === "btree") {
+		return {};
+	}
+	return { method: value };
 };
 
 /** `{ desc: true }` when the column sorts descending, else `{}` (compact snapshot). */
@@ -217,6 +326,16 @@ const indexColumnNullsField = (
 		return {};
 	}
 	return { nulls: value };
+};
+
+/** `{ opclass: <class> }` when set, else `{}` (compact snapshot). */
+const indexColumnOpclassField = (
+	value: string | null,
+): Pick<IndexColumnSnapshot, "opclass"> => {
+	if (value === null) {
+		return {};
+	}
+	return { opclass: value };
 };
 
 /** `{ where: <node> }` when the index has a partial predicate, else `{}` (compact snapshot). */
@@ -282,6 +401,8 @@ const serializeColumns = (
 				entry.columnState.unique,
 			),
 			...defaultField(encodeColumnDefaultExpr(entry.columnState)),
+			...generatedField(encodeColumnGeneratedExpr(entry.columnState)),
+			...identityField(entry.columnState.identity),
 		})),
 		context?.columnOrder({
 			schemaName: declaration.schema.schemaName,
@@ -289,12 +410,23 @@ const serializeColumns = (
 		}) ?? null,
 	);
 
+/** `{ name }` for a plain-column entry, `{ expression: encodeExprNode(...) }` for an expression entry (R5/R8) — the two-variant column's own field. */
+const serializeIndexColumnSelf = (
+	column: IndexColumnDeclaration,
+): { readonly name: string } | { readonly expression: JsonValue } => {
+	if ("name" in column) {
+		return { name: column.name };
+	}
+	return { expression: encodeExprNode(column.expression) };
+};
+
 const serializeIndexColumn = (
-	column: IndexDeclaration["columns"][number],
+	column: IndexColumnDeclaration,
 ): IndexColumnSnapshot => ({
-	name: column.name,
+	...serializeIndexColumnSelf(column),
 	...indexColumnDescField(column.desc),
 	...indexColumnNullsField(column.nulls),
+	...indexColumnOpclassField(column.opclass),
 });
 
 /** Encodes a partial index's predicate into its snapshot form — `null` when the index has none. */
@@ -313,13 +445,14 @@ const serializeIndexes = (
 		columns: index.columns.map(serializeIndexColumn),
 		...indexUniqueField(index.unique),
 		...whereField(encodePredicate(index.predicate)),
+		...methodField(index.method),
 	}));
 
 const serializeForeignKeys = (
 	declaration: TableDeclaration,
 ): ReadonlyArray<ForeignKeySnapshot> =>
 	declaration.foreignKeys.map((foreignKey) => ({
-		name: deriveForeignKeyName(declaration.tableName, foreignKey.columns),
+		name: resolveForeignKeyName(declaration.tableName, foreignKey),
 		columns: foreignKey.columns,
 		referencesTable: tableIdentity(
 			foreignKey.references.schemaName,
@@ -359,6 +492,16 @@ const primaryKeyNameField = (
 		return {};
 	}
 	return { primaryKeyName: derivePrimaryKeyName(declaration.tableName) };
+};
+
+/** `{ existing: true }` for an `existingTable()` declaration, else `{}` (compact snapshot, add-unmanaged-objects) — sourced from `declaration.existing`, the same flag `existingTable()` already sets. */
+const existingField = (
+	declaration: TableDeclaration,
+): Pick<TableSnapshot, "existing"> => {
+	if (!declaration.existing) {
+		return {};
+	}
+	return { existing: true };
 };
 
 const isEmptyKeyedDiff = <TValue>(diff: KeyedDiff<TValue>): boolean =>
@@ -433,6 +576,10 @@ const isEmptyTableFieldDiffs = (diffs: TableFieldDiffs): boolean =>
 	isEmptyKeyedDiff(diffs.foreignKeyDiff) &&
 	isEmptyKeyedDiff(diffs.checkDiff);
 
+/** `true` when `node` is a table snapshot node marked existing — `null` (the table absent on that side) is never existing (add-unmanaged-objects). The DDL-blocking guard `tableKind.diff` opens with: an existing table on *either* side of a diff emits nothing, before create/drop/alter is even considered. */
+const isExistingSide = (node: JsonValue | null): boolean =>
+	node !== null && tableExisting(asTableSnapshot(node));
+
 /** One banner note per added/dropped/changed entry across all four of `diffs`' fields (#154 ratchet-5, see tableFieldDiffs). */
 const tableFieldDiffNotes = (diffs: TableFieldDiffs): ReadonlyArray<string> => [
 	...buildNotes("column", diffs.columnDiff),
@@ -482,12 +629,25 @@ export const tableKind: ObjectKind<TableDeclaration> = {
 		foreignKeys: serializeForeignKeys(declaration),
 		...checksField(serializeChecks(declaration)),
 		...primaryKeyNameField(declaration),
+		...existingField(declaration),
 	}),
 	identify: (snapshot) => {
 		const tableSnapshot = asTableSnapshot(snapshot);
 		return tableIdentity(tableSnapshot.schema, tableSnapshot.name);
 	},
 	diff: (previous, next, identity) => {
+		// D106 R2: the table's own contract is bidirectional silence —
+		// existing on *either* side suppresses a drop (handover) or a
+		// create (adoption) alike, unlike the objects it fans out into
+		// (`sequenceKind`/`rlsKind`/`policyKind`'s own `ownerTableIdentity`,
+		// `engine/diff-engine.ts`'s `ownerIsExisting`), which the J10
+		// ruling deliberately keyed on `next` alone so adoption still
+		// creates what the declaration now manages. Two different
+		// contracts, not one duplicated — this guard stays, and
+		// `tableKind` does not implement `ownerTableIdentity`.
+		if (isExistingSide(previous) || isExistingSide(next)) {
+			return [];
+		}
 		const guard = createOrDropDiff("table", previous, next, identity);
 		if (guard.done) {
 			return guard.changes;

@@ -12,6 +12,16 @@ import {
  * `withCheck` — #110/D67/D70 — and, since #157/D72, a view's own `query`),
  * and why the rest aren't.
  *
+ * `QueryNode.queryKind` (`"select"` / `"setOp"` / `"with"`, add-ctes) is a
+ * different vocabulary and out of scope here on purpose: this file's own
+ * maps (`NODE_KIND_TO_SNAPSHOT`/`PROJECTION_KIND_TO_SNAPSHOT`) are keyed by
+ * `ExprNode["nodeKind"]`/`ProjectionNode["projectionKind"]` only, and a
+ * `WithNode` reaching a stored view (task 4.1) doesn't add a member to
+ * either — it adds a producer for kinds this file already lists. Task 4.5
+ * confirmed this directly: a CTE-declaring view added to
+ * `naming-conventions.test.ts`'s own D70 fixture compiles and passes
+ * unchanged, forcing no new entry here.
+ *
  * Before this module existed, the reference-identity loop test
  * (`retarget.test.ts`) and the D70 map-completeness test
  * (`naming-conventions.test.ts`) each maintained their own separate list
@@ -204,8 +214,45 @@ export const buildUnrelatedCase = (kind: ExprNode["nodeKind"]): ExprNode => {
 						},
 					],
 					where: null,
+					groupBy: [],
+					having: null,
 					orderBy: [],
 					limit: null,
+					offset: null,
+					distinct: null,
+				},
+			};
+		case "window":
+			return {
+				nodeKind: "window",
+				fn: {
+					nodeKind: "functionCall",
+					schemaName: null,
+					functionName: "rank",
+					args: [unrelatedColumnRef],
+				},
+				partitionBy: [unrelatedColumnRef],
+				orderBy: [{ expr: unrelatedLiteral, direction: "asc" }],
+			};
+		case "selectExpr":
+			return {
+				nodeKind: "selectExpr",
+				mode: "jsonArray",
+				query: {
+					queryKind: "select",
+					projection: {
+						projectionKind: "columns",
+						columns: [{ alias: "id", expr: unrelatedLiteral }],
+					},
+					from: { schemaName: "app", tableName: "posts" },
+					joins: [],
+					where: null,
+					groupBy: [],
+					having: null,
+					orderBy: [],
+					limit: null,
+					offset: null,
+					distinct: null,
 				},
 			};
 		default:

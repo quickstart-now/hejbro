@@ -20,7 +20,7 @@
 // check).
 //
 // 1. DEFINED codes -- every code this codebase can attach to a real
-//    HejbroError/Diagnostic, from the three literal-only shapes that
+//    HejbroError/Diagnostic, from the four literal-only shapes that
 //    actually originate one:
 //      - `hejbroError("code", ...)` / `throwHejbroError("code", ...)`
 //        (`packages/core/src/error.ts`'s factories)
@@ -33,6 +33,16 @@
 //        `cli/rename-diagnostics.ts`), plus the type unions that restate
 //        the same strings (a harmless duplicate capture, not a second
 //        source of truth)
+//      - a codes table (#619): `const <NAME>CODES = { name: "code", ... }`
+//        -- an UPPER_SNAKE const ending in CODES whose values are code
+//        literals shared by several commands and forwarded through
+//        variables at the throw sites, so no per-call literal exists.
+//        The name suffix is the opt-in: an arbitrary object holding
+//        kebab-case strings (a table name, a slug) must not register
+//        phantom definitions. The capture stops at the first `}`, so a
+//        table must stay flat -- a nested brace would truncate the scan,
+//        which errs toward a false violation (a cited code failing to
+//        register), never a false pass.
 //    A call that *forwards* an existing code through a variable --
 //    `hejbroError(report.code, ...)`, `hejbroError(d.code, ...)` -- is
 //    deliberately not a definition: it reuses a code defined at its
@@ -55,14 +65,13 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
+import { sourceRoots } from "./source-roots.mjs";
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
-const SOURCE_ROOTS = [
-	"packages/core/src",
-	"packages/cli/src",
-	"packages/supabase/src",
-];
+// #372: derived from the workspace, never enumerated -- see
+// scripts/source-roots.mjs for why (the #361 class, killed at the root).
+const SOURCE_ROOTS = sourceRoots();
 
 const CODE = "[a-z][a-z0-9-]*";
 
@@ -101,16 +110,30 @@ const DEFINE_PATTERNS = [
 	new RegExp(`\\bcode\\??:\\s*"(${CODE})"`, "g"),
 ];
 
+// The codes-table shape (#619) is two-stage -- find each opted-in table
+// (the const's own annotated type, e.g. `: ConnectionCodes`, may sit
+// between the name and `=`), then every literal value inside its braces.
+const CODES_TABLE_PATTERN =
+	/\bconst\s+[A-Z][A-Z0-9_]*CODES\s*(?::\s*[^={]+)?=\s*\{([^}]*)\}/g;
+const CODES_TABLE_VALUE_PATTERN = new RegExp(`:\\s*"(${CODE})"`, "g");
+
 const CITE_PATTERN = new RegExp(`\\b(error|warning)\\[(${CODE})\\]`, "g");
 
 const allMatches = (text, pattern) => Array.from(text.matchAll(pattern));
+
+const codesTableDefinitions = (text) =>
+	allMatches(text, CODES_TABLE_PATTERN).flatMap((tableMatch) =>
+		allMatches(tableMatch[1], CODES_TABLE_VALUE_PATTERN).map(
+			(valueMatch) => valueMatch[1],
+		),
+	);
 
 const definedCodes = new Set(
 	sourceFiles.flatMap((filePath) => {
 		const text = readFileSync(filePath, "utf8");
 		return DEFINE_PATTERNS.flatMap((pattern) =>
 			allMatches(text, pattern).map((match) => match[1]),
-		);
+		).concat(codesTableDefinitions(text));
 	}),
 );
 

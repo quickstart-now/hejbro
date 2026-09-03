@@ -1,5 +1,111 @@
 # @hejbro/supabase
 
+## 0.2.0-pre.0
+
+### Minor Changes
+
+- 33fe54d: `supabaseDriver(driver, options?)` takes an optional `endpoint`: `"session"`
+  (the default — a direct connection or Supabase's session-mode pooler,
+  unchanged behavior) or `"transaction-pooler"`, Supabase's transaction-mode
+  pooler (Supavisor, port 6543). The pooler path declares
+  `session-state: false` and carries its `IntervalStyle`/`bytea_output`
+  pins transaction-locally with every execution instead of once per
+  connection — measured against a local stack, the vanilla driver's
+  once-per-connection pin does not reliably survive the pooler reassigning
+  backend connections between transactions. An unrecognized `endpoint`
+  value is rejected at construction with a coded error naming the
+  recognized values, never silently downgraded to the session path.
+- aad5078: Fixes from an adversarial review of the day's nested-transaction and
+  `hejbro baseline` merges (#445).
+  
+  A second nested transaction started on the same `tx` while the first is
+  still in flight now fails fast with `concurrent-nested-transaction`,
+  before any savepoint statement is sent — concurrent siblings used to
+  interleave one `SAVEPOINT` sequence on a single connection, silently
+  discarding one sibling's work or aborting the whole transaction
+  depending on the interleaving. A `RELEASE` that fails after a swallowed
+  statement error now attempts `ROLLBACK TO` and surfaces
+  `savepoint-release-failed` advising rethrow over swallow, instead of a
+  bare `query-execution-failed`. A synchronously throwing nested callback
+  now rolls back like a rejected one, and a rolled-back savepoint is
+  released too, so no savepoint outlives the nested transaction that
+  created it on any exit path. `savepoint-rollback-failed`'s message no
+  longer asserts a false outcome.
+  
+  `hejbro baseline` over declarations that load but export nothing now
+  fails with `baseline-nothing-to-adopt` instead of reporting a false "no
+  changes" success and writing nothing; `--rename`/`--confirm-drop` are
+  dropped from its `--help` and refused pre-parse with
+  `baseline-flag-not-applicable`, since a baseline diffs against an empty
+  snapshot and has nothing to rename or drop. `parseBannerBaseline` joins
+  `parseBannerHashes`/`parseBannerVersion` as a public parser for the
+  `-- baseline:` banner marker, matching its own prefix only.
+  
+  `ctx.return()` inside a plpgsql function/trigger body now dispatches by
+  brand before duck-typing, so a table with a column literally named
+  `exprNode` no longer misroutes `ctx.return(ctx.new)` down the expression
+  path.
+- d15fee1: Supabase driver decorator and RLS execution context surface (#293
+  group 6): `supabaseDriver(driver)` decorates any `@hejbro/query`
+  contract `Driver` with Supabase's own contributed roles (`anon`,
+  `authenticated`, `service_role`), so a schema with zero grants/policies
+  still unlocks the new context builders. `asUser(claims)` (requiring a
+  `sub` claim) and `asAnon()` build an RLS execution context — role
+  `authenticated`/`anon` plus exactly one `request.jwt.claims` JSON
+  session setting, matching Supabase's own RLS conventions (`auth.uid()`
+  reads that same setting). Token verification stays with the
+  application (supabase-js `getClaims`, Clerk `sessionClaims`, Auth0
+  sessions, or `jose` against a custom JWKS) — this package never accepts
+  or verifies a raw token itself.
+
+### Patch Changes
+
+- 7bbdc8b: Index declarations gain three capabilities they lacked: an access method (`index().using("gin" | "hash" | "gist" | "spgist" | "brin" | "hnsw" | "ivfflat")`, with `btree` the unchanged default), an operator class per column (`op(column, "jsonb_path_ops" | "gin_trgm_ops" | …)`, composable with `asc`/`desc`), and expression indexes (`.on(sql\`lower(${t.email})\`)`, requiring an explicit index name since there's no column to derive one from). Every invalid combination — an unknown method, `unique` on a non-B-tree method, an invalid operator-class identifier, an expression referencing another table or a subquery, an unnamed expression index — fails at declaration time with a message naming the fix. Expression columns are stored in the snapshot as structured nodes, so `--rename` retargets the identifiers inside them exactly like partial-index predicates and CHECK expressions already do. A 0.1.1 project that only uses B-tree indexes regenerates unchanged: the snapshot format stays 5, and the new fields are additive and absent by default.
+- Updated dependencies [6b3cc7f]
+- Updated dependencies [5aebe5c]
+- Updated dependencies [ef12376]
+- Updated dependencies [99b659e]
+- Updated dependencies [65936ca]
+- Updated dependencies [9963d04]
+- Updated dependencies [9f58667]
+- Updated dependencies [e530909]
+- Updated dependencies [27d5554]
+- Updated dependencies [31c7ffd]
+- Updated dependencies [5f8b97f]
+- Updated dependencies [46b902c]
+- Updated dependencies [28aec17]
+- Updated dependencies [effda0a]
+- Updated dependencies [1f459d1]
+- Updated dependencies [e6c802c]
+- Updated dependencies [2146480]
+- Updated dependencies [f2e7781]
+- Updated dependencies [70e68cc]
+- Updated dependencies [aad5078]
+- Updated dependencies [32a8f11]
+- Updated dependencies [387a2cc]
+- Updated dependencies [19e7aeb]
+- Updated dependencies [16e1c92]
+- Updated dependencies [fec58f9]
+- Updated dependencies [dafb897]
+- Updated dependencies [ef00b1b]
+- Updated dependencies [0f19390]
+- Updated dependencies [1aa05f2]
+- Updated dependencies [71033ca]
+- Updated dependencies [7bbdc8b]
+- Updated dependencies [6345323]
+- Updated dependencies [232293e]
+- Updated dependencies [43bbebd]
+- Updated dependencies [67ebf69]
+- Updated dependencies [4be9551]
+- Updated dependencies [d3c39bc]
+- Updated dependencies [7c472b7]
+- Updated dependencies [221d650]
+- Updated dependencies [9394b37]
+- Updated dependencies [b2be9b9]
+- Updated dependencies [34afb30]
+  - @hejbro/core@0.2.0-pre.0
+  - @hejbro/query@0.2.0-pre.0
+
 ## 0.1.1
 
 ### Patch Changes

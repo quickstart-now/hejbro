@@ -108,6 +108,7 @@ describe("buildAmbiguityDiagnostic — table, 1:1", () => {
 		schemaName: "shop",
 		droppedTables: ["posts"],
 		createdTables: ["blog_posts"],
+		existingCreatedTables: [],
 		declaredAt: 'examples/shop/schema.ts (export "blogPosts")',
 	};
 
@@ -137,12 +138,43 @@ describe("buildAmbiguityDiagnostic — table, 1:1", () => {
 	});
 });
 
+// #703: the created table is declared with existingTable() -- the
+// ordinary "if this is a rename, rerun: --rename ..." suggestion above
+// would itself be refused by unknown-rename-target, the exact "the
+// remedy is the command that just failed" shape D106 R5-B1 was filed
+// against. Never the same suggestion shape as the ordinary case.
+describe("buildAmbiguityDiagnostic — table, 1:1, created side is existingTable() (#703)", () => {
+	const ambiguity: TableRenameAmbiguity = {
+		kind: "table",
+		schemaName: "e3",
+		droppedTables: ["widgets"],
+		createdTables: ["gadgets"],
+		existingCreatedTables: ["gadgets"],
+		declaredAt: null,
+	};
+
+	it("never suggests --rename as a standalone rerun, and names the two-run path instead", () => {
+		const diagnostic = buildAmbiguityDiagnostic(ambiguity, [], null);
+		const rendered = renderDiagnostics([diagnostic], null);
+		expect(rendered).not.toContain("if this is a rename, rerun:");
+		// #703: "two runs" is the exact phrase core's own flat message
+		// (ambiguousTableRenameMessage) uses too -- asserted on purpose so
+		// this pin would catch the two messages drifting apart again.
+		expect(rendered).toContain("two runs");
+		expect(rendered).toContain("run this NOW, then hand it over");
+		expect(rendered).toContain("hejbro generate --rename e3.widgets=gadgets");
+		expect(rendered).toContain("if these are unrelated tables, rerun:");
+		expect(rendered).toContain("hejbro generate --confirm-drop e3.widgets");
+	});
+});
+
 describe("buildAmbiguityDiagnostic — table, N:M (reasonable extension, no owner mockup)", () => {
 	const ambiguity: TableRenameAmbiguity = {
 		kind: "table",
 		schemaName: "app",
 		droppedTables: ["comments", "reactions"],
 		createdTables: ["reviews", "likes"],
+		existingCreatedTables: [],
 		declaredAt: null,
 	};
 

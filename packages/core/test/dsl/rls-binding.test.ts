@@ -2,10 +2,11 @@ import { describe, expect, it } from "vitest";
 import { rls } from "../../src/dsl/rls";
 import { schema } from "../../src/dsl/schema";
 import { getTableMeta, table } from "../../src/dsl/table";
+import type { ColumnRef } from "../../src/expr/ast";
 import { eq, isNotNull } from "../../src/expr/operators";
 import { sql } from "../../src/expr/sql-template";
 import { tableKind } from "../../src/kinds/table-kind";
-import { exists, select } from "../../src/query/select";
+import { exists, jsonArrayFrom, select } from "../../src/query/select";
 import { stableJson } from "../../src/snapshot/stable-json";
 import {
 	text,
@@ -242,6 +243,148 @@ describe("binding rls to a table", () => {
 			),
 		).toThrowError(
 			expect.objectContaining({ code: "rls-policy-foreign-column" }),
+		);
+	});
+
+	// #444 F5: a groupBy inside exists()'s own subquery used to be invisible
+	// to findExprScopeViolation (walk.ts's existsChildExprs missed the two
+	// fields #443 added), so a foreign reference there reached declaration
+	// time unrejected -- the same shape the test above proves for `where`.
+	it("rejects a policy whose exists() groups by a table outside scope", () => {
+		const comments = table(app, "comments_fc3", {
+			id: uuid().primaryKey().defaultRandom(),
+			postId: uuid().notNull(),
+		});
+		const otherTable = table(app, "other_table_fc3", {
+			id: uuid().primaryKey().defaultRandom(),
+			flag: uuid().notNull(),
+		});
+
+		expect(() =>
+			table(
+				app,
+				"posts_fc3",
+				{ id: uuid().primaryKey().defaultRandom() },
+				() => ({
+					rls: rls.enabled({
+						read: rls
+							.policy("bad_group_by")
+							.for("select")
+							.to("anon")
+							.using(
+								exists(
+									select(comments)
+										.where(eq(comments.id, comments.id))
+										.groupBy(otherTable.flag),
+								),
+							),
+					}),
+				}),
+			),
+		).toThrowError(
+			expect.objectContaining({ code: "rls-policy-foreign-column" }),
+		);
+	});
+});
+
+describe("nested reads inside policy expressions (add-relational-reads group 2 review F5)", () => {
+	const app = schema("app");
+	const comments = table(app, "comments", {
+		id: uuid().primaryKey(),
+		postId: uuid().notNull(),
+	});
+	const others = table(app, "others", { id: uuid().primaryKey() });
+
+	it("a nested read referencing its own subselect table and the policy's table is legal", () => {
+		const built = table(
+			app,
+			"posts_nested_ok",
+			{ id: uuid().primaryKey().defaultRandom() },
+			(t) => ({
+				rls: rls.enabled({
+					read: rls
+						.policy("nested_ok")
+						.for("select")
+						.to("anon")
+						.using(
+							sql`${jsonArrayFrom(
+								select({ id: comments.id }, comments).where(
+									eq(comments.postId, t.id),
+								),
+							)} is not null`,
+						),
+				}),
+			}),
+		);
+		expect(getTableMeta(built).rls).not.toBeNull();
+	});
+
+	it("a nested read referencing a third table fails with rls-policy-foreign-column", () => {
+		expect(() =>
+			table(
+				app,
+				"posts_nested_bad",
+				{ id: uuid().primaryKey().defaultRandom() },
+				(t) => ({
+					rls: rls.enabled({
+						read: rls
+							.policy("nested_bad")
+							.for("select")
+							.to("anon")
+							.using(
+								sql`${jsonArrayFrom(
+									select({ id: comments.id }, comments).where(
+										eq(others.id, t.id),
+									),
+								)} is not null`,
+							),
+					}),
+				}),
+			),
+		).toThrowError(
+			expect.objectContaining({ code: "rls-policy-foreign-column" }),
+		);
+	});
+});
+
+describe("a CTE column reference in a policy expression (add-ctes task 1.2c family, task 1.5(a) review)", () => {
+	it("names the CTE, not a bare 'null' schema, in the diagnostic", () => {
+		const posts = table(app, "posts_cte_fc", {
+			id: uuid().primaryKey().defaultRandom(),
+		});
+		// hand-built the way group 3's with() reference will hand one out --
+		// schemaName: null, tableName the CTE's bare name.
+		const cteColumnRef: ColumnRef = {
+			...posts.id,
+			sqlName: "id",
+			exprNode: {
+				nodeKind: "columnRef",
+				schemaName: null,
+				tableName: "ranked",
+				columnName: "id",
+			},
+		};
+
+		expect(() =>
+			table(
+				app,
+				"comments_cte_fc",
+				{ id: uuid().primaryKey().defaultRandom() },
+				(t) => ({
+					rls: rls.enabled({
+						read: rls
+							.policy("bad")
+							.for("select")
+							.to("anon")
+							.using(eq(cteColumnRef, t.id)),
+					}),
+				}),
+			),
+		).toThrowError(
+			expect.objectContaining({
+				code: "rls-policy-foreign-column",
+				message: expect.stringContaining("ranked"),
+			}),
 		);
 	});
 });

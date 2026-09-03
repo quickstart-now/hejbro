@@ -1,13 +1,13 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { ChainEntry, ConfirmDropSpec } from "hejbro";
 import {
 	checkChain,
 	emptySnapshot,
 	generateMigration,
-	parseBannerHashes,
 	renderSnapshot,
-} from "hejbro";
+} from "@hejbro/core";
+import type { ChainEntry, ConfirmDropSpec } from "hejbro";
+import { parseBannerHashes } from "hejbro";
 import { describe, expect, it } from "vitest";
 import { declarations as step1 } from "../src/steps/step-1.schema";
 import { declarations as step2 } from "../src/steps/step-2.schema";
@@ -16,6 +16,8 @@ import { declarations as step4 } from "../src/steps/step-4.schema";
 import { declarations as step5 } from "../src/steps/step-5.schema";
 import { declarations as step6 } from "../src/steps/step-6.schema";
 import { declarations as step7 } from "../src/steps/step-7.schema";
+import { declarations as step8 } from "../src/steps/step-8.schema";
+import { declarations as step9 } from "../src/steps/step-9.schema";
 
 const root = join(import.meta.dirname, "..");
 const migrationFiles = readdirSync(join(root, "migrations"))
@@ -56,7 +58,17 @@ const confirmedDropsForStep = (
 
 describe("examples/postgres migration chain", () => {
 	it("regenerating from the step declarations reproduces the committed migrations", () => {
-		const steps = [step1, step2, step3, step4, step5, step6, step7];
+		const steps = [
+			step1,
+			step2,
+			step3,
+			step4,
+			step5,
+			step6,
+			step7,
+			step8,
+			step9,
+		];
 		const outcome = steps.reduce(
 			(state, declarations, i) => {
 				const result = generateMigration({

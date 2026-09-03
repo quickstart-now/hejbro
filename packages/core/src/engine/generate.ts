@@ -1,9 +1,11 @@
+import type { FunctionDeclaration } from "../dsl/define-function";
 import type { TriggerDeclaration } from "../dsl/define-trigger";
 import type { GrantSetDeclaration } from "../dsl/grant";
-import type { Table, TableDeclaration } from "../dsl/table";
+import type { DeclaredTable, Table, TableDeclaration } from "../dsl/table";
 import { getTableMeta, isTable } from "../dsl/table";
 import type { HejbroError } from "../error";
 import { hejbroError, throwHejbroError } from "../error";
+import { sameJson } from "../kind/diff-helpers";
 import type { HejbroDeclaration, KindChange } from "../kind/object-kind";
 import type { KindRegistry } from "../kind/registry";
 import { createDefaultRegistry } from "../kind/registry";
@@ -29,11 +31,29 @@ import type {
 	RenameSpec,
 } from "./rename-plan";
 import { planRenames } from "./rename-plan";
+import type { SplitDecision } from "./split";
+import { applySplitChangesOnly, planSplit } from "./split";
 import type { Diagnostic, Validator } from "./validate";
 import { runValidators } from "./validate";
 
-/** Anything `generateMigration` accepts as a declaration: a plain declaration, or a `table()`-built `Table` object (unwrapped via `getTableMeta` at the entry point). */
-export type HejbroInput = HejbroDeclaration | Table;
+/**
+ * Anything `generateMigration`/`generateMigrations` accepts as a
+ * declaration: a plain declaration, or a `table()`/`existingTable()`-built
+ * `Table` object (unwrapped via `getTableMeta` at the entry point) —
+ * narrowed to {@link DeclaredTable} so a `"usage"`-authority value (no
+ * migration authority) is rejected here at the type level, not just at the
+ * runtime chokepoint in {@link resolveTableDeclarations}. Only this PUBLIC
+ * type narrows; every internal helper below takes {@link AnyInput} (bare
+ * `Table`, either authority) — narrowing this type's own internal uses
+ * would break `isTable`'s false-branch narrowing back to
+ * `HejbroDeclaration` (measured: every internal guard failed to compile
+ * against the narrowed type, cascading into build errors that broke
+ * unrelated tests reading this package's own compiled output).
+ */
+export type HejbroInput = HejbroDeclaration | DeclaredTable;
+
+/** @see HejbroInput */
+type AnyInput = HejbroDeclaration | Table;
 
 const isTriggerDeclaration = (
 	declaration: HejbroDeclaration,
@@ -44,6 +64,34 @@ const isGrantSetDeclaration = (
 	declaration: HejbroDeclaration,
 ): declaration is GrantSetDeclaration =>
 	declaration.declarationKind === "grant-set";
+
+const isFunctionDeclaration = (
+	declaration: HejbroDeclaration,
+): declaration is FunctionDeclaration =>
+	declaration.declarationKind === "function";
+
+/**
+ * The function sibling of {@link resolveTableDeclarations}'s single
+ * chokepoint (#587/G3): a synthesized `FunctionDeclaration` handed to
+ * `generateMigration` used to be silently ACCEPTED, producing an
+ * empty-body function migration — no refusal existed at all before this.
+ * Keyed on `meta.authority === "usage"` only, mirroring the table guard's
+ * own rule exactly: absence (every real `defineFunction()`/
+ * `defineTrigger()` call, which never sets this field) must never trip
+ * this, only a hand-built or synthesized `"usage"`-tagged value does.
+ */
+const resolveFunctionDeclaration = (
+	meta: FunctionDeclaration,
+): ReadonlyArray<HejbroDeclaration> => {
+	if (meta.authority === "usage") {
+		return throwHejbroError(
+			"synced-function-declared",
+			`function "${meta.schemaName}"."${meta.functionName}" carries no migration authority — for example, a module obtained from a database this repository does not own. Next: declare it with defineFunction() in the repository that owns its schema, or remove it from the declarations list if this repository doesn't own that schema.`,
+			meta.declaredAt,
+		);
+	}
+	return [meta];
+};
 
 /**
  * Synthesizes one `SequenceDeclaration` per `serial`/`smallserial`/
@@ -72,17 +120,50 @@ const synthesizeSequenceDeclarations = (
 		];
 	});
 
-/** {@link resolveDeclarations}'s `Table` case: the table itself, its synthesized sequences, and (if declared) its RLS block and policies. */
+/** {@link resolveDeclarations}'s table case — the table itself, its synthesized sequences, and (if declared) its RLS block and policies. Takes the DECLARATION, not the `Table`, so both supported input forms route through the same expansion (#408: a raw `TableDeclaration` used to skip it, silently dropping rls/policies/sequences and the existing-table guard). */
+/** A raw table declaration (never a built `Table` — the `!isTable` leg keeps this predicate sound on its own, independent of `resolveDeclarations`'s branch order). */
+const isTableDeclaration = (input: AnyInput): input is TableDeclaration =>
+	!isTable(input) && input.declarationKind === "table";
+
 const resolveTableDeclarations = (
-	input: Table,
+	meta: TableDeclaration,
 ): ReadonlyArray<HejbroDeclaration> => {
-	const meta = getTableMeta(input);
-	if (meta.existing) {
+	// add-unmanaged-objects: `meta.existing` no longer refuses here — an
+	// `existingTable()` declaration is accepted and flows through to the
+	// snapshot (`existingField`, kinds/table-kind.ts), producing no
+	// statement (the guard moves to `tableKind.diff`). "existing-table-
+	// declared" stays a registered code (`error.ts`'s codes are a plain
+	// string, not a static union) with no live raise site.
+	// The single chokepoint for the absent-authority refusal (D87
+	// polyrepo-sync): keyed on `meta.authority === "usage"` only, never on
+	// `!== "declared"` — a hand-assembled `TableDeclaration` that bypasses
+	// every constructor carries no `authority` at all, and is
+	// authored-here by definition, not a `"usage"`-tagged escapee.
+	// Type-level exclusion (`HejbroInput`) already stops a `"usage"` value
+	// from a type-checked caller, so this guard exists for the caller the
+	// type layer never saw — a JS project, or a config file `jiti` loads
+	// without a compile step (our own CLI loader does exactly that).
+	if (meta.authority === "usage") {
 		return throwHejbroError(
-			"existing-table-declared",
-			`existingTable("${meta.schema.schemaName}", "${meta.tableName}") is reference-only — it describes an existing table and must not be passed to generateMigration. Next: remove it from the declarations list (managed tables are declared with table()).`,
+			"synced-table-declared",
+			`table "${meta.schema.schemaName}"."${meta.tableName}" carries no migration authority — for example, a module obtained from a database this repository does not own. Next: declare it with table() (if this repository owns its DDL) or existingTable() (if it only owns the table's shape) in the repository that owns its schema, or remove it from the declarations list if this repository doesn't own that schema.`,
 			meta.declaredAt,
 		);
+	}
+	// D106 R1, B1/B1-removal: an existing declaration fans out into
+	// nothing — no synthesized sequence, no rls/policy attachment — so a
+	// table hejbro does not own never gains a hejbro-declared sequence or
+	// policy in the first place. The guard sits here, at declaration
+	// expansion, not in `tableKind.diff`: that guard only ever saw the
+	// table node itself, never the objects a table fans out into, which
+	// is exactly the gap D106 found (evaluation.md, B1). A managed↔
+	// existing handover for a table that already has these objects is a
+	// separate question (B2, held pending a diff-engine design ruling —
+	// this guard does not touch that path, since the objects being
+	// suppressed here never existed in a previous snapshot to diff
+	// against).
+	if (meta.existing) {
+		return [meta];
 	}
 	const sequences = synthesizeSequenceDeclarations(meta);
 	if (meta.rls === null) {
@@ -92,28 +173,50 @@ const resolveTableDeclarations = (
 };
 
 /**
- * Resolves one `HejbroInput` into the declaration(s) it contributes to the
- * snapshot. A `defineTrigger` declaration expands into its own function
- * declaration plus itself — `[functionDeclaration, triggerDeclaration]` —
- * so the function it creates lands in the snapshot without a separate
+ * {@link resolveDeclarations}'s non-table branch, split out to keep each
+ * function's own complexity under the CRAP gate (#587/G3 — adding the
+ * function-authority guard as a fifth branch on the un-split function
+ * pushed it from complexity 5 to 6, over the ratchet at full coverage).
+ * A `defineTrigger` declaration expands into its own function declaration
+ * plus itself — `[functionDeclaration, triggerDeclaration]` — so the
+ * function it creates lands in the snapshot without a separate
  * `defineFunction` call. A `grant(...).to(...)` `grant-set` expands into
- * its per-role `GrantDeclaration`s (D28 fan-out). A `table()` with any
- * `serial`-family columns similarly expands into one `SequenceDeclaration`
- * per such column (#23/D66) — see {@link resolveTableDeclarations}.
+ * its per-role `GrantDeclaration`s (D28 fan-out). A plain function
+ * declaration routes through {@link resolveFunctionDeclaration}'s own
+ * authority guard.
  */
-const resolveDeclarations = (
-	input: HejbroInput,
+const resolveNonTableDeclaration = (
+	input: HejbroDeclaration,
 ): ReadonlyArray<HejbroDeclaration> => {
-	if (isTable(input)) {
-		return resolveTableDeclarations(input);
-	}
 	if (isTriggerDeclaration(input)) {
 		return [input.functionDeclaration, input];
 	}
 	if (isGrantSetDeclaration(input)) {
 		return input.grants;
 	}
+	if (isFunctionDeclaration(input)) {
+		return resolveFunctionDeclaration(input);
+	}
 	return [input];
+};
+
+/**
+ * Resolves one `HejbroInput` into the declaration(s) it contributes to the
+ * snapshot. A `table()` with any `serial`-family columns expands into one
+ * `SequenceDeclaration` per such column (#23/D66) — see
+ * {@link resolveTableDeclarations}. Everything else routes through
+ * {@link resolveNonTableDeclaration}.
+ */
+const resolveDeclarations = (
+	input: AnyInput,
+): ReadonlyArray<HejbroDeclaration> => {
+	if (isTable(input)) {
+		return resolveTableDeclarations(getTableMeta(input));
+	}
+	if (isTableDeclaration(input)) {
+		return resolveTableDeclarations(input);
+	}
+	return resolveNonTableDeclaration(input);
 };
 
 type GenerateMigrationOptions = {
@@ -128,6 +231,8 @@ type GenerateMigrationOptions = {
 	readonly bannerHashes?: BannerHashes;
 	/** the banner's `-- hejbro: <version>` line (#229) — the CLI reads its own `package.json` for this string; core only receives it and renders it verbatim. */
 	readonly hejbroVersion?: string;
+	/** marks the emitted migration a brownfield baseline (#385): the objects it describes already exist, so it is registered as applied rather than run. Core only renders the marker; deciding when it is legal is the CLI's job. */
+	readonly baseline?: boolean;
 	/** preset-supplied pure checks run over the built snapshot + normalized declarations (D37); error severity joins `errors` and short-circuits like rename errors. */
 	readonly validators?: ReadonlyArray<Validator>;
 };
@@ -146,6 +251,60 @@ type GenerateMigrationResult = {
 };
 
 /**
+ * [G4 rework, #610] `generateMigrations`'s own options — identical to
+ * `generateMigration`'s except `bannerHashes`, which this entry point
+ * takes one *per migration* (index-aligned with the result's own
+ * `migrations`), because a split run has more than one banner to seat.
+ */
+export type GenerateMigrationsOptions = Omit<
+	GenerateMigrationOptions,
+	"bannerHashes"
+> & {
+	readonly bannerHashes?: ReadonlyArray<BannerHashes>;
+};
+
+/** One file `generateMigrations` writes: its own SQL (banner included), the changes it carries (slug derivation is the caller's job), and the snapshot state this file's own chain hash names as its `snapshot:` line. */
+export type GeneratedMigration = {
+	readonly sql: string;
+	readonly changes: ReadonlyArray<KindChange>;
+	readonly snapshot: Snapshot;
+};
+
+export type GenerateMigrationsResult = {
+	/** `[]` when nothing changed, one entry for an ordinary run, two for a run `generateMigration` itself would have refused (spec: "more than one only where Postgres's own transaction semantics require a boundary"). */
+	readonly migrations: ReadonlyArray<GeneratedMigration>;
+	readonly hasChanges: boolean;
+	/**
+	 * [D106 R2, R2-B2] The state this run reached, present unconditionally
+	 * (blocked, no-DDL, or ordinary) — matching {@link GenerateMigrationResult}'s
+	 * own unconditional `snapshot`. `hasChanges` only tracks whether there is
+	 * DDL to emit; an existing-table marker change (handover/adoption/rename)
+	 * can differ this from `previousSnapshot` with `hasChanges` still `false`
+	 * (nothing to diff into a statement), and a caller that only checked
+	 * `hasChanges` before this field existed had no way to notice.
+	 */
+	readonly snapshot: Snapshot;
+	/**
+	 * [D106 R3, J14] Whether `snapshot` differs from `options.previousSnapshot`
+	 * at all — a fact distinct from `hasChanges` ("is there DDL"), stated on
+	 * its own rather than left for a caller to infer from `snapshot` and
+	 * `previousSnapshot` itself or to reconcile against `hasChanges` reporting
+	 * "no change" while `migrations` still carries one (R3-B1's own
+	 * zero-statement migration: `hasChanges: false`, `snapshotChanged: true`).
+	 */
+	readonly snapshotChanged: boolean;
+	readonly errors: ReadonlyArray<HejbroError>;
+	readonly ambiguities: ReadonlyArray<RenameAmbiguity>;
+	readonly warnings: ReadonlyArray<Diagnostic>;
+};
+
+/** Structural equality of two snapshots' declared objects — the one fact {@link GenerateMigrationsResult.snapshotChanged} states, computed identically at every return site rather than three separately-reasoned comparisons. */
+const snapshotChangedFrom = (
+	snapshot: Snapshot,
+	previousSnapshot: Snapshot,
+): boolean => !sameJson(snapshot.objects, previousSnapshot.objects);
+
+/**
  * Builds the `declaredAt`-by-table-identity map `planRenames` attaches to
  * its diagnostics, from the *pre-normalization* `declarations` — after
  * `resolveDeclarations` a table's `declaredAt` would already be buried
@@ -154,7 +313,7 @@ type GenerateMigrationResult = {
  * `TableDeclaration` as-is).
  */
 const buildDeclaredAtByIdentity = (
-	declarations: ReadonlyArray<HejbroInput>,
+	declarations: ReadonlyArray<AnyInput>,
 ): ReadonlyMap<string, string | null> => {
 	const entries = declarations.flatMap((input) => {
 		if (isTable(input)) {
@@ -187,41 +346,15 @@ type ResolvedGenerateMigrationOptions = {
 	readonly confirmedDrops: ReadonlyArray<ConfirmDropSpec>;
 };
 
-/** {@link generateMigration}'s own optional-field defaults, resolved once up front. */
+/** {@link generateMigration}'s/{@link generateMigrations}'s own optional-field defaults, resolved once up front. */
 const resolveGenerateMigrationOptions = (
-	options: GenerateMigrationOptions,
+	options: GenerateMigrationsOptions,
 ): ResolvedGenerateMigrationOptions => ({
 	registry: options.registry ?? createDefaultRegistry(),
 	validators: options.validators ?? [],
 	renames: options.renames ?? [],
 	confirmedDrops: options.confirmedDrops ?? [],
 });
-
-/**
- * {@link generateMigration}'s blocked-run result — `plan`'s own rename/
- * confirm-drop errors, or an error-severity validator diagnostic, either
- * of which short-circuits with `sql: ""` and `hasChanges: false`. `null`
- * means neither happened: the run isn't blocked, proceed to diff/emit.
- */
-const blockedResult = (
-	snapshot: Snapshot,
-	plan: RenamePlan,
-	validatorErrors: ReadonlyArray<HejbroError>,
-	warnings: ReadonlyArray<Diagnostic>,
-): GenerateMigrationResult | null => {
-	if (plan.errors.length === 0 && validatorErrors.length === 0) {
-		return null;
-	}
-	return {
-		snapshot,
-		changes: [],
-		sql: "",
-		hasChanges: false,
-		errors: [...plan.errors, ...validatorErrors],
-		ambiguities: plan.ambiguities,
-		warnings,
-	};
-};
 
 type EmittedStatement = {
 	readonly change: KindChange;
@@ -260,17 +393,134 @@ const sortPredropStatements = (
 };
 
 /**
- * Runs the full pipeline: build the next snapshot from `declarations`,
- * resolve `renames`/`confirmedDrops` against `previousSnapshot` (rule A;
- * `errors` non-empty short-circuits with `sql: ""`), diff the rewritten
- * previous snapshot against the next, and emit SQL (banner + rename
- * statements + predrop statements + main statements + deferred statements,
- * `"\n\n"`-joined). `sql` is `""` and `hasChanges` is `false` when nothing
- * changed.
+ * Emits `changesToEmit`'s own SQL -- predrop, then main, then deferred,
+ * `"\n\n"`-joined, `""` when `changesToEmit` is empty (never a lone blank
+ * line: this function contributes nothing to an outer join in that case).
+ * `siblingChanges`/`snapshot` are read-only context (D74/D78) -- a caller
+ * emitting one *subset* of a run's changes (`generateMigrations`' split
+ * path) still passes the run's *whole* `changes`/final `snapshot` here,
+ * so every kind's `emit` sees exactly what it would have seen unsplit,
+ * and splitting itself changes no kind's own decision.
  */
-export const generateMigration = (
-	options: GenerateMigrationOptions,
-): GenerateMigrationResult => {
+export const emitStatementsSql = (
+	changesToEmit: ReadonlyArray<KindChange>,
+	siblingChanges: ReadonlyArray<KindChange>,
+	snapshot: Snapshot,
+	registry: KindRegistry,
+): string => {
+	const emittedStatements: ReadonlyArray<EmittedStatement> =
+		changesToEmit.flatMap((change) =>
+			registry
+				.get(change.kind)
+				.emit(change, siblingChanges, snapshot)
+				.map((statement) => ({ change, statement })),
+		);
+	const predropStatements = sortPredropStatements(emittedStatements, registry);
+	const mainStatements = emittedStatements.filter(
+		(entry) => entry.statement.stage === "main",
+	);
+	const deferredStatements = emittedStatements.filter(
+		(entry) => entry.statement.stage === "deferred",
+	);
+	return [
+		...predropStatements.map((entry) => entry.statement.sql),
+		...mainStatements.map((entry) => entry.statement.sql),
+		...deferredStatements.map((entry) => entry.statement.sql),
+	].join("\n\n");
+};
+
+/** `[text]` unless `text` is `""`, in which case `[]` -- lets a caller splice {@link emitStatementsSql}'s result into an outer `"\n\n"`-joined array without contributing a spurious empty segment when there was nothing to emit. */
+const nonEmptyPart = (text: string): ReadonlyArray<string> => {
+	if (text === "") {
+		return [];
+	}
+	return [text];
+};
+
+/**
+ * One file's worth of banner + rename statements (only on the *last*
+ * file -- renames are a data-level correction with nothing to do with
+ * where the transaction boundary falls, so they attach to whichever
+ * migration is the sequence's own tail) + this changeSet's own emitted
+ * SQL. Shared by both entry points below so a single-file run and each
+ * half of a split run build their SQL through the identical path.
+ */
+const bannerChangesFor = (
+	isLastMigration: boolean,
+	changeSet: ReadonlyArray<KindChange>,
+	plan: RenamePlan,
+): ReadonlyArray<KindChange> => {
+	if (isLastMigration) {
+		return [...plan.renameChanges, ...changeSet];
+	}
+	return changeSet;
+};
+
+const renameStatementsFor = (
+	isLastMigration: boolean,
+	plan: RenamePlan,
+): ReadonlyArray<string> => {
+	if (isLastMigration) {
+		return plan.renameStatements;
+	}
+	return [];
+};
+
+const buildGeneratedMigrationSql = (
+	changeSet: ReadonlyArray<KindChange>,
+	isLastMigration: boolean,
+	siblingChanges: ReadonlyArray<KindChange>,
+	contextSnapshot: Snapshot,
+	registry: KindRegistry,
+	plan: RenamePlan,
+	bannerHashes: BannerHashes | undefined,
+	hejbroVersion: string | undefined,
+	baseline: boolean | undefined,
+): string => {
+	const statementsSql = emitStatementsSql(
+		changeSet,
+		siblingChanges,
+		contextSnapshot,
+		registry,
+	);
+	return [
+		renderBanner(
+			bannerChangesFor(isLastMigration, changeSet, plan),
+			bannerHashes,
+			hejbroVersion,
+			baseline,
+		),
+		...renameStatementsFor(isLastMigration, plan),
+		...nonEmptyPart(statementsSql),
+	].join("\n\n");
+};
+
+/**
+ * The pipeline both entry points below share: build the next snapshot
+ * from `declarations`, resolve `renames`/`confirmedDrops` (rule A), and
+ * diff. Stops short of emitting any SQL -- that's where the two entry
+ * points' contracts actually differ (one file vs. one-or-two), so it is
+ * not shared past this point.
+ */
+type Pipeline =
+	| {
+			readonly blocked: true;
+			readonly snapshot: Snapshot;
+			readonly errors: ReadonlyArray<HejbroError>;
+			readonly ambiguities: ReadonlyArray<RenameAmbiguity>;
+			readonly warnings: ReadonlyArray<Diagnostic>;
+	  }
+	| {
+			readonly blocked: false;
+			readonly snapshot: Snapshot;
+			readonly changes: ReadonlyArray<KindChange>;
+			readonly hasChanges: boolean;
+			readonly warnings: ReadonlyArray<Diagnostic>;
+			readonly plan: RenamePlan;
+			readonly registry: KindRegistry;
+	  };
+
+const runPipeline = (options: GenerateMigrationsOptions): Pipeline => {
 	const resolved = resolveGenerateMigrationOptions(options);
 	const normalized = options.declarations.flatMap(resolveDeclarations);
 	const snapshot = buildSnapshot(
@@ -301,9 +551,14 @@ export const generateMigration = (
 		declaredAtByIdentity: buildDeclaredAtByIdentity(options.declarations),
 	});
 
-	const blocked = blockedResult(snapshot, plan, validatorErrors, warnings);
-	if (blocked !== null) {
-		return blocked;
+	if (plan.errors.length > 0 || validatorErrors.length > 0) {
+		return {
+			blocked: true,
+			snapshot,
+			errors: [...plan.errors, ...validatorErrors],
+			ambiguities: plan.ambiguities,
+			warnings,
+		};
 	}
 
 	const changes = diffSnapshots(
@@ -314,63 +569,250 @@ export const generateMigration = (
 	const hasChanges = changes.length > 0 || plan.renameStatements.length > 0;
 	const allWarnings = [...warnings, ...notNullWithoutDefaultWarnings(changes)];
 
-	if (!hasChanges) {
+	return {
+		blocked: false,
+		snapshot,
+		changes,
+		hasChanges,
+		warnings: allWarnings,
+		plan,
+		registry: resolved.registry,
+	};
+};
+
+/**
+ * Runs the full pipeline and writes one migration per transaction
+ * boundary the run needs (spec: "one migration, and more than one only
+ * where Postgres's own transaction semantics require a boundary between
+ * statements the run produced"). `migrations` is `[]` when nothing
+ * changed, one entry for an ordinary run, two when the run adds a value
+ * to an existing enum type that an expression it also emits resolves in
+ * the same transaction (`engine/split.ts`'s own condition).
+ *
+ * D74/D78: every kind's `emit` sees the whole diff's `changes`
+ * (siblingChanges) and the whole run's final `snapshot`, read-only and
+ * optional, for both halves of a split run alike -- so splitting itself
+ * changes no kind's own emit decision.
+ */
+const changeSetsFor = (
+	splitDecision: SplitDecision,
+	changes: ReadonlyArray<KindChange>,
+): ReadonlyArray<ReadonlyArray<KindChange>> => {
+	if (splitDecision.split) {
+		return [splitDecision.enumChanges, splitDecision.restChanges];
+	}
+	return [changes];
+};
+
+const migrationSnapshotsFor = (
+	splitDecision: SplitDecision,
+	rewrittenPrevious: Snapshot,
+	finalSnapshot: Snapshot,
+): ReadonlyArray<Snapshot> => {
+	if (splitDecision.split) {
+		return [
+			applySplitChangesOnly(rewrittenPrevious, splitDecision.enumChanges),
+			finalSnapshot,
+		];
+	}
+	return [finalSnapshot];
+};
+
+export const generateMigrations = (
+	options: GenerateMigrationsOptions,
+): GenerateMigrationsResult => {
+	const pipeline = runPipeline(options);
+	if (pipeline.blocked) {
 		return {
-			snapshot,
-			changes,
+			migrations: [],
+			hasChanges: false,
+			snapshot: pipeline.snapshot,
+			snapshotChanged: snapshotChangedFrom(
+				pipeline.snapshot,
+				options.previousSnapshot,
+			),
+			errors: pipeline.errors,
+			ambiguities: pipeline.ambiguities,
+			warnings: pipeline.warnings,
+		};
+	}
+	if (!pipeline.hasChanges) {
+		// D106 R3, J13 ("The migration chain on disk is verifiable" already
+		// SHALLs the banner's two hashes are the declaration snapshot
+		// before/after, never the SQL text -- so a run with no statement to
+		// write is not a special case for that requirement, it is the
+		// requirement working as specified). `hasChanges` tracks DDL only;
+		// an existing-table marker moving (handover, adoption, a plain
+		// add/change/remove) can differ `pipeline.snapshot` from
+		// `options.previousSnapshot` with no `KindChange` at all. Writing
+		// nothing here left that new state with no banner to anchor it in
+		// the chain -- `verify` then finds the tip and the snapshot
+		// disagreeing on a repository nobody edited (R3-B1). The fix is one
+		// migration carrying no statements, whose banner records the same
+		// before/after hashes any other migration's would.
+		const snapshotChanged = snapshotChangedFrom(
+			pipeline.snapshot,
+			options.previousSnapshot,
+		);
+		if (!snapshotChanged) {
+			return {
+				migrations: [],
+				hasChanges: false,
+				snapshot: pipeline.snapshot,
+				snapshotChanged: false,
+				errors: [],
+				ambiguities: [],
+				warnings: pipeline.warnings,
+			};
+		}
+		return {
+			migrations: [
+				{
+					sql: buildGeneratedMigrationSql(
+						[],
+						true,
+						[],
+						pipeline.snapshot,
+						pipeline.registry,
+						pipeline.plan,
+						options.bannerHashes?.[0],
+						options.hejbroVersion,
+						options.baseline,
+					),
+					changes: [],
+					snapshot: pipeline.snapshot,
+				},
+			],
+			hasChanges: false,
+			snapshot: pipeline.snapshot,
+			snapshotChanged: true,
+			errors: [],
+			ambiguities: [],
+			warnings: pipeline.warnings,
+		};
+	}
+
+	const splitDecision = planSplit(pipeline.changes);
+	const changeSets = changeSetsFor(splitDecision, pipeline.changes);
+	const migrationSnapshots = migrationSnapshotsFor(
+		splitDecision,
+		pipeline.plan.rewrittenPrevious,
+		pipeline.snapshot,
+	);
+
+	const migrations: ReadonlyArray<GeneratedMigration> = changeSets.map(
+		(changeSet, index) => ({
+			sql: buildGeneratedMigrationSql(
+				changeSet,
+				index === changeSets.length - 1,
+				pipeline.changes,
+				pipeline.snapshot,
+				pipeline.registry,
+				pipeline.plan,
+				options.bannerHashes?.[index],
+				options.hejbroVersion,
+				options.baseline,
+			),
+			changes: changeSet,
+			snapshot: migrationSnapshots[index] as Snapshot,
+		}),
+	);
+
+	return {
+		migrations,
+		hasChanges: true,
+		snapshot: pipeline.snapshot,
+		snapshotChanged: snapshotChangedFrom(
+			pipeline.snapshot,
+			options.previousSnapshot,
+		),
+		errors: [],
+		ambiguities: [],
+		warnings: pipeline.warnings,
+	};
+};
+
+/** `generateMigration`'s own `bannerHashes` (singular) wrapped into `generateMigrations`' array form -- omitted entirely rather than set to `undefined` (`exactOptionalPropertyTypes`), matching the same "absent means absent, never a present `undefined`" convention this codebase already follows elsewhere. */
+const pipelineOptionsFor = (
+	rest: Omit<GenerateMigrationOptions, "bannerHashes">,
+	bannerHashes: BannerHashes | undefined,
+): GenerateMigrationsOptions => {
+	if (bannerHashes === undefined) {
+		return rest;
+	}
+	return { ...rest, bannerHashes: [bannerHashes] };
+};
+
+/**
+ * Runs the full pipeline for a run this function can actually represent
+ * as ONE file (banner + rename statements + predrop statements + main
+ * statements + deferred statements, `"\n\n"`-joined). `sql` is `""` and
+ * `hasChanges` is `false` when nothing changed.
+ *
+ * [G4 rework, #610] A run that needs *two* files (the transaction-
+ * boundary split, `generateMigrations`' own job) is refused here with a
+ * coded error rather than silently returning half the run: this
+ * function's contract is one migration, and a single `sql` string
+ * cannot honestly carry two. Every caller of this 40-call-site, pre-
+ * existing entry point keeps its exact contract for every run it could
+ * already express; only the newly-representable split case is new, and
+ * it fails loudly instead of arriving as a partial, misleading result.
+ */
+export const generateMigration = (
+	options: GenerateMigrationOptions,
+): GenerateMigrationResult => {
+	const { bannerHashes, ...rest } = options;
+	const pipeline = runPipeline(pipelineOptionsFor(rest, bannerHashes));
+	if (pipeline.blocked) {
+		return {
+			snapshot: pipeline.snapshot,
+			changes: [],
+			sql: "",
+			hasChanges: false,
+			errors: pipeline.errors,
+			ambiguities: pipeline.ambiguities,
+			warnings: pipeline.warnings,
+		};
+	}
+	if (!pipeline.hasChanges) {
+		return {
+			snapshot: pipeline.snapshot,
+			changes: pipeline.changes,
 			sql: "",
 			hasChanges: false,
 			errors: [],
 			ambiguities: [],
-			warnings: allWarnings,
+			warnings: pipeline.warnings,
 		};
 	}
 
-	// D74: every kind's emit sees the whole diff's changes (siblingChanges),
-	// read-only and optional -- most kinds ignore it; sequenceKind/tableKind
-	// use it to coordinate a serial column's single-statement add (#23).
-	// D78: emit also sees the full next snapshot, read-only and optional --
-	// tableKind uses it to re-grant a newly created table under a standing
-	// schema-wide grant (#121), which siblingChanges can't cover (the grant
-	// itself has no change in this diff).
-	const emittedStatements: ReadonlyArray<EmittedStatement> = changes.flatMap(
-		(change) =>
-			resolved.registry
-				.get(change.kind)
-				.emit(change, changes, snapshot)
-				.map((statement) => ({ change, statement })),
-	);
+	const splitDecision = planSplit(pipeline.changes);
+	if (splitDecision.split) {
+		return throwHejbroError(
+			"migration-requires-split",
+			"this run adds a value to an existing enum type that an expression it also emits resolves inside the same transaction — Postgres refuses that combination, so it cannot be expressed as one migration file. Next: call generateMigrations() instead of generateMigration() — it returns one migration per transaction boundary this run needs.",
+		);
+	}
 
-	const predropStatements = sortPredropStatements(
-		emittedStatements,
-		resolved.registry,
+	const sql = buildGeneratedMigrationSql(
+		pipeline.changes,
+		true,
+		pipeline.changes,
+		pipeline.snapshot,
+		pipeline.registry,
+		pipeline.plan,
+		bannerHashes,
+		options.hejbroVersion,
+		options.baseline,
 	);
-	const mainStatements = emittedStatements.filter(
-		(entry) => entry.statement.stage === "main",
-	);
-	const deferredStatements = emittedStatements.filter(
-		(entry) => entry.statement.stage === "deferred",
-	);
-
-	const sql = [
-		renderBanner(
-			[...plan.renameChanges, ...changes],
-			options.bannerHashes,
-			options.hejbroVersion,
-		),
-		...plan.renameStatements,
-		...predropStatements.map((entry) => entry.statement.sql),
-		...mainStatements.map((entry) => entry.statement.sql),
-		...deferredStatements.map((entry) => entry.statement.sql),
-	].join("\n\n");
 
 	return {
-		snapshot,
-		changes,
+		snapshot: pipeline.snapshot,
+		changes: pipeline.changes,
 		sql,
 		hasChanges: true,
 		errors: [],
 		ambiguities: [],
-		warnings: allWarnings,
+		warnings: pipeline.warnings,
 	};
 };

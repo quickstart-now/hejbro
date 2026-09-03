@@ -3,8 +3,8 @@ import { diagnostic } from "@hejbro/core";
 import {
 	declaredAtOf,
 	isGrantDeclaration,
+	isManagedTableDeclaration,
 	isRlsDeclaration,
-	isTableDeclaration,
 } from "./schema-of";
 
 const apiRoles: ReadonlyArray<string> = ["anon", "authenticated"];
@@ -45,12 +45,17 @@ const rlsProtectedTables = (
  * Warns when a table sits in a schema granted to `anon`/`authenticated`
  * (`all-tables-privileges`/`default-table-privileges`) but declares no RLS
  * (D40) — every row in that table is then readable/writable through the
- * Supabase API. Order is declaration order.
+ * Supabase API. Order is declaration order. Skips an `existingTable()`
+ * declaration (add-unmanaged-objects, J6-2): this judges whether hejbro
+ * should have declared `rls(...)` on a table it manages, and an existing
+ * table's builder has no `rls(...)` option to declare in the first place —
+ * the warning's own "declare rls(...) on the table" advice would be
+ * unactionable for it.
  */
 export const exposedTableValidator: Validator = (_snapshot, declarations) => {
 	const schemas = exposedSchemas(declarations);
 	const protectedTables = rlsProtectedTables(declarations);
-	return declarations.filter(isTableDeclaration).flatMap((table) => {
+	return declarations.filter(isManagedTableDeclaration).flatMap((table) => {
 		const identity = `${table.schema.schemaName}.${table.tableName}`;
 		if (
 			!schemas.has(table.schema.schemaName) ||

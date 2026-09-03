@@ -3,6 +3,7 @@ import type { HejbroDeclaration, HejbroInput } from "../src";
 import {
 	buildSnapshot,
 	check,
+	count,
 	createDefaultRegistry,
 	defineView,
 	desc,
@@ -17,12 +18,14 @@ import {
 	integer,
 	isNotNull,
 	isTable,
+	op,
 	planRenames,
 	renderSnapshot,
 	rls,
 	schema,
 	select,
 	serial,
+	sql,
 	table,
 	text,
 	uuid,
@@ -247,6 +250,7 @@ describe("planRenames", () => {
 				schemaName: "app",
 				droppedTables: ["posts"],
 				createdTables: ["blog_posts"],
+				existingCreatedTables: [],
 				declaredAt: null,
 			},
 		]);
@@ -380,18 +384,26 @@ describe("planRenames", () => {
 		expect(diffSnapshots(plan.rewrittenPrevious, next, registry)).toEqual([]);
 	});
 
-	it("keeps desc/nulls on the renamed entry of an ordered index (D51)", () => {
+	it("keeps desc/nulls/opclass on the renamed entry of an ordered index (D51/R4)", () => {
 		const previous = snap(
 			app,
 			table(app, "posts", { slug: text(), publishedAt: text() }, (t) => ({
-				indexes: [index().on(t.slug, desc(t.publishedAt, { nulls: "first" }))],
+				indexes: [
+					index().on(
+						op(t.slug, "text_ops"),
+						desc(t.publishedAt, { nulls: "first" }),
+					),
+				],
 			})),
 		);
 		const next = snap(
 			app,
 			table(app, "posts", { handle: text(), publishedAt: text() }, (t) => ({
 				indexes: [
-					index().on(t.handle, desc(t.publishedAt, { nulls: "first" })),
+					index().on(
+						op(t.handle, "text_ops"),
+						desc(t.publishedAt, { nulls: "first" }),
+					),
 				],
 			})),
 		);
@@ -419,11 +431,12 @@ describe("planRenames", () => {
 					readonly name: string;
 					readonly desc?: true;
 					readonly nulls?: string;
+					readonly opclass?: string;
 				}>;
 			}>;
 		};
 		expect(rewrittenTable.indexes[0]?.columns).toEqual([
-			{ name: "handle" },
+			{ name: "handle", opclass: "text_ops" },
 			{ name: "published_at", desc: true, nulls: "first" },
 		]);
 		expect(diffSnapshots(plan.rewrittenPrevious, next, registry)).toEqual([]);
@@ -934,6 +947,86 @@ describe("planRenames — same-table expression retargeting (#110 items 6/7)", (
 		expect(diffSnapshots(plan.rewrittenPrevious, next, registry)).toEqual([]);
 	});
 
+	// #284 US3 (T034): expression indexes — renaming a column inside an
+	// index expression retargets the node (retargetTableFields), keeps the
+	// explicit name (never re-derived — an expression entry contributes
+	// nothing to derivation, R10b), and leaves no diff. Critically, no
+	// ambiguous-column-rename: plan.errors is empty.
+	it("a column rename retargets an index expression referencing that column, keeping the explicit name, with no leftover diff and no ambiguous-column-rename", () => {
+		const previous = snap(
+			app,
+			table(app, "users", { id: uuid().primaryKey(), email: text() }, (t) => ({
+				indexes: [index("users_email_lower_idx").on(sql`lower(${t.email})`)],
+			})),
+		);
+		const next = snap(
+			app,
+			table(
+				app,
+				"users",
+				{ id: uuid().primaryKey(), emailAddress: text() },
+				(t) => ({
+					indexes: [
+						index("users_email_lower_idx").on(sql`lower(${t.emailAddress})`),
+					],
+				}),
+			),
+		);
+
+		const plan = planRenames({
+			previous,
+			next,
+			renames: [
+				{
+					target: "column",
+					schemaName: "app",
+					tableName: "users",
+					oldName: "email",
+					newName: "email_address",
+				},
+			],
+			confirmedDrops: [],
+			declaredAtByIdentity: noDeclSites,
+		});
+		expect(plan.errors).toEqual([]);
+		const rewrittenTable = plan.rewrittenPrevious.objects[
+			"table:app.users"
+		] as { readonly indexes: ReadonlyArray<{ readonly name: string }> };
+		expect(rewrittenTable.indexes[0]?.name).toBe("users_email_lower_idx");
+		expect(diffSnapshots(plan.rewrittenPrevious, next, registry)).toEqual([]);
+	});
+
+	it("a table rename retargets its own index expression, with no leftover diff", () => {
+		const buildUsers = (tableName: string) =>
+			table(
+				app,
+				tableName,
+				{ id: uuid().primaryKey(), email: text() },
+				(t) => ({
+					indexes: [index("users_email_lower_idx").on(sql`lower(${t.email})`)],
+				}),
+			);
+		const previous = snap(app, buildUsers("users"));
+		const next = snap(app, buildUsers("accounts"));
+
+		const plan = planRenames({
+			previous,
+			next,
+			renames: [
+				{
+					target: "table",
+					schemaName: "app",
+					oldName: "users",
+					newName: "accounts",
+				},
+			],
+			confirmedDrops: [],
+			declaredAtByIdentity: noDeclSites,
+		});
+		expect(plan.errors).toEqual([]);
+		expect(diffSnapshots(plan.rewrittenPrevious, next, registry)).toEqual([]);
+	});
+
 	// #154 ratchet-5: retargetForeignKeyReferenceColumn's two early-return
 	// branches (a foreign key referencing a different table; a foreign key
 	// referencing the same table but a different column) only run for real
@@ -1124,6 +1217,56 @@ describe("planRenames — view query retargeting (#157/D72)", () => {
 					tableName: "posts",
 					oldName: "price",
 					newName: "cost",
+				},
+			],
+			confirmedDrops: [],
+			declaredAtByIdentity: noDeclSites,
+		});
+		expect(plan.errors).toEqual([]);
+		expect(diffSnapshots(plan.rewrittenPrevious, next, registry)).toEqual([]);
+	});
+
+	// #444 F3: retargetSelectNode used to miss groupBy/having/distinct on --
+	// a rename left a stale identifier behind in exactly one of those
+	// clauses, breaking D67's no-leftover-diff invariant.
+	it("a column rename retargets a view's own groupBy, with no leftover diff", () => {
+		const postsBefore = table(app, "posts", {
+			id: uuid().primaryKey(),
+			status: text().notNull(),
+		});
+		const postsAfter = table(app, "posts", {
+			id: uuid().primaryKey(),
+			state: text().notNull(),
+		});
+		const viewBefore = defineView(
+			app,
+			"posts_by_status",
+			select(
+				{ status: postsBefore.status, total: count() },
+				postsBefore,
+			).groupBy(postsBefore.status),
+		);
+		const viewAfter = defineView(
+			app,
+			"posts_by_status",
+			select({ status: postsAfter.state, total: count() }, postsAfter).groupBy(
+				postsAfter.state,
+			),
+		);
+
+		const previous = snap(app, postsBefore, viewBefore);
+		const next = snap(app, postsAfter, viewAfter);
+
+		const plan = planRenames({
+			previous,
+			next,
+			renames: [
+				{
+					target: "column",
+					schemaName: "app",
+					tableName: "posts",
+					oldName: "status",
+					newName: "state",
 				},
 			],
 			confirmedDrops: [],
@@ -1678,6 +1821,83 @@ describe("planRenames — foreign key constraint rename drift guard (#154)", () 
 			`alter table "app"."posts" rename to "articles";`,
 			`alter table "app"."articles" rename constraint "posts_author_id_fk" to "articles_author_id_fk";`,
 			`alter table "app"."articles" rename constraint "posts_pkey" to "articles_pkey";`,
+		]);
+		expect(diffSnapshots(plan.rewrittenPrevious, next, registry)).toEqual([]);
+	});
+
+	// D106 R3-B3: a foreign key's own explicit name is never the derived
+	// one (that is exactly what "explicit" means here), so
+	// rewriteForeignKeysForRename's own wasDerived check already reads it
+	// as "not ours to touch" -- no code change, only this pin.
+	it("a table rename leaves an explicitly named foreign key constraint untouched (wasDerived === false)", () => {
+		const previousUsers = table(app, "users_fkname_rename", {
+			id: uuid().primaryKey(),
+		});
+		const previous = snap(
+			app,
+			previousUsers,
+			table(
+				app,
+				"posts_fkname_rename",
+				{ id: uuid().primaryKey(), authorId: uuid().notNull() },
+				(t) => ({
+					foreignKeys: [
+						{
+							columns: [t.authorId],
+							references: { table: previousUsers, columns: [previousUsers.id] },
+							name: "posts_fkname_rename_legacy_fkey",
+						},
+					],
+				}),
+			),
+		);
+		const nextUsers = table(app, "users_fkname_rename", {
+			id: uuid().primaryKey(),
+		});
+		const next = snap(
+			app,
+			nextUsers,
+			table(
+				app,
+				"articles_fkname_rename",
+				{ id: uuid().primaryKey(), authorId: uuid().notNull() },
+				(t) => ({
+					foreignKeys: [
+						{
+							columns: [t.authorId],
+							references: { table: nextUsers, columns: [nextUsers.id] },
+							name: "posts_fkname_rename_legacy_fkey",
+						},
+					],
+				}),
+			),
+		);
+
+		const plan = planRenames({
+			previous,
+			next,
+			renames: [
+				{
+					target: "table",
+					schemaName: "app",
+					oldName: "posts_fkname_rename",
+					newName: "articles_fkname_rename",
+				},
+			],
+			confirmedDrops: [],
+			declaredAtByIdentity: noDeclSites,
+		});
+		expect(plan.errors).toEqual([]);
+		// no "rename constraint" statement for the foreign key -- its own
+		// explicit name never depended on the table's, so it never drifts.
+		expect(
+			plan.renameStatements.some((s) =>
+				s.includes("posts_fkname_rename_legacy_fkey"),
+			),
+		).toBe(false);
+		expect(plan.renameStatements).toEqual([
+			`alter table "app"."posts_fkname_rename" rename to "articles_fkname_rename";`,
+			`alter table "app"."articles_fkname_rename" rename constraint "posts_fkname_rename_pkey" to "articles_fkname_rename_pkey";`,
 		]);
 		expect(diffSnapshots(plan.rewrittenPrevious, next, registry)).toEqual([]);
 	});

@@ -25,8 +25,11 @@ import {
 	integer,
 	isNotNull,
 	isNull,
+	jsonArrayFrom,
 	migrationPrefixStrategies,
 	not,
+	over,
+	rank,
 	rls,
 	roleName,
 	schema,
@@ -35,6 +38,7 @@ import {
 	table,
 	timestamptz,
 	uuid,
+	withCte,
 } from "../src/index";
 import { CORE_KIND_IDS } from "../src/kind/registry";
 import type { JsonValue } from "../src/snapshot/stable-json";
@@ -365,6 +369,74 @@ describe("D70 naming convention: expression subtree discriminators are kebab-cas
 		"price_summary_view",
 		select({ id: posts.id, price: posts.price }, posts),
 	);
+	// add-relational-reads: a view carrying a nested read is the
+	// declaration-reachable producer of the `selectExpr` node -- without
+	// one here, the completeness assertion below would flag `select-expr`
+	// as vocabulary the fixture never reached.
+	// add-set-operations: a union view is the declaration-reachable
+	// producer of the set-op node -- its "set-op"/operator discriminators
+	// must appear in the walked snapshot for the D70 kebab rule.
+	const combinedPricesView = defineView(
+		app,
+		"combined_prices_view",
+		select(posts).union(select(posts)),
+	);
+	const postsWithCommentsView = defineView(
+		app,
+		"posts_with_comments_view",
+		select(
+			{
+				id: posts.id,
+				comments: jsonArrayFrom(
+					select({ id: comments.id }, comments).where(
+						eq(comments.postId, posts.id),
+					),
+				),
+			},
+			posts,
+		),
+	);
+	// add-window-functions (D104): a view carrying a window function is the
+	// declaration-reachable producer of the `window` node -- without one
+	// here, the completeness assertion below would flag `window` as
+	// vocabulary the fixture never reached. Built through the real public
+	// DSL (over()/rank(), group 2) now that it exists -- group 1 hand-built
+	// the node here instead, before either was public; the declaration-
+	// reachable path is the one D70's own producers are meant to exercise.
+	const rankByAuthorView = defineView(
+		app,
+		"rank_by_author_view",
+		select(
+			{
+				id: posts.id,
+				rank: over(rank(), {
+					partitionBy: [posts.authorId],
+					orderBy: [posts.price],
+				}),
+			},
+			posts,
+		),
+	);
+
+	// add-ctes, task 4.5: a view whose body declares a CTE is the
+	// declaration-reachable producer of the "with" query vocabulary --
+	// group 1 deferred the question of whether `encodeQueryNode` needed
+	// widening to this fixture forcing it. It does not: `defineView`
+	// (task 4.1) routes a `WithNode` through `view-kind.ts`'s own
+	// `encodeViewQueryNode`, which calls `encodeWithNode` directly rather
+	// than through the shared (and deliberately narrow) `encodeQueryNode`
+	// dispatcher -- confirmed by this fixture compiling and passing
+	// unchanged, not by a red/green cycle at this task. The classification
+	// ("a documented boundary, not a stub") holds; `encodeQueryNode`'s own
+	// docstring already says so (task 4.3).
+	const rankedPostsView = defineView(
+		app,
+		"ranked_posts_view",
+		withCte((w) => {
+			const ranked = w.as("ranked", select(posts));
+			return select({ id: ranked.id, price: ranked.price }, ranked);
+		}),
+	);
 
 	const result = generateMigration({
 		declarations: [
@@ -373,7 +445,11 @@ describe("D70 naming convention: expression subtree discriminators are kebab-cas
 			posts,
 			comments,
 			allPricesView,
+			combinedPricesView,
+			postsWithCommentsView,
 			priceSummaryView,
+			rankByAuthorView,
+			rankedPostsView,
 		],
 		previousSnapshot: emptySnapshot,
 		registry,

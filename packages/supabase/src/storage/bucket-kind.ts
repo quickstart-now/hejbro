@@ -265,6 +265,12 @@ export const storageBucketKind: ObjectKind<StorageBucketDeclaration> = {
 	kind: "supabase-storage-bucket",
 	dependsOn: [],
 	requiredKeys: ["name"],
+	// #482: declares what `hejbro check` used to hardcode -- a bucket row
+	// is owned by Supabase's Storage API, not by this database's own
+	// migrations, so no catalog object exists for `check` to compare it
+	// against, ever (not "couldn't this run").
+	noCatalogObjectReason:
+		"a Supabase storage bucket is a row the Storage API owns, not this database's own migrations.",
 	owns: (declaration): declaration is StorageBucketDeclaration =>
 		declaration.declarationKind === "supabase-storage-bucket",
 	serialize: (declaration) => {

@@ -21,6 +21,21 @@ export const isTableDeclaration = (
 	declaration: HejbroDeclaration,
 ): declaration is TableDeclaration => declaration.declarationKind === "table";
 
+/**
+ * Narrows to a {@link TableDeclaration} this repository manages — excludes
+ * an `existingTable()` declaration (add-unmanaged-objects, J6-2): shared by
+ * every validator here that judges managed DDL (reserved schemas, exposed
+ * tables, cached-auth-outside-RLS), none of which has anything to judge
+ * on an existing table, since it is never emitted. `isTableDeclaration`
+ * itself stays general (used by `schemaOf`/`declaredAtOf`'s own field
+ * extraction, which reports a real fact about any table regardless of
+ * management) — this is a second, narrower predicate, not a redefinition.
+ */
+export const isManagedTableDeclaration = (
+	declaration: HejbroDeclaration,
+): declaration is TableDeclaration =>
+	isTableDeclaration(declaration) && !declaration.existing;
+
 /** Narrows a normalized declaration to {@link ViewDeclaration}. */
 export const isViewDeclaration = (
 	declaration: HejbroDeclaration,

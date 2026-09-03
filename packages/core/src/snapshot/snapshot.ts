@@ -33,14 +33,32 @@ import { stableJson } from "./stable-json";
  * recorded in the snapshot), which land in this wave's later PRs
  * (`phase8-expr-nodes`, `phase8-constraint-names`) — this PR only moves
  * the version marker itself so those PRs' shape changes don't each need
- * their own bump. Pre-publication, no shim beyond the one detection
- * branch above.
+ * their own bump. Bumped to `6` for add-generated-columns (D100): a
+ * column snapshot node gains optional `generated` (a stored computed
+ * column's own expression, encoded like `default`) and `identity` (an
+ * identity column's kind and any explicit sequence options) fields — an
+ * older reader must refuse a v6 snapshot loudly (the D73 diagnostic)
+ * rather than silently diffing with those two fields ignored. Still
+ * pre-publication, so no shim beyond the existing detection branch above.
+ * Bumped to `7` for add-relational-reads (D102 amendment): a table
+ * snapshot's foreign keys are recorded in canonical,
+ * declaration-form-independent order — an older reader must refuse
+ * rather than mis-diff over the uncanonical order. v6 was never
+ * released (0.1.1 shipped v5). Bumped to `8` for #437: a view body's
+ * `SelectNode` gains `offset` and `distinct`, so a v7 reader would
+ * silently diff a paginated or de-duplicated view as if it were neither.
+ * Still pre-publication — 0.1.1 shipped v5 and 0.2.0 has not shipped, so
+ * whatever version 0.2.0 lands on is the first one any user sees, and a
+ * pre-release field addition costs nothing externally. Any further
+ * pre-release `SelectNode` growth (#416's `groupBy`/`having`) should
+ * extend 8 in place rather than bump again; the first addition AFTER
+ * 0.2.0 ships is the one that pays the real price (#413).
  */
-export const HEJBRO_SNAPSHOT_VERSION = 5;
+export const HEJBRO_SNAPSHOT_VERSION = 8;
 
 /** A deterministic, flat representation of every declared database object. */
 export type Snapshot = {
-	readonly formatVersion: 5;
+	readonly formatVersion: 8;
 	readonly dialect: "postgres";
 	/** keyed by `${kind}:${identity}` */
 	readonly objects: { readonly [kindAndIdentity: string]: JsonValue };

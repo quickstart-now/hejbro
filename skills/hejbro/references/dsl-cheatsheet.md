@@ -15,6 +15,8 @@ SQL follow that physical order (reordering existing columns in TypeScript
 changes nothing).
 
 ```ts
+import { schema, table, uuid } from "hejbro";
+
 export const app = schema("app");
 export const posts = table(app, "posts", { id: uuid().primaryKey() });
 ```
@@ -25,8 +27,134 @@ See a full example: `examples/postgres/src/app.schema.ts`.
 
 Every column factory (`uuid()`, `text()`, `integer()`, `timestamptz()`, …)
 and its chainable modifiers (`.notNull()`, `.primaryKey()`, `.unique()`,
-`.default(...)`, `.defaultRandom()`, `.defaultNow()`) are self-describing
-exports — see `packages/core/src/types/column-builder-factories.ts`.
+`.default(...)`, `.defaultRandom()`, `.defaultNow()`,
+`.generatedAlwaysAs(...)`, `.generatedAlwaysAsIdentity()`,
+`.generatedByDefaultAsIdentity()`) are self-describing exports — see
+`packages/core/src/types/column-builder-factories.ts`.
+
+## Enums
+
+```ts
+import { pgEnum, schema, table, uuid } from "hejbro";
+
+const shop = schema("shop");
+const articleStatus = pgEnum(shop, "article_status", ["draft", "published"]);
+
+export const articles = table(shop, "articles", {
+	id: uuid().primaryKey(),
+	status: articleStatus.column().notNull(),
+});
+```
+
+The declared values are the column's TypeScript type, both directions:
+`status` reads back as `"draft" | "published"` and only those two
+literals type-check as a write. Nothing to restate — no
+`.$type<"draft" | "published">()` on top of the declaration (#422).
+
+## Generated columns
+
+```ts
+import { bigint, integer, schema, sql, table } from "hejbro";
+
+export const app = schema("app");
+export const orders = table(app, "orders", {
+  id: integer().generatedAlwaysAsIdentity(),
+  amount: bigint().notNull(),
+  doubled: bigint().generatedAlwaysAs(sql`amount * 2`),
+  seq: bigint().generatedByDefaultAsIdentity(),
+});
+```
+
+- Identity is for integer-family column types only, and `serial()` is not
+  identity-eligible (its `nextval` default is the identity + default
+  combination Postgres itself rejects). Both identity kinds imply
+  `NOT NULL` — the column reads back non-nullable.
+- ALWAYS-family columns (stored generated and always-identity) do not
+  appear in any insert/update input type — the query chain's and core's
+  raw builders' alike; a by-default
+  identity can be supplied or omitted like any defaulted column. The
+  database enforces the same rule at runtime (SQLSTATE `428C9`).
+- Combining generated/identity with `.default(...)`, with each other, or
+  with a non-eligible type fails loudly at declaration time.
+- Converting an existing plain column to a generated one is not a silent
+  rewrite: migration generation stops with `unsupported-column-alter` and
+  a two-step remedy (drop the column, then re-add it as generated).
+  Generated→plain emits `drop expression`; changing the expression
+  rebuilds the column, which moves it to the end of the table.
+
+## Foreign keys
+
+Two entry points declare a foreign key — both are legitimate, and
+declaring the same column through both fails at declaration time:
+
+| Use when | Form | Covers |
+|---|---|---|
+| A single local column, referencing one other table | Column-level `.references()` | Also feeds the query layer's relation types (`related()` — see the query-layer reference) in the same declaration; nothing is declared twice |
+| Composite (multi-column), self-referencing, an explicit constraint name, or `onDelete`/`onUpdate` | `extras.foreignKeys` | Everything the column-level form can't express |
+
+**Column-level**: `ownerId: uuid().notNull().references(() => users.id)`
+— one declaration feeds both the generated DDL and the query layer's
+relation types. The target must share the column's type family, and the
+thunk defers evaluation (import-order safety, #669): it never runs
+inside `table()` itself, only on the declaration's first `foreignKeys`
+read, so two declaration files (or two tables in one file) that
+`.references()` each other resolve regardless of which one loads or is
+declared first — including a genuine circular import between two schema
+files. It cannot express a referential action — no `onDelete`, no
+`onUpdate` (#514). A column that
+needs one uses the `extras.foreignKeys` form **only** — declaring the
+same column through both fails at declaration time
+(`invalid-duplicate-foreign-key`: the constraint would emit twice), so
+this is not "add extras alongside `.references()` for the action", it
+is one form or the other, per column.
+
+**`extras.foreignKeys`**: an array of `{ columns, references: { table?,
+columns }, name?, onDelete?, onUpdate? }` — `columns` names this table's
+own local column(s); `references.table` is optional, derived from the
+referenced columns' own refs when omitted, which is how a
+self-referencing foreign key needs no extra syntax. `name` is optional
+too (validated per D36 when given, same rule `index()`'s own optional
+name already follows) and derives `<table>_<columns>_fk` when omitted;
+give one explicitly to match a foreign key's own catalog name when it
+was created outside hejbro (`hejbro import`/`pull` already do this for
+you whenever the catalog name is expressible — D106 R3-B3):
+
+```ts
+import { schema, table, uuid } from "hejbro";
+
+const app = schema("app");
+const tasks = table(app, "tasks", { id: uuid().primaryKey() });
+
+export const comments = table(
+	app,
+	"comments",
+	{
+		id: uuid().primaryKey(),
+		taskId: uuid().notNull(),
+		parentId: uuid(),
+	},
+	(t) => ({
+		foreignKeys: [
+			{
+				columns: [t.taskId],
+				references: { table: tasks, columns: [tasks.id] },
+				onDelete: "cascade",
+			},
+			// Self-referencing (D52): `table` omitted, derived from the
+			// referenced column's own ref.
+			{
+				columns: [t.parentId],
+				references: { columns: [t.id] },
+				onDelete: "cascade",
+			},
+		],
+	}),
+);
+```
+
+See `packages/core/src/dsl/table.ts` (`resolveReferenceTarget`,
+`resolveForeignKeyName`) and the task/comment foreign keys in
+`examples/postgres/src/app.schema.ts`.
 
 ## CHECK constraints
 
@@ -38,20 +166,42 @@ status/slug CHECKs in `examples/postgres/src/app.schema.ts`.
 
 ## Indexes
 
-`index("name").unique().on(asc(col), desc(col, { nulls: "last" }))`,
+`index("name").unique().using(method).on(asc(col), desc(col, { nulls: "last" }))`,
 optionally partial via `.where(expr)`. An unnamed index derives its name
-from the table and columns. See `packages/core/src/dsl/index-builder.ts`
-and the partial ordered index in
-`examples/postgres/src/steps/step-3.schema.ts`.
+from the table and columns — except an expression index, which requires
+an explicit name (see below).
 
-## Foreign keys
+A plain `.on(...)` column MUST belong to the table declaring the index —
+`t.col` from the callback's own `t`, never a column resolved from a
+different table's declaration. A foreign column fails declaration with a
+`foreign-column-ref` error naming the foreign column's own schema, table,
+and column, even when it shares its name with one of the declaring
+table's own columns (which a name-only check could not tell apart).
 
-`references: { columns: [t.id] }` — the referenced table is derived from
-the columns' own refs, so `table` is optional and self-referencing FKs
-need no extra syntax. `onDelete`/`onUpdate` are separate options. See
-`packages/core/src/dsl/table.ts` (`resolveReferenceTarget`) and the
-self-referencing `comments.parent_id` FK in
-`examples/postgres/src/app.schema.ts`.
+`.using(method)` picks the access method: `btree` (default, never recorded
+as a change), `hash`, `gin`, `gist`, `spgist`, `brin`, or pgvector's `hnsw`
+/ `ivfflat` — any other name fails at declaration time with that list.
+`unique` is B-tree only; combining it with another method also fails at
+declaration time.
+
+`op(column, "class")` attaches an operator class to one index column
+(`jsonb_path_ops`, `gin_trgm_ops`, `vector_cosine_ops`, …) — validated as a
+SQL identifier (D36), otherwise passed through to Postgres unverified.
+`op(...)` composes with `asc`/`desc` in any order:
+`op(desc(t.col, { nulls: "first" }), "c")`; `op` also wraps an expression,
+not just a column: ``op(sql`lower(${t.email})`, "c")``.
+
+`.on(...)` also accepts an expression (the same `sql` template CHECK and
+partial predicates use) in place of a column — ``index("users_email_lower_idx").on(sql`lower(${t.email})`)``.
+An expression index **must** carry an explicit name; the declaration-time
+error proposes `<table>_<referenced columns>_idx`. The expression is
+stored structurally (D67/D70), so `--rename` retargets a column used
+inside it exactly like partial predicates already do.
+
+See `packages/core/src/dsl/index-builder.ts`, the full guide at
+`docs/guide/indexes.md`, the partial ordered index in
+`examples/postgres/src/steps/step-3.schema.ts`, and the GIN / operator
+class / expression indexes in `examples/postgres/src/app.schema.ts`.
 
 ## RLS
 
@@ -85,3 +235,39 @@ owner's. See `packages/core/src/dsl/define-view.ts`.
 `packages/core/src/dsl/define-function.ts` /
 `packages/core/src/dsl/define-trigger.ts` — body-writing rules are their
 own page: `function-builder-pitfalls.md`.
+
+`returns` accepts a column builder wherever it accepts a raw type node,
+the same form `args` already takes — write `returns: varchar({ length:
+10 })` instead of `returns: { typeName: "varchar", length: 10 }` when the
+type carries detail (a length, an enum, a `$type` brand): the builder's
+own type is what `db.fn`'s call result resolves through, so nothing it
+carries is lost. A `notNullElements()` array can't be declared as a
+`returns` type — a returns clause derives no backing CHECK the way a
+table column does, so the flag would promise something nothing enforces.
+
+```ts
+import { defineFunction, schema, sql, table, uuid, varchar } from "hejbro";
+
+const shop = schema("shop");
+const orders = table(shop, "orders", { id: uuid().primaryKey() });
+
+// returns: a raw type node still works ...
+defineFunction(
+	shop,
+	"order_count",
+	{ returns: { typeName: "bigint" } },
+	(ctx) => {
+		ctx.return(sql`(select count(${orders.id}) from "shop"."orders")`);
+	},
+);
+
+// ... or a column builder, when the type needs its own detail.
+defineFunction(
+	shop,
+	"order_status",
+	{ returns: varchar({ length: 10 }) },
+	(ctx) => {
+		ctx.return(sql`'open'`);
+	},
+);
+```

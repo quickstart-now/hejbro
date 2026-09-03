@@ -1,7 +1,9 @@
 import {
 	emptySnapshot,
 	eq,
+	existingTable,
 	generateMigration,
+	getTableMeta,
 	grant,
 	rls,
 	schema,
@@ -80,6 +82,21 @@ describe("exposedTableValidator", () => {
 		const posts = table(app, "posts", { id: uuid().primaryKey() });
 		const result = generateMigration({
 			declarations: [app, posts, grant(app).usage.to("anon")],
+			previousSnapshot: emptySnapshot,
+			validators: [exposedTableValidator],
+		});
+		expect(result.warnings).toEqual([]);
+	});
+
+	it("does not warn on an existingTable in a schema granted to anon/authenticated (add-unmanaged-objects, J6-2 — its builder has no rls(...) option to declare)", () => {
+		const auth = schema("auth");
+		const authUsers = existingTable("auth", "users", { id: uuid() });
+		const result = generateMigration({
+			declarations: [
+				auth,
+				getTableMeta(authUsers),
+				grant(auth).tables("select").to("anon"),
+			],
 			previousSnapshot: emptySnapshot,
 			validators: [exposedTableValidator],
 		});

@@ -36,12 +36,18 @@
 //   assertNever fallthrough) -- these throw from closures with no
 //   `declaration`/user-input path in, so there's nothing a user could
 //   have done differently.
-// Any message that contains "internal hejbro bug" or starts with
-// "unreachable" is exempted generically too (self-describing by the
-// message's own admission) -- see MESSAGE_SELF_DESCRIBES_INTERNAL below,
-// for codes whose reasoning lives in the message text rather than the
-// code name.
+// There is deliberately NO generic message-text exemption (#288): a
+// substring like "internal hejbro bug" in a message waved the site
+// through no matter what its code was, so a user-reachable diagnostic
+// could hide behind the phrase. Every exemption is structural -- a code
+// in EXEMPT_CODES, or a code-scoped message-shape pattern below for
+// codes thrown from both user-facing and internal sites.
+// - "empty-if-statement": render-body.ts's no-branches guard -- the
+//   plpgsql if builder cannot produce a branchless statement, so the
+//   only path in is a hand-built malformed node (internal invariant;
+//   single site, classified for #288).
 const EXEMPT_CODES = new Set([
+	"empty-if-statement",
 	"invalid-kind-change",
 	"invalid-table-identity",
 	"invalid-view-projection",
@@ -51,19 +57,9 @@ const EXEMPT_CODES = new Set([
 
 /** Strips a single leading quote character (`"`, `'`, or `` ` ``) so an
  * inline string/template literal's text compares the same as a resolved
- * helper's plain text -- both `MESSAGE_SELF_DESCRIBES_INTERNAL` and the
- * mixed-reachability patterns below match against the message's own
- * wording, not its quoting. */
+ * helper's plain text -- the mixed-reachability patterns below match
+ * against the message's own wording, not its quoting. */
 const stripLeadingQuote = (text) => text.replace(/^["'`]/, "");
-
-/** A message that says outright it's an internal-only guard -- "internal
- * hejbro bug" (schema-kind's unsupported-operation, snapshot.ts's second
- * unowned-declaration site) or starts with "unreachable" (the internal
- * duplicate-identity site). Checked on the RESOLVED message text, not the
- * raw call-site args. */
-const MESSAGE_SELF_DESCRIBES_INTERNAL = (messageText) =>
-	/internal hejbro bug/.test(messageText) ||
-	/^unreachable\b/.test(stripLeadingQuote(messageText));
 
 // Two codes are thrown from both a user-facing site and an internal one;
 // distinguished by message shape (stable across edits), not line number:
@@ -75,9 +71,20 @@ const MESSAGE_SELF_DESCRIBES_INTERNAL = (messageText) =>
 // - "duplicate-identity": buildSnapshot's real duplicate-key case is
 //   user-facing; findDuplicateKey's "no first occurrence" branch is a
 //   pure invariant guard (its own message says "unreachable").
+// - "unowned-declaration": buildSnapshot's zero-owners case is
+//   user-facing (an unregistered preset kind; carries Next:); the
+//   second site fires only after the same declaration already matched
+//   during grouping -- a pure invariant guard (#288 classification).
+// - "unsupported-operation": schema-kind's emit-alter guard is
+//   unreachable in practice (schema diff never produces an alter); the
+//   code name is generic, so it is deliberately NOT in EXEMPT_CODES --
+//   a future user-facing "unsupported-operation" still owes a Next:.
 const MIXED_REACHABILITY_INTERNAL_PATTERNS = {
 	"unknown-kind-dependency": /^change references unregistered kind /,
 	"duplicate-identity": /^unreachable\b/,
+	"unowned-declaration":
+		/^declaration at index \$\{[^}]*\} matched no kind|^declaration at index \d+ matched no kind/,
+	"unsupported-operation": /^schema kind never alters/,
 };
 
 /** Tests a mixed-reachability code's pattern against the message with its
@@ -90,33 +97,54 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { sourceRoots } from "./source-roots.mjs";
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
-const SOURCE_ROOTS = [
-	"packages/core/src",
-	"packages/cli/src",
-	"packages/supabase/src",
-];
+// #372: derived from the workspace, never enumerated -- see
+// scripts/source-roots.mjs for why (the #361 class, killed at the root).
+const SOURCE_ROOTS = sourceRoots();
 
 /** Every file in `root` containing a throwHejbroError/hejbroError call --
  * `packages/core/src/error.ts` (the factories' own definitions) is
  * excluded explicitly, not by pattern, so a future file named similarly
  * doesn't silently skip itself. */
 const findCandidateFiles = (root) => {
-	const out = execFileSync(
-		"grep",
-		[
-			"-rl",
-			String.raw`throwHejbroError(\|hejbroError(`,
-			root,
-			"--include=*.ts",
-		],
-		{ cwd: REPO_ROOT, encoding: "utf8" },
-	).trim();
+	// #361: the second alternative catches the enriched-plain-Error idiom
+	// (`throw Object.assign(new Error(...), { code })`) that packages/query
+	// and packages/pg use instead of throwHejbroError -- without it, adding
+	// those roots would have been a no-op (a never-fires probe, the exact
+	// failure mode this script's own header warns about). grep exits 1 when
+	// a root has no match at all (pg today) -- that is "no candidates", not
+	// an error, so it must not crash the gate.
+	const grepOut = () => {
+		try {
+			return execFileSync(
+				"grep",
+				[
+					"-rl",
+					String.raw`throwHejbroError(\|hejbroError(\|Object.assign(\|new HejbroError(\|code: "`,
+					root,
+					"--include=*.ts",
+				],
+				{ cwd: REPO_ROOT, encoding: "utf8" },
+			).trim();
+		} catch (error) {
+			if (error.status === 1) {
+				return "";
+			}
+			throw error;
+		}
+	};
+	const out = grepOut();
 	if (out === "") {
 		return [];
 	}
+	// error.ts stays excluded: it is the factory's own implementation --
+	// its `new HejbroError(...)` IS the factory body (dynamic code, would
+	// be skipped anyway), and its docs restate call shapes that would
+	// otherwise register as phantom sites. Any direct construction
+	// elsewhere is now a candidate via the `new HejbroError(` alternative.
 	return out.split("\n").filter((file) => !file.endsWith("/error.ts"));
 };
 
@@ -145,7 +173,8 @@ const scanBalanced = (text, startIndex, open, close) => {
  * in the args" scan can mistake the call's *third* argument (`declaredAt`)
  * for its message, if a same-file local happens to also be named
  * `declaredAt` (confirmed false positive: rename-plan.ts's
- * unknown-rename-target sites, #87 investigation). */
+ * unknown-rename-target sites, #87 investigation). Comments between
+ * arguments are dropped, not copied through (#454). */
 const splitTopLevelArgs = (argsText) => {
 	const args = [];
 	let depth = 0;
@@ -163,6 +192,27 @@ const splitTopLevelArgs = (argsText) => {
 				quote = null;
 			}
 			i++;
+			continue;
+		}
+		if (c === "/" && argsText[i + 1] === "/") {
+			// A comment between arguments is not argument text (#454): a
+			// comma inside one would split an argument in two, and a
+			// "Next:" inside one would satisfy the check without being in
+			// the message -- so comments are dropped entirely, at any
+			// depth. Quote state is checked first, so a `//` inside a
+			// string (a URL in a message) is never treated as a comment.
+			while (i < argsText.length && argsText[i] !== "\n") {
+				i++;
+			}
+			continue;
+		}
+		if (c === "/" && argsText[i + 1] === "*") {
+			const end = argsText.indexOf("*/", i + 2);
+			if (end === -1) {
+				i = argsText.length;
+			} else {
+				i = end + 2;
+			}
 			continue;
 		}
 		if (c === '"' || c === "'" || c === "`") {
@@ -202,9 +252,14 @@ const splitTopLevelArgs = (argsText) => {
  * top-level argument list via balanced-paren scanning -- robust to
  * multi-line template literals and nested calls inside the message,
  * unlike a line-oriented grep. */
-const extractCalls = (filePath, text) => {
+const extractCalls = (filePath, text, extraCallNames = []) => {
 	const calls = [];
-	const callRe = /\b(throwHejbroError|hejbroError)\s*\(/g;
+	// #361: extraCallNames carries same-file thrower helpers (the
+	// (code, message) convention, e.g. compile.ts's throwQueryError) whose
+	// own Object.assign site has a dynamic code and is therefore skipped --
+	// the original messages live at their call sites, scanned here.
+	const names = ["throwHejbroError", "hejbroError", ...extraCallNames];
+	const callRe = new RegExp(`\\b(${names.join("|")})\\s*\\(`, "g");
 	let match = callRe.exec(text);
 	while (match !== null) {
 		const closeIndex = scanBalanced(
@@ -235,6 +290,177 @@ const extractCode = (args) => {
 		return null;
 	}
 	return match[1];
+};
+
+/** #361: the enriched-plain-Error idiom packages/query and packages/pg
+ * use -- `Object.assign(new Error(<message>), { code: "...", ... })` --
+ * normalized into the same `{ filePath, lineNo, args }` shape as a
+ * throwHejbroError call, so the one validation loop below (exemptions,
+ * mixed-reachability patterns, message resolution) applies unchanged. A
+ * site whose enrichment carries no literal `code:` string (the `{ code }`
+ * shorthand inside a thrower helper, or a non-error Object.assign like
+ * sql.ts's tag composition) is skipped exactly like a dynamic-code
+ * throwHejbroError call: it is not an original message site. */
+/** #461: direct `new HejbroError(code, message)` construction -- the
+ * factory (`error.ts`) is the only legitimate site today and its code is
+ * a parameter (dynamic -> skipped), but a future direct construction
+ * with a literal code would otherwise bypass the gate entirely
+ * (confirmed by mutation during the add-check-schema review). Normalized
+ * into the same `{ filePath, lineNo, args }` shape as a thrower call. */
+const extractConstructorSites = (filePath, text) => {
+	const sites = [];
+	const ctorRe = /\bnew\s+HejbroError\s*\(/g;
+	let match = ctorRe.exec(text);
+	while (match !== null) {
+		const closeIndex = scanBalanced(
+			text,
+			match.index + match[0].length,
+			"(",
+			")",
+		);
+		const argsText = text.slice(match.index + match[0].length, closeIndex - 1);
+		const lineNo = text.slice(0, match.index).split("\n").length;
+		sites.push({ filePath, lineNo, args: splitTopLevelArgs(argsText) });
+		match = ctorRe.exec(text);
+	}
+	return sites;
+};
+
+/** Walks backward from `index` to the `{` that opens the enclosing
+ * object literal, balancing any closed pairs passed on the way. */
+const findEnclosingBrace = (text, index) => {
+	let depth = 0;
+	let i = index - 1;
+	while (i >= 0) {
+		const c = text[i];
+		if (c === "}") {
+			depth++;
+		} else if (c === "{") {
+			if (depth === 0) {
+				return i;
+			}
+			depth--;
+		}
+		i--;
+	}
+	return null;
+};
+
+/** #461: diagnostics minted as plain object literals -- `{ code: "...",
+ * message: ... }` (loader.ts) and the structured Diagnostic shape
+ * `{ code: "...", body: ..., suggestions: [...] }`
+ * (rename-diagnostics.ts). The convention's substance is "state what to
+ * do next": a `suggestions` array IS that statement in structured form
+ * (each entry carries a label and concrete rerun lines), so a literal
+ * carrying `suggestions` satisfies the convention by construction and
+ * is not reduced to a message site. A literal carrying `message` or
+ * `body` WITHOUT `suggestions` must say "Next:" like any thrower
+ * message -- body text that lost its suggestions would otherwise leave
+ * the user with a finding and no action. A literal with a code and
+ * neither field (an Object.assign enrichment, a `{ code }` forward) is
+ * not an original message site and is skipped, mirroring how
+ * dynamic-code calls are skipped.
+ *
+ * Value-position detection is the comma after the string literal
+ * (`code: "x",`): type positions end in `;` or continue with `|`, and
+ * the house formatter always leaves trailing commas in multiline value
+ * literals. */
+const extractObjectLiteralSites = (filePath, text) => {
+	const sites = [];
+	const codeFieldRe = /\bcode:\s*"([^"]+)"\s*,/g;
+	let match = codeFieldRe.exec(text);
+	while (match !== null) {
+		const open = findEnclosingBrace(text, match.index);
+		if (open === null) {
+			match = codeFieldRe.exec(text);
+			continue;
+		}
+		const closeIndex = scanBalanced(text, open + 1, "{", "}");
+		const objectText = text.slice(open + 1, closeIndex - 1);
+		const fields = splitTopLevelArgs(objectText);
+		const fieldValue = (name) => {
+			const field = fields.find((candidate) =>
+				candidate.startsWith(`${name}:`),
+			);
+			if (field === undefined) {
+				return null;
+			}
+			return field.slice(field.indexOf(":") + 1).trim();
+		};
+		const hasSuggestions = fieldValue("suggestions") !== null;
+		const content = fieldValue("message") ?? fieldValue("body");
+		if (!hasSuggestions && content !== null) {
+			const lineNo = text.slice(0, match.index).split("\n").length;
+			sites.push({
+				filePath,
+				lineNo,
+				args: [`"${match[1]}"`, content],
+			});
+		}
+		match = codeFieldRe.exec(text);
+	}
+	return sites;
+};
+
+const extractAssignSites = (filePath, text) => {
+	const sites = [];
+	const assignRe = /\bObject\.assign\s*\(/g;
+	let match = assignRe.exec(text);
+	while (match !== null) {
+		const closeIndex = scanBalanced(
+			text,
+			match.index + match[0].length,
+			"(",
+			")",
+		);
+		const argsText = text.slice(match.index + match[0].length, closeIndex - 1);
+		const args = splitTopLevelArgs(argsText);
+		const enrichment = args.slice(1).join(", ");
+		const codeMatch = /\bcode:\s*"([^"]+)"/.exec(enrichment);
+		if (codeMatch !== null) {
+			const lineNo = text.slice(0, match.index).split("\n").length;
+			const [target] = args;
+			const targetText = target ?? "";
+			const errorMatch = /^new Error\s*\(/.exec(targetText);
+			const messageArg = () => {
+				if (errorMatch === null) {
+					return targetText;
+				}
+				return targetText.slice(errorMatch[0].length).replace(/\)\s*$/, "");
+			};
+			sites.push({
+				filePath,
+				lineNo,
+				args: [`"${codeMatch[1]}"`, messageArg()],
+			});
+		}
+		match = assignRe.exec(text);
+	}
+	return sites;
+};
+
+/** #361: same-file thrower helpers wrapping the enriched-plain-Error
+ * idiom with a forwarded code -- `const throwX = (code, message) => {
+ * throw Object.assign(new Error(message), { code }); }`. Their assign
+ * site is dynamic (skipped above), so the helper NAME joins the call-site
+ * scan instead, under the same (code, message) argument convention as
+ * throwHejbroError. */
+const findLocalThrowerNames = (text) => {
+	const names = [];
+	const declRe = /\bconst ([a-zA-Z_][a-zA-Z0-9_]*)\s*=/g;
+	let match = declRe.exec(text);
+	while (match !== null) {
+		const declText = findDeclarationText(text, match[1]);
+		if (
+			declText?.includes("Object.assign(") &&
+			declText.includes("new Error(") &&
+			!/\bcode:\s*"/.test(declText)
+		) {
+			names.push(match[1]);
+		}
+		match = declRe.exec(text);
+	}
+	return names;
 };
 
 /** Finds `const NAME = <anything>;` (a top-level or block-scoped
@@ -326,7 +552,13 @@ const problems = [];
 for (const root of SOURCE_ROOTS) {
 	for (const filePath of findCandidateFiles(root)) {
 		const fileText = readFileSync(join(REPO_ROOT, filePath), "utf8");
-		for (const call of extractCalls(filePath, fileText)) {
+		const sites = [
+			...extractCalls(filePath, fileText, findLocalThrowerNames(fileText)),
+			...extractAssignSites(filePath, fileText),
+			...extractConstructorSites(filePath, fileText),
+			...extractObjectLiteralSites(filePath, fileText),
+		];
+		for (const call of sites) {
 			const code = extractCode(call.args);
 			if (code === null) {
 				// A dynamic/forwarded code -- not an original message site.
@@ -343,13 +575,21 @@ for (const root of SOURCE_ROOTS) {
 			) {
 				continue;
 			}
-			if (MESSAGE_SELF_DESCRIBES_INTERNAL(messageText)) {
-				continue;
-			}
 			if (!/Next:/.test(messageText)) {
-				problems.push(
-					`${filePath}:${call.lineNo} — code "${code}" has no "Next:" and isn't on the exemption list`,
-				);
+				// Only claim "has no Next:" when the resolver actually saw
+				// message content (some string/template literal). Otherwise
+				// the site was located but its message was not -- a parser
+				// miss, and asserting a content diagnosis for it misdirected
+				// a fix twice before it was caught (#454).
+				if (/["'`]/.test(messageText)) {
+					problems.push(
+						`${filePath}:${call.lineNo} — code "${code}" has no "Next:" and isn't on the exemption list`,
+					);
+				} else {
+					problems.push(
+						`${filePath}:${call.lineNo} — code "${code}": could not locate the message literal (the call's 2nd argument resolved to no string/template) — check for unusual formatting around the call's arguments, then verify the message's "Next:" clause by reading it, not this gate`,
+					);
+				}
 			}
 		}
 	}
@@ -369,5 +609,5 @@ if (problems.length > 0) {
 }
 
 console.log(
-	'check-next-marker: ok — every user-facing HejbroError call site has a "Next:" clause (or is an explicitly justified internal-invariant exemption).',
+	'check-next-marker: ok — every user-facing diagnostic site (thrower calls, Object.assign enrichments, direct constructions, object-literal diagnostics) states a "Next:" or carries structured suggestions (or is an explicitly justified internal-invariant exemption).',
 );

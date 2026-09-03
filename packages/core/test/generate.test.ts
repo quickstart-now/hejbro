@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { defineFunction } from "../src/dsl/define-function";
+import { existingTable } from "../src/dsl/existing-table";
 import { pgEnum } from "../src/dsl/pg-enum";
 import { rls } from "../src/dsl/rls";
 import { schema } from "../src/dsl/schema";
 import { getTableMeta, table } from "../src/dsl/table";
-import { generateMigration } from "../src/engine/generate";
+import { generateMigration, generateMigrations } from "../src/engine/generate";
 import { eq, literal, now } from "../src/expr/operators";
+import { sql } from "../src/expr/sql-template";
 import { createDefaultRegistry } from "../src/kind/registry";
 import type { TableSnapshot } from "../src/kinds/table-snapshot";
 import { update } from "../src/query/mutate";
@@ -761,5 +763,731 @@ describe("generateMigration", () => {
 			expect(sequenceDropIndex).toBeGreaterThan(-1);
 			expect(policyDropIndex).toBeLessThan(sequenceDropIndex);
 		});
+	});
+});
+
+describe("raw table declarations expand like whole tables (#408)", () => {
+	it("a TableDeclaration input emits rls, policies, and serial sequences too", () => {
+		const app = schema("gen408");
+		const guarded = table(
+			app,
+			"guarded",
+			{
+				id: serial().primaryKey(),
+				viewCount: integer().notNull(),
+			},
+			(t) => ({
+				rls: rls.enabled({
+					read: rls
+						.policy("read_low")
+						.for("select")
+						.to("r408")
+						.using(sql`${t.viewCount} < 100`),
+				}),
+			}),
+		);
+		const viaTable = generateMigration({
+			declarations: [app, guarded],
+			previousSnapshot: emptySnapshot,
+		});
+		const viaMeta = generateMigration({
+			declarations: [app, getTableMeta(guarded)],
+			previousSnapshot: emptySnapshot,
+		});
+		// the two supported input forms must be EQUIVALENT -- before #408
+		// the raw declaration silently dropped rls/policies/sequences.
+		expect(viaMeta.sql).toBe(viaTable.sql);
+		expect(JSON.stringify(viaMeta.snapshot)).toBe(
+			JSON.stringify(viaTable.snapshot),
+		);
+		expect(viaMeta.warnings).toEqual(viaTable.warnings);
+		expect(viaMeta.sql).toContain("enable row level security");
+		expect(viaMeta.sql).toContain('create policy "read_low"');
+	});
+
+	it("an existingTable meta produces no migration through the raw path too (add-unmanaged-objects)", () => {
+		const app = schema("gen408b");
+		// The schema itself already exists (a prior run) -- isolates this
+		// assertion to the existing table's own contribution.
+		const baseline = generateMigration({
+			declarations: [app],
+			previousSnapshot: emptySnapshot,
+		});
+		const ref = existingTable("gen408b", "elsewhere", { id: uuid() });
+		const result = generateMigration({
+			declarations: [app, getTableMeta(ref)],
+			previousSnapshot: baseline.snapshot,
+		});
+		expect(result.hasChanges).toBe(false);
+		expect(result.sql).toBe("");
+		expect(result.snapshot.objects["table:gen408b.elsewhere"]).toMatchObject({
+			existing: true,
+		});
+	});
+});
+
+describe("an existing declaration emits nothing (add-unmanaged-objects, #605)", () => {
+	it("an existing table produces no migration", () => {
+		const app = schema("uo1");
+		// The schema itself already exists (a prior run) -- isolates this
+		// assertion to the existing table's own contribution, which must
+		// be zero.
+		const baseline = generateMigration({
+			declarations: [app],
+			previousSnapshot: emptySnapshot,
+		});
+		const authUsers = existingTable("uo1", "users", { id: uuid() });
+		const result = generateMigration({
+			declarations: [app, getTableMeta(authUsers)],
+			previousSnapshot: baseline.snapshot,
+		});
+		expect(result.hasChanges).toBe(false);
+		expect(result.sql).toBe("");
+		expect(result.snapshot.objects["table:uo1.users"]).toMatchObject({
+			existing: true,
+			columns: [expect.objectContaining({ name: "id" })],
+		});
+	});
+
+	// D106 R3, J14: `hasChanges` ("is there DDL") and `snapshotChanged`
+	// ("does the snapshot differ from previousSnapshot at all") are two
+	// facts, not one -- a run that only moves an existing-table marker
+	// has to report `hasChanges: false` (nothing to diff into a
+	// statement) while still reporting `snapshotChanged: true` (R3-B1's
+	// own zero-statement migration exists to anchor exactly this case in
+	// the chain). A caller that could only read `hasChanges` before this
+	// field existed had no way to tell the two apart.
+	it("generateMigrations states hasChanges and snapshotChanged separately (D106 R3, J14)", () => {
+		const app = schema("uo1d");
+		const baseline = generateMigrations({
+			declarations: [app],
+			previousSnapshot: emptySnapshot,
+		});
+		const repeat = generateMigrations({
+			declarations: [app],
+			previousSnapshot: baseline.snapshot,
+		});
+		expect(repeat.hasChanges).toBe(false);
+		expect(repeat.snapshotChanged).toBe(false);
+		expect(repeat.migrations).toEqual([]);
+
+		const authUsers = existingTable("uo1d", "users", { id: uuid() });
+		const withMarker = generateMigrations({
+			declarations: [app, getTableMeta(authUsers)],
+			previousSnapshot: baseline.snapshot,
+		});
+		expect(withMarker.hasChanges).toBe(false);
+		expect(withMarker.snapshotChanged).toBe(true);
+		expect(withMarker.migrations).toHaveLength(1);
+		expect(withMarker.migrations[0]?.changes).toEqual([]);
+	});
+
+	// D106 R1, B1: `existingTable()` accepts any column builder, including
+	// serial-family ones -- `resolveTableDeclarations` used to synthesize
+	// that column's backing sequence (and, had `.rls` been set, its
+	// policies too) for *any* table declaration, with no `meta.existing`
+	// guard of its own. The fixture is the evaluator's own reproduction
+	// (evaluation.md), replayed here as a pin.
+	it("an existing table with a serial-family column produces no migration (D106 R1, B1)", () => {
+		const app = schema("uo1b");
+		const baseline = generateMigration({
+			declarations: [app],
+			previousSnapshot: emptySnapshot,
+		});
+		const legacy = existingTable("uo1b", "legacy", {
+			id: serial(),
+			name: text(),
+		});
+		const result = generateMigration({
+			declarations: [app, getTableMeta(legacy)],
+			previousSnapshot: baseline.snapshot,
+		});
+		expect(result.hasChanges).toBe(false);
+		expect(result.sql).toBe("");
+		expect(
+			result.snapshot.objects["sequence:uo1b.legacy_id_seq"],
+		).toBeUndefined();
+	});
+
+	// D106 R1, B1 removal: the scenario's own removal clause ("a later run
+	// with the declaration changed or removed writes no migration
+	// either") fails the identical way in evaluation.md's reproduction --
+	// a synthesized sequence that should never have existed still had to
+	// be dropped. Pinned so a fix that stops synthesizing the sequence
+	// going forward, but forgets that one might already be sitting in an
+	// older snapshot, can't pass silently.
+	it("removing an existing table with a serial-family column produces no migration (D106 R1, B1 removal)", () => {
+		const app = schema("uo1c");
+		const baseline = generateMigration({
+			declarations: [app],
+			previousSnapshot: emptySnapshot,
+		});
+		const legacy = existingTable("uo1c", "legacy", {
+			id: serial(),
+			name: text(),
+		});
+		const firstResult = generateMigration({
+			declarations: [app, getTableMeta(legacy)],
+			previousSnapshot: baseline.snapshot,
+		});
+		const secondResult = generateMigration({
+			declarations: [app],
+			previousSnapshot: firstResult.snapshot,
+		});
+		expect(secondResult.hasChanges).toBe(false);
+		expect(secondResult.sql).toBe("");
+	});
+
+	it("changing an existing declaration produces no migration", () => {
+		const app = schema("uo2");
+		const first = existingTable("uo2", "users", { id: uuid() });
+		const firstResult = generateMigration({
+			declarations: [app, getTableMeta(first)],
+			previousSnapshot: emptySnapshot,
+		});
+		const changed = existingTable("uo2", "users", {
+			id: uuid(),
+			email: text(),
+		});
+		const secondResult = generateMigration({
+			declarations: [app, getTableMeta(changed)],
+			previousSnapshot: firstResult.snapshot,
+		});
+		expect(secondResult.hasChanges).toBe(false);
+		expect(secondResult.sql).toBe("");
+		expect(secondResult.snapshot.objects["table:uo2.users"]).toMatchObject({
+			existing: true,
+			columns: [
+				expect.objectContaining({ name: "id" }),
+				expect.objectContaining({ name: "email" }),
+			],
+		});
+	});
+
+	it("removing an existing declaration produces no migration", () => {
+		const app = schema("uo3");
+		const authUsers = existingTable("uo3", "users", { id: uuid() });
+		const firstResult = generateMigration({
+			declarations: [app, getTableMeta(authUsers)],
+			previousSnapshot: emptySnapshot,
+		});
+		const secondResult = generateMigration({
+			declarations: [app],
+			previousSnapshot: firstResult.snapshot,
+		});
+		expect(secondResult.hasChanges).toBe(false);
+		expect(secondResult.sql).toBe("");
+		expect(secondResult.sql).not.toContain("drop table");
+	});
+
+	it("a managed foreign key onto an existing table is emitted and the target untouched", () => {
+		const app = schema("uo4");
+		const authUsers = existingTable("uo4", "users", { id: uuid() });
+		const profiles = table(
+			app,
+			"profiles",
+			{ id: uuid().primaryKey(), userId: uuid().notNull() },
+			(t) => ({
+				foreignKeys: [
+					{
+						columns: [t.userId],
+						references: { table: authUsers, columns: [authUsers.id] },
+					},
+				],
+			}),
+		);
+		const result = generateMigration({
+			declarations: [app, getTableMeta(authUsers), profiles],
+			previousSnapshot: emptySnapshot,
+		});
+		expect(result.sql).toContain('references "uo4"."users"');
+		expect(result.sql).not.toContain('create table "uo4"."users"');
+		expect(result.snapshot.objects["table:uo4.users"]).toMatchObject({
+			existing: true,
+		});
+	});
+
+	it("a table changing hands emits nothing: managed to existing", () => {
+		const app = schema("uo5");
+		const managed = table(app, "widgets", { id: uuid().primaryKey() });
+		const firstResult = generateMigration({
+			declarations: [app, managed],
+			previousSnapshot: emptySnapshot,
+		});
+		const existing = existingTable("uo5", "widgets", {
+			id: uuid().primaryKey(),
+		});
+		const secondResult = generateMigration({
+			declarations: [app, getTableMeta(existing)],
+			previousSnapshot: firstResult.snapshot,
+		});
+		expect(secondResult.hasChanges).toBe(false);
+		expect(secondResult.sql).toBe("");
+		expect(secondResult.snapshot.objects["table:uo5.widgets"]).toMatchObject({
+			existing: true,
+		});
+	});
+
+	it("a table changing hands emits nothing: existing to managed", () => {
+		const app = schema("uo6");
+		const existing = existingTable("uo6", "widgets", {
+			id: uuid().primaryKey(),
+		});
+		const firstResult = generateMigration({
+			declarations: [app, getTableMeta(existing)],
+			previousSnapshot: emptySnapshot,
+		});
+		const managed = table(app, "widgets", { id: uuid().primaryKey() });
+		const secondResult = generateMigration({
+			declarations: [app, managed],
+			previousSnapshot: firstResult.snapshot,
+		});
+		expect(secondResult.hasChanges).toBe(false);
+		expect(secondResult.sql).toBe("");
+		expect(
+			secondResult.snapshot.objects["table:uo6.widgets"],
+		).not.toHaveProperty("existing");
+	});
+
+	// D106 R1, B2: the two tests above use a bare table (no RLS, no
+	// policy, no serial column) — exactly the shape the evaluator found
+	// "cannot reach the fan-out" (evaluation.md's own test-gap note).
+	// These replay the evaluator's own reproduction fixture (RLS + one
+	// policy + a `serial()` primary key) on both handover directions.
+	it("a table changing hands emits nothing, including what it fans out into: managed (with RLS, a policy, and a serial column) to existing", () => {
+		const app = schema("uo7");
+		const managed = table(
+			app,
+			"widgets",
+			{ id: serial().primaryKey() },
+			() => ({
+				rls: rls.enabled({
+					readLow: rls
+						.policy("read_low")
+						.for("select")
+						.to("anon")
+						.using(literal(true)),
+				}),
+			}),
+		);
+		const firstResult = generateMigration({
+			declarations: [app, managed],
+			previousSnapshot: emptySnapshot,
+		});
+		const existing = existingTable("uo7", "widgets", {
+			id: uuid().primaryKey(),
+		});
+		const secondResult = generateMigration({
+			declarations: [app, getTableMeta(existing)],
+			previousSnapshot: firstResult.snapshot,
+		});
+		expect(secondResult.hasChanges).toBe(false);
+		expect(secondResult.sql).toBe("");
+		expect(secondResult.snapshot.objects["table:uo7.widgets"]).toMatchObject({
+			existing: true,
+		});
+	});
+
+	it("an adopted table gains what the declaration manages: existing to managed (with RLS, a policy, and a serial column)", () => {
+		const app = schema("uo8");
+		const existing = existingTable("uo8", "widgets", {
+			id: uuid().primaryKey(),
+		});
+		const firstResult = generateMigration({
+			declarations: [app, getTableMeta(existing)],
+			previousSnapshot: emptySnapshot,
+		});
+		const managed = table(
+			app,
+			"widgets",
+			{ id: serial().primaryKey() },
+			() => ({
+				rls: rls.enabled({
+					readLow: rls
+						.policy("read_low")
+						.for("select")
+						.to("anon")
+						.using(literal(true)),
+				}),
+			}),
+		);
+		const secondResult = generateMigration({
+			declarations: [app, managed],
+			previousSnapshot: firstResult.snapshot,
+		});
+		expect(secondResult.errors).toEqual([]);
+		// No `create table` -- the table itself already exists. D106 R2's
+		// own mutant (table-kind.ts's guard weakened to `next`-only,
+		// matching the fan-out rule) measured that removing this half
+		// doesn't leak a `create table` at all -- both sides being
+		// present routes to the ALTER path instead -- so this line alone
+		// is not what proves the table needs its own bidirectional guard;
+		// the next line is.
+		expect(secondResult.sql).not.toContain("create table");
+		// The measured failure mode of that same mutant: an existing
+		// declaration's own (unrelated) column shape gets diffed against
+		// the managed declaration's, producing a spurious `alter column
+		// … type …` -- arguably worse than a duplicate create, since nothing
+		// about it looks wrong at a glance. The table's own bidirectional
+		// guard exists specifically so the two declarations' shapes are
+		// never compared to each other at all.
+		expect(secondResult.sql).not.toContain('alter column "id" type');
+		// ...but everything hejbro now manages ON that table is created as
+		// it would be for any managed table -- this is the half of the
+		// judgement that isn't "nothing": adoption is not silent about
+		// what the declaration asks for.
+		expect(secondResult.sql).toContain("create sequence");
+		expect(secondResult.sql).toContain("enable row level security");
+		expect(secondResult.sql).toContain("create policy");
+		expect(
+			secondResult.snapshot.objects["table:uo8.widgets"],
+		).not.toHaveProperty("existing");
+	});
+
+	// D106 R1-04/R1-05: `existingTable()`'s own column list is a partial
+	// claim, not a complete description -- `authUsers` declares only
+	// `{id, email}`, not the platform's real full row shape. uo7/uo8
+	// above use identical columns on both sides of the handover, which
+	// is exactly the shape evaluation.md flagged for the pre-existing
+	// `generate.test.ts:920-955` pins: it "cannot reach" a diff between
+	// two genuinely different column lists for the same table identity.
+	// These two replay uo7/uo8 with the lead's own fixture (existing
+	// declares only `id`; managed declares `id`, `email`, `createdAt`,
+	// plus RLS/a policy/a serial column) so the table's own column diff
+	// has something real to (wrongly) find if the guard doesn't hold —
+	// an `alter table` of any shape (`add column` on adoption, `drop
+	// column` on handover) would mean the two declarations' shapes got
+	// compared to each other, which must never happen for a table on
+	// either side of an existing marker.
+	const buildPartialWidgets = (
+		schemaName: string,
+	): {
+		readonly app: ReturnType<typeof schema>;
+		readonly existingPartial: ReturnType<typeof existingTable>;
+		readonly managedFull: ReturnType<typeof table>;
+	} => {
+		const app = schema(schemaName);
+		const existingPartial = existingTable(schemaName, "widgets", {
+			id: uuid(),
+		});
+		const managedFull = table(
+			app,
+			"widgets",
+			{
+				id: serial().primaryKey(),
+				email: text(),
+				createdAt: timestamptz(),
+			},
+			() => ({
+				rls: rls.enabled({
+					readLow: rls
+						.policy("read_low")
+						.for("select")
+						.to("anon")
+						.using(literal(true)),
+				}),
+			}),
+		);
+		return { app, existingPartial, managedFull };
+	};
+
+	it("a table changing hands emits nothing, even when the existing declaration's own column list is a partial claim: managed (full columns, RLS, a policy, a serial column) to existing (id only)", () => {
+		const { app, existingPartial, managedFull } = buildPartialWidgets("uo9");
+		const firstResult = generateMigration({
+			declarations: [app, managedFull],
+			previousSnapshot: emptySnapshot,
+		});
+		const secondResult = generateMigration({
+			declarations: [app, getTableMeta(existingPartial)],
+			previousSnapshot: firstResult.snapshot,
+		});
+		expect(secondResult.errors).toEqual([]);
+		// Handover is silence in full, the same as uo7's bare-column
+		// case: the table's own guard suppresses its own diff, and
+		// `ownerIsExisting` (`diff-engine.ts`) suppresses the fan-out
+		// objects' drops -- nothing for either declaration's column list
+		// to be compared against, in either direction, so there is
+		// nothing at all to emit.
+		expect(secondResult.hasChanges).toBe(false);
+		expect(secondResult.sql).toBe("");
+		expect(secondResult.snapshot.objects["table:uo9.widgets"]).toMatchObject({
+			existing: true,
+		});
+	});
+
+	it("an adopted table gains what the declaration manages, even when the existing declaration's own column list is a partial claim: existing (id only) to managed (full columns, RLS, a policy, a serial column)", () => {
+		const { app, existingPartial, managedFull } = buildPartialWidgets("uo10");
+		const firstResult = generateMigration({
+			declarations: [app, getTableMeta(existingPartial)],
+			previousSnapshot: emptySnapshot,
+		});
+		const secondResult = generateMigration({
+			declarations: [app, managedFull],
+			previousSnapshot: firstResult.snapshot,
+		});
+		expect(secondResult.errors).toEqual([]);
+		// Deliberately asymmetric with uo9's own `sql === ""`: adoption
+		// legitimately DOES emit `alter table "uo10"."widgets"`
+		// lines -- enabling RLS and wiring the new sequence's own
+		// default are both real `alter table` statements, the fan-out
+		// objects' own creation DDL, not a diff of the table's structure.
+		// The guarantee under test is narrower and precise: no statement
+		// that could only come from comparing the two declarations'
+		// column lists to each other -- no `add column` (what a naive
+		// diff would infer for `email`/`createdAt`, present in `managed`
+		// but absent from the existing declaration's own partial list),
+		// no `drop column`, no `alter column ... type` (uo8's own
+		// probed-and-found leak, D106 R1-03).
+		expect(secondResult.sql).not.toContain("add column");
+		expect(secondResult.sql).not.toContain("drop column");
+		expect(secondResult.sql).not.toContain('alter column "id" type');
+		// ...but the objects hejbro now manages ON that table are still
+		// created normally -- the two contracts (table: bidirectional
+		// silence; fan-out: `next`-only) both hold in the same run.
+		expect(secondResult.sql).toContain("create sequence");
+		expect(secondResult.sql).toContain("enable row level security");
+		expect(secondResult.sql).toContain("create policy");
+		expect(
+			secondResult.snapshot.objects["table:uo10.widgets"],
+		).not.toHaveProperty("existing");
+	});
+
+	// D106 R2, R2-B1: `planRenames` runs before `diffSnapshots`, entirely
+	// outside the table guard (`table-kind.ts:636`) and the fan-out rule
+	// (`diff-engine.ts`'s `ownerIsExisting`) alike -- it built its own
+	// working sets from every `table:` entry, with no existence filter
+	// of its own, so it both refused otherwise-valid runs and prescribed
+	// `alter table … rename …` against tables hejbro does not own. Four
+	// tests replay the evaluator's own reproductions (A-D) verbatim.
+
+	it("changing an existing declaration's own column name produces no migration and no rename ambiguity (D106 R2, R2-B1 repro A)", () => {
+		const app = schema("c1");
+		const first = existingTable("c1", "users", { id: uuid(), name: text() });
+		const firstResult = generateMigration({
+			declarations: [app, getTableMeta(first)],
+			previousSnapshot: emptySnapshot,
+		});
+		const changed = existingTable("c1", "users", {
+			id: uuid(),
+			title: text(),
+		});
+		const secondResult = generateMigration({
+			declarations: [app, getTableMeta(changed)],
+			previousSnapshot: firstResult.snapshot,
+		});
+		expect(secondResult.errors).toEqual([]);
+		expect(secondResult.hasChanges).toBe(false);
+		expect(secondResult.sql).toBe("");
+	});
+
+	it("renaming an existing declaration itself produces no migration and no rename ambiguity (D106 R2, R2-B1 repro B)", () => {
+		const app = schema("e2");
+		const first = existingTable("e2", "old_name", { id: uuid() });
+		const firstResult = generateMigration({
+			declarations: [app, getTableMeta(first)],
+			previousSnapshot: emptySnapshot,
+		});
+		const renamed = existingTable("e2", "new_name", { id: uuid() });
+		const secondResult = generateMigration({
+			declarations: [app, getTableMeta(renamed)],
+			previousSnapshot: firstResult.snapshot,
+		});
+		expect(secondResult.errors).toEqual([]);
+		expect(secondResult.hasChanges).toBe(false);
+		expect(secondResult.sql).toBe("");
+	});
+
+	it("removing an existing declaration never poisons an unrelated managed table added in the same run (D106 R2, R2-B1 repro C)", () => {
+		const app = schema("e4");
+		const legacy = existingTable("e4", "legacy", { id: uuid() });
+		const firstResult = generateMigration({
+			declarations: [app, getTableMeta(legacy)],
+			previousSnapshot: emptySnapshot,
+		});
+		const fresh = table(app, "fresh", { id: uuid().primaryKey() });
+		const secondResult = generateMigration({
+			declarations: [app, fresh],
+			previousSnapshot: firstResult.snapshot,
+		});
+		expect(secondResult.errors).toEqual([]);
+		expect(secondResult.sql).toContain('create table "e4"."fresh"');
+		expect(secondResult.sql.toLowerCase()).not.toContain("legacy");
+	});
+
+	// D106 R2's own repro D read this as "a genuine, ordinary drop,
+	// untouched by rename detection" -- correct DDL-wise (an existing
+	// declaration never gets a `create table`), but silent about a real
+	// hazard #703 restores: a managed table's own removal, paired with a
+	// same-shaped existing declaration appearing under a different name
+	// in the same schema and run, is exactly the shape a genuine
+	// `--rename` would also produce. Recorded here as the closed
+	// version of R2-B1's own repro D (#703, R5's own rename-guard piece).
+	it("a managed table replaced by a same-shaped existing declaration is an ambiguous rename, not a silent drop (D106 R2/#703, R2-B1 repro D closed)", () => {
+		const app = schema("e3");
+		const widgets = table(app, "widgets", { id: uuid().primaryKey() });
+		const firstResult = generateMigration({
+			declarations: [app, widgets],
+			previousSnapshot: emptySnapshot,
+		});
+		const gadgets = existingTable("e3", "gadgets", { id: uuid() });
+		const secondResult = generateMigration({
+			declarations: [app, getTableMeta(gadgets)],
+			previousSnapshot: firstResult.snapshot,
+		});
+		expect(secondResult.errors).toHaveLength(1);
+		expect(secondResult.errors[0]).toMatchObject({
+			code: "ambiguous-table-rename",
+		});
+		// #703: the prescribed remedy must never suggest rerunning THIS
+		// generate with --rename e3.widgets=gadgets as if it would apply
+		// as-is -- that flag targets an existingTable() and the guard
+		// above refuses it too, the exact "the remedy is the command that
+		// just failed" shape D106 R5-B1 was filed against. The flag text
+		// may still appear as step 1 of the two-run path (a legitimate,
+		// different procedure), just never as a standalone "rerun with"
+		// suggestion for the current declarations.
+		expect(secondResult.errors[0]?.message).not.toContain(
+			"rerun with `--rename e3.widgets=gadgets`",
+		);
+		expect(secondResult.errors[0]?.message).toContain("two runs");
+		expect(secondResult.errors[0]?.message).toContain(
+			"--confirm-drop e3.widgets",
+		);
+		// No DDL at all fires without confirmation -- not the managed
+		// table's drop, and never anything naming the existing declaration.
+		expect(secondResult.sql).toBe("");
+	});
+
+	// #703: a --rename that targets an identity the ambiguity above just
+	// refused isn't "unknown" the way a genuine typo is -- it's declared,
+	// just not DDL-owned. `unknown-rename-target` is reused (no new code),
+	// with a message that says so and names the two-step remedy.
+	it("--rename refuses a target that's declared with existingTable(), naming the two-step remedy (#703)", () => {
+		const app = schema("e3");
+		const widgets = table(app, "widgets", { id: uuid().primaryKey() });
+		const firstResult = generateMigration({
+			declarations: [app, widgets],
+			previousSnapshot: emptySnapshot,
+		});
+		const gadgets = existingTable("e3", "gadgets", { id: uuid() });
+		const secondResult = generateMigration({
+			declarations: [app, getTableMeta(gadgets)],
+			previousSnapshot: firstResult.snapshot,
+			renames: [
+				{
+					target: "table",
+					schemaName: "e3",
+					oldName: "widgets",
+					newName: "gadgets",
+				},
+			],
+		});
+		// Two errors, not one: the flag itself is refused (below) AND the
+		// underlying drop+add pair stays unresolved -- an invalid --rename
+		// spec never consumes the pairing it failed to validate, so the
+		// same ambiguity R2-B1 repro D's own test pins fires too.
+		expect(secondResult.errors).toHaveLength(2);
+		const targetError = secondResult.errors.find(
+			(error) => error.code === "unknown-rename-target",
+		);
+		expect(targetError).toBeDefined();
+		expect(targetError?.message).toContain("existingTable()");
+		expect(targetError?.message).toContain("two runs");
+		expect(
+			secondResult.errors.some(
+				(error) => error.code === "ambiguous-table-rename",
+			),
+		).toBe(true);
+		expect(secondResult.sql).toBe("");
+	});
+
+	// #703: the safe way to do what the two tests above both refuse --
+	// rename while both sides are still managed, THEN hand the renamed
+	// table over to existingTable() in a later run. Both steps green.
+	it("the two-step path -- rename while both managed, then hand over -- applies cleanly (#703)", () => {
+		const app = schema("e3");
+		const widgets = table(app, "widgets", { id: uuid().primaryKey() });
+		const firstResult = generateMigration({
+			declarations: [app, widgets],
+			previousSnapshot: emptySnapshot,
+		});
+
+		const gadgetsManaged = table(app, "gadgets", { id: uuid().primaryKey() });
+		const secondResult = generateMigration({
+			declarations: [app, gadgetsManaged],
+			previousSnapshot: firstResult.snapshot,
+			renames: [
+				{
+					target: "table",
+					schemaName: "e3",
+					oldName: "widgets",
+					newName: "gadgets",
+				},
+			],
+		});
+		expect(secondResult.errors).toEqual([]);
+		expect(secondResult.sql).toContain(
+			'alter table "e3"."widgets" rename to "gadgets"',
+		);
+
+		const gadgetsExisting = existingTable("e3", "gadgets", { id: uuid() });
+		const thirdResult = generateMigration({
+			declarations: [app, getTableMeta(gadgetsExisting)],
+			previousSnapshot: secondResult.snapshot,
+		});
+		expect(thirdResult.errors).toEqual([]);
+		expect(thirdResult.sql).toBe("");
+		expect(thirdResult.snapshot.objects["table:e3.gadgets"]).toMatchObject({
+			existing: true,
+		});
+	});
+
+	// D106 R3, R3-B2: repros A-D above all keep a table existing (or
+	// managed) on *both* sides of the run they measure -- `excludeExisting`
+	// filtered `previousTables`/`nextTables` independently, so those never
+	// reached the one case a filter run per-map cannot see: a table
+	// managed on one side and existing on the other (a handover or an
+	// adoption), in a run that *also* adds or drops a different table in
+	// that same schema. Two reproductions replay the evaluator's own α/β
+	// verbatim.
+
+	it("a handover in a run that also adds an unrelated managed table in the same schema is not an ambiguous rename (D106 R3, R3-B2 repro α)", () => {
+		const s2 = schema("s2");
+		const widgets = table(s2, "widgets", { id: uuid().primaryKey() });
+		const firstResult = generateMigration({
+			declarations: [s2, widgets],
+			previousSnapshot: emptySnapshot,
+		});
+		const handedOver = existingTable("s2", "widgets", { id: uuid() });
+		const gizmos = table(s2, "gizmos", { id: uuid().primaryKey() });
+		const secondResult = generateMigration({
+			declarations: [s2, getTableMeta(handedOver), gizmos],
+			previousSnapshot: firstResult.snapshot,
+		});
+		expect(secondResult.errors).toEqual([]);
+		expect(secondResult.sql).toContain('create table "s2"."gizmos"');
+		expect(secondResult.sql.toLowerCase()).not.toContain("widgets");
+	});
+
+	it("an adoption in a run that also drops an unrelated managed table in the same schema is not an ambiguous rename (D106 R3, R3-B2 repro β)", () => {
+		const s4 = schema("s4");
+		const legacy = existingTable("s4", "legacy", { id: uuid() });
+		const old = table(s4, "old", { id: uuid().primaryKey() });
+		const firstResult = generateMigration({
+			declarations: [s4, getTableMeta(legacy), old],
+			previousSnapshot: emptySnapshot,
+		});
+		const adopted = table(s4, "legacy", { id: uuid().primaryKey() });
+		const secondResult = generateMigration({
+			declarations: [s4, adopted],
+			previousSnapshot: firstResult.snapshot,
+		});
+		expect(secondResult.errors).toEqual([]);
+		expect(secondResult.sql).toContain('drop table "s4"."old"');
+		// The adoption itself never renames a managed declaration onto
+		// `legacy`'s identity -- no statement issues `alter table ...
+		// rename to "legacy"`, the collision R2-B1's own repro D named,
+		// reached through the adoption door instead of the handover one.
+		expect(secondResult.sql).not.toContain('rename to "legacy"');
 	});
 });

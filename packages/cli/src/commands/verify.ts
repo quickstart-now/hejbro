@@ -10,6 +10,7 @@ import type {
 	HejbroInput,
 	KindRegistry,
 	MigrationPrefixStrategy,
+	Validator,
 } from "@hejbro/core";
 import {
 	checkChain,
@@ -17,6 +18,7 @@ import {
 	findDuplicateVersionGroups,
 	generateMigration,
 	hejbroError,
+	parseBannerBaseline,
 	parseBannerHashes,
 	parseSnapshot,
 	planDuplicateVersionFix,
@@ -25,12 +27,15 @@ import {
 } from "@hejbro/core";
 import { defineCommand } from "citty";
 import type { HejbroConfig } from "../config";
+import { requireConfigFields } from "../config-required";
 import type { Diagnostic } from "../diagnostics";
 import { fromHejbroError, renderDiagnostics } from "../diagnostics";
 import { asHejbroError } from "../errors";
+import { compareExport } from "../export-compare";
 import { sha256Hex } from "../hash";
+import type { LoadedDeclarations } from "../loader";
 import { loadConfig, loadDeclarations } from "../loader";
-import { buildRegistry } from "../presets";
+import { buildRegistry, configValidators } from "../presets";
 import { listMigrationFiles, readSnapshotFileText } from "../snapshot-file";
 
 const VERIFY_DESCRIPTION =
@@ -41,12 +46,27 @@ const VERIFY_DESCRIPTION =
  * `chain-tip-mismatch` texts, and the `diverged-migrations`/
  * `broken-chain` `Next:` lines below (verify's own framing of
  * `checkChain`'s codes). See `test/verify.test.ts` for the golden pins.
+ * `chain-tip-mismatch` was revised (#632/#677): it now names the tip
+ * migration and the snapshot path instead of relying on the
+ * identity-extraction heuristic to find a filename that was never in the
+ * text, and states only the observation, never a cause.
  */
 const snapshotStaleMessage = (snapshotPath: string): string =>
 	`the checked-in snapshot at "${snapshotPath}" does not match your declarations — either the declarations changed without a new migration, or the snapshot file was hand-edited. Next: run \`hejbro generate\` and commit the result (or, if the snapshot is correct and the declarations are wrong, restore the declarations you meant).`;
 
-const CHAIN_TIP_MISMATCH_MESSAGE =
-	"the migration chain's tip hash doesn't match the current snapshot — the last migration's \"snapshot:\" hash and the on-disk snapshot's own hash disagree, which means the snapshot or the last migration file was edited after the last `hejbro generate`. Next: restore the snapshot (and the last migration file, if it was edited) from version control — the snapshot is a derived file and should only ever change through `hejbro generate`.";
+const chainTipMismatchMessage = (
+	tipMigrationPath: string,
+	snapshotPath: string,
+): string =>
+	`the migration chain's tip hash doesn't match the current snapshot — "${tipMigrationPath}"'s "snapshot:" hash and the snapshot at "${snapshotPath}" disagree. Next: restore the snapshot (and "${tipMigrationPath}", if it was edited) from version control — the snapshot is a derived file and should only ever change through \`hejbro generate\`.`;
+
+/** States only the observation, never a cause (schema-export spec, R2-G3
+ * 3.2): the export could be stale for any number of reasons (an edited
+ * declaration, a hand-edited export file, a regeneration that was never
+ * committed), and naming one would assert something this check never
+ * verified. */
+const EXPORT_STALE_MESSAGE =
+	'the export in ".hejbro/export/" does not match your declarations. Next: run `hejbro generate --export` and commit the result.';
 
 /** `<migrationsDir>/<fileName>`, always POSIX-joined (`config.migrationsDir` is a shell-command path fragment here, not a filesystem path Node needs to resolve — `path.join` would use `\` on Windows and break the very command this renders). */
 const migrationPath = (migrationsDir: string, fileName: string): string =>
@@ -200,16 +220,30 @@ const SKIPPED_CHECK_3_LINE =
 const SKIPPED_CHECK_4_LINE =
 	"skipped: chain tip ↔ snapshot (needs a parseable snapshot and a linear chain)";
 
-const TOTAL_CHECKS = 5;
+const BASE_CHECKS = 5;
+
+/**
+ * The export freshness check (R2-G3) only counts toward the total when it
+ * applied — a repository that has never opted into the export sees the
+ * exact same "5 checks" wording it always has, never a phantom 6th check
+ * it can't act on.
+ */
+const totalChecks = (exportApplied: boolean): number => {
+	if (exportApplied) {
+		return BASE_CHECKS + 1;
+	}
+	return BASE_CHECKS;
+};
 
 const failureSummaryLine = (
 	failedCount: number,
 	skippedCount: number,
+	checks: number,
 ): string => {
 	if (skippedCount === 0) {
-		return `verify: ${failedCount} of ${TOTAL_CHECKS} checks failed — fix the errors above and rerun \`hejbro verify\`.`;
+		return `verify: ${failedCount} of ${checks} checks failed — fix the errors above and rerun \`hejbro verify\`.`;
 	}
-	return `verify: ${failedCount} of ${TOTAL_CHECKS} checks failed, ${skippedCount} skipped — fix the errors above and rerun \`hejbro verify\`.`;
+	return `verify: ${failedCount} of ${checks} checks failed, ${skippedCount} skipped — fix the errors above and rerun \`hejbro verify\`.`;
 };
 
 export type VerifyResult = {
@@ -245,8 +279,8 @@ const preconditionErrorResult = (
 	stderr: renderDiagnostics([errorDiagnostic(error, fallbackIdentity)], null),
 });
 
-/** Every migration file's hash-chain lines, in directory-sorted order — files with no hash lines at all (pre-Phase-5 history) are silently skipped, matching checkChain's "caller filters the unhashed prefix" contract. */
-const readChainEntries = (
+/** Every migration file's hash-chain lines, in directory-sorted order — files with no hash lines at all (pre-Phase-5 history) are silently skipped, matching checkChain's "caller filters the unhashed prefix" contract. Exported (G7, #613): `migrate`/`status` read the same chain this way rather than a second copy of this walk. */
+export const readChainEntries = (
 	migrationsDirPath: string,
 	fileNames: ReadonlyArray<string>,
 ): ReadonlyArray<ChainEntry> =>
@@ -258,6 +292,30 @@ const readChainEntries = (
 		}
 		return [{ fileName, parent: hashes.parent, current: hashes.current }];
 	});
+
+/**
+ * [task 12.1, #624] Which of `fileNames` carry the `-- baseline:` marker
+ * (`parseBannerBaseline`, read by prefix, never by string-matching the
+ * banner — same reasoning as {@link readChainEntries}'s own hash read).
+ * A second pass over the same directory rather than folding the flag
+ * into `ChainEntry` itself: `ChainEntry` is `@hejbro/core`'s own type,
+ * shared with `checkChain`'s hash-chain walk, so widening it here would
+ * be a cross-package change for a fact only the apply path needs.
+ * `planApply` (`apply/plan.ts`) takes this as its own, plan-local
+ * parameter instead — the chain reader already opens every file once for
+ * its hash lines; this opens them a second time for one more marker,
+ * cheap for migration-file-sized text.
+ */
+export const readBaselineFileNames = (
+	migrationsDirPath: string,
+	fileNames: ReadonlyArray<string>,
+): ReadonlySet<string> =>
+	new Set(
+		fileNames.filter((fileName) => {
+			const text = readFileSync(join(migrationsDirPath, fileName), "utf8");
+			return parseBannerBaseline(text);
+		}),
+	);
 
 /** `applyDuplicateVersionFixes`'s running state: `fileNames` is the current directory listing (rewritten in step as earlier groups' renames land, so a later group's plan sees a fixed group's new, higher versions too), `lines` collects every `<before> -> <after>` line printed to stdout, oldest first. */
 type FixOutcome = {
@@ -367,11 +425,11 @@ type Check1Result = {
 /** Check 1 (always runs): the snapshot file exists and parses (including each entry's own required keys, D79/#159) — a missing file reuses generate's own snapshot-not-found/snapshot-lost branch (readSnapshotFileText, shared to avoid drift), a malformed one surfaces core's invalid-snapshot. Never throws — every failure mode becomes a CheckOutcome so check 3 still runs independently. */
 const runCheck1 = (
 	cwd: string,
-	config: HejbroConfig,
+	config: HejbroConfig & { readonly snapshotPath: string },
 	registry: KindRegistry,
 ): Check1Result => {
 	try {
-		const diskText = readSnapshotFileText(cwd, config);
+		const diskText = readSnapshotFileText(cwd, config, "verify");
 		parseSnapshot(diskText, requiredKeysByKind(registry));
 		return { diskText, outcome: { ok: true } };
 	} catch (error) {
@@ -438,26 +496,43 @@ const runCheckDuplicateVersion = (
 
 type Check3Result = {
 	readonly report: ChainReport;
+	/** The last hash-bearing entry (directory order), for check 4's
+	 * chain-tip-mismatch identity — `null` for an empty chain. Carried
+	 * alongside `report` rather than re-derived from `report.tip` (a bare
+	 * hash) so check 4 never has to reconstruct "which file is the tip"
+	 * from a hash string alone. */
+	readonly tipEntry: ChainEntry | null;
 	readonly outcome: CheckOutcome;
 };
 
-/** Check 3: every migration's hash-chain lines form one linked list. Only runs when the duplicate-version check passed (`runCheck3IfEligible`) — with two files sharing a version, "which one comes first" isn't defined, so a chain walk over them can't mean anything yet. `migrationsDirPath` reads the files; `migrationsDir` (config-relative) is what a diverged-migrations `rm`/`generate` suggestion should print. */
+/** Check 3: every migration's hash-chain lines form one linked list. Runs
+ * only when the duplicate-version check passed (`runCheck3IfEligible`) —
+ * with two files sharing a version, "which one comes first" isn't
+ * defined, so a chain walk over them can't mean anything yet.
+ * `migrationsDirPath` reads the files; `migrationsDir` (config-relative)
+ * is what a suggestion should print. */
 const runCheck3 = (
 	migrationsDirPath: string,
 	migrationsDir: string,
 	fileNames: ReadonlyArray<string>,
 ): Check3Result => {
-	const report = checkChain(readChainEntries(migrationsDirPath, fileNames));
-	if (report.ok) {
-		return { report, outcome: { ok: true } };
+	const entries = readChainEntries(migrationsDirPath, fileNames);
+	const report = checkChain(entries);
+	const tipEntry = entries.at(-1) ?? null;
+	if (!report.ok) {
+		return {
+			report,
+			tipEntry,
+			outcome: {
+				ok: false,
+				error: hejbroError(
+					report.code,
+					chainErrorMessage(report, migrationsDir),
+				),
+			},
+		};
 	}
-	return {
-		report,
-		outcome: {
-			ok: false,
-			error: hejbroError(report.code, chainErrorMessage(report, migrationsDir)),
-		},
-	};
+	return { report, tipEntry, outcome: { ok: true } };
 };
 
 /** `null` when the duplicate-version check failed (chain order is undefined until every version is unique); otherwise runs check 3. */
@@ -473,17 +548,28 @@ const runCheck3IfEligible = (
 	return runCheck3(migrationsDirPath, migrationsDir, fileNames);
 };
 
-/** Check 4 (runs only when checks 1 and 3 both passed): the chain tip hash equals the on-disk snapshot's normalized hash (same normalization `generate` uses for `parent`). Trivially passes when there are no migrations yet (tip is null — nothing to compare). */
-const runCheck4 = (diskText: string, tip: string | null): CheckOutcome => {
-	if (tip === null) {
+/** Check 4 (runs only when checks 1 and 3 both passed): the chain tip hash equals the on-disk snapshot's normalized hash (same normalization `generate` uses for `parent`). Trivially passes when there are no migrations yet (`tipEntry` is null — nothing to compare). `migrationsDir` is config-relative, matching every other check's suggestion text. */
+const runCheck4 = (
+	diskText: string,
+	snapshotPath: string,
+	migrationsDir: string,
+	tipEntry: ChainEntry | null,
+): CheckOutcome => {
+	if (tipEntry === null) {
 		return { ok: true };
 	}
-	if (tip === normalizedSnapshotHash(diskText)) {
+	if (tipEntry.current === normalizedSnapshotHash(diskText)) {
 		return { ok: true };
 	}
 	return {
 		ok: false,
-		error: hejbroError("chain-tip-mismatch", CHAIN_TIP_MISMATCH_MESSAGE),
+		error: hejbroError(
+			"chain-tip-mismatch",
+			chainTipMismatchMessage(
+				migrationPath(migrationsDir, tipEntry.fileName),
+				snapshotPath,
+			),
+		),
 	};
 };
 
@@ -500,15 +586,79 @@ const runCheck2IfEligible = (
 	return runCheck2(declarations, check1DiskText, snapshotPath, registry);
 };
 
-/** `null` when check 1 failed, check 3 was itself skipped (duplicate-version failed), or check 3 ran but failed (check 4 needs a parseable snapshot and a linear chain); otherwise runs check 4. */
+/** `null` when check 1 failed, check 3 was itself skipped (duplicate-version failed), or check 3 ran but failed (check 4 needs a parseable snapshot and a linear chain); otherwise runs check 4. `snapshotPath`/`migrationsDir` are both config-relative, passed through for {@link chainTipMismatchMessage}. */
 const runCheck4IfEligible = (
 	check1DiskText: string | null,
+	snapshotPath: string,
+	migrationsDir: string,
 	check3: Check3Result | null,
 ): CheckOutcome | null => {
 	if (check1DiskText === null || check3 === null || !check3.report.ok) {
 		return null;
 	}
-	return runCheck4(check1DiskText, check3.report.tip);
+	return runCheck4(
+		check1DiskText,
+		snapshotPath,
+		migrationsDir,
+		check3.tipEntry,
+	);
+};
+
+/**
+ * The export freshness check (R2-G3, new requirement — not a
+ * monotonicity-gate successor): `"not-applicable"` when check 1 failed
+ * (no parseable snapshot to regenerate against) or the repository has
+ * never opted into the export (`compareExport`'s own `"absent"`) — a
+ * repository with no export at all is not reported as stale (3.3).
+ * Otherwise regenerates the export in memory from the same declarations
+ * `generate --export` would use, and compares bytes (3.1).
+ */
+const runExportCheck = (
+	cwd: string,
+	check1DiskText: string | null,
+	declarations: LoadedDeclarations,
+	registry: KindRegistry,
+	validators: ReadonlyArray<Validator>,
+): CheckOutcome | "not-applicable" => {
+	if (check1DiskText === null) {
+		return "not-applicable";
+	}
+	const currentSnapshot = generateMigration({
+		declarations,
+		previousSnapshot: parseSnapshot(
+			check1DiskText,
+			requiredKeysByKind(registry),
+		),
+		registry,
+	}).snapshot;
+	const comparison = compareExport(
+		cwd,
+		declarations,
+		declarations.exportNames,
+		currentSnapshot,
+		registry,
+		validators,
+	);
+	if (comparison === "absent") {
+		return "not-applicable";
+	}
+	if (comparison === "current") {
+		return { ok: true };
+	}
+	return {
+		ok: false,
+		error: hejbroError("export-stale", EXPORT_STALE_MESSAGE),
+	};
+};
+
+/** `[]` when the export check did not apply, so it contributes nothing to `outcomes`, `TOTAL_CHECKS`, or the failure summary — indistinguishable from the check not existing, which is what lets every export-less repository's report stay byte-identical to before this check was added. */
+const exportOutcomes = (
+	exportCheck: CheckOutcome | "not-applicable",
+): ReadonlyArray<CheckOutcome> => {
+	if (exportCheck === "not-applicable") {
+		return [];
+	}
+	return [exportCheck];
 };
 
 const check2SkipLine = (check2: CheckOutcome | null): string | null => {
@@ -571,8 +721,14 @@ export const runVerify = async (
 	const fix = argv.includes("--fix");
 	try {
 		const { config, configPath } = await loadConfig(cwd, undefined);
+		requireConfigFields(config, "verify", [
+			"migrationsDir",
+			"snapshotPath",
+			"prefixStrategy",
+		]);
 		const declarations = await loadDeclarations(configPath, config);
 		const registry = buildRegistry(config);
+		const validators = configValidators(config);
 
 		const check1 = runCheck1(cwd, config, registry);
 		const migrationsDirPath = join(cwd, config.migrationsDir);
@@ -604,7 +760,20 @@ export const runVerify = async (
 			config.snapshotPath,
 			registry,
 		);
-		const check4 = runCheck4IfEligible(check1.diskText, check3);
+		const check4 = runCheck4IfEligible(
+			check1.diskText,
+			config.snapshotPath,
+			config.migrationsDir,
+			check3,
+		);
+		const exportCheck = runExportCheck(
+			cwd,
+			check1.diskText,
+			declarations,
+			registry,
+			validators,
+		);
+		const exportApplied = exportCheck !== "not-applicable";
 
 		const outcomes = [
 			checkDuplicateVersion,
@@ -612,6 +781,7 @@ export const runVerify = async (
 			check2,
 			check3Outcome(check3),
 			check4,
+			...exportOutcomes(exportCheck),
 		];
 		const failures = outcomes.filter(
 			(outcome): outcome is Extract<CheckOutcome, { ok: false }> =>
@@ -627,7 +797,7 @@ export const runVerify = async (
 				exitCode: 0,
 				stdout: [
 					...fixOutcome.lines,
-					`verify: ${TOTAL_CHECKS} checks passed (${fileNames.length} migrations, snapshot ${snapshotHash.slice(0, 19)}…)`,
+					`verify: ${totalChecks(exportApplied)} checks passed (${fileNames.length} migrations, snapshot ${snapshotHash.slice(0, 19)}…)`,
 				],
 				stderr: null,
 			};
@@ -644,7 +814,11 @@ export const runVerify = async (
 		const skippedCount = skippedLines.length;
 		const summary = [
 			...skippedLines,
-			failureSummaryLine(failures.length, skippedCount),
+			failureSummaryLine(
+				failures.length,
+				skippedCount,
+				totalChecks(exportApplied),
+			),
 		].join("\n");
 
 		return {

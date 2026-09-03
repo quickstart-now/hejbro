@@ -283,6 +283,44 @@ describe("rlsUncachedAuthCallValidator", () => {
 		expect(result.warnings[0]?.code).toBe("rls-uncached-auth-call");
 	});
 
+	// #444 F5b: childrenOfHandlers' exists entry used to hand-list
+	// where/joins.on/orderBy only (a private copy of core's own pre-#444
+	// traversal), missing the two clauses #443 added.
+	it("flags an uncached auth.uid() inside an exists() subquery's having", () => {
+		const profiles = table(app, "profiles", {
+			id: uuid().primaryKey(),
+			userId: uuid().notNull(),
+		});
+		const accounts = table(
+			app,
+			"accounts",
+			{ id: uuid().primaryKey() },
+			() => ({
+				rls: rls.enabled({
+					readOwn: rls
+						.policy("accounts_read_own")
+						.for("select")
+						.to("authenticated")
+						.using(
+							exists(
+								select(profiles)
+									.where(eq(profiles.id, profiles.id))
+									.groupBy(profiles.userId)
+									.having(eq(profiles.userId, authUid())),
+							),
+						),
+				}),
+			}),
+		);
+		const result = generateMigration({
+			declarations: [app, usageGrant, profiles, accounts],
+			previousSnapshot: emptySnapshot,
+			validators: [rlsUncachedAuthCallValidator],
+		});
+		expect(result.warnings).toHaveLength(1);
+		expect(result.warnings[0]?.code).toBe("rls-uncached-auth-call");
+	});
+
 	it("does not warn on an exists(...) subquery with no where clause (nothing to walk)", () => {
 		const profiles = table(app, "profiles", { id: uuid().primaryKey() });
 		const accounts = table(
@@ -485,6 +523,76 @@ describe("rlsUncachedAuthCallValidator", () => {
 						{ chunkKind: "expr", expr: authUid().exprNode },
 						{ chunkKind: "text", text: " is not null" },
 					],
+				},
+				withCheck: null,
+			};
+			const warnings = rlsUncachedAuthCallValidator(emptySnapshot, [policy]);
+			expect(warnings).toHaveLength(1);
+			expect(warnings[0]?.code).toBe("rls-uncached-auth-call");
+		});
+
+		// add-window-functions task 1.6: window is hand-built here rather
+		// than via the public DSL (the over()/rank() vocabulary lands in
+		// group 2) -- the point of this test is childrenOfHandlers' own
+		// window arm, not the builder. Same shape as the exists()/having
+		// case above (#444 F5b): a private, hand-written traversal would
+		// have missed this the same way core's pre-#444 one missed
+		// groupBy/having.
+		it("finds a plain authUid() inside over()'s partitionBy", () => {
+			const policy: PolicyDeclaration = {
+				...basePolicy,
+				using: {
+					nodeKind: "window",
+					fn: {
+						nodeKind: "functionCall",
+						schemaName: null,
+						functionName: "rank",
+						args: [],
+					},
+					partitionBy: [authUid().exprNode],
+					orderBy: [],
+				},
+				withCheck: null,
+			};
+			const warnings = rlsUncachedAuthCallValidator(emptySnapshot, [policy]);
+			expect(warnings).toHaveLength(1);
+			expect(warnings[0]?.code).toBe("rls-uncached-auth-call");
+		});
+
+		it("finds a plain authUid() inside over()'s orderBy", () => {
+			const policy: PolicyDeclaration = {
+				...basePolicy,
+				using: {
+					nodeKind: "window",
+					fn: {
+						nodeKind: "functionCall",
+						schemaName: null,
+						functionName: "rank",
+						args: [],
+					},
+					partitionBy: [],
+					orderBy: [{ expr: authUid().exprNode, direction: "asc" }],
+				},
+				withCheck: null,
+			};
+			const warnings = rlsUncachedAuthCallValidator(emptySnapshot, [policy]);
+			expect(warnings).toHaveLength(1);
+			expect(warnings[0]?.code).toBe("rls-uncached-auth-call");
+		});
+
+		it("finds a plain authUid() inside the windowed function's own argument", () => {
+			const policy: PolicyDeclaration = {
+				...basePolicy,
+				using: {
+					nodeKind: "window",
+					fn: {
+						nodeKind: "functionCall",
+						schemaName: null,
+						functionName: "coalesce",
+						args: [authUid().exprNode, literalTrue],
+					},
+					partitionBy: [],
+					orderBy: [],
 				},
 				withCheck: null,
 			};

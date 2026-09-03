@@ -1,0 +1,55 @@
+{
+	"dialect": "postgres",
+	"formatVersion": 8,
+	"objects": {
+		"schema:app": {
+			"name": "app"
+		},
+		"table:app.widgets": {
+			"columns": [
+				{
+					"identity": {
+						"kind": "by-default"
+					},
+					"name": "id",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "integer"
+					}
+				},
+				{
+					"identity": {
+						"cache": 10,
+						"cycle": true,
+						"increment": 2,
+						"kind": "by-default",
+						"maxValue": 1000000,
+						"minValue": 1,
+						"startWith": 1000
+					},
+					"name": "seq",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "bigint"
+					}
+				},
+				{
+					"name": "label",
+					"typeNode": {
+						"typeName": "text"
+					}
+				},
+				{
+					"name": "count",
+					"typeNode": {
+						"typeName": "integer"
+					}
+				}
+			],
+			"foreignKeys": [],
+			"indexes": [],
+			"name": "widgets",
+			"schema": "app"
+		}
+	}
+}

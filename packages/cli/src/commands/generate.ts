@@ -1,22 +1,27 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type {
+	BannerHashes,
 	ConfirmDropSpec,
 	Diagnostic as CoreDiagnostic,
 	HejbroError,
 	RenameAmbiguity,
 	RenameSpec,
+	Snapshot,
 } from "@hejbro/core";
 import {
+	deriveExistingTransitionSlug,
 	deriveSlug,
-	generateMigration,
+	generateMigrations,
 	hejbroError,
 	migrationFileName,
 	parseSnapshot,
 	renderSnapshot,
 	requiredKeysByKind,
+	throwHejbroError,
 } from "@hejbro/core";
 import { defineCommand } from "citty";
+import { requireConfigFields } from "../config-required";
 import type { Diagnostic } from "../diagnostics";
 import {
 	fromHejbroError,
@@ -24,6 +29,9 @@ import {
 	renderDiagnostics,
 } from "../diagnostics";
 import { asHejbroError } from "../errors";
+import { buildExportDescription } from "../export/description";
+import { buildSquashedSql } from "../export/squash";
+import { writeExport } from "../export/write";
 import {
 	normalizeEqualsFlags,
 	parseConfirmDropFlag,
@@ -72,7 +80,77 @@ const GENERATE_ARGS = {
 		description:
 			"confirm a genuine drop (not a rename): <schema>.<table>.<column>, or <schema>.<table> for a whole table (repeatable)",
 	},
+	export: {
+		type: "boolean",
+		description:
+			"write a schema export (description, squashed SQL, format record) into .hejbro/export/ alongside the migration (opt-in)",
+	},
 } as const;
+
+/**
+ * The `GENERATE_ARGS` keys a baseline can never use (#445, nit; review
+ * R-b): a baseline diffs against an empty snapshot, so nothing exists yet
+ * to rename or drop. The one list both `BASELINE_ARGS` (the `--help`
+ * surface, below) and `BASELINE_INAPPLICABLE_FLAGS` (the pre-parse
+ * refusal) derive from, so the two can never drift into naming different
+ * sets of flags.
+ */
+const BASELINE_EXCLUDED_ARG_KEYS: ReadonlyArray<keyof typeof GENERATE_ARGS> = [
+	"rename",
+	"confirm-drop",
+];
+
+/** `hejbro baseline`'s own `--help` args: {@link GENERATE_ARGS} minus {@link BASELINE_EXCLUDED_ARG_KEYS}, so the descriptions above stay the single source citty renders for both commands. */
+const BASELINE_ARGS = Object.fromEntries(
+	Object.entries(GENERATE_ARGS).filter(
+		([key]) =>
+			!(BASELINE_EXCLUDED_ARG_KEYS as ReadonlyArray<string>).includes(key),
+	),
+) as Omit<typeof GENERATE_ARGS, (typeof BASELINE_EXCLUDED_ARG_KEYS)[number]>;
+
+/** {@link BASELINE_EXCLUDED_ARG_KEYS}, spelled as the `--`-prefixed tokens `rawArgs` actually carries. */
+const BASELINE_INAPPLICABLE_FLAGS: ReadonlyArray<string> =
+	BASELINE_EXCLUDED_ARG_KEYS.map((key) => `--${key}`);
+
+/**
+ * Pre-parse intercept (#445, nit): catches `--rename`/`--confirm-drop` on
+ * `rawArgs` directly, before either flag's value is ever parsed into a
+ * `RenameSpec`/`ConfirmDropSpec` and before config/declarations load --
+ * the lead explicitly rejected letting citty's own unknown-flag dump do
+ * this job (its message doesn't say why the flag is inapplicable, or what
+ * to run instead).
+ */
+const assertBaselineFlagsApplicable = (
+	mode: GenerateMode,
+	rawArgs: ReadonlyArray<string>,
+): void => {
+	if (mode !== "baseline") {
+		return;
+	}
+	const disallowed = BASELINE_INAPPLICABLE_FLAGS.find((flag) =>
+		rawArgs.includes(flag),
+	);
+	if (disallowed === undefined) {
+		return;
+	}
+	// #445 review B5: the message has exactly one quoted substring -- the
+	// solution command -- and identityFromMessage takes the first quoted
+	// substring as the diagnostic's own identity (matches
+	// error[config-not-found]: hejbro.config.ts's own convention).
+	// Backtick-quoting the command instead (repo convention for a command
+	// name, loader.ts's own `` `hejbro init` ``) leaves no quoted
+	// substring at all, so the identity falls through to fallbackIdentity
+	// (the config path) instead. Kept as a comment ABOVE this call, not
+	// between its two arguments: check-next-marker.mjs's argument scan is
+	// text-based, not a real parser, and a comma anywhere in an inline
+	// comment between the code and message arguments (as this one used to
+	// have, in "command name, loader.ts's own") splits them wrong, hiding
+	// a real "Next:" clause from the gate.
+	throwHejbroError(
+		"baseline-flag-not-applicable",
+		`baseline does not accept ${disallowed}: a baseline diffs against an empty snapshot, so there is nothing to rename and nothing to drop. Next: run \`hejbro generate\` instead to record a change to an already-adopted project.`,
+	);
+};
 
 type ParsedGenerateArgv = {
 	readonly configFlag: string | undefined;
@@ -149,15 +227,26 @@ const relativizeDeclaredAt = (
 	return relativizeLocation(declaredAt, cwd);
 };
 
+/** Codes whose fault lives in the snapshot itself, never in a
+ * declaration -- `malformed-snapshot-node` (a corrupt on-disk node) and
+ * `existing-transition-not-found` (#703: the internal-invariant throw
+ * when no table's own record explains a snapshot move -- naming
+ * `hejbro.config.ts`, which has nothing to do with the fault, is worse
+ * than naming nothing). */
+const SNAPSHOT_PATH_ERROR_CODES: ReadonlySet<string> = new Set([
+	"malformed-snapshot-node",
+	"existing-transition-not-found",
+]);
+
 /** The identity to report for a fatal `catch`-level error: the snapshot's
- * own path for a malformed-snapshot failure (there's no declaration to
- * point at), `fallbackIdentity` otherwise. */
+ * own path for a fault the snapshot itself carries (there's no
+ * declaration to point at), `fallbackIdentity` otherwise. */
 const identityForGenerateError = (
 	error: HejbroError,
 	snapshotPath: string,
 	fallbackIdentity: string,
 ): string => {
-	if (error.code === "malformed-snapshot-node") {
+	if (SNAPSHOT_PATH_ERROR_CODES.has(error.code)) {
 		return snapshotPath;
 	}
 	return fallbackIdentity;
@@ -343,10 +432,281 @@ const warningStderr = (
  * `previousCount` injected here, never inside core) and overwrite the
  * snapshot, printing a success block that mirrors the banner.
  */
+/**
+ * What this run is for. `"baseline"` is the brownfield adoption path
+ * (#385): the same pipeline, but it refuses to run over an existing chain,
+ * marks the emitted migration as already-applied, and reports the adoption
+ * steps instead of the usual one-liner. One pipeline, not a second copy —
+ * a baseline IS a first migration, and everything about how it is built,
+ * hashed and chained has to stay identical or `verify` would reject it.
+ */
+export type GenerateMode = "generate" | "baseline";
+
+/** Names what makes this project ineligible for a baseline, for the error's own message. */
+const baselineBlockerText = (
+	migrationCount: number,
+	migrationsDir: string,
+	previousSnapshotIsEmpty: boolean,
+): string => {
+	if (previousSnapshotIsEmpty) {
+		return `found ${migrationCount} migration(s) in "${migrationsDir}"`;
+	}
+	if (migrationCount === 0) {
+		return "the snapshot already records declared objects";
+	}
+	return `found ${migrationCount} migration(s) in "${migrationsDir}" and a snapshot that already records declared objects`;
+};
+
+/**
+ * #445/D2 review R-d: `declarationCount` dropped -- every actual
+ * declaration kind (schema, table, grant, ...) contributes at least one
+ * object to a diff against an empty snapshot (probed directly: a
+ * schema-only and a grant-only declaration set each produced a `create`
+ * change), and `assertBaselineIsFirst` above guarantees the snapshot is
+ * empty in this mode. There is no declaration set that both parses as a
+ * `HejbroInput` and diffs to nothing, so the only way this branch is ever
+ * reached is an empty declarations array -- one sentence, not two branches
+ * for a state that can't happen.
+ *
+ * That flat claim rests on a premise, not a proof: every declared kind
+ * fans out to at least one snapshot object. It depends on today's kind
+ * set staying that way -- a future kind that can legitimately fan out to
+ * zero would make this message false, not just incomplete. The one
+ * candidate this could plausibly fail on -- `grant(...).to()` called with
+ * no role, which contributes no `GrantDeclaration` at all -- is already
+ * excluded before it gets here: `dsl/grant.ts`'s `buildRolesStage` throws
+ * `grant-missing-roles` at declaration time, so it can never reach
+ * `generateMigration`'s `declarations` array as a zero-fanout input.
+ */
+const throwBaselineNothingToAdopt = (entry: ReadonlyArray<string>): never => {
+	const entryPhrase = entry.map((pattern) => `"${pattern}"`).join(", ");
+	throwHejbroError(
+		"baseline-nothing-to-adopt",
+		`baseline found nothing to adopt: your declaration files loaded, but exported no hejbro declarations (schema/table/... calls). Next: check ${entryPhrase} in hejbro.config.ts -- either the entry pattern isn't matching the files you meant, or those files don't actually export their schema/table declarations.`,
+	);
+};
+
+/** `hejbro baseline` refuses unless the project is at its `init` state: a baseline IS a first migration, and there is nothing to baseline against a chain that already exists. */
+const assertBaselineIsFirst = (
+	migrationCount: number,
+	previousSnapshotIsEmpty: boolean,
+	migrationsDir: string,
+): void => {
+	if (migrationCount === 0 && previousSnapshotIsEmpty) {
+		return;
+	}
+	throwHejbroError(
+		"baseline-not-first",
+		`baseline only runs on a project with no migrations yet — ${baselineBlockerText(migrationCount, migrationsDir, previousSnapshotIsEmpty)}. Next: a baseline is the FIRST migration of a database hejbro is adopting. To record a change to an already-adopted project, run "hejbro generate" instead.`,
+	);
+};
+
+type MigrationFileNameOptions = Parameters<typeof migrationFileName>[0];
+
+/**
+ * One migration `generateMigrations` returned. Structural, not imported:
+ * [G4 rework, #610] `@hejbro/core`'s public surface re-exports only the two
+ * entry points themselves, never their result types (the "0 new symbols
+ * beyond `generateMigrations` itself" ruling) -- so this reads the shape
+ * off the function's own return type instead of naming it.
+ */
+type GeneratedMigration = ReturnType<
+	typeof generateMigrations
+>["migrations"][number];
+
+/**
+ * [design, task 4.4, generalized for #610] Every migration after the
+ * first needs naming options distinct from its predecessors' under every
+ * prefix strategy -- measured: `index` is the only one of the three that
+ * resolves from a count, so bumping `previousCount` once per predecessor
+ * is enough there; `timestamp`/`unix` derive their whole prefix from the
+ * clock alone, at one-second resolution, so the clock itself has to move
+ * by one second per predecessor instead. `verify` refuses a chain whose
+ * migrations share a version -- and does more than fail: chain linearity
+ * and the tip check are skipped, so a version collision here would
+ * disable the very checks that would describe it.
+ */
+const fileNameOptionsForIndex = (
+	first: MigrationFileNameOptions,
+	index: number,
+): MigrationFileNameOptions => {
+	if (index === 0) {
+		return first;
+	}
+	if (first.strategy === "index") {
+		return { ...first, previousCount: first.previousCount + index };
+	}
+	return {
+		...first,
+		generatedAt: new Date(first.generatedAt.getTime() + index * 1000),
+	};
+};
+
+/**
+ * `bannerHashes[i].parent` chains from the *previous* migration's own
+ * snapshot -- `previousSnapshot` itself for the first migration, the
+ * prior migration's own `snapshot` for every one after it -- matching
+ * `generateMigrations`' own `bannerHashes` contract (index-aligned, D33's
+ * hash chain). Hashing itself stays here; core never hashes.
+ */
+const bannerHashesForMigrations = (
+	previousSnapshot: Snapshot,
+	migrations: ReadonlyArray<GeneratedMigration>,
+): ReadonlyArray<BannerHashes> =>
+	migrations.map((migration, index) => {
+		const parentSnapshot = migrations[index - 1]?.snapshot ?? previousSnapshot;
+		return {
+			parent: `sha256:${sha256Hex(renderSnapshot(parentSnapshot))}`,
+			current: `sha256:${sha256Hex(renderSnapshot(migration.snapshot))}`,
+		};
+	});
+
+type WrittenMigration = {
+	readonly relativePath: string;
+	readonly sql: string;
+};
+
+/**
+ * D106 R3, J13: gated on the *run's* own `hasChanges`, not
+ * `migration.changes.length` -- measured, not assumed: a pure rename
+ * (`RenamePlan.renameStatements` only, no `KindChange` at all) already
+ * has `hasChanges: true` with an empty `changes` array
+ * (`engine/generate.ts`'s `runPipeline`, `changes.length > 0 ||
+ * plan.renameStatements.length > 0`), and `deriveSlug([])`'s own
+ * `"migration"` fallback already covered that case correctly before this
+ * round -- routing it into `deriveExistingTransitionSlug` instead threw
+ * (caught by running the existing rename suite, not by inspection: it
+ * looks for an existing-marker transition that isn't there). Only a run
+ * with `hasChanges: false` reaches `deriveExistingTransitionSlug` --
+ * exactly the one shape `deriveSlug` was never able to name, since an
+ * existing-table marker transition produces no `KindChange` at all by
+ * this change's own closed design.
+ */
+const slugFor = (
+	migration: GeneratedMigration,
+	previousSnapshot: Snapshot,
+	hasChanges: boolean,
+): string => {
+	if (hasChanges) {
+		return deriveSlug(migration.changes);
+	}
+	return deriveExistingTransitionSlug(previousSnapshot, migration.snapshot);
+};
+
+/**
+ * [task 4.3/4.4/4.5, generalized for #610] One relative path + its own
+ * SQL (banner included -- `generateMigrations` already assembled it) per
+ * migration the run needs -- writing nothing itself (the caller still owns
+ * `mkdirSync`/`writeFileSync`, matching the pre-#610 shape).
+ */
+const buildWrittenMigrations = (
+	migrations: ReadonlyArray<GeneratedMigration>,
+	migrationsDir: string,
+	firstFileNameOptions: MigrationFileNameOptions,
+	nameOverride: string | undefined,
+	previousSnapshot: Snapshot,
+	hasChanges: boolean,
+): ReadonlyArray<WrittenMigration> =>
+	migrations.map((migration, index) => {
+		const slug =
+			nameOverride ?? slugFor(migration, previousSnapshot, hasChanges);
+		const fileName = migrationFileName({
+			...fileNameOptionsForIndex(firstFileNameOptions, index),
+			slug,
+		});
+		return {
+			relativePath: join(migrationsDir, fileName),
+			sql: migration.sql,
+		};
+	});
+
+/**
+ * The report's opening lines: one `wrote` line per migration the run
+ * needed (never just the first -- the pre-#610 split path already printed
+ * two). A baseline never reaches more than one: a baseline's every change
+ * is a `create` (never `alter`), which `engine/split.ts`'s own condition
+ * never splits on. A baseline's lines differ beyond that because the next
+ * step differs and getting it wrong is expensive: running a baseline
+ * migration against the database it describes fails on the first
+ * `create`, and "already exists" is a confusing way to learn that the file
+ * was never meant to be run.
+ */
+/**
+ * D106 R3, J13: the one written migration this run's own no-DDL branch
+ * produces carries no statements -- the report SHALL name both the file
+ * and that fact (the live "The migration chain on disk is verifiable"
+ * requirement, whose own delta addition this satisfies), or a reader
+ * would have no way to tell it apart from an ordinary migration without
+ * opening the file. `statementCount === 0` is this run's own signal
+ * (mirrors `finalPass.hasChanges` at the call site) -- an ordinary run's
+ * migrations always carry at least one statement.
+ */
+const noStatementsLine = (
+	writtenMigrations: ReadonlyArray<WrittenMigration>,
+): ReadonlyArray<string> => {
+	const [only] = writtenMigrations;
+	if (writtenMigrations.length !== 1 || only === undefined) {
+		return [];
+	}
+	return [`${only.relativePath} carries no statements.`];
+};
+
+/** `[]` when the run had real statements to write -- the guard clause `noStatementsLine`'s own call site would otherwise need as a ternary. */
+const noStatementsLineIfEmpty = (
+	writtenMigrations: ReadonlyArray<WrittenMigration>,
+	hasStatements: boolean,
+): ReadonlyArray<string> => {
+	if (hasStatements) {
+		return [];
+	}
+	return noStatementsLine(writtenMigrations);
+};
+
+const reportHead = (
+	mode: GenerateMode,
+	declarationCount: number,
+	writtenMigrations: ReadonlyArray<WrittenMigration>,
+	hasStatements: boolean,
+): ReadonlyArray<string> => {
+	if (mode === "baseline") {
+		const migrationRelativePath = writtenMigrations[0]?.relativePath ?? "";
+		return [
+			"hejbro baseline",
+			`loaded ${declarationCount} declarations`,
+			`wrote ${migrationRelativePath}`,
+			"",
+			"This migration describes objects your database already has.",
+			`Next: run \`hejbro migrate\` to register ${migrationRelativePath} as applied without running it, then run \`hejbro check\` to confirm your declarations match the live schema. From here on, \`hejbro generate\` emits only what changes.`,
+		];
+	}
+	return [
+		"hejbro generate",
+		`loaded ${declarationCount} declarations`,
+		...writtenMigrations.map((written) => `wrote ${written.relativePath}`),
+		...noStatementsLineIfEmpty(writtenMigrations, hasStatements),
+	];
+};
+
+/**
+ * cli-commands (this change's own MODIFIED delta, D106 R2 R2-B2): the
+ * DDL-free branch covers two outcomes -- a truly unchanged snapshot, and
+ * one this run itself moved with nothing to diff into a statement (an
+ * existing-table marker gained, changed or removed). The second SHALL
+ * NOT report "already matches" -- this run's own write just made that
+ * false.
+ */
+const noMigrationReportLine = (snapshotUnchanged: boolean): string => {
+	if (snapshotUnchanged) {
+		return "no changes — snapshot already matches your declarations.";
+	}
+	return "no migration — snapshot updated to record the declared change.";
+};
+
 export const runGenerate = async (
 	cwd: string,
 	argv: ReadonlyArray<string>,
 	now: () => Date = () => new Date(),
+	mode: GenerateMode = "generate",
 ): Promise<GenerateResult> => {
 	// Normalized once, here, before anything else sees it: flag-value
 	// collection below and the rerun-command suggestion (buildDiagnostics
@@ -357,14 +717,21 @@ export const runGenerate = async (
 	// normalization point means a flag added later doesn't need its own.
 	const rawArgs = normalizeEqualsFlags(argv);
 	const parsedArgv = parseGenerateArgv(rawArgs);
+	const exportEnabled = rawArgs.includes("--export");
 	const fallbackIdentity = parsedArgv.configFlag ?? "hejbro.config.ts";
 	try {
+		assertBaselineFlagsApplicable(mode, rawArgs);
 		const renames: ReadonlyArray<RenameSpec> =
 			parsedArgv.renameValues.map(parseRenameFlag);
 		const confirmedDrops: ReadonlyArray<ConfirmDropSpec> =
 			parsedArgv.confirmDropValues.map(parseConfirmDropFlag);
 
 		const { config, configPath } = await loadConfig(cwd, parsedArgv.configFlag);
+		requireConfigFields(config, mode, [
+			"migrationsDir",
+			"snapshotPath",
+			"prefixStrategy",
+		]);
 		const declarations = await loadDeclarations(configPath, config);
 
 		// Nested, not the outer catch: a `malformed-snapshot-node` error
@@ -376,12 +743,23 @@ export const runGenerate = async (
 		try {
 			const registry = buildRegistry(config);
 			const previousSnapshot = parseSnapshot(
-				readSnapshotFileText(cwd, config),
+				readSnapshotFileText(cwd, config, mode),
 				requiredKeysByKind(registry),
 			);
 			const validators = configValidators(config);
 
-			const firstPass = generateMigration({
+			if (mode === "baseline") {
+				assertBaselineIsFirst(
+					listMigrationFiles(join(cwd, config.migrationsDir)).length,
+					Object.keys(previousSnapshot.objects).length === 0,
+					config.migrationsDir,
+				);
+			}
+			// [task 4.1, generalized for #610] First pass, no `bannerHashes` --
+			// learns each migration's own `changes`/`snapshot` (one entry, or
+			// two where `engine/split.ts`'s own condition needs a transaction
+			// boundary), which is what hashing the chain below needs.
+			const firstPass = generateMigrations({
 				declarations,
 				previousSnapshot,
 				renames,
@@ -398,53 +776,161 @@ export const runGenerate = async (
 					cwd,
 				);
 			}
+			// D106 M2: a repository whose snapshot already matches its
+			// declarations must still be able to produce its *first* export --
+			// otherwise `generate --export` is a no-op there forever (`baseline
+			// --export` is refused once migrations exist), and the schema
+			// repository's export directory never comes to exist at all. Reused
+			// by both branches below: the no-difference return (this export is
+			// the only artifact that run writes) and the ordinary
+			// difference-found path further down.
+			const writeExportArtifact = (snapshot: Snapshot): void => {
+				const description = buildExportDescription(
+					declarations,
+					declarations.exportNames,
+				);
+				writeExport(
+					cwd,
+					{ ...description, snapshot },
+					buildSquashedSql(declarations, registry, validators),
+				);
+			};
 			if (!firstPass.hasChanges) {
-				return {
-					exitCode: 0,
-					stdout: ["no changes — snapshot already matches your declarations."],
-					stderr: null,
-				};
+				if (mode === "baseline") {
+					if (declarations.length === 0) {
+						throwBaselineNothingToAdopt(config.entry);
+					}
+					// D106 R3, NB6: `throwBaselineNothingToAdopt`'s own premise
+					// (every non-empty declaration set fans out to at least one
+					// `create` against baseline's always-empty `previousSnapshot`)
+					// was true before #605 and false after it -- an
+					// `existingTable()`-only project loads real declarations
+					// (`declarations.length > 0`) that still diff to nothing,
+					// since an existing declaration is never DDL. There is
+					// nothing to *register*: no `create` statement was ever
+					// going to exist for `hejbro migrate` to mark as applied.
+					// `assertBaselineIsFirst` already guarantees `previousSnapshot`
+					// is empty here, so `firstPass.snapshot` (which carries at
+					// least one `table:` entry, marked existing, for every
+					// declared `existingTable()`) is guaranteed to differ from
+					// it -- this branch always has a snapshot worth writing,
+					// unlike the shared `snapshotUnchanged` check below.
+					writeFileSync(
+						join(cwd, config.snapshotPath),
+						renderSnapshot(firstPass.snapshot),
+					);
+					if (exportEnabled) {
+						writeExportArtifact(firstPass.snapshot);
+					}
+					return {
+						exitCode: 0,
+						stdout: [
+							"hejbro baseline",
+							`loaded ${declarations.length} declarations`,
+							"",
+							"No managed objects were declared — only existingTable() declarations, which hejbro never migrates or registers.",
+							"The snapshot records them as existing. Next: run `hejbro check` to confirm your declarations match the live schema.",
+						],
+						stderr: null,
+					};
+				}
+				// D106 R2, R2-B2 / R3, R3-B1+J14: `hasChanges` only tracks
+				// whether there is DDL to emit -- an existing-table marker
+				// change (handover, adoption, rename) can differ
+				// `firstPass.snapshot` from `previousSnapshot` with no
+				// statement at all. A truly unchanged snapshot
+				// (`!firstPass.snapshotChanged`, the one fact the core result
+				// itself states rather than this command re-deriving it) is
+				// the one case this run has nothing at all to write; anything
+				// else falls through to the ordinary write-files path below,
+				// which now handles a no-DDL, snapshot-changed run identically
+				// to one with real changes -- `generateMigrations`' own R3-B1
+				// branch already gives `firstPass.migrations` exactly one
+				// zero-statement entry for it, so there is no separate write
+				// here to keep in sync with that path. This snapshot-identity
+				// check is this fix's own mutant target.
+				if (!firstPass.snapshotChanged) {
+					if (exportEnabled) {
+						writeExportArtifact(firstPass.snapshot);
+					}
+					return {
+						exitCode: 0,
+						stdout: [noMigrationReportLine(true)],
+						stderr: null,
+					};
+				}
 			}
 
-			const parentHash = `sha256:${sha256Hex(renderSnapshot(previousSnapshot))}`;
-			const currentHash = `sha256:${sha256Hex(renderSnapshot(firstPass.snapshot))}`;
-			const finalPass = generateMigration({
+			const migrationsDirPath = join(cwd, config.migrationsDir);
+			const previousCount = listMigrationFiles(migrationsDirPath).length;
+
+			const finalPass = generateMigrations({
 				declarations,
 				previousSnapshot,
 				renames,
 				confirmedDrops,
-				bannerHashes: { parent: parentHash, current: currentHash },
+				bannerHashes: bannerHashesForMigrations(
+					previousSnapshot,
+					firstPass.migrations,
+				),
 				hejbroVersion: CLI_VERSION,
+				baseline: mode === "baseline",
 				registry,
 				validators,
 			});
 
-			const migrationsDirPath = join(cwd, config.migrationsDir);
-			const previousCount = listMigrationFiles(migrationsDirPath).length;
-			const slug = parsedArgv.name ?? deriveSlug(finalPass.changes);
-			const fileName = migrationFileName({
-				strategy: config.prefixStrategy,
-				generatedAt: now(),
-				previousCount,
-				slug,
-			});
+			const writtenMigrations = buildWrittenMigrations(
+				finalPass.migrations,
+				config.migrationsDir,
+				{
+					strategy: config.prefixStrategy,
+					generatedAt: now(),
+					previousCount,
+					slug: "",
+				},
+				parsedArgv.name,
+				previousSnapshot,
+				finalPass.hasChanges,
+			);
+			// `finalPass.migrations` is never `[]` here: either
+			// `firstPass.hasChanges` is already `true`, or the snapshot
+			// genuinely differs (the branch above only falls through, never
+			// returning, in that case) -- and `finalPass` runs the identical
+			// pipeline (same `declarations`/`previousSnapshot`/`renames`/
+			// `confirmedDrops`) with only banner metadata added -- metadata
+			// `runPipeline`/`planSplit` never read -- so it diffs to the same
+			// non-empty `migrations` `firstPass` already proved, DDL or not.
+			const finalSnapshot = finalPass.migrations.at(-1)?.snapshot as Snapshot;
+
 			mkdirSync(migrationsDirPath, { recursive: true });
-			writeFileSync(join(migrationsDirPath, fileName), `${finalPass.sql}\n`);
+			writtenMigrations.map((written) =>
+				writeFileSync(join(cwd, written.relativePath), `${written.sql}\n`),
+			);
 			writeFileSync(
 				join(cwd, config.snapshotPath),
-				renderSnapshot(finalPass.snapshot),
+				renderSnapshot(finalSnapshot),
 			);
+			if (exportEnabled) {
+				// Reuses the same last-migration snapshot the write above
+				// already derived (`finalPass.migrations` is never `[]`
+				// here -- see that constant's own comment) rather than
+				// re-deriving it a second way.
+				writeExportArtifact(finalSnapshot);
+			}
 
-			const migrationRelativePath = join(config.migrationsDir, fileName);
-			const [banner] = finalPass.sql.split("\n\n");
 			return {
 				exitCode: 0,
 				stdout: [
-					"hejbro generate",
-					`loaded ${declarations.length} declarations`,
-					`wrote ${migrationRelativePath}`,
+					...reportHead(
+						mode,
+						declarations.length,
+						writtenMigrations,
+						finalPass.hasChanges,
+					),
 					...warningSummaryLines(finalPass.warnings),
-					banner ?? "",
+					...writtenMigrations.map(
+						(written) => written.sql.split("\n\n")[0] ?? "",
+					),
 				],
 				stderr: warningStderr(finalPass.warnings, fallbackIdentity),
 			};
@@ -477,6 +963,31 @@ export const generateCommand = defineCommand({
 	args: GENERATE_ARGS,
 	run: async (ctx) => {
 		const result = await runGenerate(process.cwd(), ctx.rawArgs);
+		result.stdout.map((line) => console.log(line));
+		if (result.stderr !== null) {
+			console.error(result.stderr);
+		}
+		process.exitCode = result.exitCode;
+	},
+});
+
+const BASELINE_DESCRIPTION =
+	"Adopt an existing database: write the first migration as a baseline (already applied) plus its snapshot";
+
+/** The `hejbro baseline` citty subcommand — {@link runGenerate} in `"baseline"` mode (#385). */
+export const baselineCommand = defineCommand({
+	meta: {
+		name: "baseline",
+		description: BASELINE_DESCRIPTION,
+	},
+	args: BASELINE_ARGS,
+	run: async (ctx) => {
+		const result = await runGenerate(
+			process.cwd(),
+			ctx.rawArgs,
+			() => new Date(),
+			"baseline",
+		);
 		result.stdout.map((line) => console.log(line));
 		if (result.stderr !== null) {
 			console.error(result.stderr);

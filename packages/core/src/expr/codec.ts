@@ -4,24 +4,34 @@ import type {
 	BetweenNode,
 	ColumnRefNode,
 	ComparisonNode,
+	DistinctNode,
 	ExistsNode,
 	ExprNode,
+	FromNode,
 	FunctionCallNode,
 	InListNode,
+	JoinKind,
 	JoinNode,
 	LiteralNode,
 	LogicalNode,
 	NotNode,
+	NullsPlacement,
 	NullTestNode,
 	OrderByTerm,
 	PlpgsqlRefNode,
 	ProjectionNode,
 	RawSqlNode,
+	SelectExprNode,
 	SelectNode,
+	SetOpNode,
 	SqlTemplateChunk,
 	SqlTemplateNode,
 	TableRefNode,
+	WindowNode,
+	WithEntryNode,
+	WithNode,
 } from "./ast";
+import { joinKinds } from "./ast";
 
 /**
  * The serialization boundary between `ExprNode` (and everything reachable
@@ -73,6 +83,8 @@ export const NODE_KIND_TO_SNAPSHOT: Readonly<
 	sqlTemplate: "sql-template",
 	rawSql: "raw-sql",
 	exists: "exists",
+	selectExpr: "select-expr",
+	window: "window",
 };
 
 const NODE_KIND_FROM_SNAPSHOT: Readonly<Record<string, ExprNode["nodeKind"]>> =
@@ -127,15 +139,34 @@ const stringField = (node: Record<string, JsonValue>, key: string): string => {
 // --- encode: ExprNode (camelCase) -> snapshot form (kebab + D57 keys) --
 
 /**
- * One handler per {@link LiteralNode}'s `literal.literalKind`, same
- * technique used elsewhere this phase: a mapped type over the closed
- * union, so a missing entry is a compile error. Applied here for coverage,
- * not complexity (#154 ratchet-5): the former `switch`'s `default:
- * assertNever(literal)` was structurally unreachable (this union has
- * exactly these five kinds), so no test could ever reach it.
+ * `LiteralNode["literal"]["literalKind"]` minus `bigint`/`interval`/
+ * `array` — the three harden-query-layer #322 added, all mutation-write-
+ * value-only (`query/column-value.ts`'s `liftColumnValue`, the only
+ * constructor, is never on a declaration path). (F) settled that these
+ * three carry canonical *text* for the query-compile pipeline, never that
+ * they join the snapshot grammar `codec.ts` speaks — that's D87's own
+ * separate, owner-gated decision (a `HEJBRO_SNAPSHOT_VERSION` bump,
+ * `snapshot.ts`). `Exclude`-ing them from both handler maps below turns
+ * "the declaration path can't construct these kinds" (already proven,
+ * `core/test/query/snapshot-reachability.test.ts`) into "and even a
+ * hand-built node carrying one is rejected, not silently encoded" — the
+ * same class of `tsc`-enforced boundary the `LiftableFor` invariant is.
+ */
+type SnapshotLiteralKind = Exclude<
+	LiteralNode["literal"]["literalKind"],
+	"bigint" | "interval" | "array" | "json" | "bytea"
+>;
+
+/**
+ * One handler per {@link SnapshotLiteralKind}, same technique used
+ * elsewhere this phase: a mapped type over a closed union, so a missing
+ * entry is a compile error. Applied here for coverage, not complexity
+ * (#154 ratchet-5): the former `switch`'s `default: assertNever(literal)`
+ * was structurally unreachable (this union has exactly these five kinds),
+ * so no test could ever reach it.
  */
 type EncodeLiteralHandlers = {
-	readonly [K in LiteralNode["literal"]["literalKind"]]: (
+	readonly [K in SnapshotLiteralKind]: (
 		literal: Extract<LiteralNode["literal"], { readonly literalKind: K }>,
 	) => JsonValue;
 };
@@ -151,19 +182,57 @@ const encodeLiteralHandlers: EncodeLiteralHandlers = {
 	}),
 };
 
+/** `true` for the three query-compile-time-only kinds `SnapshotLiteralKind` excludes — narrows `literal` so the guard clause in {@link encodeLiteral} needs no cast either side of it. */
+const isNonSnapshotLiteralKind = (
+	literalKind: LiteralNode["literal"]["literalKind"],
+): literalKind is "bigint" | "interval" | "array" | "json" | "bytea" =>
+	literalKind === "bigint" ||
+	literalKind === "interval" ||
+	literalKind === "array" ||
+	literalKind === "json" ||
+	literalKind === "bytea";
+
+/** Builds the `non-snapshot-literal`-coded, enriched plain `Error` this module throws when asked to encode a mutation-write-only literal kind into a declaration-time snapshot — a signal for whoever trips it next, not a currently-reachable path (harden-query-layer #322 Settled Decision (F) covers the query-compile *text* form only, never a snapshot grammar extension, D87's own separate owner gate). */
+const throwNonSnapshotLiteral = (literalKind: string): never =>
+	throwHejbroError(
+		"non-snapshot-literal",
+		`literal kind "${literalKind}" is query-compile-time-only (a mutation write value) and can never appear in a declaration-time snapshot. Next: if you're seeing this, the declaration path (.default()/a comparison operator) has started constructing this literal kind — that requires a snapshot format-version bump (HEJBRO_SNAPSHOT_VERSION, snapshot.ts) approved by the project owner (D87) before it can be encoded here.`,
+	);
+
 const encodeLiteral = (literal: LiteralNode["literal"]): JsonValue => {
+	if (isNonSnapshotLiteralKind(literal.literalKind)) {
+		return throwNonSnapshotLiteral(literal.literalKind);
+	}
 	const handler = encodeLiteralHandlers[literal.literalKind] as (
 		literal: LiteralNode["literal"],
 	) => JsonValue;
 	return handler(literal);
 };
 
-const encodeColumnRef = (node: ColumnRefNode): JsonValue => ({
-	nodeKind: NODE_KIND_TO_SNAPSHOT.columnRef,
-	schema: node.schemaName,
-	table: node.tableName,
-	column: node.columnName,
-});
+/**
+ * A CTE column reference (`schemaName === null`, add-ctes) encodes with a
+ * `cte` key instead of `schema`/`table` — the same shape {@link
+ * encodeFromNode} uses for a CTE from/join target, so a reader sees one
+ * consistent marker for "this identifies a CTE, not a table" across both
+ * node kinds. Without this branch, `schema: null` would write silently
+ * and {@link decodeColumnRefNode}'s `stringField` would throw reading it
+ * back — a snapshot that commits but cannot be read (task 1.5(a) review).
+ */
+const encodeColumnRef = (node: ColumnRefNode): JsonValue => {
+	if (node.schemaName === null) {
+		return {
+			nodeKind: NODE_KIND_TO_SNAPSHOT.columnRef,
+			cte: node.tableName,
+			column: node.columnName,
+		};
+	}
+	return {
+		nodeKind: NODE_KIND_TO_SNAPSHOT.columnRef,
+		schema: node.schemaName,
+		table: node.tableName,
+		column: node.columnName,
+	};
+};
 
 const encodePlpgsqlRef = (node: PlpgsqlRefNode): JsonValue => ({
 	nodeKind: NODE_KIND_TO_SNAPSHOT.plpgsqlRef,
@@ -231,10 +300,40 @@ const encodeRawSql = (node: RawSqlNode): JsonValue => ({
 	sql: node.sql,
 });
 
+/** `mode` values serialize kebab-case like every discriminator (D57/D70). */
+const SELECT_EXPR_MODE_TO_SNAPSHOT: Readonly<
+	Record<SelectExprNode["mode"], string>
+> = {
+	jsonArray: "json-array",
+	jsonObject: "json-object",
+};
+
+const SELECT_EXPR_MODE_FROM_SNAPSHOT: Readonly<
+	Record<string, SelectExprNode["mode"]>
+> = Object.fromEntries(
+	Object.entries(SELECT_EXPR_MODE_TO_SNAPSHOT).map(([camel, kebab]) => [
+		kebab,
+		camel as SelectExprNode["mode"],
+	]),
+);
+
+const encodeSelectExprNode = (node: SelectExprNode): JsonValue => ({
+	nodeKind: NODE_KIND_TO_SNAPSHOT.selectExpr,
+	mode: SELECT_EXPR_MODE_TO_SNAPSHOT[node.mode],
+	query: encodeSelectNode(node.query),
+});
+
 const encodeExists = (node: ExistsNode): JsonValue => ({
 	nodeKind: NODE_KIND_TO_SNAPSHOT.exists,
 	negated: node.negated,
 	query: encodeSelectNode(node.query),
+});
+
+const encodeWindowNode = (node: WindowNode): JsonValue => ({
+	nodeKind: NODE_KIND_TO_SNAPSHOT.window,
+	fn: encodeExprNode(node.fn),
+	partitionBy: node.partitionBy.map(encodeExprNode),
+	orderBy: node.orderBy.map(encodeOrderByTerm),
 });
 
 const encodeLiteralNode = (node: LiteralNode): JsonValue => ({
@@ -275,6 +374,8 @@ const encodeExprNodeHandlers: EncodeExprNodeHandlers = {
 	sqlTemplate: encodeSqlTemplate,
 	rawSql: encodeRawSql,
 	exists: encodeExists,
+	selectExpr: encodeSelectExprNode,
+	window: encodeWindowNode,
 };
 
 /** @internal exported for {@link decodeExprNode}'s exhaustive-map symmetry and for tests. */
@@ -289,6 +390,20 @@ const encodeTableRef = (node: TableRefNode): JsonValue => ({
 	schema: node.schemaName,
 	table: node.tableName,
 });
+
+/**
+ * A CTE reference (add-ctes, task 2.1) encodes to its own shape, `{ cte:
+ * <name> }` — not a `TableRefNode` with a sentinel schema (D105 already
+ * rejected that for the in-memory node; the snapshot form follows the
+ * same reasoning). `cte` names what the reference points at, the same
+ * role `table`/`function` play for those referenced-object kinds (D57).
+ */
+const encodeFromNode = (node: FromNode): JsonValue => {
+	if ("cteName" in node) {
+		return { cte: node.cteName };
+	}
+	return encodeTableRef(node);
+};
 
 const encodeProjection = (node: ProjectionNode): JsonValue => {
 	switch (node.projectionKind) {
@@ -314,13 +429,24 @@ const encodeProjection = (node: ProjectionNode): JsonValue => {
 
 const encodeJoin = (node: JoinNode): JsonValue => ({
 	joinKind: node.joinKind,
-	table: encodeTableRef(node.table),
+	table: encodeFromNode(node.table),
 	on: encodeExprNode(node.on),
 });
+
+/** `{ nulls }` when set, `{}` when not (group 5.3, harden-query-surface, #470) — additive-compact: `OrderByTerm` is a released shape (present at the `@hejbro/core@0.1.1` tag), so a snapshot a released version wrote, with no `nulls` key at all, must stay exactly what it was. */
+const encodeOrderByTermNullsField = (
+	nulls: NullsPlacement | undefined,
+): { readonly nulls?: NullsPlacement } => {
+	if (nulls === undefined) {
+		return {};
+	}
+	return { nulls };
+};
 
 const encodeOrderByTerm = (term: OrderByTerm): JsonValue => ({
 	expr: encodeExprNode(term.expr),
 	direction: term.direction,
+	...encodeOrderByTermNullsField(term.nulls),
 });
 
 const encodeWhere = (where: ExprNode | null): JsonValue => {
@@ -336,14 +462,78 @@ const encodeWhere = (where: ExprNode | null): JsonValue => {
  * unchanged for a top-level query, not just one nested inside an
  * `ExistsNode`.
  */
+/**
+ * `distinct` is `null` on almost every select, so it encodes as `null`
+ * rather than an always-present wrapper object. The key itself is always
+ * written: a v8 snapshot missing it was hand-edited, and `asRecord`'s own
+ * loud failure is the right answer there — never a silent `null` that
+ * would diff a `distinct` view as if it had none.
+ */
+const encodeDistinct = (distinct: DistinctNode | null): JsonValue => {
+	if (distinct === null) {
+		return null;
+	}
+	if (distinct.distinctKind === "all") {
+		return { distinctKind: "all" };
+	}
+	return {
+		distinctKind: "on",
+		columns: distinct.columns.map(encodeExprNode),
+	};
+};
+
+/**
+ * `columns` for a `distinctKind: "on"` node — unlike `groupBy`'s own
+ * missing-vs-malformed leniency below, a MISSING `columns` here is
+ * never history (#444 review R4): no v8 version ever encoded
+ * `distinctKind: "on"` without one — `distinctOn()` itself already
+ * rejects an empty input as `empty-distinct-on`, and `encodeDistinct`
+ * always writes `columns` when it writes `distinctKind: "on"` at all —
+ * so a missing key here is corruption, not an old file, the same
+ * distinction F7's own leniency rule draws everywhere else. Decoding it
+ * as `[]` would manufacture `distinct on ()`, a node `render-sql.ts`
+ * cannot render, moving the diagnostic away from where the corruption
+ * actually is.
+ */
+const decodeDistinctOnColumns = (
+	node: Record<string, JsonValue>,
+): ReadonlyArray<ExprNode> => {
+	if (node.columns === undefined) {
+		return unknownDiscriminator("columns", "undefined");
+	}
+	return decodeExprArrayField(node, "columns");
+};
+
+const decodeDistinct = (value: JsonValue): DistinctNode | null => {
+	if (value === null) {
+		return null;
+	}
+	const node = asRecord(value, "distinctKind");
+	const distinctKind = stringField(node, "distinctKind");
+	if (distinctKind === "all") {
+		return { distinctKind: "all" };
+	}
+	if (distinctKind !== "on") {
+		return unknownDiscriminator("distinctKind", distinctKind);
+	}
+	return {
+		distinctKind: "on",
+		columns: decodeDistinctOnColumns(node),
+	};
+};
+
 export const encodeSelectNode = (node: SelectNode): JsonValue => ({
 	queryKind: node.queryKind,
 	projection: encodeProjection(node.projection),
-	from: encodeTableRef(node.from),
+	from: encodeFromNode(node.from),
 	joins: node.joins.map(encodeJoin),
 	where: encodeWhere(node.where),
+	groupBy: node.groupBy.map(encodeExprNode),
+	having: encodeWhere(node.having),
 	orderBy: node.orderBy.map(encodeOrderByTerm),
 	limit: node.limit,
+	offset: node.offset,
+	distinct: encodeDistinct(node.distinct),
 });
 
 // --- decode: snapshot form -> ExprNode (camelCase) ----------------------
@@ -353,14 +543,25 @@ const decodeLiteralNode = (node: Record<string, JsonValue>): LiteralNode => ({
 	literal: decodeLiteral(node.literal as JsonValue),
 });
 
+/** The decoding counterpart to {@link encodeColumnRef}'s CTE branch — a `cte` key means a CTE column reference, otherwise a table column reference. */
 const decodeColumnRefNode = (
 	node: Record<string, JsonValue>,
-): ColumnRefNode => ({
-	nodeKind: "columnRef",
-	schemaName: stringField(node, "schema"),
-	tableName: stringField(node, "table"),
-	columnName: stringField(node, "column"),
-});
+): ColumnRefNode => {
+	if ("cte" in node) {
+		return {
+			nodeKind: "columnRef",
+			schemaName: null,
+			tableName: stringField(node, "cte"),
+			columnName: stringField(node, "column"),
+		};
+	}
+	return {
+		nodeKind: "columnRef",
+		schemaName: stringField(node, "schema"),
+		tableName: stringField(node, "table"),
+		columnName: stringField(node, "column"),
+	};
+};
 
 const decodePlpgsqlRefNode = (
 	node: Record<string, JsonValue>,
@@ -431,10 +632,73 @@ const decodeRawSqlNode = (node: Record<string, JsonValue>): RawSqlNode => ({
 	sql: stringField(node, "sql"),
 });
 
+const decodeSelectExprNode = (
+	node: Record<string, JsonValue>,
+): SelectExprNode => ({
+	nodeKind: "selectExpr",
+	mode:
+		SELECT_EXPR_MODE_FROM_SNAPSHOT[node.mode as string] ??
+		unknownDiscriminator("mode", JSON.stringify(node.mode)),
+	query: decodeSelectNode(node.query as JsonValue),
+});
+
 const decodeExistsNode = (node: Record<string, JsonValue>): ExistsNode => ({
 	nodeKind: "exists",
 	negated: node.negated as boolean,
 	query: decodeSelectNode(node.query as JsonValue),
+});
+
+/**
+ * A required array field, missing-or-malformed both rejected —
+ * {@link decodeExprArrayField}'s opposite leniency rule, for a field with
+ * no history to be lenient about. `window`'s three child positions
+ * (`fn`/`partitionBy`/`orderBy`) are all new in this snapshot format
+ * (#444 R4): no older version ever wrote one out at all, let alone
+ * without them, so an absent one is corruption, not an old shape —
+ * the same distinction {@link decodeDistinctOnColumns} already draws for
+ * `distinct on`'s own required `columns`.
+ */
+const decodeRequiredArrayField = <T>(
+	node: Record<string, JsonValue>,
+	key: string,
+	decodeElement: (value: JsonValue) => T,
+): ReadonlyArray<T> => {
+	const value = node[key];
+	if (value === undefined) {
+		return unknownDiscriminator(key, "undefined");
+	}
+	if (!Array.isArray(value)) {
+		return unknownDiscriminator(key, JSON.stringify(value));
+	}
+	return value.map(decodeElement);
+};
+
+/**
+ * `fn` on a decoded window node — missing or not itself a function call
+ * is corruption, refused rather than repaired (same "new in this format,
+ * no leniency" reasoning as {@link decodeRequiredArrayField}). Narrowing
+ * happens here, not by trusting the stored `nodeKind`, because a
+ * hand-edited or otherwise damaged snapshot could name any node kind
+ * under `fn` — this is the one place that enforces {@link WindowNode}'s
+ * own `fn: FunctionCallNode` narrowing on the way back in.
+ */
+const decodeWindowFn = (node: Record<string, JsonValue>): FunctionCallNode => {
+	const value = node.fn;
+	if (value === undefined) {
+		return unknownDiscriminator("fn", "undefined");
+	}
+	const fn = decodeExprNode(value);
+	if (fn.nodeKind !== "functionCall") {
+		return unknownDiscriminator("fn", JSON.stringify(value));
+	}
+	return fn;
+};
+
+const decodeWindowNode = (node: Record<string, JsonValue>): WindowNode => ({
+	nodeKind: "window",
+	fn: decodeWindowFn(node),
+	partitionBy: decodeRequiredArrayField(node, "partitionBy", decodeExprNode),
+	orderBy: decodeRequiredArrayField(node, "orderBy", decodeOrderByTerm),
 });
 
 /**
@@ -467,6 +731,8 @@ const decodeExprNodeHandlers: DecodeExprNodeHandlers = {
 	sqlTemplate: decodeSqlTemplateNode,
 	rawSql: decodeRawSqlNode,
 	exists: decodeExistsNode,
+	selectExpr: decodeSelectExprNode,
+	window: decodeWindowNode,
 };
 
 export const decodeExprNode = (value: JsonValue): ExprNode => {
@@ -495,7 +761,7 @@ export const decodeExprNode = (value: JsonValue): ExprNode => {
  * unreachable `assertNever` default) was thin.
  */
 type DecodeLiteralHandlers = {
-	readonly [K in LiteralNode["literal"]["literalKind"]]: (
+	readonly [K in SnapshotLiteralKind]: (
 		node: Record<string, JsonValue>,
 	) => Extract<LiteralNode["literal"], { readonly literalKind: K }>;
 };
@@ -514,9 +780,17 @@ const decodeLiteralHandlers: DecodeLiteralHandlers = {
 	}),
 };
 
-const isKnownLiteralKind = (
-	value: string,
-): value is LiteralNode["literal"]["literalKind"] =>
+/**
+ * `true` when `value` is a key `decodeLiteralHandlers` actually carries —
+ * a runtime membership check (`in`), not a type-level one, so excluding
+ * `bigint`/`interval`/`array` from {@link DecodeLiteralHandlers}'s keys
+ * (their `SnapshotLiteralKind` narrowing) makes this function return
+ * `false` for all three automatically: no separate exclusion list to keep
+ * in sync, and a snapshot node naming one of them falls straight through
+ * to {@link decodeLiteral}'s existing `unknownDiscriminator` rejection,
+ * the exact same path any other unrecognized `literalKind` already hits.
+ */
+const isKnownLiteralKind = (value: string): value is SnapshotLiteralKind =>
 	value in decodeLiteralHandlers;
 
 const decodeLiteral = (value: JsonValue): LiteralNode["literal"] => {
@@ -550,6 +824,15 @@ const decodeTableRef = (value: JsonValue): TableRefNode => {
 		schemaName: stringField(node, "schema"),
 		tableName: stringField(node, "table"),
 	};
+};
+
+/** The decoding counterpart to {@link encodeFromNode} — a `cte` key means a CTE reference, otherwise a table reference (same shape {@link decodeTableRef} reads). */
+const decodeFromNode = (value: JsonValue): FromNode => {
+	const node = asRecord(value, "from");
+	if ("cte" in node) {
+		return { cteName: stringField(node, "cte") };
+	}
+	return decodeTableRef(value);
 };
 
 /**
@@ -600,17 +883,30 @@ const decodeProjection = (value: JsonValue): ProjectionNode => {
 	return handler(node);
 };
 
+const isJoinKind = (value: string): value is JoinKind =>
+	(joinKinds as ReadonlyArray<string>).includes(value);
+
 const decodeJoin = (value: JsonValue): JoinNode => {
 	const node = asRecord(value, "joinKind");
 	const joinKind = stringField(node, "joinKind");
-	if (joinKind !== "inner") {
+	if (!isJoinKind(joinKind)) {
 		return unknownDiscriminator("joinKind", joinKind);
 	}
 	return {
 		joinKind,
-		table: decodeTableRef(node.table as JsonValue),
+		table: decodeFromNode(node.table as JsonValue),
 		on: decodeExprNode(node.on as JsonValue),
 	};
+};
+
+/** `{ nulls }` when the decoded node has one, `{}` when absent — a 0.1.1-era `OrderByTerm` (written before `nulls` existed) decodes to "no explicit placement" the same way any other released snapshot missing a since-added optional key does, not to a decode error. */
+const decodeOrderByTermNullsField = (
+	nulls: JsonValue | undefined,
+): { readonly nulls?: NullsPlacement } => {
+	if (nulls === undefined) {
+		return {};
+	}
+	return { nulls: nulls as NullsPlacement };
 };
 
 const decodeOrderByTerm = (value: JsonValue): OrderByTerm => {
@@ -618,6 +914,7 @@ const decodeOrderByTerm = (value: JsonValue): OrderByTerm => {
 	return {
 		expr: decodeExprNode(node.expr as JsonValue),
 		direction: node.direction as OrderByTerm["direction"],
+		...decodeOrderByTermNullsField(node.nulls),
 	};
 };
 
@@ -626,6 +923,123 @@ const decodeWhere = (where: JsonValue): ExprNode | null => {
 		return null;
 	}
 	return decodeExprNode(where);
+};
+
+/**
+ * A missing clause field (a v8 snapshot written before #443 added
+ * `groupBy`) decodes to its empty value, `[]` — a present-but-not-an-
+ * array one still fails through the same coded `unknownDiscriminator`
+ * every other malformed field hits, never a raw `TypeError` (#444 F7,
+ * the read half of the #412/#413 snapshot upgrade-path obligation). Not
+ * a version bump: v8 was extended in place (#443), so an old v8 file is
+ * exactly the case this leniency exists for.
+ */
+const decodeExprArrayField = (
+	node: Record<string, JsonValue>,
+	key: string,
+): ReadonlyArray<ExprNode> => {
+	const value = node[key];
+	if (value === undefined) {
+		return [];
+	}
+	if (!Array.isArray(value)) {
+		return unknownDiscriminator(key, JSON.stringify(value));
+	}
+	return value.map(decodeExprNode);
+};
+
+/** Same missing-vs-malformed leniency as {@link decodeExprArrayField}, for a single-`ExprNode`-or-`null` field (`having`) — a missing key decodes to `null`, same as an explicit `null` already does. */
+const decodeOptionalWhere = (value: JsonValue | undefined): ExprNode | null => {
+	if (value === undefined) {
+		return decodeWhere(null);
+	}
+	return decodeWhere(value);
+};
+
+/** `SetOpNode.operator` values are verbatim SQL keywords and already kebab-safe; only the `queryKind` discriminator needs the camel↔kebab map (`setOp` ↔ `set-op`, D57/D70). */
+export const encodeSetOpNode = (node: SetOpNode): JsonValue => ({
+	queryKind: "set-op",
+	operator: node.operator,
+	all: node.all,
+	left: encodeQueryNode(node.left),
+	right: encodeQueryNode(node.right),
+	orderBy: node.orderBy.map(encodeOrderByTerm),
+	limit: node.limit,
+	offset: node.offset,
+});
+
+export const decodeSetOpNode = (value: JsonValue): SetOpNode => {
+	const node = asRecord(value, "queryKind");
+	const operator = stringField(node, "operator");
+	if (
+		operator !== "union" &&
+		operator !== "intersect" &&
+		operator !== "except"
+	) {
+		return unknownDiscriminator("operator", operator);
+	}
+	return {
+		queryKind: "setOp",
+		operator,
+		all: node.all as boolean,
+		left: decodeQueryNode(node.left as JsonValue),
+		right: decodeQueryNode(node.right as JsonValue),
+		orderBy: (node.orderBy as ReadonlyArray<JsonValue>).map(decodeOrderByTerm),
+		limit: node.limit as number | null,
+		offset: node.offset as number | null,
+	};
+};
+
+/**
+ * Encodes the snapshot-reachable QUERY subset — a select or a set
+ * operation (D94 boundary rule: mutations never reach a snapshot, so
+ * they have no snapshot form). Deliberately not widened to `WithNode`
+ * (add-ctes): a `WithEntryNode.query`/`SetOpNode.left`/`right` can never
+ * themselves be a `WithNode`, so widening this shared dispatcher would let
+ * a value that must never exist type-check. A stored view body (task 4.1)
+ * reaches `WithNode` encoding through `kinds/view-kind.ts`'s own
+ * `encodeViewQueryNode` instead, which calls {@link encodeWithNode}
+ * directly and falls back to this function for its two narrower kinds.
+ */
+export const encodeQueryNode = (node: SelectNode | SetOpNode): JsonValue => {
+	if (node.queryKind === "setOp") {
+		return encodeSetOpNode(node);
+	}
+	return encodeSelectNode(node);
+};
+
+/** One `WITH` entry: its name, its query (reusing {@link encodeQueryNode} — a `WithEntryNode.query` is always `SelectNode | SetOpNode`, never another `with`), and its `materialized` hint. The key is always written, `null` included, matching `distinct`'s own convention above: an absent key is corruption, not "no hint" (this format version never wrote one out any other way). */
+const encodeWithEntry = (entry: WithEntryNode): JsonValue => ({
+	name: entry.name,
+	query: encodeQueryNode(entry.query),
+	materialized: entry.materialized,
+});
+
+/**
+ * Encodes a {@link WithNode} (add-ctes, task 2.1) — entries in declaration
+ * order, the `recursive` flag, and the body, reusing {@link
+ * encodeQueryNode} for both an entry's query and the body (neither can be
+ * another `with`, so the existing `SelectNode | SetOpNode` dispatcher
+ * needs no widening). Called directly by `kinds/view-kind.ts`'s
+ * `encodeViewQueryNode` (task 4.1) for a stored view body — not merged into
+ * {@link encodeQueryNode} itself, which stays narrow for the reason its own
+ * docstring states.
+ */
+export const encodeWithNode = (node: WithNode): JsonValue => ({
+	queryKind: "with",
+	ctes: node.ctes.map(encodeWithEntry),
+	recursive: node.recursive,
+	body: encodeQueryNode(node.body),
+});
+
+/** The decoding counterpart to {@link encodeQueryNode} — dispatches on the stored `queryKind`. */
+export const decodeQueryNode = (value: JsonValue): SelectNode | SetOpNode => {
+	const node = asRecord(value, "queryKind");
+	const queryKind = stringField(node, "queryKind");
+	if (queryKind === "set-op") {
+		return decodeSetOpNode(value);
+	}
+	return decodeSelectNode(value);
 };
 
 /** Decodes a whole {@link SelectNode} from its snapshot form — the counterpart to {@link encodeSelectNode}, equally reusable for a top-level query (#157) as for `exists()`'s nested one. */
@@ -638,10 +1052,64 @@ export const decodeSelectNode = (value: JsonValue): SelectNode => {
 	return {
 		queryKind,
 		projection: decodeProjection(node.projection as JsonValue),
-		from: decodeTableRef(node.from as JsonValue),
+		from: decodeFromNode(node.from as JsonValue),
 		joins: (node.joins as ReadonlyArray<JsonValue>).map(decodeJoin),
 		where: decodeWhere(node.where as JsonValue),
+		groupBy: decodeExprArrayField(node, "groupBy"),
+		having: decodeOptionalWhere(node.having),
 		orderBy: (node.orderBy as ReadonlyArray<JsonValue>).map(decodeOrderByTerm),
-		limit: node.limit as number | null,
+		limit: (node.limit ?? null) as number | null,
+		offset: (node.offset ?? null) as number | null,
+		distinct: decodeDistinct((node.distinct ?? null) as JsonValue),
+	};
+};
+
+/**
+ * The decoding counterpart to {@link encodeWithEntry}. `query` and
+ * `materialized` are both required — new in this format, so a missing
+ * key is corruption, not an older shape (same leniency rule
+ * {@link decodeRequiredArrayField}'s own doc comment states).
+ */
+const decodeWithEntry = (value: JsonValue): WithEntryNode => {
+	const node = asRecord(value, "name");
+	if (node.query === undefined) {
+		return unknownDiscriminator("query", "undefined");
+	}
+	if (node.materialized === undefined) {
+		return unknownDiscriminator("materialized", "undefined");
+	}
+	return {
+		name: stringField(node, "name"),
+		query: decodeQueryNode(node.query),
+		materialized: node.materialized as boolean | null,
+	};
+};
+
+/**
+ * The decoding counterpart to {@link encodeWithNode} (add-ctes, task
+ * 2.1). A stored `with` node missing its `ctes` list or its `body` is
+ * refused, not repaired: `with` is new in this format version, so an
+ * absent field is corruption rather than an older shape — decoding it
+ * into a plausible value (an empty entry list, a `null` body) would turn
+ * a damaged snapshot into a silently different declaration (query-builder
+ * spec, "A damaged with node is refused, not repaired").
+ */
+export const decodeWithNode = (value: JsonValue): WithNode => {
+	const node = asRecord(value, "queryKind");
+	const queryKind = stringField(node, "queryKind");
+	if (queryKind !== "with") {
+		return unknownDiscriminator("queryKind", queryKind);
+	}
+	if (node.body === undefined) {
+		return unknownDiscriminator("body", "undefined");
+	}
+	if (node.recursive === undefined) {
+		return unknownDiscriminator("recursive", "undefined");
+	}
+	return {
+		queryKind: "with",
+		ctes: decodeRequiredArrayField(node, "ctes", decodeWithEntry),
+		recursive: node.recursive as boolean,
+		body: decodeQueryNode(node.body),
 	};
 };

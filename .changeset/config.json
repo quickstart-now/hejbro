@@ -1,7 +1,17 @@
 {
 	"$schema": "https://unpkg.com/@changesets/config@4.0.0/schema.json",
 	"changelog": "@changesets/cli/changelog",
-	"fixed": [["@hejbro/core", "hejbro", "@hejbro/supabase"]],
+	"fixed": [
+		[
+			"@hejbro/core",
+			"hejbro",
+			"@hejbro/supabase",
+			"@hejbro/query",
+			"@hejbro/pg",
+			"@hejbro/neon",
+			"@hejbro/nile"
+		]
+	],
 	"access": "public",
 	"baseBranch": "dev",
 	"updateInternalDependencies": "patch"

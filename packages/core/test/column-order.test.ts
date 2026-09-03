@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { getTableMeta } from "../src/dsl/table";
-import { emptySnapshot, schema, table, text } from "../src/index";
+import { encodeExprNode } from "../src/expr/codec";
+import { emptySnapshot, numeric, schema, sql, table, text } from "../src/index";
 import {
 	applyColumnOrderToQuery,
 	applyColumnOrderToSelect,
@@ -169,6 +170,104 @@ describe("computeColumnOrder", () => {
 	});
 });
 
+// D100: an expression-change rebuild is a real `drop column` + `add column`
+// on Postgres, which physically re-appends the column at the end of the
+// table -- the oracle must route that column through the newcomer branch,
+// not its pre-rebuild position.
+describe("computeColumnOrder — expression-change rebuild (D100)", () => {
+	const generatedField = (generated: string | undefined) => {
+		if (generated === undefined) {
+			return {};
+		}
+		return { generated: encodeExprNode(sql.raw(generated).exprNode) };
+	};
+
+	const numericColumn = (generated?: string) => ({
+		typeNode: { typeName: "numeric", precision: null, scale: null },
+		...generatedField(generated),
+	});
+
+	const parentWithGenerated = (
+		columns: ReadonlyArray<{
+			readonly name: string;
+			readonly generated?: string;
+		}>,
+	): Snapshot => ({
+		...emptySnapshot,
+		objects: {
+			"table:app.projects": {
+				schema: "app",
+				name: "projects",
+				columns: columns.map(({ name, generated }) => ({
+					name,
+					...numericColumn(generated),
+				})),
+				indexes: [],
+				foreignKeys: [],
+			},
+		},
+	});
+
+	const totalColumn = (expression: string | null) => {
+		if (expression === null) {
+			return numeric();
+		}
+		return numeric().generatedAlwaysAs(sql.raw(expression));
+	};
+
+	const declaredNumeric = (spec: {
+		readonly a: true;
+		readonly total: string | null;
+		readonly b: true;
+	}) =>
+		getTableMeta(
+			table(app, "projects", {
+				a: numeric(),
+				total: totalColumn(spec.total),
+				b: numeric(),
+			}),
+		);
+
+	it("moves a rebuilt column (same name, changed expression) to the end", () => {
+		const oracle = computeColumnOrder(
+			[app, declaredNumeric({ a: true, total: "a * 2", b: true })],
+			parentWithGenerated([
+				{ name: "a" },
+				{ name: "total", generated: "a" },
+				{ name: "b" },
+			]),
+			[],
+		);
+		expect(oracle(ref)).toEqual(["a", "b", "total"]);
+	});
+
+	it("keeps an unchanged generated column in place", () => {
+		const oracle = computeColumnOrder(
+			[app, declaredNumeric({ a: true, total: "a", b: true })],
+			parentWithGenerated([
+				{ name: "a" },
+				{ name: "total", generated: "a" },
+				{ name: "b" },
+			]),
+			[],
+		);
+		expect(oracle(ref)).toEqual(["a", "total", "b"]);
+	});
+
+	it("keeps a generated-to-plain transition in place -- drop expression is in-place, not a rebuild", () => {
+		const oracle = computeColumnOrder(
+			[app, declaredNumeric({ a: true, total: null, b: true })],
+			parentWithGenerated([
+				{ name: "a" },
+				{ name: "total", generated: "a" },
+				{ name: "b" },
+			]),
+			[],
+		);
+		expect(oracle(ref)).toEqual(["a", "total", "b"]);
+	});
+});
+
 describe("applyColumnOrderTo*", () => {
 	const oracle = computeColumnOrder(
 		[app, declared("id", "title", "description", "archivedAt")],
@@ -185,9 +284,44 @@ describe("applyColumnOrderTo*", () => {
 		from: ref,
 		joins: [],
 		where: null,
+		groupBy: [],
+		having: null,
 		orderBy: [],
 		limit: null,
+		offset: null,
+		distinct: null,
 	} as const;
+
+	it("recurses into both set-op branches, keeping identity when nothing moves (add-set-operations)", () => {
+		const setOp = {
+			queryKind: "setOp",
+			operator: "union",
+			all: false,
+			left: select,
+			right: select,
+			orderBy: [],
+			limit: null,
+			offset: null,
+		} as const;
+		const reordered = applyColumnOrderToQuery(setOp, oracle);
+		expect(reordered).not.toBe(setOp);
+		expect((reordered as typeof setOp).left.projection).toEqual({
+			projectionKind: "allColumns",
+			columnNames: ["id", "title", "archived_at", "description"],
+		});
+		// branches over a table the oracle doesn't know stay untouched --
+		// and the set-op node itself keeps reference identity.
+		const unknownSelect = {
+			...select,
+			from: { schemaName: "app", tableName: "unknown" },
+		} as const;
+		const inertSetOp = {
+			...setOp,
+			left: unknownSelect,
+			right: unknownSelect,
+		} as const;
+		expect(applyColumnOrderToQuery(inertSetOp, oracle)).toBe(inertSetOp);
+	});
 
 	it("re-orders an allColumns projection by the oracle", () => {
 		expect(applyColumnOrderToSelect(select, oracle).projection).toEqual({
@@ -204,6 +338,11 @@ describe("applyColumnOrderTo*", () => {
 		expect(applyColumnOrderToSelect(unknown, oracle)).toBe(unknown);
 	});
 
+	it("leaves an allColumns projection over a CTE reference alone -- a CTE is never a snapshot object, so no oracle entry could ever exist for it (add-ctes task 4.2)", () => {
+		const fromCte = { ...select, from: { cteName: "recent" } };
+		expect(applyColumnOrderToSelect(fromCte, oracle)).toBe(fromCte);
+	});
+
 	it("re-orders an allColumns returning on insert/update/delete", () => {
 		const update = {
 			queryKind: "update",
@@ -218,5 +357,41 @@ describe("applyColumnOrderTo*", () => {
 		expect(applyColumnOrderToQuery(update, oracle)).toMatchObject({
 			returning: { columnNames: ["id", "title", "archived_at", "description"] },
 		});
+	});
+
+	it("column order applies to both a CTE-declaring statement's body and every entry's own query (add-ctes task 4.2/4.2b)", () => {
+		const withNode = {
+			queryKind: "with",
+			ctes: [{ name: "recent", query: select, materialized: null }],
+			recursive: false,
+			body: select,
+		} as const;
+		const reordered = applyColumnOrderToQuery(withNode, oracle);
+		expect(reordered).not.toBe(withNode);
+		expect((reordered as typeof withNode).body.projection).toEqual({
+			projectionKind: "allColumns",
+			columnNames: ["id", "title", "archived_at", "description"],
+		});
+		// an entry's own query is a plain select over a real table, with
+		// exactly the same physical order as any other one (task 4.2b) --
+		// not left untouched the way a CTE *reference* correctly is.
+		expect((reordered as typeof withNode).ctes[0].query.projection).toEqual({
+			projectionKind: "allColumns",
+			columnNames: ["id", "title", "archived_at", "description"],
+		});
+	});
+
+	it("a WithNode over an unknown-table body AND unknown-table entries keeps reference identity", () => {
+		const unknownSelect = {
+			...select,
+			from: { schemaName: "app", tableName: "unknown" },
+		} as const;
+		const withNode = {
+			queryKind: "with",
+			ctes: [{ name: "recent", query: unknownSelect, materialized: null }],
+			recursive: false,
+			body: unknownSelect,
+		} as const;
+		expect(applyColumnOrderToQuery(withNode, oracle)).toBe(withNode);
 	});
 });

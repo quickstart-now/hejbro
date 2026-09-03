@@ -21,6 +21,10 @@ import { viewSecurityInvokerValidator } from "./validators/view-security-invoker
 
 export { authJwt, authJwtCached, authUid, authUidCached } from "./auth";
 export { authUsers } from "./auth-tables";
+export type { Claims } from "./context";
+export { asAnon, asUser } from "./context";
+export type { SupabaseDriverEndpoint, SupabaseDriverOptions } from "./driver";
+export { supabaseDriver } from "./driver";
 export { anonRole, authenticatedRole, serviceRole } from "./roles";
 export type {
 	StorageBucketDeclaration,

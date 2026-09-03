@@ -1,6 +1,6 @@
 import type { TriggerDeclaration } from "../dsl/define-trigger";
-import { throwHejbroError } from "../error";
 import { createOrDropDiff, sameJson } from "../kind/diff-helpers";
+import { requireNext, requirePrevious } from "../kind/emit-helpers";
 import type {
 	ChangeOperation,
 	KindChange,
@@ -51,25 +51,15 @@ const TRIGGER_CHANGED_NOTE = "trigger changed; recreating";
  * `alter`'s and `drop`'s drop halves need `predrop`).
  */
 const emitCreate = (change: KindChange): ReadonlyArray<SqlStatement> => {
-	if (change.next === null) {
-		return throwHejbroError(
-			"invalid-kind-change",
-			"trigger create change is missing its next snapshot.",
-		);
-	}
-	const [dropSql, createSql] = renderTriggerSql(asTriggerSnapshot(change.next));
+	const [dropSql, createSql] = renderTriggerSql(
+		asTriggerSnapshot(requireNext(change)),
+	);
 	return [statement(dropSql), statement(createSql)];
 };
 
 /** {@link triggerKind}'s `emit`, `"alter"` case: drop (predrop stage, #122) then recreate. */
 const emitAlter = (change: KindChange): ReadonlyArray<SqlStatement> => {
-	if (change.next === null) {
-		return throwHejbroError(
-			"invalid-kind-change",
-			"trigger alter change is missing its next snapshot.",
-		);
-	}
-	const nextSnapshot = asTriggerSnapshot(change.next);
+	const nextSnapshot = asTriggerSnapshot(requireNext(change));
 	const dropSql = renderTriggerDropSql(nextSnapshot, false);
 	const createSql = renderTriggerCreateSql(nextSnapshot);
 	return [predropStatement(dropSql), statement(createSql)];
@@ -77,14 +67,8 @@ const emitAlter = (change: KindChange): ReadonlyArray<SqlStatement> => {
 
 /** {@link triggerKind}'s `emit`, `"drop"` case: a bare `drop trigger` (D75, predrop stage). */
 const emitDrop = (change: KindChange): ReadonlyArray<SqlStatement> => {
-	if (change.previous === null) {
-		return throwHejbroError(
-			"invalid-kind-change",
-			"trigger drop change is missing its previous snapshot.",
-		);
-	}
 	const dropSql = renderTriggerDropSql(
-		asTriggerSnapshot(change.previous),
+		asTriggerSnapshot(requirePrevious(change)),
 		false,
 	);
 	return [predropStatement(dropSql)];

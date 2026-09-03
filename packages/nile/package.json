@@ -1,0 +1,55 @@
+{
+	"name": "@hejbro/nile",
+	"version": "0.2.0-pre.0",
+	"description": "Nile provider preset and driver for hejbro's query layer.",
+	"license": "Apache-2.0",
+	"type": "module",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js"
+		}
+	},
+	"files": [
+		"dist",
+		"NOTICE"
+	],
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/quickstart-now/hejbro",
+		"directory": "packages/nile"
+	},
+	"homepage": "https://github.com/quickstart-now/hejbro#readme",
+	"bugs": {
+		"url": "https://github.com/quickstart-now/hejbro/issues"
+	},
+	"keywords": [
+		"postgres",
+		"postgresql",
+		"nile",
+		"driver",
+		"preset"
+	],
+	"engines": {
+		"node": ">=22.18.0"
+	},
+	"scripts": {
+		"build": "tsdown",
+		"check-types": "tsc --noEmit",
+		"test": "vitest run",
+		"test:coverage": "vitest run --coverage",
+		"test:integration": "vitest run --config vitest.integration.config.ts",
+		"prepack": "pnpm build"
+	},
+	"dependencies": {
+		"@hejbro/core": "workspace:*",
+		"@hejbro/query": "workspace:*"
+	},
+	"devDependencies": {
+		"@hejbro/pg": "workspace:*",
+		"@vitest/coverage-v8": "catalog:",
+		"tsdown": "catalog:",
+		"typescript": "catalog:",
+		"vitest": "catalog:"
+	}
+}

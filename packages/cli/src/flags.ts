@@ -2,16 +2,23 @@ import type { ConfirmDropSpec, RenameSpec } from "@hejbro/core";
 import { throwHejbroError } from "@hejbro/core";
 
 /**
- * Every value-taking flag `hejbro generate` accepts (rerun.ts:5's own
- * list) — the complete surface, confirmed by reading every command
- * (`verify`/`init` take none). Adding a 5th value-taking flag means
- * adding it here too, or it silently keeps requiring the space form.
+ * Every value-taking flag any command accepts (rerun.ts:5's own list for
+ * `generate`, plus `check`'s `--url`) — the complete surface, confirmed
+ * by reading every command (`verify`/`init` take none). Adding a new
+ * value-taking flag means adding it here too, or it silently keeps
+ * requiring the space form (measured: `check --url=...` was dropped
+ * while `check --url ...` worked, and with `DATABASE_URL` also set the
+ * command silently checked a different database than the one named).
  */
 const VALUE_TAKING_FLAGS: ReadonlyArray<string> = [
 	"--config",
 	"--name",
 	"--rename",
 	"--confirm-drop",
+	"--url",
+	"--schema",
+	"--out",
+	"--db-url",
 ];
 
 /**
@@ -131,3 +138,24 @@ export const parseConfirmDropFlag = (value: string): ConfirmDropSpec => {
 		invalidConfirmDropFlagMessage(value),
 	);
 };
+
+/**
+ * Every value a repeatable flag (e.g. `import`'s `--schema`) was given, in
+ * argv order -- unlike `check.ts`'s own `lastFlagValue` (kept local there,
+ * one caller), this is shared because `import` needs every occurrence, not
+ * just the last.
+ */
+export const collectFlagValues = (
+	rawArgs: ReadonlyArray<string>,
+	flagName: string,
+): ReadonlyArray<string> =>
+	rawArgs.flatMap((token, index) => {
+		if (token !== flagName) {
+			return [];
+		}
+		const value = rawArgs[index + 1];
+		if (value === undefined) {
+			return [];
+		}
+		return [value];
+	});

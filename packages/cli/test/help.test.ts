@@ -45,6 +45,15 @@ describe("hejbro --help", () => {
 		expect(result.stdout).toContain("generate");
 	});
 
+	it("lists check among the commands", async () => {
+		const result = await runHelp(cwd, ["--help"]);
+		const commands = result.stdout.split("COMMANDS")[1] ?? "";
+		const checkRow = commands
+			.split("\n")
+			.filter((line) => line.trimStart().startsWith("check"));
+		expect(checkRow).toHaveLength(1);
+	});
+
 	it("renders each subcommand on one line in COMMANDS", async () => {
 		const result = await runHelp(cwd, ["--help"]);
 		const commands = result.stdout.split("COMMANDS")[1] ?? "";
@@ -56,6 +65,98 @@ describe("hejbro --help", () => {
 			"Diff your TypeScript declarations against the last snapshot and write a new migration file.",
 		);
 		expect(commands).not.toContain("Renames are never confirmed interactively");
+	});
+
+	// [task 7.1] The four apply-engine commands this change adds, under
+	// the names 7.1 settled on -- `migrate`, `status`, `reset`, `raise`
+	// (`db-up`/`status`-as-placeholder never shipped as literal command
+	// names).
+	it("lists the new commands", async () => {
+		const result = await runHelp(cwd, ["--help"]);
+		const commands = result.stdout.split("COMMANDS")[1] ?? "";
+		const rows = commands.split("\n");
+		["migrate", "status", "reset", "raise"].forEach((name) => {
+			expect(
+				rows.filter((line) => line.trimStart().startsWith(name)),
+			).toHaveLength(1);
+		});
+	});
+
+	// [task 7.1] `history` is taken (git-derived: ok/lost/rewritten/
+	// uncommitted) -- the ledger's own report is a different command
+	// (`status`), never a second sense of the same word. Both rows exist,
+	// distinctly, and `status`'s own one-line description does not reuse
+	// "history" to describe what it reports.
+	it("does not rename history", async () => {
+		const result = await runHelp(cwd, ["--help"]);
+		const commands = result.stdout.split("COMMANDS")[1] ?? "";
+		const rows = commands.split("\n");
+		const historyRow = rows.filter((line) =>
+			line.trimStart().startsWith("history"),
+		);
+		const statusRow = rows.filter((line) =>
+			line.trimStart().startsWith("status"),
+		);
+		expect(historyRow).toHaveLength(1);
+		expect(statusRow).toHaveLength(1);
+		expect(statusRow[0]).not.toContain("history");
+	});
+});
+
+/**
+ * Every `--flag` citty's `OPTIONS` block lists, parsed from its own
+ * `--flag=<placeholder>` rendering -- not a hand-maintained list, so it
+ * tracks whatever `GENERATE_ARGS` actually declares. Anchored on the
+ * `OPTIONS` heading line specifically (`\nOPTIONS\n\n`), not the first
+ * substring match: the `USAGE hejbro generate [OPTIONS]` line above it
+ * also contains the bare word "OPTIONS". The `--flag=` pattern only
+ * matches value-taking flags, rendered as `--flag=<placeholder>` -- every
+ * `GENERATE_ARGS` entry is a string today, so this stays a sound
+ * comparison. A future boolean flag renders with no `=` at all, so it
+ * would be missing from BOTH `generateFlags` and `baselineFlags` here at
+ * once -- invisible to the R-b drift check this helper exists for, not
+ * merely miscounted.
+ */
+const optionFlags = (stdout: string): ReadonlyArray<string> => {
+	const optionsBlock = stdout.match(/\nOPTIONS\n\n([\s\S]*)/)?.[1] ?? "";
+	return [...optionsBlock.matchAll(/--([a-z-]+)=/g)].map(
+		(match) => `--${match[1]}`,
+	);
+};
+
+describe("hejbro baseline --help", () => {
+	it("does not list the rename or drop-confirmation flags (#445, nit)", async () => {
+		const result = await runHelp(cwd, ["baseline", "--help"]);
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).not.toContain("--rename");
+		expect(result.stdout).not.toContain("--confirm-drop");
+	});
+
+	it("still lists --config and --name", async () => {
+		const result = await runHelp(cwd, ["baseline", "--help"]);
+		expect(result.stdout).toContain("--config");
+		expect(result.stdout).toContain("--name");
+	});
+
+	it("lists exactly generate's own flags minus --rename and --confirm-drop (#445 review R-b)", async () => {
+		const generateResult = await runHelp(cwd, ["generate", "--help"]);
+		const baselineResult = await runHelp(cwd, ["baseline", "--help"]);
+
+		const generateFlags = optionFlags(generateResult.stdout);
+		const baselineFlags = optionFlags(baselineResult.stdout);
+
+		// sanity first: the set this test derives "expected" from actually
+		// contains what it's about to subtract, so the assertion below
+		// isn't vacuously true against an already-empty starting set.
+		expect(generateFlags).toEqual(
+			expect.arrayContaining(["--rename", "--confirm-drop"]),
+		);
+		const expectedBaselineFlags = generateFlags.filter(
+			(flag) => flag !== "--rename" && flag !== "--confirm-drop",
+		);
+		expect([...baselineFlags].sort()).toEqual(
+			[...expectedBaselineFlags].sort(),
+		);
 	});
 });
 

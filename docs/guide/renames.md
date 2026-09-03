@@ -87,9 +87,18 @@ For a rename you'd rather ship as two safe, backward-compatible steps:
 
 This avoids a single migration that both adds and drops in the same statement batch — useful when you need a deploy window between the two.
 
-## What renames do not re-target yet
+## Expressions retarget too
 
-Rendered expression text — RLS policy `using`/`with check`, CHECK constraints, and partial-index predicates — keeps the old names inside the stored SQL string, so the generate after a rename emits one extra drop+add for those objects. The end state is correct; see issue #110.
+RLS policy `using`/`with check`, CHECK constraints, index predicates and
+index expression columns, and view queries are stored in the snapshot as
+structured expression nodes, not rendered SQL text (D67/D70) — so a
+`--rename` retargets the identifiers inside them exactly, the same way it
+retargets a plain column reference. Renaming a column used inside
+``index("…").on(sql`lower(${t.email})`)``, for example, retargets the
+stored expression to the new column name — no index DDL is emitted (no
+drop, no create), only the `alter table … rename column` statement, and no
+ambiguity error. See the [indexes guide](indexes.md) for the
+expression-index example end to end.
 
 ## Rolling back
 
@@ -97,7 +106,7 @@ There is no `hejbro rollback` command — migrations are forward-only, the same 
 
 1. To undo a change, edit your declaration files back to the prior shape and run `hejbro generate` again — this produces a new, forward migration that happens to move the declared state backward, not a rewrite of an existing one.
 2. That new migration's `snapshot:` hash converges to the same value the chain had before the change being undone, so `hejbro verify` and the committed chain agree once it's applied.
-3. Never `git revert` (or hand-edit) a committed migration `.sql` file or `hejbro.snapshot.json` — the chain's `parent-snapshot`/`snapshot` lines are hashes over file contents, and rewriting history out of them breaks chain linearity (`hejbro verify`'s check 3). The only migrations safe to delete are ones that were generated but never applied anywhere.
+3. Never `git revert` (or hand-edit) a committed migration `.sql` file or `hejbro.snapshot.json` — the chain's `parent-snapshot`/`snapshot` lines are hashes of the declaration snapshot before and after each migration, so reverting a file, editing one of those two hash lines, or editing the snapshot breaks the chain (`hejbro verify`'s check 3, or check 4 for the last migration's `snapshot:` line). The chain's head is the one place `verify` takes as given: the first migration's own `parent-snapshot:` line is not checked, and deleting the first migration — or any leading run of migrations — leaves a chain that still verifies; never rely on that. The two hash lines are not hashes of the file's SQL body either: a body edit that leaves them intact is not something `verify` can see, which is one more reason never to make one. The only migrations safe to delete are ones that were generated but never applied anywhere.
 4. A rollback that drops a column emits without needing a `--rename` flag (it's a genuine drop, not a rename candidate), but it can lose data — Postgres drops the column's stored values along with it. If the rollback needs to preserve data, use [expand–contract](#when-you-dont-want-a-flag-at-all-expand-contract) instead of a straight drop.
 
 Known limitation: `hejbro verify`'s check 3 doesn't yet distinguish "the chain rolled forward back to a snapshot state it already passed through" from a genuinely diverged chain; see #129.

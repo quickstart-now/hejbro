@@ -1,4 +1,4 @@
-import { readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
@@ -96,7 +96,7 @@ export default defineConfig({
 `;
 
 const EMPTY_SNAPSHOT_SOURCE =
-	'{\n\t"dialect": "postgres",\n\t"formatVersion": 5,\n\t"objects": {}\n}\n';
+	'{\n\t"dialect": "postgres",\n\t"formatVersion": 8,\n\t"objects": {}\n}\n';
 
 const BUCKET_SCHEMA = `import { storageBucket } from "@hejbro/supabase";
 
@@ -405,7 +405,7 @@ export const projects = table(app, "projects", {
 		);
 	});
 
-	it("check 4 (tip == current): exits 1 with chain-tip-mismatch when a migration's own snapshot hash is corrupted", async () => {
+	it("check 4 (tip == current): exits 1 with chain-tip-mismatch naming both the migration and the snapshot when a migration's own snapshot hash is corrupted (#632)", async () => {
 		await runCli(cwd, ["init"]);
 		await writeSchema(BASE_SCHEMA);
 		await runCli(cwd, ["generate"]);
@@ -422,9 +422,195 @@ export const projects = table(app, "projects", {
 
 		const result = await runCli(cwd, ["verify"]);
 		expect(result.exitCode).toBe(1);
+		// The header line's identity must name the actual migration file, not
+		// the "snapshot:" substring the message happens to quote (#632: the
+		// regex-based identity heuristic used to pick that up instead).
 		expect(result.stderr).toContain(
-			"the migration chain's tip hash doesn't match the current snapshot — the last migration's \"snapshot:\" hash and the on-disk snapshot's own hash disagree, which means the snapshot or the last migration file was edited after the last `hejbro generate`. Next: restore the snapshot (and the last migration file, if it was edited) from version control — the snapshot is a derived file and should only ever change through `hejbro generate`.",
+			`error[chain-tip-mismatch]: migrations/${fileName}`,
 		);
+		expect(result.stderr).toContain(
+			`the migration chain's tip hash doesn't match the current snapshot — "migrations/${fileName}"'s "snapshot:" hash and the snapshot at "hejbro.snapshot.json" disagree. Next: restore the snapshot (and "migrations/${fileName}", if it was edited) from version control — the snapshot is a derived file and should only ever change through \`hejbro generate\`.`,
+		);
+		// The prior text asserted a cause ("which means ... was edited after
+		// the last `hejbro generate`") the check never actually verified —
+		// dropped, states the observation only.
+		expect(result.stderr).not.toContain("which means");
+	});
+
+	it("check 4 (tip == current): names the last hash-bearing migration, not the last file in the directory listing (#632)", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(BASE_SCHEMA);
+		await runCli(cwd, ["generate"]);
+
+		const [fileName] = await migrationFileNames();
+		const filePath = join(cwd, "migrations", fileName as string);
+		const original = await readFile(filePath, "utf8");
+		const corrupted = replaceLinePrefixedWith(
+			original,
+			SNAPSHOT_PREFIX,
+			`sha256:${"a".repeat(64)}`,
+		);
+		await writeFile(filePath, corrupted);
+
+		// A legacy, pre-Phase-5 file with no hash-chain banner at all, sorted
+		// after the real (hashed) migration by filename — readChainEntries
+		// filters it out entirely, so the reported tip must still be the real
+		// migration, never this one, even though it's the last file
+		// `listMigrationFiles` returns.
+		await writeFixtureFile(
+			cwd,
+			"migrations/99999999999999_legacy_no_hashes.sql",
+			"-- hand-written, no hejbro banner\ncreate table legacy (id int);\n",
+		);
+
+		const result = await runCli(cwd, ["verify"]);
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain(
+			`error[chain-tip-mismatch]: migrations/${fileName}`,
+		);
+		expect(result.stderr).not.toContain("99999999999999_legacy_no_hashes.sql");
+	});
+
+	// #616: the banner hashes are snapshot hashes, so a body edit is outside
+	// verify's reach. This pins the limit the requirement now states; it is
+	// green by construction and is meant to turn red only when a body hash
+	// ships. The check-4 test above is its control (the same file with a
+	// banner line altered exits 1).
+	it("a body edit that keeps the hash lines passes (stated limitation)", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(BASE_SCHEMA);
+		await runCli(cwd, ["generate"]);
+
+		const [fileName] = await migrationFileNames();
+		const filePath = join(cwd, "migrations", fileName as string);
+		const original = await readFile(filePath, "utf8");
+		const lines = original.split("\n");
+		const statementIndex = lines.findIndex((line) =>
+			line.startsWith("create "),
+		);
+		expect(statementIndex).toBeGreaterThan(-1);
+		const edited = lines
+			.map((line, index) => {
+				if (index !== statementIndex) {
+					return line;
+				}
+				return line.replace("create ", "create /* hand-edited */ ");
+			})
+			.join("\n");
+		expect(edited).not.toBe(original);
+		await writeFile(filePath, edited);
+
+		const result = await runCli(cwd, ["verify"]);
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("checks passed");
+	});
+
+	// #616: the chain root's own parent is taken as given (core's checkChain,
+	// by design -- a legacy-prefix chain's first hashed file does not start at
+	// the empty snapshot), so deleting the first migration is not reported.
+	// A stated limit, pinned; the middle-file case is the control (broken-chain).
+	it("removing the first migration passes (stated limitation: the root is taken as given)", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(BASE_SCHEMA);
+		await runCli(cwd, ["generate"]);
+		await writeSchema(CHANGED_SCHEMA);
+		await runCli(cwd, ["generate"]);
+		const [first, second] = await migrationFileNames();
+		expect(second).toBeDefined();
+		await rm(join(cwd, "migrations", first as string));
+
+		const result = await runCli(cwd, ["verify"]);
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("checks passed (1 migrations");
+	});
+
+	it("editing a non-hash banner line passes (stated limitation: only the two hash lines are read)", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(BASE_SCHEMA);
+		await runCli(cwd, ["generate"]);
+		const [fileName] = await migrationFileNames();
+		const filePath = join(cwd, "migrations", fileName as string);
+		const original = await readFile(filePath, "utf8");
+		const edited = original.replace(
+			"-- hejbro migration",
+			"-- hejbro migration (edited by hand)",
+		);
+		expect(edited).not.toBe(original);
+		await writeFile(filePath, edited);
+
+		const result = await runCli(cwd, ["verify"]);
+		expect(result.exitCode).toBe(0);
+	});
+
+	it("removing every migration passes (stated limitation: an empty directory has no tip to compare)", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(BASE_SCHEMA);
+		await runCli(cwd, ["generate"]);
+		const [only] = await migrationFileNames();
+		await rm(join(cwd, "migrations", only as string));
+
+		const result = await runCli(cwd, ["verify"]);
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("checks passed (0 migrations");
+	});
+
+	it("a rename that keeps a file's sort position passes (stated limitation: no hash covers the filename)", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(BASE_SCHEMA);
+		await runCli(cwd, ["generate"]);
+		await writeSchema(CHANGED_SCHEMA);
+		await runCli(cwd, ["generate"]);
+		const [, second] = await migrationFileNames();
+		const version = (second as string).split("_", 1)[0] as string;
+		const renamed = `${version}_renamed_by_hand.sql`;
+		expect(renamed).not.toBe(second);
+		await rename(
+			join(cwd, "migrations", second as string),
+			join(cwd, "migrations", renamed),
+		);
+
+		const result = await runCli(cwd, ["verify"]);
+		expect(result.exitCode).toBe(0);
+	});
+
+	it("a file with no hash lines passes and is counted (stated limitation: the walk skips it, the summary counts it)", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(BASE_SCHEMA);
+		await runCli(cwd, ["generate"]);
+		await writeFile(
+			join(cwd, "migrations", "99999999999999_added_by_hand.sql"),
+			"drop table app.posts;\n",
+		);
+
+		const result = await runCli(cwd, ["verify"]);
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("checks passed (2 migrations");
+	});
+
+	it("existing chain diagnostics are unchanged (R2-G3's export check contributes nothing to a repository with no export)", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(BASE_SCHEMA);
+		await runCli(cwd, ["generate"]);
+
+		const [fileName] = await migrationFileNames();
+		const filePath = join(cwd, "migrations", fileName as string);
+		const original = await readFile(filePath, "utf8");
+		const corrupted = replaceLinePrefixedWith(
+			original,
+			SNAPSHOT_PREFIX,
+			`sha256:${"a".repeat(64)}`,
+		);
+		await writeFile(filePath, corrupted);
+
+		const result = await runCli(cwd, ["verify"]);
+		expect(result.exitCode).toBe(1);
+		// Still "of 5", not 6 -- no export directory exists, so the export
+		// check contributed nothing: no outcome, no skip line, no shift in
+		// the total a repository that has never opted in has always seen.
+		expect(result.stderr).toContain(
+			"verify: 1 of 5 checks failed — fix the errors above and rerun `hejbro verify`.",
+		);
+		expect(result.stderr).not.toContain("export-stale");
 	});
 
 	// #220: two migrations claiming the same version prefix -- Supabase (and

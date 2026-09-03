@@ -1,8 +1,8 @@
 {
 	"name": "@hejbro/supabase",
-	"version": "0.1.1",
+	"version": "0.2.0-pre.0",
 	"description": "Supabase provider preset for hejbro: auth expression helpers, storage buckets, role/grant presets, reserved-schema protection.",
-	"license": "MIT",
+	"license": "Apache-2.0",
 	"type": "module",
 	"repository": {
 		"type": "git",
@@ -28,7 +28,8 @@
 		}
 	},
 	"files": [
-		"dist"
+		"dist",
+		"NOTICE"
 	],
 	"engines": {
 		"node": ">=22.18.0"
@@ -38,13 +39,17 @@
 		"check-types": "tsc --noEmit",
 		"test": "vitest run",
 		"test:coverage": "vitest run --coverage",
+		"test:integration": "vitest run --config vitest.integration.config.ts",
 		"prepack": "pnpm build"
 	},
 	"dependencies": {
-		"@hejbro/core": "workspace:*"
+		"@hejbro/core": "workspace:*",
+		"@hejbro/query": "workspace:*"
 	},
 	"devDependencies": {
+		"@types/pg": "^8.23.1",
 		"@vitest/coverage-v8": "catalog:",
+		"pg": "^8.23.0",
 		"tsdown": "catalog:",
 		"typescript": "catalog:",
 		"vitest": "catalog:"

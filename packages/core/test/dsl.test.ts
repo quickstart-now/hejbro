@@ -101,10 +101,19 @@ describe("table() — app-style posts", () => {
 		}));
 		expect(getTableMeta(posts).indexes).toEqual([
 			{
-				columns: [{ name: "published_at", desc: false, nulls: null }],
+				columns: [
+					{
+						name: "published_at",
+						origin: { schemaName: "app", tableName: "posts" },
+						desc: false,
+						nulls: null,
+						opclass: null,
+					},
+				],
 				unique: false,
 				indexName: null,
 				predicate: null,
+				method: null,
 			},
 		]);
 	});
@@ -114,10 +123,19 @@ describe("table() — app-style posts", () => {
 			table(app, "posts", { id: uuid().primaryKey() }, () => ({
 				indexes: [
 					{
-						columns: [{ name: "nonexistent", desc: false, nulls: null }],
+						columns: [
+							{
+								name: "nonexistent",
+								origin: { schemaName: "app", tableName: "posts" },
+								desc: false,
+								nulls: null,
+								opclass: null,
+							},
+						],
 						unique: false,
 						indexName: null,
 						predicate: null,
+						method: null,
 					},
 				],
 			})),
@@ -168,5 +186,75 @@ describe("table() — auxiliary types", () => {
 		expect(getTableMeta(counters).columns[0]?.columnState.typeNode).toEqual({
 			typeName: "integer",
 		});
+	});
+});
+
+describe("column-level references fold into foreign keys (add-relational-reads task 1.2)", () => {
+	const app = schema("app");
+	const users = table(app, "users", { id: uuid().primaryKey() });
+
+	it("produces the extras-equivalent foreign key declaration", () => {
+		const viaColumn = table(app, "pets_via_column", {
+			id: uuid().primaryKey(),
+			ownerId: uuid()
+				.notNull()
+				.references(() => users.id),
+		});
+		const viaExtras = table(
+			app,
+			"pets_via_extras",
+			{ id: uuid().primaryKey(), ownerId: uuid().notNull() },
+			(t) => ({
+				foreignKeys: [
+					{ columns: [t.ownerId], references: { columns: [users.id] } },
+				],
+			}),
+		);
+		expect(getTableMeta(viaColumn).foreignKeys).toEqual(
+			getTableMeta(viaExtras).foreignKeys,
+		);
+		expect(getTableMeta(viaColumn).foreignKeys).toEqual([
+			{
+				columns: ["owner_id"],
+				references: {
+					schemaName: "app",
+					tableName: "users",
+					columns: ["id"],
+				},
+				// D106 R3-B3: the column-level .references() sugar has no
+				// name slot of its own -- always derives.
+				name: null,
+				onDelete: null,
+				onUpdate: null,
+			},
+		]);
+	});
+
+	it("rejects a column declared through both paths, naming the column", () => {
+		const buildDoublyDeclared = () =>
+			table(
+				app,
+				"pets_double",
+				{
+					id: uuid().primaryKey(),
+					ownerId: uuid()
+						.notNull()
+						.references(() => users.id),
+				},
+				(t) => ({
+					foreignKeys: [
+						{ columns: [t.ownerId], references: { columns: [users.id] } },
+					],
+				}),
+			);
+		expect(buildDoublyDeclared).toThrowError(/owner_id/);
+		try {
+			buildDoublyDeclared();
+			expect.unreachable("buildDoublyDeclared() should have thrown");
+		} catch (error) {
+			expect((error as { code: string }).code).toBe(
+				"invalid-duplicate-foreign-key",
+			);
+		}
 	});
 });

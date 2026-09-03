@@ -116,4 +116,41 @@ export interface ObjectKind<TDeclaration extends HejbroDeclaration> {
 	 * predating this field) is simply never checked, unaffected.
 	 */
 	readonly requiredKeys?: ReadonlyArray<string>;
+	/**
+	 * `noCatalogObjectReason` (#482, task 2.1) — states that no catalog
+	 * object ever backs this kind's declared objects, and why (e.g.
+	 * `@hejbro/supabase`'s storage bucket kind: the Storage API owns that
+	 * row, not this database's own migrations). Named for what its value
+	 * *is*, the same way `requiredKeys`'s value is keys and
+	 * `siblingChanges`'s value is changes — a predicate-shaped name
+	 * (`notCatalogComparable`) paired with a prose value would build a
+	 * naming/value mismatch into the type itself. This is the kind-level
+	 * fact only; `hejbro check` (a CLI concern, not this interface's) is
+	 * what turns a declared reason into a coverage-boundary statement,
+	 * comparing nothing for the kind and never counting one of its
+	 * objects as a difference just because it was never compared.
+	 * Optional and additive, the same way `siblingChanges` (D74),
+	 * `nextSnapshot` (D78), and `requiredKeys` (D79) widened this
+	 * interface: a kind that doesn't set it is compared exactly as it
+	 * always was. Data, not a function: a comparator that ran its own
+	 * logic here would drag `hejbro check`'s catalog and finding types
+	 * across the preset boundary for a need no kind has yet — tracked as
+	 * #508, decided when one does.
+	 */
+	readonly noCatalogObjectReason?: string;
+	/**
+	 * `ownerTableIdentity` (D106 R1, B2) — answers "which table declaration
+	 * gave rise to this node", for a kind whose objects are always the
+	 * fan-out of a table declaration (`sequenceKind`/`rlsKind`/
+	 * `policyKind`; `tableKind` answers with its own identity). Optional
+	 * and additive, the same way every other member here widened this
+	 * interface: a kind that doesn't set it (a `grant`, for instance — a
+	 * grant is the user's own standalone declaration, never a table
+	 * fan-out, and MUST NOT answer this) is never asked. `diffSnapshots`
+	 * is the only reader: a key whose owning table identity resolves to
+	 * an `existing` table in `next` is skipped before this kind's own
+	 * `diff` ever runs — a table hejbro does not own gets no drop *or*
+	 * create for what it fans out into, on either side of a handover.
+	 */
+	ownerTableIdentity?(node: JsonValue): string;
 }

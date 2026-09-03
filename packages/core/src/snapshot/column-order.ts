@@ -1,3 +1,4 @@
+import { arrayWithIdentityPreserved } from "../array-identity";
 import type { TableDeclaration } from "../dsl/table";
 import type {
 	ColumnRenameSpec,
@@ -5,14 +6,21 @@ import type {
 	TableRenameSpec,
 } from "../engine/rename-plan";
 import type {
+	ExprNode,
+	FromNode,
 	ProjectionNode,
 	QueryNode,
 	ReturningNode,
 	SelectNode,
+	SetOpNode,
 	TableRefNode,
+	WithEntryNode,
+	WithNode,
 } from "../expr/ast";
+import { renderExpr } from "../expr/render-sql";
 import type { HejbroDeclaration } from "../kind/object-kind"; // type-only; object-kind.ts imports ColumnOrderOracle back as `import type`, which TS erases — no runtime cycle
-import { asTableSnapshot } from "../kinds/table-snapshot";
+import type { ColumnSnapshot } from "../kinds/table-snapshot";
+import { asTableSnapshot, columnGenerated } from "../kinds/table-snapshot";
 import type { Snapshot } from "./snapshot";
 
 /** Answers "what is the physical column order of this table?" — `null` when the table is unknown to the declarations being built. */
@@ -45,17 +53,17 @@ const parentTableName = (
 		)
 		.map((spec) => spec.oldName)[0] ?? tableName;
 
-/** Parent column names, already spelled the way the next snapshot spells them (column renames applied). */
-const parentColumnNames = (
+/** Parent columns, keyed by the name the next snapshot spells them with (column renames applied). */
+const parentColumnsByName = (
 	previous: Snapshot,
 	schemaName: string,
 	tableName: string,
 	renames: ReadonlyArray<RenameSpec>,
-): ReadonlyArray<string> => {
+): ReadonlyMap<string, ColumnSnapshot> => {
 	const parentName = parentTableName(schemaName, tableName, renames);
 	const node = previous.objects[`table:${schemaName}.${parentName}`];
 	if (node === undefined) {
-		return [];
+		return new Map();
 	}
 	// A `ColumnRenameSpec.tableName` is always the table's *old* name
 	// (`applyColumnRename`, rename-plan.ts — a same-run table rename is
@@ -73,21 +81,70 @@ const parentColumnNames = (
 			)
 			.map((spec) => [spec.oldName, spec.newName] as const),
 	);
-	return asTableSnapshot(node).columns.map(
-		(column) => renamed.get(column.name) ?? column.name,
+	return new Map(
+		asTableSnapshot(node).columns.map((column) => [
+			renamed.get(column.name) ?? column.name,
+			column,
+		]),
 	);
 };
 
-/** D81: parent order for the columns that survive, then the newcomers in declaration order. */
+/**
+ * `true` when `previousColumn`'s own generated expression differs from
+ * `declaredGenerated`'s rendered text — an expression-change rebuild,
+ * which physically re-appends the column at the end of a real Postgres
+ * table (`drop column` + `add column`, `table-kind-emit.ts`'s
+ * `generatedRebuildStatements`). `declaredGenerated === null` (a plain or
+ * absent-generated column) or no parent column is never a rebuild by this
+ * check alone.
+ */
+const isGeneratedRebuild = (
+	previousColumn: ColumnSnapshot | undefined,
+	declaredGenerated: ExprNode | null,
+): boolean => {
+	if (previousColumn === undefined || declaredGenerated === null) {
+		return false;
+	}
+	const previousGenerated = columnGenerated(previousColumn);
+	if (previousGenerated === null) {
+		return false;
+	}
+	return previousGenerated !== renderExpr(declaredGenerated);
+};
+
+/** Every declared column whose expression-change rebuild this build must reflect (see {@link isGeneratedRebuild}). */
+const rebuiltColumnNames = (
+	declaration: TableDeclaration,
+	parentColumns: ReadonlyMap<string, ColumnSnapshot>,
+): ReadonlySet<string> =>
+	new Set(
+		declaration.columns
+			.filter((column) =>
+				isGeneratedRebuild(
+					parentColumns.get(column.columnName),
+					column.columnState.generated ?? null,
+				),
+			)
+			.map((column) => column.columnName),
+	);
+
+/**
+ * D81: parent order for the columns that survive, then the newcomers in
+ * declaration order. `rebuilt` (D100) routes a same-name expression-change
+ * rebuild through the newcomer branch instead of its old position — it
+ * physically lands at the end of a real Postgres table, not where it used
+ * to be.
+ */
 const physicalOrder = (
 	parent: ReadonlyArray<string>,
 	declared: ReadonlyArray<string>,
+	rebuilt: ReadonlySet<string>,
 ): ReadonlyArray<string> => {
 	const declaredSet = new Set(declared);
 	const parentSet = new Set(parent);
 	return [
-		...parent.filter((name) => declaredSet.has(name)),
-		...declared.filter((name) => !parentSet.has(name)),
+		...parent.filter((name) => declaredSet.has(name) && !rebuilt.has(name)),
+		...declared.filter((name) => !parentSet.has(name) || rebuilt.has(name)),
 	];
 };
 
@@ -100,16 +157,18 @@ export const computeColumnOrder = (
 		declarations.filter(isTableDeclaration).map((declaration) => {
 			const schemaName = declaration.schema.schemaName;
 			const declared = declaration.columns.map((column) => column.columnName);
+			const parentColumns = parentColumnsByName(
+				previous,
+				schemaName,
+				declaration.tableName,
+				renames,
+			);
 			return [
 				`${schemaName}.${declaration.tableName}`,
 				physicalOrder(
-					parentColumnNames(
-						previous,
-						schemaName,
-						declaration.tableName,
-						renames,
-					),
+					Array.from(parentColumns.keys()),
 					declared,
+					rebuiltColumnNames(declaration, parentColumns),
 				),
 			] as const;
 		}),
@@ -120,13 +179,20 @@ export const computeColumnOrder = (
 
 const orderedProjection = (
 	projection: ProjectionNode,
-	table: TableRefNode,
+	from: FromNode,
 	columnOrder: ColumnOrderOracle,
 ): ProjectionNode => {
 	if (projection.projectionKind !== "allColumns") {
 		return projection;
 	}
-	const order = columnOrder(table);
+	// A CTE reference is inert here by construction (add-ctes, task 4.2):
+	// it is never a snapshot object, so no oracle entry could ever exist
+	// for it -- the same "unknown table" case columnOrder already answers
+	// null for, just proven rather than reached through the oracle at all.
+	if ("cteName" in from) {
+		return projection;
+	}
+	const order = columnOrder(from);
 	if (order === null) {
 		return projection;
 	}
@@ -159,12 +225,72 @@ export const applyColumnOrderToSelect = (
 	return { ...node, projection };
 };
 
+/** D81 over a set operation: each leaf select reorders against its own `from` (the left branch names the output, D103, but a right branch's physical order matters to ITS rendering too). */
+const applyColumnOrderToSetOp = (
+	node: SetOpNode,
+	columnOrder: ColumnOrderOracle,
+): SetOpNode => {
+	const left = applyColumnOrderToQuery(node.left, columnOrder);
+	const right = applyColumnOrderToQuery(node.right, columnOrder);
+	if (left === node.left && right === node.right) {
+		return node;
+	}
+	return {
+		...node,
+		left: left as typeof node.left,
+		right: right as typeof node.right,
+	};
+};
+
+/** One `WITH` entry's own query reordered against its own `from` -- an entry's body is an ordinary select over a real table (or another entry), with exactly the physical order any other select has (add-ctes, task 4.2b: entries were wrongly treated as computed results with no physical order of their own, the same status a CTE *reference* correctly has, but an entry's *body* does not). */
+const applyColumnOrderToWithEntry = (
+	entry: WithEntryNode,
+	columnOrder: ColumnOrderOracle,
+): WithEntryNode => {
+	const query = applyColumnOrderToQuery(entry.query, columnOrder);
+	if (query === entry.query) {
+		return entry;
+	}
+	return { ...entry, query: query as typeof entry.query };
+};
+
+/**
+ * A `WITH` statement's own physical order reaches both its body and every
+ * entry's own query (add-ctes, task 4.2b) -- only a CTE *reference* (a
+ * `from`/join naming one by its bare name) has no physical order, handled
+ * separately by `orderedProjection`'s own `cteName` branch; an entry's
+ * *body* is a plain select over real tables and reorders exactly like any
+ * other one, the same way `retargetWithNode` already recurses into
+ * `ctes` for a rename. Split out (D71/#154 ratchet-5), same reasoning as
+ * {@link applyColumnOrderToSetOp}.
+ */
+const applyColumnOrderToWith = (
+	node: WithNode,
+	columnOrder: ColumnOrderOracle,
+): WithNode => {
+	const ctes = arrayWithIdentityPreserved(
+		node.ctes.map((entry) => applyColumnOrderToWithEntry(entry, columnOrder)),
+		node.ctes,
+	);
+	const body = applyColumnOrderToQuery(node.body, columnOrder);
+	if (ctes === node.ctes && body === node.body) {
+		return node;
+	}
+	return { ...node, ctes, body: body as typeof node.body };
+};
+
 export const applyColumnOrderToQuery = (
 	node: QueryNode,
 	columnOrder: ColumnOrderOracle,
 ): QueryNode => {
 	if (node.queryKind === "select") {
 		return applyColumnOrderToSelect(node, columnOrder);
+	}
+	if (node.queryKind === "setOp") {
+		return applyColumnOrderToSetOp(node, columnOrder);
+	}
+	if (node.queryKind === "with") {
+		return applyColumnOrderToWith(node, columnOrder);
 	}
 	const returning = orderedReturning(node.returning, node.table, columnOrder);
 	if (returning === node.returning) {

@@ -356,7 +356,7 @@ export const projects = table(app, "projects", {
 			const historyResult = await runCli(cwd, ["history"]);
 			expect(historyResult.exitCode).toBe(0);
 			expect(historyResult.stdout).toContain(
-				"only migration 2's declaration state exists in git (squash merge lost migration 1's). Closest available: `hejbro restore 2`.",
+				"only migration 2's declaration state exists in git. Closest available: `hejbro restore 2`.",
 			);
 
 			const restoreResult = await runCli(cwd, ["restore", "1"]);
@@ -460,7 +460,7 @@ export const projects = table(app, "projects", {
 			const result = await runCli(cwd, ["restore", "1"]);
 			expect(result.exitCode).toBe(0);
 			expect(result.stdout).toContain(
-				"note: migration 1 was generated under an older snapshot format (v4; this build is v5)",
+				"note: migration 1 was generated under an older snapshot format (v4; this build is v8)",
 			);
 			expect(result.stdout).toContain(
 				"the post-restore snapshot-reproduction check can't run across a format change",

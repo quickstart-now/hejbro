@@ -9,6 +9,7 @@ import {
 	select,
 	table,
 	uuid,
+	withCte,
 } from "@hejbro/core";
 import { describe, expect, it } from "vitest";
 import { supabaseValidators } from "../src/index";
@@ -44,6 +45,24 @@ describe("viewSecurityInvokerValidator", () => {
 			"view-over-rls-without-security-invoker",
 		);
 		expect(result.warnings[0]?.message).toContain('"app"."recent_posts"');
+		expect(result.warnings[0]?.message).toContain('"app"."posts"');
+	});
+
+	it("warns when only a set-op's RIGHT branch reads an rls-protected table (review F2)", () => {
+		const view = defineView(
+			app,
+			"combined_view",
+			select(comments).union(select(posts)),
+		);
+		const result = generateMigration({
+			declarations: [app, posts, comments, usageGrant, view],
+			previousSnapshot: emptySnapshot,
+			validators: [viewSecurityInvokerValidator],
+		});
+		expect(result.warnings).toHaveLength(1);
+		expect(result.warnings[0]?.code).toBe(
+			"view-over-rls-without-security-invoker",
+		);
 		expect(result.warnings[0]?.message).toContain('"app"."posts"');
 	});
 
@@ -84,6 +103,47 @@ describe("viewSecurityInvokerValidator", () => {
 		expect(result.warnings[0]?.code).toBe(
 			"view-over-rls-without-security-invoker",
 		);
+	});
+
+	// add-ctes task 4.4: both halves of why FromNode was chosen over a
+	// side-channel field (D105) -- a field would compile untouched and
+	// warn about nothing here, the exact false negative this proves closed.
+	it("warns when a table is read only inside a CTE's own body", () => {
+		const view = defineView(
+			app,
+			"ranked_posts",
+			withCte((w) => {
+				const ranked = w.as("ranked", select(posts));
+				return select({ id: ranked.id }, ranked);
+			}),
+		);
+		const result = generateMigration({
+			declarations: [app, posts, usageGrant, view],
+			previousSnapshot: emptySnapshot,
+			validators: [viewSecurityInvokerValidator],
+		});
+		expect(result.warnings).toHaveLength(1);
+		expect(result.warnings[0]?.code).toBe(
+			"view-over-rls-without-security-invoker",
+		);
+		expect(result.warnings[0]?.message).toContain('"app"."posts"');
+	});
+
+	it("does not report a CTE's own name as a referenced table, even when it collides with a protected table's name", () => {
+		const view = defineView(
+			app,
+			"comments_via_cte",
+			withCte((w) => {
+				const ranked = w.as("posts", select(comments));
+				return select({ id: ranked.id }, ranked);
+			}),
+		);
+		const result = generateMigration({
+			declarations: [app, posts, comments, usageGrant, view],
+			previousSnapshot: emptySnapshot,
+			validators: [viewSecurityInvokerValidator],
+		});
+		expect(result.warnings).toEqual([]);
 	});
 });
 

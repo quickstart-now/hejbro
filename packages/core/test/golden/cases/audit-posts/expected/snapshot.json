@@ -1,0 +1,106 @@
+{
+	"dialect": "postgres",
+	"formatVersion": 8,
+	"objects": {
+		"function:app.audit_posts_changes": {
+			"args": [],
+			"bodyHash": "13ead680",
+			"bodySql": "create or replace function \"app\".\"audit_posts_changes\"()\nreturns trigger\nlanguage plpgsql\nas $function$\nbegin\n\tinsert into \"app\".\"audit_log\" (\"table_name\") values ('posts');\n\treturn new;\nend;\n$function$;",
+			"language": "plpgsql",
+			"name": "audit_posts_changes",
+			"returns": "trigger",
+			"schema": "app",
+			"security": "invoker"
+		},
+		"schema:app": {
+			"name": "app"
+		},
+		"table:app.audit_log": {
+			"columns": [
+				{
+					"default": {
+						"args": [],
+						"function": "gen_random_uuid",
+						"nodeKind": "function-call",
+						"schema": null
+					},
+					"name": "id",
+					"notNull": true,
+					"primaryKey": true,
+					"typeNode": {
+						"typeName": "uuid"
+					}
+				},
+				{
+					"name": "table_name",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "text"
+					}
+				},
+				{
+					"default": {
+						"args": [],
+						"function": "now",
+						"nodeKind": "function-call",
+						"schema": null
+					},
+					"name": "changed_at",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "timestamptz"
+					}
+				}
+			],
+			"foreignKeys": [],
+			"indexes": [],
+			"name": "audit_log",
+			"primaryKeyName": "audit_log_pkey",
+			"schema": "app"
+		},
+		"table:app.posts": {
+			"columns": [
+				{
+					"default": {
+						"args": [],
+						"function": "gen_random_uuid",
+						"nodeKind": "function-call",
+						"schema": null
+					},
+					"name": "id",
+					"notNull": true,
+					"primaryKey": true,
+					"typeNode": {
+						"typeName": "uuid"
+					}
+				},
+				{
+					"name": "title",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "text"
+					}
+				}
+			],
+			"foreignKeys": [],
+			"indexes": [],
+			"name": "posts",
+			"primaryKeyName": "posts_pkey",
+			"schema": "app"
+		},
+		"trigger:app.posts.audit_posts": {
+			"events": [
+				{
+					"columns": null,
+					"event": "update"
+				}
+			],
+			"forEach": "row",
+			"function": "audit_posts_changes",
+			"name": "audit_posts",
+			"schema": "app",
+			"table": "posts",
+			"timing": "after"
+		}
+	}
+}

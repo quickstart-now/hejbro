@@ -2,6 +2,7 @@ import {
 	emptySnapshot,
 	existingTable,
 	generateMigration,
+	getTableMeta,
 	grant,
 	schema,
 	table,
@@ -75,6 +76,24 @@ describe("reservedSchemaValidator", () => {
 			validators: [reservedSchemaValidator],
 		});
 		expect(result.errors).toEqual([]);
+	});
+
+	it("an existingTable in a reserved schema is exempt (add-unmanaged-objects, J6-2)", () => {
+		const authUsers = existingTable("auth", "users", { id: uuid() });
+		const diagnostics = reservedSchemaValidator(emptySnapshot, [
+			getTableMeta(authUsers),
+		]);
+		expect(diagnostics).toEqual([]);
+	});
+
+	it("a managed table in auth is still refused (the exemption does not swallow the protection)", () => {
+		const auth = schema("auth");
+		const shadow = table(auth, "shadow_users", { id: uuid() });
+		const diagnostics = reservedSchemaValidator(emptySnapshot, [
+			getTableMeta(shadow),
+		]);
+		expect(diagnostics).toHaveLength(1);
+		expect(diagnostics[0]?.code).toBe("reserved-schema");
 	});
 
 	it("does not flag a schema-usage grant to a non-reserved schema", () => {

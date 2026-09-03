@@ -3,7 +3,17 @@
 	"compilerOptions": {
 		"moduleResolution": "bundler",
 		"module": "esnext",
-		"noEmit": true
+		"noEmit": true,
+		// #481: mirrors `vitest.config.ts`'s own alias for the same
+		// specifier -- `tsc` (used by `check-types`, unlike vitest) has no
+		// way to see a vite-only `resolve.alias`, and package.json's
+		// `exports` map deliberately has no `./testing/*` entry (the
+		// conformance kit is repo-internal).
+		"paths": {
+			"@hejbro/query/testing/driver-conformance": [
+				"../query/src/testing/driver-conformance.ts"
+			]
+		}
 	},
 	"include": ["src", "test", "vitest.config.ts", "tsdown.config.ts"]
 }

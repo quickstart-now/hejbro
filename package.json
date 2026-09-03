@@ -12,8 +12,11 @@
 		"check:first-release-version": "node scripts/check-first-release-version.mjs",
 		"check:next-marker": "node scripts/check-next-marker.mjs",
 		"check:diagnostic-xref": "node scripts/check-diagnostic-xref.mjs",
+		"check:bans": "node scripts/check-bans.mjs",
+		"check:fixed-group": "node scripts/check-fixed-group.mjs",
 		"check:pnpm-publish-tool": "node scripts/verify-pnpm-publish-tool.mjs",
-		"check:crap": "pnpm test:coverage && node scripts/check-crap.mjs",
+		"check:crap": "node scripts/crap-gate.mjs",
+		"check:tasktime": "node scripts/tasktime-badges.mjs",
 		"regen:examples": "bash scripts/regen-examples.sh",
 		"verify:supabase-image": "bash scripts/verify-supabase-image.sh",
 		"changeset": "changeset",
@@ -22,7 +25,7 @@
 		"prepare": "husky"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "^2.4.14",
+		"@biomejs/biome": "^2.5.10",
 		"@changesets/cli": "^3.0.1",
 		"@commitlint/cli": "^21.0.1",
 		"@commitlint/config-conventional": "^21.0.1",
@@ -34,5 +37,10 @@
 	"packageManager": "pnpm@10.19.0",
 	"engines": {
 		"node": ">=22.18.0"
+	},
+	"pnpm": {
+		"overrides": {
+			"fast-uri": "^3.1.6"
+		}
 	}
 }

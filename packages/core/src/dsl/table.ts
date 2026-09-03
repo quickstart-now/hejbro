@@ -1,17 +1,30 @@
 import { captureDeclarationSite } from "../declaration-site";
 import { throwHejbroError } from "../error";
-import type { ColumnRef, ExprNode } from "../expr/ast";
-import { columnRef } from "../expr/ast";
+import type {
+	ColumnRef,
+	ColumnRefNode,
+	Expr,
+	ExprNode,
+	NullsPlacement,
+} from "../expr/ast";
+import { columnRef, expr } from "../expr/ast";
+import { isNull } from "../expr/operators";
 import { collectColumnRefs } from "../expr/render-sql";
 import { someExprNode } from "../expr/walk";
-import { deriveForeignKeyName, deriveIndexName } from "../kinds/table-kind";
+import {
+	deriveForeignKeyName,
+	deriveIndexName,
+	namedIndexColumnNames,
+} from "../kinds/table-kind";
 import { assertSqlName } from "../sql/identifier-rules";
 import type {
 	BuilderFamily,
 	ColumnBuilder,
 	ColumnState,
+	OriginBrand,
 } from "../types/column-builder";
 import type { CheckDeclaration } from "./check";
+import { check } from "./check";
 import type { RlsDeclaration, RlsInput } from "./rls";
 import { bindRls } from "./rls";
 import type { SchemaDeclaration } from "./schema";
@@ -28,19 +41,53 @@ export const foreignKeyActions = [
 /** @see foreignKeyActions */
 export type ForeignKeyAction = (typeof foreignKeyActions)[number];
 
-/** Where an ordered index column places SQL nulls relative to its sort order. */
-export type IndexNulls = "first" | "last";
+/** Where an ordered index column places SQL nulls relative to its sort order — alias of the shared {@link NullsPlacement} (`expr/ast.ts`, group 5, harden-query-surface, #470): the index declaration medium and the query medium share one nulls-placement vocabulary now, not two independently declared unions kept in sync by hand. */
+export type IndexNulls = NullsPlacement;
 
-/** A declared index on one or more (already snake_cased) columns, each with its sort direction and nulls placement, plus an optional partial-index predicate (D51). */
+/** Postgres access methods hejbro accepts (D85, closed) — built-in six plus pgvector's two. `"btree"` is Postgres' own default and is never recorded in a declaration or snapshot (SC-004): see {@link IndexDeclaration.method}. */
+export const indexMethods = [
+	"btree",
+	"hash",
+	"gin",
+	"gist",
+	"spgist",
+	"brin",
+	"hnsw",
+	"ivfflat",
+] as const;
+
+/** @see indexMethods */
+export type IndexMethod = (typeof indexMethods)[number];
+
+/** The table a plain index column's `name` was resolved from (#464) — declaration-side only, `assertNoForeignIndexColumn`'s own input; never reaches the snapshot (`serializeIndexColumnSelf` picks `name` alone). */
+export type IndexColumnOrigin = {
+	readonly schemaName: string;
+	readonly tableName: string;
+};
+
+/**
+ * One entry of an index's column list after `table()` resolves it (D51):
+ * a plain column (`name`, plus the table it came from, `origin`) or an
+ * expression column (`expression`, a structured node reused from the
+ * partial-predicate machinery, D46) — exactly one of the two — plus its
+ * sort direction, nulls placement, and optional operator class (R4/R5).
+ */
+export type IndexColumnDeclaration = (
+	| { readonly name: string; readonly origin: IndexColumnOrigin }
+	| { readonly expression: ExprNode }
+) & {
+	readonly desc: boolean;
+	readonly nulls: IndexNulls | null;
+	readonly opclass: string | null;
+};
+
+/** A declared index on one or more (already snake_cased) columns, each with its sort direction and nulls placement, plus an optional partial-index predicate (D51) and access method (R1/R2; `null` means Postgres' default, `btree`). */
 export type IndexDeclaration = {
-	readonly columns: ReadonlyArray<{
-		readonly name: string;
-		readonly desc: boolean;
-		readonly nulls: IndexNulls | null;
-	}>;
+	readonly columns: ReadonlyArray<IndexColumnDeclaration>;
 	readonly unique: boolean;
 	readonly indexName: string | null;
 	readonly predicate: ExprNode | null;
+	readonly method: IndexMethod | null;
 };
 
 /** The table a foreign key references, resolved to its identity parts (D52) — derived from the referenced columns' own refs, not carried as a live `TableDeclaration`. */
@@ -50,13 +97,23 @@ export type ForeignKeyReferenceTarget = {
 	readonly columns: ReadonlyArray<string>;
 };
 
-/** A declared foreign key from local (already snake_cased) columns to another table's columns. */
+/** A declared foreign key from local (already snake_cased) columns to another table's columns. `name`: `null` derives `<table>_<columns>_fk` at emit time ({@link deriveForeignKeyName}, `kinds/table-kind.ts`'s own `serializeForeignKeys`) — same shape `IndexDeclaration.indexName` already has (D106 R3-B3: a database hejbro did not create names its foreign keys some other way, most often Postgres's own default `_fkey`; without a slot to carry that name, `generate`/`check` diverge from it permanently). */
 export type ForeignKeyDeclaration = {
 	readonly columns: ReadonlyArray<string>;
 	readonly references: ForeignKeyReferenceTarget;
+	readonly name: string | null;
 	readonly onDelete: ForeignKeyAction | null;
 	readonly onUpdate: ForeignKeyAction | null;
 };
+
+/**
+ * Which constructor built a {@link Table} value — `"declared"` for
+ * {@link table}/{@link existingTable} (both authored in this repository).
+ * `"usage"` marks a value this package did not build itself; no
+ * constructor here produces it, and `engine/generate.ts` refuses it
+ * wherever it is seen.
+ */
+export type TableAuthority = "declared" | "usage";
 
 /** A declared table: its columns (in declaration order), indexes, and foreign keys. */
 export type TableDeclaration = {
@@ -64,6 +121,8 @@ export type TableDeclaration = {
 	readonly schema: SchemaDeclaration;
 	readonly tableName: string;
 	readonly columns: ReadonlyArray<{
+		/** The declared TypeScript key — the name result rows are keyed by (#339); TS-only meta, never serialized (snapshot nodes carry `columnName`). */
+		readonly columnKey: string;
 		readonly columnName: string;
 		readonly columnState: ColumnState;
 	}>;
@@ -71,8 +130,16 @@ export type TableDeclaration = {
 	readonly foreignKeys: ReadonlyArray<ForeignKeyDeclaration>;
 	readonly checks: ReadonlyArray<CheckDeclaration>;
 	readonly rls: RlsDeclaration | null;
-	/** `true` for an {@link existingTable} reference (D41) — reference-only, never passed to `generateMigration`, never diffed, never emitted. `table()` always sets `false`. */
+	/** `true` for an {@link existingTable} reference (D41, amended by add-unmanaged-objects #605) — declared for its shape, never for its DDL: passing it to `generateMigration` is accepted, but it is never diffed and never emitted. `table()` always sets `false`. */
 	readonly existing: boolean;
+	/**
+	 * See {@link TableAuthority}. Optional: a hand-assembled
+	 * `TableDeclaration` that bypasses every constructor (a test fixture
+	 * predating this field) carries none, and is treated as authored here
+	 * — the runtime chokepoint in `engine/generate.ts` refuses only
+	 * `"usage"`, never an absent value.
+	 */
+	readonly authority?: TableAuthority;
 	readonly declaredAt: string | null;
 };
 
@@ -99,16 +166,52 @@ export const tableMeta: unique symbol = Symbol.for("hejbro:table-meta");
 
 /** Maps a table's column builders to the typed {@link ColumnRef}s exposed at the top level of the built {@link Table}. */
 export type TableColumns<TColumns extends Record<string, ColumnBuilder>> = {
-	readonly [K in keyof TColumns]: ColumnRef<BuilderFamily<TColumns[K]>>;
+	readonly [K in keyof TColumns]: ColumnRef<BuilderFamily<TColumns[K]>> &
+		OriginBrand<TColumns, K>;
 };
 
-/** A drizzle-style table object (D15): columns as top-level typed refs, declaration metadata hidden behind {@link tableMeta}. */
+/**
+ * A drizzle-style table object (D15): columns as top-level typed refs,
+ * declaration metadata hidden behind {@link tableMeta}. `TAuthority`
+ * defaults to the full {@link TableAuthority} union — `Table` keeps a
+ * single type parameter's worth of shape for every existing bare
+ * reference (`packages/query`'s 64 `extends Table<infer TColumns>`
+ * sites, this package's own `Table[]`/`function f(t: Table)` — measured:
+ * a second type parameter, even with a union default, broke every one of
+ * those inference sites when it was intersected onto `Table` as a
+ * required brand; a type parameter avoids that because it adds no new
+ * key to `keyof Table`). Narrowing lives entirely inside the
+ * `[tableMeta]` member's own type — see {@link DeclaredTable}.
+ */
 export type Table<
 	TColumns extends Record<string, ColumnBuilder> = Record<
 		string,
 		ColumnBuilder
 	>,
-> = TableColumns<TColumns> & { readonly [tableMeta]: TableDeclaration };
+	TAuthority extends TableAuthority = TableAuthority,
+> = TableColumns<TColumns> & {
+	readonly [tableMeta]: TableDeclaration & { readonly authority?: TAuthority };
+};
+
+/**
+ * A {@link Table} authored in this repository (via {@link table} or
+ * {@link existingTable}) — narrows `TAuthority` to `"declared"`, excluding
+ * a `"usage"`-authority value. `engine/generate.ts`'s `HejbroInput` narrows
+ * to this. Measured: `table()`'s own return type must spell out
+ * `Table<TColumns, "declared">` rather than naming this alias directly —
+ * substituting the alias there (a function called from thousands of
+ * call sites across this package's own test suite) reintroduced the same
+ * inference breakage the type-parameter design exists to avoid, even
+ * though the two forms are structurally identical. `existingTable`'s
+ * return type carries the same constraint for the same reason. This
+ * alias itself is safe where it is only read, as `HejbroInput` does.
+ */
+export type DeclaredTable<
+	TColumns extends Record<string, ColumnBuilder> = Record<
+		string,
+		ColumnBuilder
+	>,
+> = Table<TColumns, "declared">;
 
 /** Reads a {@link Table}'s hidden declaration metadata. */
 export const getTableMeta = (tableObject: Table): TableDeclaration =>
@@ -126,6 +229,8 @@ export type ForeignKeyInput = {
 		readonly table?: Table;
 		readonly columns: ReadonlyArray<ColumnRef>;
 	};
+	/** Optional, validated per D36 when given (D106 R3-B3, same shape `index()`'s own optional name already has) — derives `<table>_<columns>_fk` when omitted. */
+	readonly name?: string;
 	readonly onDelete?: ForeignKeyAction;
 	readonly onUpdate?: ForeignKeyAction;
 };
@@ -203,6 +308,55 @@ export const buildColumnRefs = <TColumns extends Record<string, ColumnBuilder>>(
 		]),
 	) as TableColumns<TColumns>;
 
+type ForeignNamedIndexColumn = {
+	readonly name: string;
+	readonly origin: IndexColumnOrigin;
+};
+
+/** Every plain (`name`) index column paired with the table it was resolved from, across every index — an expression column carries no `origin` and is out of this scan (its own foreign-column check runs in `assertNoForeignIndexExpressionColumn`). */
+const namedIndexColumnsWithOrigin = (
+	indexes: ReadonlyArray<IndexDeclaration>,
+): ReadonlyArray<ForeignNamedIndexColumn> =>
+	indexes.flatMap((index) =>
+		index.columns.flatMap((column) => {
+			if (!("origin" in column)) {
+				return [];
+			}
+			return [{ name: column.name, origin: column.origin }];
+		}),
+	);
+
+/**
+ * Rejects a plain index column (`.on(t.col)`, not an expression) naming
+ * another table's column (#464) — joins the `foreign-column-ref` family
+ * the CTE guard in `dsl/index-builder.ts`'s `declarationColumnSelf`
+ * already forms for this same `.on()` position: a CTE column is refused
+ * there at build time (no table context needed yet), and this is that
+ * guard's other half, refused here once `table()` knows which table is
+ * declaring the index. Runs before {@link validateColumnRefs} so a
+ * foreign column gets this diagnosis instead of either passing silently
+ * (same-named case) or reading as a typo (`unknown-index-column`,
+ * different-named case).
+ */
+const assertNoForeignIndexColumn = (
+	owner: SchemaDeclaration,
+	tableName: string,
+	indexes: ReadonlyArray<IndexDeclaration>,
+): void => {
+	const foreign = namedIndexColumnsWithOrigin(indexes).find(
+		(column) =>
+			column.origin.schemaName !== owner.schemaName ||
+			column.origin.tableName !== tableName,
+	);
+	if (foreign === undefined) {
+		return;
+	}
+	throwHejbroError(
+		"foreign-column-ref",
+		`table "${tableName}" declares an index over column "${foreign.origin.schemaName}.${foreign.origin.tableName}.${foreign.name}" — an index can only use this table's own columns. Next: use this table's own columns (the callback's \`t\`).`,
+	);
+};
+
 const validateColumnRefs = (
 	tableName: string,
 	knownColumnNames: ReadonlySet<string>,
@@ -210,7 +364,7 @@ const validateColumnRefs = (
 	foreignKeys: ReadonlyArray<ForeignKeyDeclaration>,
 ): void => {
 	const badIndexColumn = indexes
-		.flatMap((index) => index.columns.map((column) => column.name))
+		.flatMap((index) => namedIndexColumnNames(index.columns))
 		.find((columnName) => !knownColumnNames.has(columnName));
 	if (badIndexColumn !== undefined) {
 		throwHejbroError(
@@ -242,10 +396,7 @@ const validateDuplicateNames = (
 	const indexNames = indexes.map(
 		(index) =>
 			index.indexName ??
-			deriveIndexName(
-				tableName,
-				index.columns.map((column) => column.name),
-			),
+			deriveIndexName(tableName, namedIndexColumnNames(index.columns)),
 	);
 	const duplicateIndex = firstDuplicate(indexNames);
 	if (duplicateIndex !== undefined) {
@@ -255,8 +406,9 @@ const validateDuplicateNames = (
 		);
 	}
 
-	const foreignKeyNames = foreignKeys.map((foreignKey) =>
-		deriveForeignKeyName(tableName, foreignKey.columns),
+	const foreignKeyNames = foreignKeys.map(
+		(foreignKey) =>
+			foreignKey.name ?? deriveForeignKeyName(tableName, foreignKey.columns),
 	);
 	const duplicateForeignKey = firstDuplicate(foreignKeyNames);
 	if (duplicateForeignKey !== undefined) {
@@ -267,9 +419,462 @@ const validateDuplicateNames = (
 	}
 };
 
-/** Rejects duplicate CHECK names, subqueries, and cross-table column refs, in that order (D50). */
-const validateChecks = (
+type IndexExpressionEntry = {
+	readonly indexName: string;
+	readonly expression: ExprNode;
+};
+
+/** `[column.expression]` for an expression entry, else `[]` — the `flatMap` step of {@link indexExpressions}. */
+const indexColumnExpressionOrEmpty = (
+	column: IndexColumnDeclaration,
+): ReadonlyArray<ExprNode> => {
+	if ("expression" in column) {
+		return [column.expression];
+	}
+	return [];
+};
+
+/** An index's own expression-column nodes, in declaration order (R5). */
+const indexExpressions = (index: IndexDeclaration): ReadonlyArray<ExprNode> =>
+	index.columns.flatMap(indexColumnExpressionOrEmpty);
+
+/** The column refs `collectColumnRefs` finds inside `expressions`, `.columnName`s only, in encounter order — {@link proposeExpressionIndexName}'s own input (R6). */
+const expressionColumnNames = (
+	expressions: ReadonlyArray<ExprNode>,
+): ReadonlyArray<string> =>
+	expressions.flatMap((expression) =>
+		collectColumnRefs(expression).map((ref) => ref.columnName),
+	);
+
+/** Proposes a name for an unnamed expression index (D86/R6): `<table>_<cols>_idx` from the columns its expressions reference, or `<table>_expr_idx` when they reference none. */
+const proposeExpressionIndexName = (
+	tableName: string,
+	expressions: ReadonlyArray<ExprNode>,
+): string => {
+	const columnNames = expressionColumnNames(expressions);
+	if (columnNames.length === 0) {
+		return `${tableName}_expr_idx`;
+	}
+	return deriveIndexName(tableName, columnNames);
+};
+
+/** Rejects an unnamed index with at least one expression column (D86/R6) — hejbro can't derive a name from an expression the way it derives one from plain columns, so it proposes one instead. */
+const assertIndexExpressionsAreNamed = (
+	tableName: string,
+	indexes: ReadonlyArray<IndexDeclaration>,
+): void => {
+	const unnamed = indexes.find(
+		(index) => index.indexName === null && indexExpressions(index).length > 0,
+	);
+	if (unnamed === undefined) {
+		return;
+	}
+	const proposedName = proposeExpressionIndexName(
+		tableName,
+		indexExpressions(unnamed),
+	);
+	throwHejbroError(
+		"index-expression-requires-name",
+		`table "${tableName}" declares an index over an expression without a name — hejbro cannot derive a name from an expression. Next: name it — index("${proposedName}").`,
+	);
+};
+
+/**
+ * Every named index's expression columns, paired with the index's own
+ * name — {@link assertNoIndexExpressionSubquery}/
+ * {@link assertNoForeignIndexExpressionColumn}'s shared scan input
+ * (mirrors {@link indexPredicateEntries}). By validation order
+ * (`assertIndexExpressionsAreNamed` runs first), every index reaching
+ * here that has an expression column is already named.
+ */
+const indexExpressionEntries = (
+	indexes: ReadonlyArray<IndexDeclaration>,
+): ReadonlyArray<IndexExpressionEntry> =>
+	indexes.flatMap((index) => {
+		const { indexName } = index;
+		if (indexName === null) {
+			return [];
+		}
+		return indexExpressions(index).map((expression) => ({
+			indexName,
+			expression,
+		}));
+	});
+
+/** Rejects an index expression containing a subquery — Postgres forbids subqueries in index expressions, mirroring {@link validateChecks}'s check-subquery guard. */
+const assertNoIndexExpressionSubquery = (
+	tableName: string,
+	indexes: ReadonlyArray<IndexDeclaration>,
+): void => {
+	const subquery = indexExpressionEntries(indexes).find((entry) =>
+		someExprNode(entry.expression, (node) => node.nodeKind === "exists"),
+	);
+	if (subquery !== undefined) {
+		throwHejbroError(
+			"index-expression-subquery",
+			`index "${subquery.indexName}" on table "${tableName}" contains a subquery in an index expression — Postgres forbids subqueries in index expressions. Next: express the column over this table's own columns, or index the plain column and filter elsewhere.`,
+		);
+	}
+};
+
+/** Rejects an index expression containing a window function (D104), same shape as {@link assertNoIndexExpressionSubquery} right above — Postgres forbids window functions in index expressions too. */
+const assertNoIndexExpressionWindowFunction = (
+	tableName: string,
+	indexes: ReadonlyArray<IndexDeclaration>,
+): void => {
+	const windowed = indexExpressionEntries(indexes).find((entry) =>
+		someExprNode(entry.expression, (node) => node.nodeKind === "window"),
+	);
+	if (windowed !== undefined) {
+		throwHejbroError(
+			"index-expression-window-function",
+			`index "${windowed.indexName}" on table "${tableName}" contains a window function in an index expression — Postgres forbids window functions in index expressions. Next: express the column over this table's own columns, or index the plain column and filter elsewhere.`,
+		);
+	}
+};
+
+/** Rejects an index expression referencing another table's column, mirroring {@link validateChecks}'s check-foreign-column-ref guard. */
+const assertNoForeignIndexExpressionColumn = (
 	owner: SchemaDeclaration,
+	tableName: string,
+	indexes: ReadonlyArray<IndexDeclaration>,
+): void => {
+	const foreign = indexExpressionEntries(indexes)
+		.flatMap((entry) =>
+			collectColumnRefs(entry.expression).map((ref) => ({
+				indexName: entry.indexName,
+				ref,
+			})),
+		)
+		.find(
+			({ ref }) =>
+				ref.schemaName !== owner.schemaName || ref.tableName !== tableName,
+		);
+	if (foreign !== undefined) {
+		if (foreign.ref.schemaName === null) {
+			// add-ctes task 3.5: this guard predates CTEs and never expected a
+			// null schema -- unfixed, the fallback message below renders it as
+			// the literal string "null" ("null.ranked.id"). A withCte()
+			// reference reaches here (it has no `sqlName`, so `isColumnRef` in
+			// dsl/index-builder.ts sends it to this expression path instead of
+			// the ColumnRef one) once it escapes its own withCte() scope --
+			// our exposure to close, not this guard's general shape to
+			// redesign.
+			throwHejbroError(
+				"index-expression-foreign-column-ref",
+				`index "${foreign.indexName}" on table "${tableName}" references a column of the CTE "${foreign.ref.tableName}" in an index expression — an index expression can only see this table's own columns. Next: use this table's own columns (the callback's \`t\`).`,
+			);
+		}
+		throwHejbroError(
+			"index-expression-foreign-column-ref",
+			`index "${foreign.indexName}" on table "${tableName}" references column "${foreign.ref.schemaName}.${foreign.ref.tableName}.${foreign.ref.columnName}" in an index expression — an index expression can only see this table's own columns. Next: use this table's own columns (the callback's \`t\`).`,
+		);
+	}
+};
+
+/** Rejects an unnamed expression index, then a subquery inside an index expression, then a window function inside one, then an index expression referencing another table's column, in that order (D86/R6/R7, D104). */
+const validateIndexExpressions = (
+	owner: SchemaDeclaration,
+	tableName: string,
+	indexes: ReadonlyArray<IndexDeclaration>,
+): void => {
+	assertIndexExpressionsAreNamed(tableName, indexes);
+	assertNoIndexExpressionSubquery(tableName, indexes);
+	assertNoIndexExpressionWindowFunction(tableName, indexes);
+	assertNoForeignIndexExpressionColumn(owner, tableName, indexes);
+};
+
+/**
+ * The first column carrying `columnState.notNullElements` while not itself
+ * an `.array()` column, if any (add-array-ergonomics design decision 3):
+ * `.notNullElements()` on the builder never throws — a bare builder has no
+ * column name yet to name in an error — so `table()`, the first point a
+ * column actually has a name, is where misuse is caught.
+ */
+const findInvalidNotNullElementsColumn = (
+	columnEntries: ReadonlyArray<ColumnEntry>,
+): ColumnEntry | undefined =>
+	columnEntries.find(
+		(entry) =>
+			entry.columnState.notNullElements === true &&
+			entry.columnState.typeNode.typeName !== "array",
+	);
+
+/** Rejects a `.notNullElements()` column that isn't actually an `.array()` column, naming the column (design decision 3) — see {@link findInvalidNotNullElementsColumn}. */
+const assertNotNullElementsOnArrayColumns = (
+	tableName: string,
+	columnEntries: ReadonlyArray<ColumnEntry>,
+): void => {
+	const invalid = findInvalidNotNullElementsColumn(columnEntries);
+	if (invalid === undefined) {
+		return;
+	}
+	throwHejbroError(
+		"invalid-not-null-elements",
+		`table "${tableName}" column "${invalid.columnName}" calls .notNullElements() but is declared "${invalid.columnState.typeNode.typeName}", not an .array() column. Next: only an .array() column holds elements — call .array() before .notNullElements(), or drop .notNullElements() from "${invalid.columnName}".`,
+	);
+};
+
+/**
+ * The only type names `.generatedAlwaysAsIdentity()`/
+ * `.generatedByDefaultAsIdentity()` are valid on (D100) — the explicit
+ * enumeration, never `familyOfTypeNode`/`SqlTypeFamily`: `"numeric"` also
+ * covers `real`/`double precision`/`numeric` and the whole `serial` family,
+ * so a family-keyed guard would silently admit all of them, let a
+ * wrong-type identity column reach group 2's snapshot/emit, and generate
+ * incorrect SQL — not merely mistype. `serial`/`smallserial`/`bigserial`
+ * are excluded on purpose: a serial column already carries a
+ * sequence-backed `nextval()` default (D66), so an identity on top is the
+ * same identity-plus-default conflict guard 4 (`invalid-identity-default`)
+ * rejects when it arrives via `.default()` — this enumeration is that rule
+ * expressed at the type name level, not a list to "simplify" back into a
+ * family check. Mirrors `ColumnBuilder`'s own type-level
+ * `TMeta["typeName"] extends "smallint" | "integer" | "bigint"` guard, as
+ * the runtime backstop a generic `TMeta` at a call site can't always be
+ * narrowed enough for (same two-layer defense `notNullElements` uses).
+ */
+const identityEligibleTypeNames = new Set(["smallint", "integer", "bigint"]);
+
+/** The first column declaring an identity outside {@link identityEligibleTypeNames}, if any (design decision 2, guard 1). */
+const findInvalidIdentityTypeColumn = (
+	columnEntries: ReadonlyArray<ColumnEntry>,
+): ColumnEntry | undefined =>
+	columnEntries.find(
+		(entry) =>
+			entry.columnState.identity !== undefined &&
+			!identityEligibleTypeNames.has(entry.columnState.typeNode.typeName),
+	);
+
+/** Rejects an identity method declared on a column outside the integer enumeration, naming the column (design decision 2, guard 1 — checked first: a wrong column type is reported ahead of any clash it also happens to be part of, see {@link validateGeneratedAndIdentityColumns}). */
+const assertIdentityColumnType = (
+	tableName: string,
+	columnEntries: ReadonlyArray<ColumnEntry>,
+): void => {
+	const invalid = findInvalidIdentityTypeColumn(columnEntries);
+	if (invalid === undefined) {
+		return;
+	}
+	throwHejbroError(
+		"invalid-identity-column",
+		`table "${tableName}" column "${invalid.columnName}" declares an identity column but is declared "${invalid.columnState.typeNode.typeName}", not an integer column. Next: declare "${invalid.columnName}" as smallint, integer, or bigint, or drop the identity declaration from "${invalid.columnName}".`,
+	);
+};
+
+/** The first column combining `.generatedAlwaysAs()` with an identity method, if any (design decision 2, guard 2) -- Postgres allows only one `GENERATED` clause per column. */
+const findGeneratedWithIdentityColumn = (
+	columnEntries: ReadonlyArray<ColumnEntry>,
+): ColumnEntry | undefined =>
+	columnEntries.find(
+		(entry) =>
+			entry.columnState.generated !== undefined &&
+			entry.columnState.identity !== undefined,
+	);
+
+/** Rejects `.generatedAlwaysAs()` combined with an identity method, naming the column (design decision 2, guard 2), regardless of chaining order. */
+const assertGeneratedHasNoIdentity = (
+	tableName: string,
+	columnEntries: ReadonlyArray<ColumnEntry>,
+): void => {
+	const invalid = findGeneratedWithIdentityColumn(columnEntries);
+	if (invalid === undefined) {
+		return;
+	}
+	throwHejbroError(
+		"invalid-generated-identity",
+		`table "${tableName}" column "${invalid.columnName}" declares both .generatedAlwaysAs() and an identity method — Postgres allows only one GENERATED clause per column. Next: pick one — a stored expression (.generatedAlwaysAs()) or an identity (.generatedAlwaysAsIdentity()/.generatedByDefaultAsIdentity()) — and drop the other from "${invalid.columnName}".`,
+	);
+};
+
+/** The first column combining `.generatedAlwaysAs()` with `.default()`, if any (design decision 2, guard 3) -- Postgres rejects a `DEFAULT` clause on a generated column outright. */
+const findGeneratedWithDefaultColumn = (
+	columnEntries: ReadonlyArray<ColumnEntry>,
+): ColumnEntry | undefined =>
+	columnEntries.find(
+		(entry) =>
+			entry.columnState.generated !== undefined &&
+			entry.columnState.defaultValue !== null,
+	);
+
+/** Rejects `.generatedAlwaysAs()` combined with `.default()`, naming the column (design decision 2, guard 3). */
+const assertGeneratedHasNoDefault = (
+	tableName: string,
+	columnEntries: ReadonlyArray<ColumnEntry>,
+): void => {
+	const invalid = findGeneratedWithDefaultColumn(columnEntries);
+	if (invalid === undefined) {
+		return;
+	}
+	throwHejbroError(
+		"invalid-generated-default",
+		`table "${tableName}" column "${invalid.columnName}" combines .generatedAlwaysAs() with .default() — Postgres rejects a default on a generated column. Next: drop .default() from "${invalid.columnName}" (the expression already supplies its value on every write), or drop .generatedAlwaysAs() if you meant a plain defaulted column.`,
+	);
+};
+
+/** The first column combining an identity method with `.default()`, if any (design decision 2, guard 4) -- Postgres allows either an identity or a default on a column, never both. */
+const findIdentityWithDefaultColumn = (
+	columnEntries: ReadonlyArray<ColumnEntry>,
+): ColumnEntry | undefined =>
+	columnEntries.find(
+		(entry) =>
+			entry.columnState.identity !== undefined &&
+			entry.columnState.defaultValue !== null,
+	);
+
+/** Rejects an identity method combined with `.default()`, naming the column (design decision 2, guard 4). */
+const assertIdentityHasNoDefault = (
+	tableName: string,
+	columnEntries: ReadonlyArray<ColumnEntry>,
+): void => {
+	const invalid = findIdentityWithDefaultColumn(columnEntries);
+	if (invalid === undefined) {
+		return;
+	}
+	throwHejbroError(
+		"invalid-identity-default",
+		`table "${tableName}" column "${invalid.columnName}" combines an identity declaration with .default() — Postgres allows either an identity or a default, not both. Next: drop .default() from "${invalid.columnName}" if you meant the identity's own sequence to supply the value, or drop the identity declaration and keep .default().`,
+	);
+};
+
+/**
+ * Runs every generated/identity misuse guard, in the exact order design
+ * decision 2 fixes (D100): wrong column type first (guard 1), then the
+ * two-mechanisms clash (guard 2), then each mechanism against `.default()`
+ * in turn (guards 3, 4). This order is itself part of the contract — a
+ * column can violate two guards at once (e.g. an identity declared on a
+ * non-integer column that also carries a `.default()`), and the FIRST
+ * guard in this sequence is the one whose code the caller sees; pinned by
+ * `generated-columns.test.ts`'s own precedence test.
+ */
+const validateGeneratedAndIdentityColumns = (
+	tableName: string,
+	columnEntries: ReadonlyArray<ColumnEntry>,
+): void => {
+	assertIdentityColumnType(tableName, columnEntries);
+	assertGeneratedHasNoIdentity(tableName, columnEntries);
+	assertGeneratedHasNoDefault(tableName, columnEntries);
+	assertIdentityHasNoDefault(tableName, columnEntries);
+};
+
+/**
+ * Rejects a column `.default(...)` expression containing a window
+ * function (D104) — a new guard home, not an arm on an existing one:
+ * unlike `check`/index expressions/index predicates, `.default(...)` has
+ * no structural validation at all today (nothing here rejects a subquery
+ * either), so this is the first thing to ever look inside it.
+ */
+const assertNoDefaultWindowFunction = (
+	tableName: string,
+	columnEntries: ReadonlyArray<ColumnEntry>,
+): void => {
+	const invalid = columnEntries.find(
+		(entry) =>
+			entry.columnState.defaultValue !== null &&
+			someExprNode(
+				entry.columnState.defaultValue,
+				(node) => node.nodeKind === "window",
+			),
+	);
+	if (invalid === undefined) {
+		return;
+	}
+	throwHejbroError(
+		"column-default-window-function",
+		`table "${tableName}" column "${invalid.columnName}"'s default contains a window function — Postgres forbids window functions in DEFAULT expressions. Next: compute the value another way (a trigger via defineTrigger, or a plain literal/expression), or drop the window function from "${invalid.columnName}"'s default.`,
+	);
+};
+
+/** Rejects a `.generatedAlwaysAs(...)` expression containing a window function (D104) — same "new guard home" reasoning as {@link assertNoDefaultWindowFunction}. */
+const assertNoGeneratedWindowFunction = (
+	tableName: string,
+	columnEntries: ReadonlyArray<ColumnEntry>,
+): void => {
+	const invalid = columnEntries.find(
+		(entry) =>
+			entry.columnState.generated !== undefined &&
+			someExprNode(
+				entry.columnState.generated,
+				(node) => node.nodeKind === "window",
+			),
+	);
+	if (invalid === undefined) {
+		return;
+	}
+	throwHejbroError(
+		"generated-column-window-function",
+		`table "${tableName}" column "${invalid.columnName}" is generated from an expression containing a window function — Postgres forbids window functions in generated column expressions. Next: compute the value another way, or drop the window function from "${invalid.columnName}"'s generated expression.`,
+	);
+};
+
+/**
+ * `array_position("<schema>"."<table>"."<column>", null) is null`, as a
+ * structured expression (a `columnRef` + `functionCall` + null `literal`,
+ * wrapped in the existing `isNull` operator's `nullTest`) — never a
+ * `rawSql`/`sqlTemplate` fragment: `retarget.ts`'s rename machinery only
+ * updates a `columnRef` node's own `columnName`, so a raw-text fragment
+ * would silently go stale across a column rename while every other part
+ * of the check machinery (name, snapshot) tracks the rename correctly.
+ * `isNull`/`expr` are the same house helpers `check()`'s own callers use
+ * for every hand-written check (`check.test.ts`), so the derived check is
+ * built exactly the way a user would build it by hand.
+ */
+const notNullElementsCheckExpression = (
+	owner: SchemaDeclaration,
+	tableName: string,
+	columnName: string,
+): Expr<"boolean"> =>
+	isNull(
+		expr("unknown", {
+			nodeKind: "functionCall",
+			schemaName: null,
+			functionName: "array_position",
+			args: [
+				{
+					nodeKind: "columnRef",
+					schemaName: owner.schemaName,
+					tableName,
+					columnName,
+				},
+				{ nodeKind: "literal", literal: { literalKind: "null" } },
+			],
+		}),
+	);
+
+/**
+ * `[check(...)]` for a column declared `.array().notNullElements()`, else
+ * `[]` — {@link deriveNotNullElementsChecks}'s own `flatMap` step
+ * (add-array-ergonomics design decision 1: the CHECK is derived at
+ * `table()` build time into the declaration's own checks list, so it
+ * rides the existing check machinery — diff/removal/collision detection
+ * come free). Name is owner-settled: `<column>_no_null_elements`.
+ */
+const notNullElementsCheckOrEmpty = (
+	owner: SchemaDeclaration,
+	tableName: string,
+	entry: ColumnEntry,
+): ReadonlyArray<CheckDeclaration> => {
+	if (!entry.columnState.notNullElements) {
+		return [];
+	}
+	return [
+		check(
+			`${entry.columnName}_no_null_elements`,
+			notNullElementsCheckExpression(owner, tableName, entry.columnName),
+		),
+	];
+};
+
+/** Every `.notNullElements()` column's derived CHECK, in column declaration order — see {@link notNullElementsCheckOrEmpty}. */
+const deriveNotNullElementsChecks = (
+	owner: SchemaDeclaration,
+	tableName: string,
+	columnEntries: ReadonlyArray<ColumnEntry>,
+): ReadonlyArray<CheckDeclaration> =>
+	columnEntries.flatMap((entry) =>
+		notNullElementsCheckOrEmpty(owner, tableName, entry),
+	);
+
+/** Rejects two CHECK constraints sharing a name (D50) — split out of {@link validateChecks} (D71/#154 ratchet-5) so that function's own complexity stays low. */
+const assertNoDuplicateCheckName = (
 	tableName: string,
 	checks: ReadonlyArray<CheckDeclaration>,
 ): void => {
@@ -282,7 +887,13 @@ const validateChecks = (
 			`table "${tableName}" declares two check constraints named "${duplicate}" — Postgres requires unique constraint names per table. Next: rename one of them.`,
 		);
 	}
+};
 
+/** Rejects a CHECK expression containing a subquery (D50) — split out of {@link validateChecks}, same reasoning as {@link assertNoDuplicateCheckName}. */
+const assertNoCheckSubquery = (
+	tableName: string,
+	checks: ReadonlyArray<CheckDeclaration>,
+): void => {
 	const subquery = checks.find((entry) =>
 		someExprNode(entry.expression, (node) => node.nodeKind === "exists"),
 	);
@@ -292,7 +903,30 @@ const validateChecks = (
 			`check "${subquery.checkName}" on table "${tableName}" contains a subquery — Postgres forbids subqueries in CHECK constraints. Next: express the rule over this row's own columns, or enforce it with a trigger (defineTrigger).`,
 		);
 	}
+};
 
+/** Rejects a CHECK expression containing a window function (D104) — split out of {@link validateChecks}, same reasoning as {@link assertNoDuplicateCheckName}. */
+const assertNoCheckWindowFunction = (
+	tableName: string,
+	checks: ReadonlyArray<CheckDeclaration>,
+): void => {
+	const windowed = checks.find((entry) =>
+		someExprNode(entry.expression, (node) => node.nodeKind === "window"),
+	);
+	if (windowed !== undefined) {
+		throwHejbroError(
+			"check-window-function",
+			`check "${windowed.checkName}" on table "${tableName}" contains a window function — Postgres forbids window functions in CHECK constraints. Next: express the rule over this row's own columns, or enforce it with a trigger (defineTrigger).`,
+		);
+	}
+};
+
+/** Rejects a CHECK expression referencing another table's column (D50) — split out of {@link validateChecks}, same reasoning as {@link assertNoDuplicateCheckName}. */
+const assertNoForeignCheckColumnRef = (
+	owner: SchemaDeclaration,
+	tableName: string,
+	checks: ReadonlyArray<CheckDeclaration>,
+): void => {
 	const foreign = checks
 		.flatMap((entry) =>
 			collectColumnRefs(entry.expression).map((ref) => ({
@@ -310,6 +944,18 @@ const validateChecks = (
 			`check "${foreign.check.checkName}" on table "${tableName}" references column "${foreign.ref.schemaName}.${foreign.ref.tableName}.${foreign.ref.columnName}" — a CHECK can only see the row being written. Next: use this table's own columns (the callback's \`t\`), or enforce cross-table rules with a trigger (defineTrigger).`,
 		);
 	}
+};
+
+/** Rejects duplicate CHECK names, subqueries, window functions, and cross-table column refs, in that order (D50, D104). */
+const validateChecks = (
+	owner: SchemaDeclaration,
+	tableName: string,
+	checks: ReadonlyArray<CheckDeclaration>,
+): void => {
+	assertNoDuplicateCheckName(tableName, checks);
+	assertNoCheckSubquery(tableName, checks);
+	assertNoCheckWindowFunction(tableName, checks);
+	assertNoForeignCheckColumnRef(owner, tableName, checks);
 };
 
 type IndexPredicateEntry = {
@@ -330,16 +976,47 @@ const indexPredicateEntries = (
 			{
 				name:
 					index.indexName ??
-					deriveIndexName(
-						tableName,
-						index.columns.map((column) => column.name),
-					),
+					deriveIndexName(tableName, namedIndexColumnNames(index.columns)),
 				predicate: index.predicate,
 			},
 		];
 	});
 
 /** Rejects a partial index `.where(...)` predicate that contains a subquery or references another table's column, mirroring {@link validateChecks} (D50/D51). */
+/**
+ * The two `index-predicate-foreign-column-ref` shapes {@link
+ * validateIndexPredicates} throws for a predicate column outside the
+ * table (add-ctes task 1.2c's CTE case, and the pre-existing wrong-table
+ * case) — split out so the caller's own branching stays flat (task 1.5(a)
+ * review, CRAP).
+ */
+const throwIndexPredicateForeignColumnRef = (
+	tableName: string,
+	foreign: { readonly name: string; readonly ref: ColumnRefNode },
+): never => {
+	if (foreign.ref.schemaName === null) {
+		// add-ctes task 1.2c: a CTE column reaching a partial index's
+		// predicate -- a CTE does not exist at index-creation time
+		// (it is statement-local to a query, not a schema object), so
+		// naming it here is meaningless, not merely out of scope.
+		// Task 3.2: unlike the FK-target guards below, this one is NOT
+		// closed by the type layer -- `.where()` accepts a plain
+		// `Expr<"boolean">` (`comparison()` only needs `.exprNode`/
+		// `.family`), which a withCte() reference still satisfies without
+		// its typeNode. A leaked reference reaches this guard through
+		// completely ordinary typed usage, no cast required -- this stays
+		// the first (and only) line.
+		return throwHejbroError(
+			"index-predicate-foreign-column-ref",
+			`index "${foreign.name}"'s where predicate on table "${tableName}" references a column of the CTE "${foreign.ref.tableName}" — a CTE is statement-local and does not exist at index-creation time. Next: use this table's own columns (the callback's \`t\`), or drop the predicate.`,
+		);
+	}
+	return throwHejbroError(
+		"index-predicate-foreign-column-ref",
+		`index "${foreign.name}"'s where predicate on table "${tableName}" references column "${foreign.ref.schemaName}.${foreign.ref.tableName}.${foreign.ref.columnName}" — a partial index predicate can only see this table's own columns. Next: use this table's own columns (the callback's \`t\`), or drop the predicate.`,
+	);
+};
+
 const validateIndexPredicates = (
 	owner: SchemaDeclaration,
 	tableName: string,
@@ -357,6 +1034,16 @@ const validateIndexPredicates = (
 		);
 	}
 
+	const windowed = withPredicate.find((entry) =>
+		someExprNode(entry.predicate, (node) => node.nodeKind === "window"),
+	);
+	if (windowed !== undefined) {
+		throwHejbroError(
+			"index-predicate-window-function",
+			`index "${windowed.name}"'s where predicate on table "${tableName}" contains a window function — Postgres forbids window functions in a partial index's WHERE clause. Next: express the predicate over this table's own columns, or drop the predicate and filter elsewhere.`,
+		);
+	}
+
 	const foreign = withPredicate
 		.flatMap((entry) =>
 			collectColumnRefs(entry.predicate).map((ref) => ({
@@ -369,10 +1056,7 @@ const validateIndexPredicates = (
 				ref.schemaName !== owner.schemaName || ref.tableName !== tableName,
 		);
 	if (foreign !== undefined) {
-		throwHejbroError(
-			"index-predicate-foreign-column-ref",
-			`index "${foreign.name}"'s where predicate on table "${tableName}" references column "${foreign.ref.schemaName}.${foreign.ref.tableName}.${foreign.ref.columnName}" — a partial index predicate can only see this table's own columns. Next: use this table's own columns (the callback's \`t\`), or drop the predicate.`,
-		);
+		throwIndexPredicateForeignColumnRef(tableName, foreign);
 	}
 };
 
@@ -453,6 +1137,20 @@ const resolveReferenceTarget = (
 	references: ForeignKeyInput["references"],
 ): ForeignKeyReferenceTarget => {
 	const first = firstReferencedColumnOrThrow(tableName, references.columns);
+	if (first.exprNode.schemaName === null) {
+		// add-ctes task 1.2c: a CTE column reaching the FK reference target
+		// itself -- a CTE has no schema, so it cannot be what a foreign key
+		// points at (D94's boundary: a CTE is statement-local, never a
+		// schema object a constraint can name).
+		// Task 3.2: withCte()'s reference is structurally not a ColumnRef
+		// (no typeNode), so no builder can reach this branch any more --
+		// that is the first line. This is the second, for an artifact
+		// path (a decoded snapshot, a hand-assembled node).
+		return throwHejbroError(
+			"foreign-column-ref",
+			`table "${tableName}" declares a foreign key whose references.columns names "${first.exprNode.tableName}.${first.exprNode.columnName}", a column of a CTE — a foreign key's target must be a declared table's own column. Next: reference a declared table's column instead.`,
+		);
+	}
 	const [, ...rest] = references.columns;
 	const derived: ReferencedTable = {
 		schemaName: first.exprNode.schemaName,
@@ -472,7 +1170,16 @@ const resolveIndex = (input: IndexDeclaration): IndexDeclaration => ({
 	unique: input.unique,
 	indexName: input.indexName,
 	predicate: input.predicate,
+	method: input.method,
 });
+
+/** Resolves an optional foreign key name: `undefined` stays `null` (derive later), else validated per D36 -- the foreign-key twin of `dsl/index-builder.ts`'s own `resolveIndexName` (D106 R3-B3). */
+const resolveForeignKeyName = (name: string | undefined): string | null => {
+	if (name === undefined) {
+		return null;
+	}
+	return assertSqlName(name, "foreign key", null);
+};
 
 const resolveForeignKey = (
 	owner: SchemaDeclaration,
@@ -481,6 +1188,19 @@ const resolveForeignKey = (
 ): ForeignKeyDeclaration => {
 	const foreignRef = findForeignColumnRef(owner, tableName, input.columns);
 	if (foreignRef !== undefined) {
+		if (foreignRef.exprNode.schemaName === null) {
+			// add-ctes task 1.2c: a CTE column reaching a local FK column
+			// position (D105 -- "reachable but silent" is the exact failure
+			// this refusal exists to name instead of).
+			// Task 3.2: withCte()'s reference is structurally not a
+			// ColumnRef (no typeNode), so no builder can reach this branch
+			// any more -- that is the first line. This is the second, for
+			// an artifact path (a decoded snapshot, a hand-assembled node).
+			return throwHejbroError(
+				"foreign-column-ref",
+				`table "${tableName}" received a column of the CTE "${foreignRef.exprNode.tableName}" as a foreign key's local column — a CTE is statement-local and cannot back a table's foreign key. Next: pass one of "${tableName}"'s own columns instead.`,
+			);
+		}
 		return throwHejbroError(
 			"foreign-column-ref",
 			`table "${tableName}" received a column of "${foreignRef.exprNode.schemaName}.${foreignRef.exprNode.tableName}" — indexes and local fk columns must use this table's own columns. Next: pass one of "${tableName}"'s own columns instead — to reference "${foreignRef.exprNode.schemaName}.${foreignRef.exprNode.tableName}", use it as a references.table target on a foreign key, not as a local column.`,
@@ -489,6 +1209,7 @@ const resolveForeignKey = (
 	return {
 		columns: input.columns.map((column) => column.sqlName),
 		references: resolveReferenceTarget(tableName, input.references),
+		name: resolveForeignKeyName(input.name),
 		onDelete: input.onDelete ?? null,
 		onUpdate: input.onUpdate ?? null,
 	};
@@ -506,6 +1227,121 @@ const resolveRls = (
 	return bindRls(owner.schemaName, tableName, rlsInput);
 };
 
+/** The canonical, declaration-form-independent sort key for one foreign key (D1, add-relational-reads): local columns then target identity — so a table's foreign-key order never depends on WHICH declaration form wrote it, and converting a form is snapshot-invariant. */
+const foreignKeySortKey = (foreignKey: ForeignKeyDeclaration): string =>
+	[
+		foreignKey.columns.join("\u001f"),
+		foreignKey.references.schemaName,
+		foreignKey.references.tableName,
+		foreignKey.references.columns.join("\u001f"),
+	].join("\u001f");
+
+const compareForeignKeys = (
+	a: ForeignKeyDeclaration,
+	b: ForeignKeyDeclaration,
+): number => {
+	const keyA = foreignKeySortKey(a);
+	const keyB = foreignKeySortKey(b);
+	if (keyA < keyB) {
+		return -1;
+	}
+	if (keyA > keyB) {
+		return 1;
+	}
+	return 0;
+};
+
+/**
+ * The declaration's `foreignKeys` getter body (#669): folds column-level
+ * `.references()` thunks on first read, memoized after -- never during
+ * `table()` itself, so a reference into a file the loader hasn't reached
+ * yet (or a not-yet-initialized same-file binding) only needs to be
+ * resolvable by the time something first asks for this table's foreign
+ * keys, not by the time this table is declared. Lives outside `table()`
+ * so its branch does not count against that function's CRAP budget.
+ */
+const memoizedForeignKeys = (
+	tableName: string,
+	columnEntries: ReadonlyArray<ColumnEntry>,
+	extrasForeignKeys: ReadonlyArray<ForeignKeyDeclaration>,
+): (() => ReadonlyArray<ForeignKeyDeclaration>) => {
+	const cache: { current: ReadonlyArray<ForeignKeyDeclaration> | null } = {
+		current: null,
+	};
+	return () => {
+		if (cache.current === null) {
+			cache.current = [
+				...foldColumnReferences(tableName, columnEntries),
+				...extrasForeignKeys,
+			].sort(compareForeignKeys);
+		}
+		return cache.current;
+	};
+};
+
+/** Rejects a column declared through both foreign-key paths (add-relational-reads guard) — without it the clash would still throw, but only later and name-centrically (`duplicate-foreign-key-name`); this guard fires earlier and names the COLUMN, which is what the user actually wrote twice. */
+const assertNoDoublyDeclaredReference = (
+	tableName: string,
+	columnEntries: ReadonlyArray<ColumnEntry>,
+	extrasForeignKeys: ReadonlyArray<ForeignKeyDeclaration>,
+): void => {
+	const doublyDeclared = columnEntries.find(
+		(entry) =>
+			entry.columnState.references !== undefined &&
+			extrasForeignKeys.some((foreignKey) =>
+				foreignKey.columns.includes(entry.columnName),
+			),
+	);
+	if (doublyDeclared === undefined) {
+		return;
+	}
+	throwHejbroError(
+		"invalid-duplicate-foreign-key",
+		`table "${tableName}" column "${doublyDeclared.columnName}" declares .references() and is also named in an extras foreign key — the constraint would emit twice. Next: keep exactly one of the two declarations for "${doublyDeclared.columnName}".`,
+	);
+};
+
+/** Folds every column-level `.references()` declaration (add-relational-reads, D102) into the extras-equivalent `ForeignKeyDeclaration`. The built target ref carries its full identity, so the fold needs no lookup; a column without `.references()` contributes nothing. Exported for `memoizedForeignKeys` (this file) — its only caller — to call from the declaration's `foreignKeys` getter, not from `table()` itself (#669). */
+export const foldColumnReferences = (
+	tableName: string,
+	columnEntries: ReadonlyArray<ColumnEntry>,
+): ReadonlyArray<ForeignKeyDeclaration> =>
+	columnEntries.flatMap((entry) => {
+		const target = entry.columnState.references?.();
+		if (target === undefined) {
+			return [];
+		}
+		if (target.exprNode.schemaName === null) {
+			// add-ctes task 1.2c: the per-column `.references()` sugar's own
+			// reference target, the D102 twin of resolveReferenceTarget's
+			// guard above -- a CTE column reaching here is refused the same
+			// way, not half-encoded into a target that has no schema.
+			// Task 3.2: withCte()'s reference is structurally not a
+			// ColumnRef (no typeNode), so no builder can reach this branch
+			// any more -- that is the first line. This is the second, for
+			// an artifact path (a decoded snapshot, a hand-assembled node).
+			return throwHejbroError(
+				"foreign-column-ref",
+				`table "${tableName}" column "${entry.columnName}" declares .references() pointing at "${target.exprNode.tableName}.${target.exprNode.columnName}", a column of a CTE — a foreign key's target must be a declared table's own column. Next: reference a declared table's column instead.`,
+			);
+		}
+		return [
+			{
+				columns: [entry.columnName],
+				references: {
+					schemaName: target.exprNode.schemaName,
+					tableName: target.exprNode.tableName,
+					columns: [target.exprNode.columnName],
+				},
+				// The per-column `.references()` sugar (D102) has no name
+				// slot of its own -- always derives (D106 R3-B3).
+				name: null,
+				onDelete: null,
+				onUpdate: null,
+			},
+		];
+	});
+
 /**
  * Declares a table under `owner`. Column keys are camelCase in TypeScript
  * and snake_cased in the generated SQL. `extras` receives this table's own
@@ -517,44 +1353,89 @@ export const table = <TColumns extends Record<string, ColumnBuilder>>(
 	tableName: string,
 	columns: TColumns,
 	extras?: (t: TableColumns<TColumns>) => TableExtras,
-): Table<TColumns> => {
+): Table<TColumns, "declared"> => {
 	const declaredAt = captureDeclarationSite();
 	assertSqlName(tableName, "table", null);
 	const columnEntries = buildColumnEntries(tableName, columns);
+	assertNotNullElementsOnArrayColumns(tableName, columnEntries);
+	validateGeneratedAndIdentityColumns(tableName, columnEntries);
+	assertNoDefaultWindowFunction(tableName, columnEntries);
+	assertNoGeneratedWindowFunction(tableName, columnEntries);
 	const refsObject = buildColumnRefs<TColumns>(owner, tableName, columnEntries);
 
 	const resolvedExtras = extras?.(refsObject) ?? {};
 	const indexes = (resolvedExtras.indexes ?? []).map(resolveIndex);
-	const foreignKeys = (resolvedExtras.foreignKeys ?? []).map((input) =>
+	const extrasForeignKeys = (resolvedExtras.foreignKeys ?? []).map((input) =>
 		resolveForeignKey(owner, tableName, input),
 	);
-	const checks = resolvedExtras.checks ?? [];
+	assertNoDoublyDeclaredReference(tableName, columnEntries, extrasForeignKeys);
+	// #669: a column-level `.references()` thunk is NEVER called here --
+	// only `extrasForeignKeys` (already resolved, no thunk involved) feeds
+	// the two declaration-time guards below. Folding column-level
+	// references eagerly is exactly what made a cross-file (or same-file)
+	// forward reference crash with a TDZ/undefined error; the fold itself
+	// moves to `resolveForeignKeys` below, memoized on the declaration's
+	// first `foreignKeys` read instead. Structurally, a folded entry can
+	// never fail either guard: its one local column is always this
+	// table's own (drawn from `columnEntries`), so
+	// `unknown-foreign-key-column` can't fire, and its derived name
+	// depends only on that column, so it can neither collide with
+	// another folded entry (distinct columns, by construction) nor with
+	// an extras entry (`assertNoDoublyDeclaredReference` above already
+	// refused that column pairing).
+	const checks = [
+		...(resolvedExtras.checks ?? []),
+		...deriveNotNullElementsChecks(owner, tableName, columnEntries),
+	];
 
 	const knownColumnNames = new Set(
 		columnEntries.map((entry) => entry.columnName),
 	);
-	validateColumnRefs(tableName, knownColumnNames, indexes, foreignKeys);
-	validateDuplicateNames(tableName, indexes, foreignKeys);
+	// Order affects diagnosis, not detection (#464, measured): running
+	// this after validateColumnRefs would misdiagnose a different-named
+	// foreign column as unknown-index-column (a typo) instead of
+	// foreign-column-ref -- validateColumnRefs only checks name
+	// membership, so it can't itself catch a same-named foreign column
+	// either way; this guard is what does, regardless of the two calls'
+	// order. A same-named foreign column passing silently is what
+	// removing this guard entirely (not merely reordering it) causes.
+	assertNoForeignIndexColumn(owner, tableName, indexes);
+	validateColumnRefs(tableName, knownColumnNames, indexes, extrasForeignKeys);
+	validateDuplicateNames(tableName, indexes, extrasForeignKeys);
+	validateIndexExpressions(owner, tableName, indexes);
 	validateChecks(owner, tableName, checks);
 	validateIndexPredicates(owner, tableName, indexes);
 
 	const rls = resolveRls(owner, tableName, resolvedExtras.rls);
+
+	const resolveForeignKeys = memoizedForeignKeys(
+		tableName,
+		columnEntries,
+		extrasForeignKeys,
+	);
 
 	const declaration: TableDeclaration = {
 		declarationKind: "table",
 		schema: owner,
 		tableName,
 		columns: columnEntries.map((entry) => ({
+			columnKey: entry.columnKey,
 			columnName: entry.columnName,
 			columnState: entry.columnState,
 		})),
 		indexes,
-		foreignKeys,
+		get foreignKeys() {
+			return resolveForeignKeys();
+		},
 		checks,
 		rls,
 		existing: false,
+		authority: "declared",
 		declaredAt,
 	};
 
-	return Object.assign(refsObject, { [tableMeta]: declaration });
+	return Object.assign(refsObject, { [tableMeta]: declaration }) as Table<
+		TColumns,
+		"declared"
+	>;
 };

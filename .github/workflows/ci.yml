@@ -91,6 +91,33 @@ jobs:
       # matrix leg only, the same way smoke:pack-install above is.
       - run: pnpm check:crap
         if: matrix.node-version == 24
+      # #278: `pnpm check:crap` (above) rewrites README.md's CRAP block and
+      # badge from its own results before gating -- a PR that moves the
+      # scanned/violation/highest-score numbers but doesn't carry the
+      # refreshed README fails here instead of silently going stale. Same
+      # leg as check:crap (Node-version-independent, and running it twice
+      # would just repeat the same diff-or-not verdict).
+      - name: README CRAP block is current
+        if: matrix.node-version == 24
+        run: |
+          if ! git diff --exit-code -- README.md; then
+            echo "error[check-crap-readme]: README's CRAP block is stale. Next: run pnpm check:crap and commit README.md" >&2
+            exit 1
+          fi
+      # #305: same construction as the CRAP block above, for the task-time
+      # badges rendered from openspec/task-times.csv (the D88 ledger).
+      # Runs AFTER the CRAP diff step so a stale block attributes to the
+      # right gate: the CRAP step has already proven README clean, so any
+      # diff after check:tasktime is the badge block's own.
+      - run: pnpm check:tasktime
+        if: matrix.node-version == 24
+      - name: README task-time badges are current
+        if: matrix.node-version == 24
+        run: |
+          if ! git diff --exit-code -- README.md; then
+            echo "error[check-tasktime-readme]: README's task-time badges are stale. Next: run pnpm check:tasktime and commit README.md" >&2
+            exit 1
+          fi
       # #180: not "trust this branch" -- the question this step asks
       # ("does every package this branch changed relative to dev have an
       # accompanying pending changeset?") does not apply on a
@@ -131,3 +158,7 @@ jobs:
       - run: pnpm check:first-release-version
       - run: pnpm check:next-marker
       - run: pnpm check:diagnostic-xref
+      - run: pnpm check:bans
+      # #488: the changeset fixed group must equal the workspace's published
+      # set exactly -- a new package outside the group would version alone.
+      - run: pnpm check:fixed-group

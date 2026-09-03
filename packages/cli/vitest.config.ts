@@ -1,9 +1,20 @@
-import { resolve } from "node:path";
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
+import { hejbroSourceAlias } from "./vitest.shared.ts";
 
 export default defineConfig({
 	test: {
 		include: ["test/**/*.test.ts"],
+		// Group 6's Docker-gated live-server suite stays out of the
+		// default `pnpm test`/CI run (packages/pg's own split, same
+		// reasoning) -- excluded by *pattern*, not a hardcoded filename,
+		// matching packages/pg/vitest.config.ts's own comment on this
+		// exact pair of patterns. `configDefaults` is spread first so
+		// vitest's own exclusions are never lost.
+		exclude: [
+			...configDefaults.exclude,
+			"test/**/*integration.test.ts",
+			"test/integration/**",
+		],
 		// Informational only -- #154 scopes the CRAP gate to @hejbro/core and
 		// @hejbro/supabase, not this package. This in-process number
 		// undercounts packages/cli/src/commands specifically: those are
@@ -49,17 +60,17 @@ export default defineConfig({
 		// making `isTable()` return false across the boundary — this forces a
 		// single shared instance, matching real (non-test) Node module caching.
 		dedupe: ["@hejbro/core"],
-		// #131: resolves straight to core's public entry point in source,
-		// not `dist/index.js` -- see packages/supabase/vitest.config.ts for
-		// the full rationale. Covers this package's own in-process tests
-		// (config.test.ts, diagnostics.test.ts, rename-diagnostics.test.ts,
-		// loader.test.ts); the subprocess e2e tests (generate-command.test.ts
-		// etc., which spawn the built `dist/cli.js`) are unaffected either
-		// way -- a child process resolves modules on its own, outside this
-		// vitest process's module graph -- and get a dist-freshness guard
-		// instead (test/support/cli-runner.ts).
-		alias: {
-			"@hejbro/core": resolve(import.meta.dirname, "../core/src/index.ts"),
-		},
+		// #131 aliases, shared with vitest.integration.config.ts (group 6)
+		// via vitest.shared.ts rather than duplicated -- see that file's
+		// own comment (a copy here would drift silently since the
+		// integration config never runs in CI). Covers this package's own
+		// in-process tests (config.test.ts, diagnostics.test.ts,
+		// rename-diagnostics.test.ts, loader.test.ts); the subprocess e2e
+		// tests (generate-command.test.ts etc., which spawn the built
+		// `dist/cli.js`) are unaffected either way -- a child process
+		// resolves modules on its own, outside this vitest process's
+		// module graph -- and get a dist-freshness guard instead
+		// (test/support/cli-runner.ts).
+		alias: hejbroSourceAlias,
 	},
 });

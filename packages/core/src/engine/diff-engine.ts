@@ -1,6 +1,7 @@
 import { guardSnapshotRead, throwHejbroError } from "../error";
 import type { KindChange } from "../kind/object-kind";
-import type { KindRegistry } from "../kind/registry";
+import type { KindRegistry, RegisteredObjectKind } from "../kind/registry";
+import { asTableSnapshot, tableExisting } from "../kinds/table-snapshot";
 import type { Snapshot } from "../snapshot/snapshot";
 import type { JsonValue } from "../snapshot/stable-json";
 import { compareKeys } from "../sort";
@@ -113,6 +114,73 @@ export const rankKinds = (
 };
 
 /**
+ * `key`'s owning table's own snapshot node (per `kind.ownerTableIdentity`,
+ * D106 R1, B2) — `next`'s own entry for that table identity, falling
+ * back to `previous`'s when the table's declaration was removed
+ * outright (so `next` carries no entry for it at all). `null` when
+ * `kind` doesn't implement `ownerTableIdentity` at all (a `grant`, for
+ * instance — the user's own standalone declaration, never a table
+ * fan-out, is never asked).
+ *
+ * Internal invariant: `diffSnapshots`' own caller draws `key` from the
+ * union of `previous.objects`'/`next.objects`' keys, so at least one of
+ * `previousNode`/`nextNode` is always non-null here — the cast below
+ * narrows that guarantee rather than adding a runtime branch nothing
+ * can ever take (a fan-out object's own key only ever exists because
+ * some run once serialized it from a real table declaration). This
+ * breaks the moment a second caller passes a `previousNode`/`nextNode`
+ * pair for a key it invented rather than one drawn from that same
+ * union — the compiler cannot catch that; only this comment can warn
+ * the next caller.
+ */
+const authoritativeOwnerNode = (
+	kind: RegisteredObjectKind,
+	previous: Snapshot,
+	next: Snapshot,
+	previousNode: JsonValue | null,
+	nextNode: JsonValue | null,
+): JsonValue | null => {
+	if (kind.ownerTableIdentity === undefined) {
+		return null;
+	}
+	const ownerNode = (nextNode ?? previousNode) as JsonValue;
+	const ownerTableKey = `table:${kind.ownerTableIdentity(ownerNode)}`;
+	return (
+		lookupNode(next.objects, ownerTableKey) ??
+		lookupNode(previous.objects, ownerTableKey)
+	);
+};
+
+/**
+ * `true` when `key`'s owning table is existing — read via
+ * {@link authoritativeOwnerNode}, so `next`'s own record decides except
+ * when the table's declaration was removed outright (`next` having
+ * nothing to say being exactly the removal case). This is not `previous
+ * || existing-in-next`: on adoption, `next`'s own record says the table
+ * is managed again, and a fanned-out object's create must proceed then,
+ * never suppressed merely because the table once was existing.
+ */
+const ownerIsExisting = (
+	kind: RegisteredObjectKind,
+	previous: Snapshot,
+	next: Snapshot,
+	previousNode: JsonValue | null,
+	nextNode: JsonValue | null,
+): boolean => {
+	const authoritative = authoritativeOwnerNode(
+		kind,
+		previous,
+		next,
+		previousNode,
+		nextNode,
+	);
+	if (authoritative === null) {
+		return false;
+	}
+	return tableExisting(asTableSnapshot(authoritative));
+};
+
+/**
  * Diffs two snapshots into an ordered list of {@link KindChange}s.
  * Creates and alters are ordered by kind dependency order (topological
  * over `dependsOn`), sorted by identity (byte order) within a kind. Drops
@@ -135,6 +203,9 @@ export const diffSnapshots = (
 			const kind = registry.get(kindName);
 			const previousNode = lookupNode(previous.objects, key);
 			const nextNode = lookupNode(next.objects, key);
+			if (ownerIsExisting(kind, previous, next, previousNode, nextNode)) {
+				return [];
+			}
 			return kind.diff(previousNode, nextNode, identity);
 		}),
 	);

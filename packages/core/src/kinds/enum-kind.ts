@@ -1,7 +1,11 @@
 import type { EnumDeclaration } from "../dsl/pg-enum";
-import { throwHejbroError } from "../error";
 import { createOrDropDiff } from "../kind/diff-helpers";
-import { dispatchEmit } from "../kind/emit-helpers";
+import {
+	dispatchEmit,
+	requireBoth,
+	requireNext,
+	requirePrevious,
+} from "../kind/emit-helpers";
 import type { KindChange, ObjectKind } from "../kind/object-kind";
 import type { JsonValue } from "../snapshot/stable-json";
 import { qualifyName } from "../sql/identifier";
@@ -52,35 +56,18 @@ const addValueStatements = (
 		),
 	);
 
-const emitCreate = (change: KindChange): ReadonlyArray<SqlStatement> => {
-	if (change.next === null) {
-		return throwHejbroError(
-			"invalid-kind-change",
-			"enum create change is missing its next snapshot.",
-		);
-	}
-	return [statement(createTypeSql(asEnumSnapshot(change.next)))];
-};
+const emitCreate = (change: KindChange): ReadonlyArray<SqlStatement> => [
+	statement(createTypeSql(asEnumSnapshot(requireNext(change)))),
+];
 
-const emitDrop = (change: KindChange): ReadonlyArray<SqlStatement> => {
-	if (change.previous === null) {
-		return throwHejbroError(
-			"invalid-kind-change",
-			"enum drop change is missing its previous snapshot.",
-		);
-	}
-	return [statement(dropTypeSql(asEnumSnapshot(change.previous)))];
-};
+const emitDrop = (change: KindChange): ReadonlyArray<SqlStatement> => [
+	statement(dropTypeSql(asEnumSnapshot(requirePrevious(change)))),
+];
 
 const emitAlter = (change: KindChange): ReadonlyArray<SqlStatement> => {
-	if (change.previous === null || change.next === null) {
-		return throwHejbroError(
-			"invalid-kind-change",
-			"enum alter change is missing its previous or next snapshot.",
-		);
-	}
-	const previousSnapshot = asEnumSnapshot(change.previous);
-	const nextSnapshot = asEnumSnapshot(change.next);
+	const both = requireBoth(change);
+	const previousSnapshot = asEnumSnapshot(both.previous);
+	const nextSnapshot = asEnumSnapshot(both.next);
 	if (isAppendOnly(previousSnapshot.values, nextSnapshot.values)) {
 		const addedValues = nextSnapshot.values.slice(
 			previousSnapshot.values.length,

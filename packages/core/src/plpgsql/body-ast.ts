@@ -46,12 +46,29 @@ export type BodyStatement =
 	  }
 	| { readonly stmtKind: "returnRef"; readonly refName: string }
 	| { readonly stmtKind: "returnQuery"; readonly query: QueryNode }
+	/**
+	 * `return <expr>;` — the scalar-returning function's only return shape
+	 * (#424). Kept separate from `returnQuery` because plpgsql keeps them
+	 * separate: `return query` is legal only in a SETOF function, and a
+	 * scalar function reaching `end` without one of these raises at call
+	 * time, so which of the two a body records is decided by the
+	 * declaration's own `returns`, never by the value alone.
+	 */
+	| { readonly stmtKind: "returnExpr"; readonly expr: ExprNode }
 	| {
 			readonly stmtKind: "forEach";
 			readonly loopName: string;
 			readonly query: SelectNode;
 			readonly statements: ReadonlyArray<BodyStatement>;
-	  };
+	  }
+	/**
+	 * `ctx.execute(...)` — a statement run for its side effect, not its
+	 * value (#426). A select renders `perform <sql>;` (plpgsql rejects a
+	 * bare `select` with no `into`); an insert/update/delete renders
+	 * `<sql>;` as-is. `queryKind` on `query` itself is what the renderer
+	 * branches on — no separate discriminator needed here.
+	 */
+	| { readonly stmtKind: "execute"; readonly query: QueryNode };
 
 /** A recorded function/trigger body: its locals plus its statements, in order. */
 export type FunctionBody = {

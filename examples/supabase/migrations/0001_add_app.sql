@@ -15,8 +15,8 @@
 -- + grant app.schema-usage.anon [new]
 -- + grant app.schema-usage.authenticated [new]
 -- + supabase-storage-bucket attachments [new]
--- parent-snapshot: sha256:d379e9576f63f1d63d29561b7366135984e883890a8efcb780b4e53648a77c7c
--- snapshot: sha256:3c2e312f47848c6d24d4893659fb324214b9b0d1b9f2fbe5a462865bf4848c29
+-- parent-snapshot: sha256:d369ef9ab960e03f29326874197ae3d23281b0b38fa322e6e8d0b9ac9030eedb
+-- snapshot: sha256:5b7eca272eec78d30655af2c7cc982fce5e3f989e84b58d43d891cfa588a3448
 
 create schema "app";
 

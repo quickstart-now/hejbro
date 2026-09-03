@@ -10,6 +10,13 @@ import { registerSupabaseKinds } from "../src/index";
 import { storageBucket } from "../src/storage/bucket";
 import { storageBucketKind } from "../src/storage/bucket-kind";
 
+describe("storageBucketKind.noCatalogObjectReason (#482, task 2.2)", () => {
+	it("the bucket kind declares itself uncomparable against a catalog, with the reason", () => {
+		expect(storageBucketKind.noCatalogObjectReason).toBeDefined();
+		expect(storageBucketKind.noCatalogObjectReason).toMatch(/Storage API/);
+	});
+});
+
 describe("storageBucketKind.serialize / identify", () => {
 	it("serializes a full-option bucket with every field present", () => {
 		const bucket = storageBucket("avatars", {
@@ -565,7 +572,7 @@ describe("storageBucketKind.requiredKeys (D79, #159)", () => {
 
 	it("accepts a fully-populated node (negative control)", () => {
 		const raw = JSON.stringify({
-			formatVersion: 5,
+			formatVersion: 8,
 			dialect: "postgres",
 			objects: { "supabase-storage-bucket:avatars": { name: "avatars" } },
 		});
@@ -576,7 +583,7 @@ describe("storageBucketKind.requiredKeys (D79, #159)", () => {
 
 	it("rejects a node missing name, by name", () => {
 		const raw = JSON.stringify({
-			formatVersion: 5,
+			formatVersion: 8,
 			dialect: "postgres",
 			objects: { "supabase-storage-bucket:avatars": {} },
 		});

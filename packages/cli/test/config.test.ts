@@ -95,6 +95,16 @@ describe("parseConfig", () => {
 		}
 	});
 
+	it("accepts a configuration without the migration-authoring fields", () => {
+		const value = {
+			entry: ["src/**/*.schema.ts"],
+		};
+		expect(parseConfig(value, "/repo/hejbro.config.ts")).toEqual({
+			entry: ["src/**/*.schema.ts"],
+			presets: [],
+		});
+	});
+
 	it("reports an invalid prefixStrategy value, listing the three valid strategies", () => {
 		const value = {
 			entry: ["src/**/*.schema.ts"],
