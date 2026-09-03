@@ -219,7 +219,7 @@ Inside group 1, 1.2 makes 1.3's test red, so 1.3 follows it.
       — and this case must fail while the existing in-place case at
       `driver.test.ts:711` stays green. `packages/pg/src` is not edited.
       Files: `packages/pg/test/driver.test.ts`.
-- [ ] 5.2 (~5m) The set-operation pins stop measuring themselves. The
+- [x] 5.2 (~5m) The set-operation pins stop measuring themselves. The
       existing expectation is written as `ReadonlyArray<SelectResult<
       Projection>>` — the same type expression the implementation
       evaluates — so it holds however that expression resolves. Replace it

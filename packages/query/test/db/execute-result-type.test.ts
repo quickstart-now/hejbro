@@ -107,21 +107,35 @@ describe("Db.execute's resolved row type (task 4.11)", () => {
 describe("Db.execute's resolved row type for a core-built set operation (task 3.1, #551)", () => {
 	it("a whole-table union reads back as the left branch's declared row shape, not a raw driver row", () => {
 		type Stage = SetOpStage<Posts>;
+		type BranchAlone = SelectLimited<Posts>;
+
+		// Independent oracle (review repair, task 5.2): the type the same
+		// handle resolves executing the left branch alone -- not
+		// `ReadonlyArray<SelectResult<Posts>>`, the exact expression
+		// ExecuteResult itself evaluates for this branch, which would hold
+		// tautologically however that expression resolved.
 		expectTypeOf<ExecuteRows<Stage>>().toEqualTypeOf<
-			ReadonlyArray<SelectResult<Posts>>
+			ExecuteRows<BranchAlone>
 		>();
 	});
 
-	it("an object-projection union reads back as the left branch's declared keys and types -- no more, no less", () => {
-		type Projection = { readonly total: Posts["amount"] };
+	it("an object-projection union reads back as the left branch's declared keys and types, widened with null where the join record is missing -- no more, no less", () => {
+		// posts.status is declared notNull (review repair, task 5.2) --
+		// the original fixture here projected posts.amount, already
+		// nullable, so the widening this scenario promises was invisible:
+		// `bigint | null` looks identical whether or not it widened.
+		type Projection = { readonly label: Posts["status"] };
 		type Stage = SetOpStage<Projection>;
+		type BranchAlone = SelectLimited<Projection>;
 		type Row = ExecuteRows<Stage>[number];
 
+		// Same independent oracle as the whole-table case above.
 		expectTypeOf<ExecuteRows<Stage>>().toEqualTypeOf<
-			ReadonlyArray<SelectResult<Projection>>
+			ExecuteRows<BranchAlone>
 		>();
-		// @ts-expect-error "status" was never projected -- not a key of Row.
-		type _Rejected = Row["status"];
+		expectTypeOf<Row>().toEqualTypeOf<{ readonly label: string | null }>();
+		// @ts-expect-error "id" was never projected -- not a key of Row.
+		type _Rejected = Row["id"];
 	});
 
 	it("a set-op stage further chained with orderBy()/limit() keeps the same resolved row type -- neither changes TProjection", () => {
