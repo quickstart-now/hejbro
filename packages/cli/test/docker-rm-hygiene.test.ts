@@ -50,6 +50,9 @@ const findRepoRoot = (dir: string): string => {
 
 const REPO_ROOT = findRepoRoot(dirname(THIS_FILE));
 
+/** The extracted scan module's own path -- excluded by identity for the same reason as `THIS_FILE`: it must stay free to document the pattern without a future one-line example turning it into a self-reported violation. */
+const SCAN_MODULE_FILE = join(dirname(THIS_FILE), "support", "repo-test-file-scan.ts");
+
 /** `pnpm-workspace.yaml`'s own two globs (`packages/*`, `examples/*`), scoped to the `test` subdirectory each may or may not have. */
 const candidateFiles: ReadonlyArray<string> = [
 	...testDirsUnder(REPO_ROOT, "packages"),
@@ -57,10 +60,12 @@ const candidateFiles: ReadonlyArray<string> = [
 ].flatMap(listTsFilesRecursively);
 
 describe("docker rm hygiene / #709", () => {
-	// Excluded by identity so this file stays free to describe the rule
-	// in prose without every future edit having to keep re-checking
-	// itself against its own pattern.
-	const scanned = candidateFiles.filter((file) => file !== THIS_FILE);
+	// Excluded by identity so this file and the scan module it drives
+	// stay free to describe the rule in prose without every future edit
+	// having to keep re-checking themselves against their own pattern.
+	const scanned = candidateFiles.filter(
+		(file) => file !== THIS_FILE && file !== SCAN_MODULE_FILE,
+	);
 
 	it("every docker rm array literal in packages/*/test and examples/*/test carries -v", () => {
 		expect(scanned.length).toBeGreaterThan(0);
