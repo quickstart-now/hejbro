@@ -10,11 +10,10 @@
  * be, and run-one.sh already tees stdout/stderr to a `.log` per run, so
  * a second capture file would just duplicate what's already on disk).
  *
- * Wiring this into a real Vitest reporter (registered in
- * `vitest.config.ts`) is deliberately not done in this file -- G2.1's
- * own constraint is that this must not collide with G0's edits to that
- * file, and Vitest's reporter hook shapes are worth confirming against a
- * real run rather than guessed. See G2.4.
+ * Wired in via vitest's own `onTestFailed` test hook, not a custom
+ * Reporter -- see `failure-capture-setup.ts` (the wiring) and
+ * `call-transcript.ts` (the CLI/git invocation record this same sink
+ * also dumps on failure).
  */
 
 export type FailureInput = {

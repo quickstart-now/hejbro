@@ -1,22 +1,31 @@
 import { beforeEach, onTestFailed } from "vitest";
 import { captureFailure } from "./failure-capture";
+import { dumpTranscript, transcript } from "./call-transcript";
 
 /**
- * #533: wires `captureFailure` into Vitest's own per-test `onTestFailed`
- * hook -- opt-in only (loaded via `vitest.config.ts`'s `setupFiles` when
- * someone is actively chasing a flake, not on every routine `pnpm test`
- * run). `onTestFailed` must be called while a test is "current", so it is
+ * #533: wires `captureFailure` and the call transcript into vitest's own
+ * per-test `onTestFailed` hook. Registered by `vitest.config.ts`'s
+ * `setupFiles` **permanently** -- this is the standing capture path, not
+ * an opt-in a session has to remember to enable, because the issue this
+ * closes is precisely "nobody remembered to capture anything before the
+ * process was gone." On a green path this module runs `transcript.reset()`
+ * per test and nothing else: `onTestFailed`'s own callback, and
+ * `dumpTranscript`'s own no-op-when-empty guard, mean a passing suite
+ * never writes a line.
+ *
+ * `onTestFailed` must be called while a test is "current", so it is
  * registered inside `beforeEach`, not at this module's own top level.
  *
  * Worker/pool identity is approximated from what a single test's own
  * process can see (`process.pid`, `VITEST_POOL_ID`/`VITEST_MAX_WORKERS`
  * if the active pool sets them) -- a full custom Reporter would see the
  * whole run's file list and could name concurrently-running suites
- * directly, but guessing that class's hook shapes against a version this
- * module hasn't been run against is worse than an honest gap: this
- * always emits `concurrentSuites: []`, not a guess.
+ * directly, but a per-package reporter still couldn't see another
+ * package's files running concurrently under turbo either, so this
+ * always emits `concurrentSuites: []` rather than a partial answer.
  */
 beforeEach(() => {
+	transcript.reset();
 	onTestFailed((context) => {
 		const [firstError] = context.task.result?.errors ?? [];
 		captureFailure({
@@ -29,5 +38,6 @@ beforeEach(() => {
 			poolSize: Number(process.env.VITEST_MAX_WORKERS ?? Number.NaN),
 			concurrentSuites: [],
 		});
+		dumpTranscript();
 	});
 });

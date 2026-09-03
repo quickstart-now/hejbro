@@ -3,6 +3,12 @@ import { hejbroSourceAlias } from "./vitest.shared.ts";
 
 export default defineConfig({
 	test: {
+		// #533: the capture harness is wired in permanently, not on
+		// request -- see failure-capture-setup.ts's own doc comment. It
+		// writes nothing on a green path (onTestFailed never fires, and
+		// dumpTranscript no-ops on an empty transcript), so this carries
+		// no cost for a routine passing run.
+		setupFiles: ["./test/support/failure-capture-setup.ts"],
 		include: ["test/**/*.test.ts"],
 		// Group 6's Docker-gated live-server suite stays out of the
 		// default `pnpm test`/CI run (packages/pg's own split, same
