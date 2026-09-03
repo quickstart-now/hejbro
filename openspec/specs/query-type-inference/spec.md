@@ -403,6 +403,19 @@ column's type the union of the two branches' declared read types for
 that key (identical declarations stay unchanged), and a column nullable
 in EITHER branch SHALL be nullable in the result.
 
+That union is available where both branches' row types are resolved
+before they are combined, which is the chain surface. A set operation
+built from the core builder's own combinators carries the LEFT branch's
+projection alone: no type for the right branch, and no record of which
+tables either branch left-joined. Executing one through a db handle
+SHALL therefore deliver the left branch's own keys, never a raw driver
+row, each column typed from that branch's declaration — and, where that
+branch projects an object of expressions, additionally widened to
+include null. That widening is what the missing join record costs:
+narrowing without it would type a column drawn from a left-joined table
+as non-null. A whole-table projection is unaffected, its columns being
+resolved from the table's own declaration rather than from the join set.
+
 #### Scenario: Identical branch shapes pass through unchanged
 - **WHEN** two whole-table selects over identically-declared tables
   combine with `.union(...)`
@@ -421,6 +434,20 @@ in EITHER branch SHALL be nullable in the result.
 - **WHEN** a branch with a `notNull` column unions a branch where the
   same key is nullable
 - **THEN** the result types that column as nullable
+
+#### Scenario: A core-built set operation executed on a handle reads back as its left branch
+- **WHEN** a set operation over whole-table projections, built with the
+  core builder's own combinators, is executed through a db handle
+- **THEN** the rows read back with the left branch's declared keys and
+  read types — the same row type that branch reads back on its own — and
+  no key resolves to an untyped driver row's value
+
+#### Scenario: An object projection widens where the join record is missing
+- **WHEN** the same execution's branches project an object of
+  expressions rather than a whole table
+- **THEN** each key is still the left branch's own, typed from its
+  declaration and widened to include null, rather than resolving to an
+  untyped driver row's value
 
 ### Requirement: Enum columns type as their declared values
 A column declared from `pgEnum(schema, name, values)` SHALL read back as
