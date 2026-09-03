@@ -65,21 +65,33 @@ Inside group 1, 1.2 makes 1.3's test red, so 1.3 follows it.
       the transaction's opening, must turn these cases red while every
       case in 1.1 stays green. If both move together, the new obligation
       is guarding nothing. Files: those two.
-- [ ] 1.3 (~7m) The Supabase pooled-transaction driver's own conformance
-      check feeds the wire-level envelope instead of the session-surface
-      list. Red: `packages/supabase/test/pooler.test.ts`'s case *"conforms
-      to the session-state:false tier"* now throws — the observation it
-      hands the kit cannot show transaction control. Green by recording
-      through the envelope-recording fixture that already exists in that
-      file, so the driver's real `BEGIN`/pins/caller/`COMMIT` order is
-      what the kit judges. No `packages/supabase/src` file is edited: if
-      the driver itself turns out to violate the obligation, that is a
+- [x] 1.3 (~7m, actual ~4m work + planner round-trip wait — see note) The
+      Supabase pooled-transaction driver's own conformance check feeds
+      the wire-level envelope
+      instead of the session-surface list. Red: `packages/supabase/test/
+      pooler.test.ts`'s case *"conforms to the session-state:false
+      tier"* now throws — the observation it hands the kit cannot show
+      transaction control. Green by recording through the
+      envelope-recording fixture that already exists in that file, so
+      the driver's real `BEGIN`/pins/caller/`COMMIT` order is what the
+      kit judges. No `packages/supabase/src` file is edited: if the
+      driver itself turns out to violate the obligation, that is a
       finding for the planner, not a fix here. Report, with this task,
       which obligation each in-repo driver ended up under and how it
       answered — `@hejbro/pg`, the Supabase session and pooled paths,
       and both Neon paths — since only one of the five reaches the new
       obligation and the other four are the evidence that it left them
       alone. Files: `packages/supabase/test/pooler.test.ts`.
+
+      Note: 1.2 landing also broke `pooler.test.ts`'s own task-1.6
+      "red/green contrast" test (not named above) — its premise ("the
+      kit's session-surface observation silently passes a pins-before-
+      BEGIN fixture") stopped being true once 1.2's shape guard refuses
+      that observation for this capability combo outright. Rebuilt (lead
+      ruling QC-G1-R1-02) to pin the fixed behavior on two independent,
+      distinctly-asserted layers instead of the superseded gap; a repo
+      sweep confirmed it was the only test 1.2 broke outside this
+      task's own named red.
 
 ## 2. Whole-table projection under a join
 
