@@ -113,18 +113,12 @@ export const postById = defineFunction(
 	},
 );
 
-// #662: a function argument keyed by something that is not a valid TS
-// identifier -- the DSL accepts it (only table columns go through D36's
-// assertSqlName), so this is the one place a non-identifier key reaches
-// a real, vendored contract that a real tsc actually compiles. Contract
-// axis only -- the DDL this same declaration would generate renders the
-// argument name unquoted and is invalid SQL (#679).
 export const echoArg = defineFunction(
 	app,
 	"echo_arg",
-	{ args: { "my-arg": uuid() }, returns: uuid() },
+	{ args: { myArg: uuid() }, returns: uuid() },
 	(ctx, args) => {
-		ctx.return(sql\`\${args["my-arg"]}\`);
+		ctx.return(sql\`\${args.myArg}\`);
 	},
 );
 `;
@@ -175,7 +169,7 @@ export const posts = table(app, "posts", {
  * committed `schema.json` afterward, standing in for a person hand-
  * editing that file (the reader never checks a column key's shape).
  */
-const COLUMN_KEY_SCHEMA_SOURCE = `import { schema, table, text, uuid } from "hejbro";
+const COLUMN_KEY_SCHEMA_SOURCE = `import { defineFunction, schema, sql, table, text, uuid } from "hejbro";
 
 export const app = schema("app");
 
@@ -186,6 +180,19 @@ export const posts = table(app, "posts", {
 	klass: text().notNull(),
 	aQuoteB: text().notNull(),
 });
+
+// #679: real-tsc observer for the argument-key half -- the argument
+// itself stays an ordinary key (defineFunction now rejects a
+// non-identifier one), the adversarial key is patched into the
+// hand-edited export below, the same move the column half already made.
+export const echoArg = defineFunction(
+	app,
+	"echo_arg",
+	{ args: { myArg: uuid() }, returns: uuid() },
+	(ctx, args) => {
+		ctx.return(sql\`\${args.myArg}\`);
+	},
+);
 `;
 
 let schemaRepo: string;
@@ -318,6 +325,7 @@ describe("a vendored contract type-checks against the real, installed hejbro pac
 				key: 'a"b',
 			},
 		};
+		const myArgSqlName = "my_arg";
 		const patched = {
 			...original,
 			// biome-ignore lint/suspicious/noExplicitAny: see above.
@@ -326,6 +334,22 @@ describe("a vendored contract type-checks against the real, installed hejbro pac
 					return table;
 				}
 				return { ...table, columns: patchedColumns };
+			}),
+			// #679: the argument-key half of the same fixture -- `echoArg`'s
+			// own declaration uses an ordinary key, and only the export fact
+			// (never a declaration) carries the adversarial one.
+			// biome-ignore lint/suspicious/noExplicitAny: see above.
+			functions: original.functions.map((fn: any) => {
+				if (fn.functionName !== "echo_arg") {
+					return fn;
+				}
+				return {
+					...fn,
+					// biome-ignore lint/suspicious/noExplicitAny: see above.
+					args: fn.args.map((arg: any) =>
+						arg.sqlName === myArgSqlName ? { ...arg, key: "my-arg" } : arg,
+					),
+				};
 			}),
 		};
 		await writeFile(schemaJsonPath, JSON.stringify(patched));
@@ -368,6 +392,7 @@ client.posts.columns["user-id"];
 client.posts.columns["1st"];
 client.posts.columns.class;
 client.posts.columns["a\\"b"];
+client.fn.echoArg({ "my-arg": "00000000-0000-0000-0000-000000000000" });
 `,
 		);
 
