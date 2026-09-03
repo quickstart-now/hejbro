@@ -82,6 +82,7 @@ export const assertBuiltCli = (): void => {
 		);
 	}
 	assertFreshBuild("@hejbro/core", CORE_PACKAGE_ROOT);
+	assertFreshBuild("@hejbro/nile", NILE_PACKAGE_ROOT);
 	assertFreshBuild("hejbro", CLI_PACKAGE_ROOT);
 };
 
