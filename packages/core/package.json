@@ -1,6 +1,6 @@
 {
 	"name": "@hejbro/core",
-	"version": "0.1.1",
+	"version": "0.2.0-pre.0",
 	"description": "hejbro core: declaration model, builder DSL, compiler, snapshot and diff engine. Pure — no filesystem, no database I/O.",
 	"license": "Apache-2.0",
 	"type": "module",

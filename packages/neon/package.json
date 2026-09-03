@@ -1,6 +1,6 @@
 {
 	"name": "@hejbro/neon",
-	"version": "0.0.0",
+	"version": "0.2.0-pre.0",
 	"description": "Neon provider preset and driver for hejbro's query layer.",
 	"license": "Apache-2.0",
 	"type": "module",
