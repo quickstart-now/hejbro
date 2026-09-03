@@ -231,13 +231,18 @@ const walkAncestors = (path: string): AncestorOutcome => {
  * (D106 R1 N1). Runs before {@link checkPathKind}: a leaf whose own
  * `stat` also fails with `ENOTDIR` (because an ancestor, not the leaf,
  * is the file) is named here by the ancestor that actually blocks it,
- * instead of by the leaf with a bare OS code. */
+ * instead of by the leaf with a bare OS code. Labelled with
+ * {@link fileLabel} (no trailing separator, D106 R1 lead-approved
+ * option A extended to ancestors): unlike a leaf's own field, no user
+ * ever spelled this path with a trailing slash for this function to
+ * preserve -- it is derived from a nested field's own value, so both
+ * the quote and the `Next:` clause name the one real path. */
 const checkAncestors = (cwd: string, artifact: Artifact): void => {
 	const outcome = walkAncestors(dirname(artifact.path));
 	if (outcome.kind === "ok") {
 		return;
 	}
-	const label = dirLabel(cwd, outcome.path);
+	const label = fileLabel(cwd, outcome.path);
 	if (outcome.kind === "conflict") {
 		throwAncestorConflict(label, artifact.fieldName, outcome.actualKind);
 	}

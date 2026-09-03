@@ -581,8 +581,8 @@ describe("runInit / a file in a configured path's ancestor chain stops the run (
 		const result = await runInit(cwd);
 
 		expect(result.exitCode).toBe(1);
-		expect(result.stderr).toContain(
-			'"db/" was expected to be a directory to hold snapshotPath, but a file is there. Next: move or remove the existing file at "db/", then rerun `hejbro init`.',
+		expect(result.stderr).toBe(
+			'error[init-path-conflict]: db\n  "db" was expected to be a directory to hold snapshotPath, but a file is there. Next: move or remove the existing file at "db", then rerun `hejbro init`.',
 		);
 		expect(existsSync(join(cwd, "migrations"))).toBe(false);
 	});
@@ -597,8 +597,8 @@ describe("runInit / a file in a configured path's ancestor chain stops the run (
 		const result = await runInit(cwd);
 
 		expect(result.exitCode).toBe(1);
-		expect(result.stderr).toContain(
-			'"db/" was expected to be a directory to hold migrationsDir, but a file is there. Next: move or remove the existing file at "db/", then rerun `hejbro init`.',
+		expect(result.stderr).toBe(
+			'error[init-path-conflict]: db\n  "db" was expected to be a directory to hold migrationsDir, but a file is there. Next: move or remove the existing file at "db", then rerun `hejbro init`.',
 		);
 		expect(existsSync(snapshotPath())).toBe(false);
 	});
@@ -613,10 +613,9 @@ describe("runInit / a file in a configured path's ancestor chain stops the run (
 		const result = await runInit(cwd);
 
 		expect(result.exitCode).toBe(1);
-		expect(result.stderr).toContain(
-			'"a/" was expected to be a directory to hold snapshotPath, but a file is there. Next: move or remove the existing file at "a/", then rerun `hejbro init`.',
+		expect(result.stderr).toBe(
+			'error[init-path-conflict]: a\n  "a" was expected to be a directory to hold snapshotPath, but a file is there. Next: move or remove the existing file at "a", then rerun `hejbro init`.',
 		);
-		expect(result.stderr).not.toContain("a/b/c/snap.json");
 	});
 
 	it("creates nothing at all when one field's ancestor is a file, even though the other field's own path is fine", async () => {
