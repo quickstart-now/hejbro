@@ -3,6 +3,7 @@ import {
 	diffSnapshots,
 	emptySnapshot,
 	generateMigrations,
+	HejbroError,
 	hejbroError,
 	throwHejbroError,
 } from "@hejbro/core";
@@ -156,6 +157,18 @@ const resetMigrationSql = (
 	return result.migrations[0]?.sql as string;
 };
 
+/** `null` when there is nothing to drop (a no-op reset needs no SQL); otherwise {@link resetMigrationSql}'s own DDL. */
+const sqlToDrop = (
+	changes: ReadonlyArray<KindChange>,
+	currentSnapshot: Snapshot,
+	registry: KindRegistry,
+): string | null => {
+	if (changes.length === 0) {
+		return null;
+	}
+	return resetMigrationSql(currentSnapshot, registry);
+};
+
 /**
  * [task 1.4, #753] Translates a failed drop into a coded
  * `reset-drop-failed` `HejbroError` instead of letting it escape uncaught
@@ -170,7 +183,18 @@ const resetMigrationSql = (
  * caller that wants the raw failure structurally rather than by
  * re-parsing this message.
  */
+/**
+ * [task 3.8, #753] A `HejbroError` the transaction raises (e.g.
+ * `resetMigrationSql`'s own `reset-migration-not-singular`, when the
+ * hoist below can't already keep it out of this catch) is rethrown
+ * unchanged -- it is already a deliberate diagnostic, with its own code
+ * and its own advice, neither of which the drop-failure wording below
+ * describes. Only a failure that is not one is re-coded.
+ */
 const throwResetDropFailed = (error: unknown): never => {
+	if (error instanceof HejbroError) {
+		throw error;
+	}
 	const code = driverErrorCode(error);
 	const reason = driverErrorReason(error);
 	throw Object.assign(
@@ -212,10 +236,15 @@ export const applyReset = async (
 	const changes = planReset(currentSnapshot, registry);
 	const databaseName = await currentDatabaseName(driver);
 	assertResetConfirmed(databaseName, changes, confirmed);
+	// [task 3.8, #753] Computed here, not inside the transaction below: a
+	// pure computation, so a `reset-migration-not-singular` refusal (a
+	// hejbro bug, not a drop failure) surfaces before any statement is
+	// sent, rather than racing throwResetDropFailed's own rethrow-if-
+	// HejbroError guard to keep its code.
+	const sql = sqlToDrop(changes, currentSnapshot, registry);
 	try {
 		await driver.transaction(async (session) => {
-			if (changes.length > 0) {
-				const sql = resetMigrationSql(currentSnapshot, registry);
+			if (sql !== null) {
 				await session.execute({ sql, params: [], kind: "sql" });
 				await clearLedger(session);
 			}

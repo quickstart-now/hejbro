@@ -395,3 +395,68 @@ describe("applyReset — a failed drop is reported as a coded error, not an unca
 		);
 	});
 });
+
+describe("applyReset — a hejbro-coded failure inside the transaction keeps its own code (task 3.8, #753)", () => {
+	const seedLedger = async (driver: Driver): Promise<void> => {
+		await driver.transaction(async (session) => {
+			await bootstrapLedger(session);
+			await recordAppliedMigration(session, "0001_add_managed.sql", "applied");
+		});
+	};
+
+	it("a HejbroError raised inside the transaction -- its own code survives, not reset-drop-failed", async () => {
+		const { driver } = makeFakeDriver("testdb", {
+			thrown: new HejbroError(
+				"reset-migration-not-singular",
+				"reset's own migration run produced 2 file(s), not exactly one",
+			),
+		});
+		await seedLedger(driver);
+
+		const error: unknown = await applyReset(
+			driver,
+			managedSnapshot,
+			registry,
+			"testdb:2",
+		).catch((caught: unknown) => caught);
+
+		expect(error).toBeInstanceOf(HejbroError);
+		expect((error as HejbroError).code).toBe("reset-migration-not-singular");
+	});
+
+	it("a driver error with .code/.message -- still reset-drop-failed (task 1.4's own regression pin)", async () => {
+		const { driver } = makeFakeDriver("testdb", {
+			thrown: Object.assign(new Error("relation still has dependents"), {
+				code: "2BP01",
+			}),
+		});
+		await seedLedger(driver);
+
+		const error: unknown = await applyReset(
+			driver,
+			managedSnapshot,
+			registry,
+			"testdb:2",
+		).catch((caught: unknown) => caught);
+
+		expect(error).toBeInstanceOf(HejbroError);
+		expect((error as HejbroError).code).toBe("reset-drop-failed");
+	});
+
+	it("a bare non-Error thrown value -- still reset-drop-failed", async () => {
+		const { driver } = makeFakeDriver("testdb", {
+			thrown: "the database just closed the connection",
+		});
+		await seedLedger(driver);
+
+		const error: unknown = await applyReset(
+			driver,
+			managedSnapshot,
+			registry,
+			"testdb:2",
+		).catch((caught: unknown) => caught);
+
+		expect(error).toBeInstanceOf(HejbroError);
+		expect((error as HejbroError).code).toBe("reset-drop-failed");
+	});
+});
