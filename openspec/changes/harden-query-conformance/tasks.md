@@ -33,7 +33,7 @@ Inside group 1, 1.2 makes 1.3's test red, so 1.3 follows it.
       `execute`, and "last" is not part of the obligation. Files:
       `packages/query/src/testing/driver-conformance.ts`,
       `packages/query/test/driver/conformance.test.ts`.
-- [ ] 1.2 (~10m) **[design]** The transaction-envelope obligation for a
+- [x] 1.2 (~10m) **[design]** The transaction-envelope obligation for a
       driver declaring interactive transactions `true` and session state
       `false`. Settles three contract details: the observation's own
       shape (a variant carrying the statements the driver emits on its

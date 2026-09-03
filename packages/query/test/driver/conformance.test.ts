@@ -2,11 +2,12 @@ import { describe, expect, it } from "vitest";
 import type { DriverCapabilities } from "../../src/driver/contract";
 import { assertSessionStateConformance } from "../../src/testing/driver-conformance";
 
-/** A full `DriverCapabilities` value for a given `session-state` reading -- `interactive-transactions` is irrelevant to this kit, fixed `true` so every fixture below states only the axis under test. */
+/** A full `DriverCapabilities` value -- since 1.2, `interactiveTransactions` is required explicitly (not defaulted): combined with `session-state: false` it selects the transaction-envelope observation shape instead of the plain one, so every fixture below states both axes. */
 const capabilitiesWithSessionState = (
 	sessionState: boolean,
+	interactiveTransactions: boolean,
 ): DriverCapabilities => ({
-	"interactive-transactions": true,
+	"interactive-transactions": interactiveTransactions,
 	"session-state": sessionState,
 });
 
@@ -17,10 +18,13 @@ describe("assertSessionStateConformance (task 1.4/1.5, #481)", () => {
 		// kit that passed this would be wrong (tasks.md 1.4's own words):
 		// this is the shape #481 exists to catch.
 		expect(() =>
-			assertSessionStateConformance(capabilitiesWithSessionState(false), {
-				recordedForOneExecute: [{ sql: "select 1", params: [] }],
-				callerStatement: { sql: "select 1", params: [] },
-			}),
+			assertSessionStateConformance(
+				capabilitiesWithSessionState(false, false),
+				{
+					recordedForOneExecute: [{ sql: "select 1", params: [] }],
+					callerStatement: { sql: "select 1", params: [] },
+				},
+			),
 		).toThrowError(/session-state/);
 	});
 
@@ -30,27 +34,33 @@ describe("assertSessionStateConformance (task 1.4/1.5, #481)", () => {
 		// know any driver's pin text), only that something precedes the
 		// caller's own statement's position.
 		expect(() =>
-			assertSessionStateConformance(capabilitiesWithSessionState(false), {
-				recordedForOneExecute: [
-					{ sql: "set intervalstyle to 'postgres'", params: [] },
-					{ sql: "set bytea_output to 'hex'", params: [] },
-					{ sql: "select 1", params: [] },
-				],
-				callerStatement: { sql: "select 1", params: [] },
-			}),
+			assertSessionStateConformance(
+				capabilitiesWithSessionState(false, false),
+				{
+					recordedForOneExecute: [
+						{ sql: "set intervalstyle to 'postgres'", params: [] },
+						{ sql: "set bytea_output to 'hex'", params: [] },
+						{ sql: "select 1", params: [] },
+					],
+					callerStatement: { sql: "select 1", params: [] },
+				},
+			),
 		).not.toThrow();
 
 		// Order, not just count: the caller's statement sent *first*, with
 		// a setting trailing after it, still fails -- two entries present,
 		// but not "in that order".
 		expect(() =>
-			assertSessionStateConformance(capabilitiesWithSessionState(false), {
-				recordedForOneExecute: [
-					{ sql: "select 1", params: [] },
-					{ sql: "set intervalstyle to 'postgres'", params: [] },
-				],
-				callerStatement: { sql: "select 1", params: [] },
-			}),
+			assertSessionStateConformance(
+				capabilitiesWithSessionState(false, false),
+				{
+					recordedForOneExecute: [
+						{ sql: "select 1", params: [] },
+						{ sql: "set intervalstyle to 'postgres'", params: [] },
+					],
+					callerStatement: { sql: "select 1", params: [] },
+				},
+			),
 		).toThrowError(/session-state/);
 	});
 
@@ -64,10 +74,13 @@ describe("assertSessionStateConformance (task 1.4/1.5, #481)", () => {
 		// but blurs the diagnostic.
 		let caught: unknown;
 		try {
-			assertSessionStateConformance(capabilitiesWithSessionState(true), {
-				recordedForOneExecute: [{ sql: "select 1", params: [] }],
-				callerStatement: { sql: "select 1", params: [] },
-			});
+			assertSessionStateConformance(
+				capabilitiesWithSessionState(true, true),
+				{
+					recordedForOneExecute: [{ sql: "select 1", params: [] }],
+					callerStatement: { sql: "select 1", params: [] },
+				},
+			);
 		} catch (error) {
 			caught = error;
 		}
@@ -95,11 +108,14 @@ describe("assertSessionStateConformance (task 1.4/1.5, #481)", () => {
 		// other test green.
 		let caught: unknown;
 		try {
-			assertSessionStateConformance(capabilitiesWithSessionState(false), {
-				recordedForSetupSession: [
-					{ sql: "set intervalstyle to 'postgres'", params: [] },
-				],
-			});
+			assertSessionStateConformance(
+				capabilitiesWithSessionState(false, false),
+				{
+					recordedForSetupSession: [
+						{ sql: "set intervalstyle to 'postgres'", params: [] },
+					],
+				},
+			);
 		} catch (error) {
 			caught = error;
 		}
@@ -115,23 +131,29 @@ describe("assertSessionStateConformance (task 1.4/1.5, #481)", () => {
 		// anything through its setup hook, positive `capabilities` claim
 		// notwithstanding.
 		expect(() =>
-			assertSessionStateConformance(capabilitiesWithSessionState(true), {
-				recordedForSetupSession: [],
-			}),
+			assertSessionStateConformance(
+				capabilitiesWithSessionState(true, true),
+				{
+					recordedForSetupSession: [],
+				},
+			),
 		).toThrowError(/session-state/);
 
 		// Positive: the setup hook sent something -- the kit reads no pin
 		// SQL text (same as the false tier), only that the hook is where
 		// this tier's settings actually travel.
 		expect(() =>
-			assertSessionStateConformance(capabilitiesWithSessionState(true), {
-				recordedForSetupSession: [
-					{
-						sql: "set intervalstyle to 'postgres'; set bytea_output to 'hex'",
-						params: [],
-					},
-				],
-			}),
+			assertSessionStateConformance(
+				capabilitiesWithSessionState(true, true),
+				{
+					recordedForSetupSession: [
+						{
+							sql: "set intervalstyle to 'postgres'; set bytea_output to 'hex'",
+							params: [],
+						},
+					],
+				},
+			),
 		).not.toThrow();
 	});
 
@@ -191,7 +213,7 @@ describe("assertSessionStateConformance (task 1.4/1.5, #481)", () => {
 				const callerStatement = { sql: "select 1", params: [] };
 				const run = () =>
 					assertSessionStateConformance(
-						capabilitiesWithSessionState(false),
+						capabilitiesWithSessionState(false, false),
 						{ recordedForOneExecute, callerStatement },
 					);
 				if (outcome === "pass") {
@@ -203,6 +225,148 @@ describe("assertSessionStateConformance (task 1.4/1.5, #481)", () => {
 		},
 	);
 
+	describe.each([
+		{
+			name: "open/settings/caller/end (conforms)",
+			recordedOnConnection: [
+				{ sql: "begin", params: [] },
+				{ sql: "set intervalstyle to 'postgres'", params: [] },
+				{ sql: "select 1", params: [] },
+				{ sql: "commit", params: [] },
+			],
+			outcome: "pass" as const,
+		},
+		{
+			name: "settings/open/caller/end -- settings sent before the transaction opens are caught",
+			recordedOnConnection: [
+				{ sql: "set intervalstyle to 'postgres'", params: [] },
+				{ sql: "begin", params: [] },
+				{ sql: "select 1", params: [] },
+				{ sql: "commit", params: [] },
+			],
+			outcome: "violation" as const,
+		},
+		{
+			name: "open/settings/end/open/caller/end -- settings landed in an earlier, already-closed transaction",
+			recordedOnConnection: [
+				{ sql: "begin", params: [] },
+				{ sql: "set intervalstyle to 'postgres'", params: [] },
+				{ sql: "commit", params: [] },
+				{ sql: "begin", params: [] },
+				{ sql: "select 1", params: [] },
+				{ sql: "commit", params: [] },
+			],
+			outcome: "violation" as const,
+		},
+		{
+			name: "open/caller/end -- nothing precedes the caller inside the transaction",
+			recordedOnConnection: [
+				{ sql: "begin", params: [] },
+				{ sql: "select 1", params: [] },
+				{ sql: "commit", params: [] },
+			],
+			outcome: "violation" as const,
+		},
+		{
+			name: "caller with no transaction at all",
+			recordedOnConnection: [{ sql: "select 1", params: [] }],
+			outcome: "violation" as const,
+		},
+		{
+			name: "boundary vocabulary is whole-statement, never substring -- a function body's own do $$ begin … end $$ ahead of the caller is an ordinary statement, not a reopened transaction",
+			recordedOnConnection: [
+				{ sql: "begin", params: [] },
+				{ sql: "do $$ begin perform 1; end $$;", params: [] },
+				{ sql: "select 1", params: [] },
+				{ sql: "commit", params: [] },
+			],
+			outcome: "pass" as const,
+		},
+		{
+			name: "boundary vocabulary is whole-statement, never substring -- the caller's own statement carrying the word 'begin' inside a string literal is still found and is not read as control",
+			recordedOnConnection: [
+				{ sql: "begin", params: [] },
+				{ sql: "set intervalstyle to 'postgres'", params: [] },
+				{ sql: "select 'begin here'", params: [] },
+				{ sql: "commit", params: [] },
+			],
+			outcome: "pass" as const,
+			callerStatementOverride: { sql: "select 'begin here'", params: [] },
+		},
+	])(
+		"the transaction-envelope obligation for interactive-transactions:true + session-state:false -- $name",
+		({ recordedOnConnection, outcome, callerStatementOverride }) => {
+			it(`outcome: ${outcome}`, () => {
+				const callerStatement = callerStatementOverride ?? {
+					sql: "select 1",
+					params: [],
+				};
+				const run = () =>
+					assertSessionStateConformance(
+						capabilitiesWithSessionState(false, true),
+						{ recordedOnConnection, callerStatement },
+					);
+				if (outcome === "pass") {
+					expect(run).not.toThrow();
+					return;
+				}
+				expect(run).toThrowError(/session-state/);
+			});
+		},
+	);
+
+	it("an envelope-blind observation is refused for a transaction-keeping driver", () => {
+		// The plain false-tier shape (recordedForOneExecute) cannot show
+		// transaction control at all -- handed to a driver declaring
+		// interactive-transactions:true + session-state:false, it is
+		// refused outright, not silently accepted as a passing envelope.
+		let caught: unknown;
+		try {
+			assertSessionStateConformance(
+				capabilitiesWithSessionState(false, true),
+				{
+					recordedForOneExecute: [
+						{ sql: "set intervalstyle to 'postgres'", params: [] },
+						{ sql: "select 1", params: [] },
+					],
+					callerStatement: { sql: "select 1", params: [] },
+				},
+			);
+		} catch (error) {
+			caught = error;
+		}
+		expect(caught).toMatchObject({
+			code: "driver-conformance-violation",
+		});
+	});
+
+	it("discriminating mutant: moving the settings statement one position earlier, ahead of the transaction's own opening, turns the envelope case red while every 1.1 case (interactive-transactions:false) stays green", () => {
+		// The "conforms" row above (open/settings/caller/end) versus the
+		// "settings sent before the transaction opens" row (settings/open/
+		// caller/end) *is* this exact mutant -- both already run above as
+		// separate table rows. This test pins the other half: the same
+		// perturbation applied to a plain false-tier (interactive-
+		// transactions:false) observation is not even reachable by this
+		// function -- it runs through `assertFalseTierConformance`
+		// entirely, which has no notion of "transaction opening" at all,
+		// so the plain tier's own cases (task 1.1's table) cannot move
+		// together with the envelope tier's. If they did, this obligation
+		// would be guarding nothing.
+		expect(() =>
+			assertSessionStateConformance(
+				capabilitiesWithSessionState(false, false),
+				{
+					recordedForOneExecute: [
+						{ sql: "begin", params: [] },
+						{ sql: "select 1", params: [] },
+						{ sql: "commit", params: [] },
+					],
+					callerStatement: { sql: "select 1", params: [] },
+				},
+			),
+		).not.toThrow();
+	});
+
 	it("the declaration is left alone -- the kit reads capabilities, never writes it, for either tier", () => {
 		// Structural guarantee, made explicit: `assertSessionStateConformance`
 		// never receives a `Driver` or any mutable reference to its
@@ -212,7 +376,7 @@ describe("assertSessionStateConformance (task 1.4/1.5, #481)", () => {
 		// exercises both tiers' *compliant* path and then re-reads the
 		// same object literal to make that structural fact an executable
 		// check, not just an argument.
-		const falseCapabilities = capabilitiesWithSessionState(false);
+		const falseCapabilities = capabilitiesWithSessionState(false, false);
 		assertSessionStateConformance(falseCapabilities, {
 			recordedForOneExecute: [
 				{ sql: "set intervalstyle to 'postgres'", params: [] },
@@ -222,7 +386,7 @@ describe("assertSessionStateConformance (task 1.4/1.5, #481)", () => {
 		});
 		expect(falseCapabilities["session-state"]).toBe(false);
 
-		const trueCapabilities = capabilitiesWithSessionState(true);
+		const trueCapabilities = capabilitiesWithSessionState(true, true);
 		assertSessionStateConformance(trueCapabilities, {
 			recordedForSetupSession: [
 				{ sql: "set intervalstyle to 'postgres'", params: [] },
