@@ -131,22 +131,29 @@ const normalizeStatement = (sql: string): string =>
 		.replace(/;+\s*$/, "")
 		.trim();
 
+/** Bare closers -- a single-word statement leading with one of these always ends the transaction; `rollback` is handled separately in {@link isTransactionEnd} since `rollback to …` (a savepoint rollback) does not. */
+const BARE_END_WORDS = new Set(["commit", "abort", "end"]);
+
+const isTransactionOpen = (
+	leadingWord: string | undefined,
+	secondWord: string | undefined,
+): boolean =>
+	leadingWord === "begin" ||
+	(leadingWord === "start" && secondWord === "transaction");
+
+const isTransactionEnd = (
+	leadingWord: string | undefined,
+	secondWord: string | undefined,
+): boolean =>
+	(leadingWord !== undefined && BARE_END_WORDS.has(leadingWord)) ||
+	(leadingWord === "rollback" && secondWord !== "to");
+
 const transactionControlKind = (sql: string): TransactionControlKind => {
 	const [leadingWord, secondWord] = normalizeStatement(sql).split(/\s+/);
-	if (leadingWord === "begin") {
+	if (isTransactionOpen(leadingWord, secondWord)) {
 		return "open";
 	}
-	if (leadingWord === "start" && secondWord === "transaction") {
-		return "open";
-	}
-	if (
-		leadingWord === "commit" ||
-		leadingWord === "abort" ||
-		leadingWord === "end"
-	) {
-		return "end";
-	}
-	if (leadingWord === "rollback" && secondWord !== "to") {
+	if (isTransactionEnd(leadingWord, secondWord)) {
 		return "end";
 	}
 	return undefined;
