@@ -4,6 +4,7 @@ import {
 	emptySnapshot,
 	existingTable,
 	getTableMeta,
+	HejbroError,
 	schema,
 	table,
 	uuid,
@@ -45,9 +46,19 @@ const managedSnapshot = buildSnapshot(
  * source of truth, 5.2's revision), and everything else just records
  * what was sent, mirroring `apply-execute.test.ts`'s own fake driver
  * shape.
+ *
+ * `dropFailure` (task 1.4, #753): when set, the drop DDL statement reset
+ * itself sends (the one statement this fake doesn't otherwise interpret)
+ * throws `dropFailure.thrown` instead of succeeding -- standing in for
+ * the database refusing the drop (e.g. an object outside the
+ * declarations still depending on the one being dropped). A distinct
+ * `{ thrown }` wrapper, not the bare value, so `undefined` itself can be
+ * asserted as a thrown value without being mistaken for "no failure
+ * configured".
  */
 const makeFakeDriver = (
 	databaseName = "testdb",
+	dropFailure?: { readonly thrown: unknown },
 ): {
 	readonly driver: Driver;
 	readonly calls: CompileResult[];
@@ -77,7 +88,12 @@ const makeFakeDriver = (
 				return ledgerRows.map((filename) => ({ filename }));
 			}
 			// Any other statement (the DROP DDL reset itself sends) is just
-			// recorded, not interpreted -- these tests assert on its text.
+			// recorded, not interpreted -- these tests assert on its text --
+			// unless a drop failure was configured, in which case this is
+			// exactly the statement that fails.
+			if (dropFailure !== undefined) {
+				throw dropFailure.thrown;
+			}
 			return [];
 		},
 	};
@@ -291,5 +307,156 @@ describe("applyReset / 5.3", () => {
 				(call) => !call.sql.toLowerCase().startsWith("select current_database"),
 			),
 		).toHaveLength(0);
+	});
+});
+
+describe("applyReset — a failed drop is reported as a coded error, not an uncaught crash (task 1.4, #753)", () => {
+	const seedLedger = async (driver: Driver): Promise<void> => {
+		await driver.transaction(async (session) => {
+			await bootstrapLedger(session);
+			await recordAppliedMigration(session, "0001_add_managed.sql", "applied");
+		});
+	};
+
+	/** Every row asserts the same three facts (task 1.4's own input table: what the fake driver's `transaction` callback throws varies, these three never do). */
+	const assertCodedFailure = async (
+		driver: Driver,
+		error: unknown,
+	): Promise<void> => {
+		expect(error).toBeInstanceOf(HejbroError);
+		expect((error as HejbroError).code).toBe("reset-drop-failed");
+		const state = await driver.transaction((session) => readLedger(session));
+		if (!state.exists) {
+			throw new Error("expected the ledger to still exist after a failed drop");
+		}
+		expect(state.applied.map((row) => row.filename)).toEqual([
+			"0001_add_managed.sql",
+		]);
+	};
+
+	it("an object carrying both .code and .message -- both surface, coded", async () => {
+		const { driver } = makeFakeDriver("testdb", {
+			thrown: Object.assign(new Error("relation still has dependents"), {
+				code: "2BP01",
+			}),
+		});
+		await seedLedger(driver);
+
+		const error: unknown = await applyReset(
+			driver,
+			managedSnapshot,
+			registry,
+			"testdb:2",
+		).catch((caught: unknown) => caught);
+
+		await assertCodedFailure(driver, error);
+		expect((error as HejbroError).message).toContain("(2BP01)");
+		expect((error as HejbroError).message).toContain(
+			"relation still has dependents",
+		);
+	});
+
+	it("an Error with a .message but no .code -- the reason still surfaces, no code suffix", async () => {
+		const { driver } = makeFakeDriver("testdb", {
+			thrown: new Error("connection reset by peer"),
+		});
+		await seedLedger(driver);
+
+		const error: unknown = await applyReset(
+			driver,
+			managedSnapshot,
+			registry,
+			"testdb:2",
+		).catch((caught: unknown) => caught);
+
+		await assertCodedFailure(driver, error);
+		expect((error as HejbroError).message).toContain(
+			"connection reset by peer",
+		);
+		expect((error as HejbroError).message).not.toMatch(/\([A-Z0-9]+\)/);
+	});
+
+	it("a bare non-Error thrown value (a string) -- applyReset still rejects with a HejbroError, never the raw value", async () => {
+		const { driver } = makeFakeDriver("testdb", {
+			thrown: "the database just closed the connection",
+		});
+		await seedLedger(driver);
+
+		const error: unknown = await applyReset(
+			driver,
+			managedSnapshot,
+			registry,
+			"testdb:2",
+		).catch((caught: unknown) => caught);
+
+		await assertCodedFailure(driver, error);
+		expect((error as HejbroError).message).toContain(
+			"the database just closed the connection",
+		);
+	});
+});
+
+describe("applyReset — a hejbro-coded failure inside the transaction keeps its own code (task 3.8, #753)", () => {
+	const seedLedger = async (driver: Driver): Promise<void> => {
+		await driver.transaction(async (session) => {
+			await bootstrapLedger(session);
+			await recordAppliedMigration(session, "0001_add_managed.sql", "applied");
+		});
+	};
+
+	it("a HejbroError raised inside the transaction -- its own code survives, not reset-drop-failed", async () => {
+		const { driver } = makeFakeDriver("testdb", {
+			thrown: new HejbroError(
+				"reset-migration-not-singular",
+				"reset's own migration run produced 2 file(s), not exactly one",
+			),
+		});
+		await seedLedger(driver);
+
+		const error: unknown = await applyReset(
+			driver,
+			managedSnapshot,
+			registry,
+			"testdb:2",
+		).catch((caught: unknown) => caught);
+
+		expect(error).toBeInstanceOf(HejbroError);
+		expect((error as HejbroError).code).toBe("reset-migration-not-singular");
+	});
+
+	it("a driver error with .code/.message -- still reset-drop-failed (task 1.4's own regression pin)", async () => {
+		const { driver } = makeFakeDriver("testdb", {
+			thrown: Object.assign(new Error("relation still has dependents"), {
+				code: "2BP01",
+			}),
+		});
+		await seedLedger(driver);
+
+		const error: unknown = await applyReset(
+			driver,
+			managedSnapshot,
+			registry,
+			"testdb:2",
+		).catch((caught: unknown) => caught);
+
+		expect(error).toBeInstanceOf(HejbroError);
+		expect((error as HejbroError).code).toBe("reset-drop-failed");
+	});
+
+	it("a bare non-Error thrown value -- still reset-drop-failed", async () => {
+		const { driver } = makeFakeDriver("testdb", {
+			thrown: "the database just closed the connection",
+		});
+		await seedLedger(driver);
+
+		const error: unknown = await applyReset(
+			driver,
+			managedSnapshot,
+			registry,
+			"testdb:2",
+		).catch((caught: unknown) => caught);
+
+		expect(error).toBeInstanceOf(HejbroError);
+		expect((error as HejbroError).code).toBe("reset-drop-failed");
 	});
 });

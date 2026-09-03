@@ -1,10 +1,14 @@
 -- hejbro migration
--- + table app.attachment_blobs [new]
 -- ~ table app.attachments [column "archived_at" added, column "storage_path" dropped]
+-- + table app.attachment_blobs [new]
 -- + rls app.attachment_blobs [new]
 -- + policy app.attachment_blobs.attachment_blobs_read_own [new]
 -- parent-snapshot: sha256:318b8e47983030f4d832cbfad27d66db00b8254a1fd8d3cac049da5ce135ec1e
 -- snapshot: sha256:e0d46be6cff9daf7c7072fb23f95d814f42bf5373f1f65c85c857bd340589a7a
+
+alter table "app"."attachments" drop column "storage_path";
+
+alter table "app"."attachments" add column "archived_at" timestamp with time zone;
 
 create table "app"."attachment_blobs" (
 	"attachment_id" uuid not null,
@@ -16,10 +20,6 @@ create table "app"."attachment_blobs" (
 grant select on all tables in schema "app" to "anon";
 
 grant select on all tables in schema "app" to "authenticated";
-
-alter table "app"."attachments" drop column "storage_path";
-
-alter table "app"."attachments" add column "archived_at" timestamp with time zone;
 
 alter table "app"."attachment_blobs" enable row level security;
 

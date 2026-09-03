@@ -1,8 +1,8 @@
 -- hejbro migration
 -- + schema app [new]
--- + table app.attachments [new]
 -- + table app.drafts [new]
 -- + table app.profiles [new]
+-- + table app.attachments [new]
 -- + rls app.attachments [new]
 -- + rls app.profiles [new]
 -- + policy app.attachments.attachments_read_own [new]
@@ -20,15 +20,6 @@
 
 create schema "app";
 
-create table "app"."attachments" (
-	"id" uuid not null default gen_random_uuid(),
-	"profile_id" uuid not null,
-	"storage_path" text not null,
-	"size_bytes" bigint not null,
-	constraint "attachments_pkey" primary key ("id"),
-	constraint "attachments_size_bytes_positive" check ("app"."attachments"."size_bytes" > 0)
-);
-
 create table "app"."drafts" (
 	"id" uuid not null default gen_random_uuid(),
 	"title" text not null,
@@ -40,6 +31,15 @@ create table "app"."profiles" (
 	"user_id" uuid not null,
 	"display_name" text not null,
 	constraint "profiles_pkey" primary key ("id")
+);
+
+create table "app"."attachments" (
+	"id" uuid not null default gen_random_uuid(),
+	"profile_id" uuid not null,
+	"storage_path" text not null,
+	"size_bytes" bigint not null,
+	constraint "attachments_pkey" primary key ("id"),
+	constraint "attachments_size_bytes_positive" check ("app"."attachments"."size_bytes" > 0)
 );
 
 alter table "app"."attachments" enable row level security;
@@ -75,6 +75,6 @@ on conflict ("id") do update set
   "file_size_limit" = excluded."file_size_limit",
   "allowed_mime_types" = excluded."allowed_mime_types";
 
-alter table "app"."attachments" add constraint "attachments_profile_id_fk" foreign key ("profile_id") references "app"."profiles" ("id");
-
 alter table "app"."profiles" add constraint "profiles_user_id_fk" foreign key ("user_id") references "auth"."users" ("id");
+
+alter table "app"."attachments" add constraint "attachments_profile_id_fk" foreign key ("profile_id") references "app"."profiles" ("id");

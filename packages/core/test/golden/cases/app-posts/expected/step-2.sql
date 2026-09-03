@@ -1,6 +1,6 @@
 -- hejbro migration
--- ~ table app.comments [foreign key "comments_post_id_fk" added]
 -- ~ table app.posts [index "posts_published_at_idx" dropped]
+-- ~ table app.comments [foreign key "comments_post_id_fk" added]
 
 drop index "app"."posts_published_at_idx";
 

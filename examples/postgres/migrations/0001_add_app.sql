@@ -1,9 +1,9 @@
 -- hejbro migration
 -- + schema app [new]
--- + table app.comments [new]
 -- + table app.members [new]
 -- + table app.projects [new]
 -- + table app.tasks [new]
+-- + table app.comments [new]
 -- + function app.comments_enforce_single_depth [new]
 -- + trigger app.comments.comments_single_depth [new]
 -- + rls app.comments [new]
@@ -30,15 +30,6 @@
 -- snapshot: sha256:37980def9e1707c18aef17ce0cf53588f4f32e702900f3ad30c3a7dc0e2db9c5
 
 create schema "app";
-
-create table "app"."comments" (
-	"id" uuid not null default gen_random_uuid(),
-	"task_id" uuid not null,
-	"parent_id" uuid,
-	"body" text not null,
-	constraint "comments_pkey" primary key ("id"),
-	constraint "comments_body_not_blank" check (length(btrim("app"."comments"."body")) > 0)
-);
 
 create table "app"."members" (
 	"id" uuid not null default gen_random_uuid(),
@@ -75,6 +66,15 @@ create table "app"."tasks" (
 create index "tasks_project_id_due_at_idx" on "app"."tasks" ("project_id", "due_at" desc) where "app"."tasks"."status" <> 'done';
 
 create unique index "tasks_project_id_title_idx" on "app"."tasks" ("project_id", "title") where "app"."tasks"."status" <> 'done';
+
+create table "app"."comments" (
+	"id" uuid not null default gen_random_uuid(),
+	"task_id" uuid not null,
+	"parent_id" uuid,
+	"body" text not null,
+	constraint "comments_pkey" primary key ("id"),
+	constraint "comments_body_not_blank" check (length(btrim("app"."comments"."body")) > 0)
+);
 
 create or replace function "app"."comments_enforce_single_depth"()
 returns trigger
@@ -156,10 +156,10 @@ grant usage on schema "app" to "app_reader";
 
 grant usage on schema "app" to "app_writer";
 
-alter table "app"."comments" add constraint "comments_parent_id_fk" foreign key ("parent_id") references "app"."comments" ("id") on delete cascade;
-
-alter table "app"."comments" add constraint "comments_task_id_fk" foreign key ("task_id") references "app"."tasks" ("id") on delete cascade;
-
 alter table "app"."projects" add constraint "projects_owner_id_fk" foreign key ("owner_id") references "app"."members" ("id");
 
 alter table "app"."tasks" add constraint "tasks_project_id_fk" foreign key ("project_id") references "app"."projects" ("id") on delete cascade;
+
+alter table "app"."comments" add constraint "comments_parent_id_fk" foreign key ("parent_id") references "app"."comments" ("id") on delete cascade;
+
+alter table "app"."comments" add constraint "comments_task_id_fk" foreign key ("task_id") references "app"."tasks" ("id") on delete cascade;
