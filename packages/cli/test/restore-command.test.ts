@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 import { sha256Hex } from "../src/hash";
 import { CLI_VERSION } from "../src/version";
+import { transcript } from "./support/call-transcript";
 import {
 	assertBuiltCli,
 	createCliFixtureDir,
@@ -12,8 +13,15 @@ import {
 	runCli,
 	writeFixtureFile,
 } from "./support/cli-runner";
-import { transcript } from "./support/call-transcript";
 import { GIT_TEST_ENV } from "./support/git-fixture";
+
+/** A spawn failure without a numeric `status` (signal kill, ENOENT) is recorded as exit code 1. */
+const exitCodeOf = (status: number | undefined): number => {
+	if (typeof status === "number") {
+		return status;
+	}
+	return 1;
+};
 
 beforeAll(assertBuiltCli);
 
@@ -77,7 +85,13 @@ const git = (cwd: string, args: ReadonlyArray<string>): string => {
 			encoding: "utf8",
 			env: FIXED_COMMIT_DATE_ENV,
 		});
-		transcript.record({ argv: ["git", ...args], cwd, exitCode: 0, stdout, stderr: "" });
+		transcript.record({
+			argv: ["git", ...args],
+			cwd,
+			exitCode: 0,
+			stdout,
+			stderr: "",
+		});
 		return stdout;
 	} catch (error) {
 		const execError = error as {
@@ -88,7 +102,7 @@ const git = (cwd: string, args: ReadonlyArray<string>): string => {
 		transcript.record({
 			argv: ["git", ...args],
 			cwd,
-			exitCode: typeof execError.status === "number" ? execError.status : 1,
+			exitCode: exitCodeOf(execError.status),
 			stdout: execError.stdout ?? "",
 			stderr: execError.stderr ?? String(error),
 		});

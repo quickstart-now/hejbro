@@ -167,7 +167,13 @@ export const runCli = async (
 					return;
 				}
 				const exitCode = exitCodeFrom(error);
-				transcript.record({ argv: [CLI_PATH, ...args], cwd, exitCode, stdout, stderr });
+				transcript.record({
+					argv: [CLI_PATH, ...args],
+					cwd,
+					exitCode,
+					stdout,
+					stderr,
+				});
 				// Keep the full child stderr in the report even when the test's
 				// own assertions don't inspect it — a flaky failure otherwise
 				// leaves no trace of what the spawned CLI actually printed (#102).

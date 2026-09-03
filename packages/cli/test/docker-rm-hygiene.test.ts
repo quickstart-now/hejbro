@@ -12,9 +12,9 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
 	listTsFilesRecursively,
 	parseGapsIn,
+	type ReadFile,
 	testDirsUnder,
 	violationsIn,
-	type ReadFile,
 } from "./support/repo-test-file-scan";
 
 /**
@@ -51,7 +51,11 @@ const findRepoRoot = (dir: string): string => {
 const REPO_ROOT = findRepoRoot(dirname(THIS_FILE));
 
 /** The extracted scan module's own path -- excluded by identity for the same reason as `THIS_FILE`: it must stay free to document the pattern without a future one-line example turning it into a self-reported violation. */
-const SCAN_MODULE_FILE = join(dirname(THIS_FILE), "support", "repo-test-file-scan.ts");
+const SCAN_MODULE_FILE = join(
+	dirname(THIS_FILE),
+	"support",
+	"repo-test-file-scan.ts",
+);
 
 /** `pnpm-workspace.yaml`'s own two globs (`packages/*`, `examples/*`), scoped to the `test` subdirectory each may or may not have. */
 const candidateFiles: ReadonlyArray<string> = [
@@ -128,8 +132,8 @@ describe("repo-test-file-scan skip & ENOENT tolerance / #744", () => {
 			.map((entry) => JSON.stringify(entry))
 			.join(", ")}${"]"}`;
 
-	const WITHOUT_V_FLAG = rmCallText(["-f", "container"]);
-	const WITH_V_FLAG = rmCallText(["-f", "-v", "container"]);
+	const withoutVFlag = rmCallText(["-f", "container"]);
+	const withVFlag = rmCallText(["-f", "-v", "container"]);
 
 	const enoentRead: ReadFile = () => {
 		throw Object.assign(new Error("ENOENT: no such file or directory"), {
@@ -140,19 +144,19 @@ describe("repo-test-file-scan skip & ENOENT tolerance / #744", () => {
 	it.each([
 		{
 			name: "(i) a plain compliant call reports no violation",
-			content: WITH_V_FLAG,
+			content: withVFlag,
 			readFile: undefined,
 			expectedCount: 0,
 		},
 		{
 			name: "(v) a plain non-compliant call reports exactly one violation -- the skip does not over-eat",
-			content: WITHOUT_V_FLAG,
+			content: withoutVFlag,
 			readFile: undefined,
 			expectedCount: 1,
 		},
 		{
 			name: "(iv) a listed file gone by read time is treated as absent, not a violation",
-			content: WITHOUT_V_FLAG,
+			content: withoutVFlag,
 			readFile: enoentRead,
 			expectedCount: 0,
 		},
@@ -163,7 +167,7 @@ describe("repo-test-file-scan skip & ENOENT tolerance / #744", () => {
 	});
 
 	it("a non-ENOENT read error still propagates -- the tolerance is narrow, not a catch-all", () => {
-		const file = writeFixture("test/other-error.ts", WITHOUT_V_FLAG);
+		const file = writeFixture("test/other-error.ts", withoutVFlag);
 		const throwingRead: ReadFile = () => {
 			throw new Error("EACCES: permission denied");
 		};
@@ -171,26 +175,22 @@ describe("repo-test-file-scan skip & ENOENT tolerance / #744", () => {
 	});
 
 	it("(ii)/(iii) a file under _tmp-* or .uo-contract is never listed, so it is never opened", () => {
-		writeFixture("test/_tmp-shadow-abc/fixture.ts", WITHOUT_V_FLAG);
-		writeFixture("test/.uo-contract/cache.ts", WITHOUT_V_FLAG);
-		writeFixture("test/plain.ts", WITH_V_FLAG);
+		writeFixture("test/_tmp-shadow-abc/fixture.ts", withoutVFlag);
+		writeFixture("test/.uo-contract/cache.ts", withoutVFlag);
+		writeFixture("test/plain.ts", withVFlag);
 
 		const opened: string[] = [];
 		const recordingRead: ReadFile = (filePath) => {
 			opened.push(filePath);
-			return WITH_V_FLAG;
+			return withVFlag;
 		};
 
 		const files = listTsFilesRecursively(join(scratchRoot, "test"));
 		files.flatMap((file) => violationsIn(file, recordingRead));
 
-		expect(files.some((file) => file.includes("_tmp-shadow-abc"))).toBe(
-			false,
-		);
+		expect(files.some((file) => file.includes("_tmp-shadow-abc"))).toBe(false);
 		expect(files.some((file) => file.includes(".uo-contract"))).toBe(false);
-		expect(opened.some((file) => file.includes("_tmp-shadow-abc"))).toBe(
-			false,
-		);
+		expect(opened.some((file) => file.includes("_tmp-shadow-abc"))).toBe(false);
 		expect(opened.some((file) => file.includes(".uo-contract"))).toBe(false);
 		expect(opened).toContain(join(scratchRoot, "test", "plain.ts"));
 	});

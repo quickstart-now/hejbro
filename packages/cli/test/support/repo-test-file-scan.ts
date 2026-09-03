@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 /**
@@ -20,11 +20,15 @@ export const listTsFilesRecursively = (dir: string): ReadonlyArray<string> => {
 	}
 	return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
 		if (entry.isDirectory()) {
-			return isScratchDir(entry.name)
-				? []
-				: listTsFilesRecursively(join(dir, entry.name));
+			if (isScratchDir(entry.name)) {
+				return [];
+			}
+			return listTsFilesRecursively(join(dir, entry.name));
 		}
-		return entry.name.endsWith(".ts") ? [join(dir, entry.name)] : [];
+		if (entry.name.endsWith(".ts")) {
+			return [join(dir, entry.name)];
+		}
+		return [];
 	});
 };
 

@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
-	FAILURE_CAPTURE_MARKER,
-	type FailureInput,
 	buildFailureRecord,
 	captureFailure,
+	FAILURE_CAPTURE_MARKER,
+	type FailureInput,
 } from "./failure-capture";
 
 /**
@@ -90,7 +90,14 @@ describe("failure-capture / #533", () => {
 	});
 
 	it("buildFailureRecord never throws on an object String() itself rejects", () => {
-		const unstringifiable = { toString: () => { throw new Error("no"); }, [Symbol.toPrimitive]: () => { throw new Error("no"); } };
+		const unstringifiable = {
+			toString: () => {
+				throw new Error("no");
+			},
+			[Symbol.toPrimitive]: () => {
+				throw new Error("no");
+			},
+		};
 		expect(() =>
 			buildFailureRecord(
 				{ ...baseInput, error: unstringifiable },
@@ -135,7 +142,8 @@ describe("failure-capture / #533", () => {
 
 		expect(lines).toHaveLength(1);
 		expect(lines[0]?.startsWith(FAILURE_CAPTURE_MARKER)).toBe(true);
-		const jsonText = lines[0]?.slice(FAILURE_CAPTURE_MARKER.length).trim() ?? "";
+		const jsonText =
+			lines[0]?.slice(FAILURE_CAPTURE_MARKER.length).trim() ?? "";
 		expect(() => JSON.parse(jsonText)).not.toThrow();
 		expect(JSON.parse(jsonText).errorText).toBe("boom");
 	});

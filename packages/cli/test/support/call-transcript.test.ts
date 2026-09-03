@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { FAILURE_CAPTURE_MARKER } from "./failure-capture";
 import { CallTranscript, dumpTranscript, transcript } from "./call-transcript";
+import { FAILURE_CAPTURE_MARKER } from "./failure-capture";
 
 /**
  * #533 G2.3b, driven from the input table the plan names:
@@ -89,7 +89,9 @@ describe("call-transcript / #533 G2.3b", () => {
 
 		expect(lines).toHaveLength(1);
 		expect(lines[0]?.startsWith(FAILURE_CAPTURE_MARKER)).toBe(true);
-		const parsed = JSON.parse(lines[0]?.slice(FAILURE_CAPTURE_MARKER.length).trim() ?? "");
+		const parsed = JSON.parse(
+			lines[0]?.slice(FAILURE_CAPTURE_MARKER.length).trim() ?? "",
+		);
 		expect(parsed.kind).toBe("call-transcript");
 		expect(parsed.calls).toHaveLength(1);
 		expect(parsed.truncated).toBe(false);

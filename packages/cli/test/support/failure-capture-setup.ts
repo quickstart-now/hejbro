@@ -1,6 +1,14 @@
 import { beforeEach, onTestFailed } from "vitest";
-import { captureFailure } from "./failure-capture";
 import { dumpTranscript, transcript } from "./call-transcript";
+import { captureFailure } from "./failure-capture";
+
+/** `pid-<pid>` plus `/pool-<id>` when vitest assigned a pool id (workers only; the main process has none). */
+const workerIdOf = (pid: number, poolId: string | undefined): string => {
+	if (poolId === undefined || poolId === "") {
+		return `pid-${pid}`;
+	}
+	return `pid-${pid}/pool-${poolId}`;
+};
 
 /**
  * #533: wires `captureFailure` and the call transcript into vitest's own
@@ -32,9 +40,7 @@ beforeEach(() => {
 			testName: context.task.name,
 			filePath: context.task.file?.filepath ?? "unknown",
 			error: firstError ?? new Error("onTestFailed fired with no errors"),
-			workerId: `pid-${process.pid}${
-				process.env.VITEST_POOL_ID ? `/pool-${process.env.VITEST_POOL_ID}` : ""
-			}`,
+			workerId: workerIdOf(process.pid, process.env.VITEST_POOL_ID),
 			poolSize: Number(process.env.VITEST_MAX_WORKERS ?? Number.NaN),
 			concurrentSuites: [],
 		});
