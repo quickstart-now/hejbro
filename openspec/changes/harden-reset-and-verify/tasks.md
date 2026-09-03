@@ -10,7 +10,7 @@ green, refactor). Estimates are pure work minutes (D88).
 
 ## 1. `reset` drops in dependency order and reports a failed drop
 
-- [ ] 1.1 (~8m) **[design]** A new, optional `ObjectKind` extension
+- [x] 1.1 (~8m) **[design]** A new, optional `ObjectKind` extension
       member — settle its name (`dependsOnIdentities` is this task's own
       proposal, mirroring `ownerTableIdentity`'s `<subject>Identities`
       shape) and signature: `(node: JsonValue) => ReadonlyArray<string>`,
@@ -37,7 +37,15 @@ green, refactor). Estimates are pure work minutes (D88).
       `packages/core/src/kinds/table-kind.ts`,
       `packages/core/test/table-kind-diff.test.ts`.
 
-- [ ] 1.2 (~10m) **[design]** `diffSnapshots` applies `dependsOnIdentities`
+      Note: "two foreign keys to two different tables (both, in
+      declaration order)" landed corrected — `table-kind.ts`'s own
+      `serializeForeignKeys` already sorts `foreignKeys` by D1's column
+      comparator before `dependsOnIdentities` ever sees them, so the
+      order a `dependsOnIdentities` result carries is that sorted order,
+      not the order the DSL's `table()` call wrote them in. Not a design
+      change — the test's own expected value, corrected to match.
+
+- [x] 1.2 (~10m) **[design]** `diffSnapshots` applies `dependsOnIdentities`
       as a stable, intra-kind topological refinement of the order it
       already computes — settle three details. First, scope: apply it to
       *both* the create and the drop groups (not drop alone) for the same
@@ -85,7 +93,7 @@ green, refactor). Estimates are pure work minutes (D88).
       pin, not a new row). Files: `packages/core/src/engine/diff-engine.ts`,
       `packages/core/test/diff-engine.test.ts`.
 
-- [ ] 1.3 (~5m) A regression witness that this change leaves the
+- [x] 1.3 (~5m) A regression witness that this change leaves the
       already-correct *cross-kind* order alone — the dependency graph
       this proposal names (foreign keys, a view's or a policy's or a
       trigger's own table, a trigger's own function, a sequence's owning
@@ -101,7 +109,7 @@ green, refactor). Estimates are pure work minutes (D88).
       restating today's incidental array order. Files:
       `packages/core/test/diff-engine.test.ts`.
 
-- [ ] 1.4 (~8m) **[design]** `applyReset`'s transaction failure is
+- [x] 1.4 (~8m) **[design]** `applyReset`'s transaction failure is
       translated into a coded `reset-drop-failed` `HejbroError` instead of
       escaping uncaught — settle the message wording (draft: `` hejbro
       reset failed to drop your declared objects${codeSuffix(code)}:
@@ -127,7 +135,7 @@ green, refactor). Estimates are pure work minutes (D88).
       are unaffected). Files: `packages/cli/src/apply/reset.ts`,
       `packages/cli/test/apply-reset.test.ts`.
 
-- [ ] 1.5 (~9m) A real-Postgres witness (Docker), mirroring
+- [x] 1.5 (~9m) A real-Postgres witness (Docker), mirroring
       `live-witness.integration.test.ts`'s own image selection
       (`HEJBRO_PG_IMAGE`, default `postgres:17-alpine`) and its
       docker-availability gating (skipped when `docker info` fails) —
@@ -146,7 +154,12 @@ green, refactor). Estimates are pure work minutes (D88).
       error, exits non-zero, and `hejbro status` afterward still shows
       every migration applied (the database and the ledger unchanged).
       Files: `packages/cli/test/apply-reset.integration.test.ts` (new;
-      `packages/cli/test/docker-volumes.ts` reused, not edited).
+      `packages/cli/test/docker-volumes.ts` reused, not edited). Single
+      image, not a PG 15/17 pair (the drop-order fix is dialect-independent
+      SQL; the witness file states this).
+
+      Ran green against a real container: both cases executed, none
+      skipped by the docker gate.
 
 ## 2. `verify` runs registered preset validators as a sixth check
 
@@ -235,7 +248,7 @@ green, refactor). Estimates are pure work minutes (D88).
 
 ## 3. Review repairs (group 2's reviewer findings)
 
-- [ ] 3.1 (~5m) `verify`'s own diagnostic construction reuses the shared
+- [x] 3.1 (~5m) `verify`'s own diagnostic construction reuses the shared
       `../identity.ts` helper `generate.ts` already uses, replacing the
       local, now-stale copy in `verify.ts` (whose own comment claims
       parity with `generate.ts` that no longer holds) — so an
@@ -253,7 +266,7 @@ green, refactor). Estimates are pure work minutes (D88).
       `packages/cli/src/commands/verify.ts`,
       `packages/cli/test/verify.test.ts`.
 
-- [ ] 3.2 (~5m) `skills/hejbro`'s own reference doc is corrected to match
+- [x] 3.2 (~5m) `skills/hejbro`'s own reference doc is corrected to match
       observed behavior: `references/generate-verify-workflow.md`
       currently states "Five checks" and "There is no sixth check and no
       database-inspecting option", both no longer true (the export check
@@ -264,7 +277,7 @@ green, refactor). Estimates are pure work minutes (D88).
       active configuration registers a validator — up to seven. Files:
       `skills/hejbro/references/generate-verify-workflow.md`.
 
-- [ ] 3.3 (~3m) `@hejbro/nile`'s fixture symlink gets the same
+- [x] 3.3 (~3m) `@hejbro/nile`'s fixture symlink gets the same
       build-freshness guard `assertBuiltCli` already runs for
       `@hejbro/core`/`hejbro` — a stale `packages/nile/dist` would
       otherwise let `verify`'s new sixth-check fixtures silently exercise
@@ -274,6 +287,47 @@ green, refactor). Estimates are pure work minutes (D88).
       make `assertBuiltCli` refuse before any test using the nile fixture
       runs, restored immediately after (`git checkout --`/rebuild, never
       committed). Files: `packages/cli/test/support/cli-runner.ts`.
+
+- [x] 3.4 (~5m) The four symbols 3.1 just copied into `verify.ts`
+      (`FILE_URL_PREFIX`, `stripFileUrlPrefix`, `relativizeLocation`,
+      `relativizeDeclaredAt`) are byte-identical to `generate.ts`'s own —
+      reviewer-found: 3.1 exists because a *previous* local copy
+      (`identityFromMessage`) silently drifted from its own claimed
+      parity with `generate.ts`, and leaving a second, differently-named
+      local copy in place recreates exactly that trap. Move all four into
+      the shared `../identity.ts` (already the home `3.1` itself pulled
+      `identityFromMessage`'s replacement from), and have both
+      `generate.ts` and `verify.ts` import them from there — no behavior
+      change, so the existing golden/parity assertions are the
+      regression coverage; no new test is added for a pure move. Files:
+      `packages/cli/src/identity.ts`, `packages/cli/src/commands/verify.ts`,
+      `packages/cli/src/commands/generate.ts`.
+
+- [x] 3.5 (~2m) `generate-verify-workflow.md`'s own new sentence
+      (3.2) says the preset check applies "when the active config
+      registers at least one preset" — imprecise against the spec and
+      the implementation, both of which key on a **validator**, not a
+      preset (a kinds-only preset with no validator still reports five
+      checks, reviewer-measured). Correct the one word: "registers at
+      least one preset validator". Files:
+      `skills/hejbro/references/generate-verify-workflow.md`.
+
+- [x] 3.6 (~3m) `@hejbro/supabase`'s fixture symlink gets the same
+      build-freshness guard 3.3 gave `@hejbro/nile` — `verify.test.ts`'s
+      own existing supabase-preset-refusal case is exactly the same risk
+      shape (a signal read from `packages/supabase/dist`), now
+      asymmetric against nile's freshly-guarded one. Same mutant proof as
+      3.3: an intentionally stale `packages/supabase/dist` must make
+      `assertBuiltCli` refuse, restored immediately after. Files:
+      `packages/cli/test/support/cli-runner.ts`.
+
+- [x] 3.7 (~2m) `docs/guide/ci.md`'s own "exits `0` when all five checks
+      pass" line is corrected to state the count varies (five, plus the
+      export check when enabled, plus the preset-validator check when
+      one is registered — the same fact 3.2 already states in
+      `generate-verify-workflow.md`); the line's own example output (`1
+      of 5 checks failed`) is untouched, since it is already scoped to a
+      project with neither. Files: `docs/guide/ci.md`.
 
 ## Close-out (not a group)
 
