@@ -107,7 +107,7 @@ const assertFalseTierConformance = (
 	}
 };
 
-/** SQL's own transaction-control vocabulary, matched as a whole statement (trimmed, case-insensitive) only — never a substring, so a function body's own `do $$ begin … end $$` or a caller statement carrying one of these words inside a string literal reads as an ordinary statement. The kit still reads no driver's own settings text; this is the one exception, and it stays scoped to SQL's own control words. */
+/** SQL's own transaction-control vocabulary, matched as a whole statement (trimmed, case-insensitive) only — never a substring, so a function body's own `do $$ begin … end $$` or a caller statement carrying one of these words inside a string literal reads as an ordinary statement. The kit still reads no driver's own settings text; this is the one exception, and it stays scoped to SQL's own control words. Observation limit: a whole-statement match on this exact vocabulary only, so a decorated opener a real driver might send (`begin isolation level serializable`, `begin read only`) is not recognized as an opening and reads as an ordinary statement instead. */
 const TRANSACTION_OPEN_STATEMENTS = new Set(["begin", "start transaction"]);
 const TRANSACTION_END_STATEMENTS = new Set(["commit", "rollback", "end"]);
 
