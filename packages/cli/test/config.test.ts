@@ -56,6 +56,27 @@ describe("parseConfig", () => {
 		]);
 	});
 
+	// fix-nile-findings, #755, task 2.1: explainUnavailable is an optional
+	// field on Preset -- isPreset's shape check names name/kinds/validators
+	// only, so a preset carrying it (nilePreset's own shape) still crosses
+	// the CLI's config boundary unrejected.
+	it("accepts a preset declaring explainUnavailable in presets", () => {
+		const presetWithExplainUnavailable: Preset = {
+			...TOY_PRESET,
+			explainUnavailable: true,
+		};
+		const value = {
+			entry: ["src/**/*.schema.ts"],
+			migrationsDir: "migrations",
+			snapshotPath: "hejbro.snapshot.json",
+			prefixStrategy: "timestamp",
+			presets: [presetWithExplainUnavailable],
+		};
+		expect(parseConfig(value, "/repo/hejbro.config.ts").presets).toEqual([
+			presetWithExplainUnavailable,
+		]);
+	});
+
 	it("rejects a non-preset entry in presets, naming its index", () => {
 		const value = {
 			entry: ["src/**/*.schema.ts"],
