@@ -120,7 +120,9 @@ const assertFalseTierConformance = (
  * closer by name, so a savepoint rollback is never mistaken for ending
  * the enclosing transaction. Observation limit: this still can't see a
  * driver-decorated opener or closer whose own leading word isn't in this
- * vocabulary.
+ * vocabulary. A closer batched into one string with other statements
+ * (e.g. `"commit; select 3"`) is not recognized -- statements are
+ * classified by the string's own leading word, never split on `;`.
  */
 type TransactionControlKind = "open" | "end" | undefined;
 

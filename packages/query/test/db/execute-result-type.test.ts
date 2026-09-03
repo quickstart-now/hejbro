@@ -129,7 +129,13 @@ describe("Db.execute's resolved row type for a core-built set operation (task 3.
 		type BranchAlone = SelectLimited<Projection>;
 		type Row = ExecuteRows<Stage>[number];
 
-		// Same independent oracle as the whole-table case above.
+		// Unlike the whole-table oracle above, this one is not fully
+		// independent: a real (value-level) execute() of BranchAlone would
+		// infer `{ label: string }`, not `| null` -- this bare, type-only
+		// SelectLimited<Projection> defaults TLeftJoined to UntrackedJoins,
+		// the same default ExecuteResult's SetOpStage branch takes, so both
+		// sides pass through the same widening. The literal pin right below
+		// is the genuinely independent check for the widening itself.
 		expectTypeOf<ExecuteRows<Stage>>().toEqualTypeOf<
 			ExecuteRows<BranchAlone>
 		>();
