@@ -786,3 +786,5 @@ date,change-id,task-id,group,est_min,actual_min,waited_user_min,notes
 2026-09-04,harden-reset-and-verify,3.10,3,6,4,0,measured from date -u stamps 17:56:57..18:01:03 (start taken as the previous task's end)
 2026-09-04,harden-reset-and-verify,3.11-alter-pin,3,,1,0,fourth input row the reviewer asked for (a run whose first change is an alter); measured from date -u stamps 18:01:41..18:02:40
 2026-09-04,harden-reset-and-verify,merge-in,-,,2,0,second merge of upstream/dev (9affcef9) plus install and a forced rebuild; two conflicts resolved by keeping both sides' rows; measured from date -u stamps 18:03:00..18:04:51
+2026-09-04,harden-reset-and-verify,pr-draft,-,,1,0,PR body draft; measured from date -u stamps 18:13:42..18:14:42
+2026-09-04,harden-reset-and-verify,3.12,3,5,10,0,cli-level witness that the ordering refinement never renames a migration; the window also holds the mutant round (three names flipped and restored with two forced rebuilds), the changeset sentence, the full gate rerun and the PR draft update; measured from date -u stamps 18:36:06..18:45:42

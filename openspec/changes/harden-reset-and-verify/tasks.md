@@ -398,11 +398,27 @@ green, refactor). Estimates are pure work minutes (D88).
       a drop-only run whose first change the refinement moves; and a run
       whose moved first change is an `alter`, not a `create` — the
       refinement groups creates and alters together, so an alter-only
-      run can move the slug too. `examples/{postgres,supabase}`'s chain tests, green
-      with their committed file names unchanged, are the second witness.
+      run can move the slug too. `examples/{postgres,supabase}`'s chain
+      tests are **not** a second witness for this: they compare file
+      contents over a directory listing and never derive a name, so they
+      stay green even when the slug follows the refined order (measured).
       Files: `packages/core/src/sql/migration-file.ts`,
       `packages/core/src/engine/diff-engine.ts` (only if the derivation
       needs the kind grouping), and their tests.
+
+- [x] 3.12 (~5m) 3.11's contract — the refinement never renames a
+      migration — is observable at the CLI, but its only witness is a
+      core unit test over `deriveSlug`: the example chain tests compare
+      file contents over a directory listing and never derive a name, so
+      they stay green under a slug that follows the refined order
+      (measured). Pin the observable end: a `packages/cli/test` case that
+      runs `generate` (no database, no Docker) and asserts the **written
+      file's own name** over three runs the refinement reorders — a
+      create pair whose referenced table sorts last, an alter-only pair
+      of the same shape, and a drop pair — each named from the
+      pre-refinement first change. Red: available by mutant — sending
+      `deriveSlug` the refined array again must flip all three names.
+      Files: `packages/cli/test/` (one new file).
 
 ## Close-out (not a group)
 
