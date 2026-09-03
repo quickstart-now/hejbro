@@ -52,8 +52,10 @@ SHALL drop in their existing identity order instead, and a resulting
 refusal from the database is reported through the coded failure the next
 paragraph states.
 
-This order is the reverse of the one generation itself emits
-(cli-commands).
+This is the same dependency graph generation computes (cli-commands),
+read in the opposite direction — a dependent before what it depends on —
+never the literal reverse of whatever statement sequence one specific
+generation run happened to emit.
 
 A drop that fails SHALL leave the database and the ledger exactly as
 they were: the drops and the ledger's own clearing run inside one

@@ -146,6 +146,30 @@ goes further: it applies the full committed migration chain to one
 database and a single fresh migration to another, then diffs the schema
 dumps — the deeper, pre-merge check `verify` can't do without a database.
 
+## `hejbro reset`
+
+`hejbro reset --confirm-drop <database>:<count>` drops every object your
+declarations manage and clears the ledger for what it dropped — refusing
+first without the exact confirmation it names, bound to the connected
+database's own name (queried live) so a confirmation learned against one
+database can't silently pass, unchanged, against another. Drops run in
+reverse *dependency* order: a table that references another declared
+table drops before the table it references, so nothing this run also
+drops still stands as a dependency when its own turn comes — the same
+graph `generate` computes (above), read in the opposite direction, never
+the literal reverse of one specific run's own emitted statement sequence.
+Two declared tables that reference each other can't both drop first;
+`reset` leaves that pair in its existing identity order and lets the
+database itself refuse the one drop that order can't satisfy.
+
+A drop the database refuses — most commonly an object outside your
+declarations still depending on one being dropped, or the mutual-reference
+case above — surfaces as the coded `reset-drop-failed` error carrying the
+database's own reason. The whole transaction (every drop, and the ledger
+clear) rolls back: the database and the ledger are exactly as they were,
+`hejbro status` run afterward still reports every previously-applied
+migration as applied, and nothing is left half-dropped.
+
 ## When an apply step fails partway through
 
 `hejbro migrate` (D12, amended — applying is now hejbro's own command

@@ -475,7 +475,7 @@ scenarios of `openspec show harden-reset-and-verify --diff` hold.
   in the diff. Files: `packages/cli/src/apply/reset.ts`,
   `packages/cli/src/apply/execute.ts` (only if `driverErrorReason` needs a
   detail sibling), the test.
-- [ ] 4.3 ~6m — **N1 + N5.** Red: `openspec validate harden-reset-and-verify
+- [x] 4.3 ~6m — **N1 + N5.** Red: `openspec validate harden-reset-and-verify
   --strict` after the edit and `packages/skills/test/links.test.ts`. Green:
   `openspec/changes/harden-reset-and-verify/specs/migration-apply/spec.md`
   — replace "A reset's drops are the reverse of this order" with a sentence
