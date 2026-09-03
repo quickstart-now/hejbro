@@ -1,7 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
+import type { BodyContext } from "../../src/index";
 import {
 	defineFunction,
 	defineTrigger,
+	deleteFrom,
 	eq,
 	insert,
 	isNotNull,
@@ -10,6 +12,7 @@ import {
 	select,
 	sql,
 	table,
+	update,
 	uuid,
 } from "../../src/index";
 
@@ -509,5 +512,67 @@ describe("body-context recording", () => {
 		).toThrowError(
 			/must return a trigger row.*Next: run the statement with ctx\.execute/,
 		);
+	});
+});
+
+const MOCK_ID = "00000000-0000-0000-0000-000000000000";
+
+/**
+ * #686: a type-only `BodyContext` handle -- never assigned, never called at
+ * runtime (the same technique `chain-mutation-input.test.ts` uses for
+ * `ChainApi`). Every "call" below lives inside an arrow that is
+ * type-checked but never invoked, so nothing here reaches `recordReturn`/
+ * `recordExecute` at runtime -- evidence is `pnpm check-types` across the
+ * workspace, never `vitest` (it can't see a type claim) and never a
+ * `--filter` (the stage brand `@hejbro/query`'s own chain reads lives in
+ * `packages/query/src/db/chain.ts`).
+ */
+declare const returnCtx: BodyContext;
+
+describe("ctx.return demands a returning clause (#686)", () => {
+	it("a mutation stage before .returning() is not assignable to ctx.return (type pin — evidence is check-types, not this test)", () => {
+		const rejectedInsert = () =>
+			// @ts-expect-error an insert with no .returning() is not a ReturnableQuery (#686)
+			returnCtx.return(insert(comments).values({ postId: MOCK_ID }));
+		const rejectedUpdate = () =>
+			// @ts-expect-error an update with no .returning() is not a ReturnableQuery (#686)
+			returnCtx.return(update(comments).set({ postId: MOCK_ID }));
+		const rejectedDelete = () =>
+			// @ts-expect-error a delete with no .returning() is not a ReturnableQuery (#686)
+			returnCtx.return(deleteFrom(comments));
+		const rejectedConflict = () => {
+			const conflictStage = insert(comments)
+				.values({ postId: MOCK_ID })
+				.onConflictDoNothing(comments.id);
+			// @ts-expect-error onConflictDoNothing's own stage is still pre-returning (#686)
+			returnCtx.return(conflictStage);
+		};
+		expectTypeOf(rejectedInsert).toBeFunction();
+		expectTypeOf(rejectedUpdate).toBeFunction();
+		expectTypeOf(rejectedDelete).toBeFunction();
+		expectTypeOf(rejectedConflict).toBeFunction();
+	});
+
+	it("the returning stage, a bare select, and an executed non-returning mutation still compile (controls)", () => {
+		const acceptedBareReturning = () =>
+			returnCtx.return(
+				insert(comments).values({ postId: MOCK_ID }).returning(),
+			);
+		const acceptedProjectedReturning = () =>
+			returnCtx.return(
+				update(comments)
+					.set({ postId: MOCK_ID })
+					.returning({ id: comments.id }),
+			);
+		const acceptedDeleteReturning = () =>
+			returnCtx.return(deleteFrom(comments).returning());
+		const acceptedSelect = () => returnCtx.return(select(comments));
+		const acceptedExecute = () =>
+			returnCtx.execute(insert(comments).values({ postId: MOCK_ID }));
+		expectTypeOf(acceptedBareReturning).toBeFunction();
+		expectTypeOf(acceptedProjectedReturning).toBeFunction();
+		expectTypeOf(acceptedDeleteReturning).toBeFunction();
+		expectTypeOf(acceptedSelect).toBeFunction();
+		expectTypeOf(acceptedExecute).toBeFunction();
 	});
 });

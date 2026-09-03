@@ -142,51 +142,67 @@ export type ReturningProjection = Record<string, Expr>;
  */
 const mutationStageBrand: unique symbol = Symbol("hejbro:mutation-stage-meta");
 
-/** One mutation stage's phantom marker value shape — shared by insert/update/delete so the brand's own type is written once. */
+/** The two sides of `.returning()` a mutation stage's phantom brand can carry (#686) — the default for every `InsertFinal`/`UpdateFinal`/`DeleteFinal`'s third parameter, so a bare two-argument mention (every pre-existing one, including `@hejbro/query`'s own `chain.ts`) means "either stage", not a false narrowing to `"final"` alone. */
+type MutationStage = "returnable" | "final";
+
+/** One mutation stage's phantom marker value shape — shared by insert/update/delete so the brand's own type is written once. `stage` is `"returnable"` before `.returning()` is called and `"final"` after (#686) — a disjoint literal, so a `"returnable"` value is never structurally assignable to a `"final"`-only consumer even though `table`/`returning` alone might line up. */
 type MutationStageMeta<
 	TTable extends Table,
 	TReturning extends ReturningProjection | undefined,
+	TStage extends MutationStage,
 > = {
 	readonly table: TTable;
 	readonly returning: TReturning;
+	readonly stage: TStage;
 };
 
 /**
  * The terminal insert stage: nothing left to chain but the compiled
- * query. `TTable` defaults to the widest `Table` and `TReturning` to
- * `undefined` (spec §5.2's "no projection = every column"), so every
- * existing consumer that names the bare `InsertFinal` -- including
- * plpgsql's `ReturnableQuery` -- keeps accepting what it accepted. The
- * stage a chain sits at *before* `returning()` is called
- * (`InsertReturnable`, and `InsertConflictable` through it) is the
- * `never` instantiation instead (#622): that statement carries no
- * `returning` clause, so the row type a reader derives from it is
- * `never`, not the table's shape, and `never` is assignable to the bare
- * default so no consumer narrows. `UpdateFinal`/`DeleteFinal` and their
- * `*Returnable` stages follow the same rule.
+ * query. `TTable` defaults to the widest `Table`, `TReturning` to
+ * `undefined` (spec §5.2's "no projection = every column"), and `TStage`
+ * to the full {@link MutationStage} union, so every existing consumer
+ * that names the bare `InsertFinal` with one or two type arguments --
+ * including `@hejbro/query`'s `chain.ts`, which passes a pre-`.returning()`
+ * stage into a two-argument-typed parameter to build its own "no rows"
+ * terminal view -- keeps accepting what it accepted; pinning that default
+ * to `"final"` alone would silently narrow every such site (measured,
+ * #686). The stage a chain sits at *before* `returning()` is called
+ * (`InsertReturnable`, and `InsertConflictable` through it) instantiates
+ * `TReturning` as `never` (#622) and `TStage` as `"returnable"`: that
+ * statement carries no `returning` clause, so the row type a reader
+ * derives from it is `never`, not the table's shape, and it is not yet
+ * the `"final"`, returning-bearing stage `ctx.return` requires --
+ * `ExecutableQuery` (`plpgsql/body-context.ts`) accepts both stages via
+ * this same two-argument default, `ReturnableQuery` names `"final"`
+ * explicitly. `UpdateFinal`/`DeleteFinal` and their `*Returnable` stages
+ * follow the same rule.
  */
 export type InsertFinal<
 	TTable extends Table = Table,
 	TReturning extends ReturningProjection | undefined = undefined,
+	TStage extends MutationStage = MutationStage,
 > = {
 	readonly insertQuery: InsertNode;
 	/** Type-only marker, never assigned — see {@link mutationStageBrand}. */
-	readonly [mutationStageBrand]?: MutationStageMeta<TTable, TReturning>;
+	readonly [mutationStageBrand]?: MutationStageMeta<TTable, TReturning, TStage>;
 };
 export type InsertReturnable<TTable extends Table = Table> = InsertFinal<
 	TTable,
-	never
+	never,
+	"returnable"
 > & {
 	/**
 	 * No-arg = every column, snake_cased and explicit (spec §5.2); an
 	 * object projection = exactly those aliased expressions. `TProjection`
 	 * is inferred from the call site — omitted vs. supplied resolve to two
 	 * different `InsertFinal` instantiations (task 4.11-mutation), not the
-	 * same erased shape either way.
+	 * same erased shape either way. Names `"final"` explicitly (#686) --
+	 * the returning-stage result this method produces, not the
+	 * two-argument default.
 	 */
 	returning<TProjection extends ReturningProjection | undefined = undefined>(
 		projection?: TProjection,
-	): InsertFinal<TTable, TProjection>;
+	): InsertFinal<TTable, TProjection, "final">;
 };
 export type InsertConflictable<TTable extends Table> =
 	InsertReturnable<TTable> & {
@@ -202,18 +218,20 @@ export type InsertConflictable<TTable extends Table> =
 export type UpdateFinal<
 	TTable extends Table = Table,
 	TReturning extends ReturningProjection | undefined = undefined,
+	TStage extends MutationStage = MutationStage,
 > = {
 	readonly updateQuery: UpdateNode;
 	/** Type-only marker, never assigned — see {@link mutationStageBrand}. */
-	readonly [mutationStageBrand]?: MutationStageMeta<TTable, TReturning>;
+	readonly [mutationStageBrand]?: MutationStageMeta<TTable, TReturning, TStage>;
 };
 export type UpdateReturnable<TTable extends Table = Table> = UpdateFinal<
 	TTable,
-	never
+	never,
+	"returnable"
 > & {
 	returning<TProjection extends ReturningProjection | undefined = undefined>(
 		projection?: TProjection,
-	): UpdateFinal<TTable, TProjection>;
+	): UpdateFinal<TTable, TProjection, "final">;
 };
 export type UpdateFilterable<TTable extends Table = Table> =
 	UpdateReturnable<TTable> & {
@@ -223,18 +241,20 @@ export type UpdateFilterable<TTable extends Table = Table> =
 export type DeleteFinal<
 	TTable extends Table = Table,
 	TReturning extends ReturningProjection | undefined = undefined,
+	TStage extends MutationStage = MutationStage,
 > = {
 	readonly deleteQuery: DeleteNode;
 	/** Type-only marker, never assigned — see {@link mutationStageBrand}. */
-	readonly [mutationStageBrand]?: MutationStageMeta<TTable, TReturning>;
+	readonly [mutationStageBrand]?: MutationStageMeta<TTable, TReturning, TStage>;
 };
 export type DeleteReturnable<TTable extends Table = Table> = DeleteFinal<
 	TTable,
-	never
+	never,
+	"returnable"
 > & {
 	returning<TProjection extends ReturningProjection | undefined = undefined>(
 		projection?: TProjection,
-	): DeleteFinal<TTable, TProjection>;
+	): DeleteFinal<TTable, TProjection, "final">;
 };
 export type DeleteFilterable<TTable extends Table = Table> =
 	DeleteReturnable<TTable> & {

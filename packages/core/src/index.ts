@@ -305,6 +305,7 @@ export type {
 } from "./plpgsql/body-ast";
 export type {
 	BodyContext,
+	ExecutableQuery,
 	IfChain,
 	RaiseArg,
 	ReturnableQuery,
