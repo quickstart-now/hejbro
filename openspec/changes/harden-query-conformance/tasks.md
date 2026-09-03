@@ -111,13 +111,36 @@ Inside group 1, 1.2 makes 1.3's test red, so 1.3 follows it.
       itself refuses as ambiguous. Files:
       `packages/core/src/expr/render-sql.ts`,
       `packages/core/test/query/select.test.ts`.
-- [ ] 2.2 (~7m) Every committed artifact carrying the changed shape is
+- [x] 2.2 (~7m) Every committed artifact carrying the changed shape is
       regenerated in the same commit and read line by line to confirm
       qualification is the only difference. Red: whichever golden or
       round-trip test 2.1 turns red (report the list when it is known —
       if none turns red, that is the finding: no committed artifact
       carries a joined whole-table projection, and it is recorded here
       rather than assumed). Files: the regenerated artifacts only.
+
+      Observed (full repo sweep of every `innerJoin`/`leftJoin` call site
+      in `packages/*/test/**` and `examples/**`, reported to planner
+      before touching anything): exactly one file turned red --
+      `packages/query/test/compile/join.test.ts`'s two "with qualified
+      columns" cases (their own title already claimed qualification;
+      their golden SQL didn't). Diff read line by line: 2 lines changed,
+      each adding only the `"app"."posts".` qualifier prefix to `"id"`/
+      `"status"` -- from-clause, join-clause, on-condition, and the
+      `not.toContain("*")` line byte-identical. Every other whole-table+
+      join site checked either asserts a substring that doesn't include
+      the projection list, wraps in `exists()` (constantOne projection,
+      unaffected), is a structural/type-only check, or is an
+      object-projection (never `allColumns`) to begin with -- none
+      carries a joined whole-table projection's SQL text as a golden.
+      `examples/**` (9 schema files' `defineView`s) and
+      `packages/{pg,supabase,neon}/test/**` (read-only) checked and
+      confirmed clear; nothing there needed the planner's edit
+      permission. `pnpm --filter core vitest run` (package-local, all
+      files): 1510 passed, 3 failed (pre-existing
+      `cross-instance-symbols.test.ts` dist-freshness ENOENT, unrelated
+      to this change). `packages/query` and `packages/supabase` full
+      suites: 872/872 and 141/141.
 
 ## 3. A core-built set operation's execute result type
 
