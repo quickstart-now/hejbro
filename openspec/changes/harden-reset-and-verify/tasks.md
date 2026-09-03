@@ -329,6 +329,40 @@ green, refactor). Estimates are pure work minutes (D88).
       of 5 checks failed`) is untouched, since it is already scoped to a
       project with neither. Files: `docs/guide/ci.md`.
 
+- [ ] 3.8 (~5m) `applyReset`'s own catch re-codes **every** failure the
+      transaction raises as `reset-drop-failed`, including a `HejbroError`
+      the transaction itself already coded — so
+      `reset-migration-not-singular` (raised inside the transaction, its
+      code documented alongside the ledger it guards) can never reach a
+      user, and its message is dressed in advice about objects outside
+      the declarations that does not apply to it. Preferred fix: hoist
+      the migration-SQL computation out of the transaction callback — it
+      is a pure computation, and hoisting it also means the guard refuses
+      before any statement is sent. Where that is not possible, the catch
+      instead rethrows a `HejbroError` unchanged and wraps only a failure
+      that is not one. Red:
+      `packages/cli/test/apply-reset.test.ts`, new case *"a hejbro-coded
+      failure inside the transaction keeps its own code"*, over an input
+      table of what the transaction raises: a `HejbroError`
+      (`reset-migration-not-singular`) — its own code survives; a driver
+      error object with `.code`/`.message` — still `reset-drop-failed`
+      (1.4's rows, re-run as the regression pin); a bare non-`Error`
+      value — still `reset-drop-failed`. Files:
+      `packages/cli/src/apply/reset.ts`,
+      `packages/cli/test/apply-reset.test.ts`.
+
+- [ ] 3.9 (~6m) The create-side ordering change moves the committed
+      example migrations too, not only `packages/core`'s goldens:
+      `examples/postgres` and `examples/supabase`'s chain tests
+      ("regenerating … reproduces the committed migrations") both fail
+      against the new order. Regenerate the committed migrations and show
+      — the same way the goldens are shown — that the regenerated files
+      differ from the committed ones **only** in statement order, with no
+      statement added, removed or reworded, and that each chain's own
+      banner hashes still verify afterwards. Files:
+      `examples/postgres/migrations/*`, `examples/supabase/migrations/*`
+      (regenerated, not hand-edited).
+
 ## Close-out (not a group)
 
 The changeset, `openspec/task-times.csv`, the README stamps

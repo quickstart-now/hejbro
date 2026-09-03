@@ -40,7 +40,9 @@ the reverse of the dependency order the snapshot itself describes — never
 `cascade`, which could remove an object the declarations do not describe
 and so would break the first paragraph's own promise. This order SHALL
 hold both across kinds (a view, a policy, a trigger, and a sequence, all
-before their own table; a table before its own schema) and within a kind,
+before their own table — for the sequence at the statement level, since
+the column default it backs is dropped by a statement of its own; a table
+before its own schema) and within a kind,
 for a foreign key from one declared table to another: a table that
 references another declared table SHALL drop before the table it
 references, so a declared object is never dropped while another object
@@ -50,11 +52,8 @@ SHALL drop in their existing identity order instead, and a resulting
 refusal from the database is reported through the coded failure the next
 paragraph states.
 
-The order this reverses is the one generation itself emits: within a
-kind, a declared object SHALL be created after the declared objects it
-references, so a table carrying a foreign key to another declared table
-is created after that table, and a mutually referencing pair keeps its
-existing identity order there too.
+This order is the reverse of the one generation itself emits
+(cli-commands).
 
 A drop that fails SHALL leave the database and the ledger exactly as
 they were: the drops and the ledger's own clearing run inside one
