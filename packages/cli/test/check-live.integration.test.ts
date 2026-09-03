@@ -10,6 +10,7 @@ import {
 	requiredKeysByKind,
 	roleName,
 	schema,
+	serial,
 	table,
 	uuid,
 } from "@hejbro/core";
@@ -473,6 +474,97 @@ describe("hejbro check / role independence (group 6, task 6.4)", () => {
 			expect(sentSql).toContain(CHECK_CATALOG_QUERIES.defaultTableGrants);
 		} finally {
 			await rawDriver.client.end();
+		}
+	});
+});
+
+/**
+ * #716: `check` used to report every `serial()` column as missing its
+ * default, because the catalog's `nextval(...)` text is `search_path`-
+ * sensitive (`pg_get_expr` qualifies the sequence only when its schema
+ * isn't on the reading role's `search_path`) while `compareColumnDefault`
+ * never resolved that against the snapshot's own owning sequence.
+ * Both ends of that axis get their own database object here, so a
+ * genuinely unqualified `nextval('..._seq'::regclass)` and a genuinely
+ * qualified one are each read from a real server, not asserted from a
+ * hand-written `ColumnRow` (unit coverage: `check-compare.test.ts`).
+ */
+describe("hejbro check / a serial column's owned-sequence default (group 6, #716)", () => {
+	const SerialDb = "serial_check";
+
+	// Same `let`-at-describe-level idiom the role-independence block above
+	// uses (this file's own `check:bans` note, line ~384): one `beforeAll`
+	// per axis's fixture, read by that axis's own `it`.
+	let publicSnapshot: Snapshot | undefined;
+	let qualifiedSnapshot: Snapshot | undefined;
+
+	beforeAll(() => {
+		psqlCommand("postgres", `create database ${SerialDb};`);
+
+		// Unqualified axis: `schema("public")` supplies `table()` only the
+		// schemaName it needs (`core/src/dsl/table.ts`'s `table()` takes a
+		// plain `SchemaDeclaration` value, never requiring it be part of
+		// the `declarations` set) -- kept out of `declarations` so no
+		// `create schema "public"` is ever emitted against a schema this
+		// fresh database already has.
+		const publicSchema = schema("public");
+		const publicTable = table(publicSchema, "t", {
+			id: serial().primaryKey(),
+		});
+		const publicMigration = generateMigration({
+			declarations: [publicTable],
+			previousSnapshot: emptySnapshot,
+		});
+		expect(publicMigration.errors).toEqual([]);
+		psqlFile(SerialDb, publicMigration.sql);
+		publicSnapshot = publicMigration.snapshot;
+
+		// Qualified axis: a brand-new, non-public schema, declared and
+		// created like `role independence`'s own `roleSchema` above.
+		const qualifiedSchema = schema(SerialDb);
+		const qualifiedTable = table(qualifiedSchema, "t", {
+			id: serial().primaryKey(),
+		});
+		const qualifiedMigration = generateMigration({
+			declarations: [qualifiedSchema, qualifiedTable],
+			previousSnapshot: emptySnapshot,
+		});
+		expect(qualifiedMigration.errors).toEqual([]);
+		psqlFile(SerialDb, qualifiedMigration.sql);
+		qualifiedSnapshot = qualifiedMigration.snapshot;
+	}, 60_000);
+
+	const serialDbUrl = (): string => hostUrl("postgres", SerialDb);
+
+	it("reports no differences for a public-schema serial column (unqualified nextval)", async () => {
+		if (publicSnapshot === undefined) {
+			throw new Error(
+				"beforeAll did not build the public-schema fixture snapshot",
+			);
+		}
+		const driver = pgDriver(serialDbUrl());
+		try {
+			const catalog = await readCatalog(driver);
+			const findings = compareCatalog(publicSnapshot, catalog);
+			expect(findings).toEqual([]);
+		} finally {
+			await driver.client.end();
+		}
+	});
+
+	it("reports no differences for a schema-qualified serial column (qualified nextval)", async () => {
+		if (qualifiedSnapshot === undefined) {
+			throw new Error(
+				"beforeAll did not build the qualified-schema fixture snapshot",
+			);
+		}
+		const driver = pgDriver(serialDbUrl());
+		try {
+			const catalog = await readCatalog(driver);
+			const findings = compareCatalog(qualifiedSnapshot, catalog);
+			expect(findings).toEqual([]);
+		} finally {
+			await driver.client.end();
 		}
 	});
 });

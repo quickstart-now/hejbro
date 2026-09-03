@@ -3,6 +3,7 @@ import type {
 	JsonValue,
 	KindRegistry,
 	RegisteredObjectKind,
+	SequenceSnapshot,
 	Snapshot,
 	TypeNode,
 } from "@hejbro/core";
@@ -14,6 +15,7 @@ import {
 	renderTypeNode,
 	throwHejbroError,
 } from "@hejbro/core";
+import { sequencesInSnapshot } from "../contract/read-snapshot";
 import type { Catalog, ColumnRow } from "./catalog";
 
 /**
@@ -264,11 +266,84 @@ const missingDefaultFinding = (
 	);
 };
 
+/** `pg_get_expr`'s own text for a `nextval(...)` default (ported shape -- `infer/loss-report.ts`'s `NEXTVAL_DEFAULT` is the same regex for a different, display-only purpose there; not shared, since sharing would couple this comparison to that report's own drift). */
+const OWNED_SEQUENCE_DEFAULT = /^nextval\('([^']+)'::regclass\)$/;
+
+/**
+ * Same text `core`'s own `nextvalExpression` (`kinds/sequence-kind.ts`)
+ * renders for this sequence's default -- restated here because that
+ * function isn't on core's public surface, never imported. Display-only:
+ * this file never sends it anywhere, only names it in a message.
+ */
+const ownedSequenceDisplayText = (owner: SequenceSnapshot): string =>
+	`nextval('${owner.schema}.${owner.name}')`;
+
+/**
+ * True when the catalog's `nextval(...)` default names `owner`'s own
+ * sequence -- schema-qualified or not (#716's `search_path` axis:
+ * `pg_get_expr` qualifies only when the sequence's schema isn't on the
+ * reading role's `search_path`, `public` most often being on it). A bare
+ * name is checked against `owner.name` alone, never resolved against
+ * `search_path` itself -- a same-named sequence in an earlier schema on
+ * the path would still match here, an accepted residual ambiguity (no
+ * feature, no test), not a resolution of the real one.
+ */
+const matchesOwnedSequence = (
+	owner: SequenceSnapshot,
+	catalogText: string,
+): boolean => {
+	const match = OWNED_SEQUENCE_DEFAULT.exec(normalizeSql(catalogText));
+	if (match === null) {
+		return false;
+	}
+	const identityText = match[1] ?? "";
+	const lastDot = identityText.lastIndexOf(".");
+	if (lastDot === -1) {
+		return identityText === owner.name;
+	}
+	return (
+		identityText.slice(0, lastDot) === owner.schema &&
+		identityText.slice(lastDot + 1) === owner.name
+	);
+};
+
+/**
+ * A `serial`/`smallserial`/`bigserial` column's *effective* declared
+ * default (#716) -- `column.default` structurally never carries it
+ * (D66: it lives on the snapshot's own `sequence:` object), so this
+ * compares the catalog's `nextval(...)` text against `owner` instead of
+ * `declaredDefaultText`.
+ */
+const compareOwnedSequenceDefault = (
+	identity: string,
+	owner: SequenceSnapshot,
+	catalogDefault: string | null,
+): ReadonlyArray<Finding> => {
+	const declared = ownedSequenceDisplayText(owner);
+	if (catalogDefault === null) {
+		return [missingDefaultFinding(identity, declared, null)];
+	}
+	if (matchesOwnedSequence(owner, catalogDefault)) {
+		return [];
+	}
+	return [
+		differsFinding(
+			identity,
+			`declared column "${identity}" has default "${declared}", but the database has "${catalogDefault}".`,
+			"change the declaration to match the database, or write a migration that alters the default.",
+		),
+	];
+};
+
 const compareColumnDefault = (
 	identity: string,
 	column: LocalColumnSnapshot,
 	row: ColumnRow,
+	owner: SequenceSnapshot | undefined,
 ): ReadonlyArray<Finding> => {
+	if (owner !== undefined) {
+		return compareOwnedSequenceDefault(identity, owner, row.catalogDefault);
+	}
 	const declared = declaredDefaultText(column);
 	const catalogDefault = row.catalogDefault;
 	if (declared === null && catalogDefault === null) {
@@ -299,17 +374,33 @@ const findColumnRow = (
 		(row) => row.schema === schema && row.table === table && row.name === name,
 	);
 
+/** The snapshot's own synthesized sequence that owns `schema.table.columnName`, or `undefined` for a column no `serial`-family builder produced (#716). */
+const findOwnedSequence = (
+	snapshot: Snapshot,
+	schema: string,
+	table: string,
+	columnName: string,
+): SequenceSnapshot | undefined =>
+	sequencesInSnapshot(snapshot).find(
+		(sequence) =>
+			sequence.schema === schema &&
+			sequence.table === table &&
+			sequence.column === columnName,
+	);
+
 const compareColumn = (
 	schema: string,
 	table: string,
 	column: LocalColumnSnapshot,
 	catalog: Catalog,
+	snapshot: Snapshot,
 ): ReadonlyArray<Finding> => {
 	const identity = `${schema}.${table}.${column.name}`;
 	const row = findColumnRow(catalog, schema, table, column.name);
 	if (row === undefined) {
 		return [missingFinding(identity, "column")];
 	}
+	const owner = findOwnedSequence(snapshot, schema, table, column.name);
 	// Every axis this column differs on is reported from this one run
 	// (spec Req1) -- never an early return after the first mismatch, which
 	// would make a reader fix one difference, rerun, and meet a second one
@@ -317,7 +408,7 @@ const compareColumn = (
 	return [
 		...compareColumnNotNull(identity, column, row),
 		...compareColumnType(identity, column, row),
-		...compareColumnDefault(identity, column, row),
+		...compareColumnDefault(identity, column, row, owner),
 	];
 };
 
@@ -415,6 +506,7 @@ const compareTable = (
 	identity: string,
 	node: JsonValue,
 	catalog: Catalog,
+	snapshot: Snapshot,
 ): ReadonlyArray<Finding> => {
 	const table = node as LocalTableSnapshot;
 	// add-unmanaged-objects: an existing declaration claims a shape this
@@ -435,7 +527,7 @@ const compareTable = (
 	}
 	return [
 		...table.columns.flatMap((column) =>
-			compareColumn(table.schema, table.name, column, catalog),
+			compareColumn(table.schema, table.name, column, catalog, snapshot),
 		),
 		...compareConstraintsByName(
 			table.schema,

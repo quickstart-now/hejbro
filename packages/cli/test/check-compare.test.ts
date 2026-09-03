@@ -15,11 +15,13 @@ import {
 	generateMigration,
 	grant,
 	index,
+	integer,
 	isNotNull,
 	literal,
 	pgEnum,
 	rls,
 	schema,
+	serial,
 	table,
 	text,
 	uuid,
@@ -330,6 +332,198 @@ describe("compareCatalog / 2.3 notNull and default comparison", () => {
 		const messages = findings.map((finding) => finding.error.message).join(" ");
 		expect(messages).toContain("not null");
 		expect(messages).toContain("character varying(120)");
+	});
+});
+
+/**
+ * #716: a `serial()` column's `nextval` default lives on the snapshot's
+ * synthesized `sequence:` object, never on the column's own `default`
+ * field (`core/src/kinds/table-kind.ts`'s `materializeTypeNode`/D66) --
+ * `compareColumnDefault` must join that object rather than read a
+ * `ColumnSnapshot.default` that structurally never carries it. Each row
+ * of the lead's sweep table is its own `it` (D110); the sweep also
+ * considered a mixed-case/quoted sequence identifier ("g"), dropped
+ * without a test: D36's `assertSqlName` (`^[a-z][a-z0-9_]*$`) refuses
+ * that name in the DSL before a snapshot can ever carry it.
+ */
+describe("compareCatalog / a serial column's owned-sequence default (#716)", () => {
+	it("accepts an unqualified nextval default on a public-schema serial column (a)", () => {
+		const publicSchema = schema("public");
+		const t = table(publicSchema, "t", { id: serial() });
+		const snapshot = buildTestSnapshot([t]);
+		const catalog: Catalog = {
+			...emptyCatalog(),
+			tables: [{ schema: "public", table: "t", rls: false }],
+			columns: [
+				{
+					schema: "public",
+					table: "t",
+					name: "id",
+					notNull: true,
+					catalogType: "integer",
+					baseTypeKind: null,
+					baseTypeSchema: null,
+					baseTypeName: null,
+					catalogDefault: "nextval('t_id_seq'::regclass)",
+				},
+			],
+			sequences: [{ schema: "public", name: "t_id_seq" }],
+		};
+
+		const findings = compareCatalog(snapshot, catalog);
+
+		expect(findings).toEqual([]);
+	});
+
+	it("accepts a schema-qualified nextval default on a non-public-schema serial column (b)", () => {
+		const t = table(app, "t", { id: serial() });
+		const snapshot = buildTestSnapshot([t]);
+		const catalog: Catalog = {
+			...emptyCatalog(),
+			tables: [{ schema: "app", table: "t", rls: false }],
+			columns: [
+				{
+					schema: "app",
+					table: "t",
+					name: "id",
+					notNull: true,
+					catalogType: "integer",
+					baseTypeKind: null,
+					baseTypeSchema: null,
+					baseTypeName: null,
+					catalogDefault: "nextval('app.t_id_seq'::regclass)",
+				},
+			],
+			sequences: [{ schema: "app", name: "t_id_seq" }],
+		};
+
+		const findings = compareCatalog(snapshot, catalog);
+
+		expect(findings).toEqual([]);
+	});
+
+	it("reports a serial column whose database default was dropped (c)", () => {
+		const t = table(app, "t", { id: serial() });
+		const snapshot = buildTestSnapshot([t]);
+		const catalog: Catalog = {
+			...emptyCatalog(),
+			tables: [{ schema: "app", table: "t", rls: false }],
+			columns: [
+				{
+					schema: "app",
+					table: "t",
+					name: "id",
+					notNull: true,
+					catalogType: "integer",
+					baseTypeKind: null,
+					baseTypeSchema: null,
+					baseTypeName: null,
+					catalogDefault: null,
+				},
+			],
+			sequences: [{ schema: "app", name: "t_id_seq" }],
+		};
+
+		const findings = compareCatalog(snapshot, catalog);
+
+		expect(findings).toHaveLength(1);
+		expect(findings[0]?.identity).toBe("app.t.id");
+		expect(findings[0]?.error).toMatchObject({ code: "check-object-differs" });
+		expect(findings[0]?.error.message).toContain("nextval('app.t_id_seq')");
+		expect(findings[0]?.error.message).toContain("but the database has none.");
+	});
+
+	it("reports a serial column whose database default calls a different sequence (d)", () => {
+		const t = table(app, "t", { id: serial() });
+		const snapshot = buildTestSnapshot([t]);
+		const catalog: Catalog = {
+			...emptyCatalog(),
+			tables: [{ schema: "app", table: "t", rls: false }],
+			columns: [
+				{
+					schema: "app",
+					table: "t",
+					name: "id",
+					notNull: true,
+					catalogType: "integer",
+					baseTypeKind: null,
+					baseTypeSchema: null,
+					baseTypeName: null,
+					catalogDefault: "nextval('other_seq'::regclass)",
+				},
+			],
+			sequences: [{ schema: "app", name: "t_id_seq" }],
+		};
+
+		const findings = compareCatalog(snapshot, catalog);
+
+		expect(findings).toHaveLength(1);
+		expect(findings[0]?.identity).toBe("app.t.id");
+		expect(findings[0]?.error).toMatchObject({ code: "check-object-differs" });
+		// Pins the direction, not just the shape (#716 follow-up): before the
+		// fix this same length/code pair was already produced by the
+		// declared-null branch ("...has no default, but the database has
+		// one"), which never names *this* column's own owned sequence and
+		// would still pass a check that stopped at length/code.
+		expect(findings[0]?.error.message).toContain("nextval('app.t_id_seq')");
+		expect(findings[0]?.error.message).toContain(
+			"nextval('other_seq'::regclass)",
+		);
+	});
+
+	it("still accepts a plain column's own cast default (e, regression)", () => {
+		const t = table(app, "t", { role: text().default("member") });
+		const snapshot = buildTestSnapshot([t]);
+		const catalog: Catalog = {
+			...emptyCatalog(),
+			tables: [{ schema: "app", table: "t", rls: false }],
+			columns: [
+				{
+					schema: "app",
+					table: "t",
+					name: "role",
+					notNull: false,
+					catalogType: "text",
+					baseTypeKind: null,
+					baseTypeSchema: null,
+					baseTypeName: null,
+					catalogDefault: "'member'::text",
+				},
+			],
+		};
+
+		const findings = compareCatalog(snapshot, catalog);
+
+		expect(findings).toEqual([]);
+	});
+
+	it("still reports a non-serial column whose database has an unowned nextval default (f, regression)", () => {
+		const t = table(app, "t", { id: integer() });
+		const snapshot = buildTestSnapshot([t]);
+		const catalog: Catalog = {
+			...emptyCatalog(),
+			tables: [{ schema: "app", table: "t", rls: false }],
+			columns: [
+				{
+					schema: "app",
+					table: "t",
+					name: "id",
+					notNull: false,
+					catalogType: "integer",
+					baseTypeKind: null,
+					baseTypeSchema: null,
+					baseTypeName: null,
+					catalogDefault: "nextval('x_seq'::regclass)",
+				},
+			],
+		};
+
+		const findings = compareCatalog(snapshot, catalog);
+
+		expect(findings).toHaveLength(1);
+		expect(findings[0]?.identity).toBe("app.t.id");
+		expect(findings[0]?.error).toMatchObject({ code: "check-object-differs" });
+		expect(findings[0]?.error.message).toContain("nextval('x_seq'::regclass)");
 	});
 });
 
