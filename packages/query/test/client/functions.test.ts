@@ -179,6 +179,132 @@ describe("a pre-built value with an extra property is refused at runtime, before
 });
 
 /**
+ * The runtime guard's key-set check (#697, R2-N1): a pre-built value
+ * whose key *count* matches but names an argument the declaration
+ * doesn't (a caller-side typo, unreachable from a type-checked call
+ * site) used to pass `assertArgCount` and be sent with the misspelled
+ * argument silently missing. Named exactly the declared two-argument
+ * shape (`userId`, `limit`) so both the count check and the name check
+ * have a real, non-trivial declaration to run against.
+ */
+describe("assertArgNames refuses an unknown argument key (#697, R2-N1)", () => {
+	const TwoArgMetadata: ContractMetadata = {
+		commit: "abc123",
+		exportHash: "sha256:x",
+		roles: [],
+		tables: {},
+		functions: {
+			searchPosts: {
+				schema: "app",
+				name: "search_posts",
+				args: [
+					{
+						key: "userId",
+						sqlName: "user_id",
+						typeNode: { typeName: "text" },
+						mode: null,
+						notNullElements: false,
+					},
+					{
+						key: "limit",
+						sqlName: "limit",
+						typeNode: { typeName: "text" },
+						mode: null,
+						notNullElements: false,
+					},
+				],
+				returns: { kind: "scalar", typeNode: { typeName: "text" }, mode: null },
+			},
+		},
+	};
+
+	type TwoArgDatabase = {
+		readonly Tables: Record<string, never>;
+		readonly Functions: {
+			readonly searchPosts: {
+				readonly Args: { readonly userId: string; readonly limit: string };
+				readonly Returns: string;
+			};
+		};
+	};
+
+	it("sends the declared arguments in declared order, whatever order the caller wrote them", async () => {
+		const { driver, topLevelSent } = recordingTransactionalDriver({
+			rows: [{ result: "ok" }],
+		});
+		const client = createNameKeyedDb<TwoArgDatabase>(driver, TwoArgMetadata);
+
+		const value = await client.fn.searchPosts({ limit: "10", userId: "a" });
+
+		expect(value).toBe("ok");
+		expect(topLevelSent[0]?.params).toEqual(["a", "10"]);
+	});
+
+	it("refuses a right-sized argument object naming an argument the function does not declare, and never reaches the driver", async () => {
+		const { driver } = recordingTransactionalDriver();
+		const client = createNameKeyedDb<TwoArgDatabase>(driver, TwoArgMetadata);
+		const looseFn = client.fn as unknown as {
+			readonly searchPosts: (args: unknown) => Promise<unknown>;
+		};
+
+		// A pre-built value, not a fresh object literal -- the compile-time
+		// excess/missing-property checks never run for one (same reasoning
+		// as the count-mismatch case above).
+		const args = { user_id: "a", limit: "10" };
+
+		expect.assertions(4);
+		try {
+			await looseFn.searchPosts(args);
+			expect.unreachable("should have refused the unknown key");
+		} catch (error) {
+			expect(error).toHaveProperty("code", "function-argument-unknown");
+			expect((error as Error).message).toContain("search_posts");
+			expect((error as Error).message).toContain('"user_id"');
+		}
+		expect(driver.execute).not.toHaveBeenCalled();
+	});
+
+	it("still refuses with function-argument-count-mismatch, unchanged, for too many or too few keys", async () => {
+		const { driver } = recordingTransactionalDriver();
+		const client = createNameKeyedDb<TwoArgDatabase>(driver, TwoArgMetadata);
+		const looseFn = client.fn as unknown as {
+			readonly searchPosts: (args: unknown) => Promise<unknown>;
+		};
+
+		const tooMany = { userId: "a", limit: "10", extra: "not declared" };
+		const tooFew = { userId: "a" };
+
+		expect.assertions(3);
+		await Promise.all(
+			[tooMany, tooFew].map(async (args) => {
+				try {
+					await looseFn.searchPosts(args);
+					expect.unreachable("should have refused the count mismatch");
+				} catch (error) {
+					expect(error).toHaveProperty(
+						"code",
+						"function-argument-count-mismatch",
+					);
+				}
+			}),
+		);
+		expect(driver.execute).not.toHaveBeenCalled();
+	});
+
+	it("an empty argument object is sent against a no-argument function", async () => {
+		const { driver } = recordingTransactionalDriver({
+			rows: [{ result: "42" }],
+		});
+		const client = createNameKeyedDb<TestDatabase>(driver, METADATA);
+
+		const value = await client.fn.totalPosts({});
+
+		expect(value).toBe(42n);
+		expect(driver.execute).toHaveBeenCalledTimes(1);
+	});
+});
+
+/**
  * A function's export name can equal a table's own SQL name (two
  * independently-sourced namespaces, forced into one merged record so
  * `db()`'s own classification can wire `fn` without a second renderer,

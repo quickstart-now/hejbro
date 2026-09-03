@@ -113,7 +113,7 @@ one-way documentation cross-check is unaffected by adding a sibling.
       must keep its literal key type under `as const` — the observer for
       that is `pnpm check-types`, not vitest. Files:
       `packages/cli/src/contract/emit.ts`, its test.
-- [ ] 2.2 (~8m) `[design]` The `db.fn` guard refuses an argument key the
+- [x] 2.2 (~8m) `[design]` The `db.fn` guard refuses an argument key the
       declaration does not name. Red:
       `packages/query/test/client/functions.test.ts` — "refuses a
       right-sized argument object naming an argument the function does

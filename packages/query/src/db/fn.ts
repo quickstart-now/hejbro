@@ -27,6 +27,21 @@ function throwArgumentCountMismatch(
 	);
 }
 
+/** Builds and throws the `function-argument-unknown`-coded, enriched plain `Error` (D57) — a `function` declaration. `declaredKeys` is rendered in the declaration's own order, matching the count-mismatch error's "in the function's declared argument order" convention. */
+function throwArgumentUnknown(
+	functionName: string,
+	unknownKey: string,
+	declaredKeys: ReadonlyArray<string>,
+): never {
+	const declaredList = declaredKeys.map((key) => `"${key}"`).join(", ");
+	throw Object.assign(
+		new Error(
+			`db.fn call to "${functionName}" was given the argument "${unknownKey}", which it does not declare. Next: pass exactly the declared arguments: ${declaredList}.`,
+		),
+		{ code: "function-argument-unknown", unknownKey, declaredKeys },
+	);
+}
+
 /** Builds and throws the `function-return-kind-unsupported`-coded, enriched plain `Error` (D57) — a `function` declaration. `defineTrigger`'s own function declarations return `"trigger"` and are never meant to be called directly through SQL (Postgres attaches them via `CREATE TRIGGER`). */
 function throwUnsupportedReturnKind(functionName: string): never {
 	throw Object.assign(
@@ -181,6 +196,33 @@ const assertArgCount = (
 };
 
 /**
+ * Guards the second precondition every call shares, run after
+ * {@link assertArgCount} so a count mismatch's own message never moves
+ * (D5): every key the caller's object carries is one `declaration`
+ * actually declares. A right-sized object naming an argument the
+ * declaration doesn't (a caller-side typo TypeScript never checked --
+ * plain JS, an `any`, a `JSON.parse`d object) used to pass the count
+ * check alone and silently resolve to `undefined` for the argument it
+ * was misspelling (#697, R2-N1). Named by the caller's own key order,
+ * the first unknown key found -- there can be at most one past
+ * `assertArgCount`'s equal-length check, but "first by caller order"
+ * matches the loader's own "name the first failing entry" convention
+ * regardless.
+ */
+const assertArgNames = (
+	declaration: FunctionDeclaration,
+	namedArgs: Readonly<Record<string, unknown>>,
+): void => {
+	const declaredKeys = declaration.args.map((arg) => arg.key);
+	const unknownKey = Object.keys(namedArgs).find(
+		(key) => !declaredKeys.includes(key),
+	);
+	if (unknownKey !== undefined) {
+		throwArgumentUnknown(declaration.functionName, unknownKey, declaredKeys);
+	}
+};
+
+/**
  * Maps a call's own named-argument object to the positional array
  * `declaration.args`'s own declared order expects — matched by each
  * declared argument's own `key` directly against the caller's object key,
@@ -275,6 +317,7 @@ const buildCall = (
 	readonly positionalArgs: ReadonlyArray<unknown>;
 } => {
 	assertArgCount(declaration, namedArgs);
+	assertArgNames(declaration, namedArgs);
 	const positionalArgs = resolvePositionalArgs(declaration, namedArgs);
 	const placeholders = paramPlaceholders(positionalArgs.length);
 	return {
