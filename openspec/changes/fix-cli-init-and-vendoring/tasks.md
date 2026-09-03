@@ -83,7 +83,7 @@ and `diagnostics` names no argument code — so this group carries one
 delta, not three. The code itself is cited in no document, so the
 one-way documentation cross-check is unaffected by adding a sibling.
 
-- [ ] 2.1 (~9m) `[design]` Every emitted metadata key is an own property
+- [x] 2.1 (~9m) `[design]` Every emitted metadata key is an own property
       of `contractMetadata`. Red:
       `packages/cli/test/contract-emit.test.ts` — "carries a column key
       that would otherwise set the prototype". The input is a

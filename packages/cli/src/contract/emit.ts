@@ -187,12 +187,29 @@ const existingMetaLine = (meta: TableClientMeta): string => {
 	return "\t\t\texisting: true,\n";
 };
 
+/**
+ * A `contractMetadata` object-literal key, quoted the ordinary way for
+ * every name except `__proto__` (#697, R2-N2): that one literal key sets
+ * the prototype instead of creating a property, silently dropping the
+ * table/column/function it names. Emitted as a computed key instead
+ * (`["__proto__"]`), the only form that makes it an own property in an
+ * object literal — every other name (including `constructor`/
+ * `prototype`/`hasOwnProperty`/`toString`, which carry no such special
+ * literal-key meaning) keeps its plain `JSON.stringify` form unchanged.
+ */
+const renderMetadataKey = (key: string): string => {
+	if (key === "__proto__") {
+		return `["__proto__"]`;
+	}
+	return JSON.stringify(key);
+};
+
 const renderTableClientMetaEntry = (computation: TableComputation): string => {
 	const meta = buildTableClientMeta(computation);
 	const columns = Object.entries(meta.columns)
 		.map(
 			([tsKey, column]) =>
-				`\t\t\t\t${JSON.stringify(tsKey)}: { sqlName: ${JSON.stringify(column.sqlName)}, typeNode: ${JSON.stringify(column.typeNode)}, mode: ${JSON.stringify(column.mode)}, notNullElements: ${JSON.stringify(column.notNullElements)} },`,
+				`\t\t\t\t${renderMetadataKey(tsKey)}: { sqlName: ${JSON.stringify(column.sqlName)}, typeNode: ${JSON.stringify(column.typeNode)}, mode: ${JSON.stringify(column.mode)}, notNullElements: ${JSON.stringify(column.notNullElements)} },`,
 		)
 		.join("\n");
 	const foreignKeys = meta.foreignKeys
@@ -201,7 +218,7 @@ const renderTableClientMetaEntry = (computation: TableComputation): string => {
 				`\t\t\t\t{ name: ${JSON.stringify(fk.name)}, columns: ${JSON.stringify(fk.columns)}, referencesSchema: ${JSON.stringify(fk.referencesSchema)}, referencesTable: ${JSON.stringify(fk.referencesTable)}, referencedColumns: ${JSON.stringify(fk.referencedColumns)} },`,
 		)
 		.join("\n");
-	return `\t\t${JSON.stringify(meta.name)}: {
+	return `\t\t${renderMetadataKey(meta.name)}: {
 \t\t\tschema: ${JSON.stringify(meta.schema)},
 \t\t\tname: ${JSON.stringify(meta.name)},
 \t\t\tcolumns: {
@@ -230,7 +247,7 @@ const renderFunctionClientMetaEntry = (fn: FunctionComputation): string => {
 				`\t\t\t\t{ key: ${JSON.stringify(arg.key)}, sqlName: ${JSON.stringify(arg.sqlName)}, typeNode: ${JSON.stringify(arg.typeNode)}, mode: ${JSON.stringify(arg.mode)}, notNullElements: ${JSON.stringify(arg.notNullElements)} },`,
 		)
 		.join("\n");
-	return `\t\t${JSON.stringify(fn.exportName)}: {
+	return `\t\t${renderMetadataKey(fn.exportName)}: {
 \t\t\tschema: ${JSON.stringify(meta.schema)},
 \t\t\tname: ${JSON.stringify(meta.name)},
 \t\t\targs: [
