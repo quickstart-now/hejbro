@@ -25,7 +25,7 @@
 		"prepare": "husky"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "^2.4.14",
+		"@biomejs/biome": "^2.5.10",
 		"@changesets/cli": "^3.0.1",
 		"@commitlint/cli": "^21.0.1",
 		"@commitlint/config-conventional": "^21.0.1",
@@ -37,5 +37,10 @@
 	"packageManager": "pnpm@10.19.0",
 	"engines": {
 		"node": ">=22.18.0"
+	},
+	"pnpm": {
+		"overrides": {
+			"fast-uri": "^3.1.6"
+		}
 	}
 }
