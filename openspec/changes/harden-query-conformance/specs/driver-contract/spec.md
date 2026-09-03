@@ -29,9 +29,10 @@ where a transaction opens and ends reads SQL's own transaction-control
 statements only; the check still reads no driver's own settings text. A
 statement is recognized by the transaction-control keyword it leads
 with, not by its exact text, so the ordinary spellings of opening and
-ending a transaction are all seen. A statement is classified by the
-whitespace-delimited word its own text leads with, and a string is never
-split on `;`. A statement that only manipulates a
+ending a transaction are all seen. A statement is classified by the word
+its text leads with once that text is trimmed, lower-cased, and
+stripped of any trailing semicolons; a string is never split on an
+interior `;`. A statement that only manipulates a
 savepoint — establishing one, releasing one, or rolling back to one —
 neither opens nor ends a transaction, and counts as an ordinary
 statement here. The refusal above reads which record the caller handed

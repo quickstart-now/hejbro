@@ -109,24 +109,21 @@ const assertFalseTierConformance = (
 
 /**
  * SQL's own transaction-control vocabulary, recognized by the keyword a
- * normalized statement (trimmed, lower-cased, one trailing semicolon
- * dropped) leads with — never a substring, so a function body's own
- * `do $$ begin … end $$` or a caller statement carrying one of these
- * words inside a string literal reads as an ordinary statement. The kit
- * still reads no driver's own settings text; this is the one exception,
- * and it stays scoped to SQL's own control words. A savepoint statement
- * (`savepoint s`, `release savepoint s`, `rollback to savepoint s`) is
- * ordinary too — `rollback to …` is excluded from the bare `rollback`
- * closer by name, so a savepoint rollback is never mistaken for ending
- * the enclosing transaction. Observation limit: this still can't see a
- * driver-decorated opener or closer whose own leading word isn't in this
- * vocabulary. Classification reads the whitespace-delimited word a
- * statement leads with, and a string is never split on `;` -- so
- * whether a semicolon touches that leading word decides the outcome:
- * `"commit; select 3"` leads with `commit;`, outside the vocabulary, so
- * it reads as an ordinary statement, while `"commit ; select 3"` leads
- * with the bare word `commit` and is recognized as ending a
- * transaction.
+ * normalized statement (trimmed, lower-cased, one or more trailing
+ * semicolons dropped) leads with — never a substring, so a function
+ * body's own `do $$ begin … end $$` or a caller statement carrying one
+ * of these words inside a string literal reads as an ordinary
+ * statement. The kit still reads no driver's own settings text; this is
+ * the one exception, and it stays scoped to SQL's own control words. A
+ * savepoint statement (`savepoint s`, `release savepoint s`, `rollback
+ * to savepoint s`) is ordinary too — `rollback to …` is excluded from
+ * the bare `rollback` closer by name, so a savepoint rollback is never
+ * mistaken for ending the enclosing transaction. Observation limit:
+ * this still can't see a driver-decorated opener or closer whose own
+ * leading word isn't in this vocabulary. A statement is classified by
+ * the word its text leads with once that text is trimmed, lower-cased,
+ * and stripped of any trailing semicolons; a string is never split on
+ * an interior `;`.
  */
 type TransactionControlKind = "open" | "end" | undefined;
 
