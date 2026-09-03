@@ -190,6 +190,100 @@ const assertEveryEntryPointLoads = async (
 	);
 };
 
+type LossReportRow = {
+	readonly prefix: string;
+	readonly identifier: string | null;
+	readonly derived: boolean;
+	readonly dumpEvidence: string | null;
+};
+
+/**
+ * D110: the full population of `Omitted:`/`Approximated:` lines the full
+ * corpus's own loss report produces, in the order it emits them -- not one
+ * example. `prefix` stops right after the quoted identifier (or, for the
+ * one line with none, at a stable leading clause), so a later wording
+ * change to a sentence's tail never breaks this table. `derived` rows name
+ * an object Postgres itself named (an unnamed inline `unique`/
+ * `references`) -- `dumpEvidence` for those is the clause that produced
+ * the name, never the name itself, since the name is never written down.
+ */
+const LOSS_REPORT_ROWS: ReadonlyArray<LossReportRow> = [
+	{
+		prefix:
+			'Approximated: the UNIQUE constraint "app.users.users_email_key" is',
+		identifier: "app.users.users_email_key",
+		derived: true,
+		dumpEvidence: "email text not null unique,",
+	},
+	{
+		prefix:
+			'Approximated: the UNIQUE constraint "catalog.products.products_sku_key" is',
+		identifier: "catalog.products.products_sku_key",
+		derived: false,
+		dumpEvidence: "constraint products_sku_key unique (sku),",
+	},
+	{
+		prefix: 'Approximated: column "catalog.products.external_ref" keeps',
+		identifier: "catalog.products.external_ref",
+		derived: false,
+		dumpEvidence:
+			"external_ref integer not null default nextval('catalog.external_ref_seq'),",
+	},
+	{
+		prefix:
+			"Approximated: every default, check, generated, and index-predicate expression is carried as raw SQL text,",
+		identifier: null,
+		derived: false,
+		dumpEvidence: null,
+	},
+	{
+		prefix: 'Omitted: schema "Marketing" --',
+		identifier: "Marketing",
+		derived: false,
+		dumpEvidence: 'create schema "Marketing";',
+	},
+	{
+		prefix: 'Omitted: table "shop.Widgets" --',
+		identifier: "shop.Widgets",
+		derived: false,
+		dumpEvidence: 'create table shop."Widgets" (',
+	},
+	{
+		prefix: 'Omitted: index "catalog.orders.IX_Orders_Status" --',
+		identifier: "catalog.orders.IX_Orders_Status",
+		derived: false,
+		dumpEvidence: 'create index "IX_Orders_Status" on catalog.orders (status);',
+	},
+	{
+		prefix: 'Omitted: check constraint "catalog.orders.CK_Orders_Total" --',
+		identifier: "catalog.orders.CK_Orders_Total",
+		derived: false,
+		dumpEvidence: 'constraint "CK_Orders_Total" check (total >= 0)',
+	},
+	{
+		prefix: 'Omitted: foreign key "shop.orders.orders_widget_id_fkey" --',
+		identifier: "shop.orders.orders_widget_id_fkey",
+		derived: true,
+		dumpEvidence: 'widget_id integer not null references shop."Widgets" (id)',
+	},
+	{
+		prefix: 'Omitted: column "catalog.products.a*/b" --',
+		identifier: "catalog.products.a*/b",
+		derived: false,
+		dumpEvidence: '"a*/b" text,',
+	},
+	{
+		prefix: 'Omitted: column "people.accounts._id" --',
+		identifier: "people.accounts._id",
+		derived: false,
+		dumpEvidence: "_id text,",
+	},
+];
+
+/** D110: an object Postgres names for us never writes that name into the dump -- only the clause that produced it does. */
+const lastDotSegment = (identifier: string): string =>
+	identifier.split(".").at(-1) ?? identifier;
+
 describe.each(PG_IMAGES)("brownfield corpus / %s", (image) => {
 	const container = `hejbro-brownfield-${process.pid}-${image.replace(/[^a-z0-9]/gi, "")}`;
 	const state: { hostPort: string } = { hostPort: "" };
@@ -261,6 +355,50 @@ describe.each(PG_IMAGES)("brownfield corpus / %s", (image) => {
 				// none stays hidden behind another.
 				expect(firstImport.exitCode).toBe(0);
 
+				const lossReportLines = firstImport.stdout
+					.split("\n")
+					.filter((line) => /^(Omitted|Approximated):/.test(line));
+				// D110: the full population the loss report can produce for this
+				// corpus, not one example -- order and count both matter, so a
+				// missing or reordered line fails here before the per-row checks
+				// below even run.
+				expect(
+					lossReportLines.map((line) => line.match(/"([^"]*)"/)?.[1] ?? null),
+				).toEqual(LOSS_REPORT_ROWS.map((row) => row.identifier));
+				LOSS_REPORT_ROWS.map((row) =>
+					expect(firstImport.stdout, row.identifier ?? row.prefix).toContain(
+						row.prefix,
+					),
+				);
+				const rowsWithDumpEvidence = LOSS_REPORT_ROWS.filter(
+					(row): row is LossReportRow & { dumpEvidence: string } =>
+						row.dumpEvidence !== null,
+				);
+				rowsWithDumpEvidence.map((row) =>
+					expect(
+						DUMP_SQL.split(row.dumpEvidence).length - 1,
+						row.dumpEvidence,
+					).toBe(1),
+				);
+				const namedLossReportRows = LOSS_REPORT_ROWS.filter(
+					(row): row is LossReportRow & { identifier: string } =>
+						row.identifier !== null,
+				);
+				namedLossReportRows
+					.filter((row) => !row.derived)
+					.map((row) =>
+						expect(DUMP_SQL, row.identifier).toContain(
+							lastDotSegment(row.identifier),
+						),
+					);
+				namedLossReportRows
+					.filter((row) => row.derived)
+					.map((row) =>
+						expect(DUMP_SQL, row.identifier).not.toContain(
+							lastDotSegment(row.identifier),
+						),
+					);
+
 				// Written outside "src/" -- the default entry glob
 				// (init.ts's "src/**/*.schema.ts") would otherwise match
 				// both copies once baseline runs below, turning this
@@ -292,17 +430,18 @@ describe.each(PG_IMAGES)("brownfield corpus / %s", (image) => {
 				const migrateResult = await runCli(cwd, ["migrate", "--url", url()]);
 				expect(migrateResult.exitCode).toBe(0);
 				const checkResult = await runCli(cwd, ["check", "--url", url()]);
-				// (d): observed, not asserted, until #716 is ruled on --
-				// every `serial()` column's own owned-sequence default
-				// (`nextval(...)`) is missing from the declaration `check`
-				// compares against, so a clean serial column reports as
-				// differing although the loss report omitted or
-				// approximated nothing about it.
-				const findingCount = (checkResult.stderr.match(/^error\[/gm) ?? [])
-					.length;
-				console.log(
-					`[brownfield/full-corpus] check exitCode=${checkResult.exitCode} findings=${findingCount}`,
+				expect(checkResult.exitCode).toBe(0);
+				expect(checkResult.stdout).toContain("check: no differences.");
+				expect(checkResult.stderr.match(/^error\[/gm) ?? []).toEqual([]);
+				// The loss report's own promise from the import above -- an
+				// omitted table keeps surfacing in `check`'s unmanaged inventory,
+				// an omitted schema never surfaces at all -- pinned here against
+				// `check`'s real output.
+				expect(checkResult.stdout).toContain(
+					"unmanaged table (not covered by any declaration): shop.Widgets",
 				);
+				expect(checkResult.stdout).not.toContain("Marketing");
+				// the column line's own check promise is not asserted -- #726
 			} finally {
 				await removeCliFixtureDir(cwd);
 			}
