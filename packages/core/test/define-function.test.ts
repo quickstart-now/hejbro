@@ -418,6 +418,97 @@ describe("an argument key whose derived name is not a hejbro SQL name is refused
 	});
 });
 
+describe("a literal __proto__ key replaces the args object's prototype instead of declaring an argument (#679, D106 review B1)", () => {
+	it("a literal __proto__: key is refused with args-prototype-key, and no declaration is produced", () => {
+		expect(
+			codeOf(() =>
+				defineFunction(
+					app,
+					"echo_proto",
+					{ args: { __proto__: uuid() }, returns: { typeName: "uuid" } },
+					(ctx) => {
+						ctx.return(sql`null`);
+					},
+				),
+			),
+		).toBe("args-prototype-key");
+	});
+
+	it("a computed __proto__ key is still refused as an invalid SQL name (no regression)", () => {
+		expect(
+			codeOf(() =>
+				defineFunction(
+					app,
+					"echo_proto_computed",
+					{ args: { ["__proto__"]: uuid() }, returns: { typeName: "uuid" } },
+					(ctx) => {
+						ctx.return(sql`null`);
+					},
+				),
+			),
+		).toBe("invalid-sql-name");
+	});
+
+	it("a spread of a computed __proto__ key copies it as an own property, still refused as invalid-sql-name", () => {
+		expect(
+			codeOf(() =>
+				defineFunction(
+					app,
+					"echo_proto_spread",
+					{
+						args: { ...{ ["__proto__"]: uuid() } },
+						returns: { typeName: "uuid" },
+					},
+					(ctx) => {
+						ctx.return(sql`null`);
+					},
+				),
+			),
+		).toBe("invalid-sql-name");
+	});
+
+	it("args built with Object.create(null) is accepted (control)", () => {
+		const nullProtoArgs = Object.assign(Object.create(null) as object, {
+			status: text(),
+		}) as { readonly status: ReturnType<typeof text> };
+		expect(Object.getPrototypeOf(nullProtoArgs)).toBeNull();
+		const fn = defineFunction(
+			app,
+			"echo_null_proto",
+			{ args: nullProtoArgs, returns: { typeName: "text" } },
+			(ctx, args) => {
+				ctx.return(args.status);
+			},
+		);
+		expect(fn.args[0]?.argName).toBe("status");
+	});
+
+	it("a literal __proto__ key beside a real argument is still refused, and the message never claims no key declares an argument", () => {
+		let caught: unknown;
+		try {
+			defineFunction(
+				app,
+				"echo_proto_with_real_arg",
+				{
+					args: { __proto__: uuid(), realArg: text() },
+					returns: { typeName: "uuid" },
+				},
+				(ctx) => {
+					ctx.return(sql`null`);
+				},
+			);
+		} catch (error) {
+			caught = error;
+		}
+		expect((caught as { code?: string } | undefined)?.code).toBe(
+			"args-prototype-key",
+		);
+		expect((caught as { message?: string } | undefined)?.message).not.toMatch(
+			/no key on it declares an argument/,
+		);
+	});
+});
+
 describe("a returns builder with notNullElements is refused (#433)", () => {
 	it("rejects notNullElements at a returns position", () => {
 		expect(

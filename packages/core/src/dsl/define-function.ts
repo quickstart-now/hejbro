@@ -188,11 +188,44 @@ type ResolvedArgs<TArgs extends Record<string, ColumnBuilder>> = {
 	readonly refs: ArgRefs<TArgs>;
 };
 
+/**
+ * A literal `__proto__:` key in an object literal (unlike a computed
+ * `["__proto__"]` key) replaces the object's prototype instead of
+ * defining an own property, so that one key never reaches
+ * `Object.entries` at all — a caller who wrote it gets a function that
+ * silently declares no argument under it, not a name to validate.
+ * `Object.getPrototypeOf` only observes "the prototype was replaced", not
+ * "the caller wrote `__proto__:`" (a caller passing a custom prototype
+ * object never wrote that key either), so the message states the
+ * observation and its most common cause separately, never the other way
+ * around. `null` is legitimate (`Object.create(null)`), and `args` itself
+ * being `undefined` (no `args` config at all) is not this check's
+ * concern.
+ */
+const assertArgsPrototypeNotReplaced = (
+	identity: string,
+	declaredAt: string | null,
+	args: object,
+): void => {
+	const argsPrototype = Object.getPrototypeOf(args);
+	if (argsPrototype === Object.prototype || argsPrototype === null) {
+		return;
+	}
+	throwHejbroError(
+		"args-prototype-key",
+		`defineFunction() "${identity}" received an "args" object whose prototype is neither Object.prototype nor null. This is what a literal __proto__: key in an object literal does — it replaces the prototype instead of declaring an argument. Next: declare it as a computed key ["__proto__"] (which is then refused as an invalid SQL name), rename the argument, or pass a plain object literal.`,
+		declaredAt,
+	);
+};
+
 const resolveArgs = <TArgs extends Record<string, ColumnBuilder>>(
 	identity: string,
 	declaredAt: string | null,
 	args: TArgs | undefined,
 ): ResolvedArgs<TArgs> => {
+	if (args !== undefined) {
+		assertArgsPrototypeNotReplaced(identity, declaredAt, args);
+	}
 	const resolved = Object.entries(args ?? {}).map(([key, builder]) => {
 		const argName = toSnakeCase(key);
 		assertSqlName(
