@@ -7,10 +7,9 @@
 -- single, standing corpus. No CREATE ROLE, no GRANT -- applied as
 -- `postgres` (psql -f), the way the standing witness applies it.
 --
--- R5-blocked schemas (import aborts on these today -- #711, D106 round 5,
--- OPEN, not yet merged to dev): shop, people, inventory.
--- Clean schemas (import succeeds today, R1-R4 already on dev): app,
--- audit, billing, catalog, "Marketing".
+-- Schemas carrying a D106 round-5 shape (#711): shop, people, inventory.
+-- Schemas carrying only round 1-4 shapes: app, audit, billing, catalog,
+-- "Marketing".
 --
 -- Round attribution is per shape (`-- shape: ...` above the object that
 -- carries it), sourced from each round's own issue body (`gh issue view
@@ -25,8 +24,7 @@
 -- adjacent foreign key (shape: R1 #680 -- "a cross-schema enum
 -- reference was not a file-graph edge ... produced an import cycle the
 -- emitter never cut, and the loader crashed under either file order").
--- Both rounds are already on dev (upstream/dev a3c3d802 and earlier), so
--- this trio is expected to import cleanly today.
+-- Both rounds' corrections are on dev, so this trio imports cleanly.
 -- ---------------------------------------------------------------------
 
 create schema audit;
@@ -83,7 +81,7 @@ create table billing.users (
 -- `serial` column (owned sequence, no loss), a `generated always as
 -- identity` column, an unowned `nextval(...)` default (approximated, its
 -- own sequence never inferred), a partial index, an expression index.
--- Already on dev, expected clean today.
+-- Its correction is on dev; imports cleanly.
 -- ---------------------------------------------------------------------
 
 create schema catalog;
@@ -132,9 +130,9 @@ create index "IX_Orders_Status" on catalog.orders (status);
 -- hejbro SQL identifier (shape: R4 #710 -- "a table or schema with an
 -- invalid name is omitted with its dependents"), CamelCase beside every
 -- snake_case schema above it. Deliberately not referenced by anything
--- outside itself, so its omission stays self-contained and clean today
--- (unlike the shapes in "shop" below, which chain an invalid name
--- through a live foreign key -- still R5-blocked).
+-- outside itself, so its omission stays self-contained (unlike the
+-- shapes in "shop" below, which chain an invalid name through a live
+-- foreign key).
 -- ---------------------------------------------------------------------
 
 create schema "Marketing";
@@ -145,7 +143,7 @@ create table "Marketing".campaigns (
 );
 
 -- ---------------------------------------------------------------------
--- shop: R5-blocked (#711, OPEN -- not yet merged). R5-B1 -- "a foreign
+-- shop: D106 round 5 (#711). R5-B1 -- "a foreign
 -- key whose *target* table or schema has a name no declaration can
 -- carry still aborts the whole reading" -- and R5-N2 (non-blocking, same
 -- issue) -- "the UNIQUE-constraint approximation is detected on the
@@ -159,14 +157,10 @@ create schema shop;
 -- R5-N2 #711 (a live foreign key into it, and a UNIQUE constraint on it)
 -- -- "Widgets" is CamelCase, so its own name is not a valid hejbro SQL
 -- identifier. R5-B1 and R5-N2 are two DIFFERENT variables this one
--- fixture carries at once, not one bug under two names: confirmed
--- (lead's own build --force'd measurement, 2026-09-03, stack frame
--- `referencesFor`/`existingTable`) that today's abort is the R5-B1
--- path -- shop.orders' own inbound foreign key into "Widgets" -- the
--- UNIQUE constraint below (R5-N2) never gets the chance to be its own
--- defect on this fixture, since the reading aborts before reaching it.
--- Kept anyway: R5-N2 stays its own observation target once #711 lands
--- and R5-B1's abort no longer masks it.
+-- fixture carries at once, not one bug under two names: before #711 the
+-- abort was the R5-B1 path (shop.orders' own inbound foreign key into
+-- "Widgets", stack frame `referencesFor`/`existingTable`) and masked
+-- R5-N2; the witness now pins each on its own.
 create table shop."Widgets" (
 	id serial primary key,
 	sku text not null,
@@ -177,15 +171,15 @@ create table shop."Widgets" (
 
 -- shape: R5-B1 #711 -- shop.orders is validly named and otherwise
 -- unremarkable, but its own foreign key targets the omitted
--- shop."Widgets" -- today this aborts import/pull entirely instead of
--- being omitted and named, for the whole run, not just this table.
+-- shop."Widgets" -- before #711 this aborted import/pull entirely
+-- instead of being omitted and named.
 create table shop.orders (
 	id serial primary key,
 	widget_id integer not null references shop."Widgets" (id)
 );
 
 -- ---------------------------------------------------------------------
--- people: R5-blocked (#711, OPEN). R5-B2 -- "a column whose SQL name
+-- people: D106 round 5 (#711). R5-B2 -- "a column whose SQL name
 -- starts with `_` round-trips through the key rule but fails
 -- assertSqlName in table(), so it aborts the reading instead of being
 -- omitted and named."
@@ -203,7 +197,7 @@ create table people.accounts (
 );
 
 -- ---------------------------------------------------------------------
--- inventory: R5-blocked (#711, OPEN). R5-B3 -- "checksFor matches a
+-- inventory: D106 round 5 (#711). R5-B3 -- "checksFor matches a
 -- check expression on schema + constraint name only, so two tables in
 -- one schema sharing a check name get each other's expression; the
 -- baseline DDL then fails against the very database it was read from."
