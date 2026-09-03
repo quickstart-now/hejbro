@@ -2,11 +2,16 @@ import { schema } from "@hejbro/core";
 import { describe, expect, it } from "vitest";
 import type { Catalog } from "../src/check/catalog";
 import {
+	isNameDeclarable,
+	partitionForeignKeys,
 	partitionSchemas,
 	partitionTables,
 	withInventorySignal,
 } from "../src/infer/compose";
-import type { InferredTableFacts } from "../src/infer/table";
+import type {
+	InferredForeignKey,
+	InferredTableFacts,
+} from "../src/infer/table";
 
 const emptyCatalog = (): Catalog => ({
 	schemas: [],
@@ -64,13 +69,50 @@ describe("partitionSchemas / D106 R4-B1", () => {
 
 const app = schema("app");
 
-const tableFacts = (tableName: string): InferredTableFacts => ({
+const tableFacts = (
+	tableName: string,
+	foreignKeys: ReadonlyArray<InferredForeignKey> = [],
+): InferredTableFacts => ({
 	schema: app,
 	tableName,
 	columns: [],
-	foreignKeys: [],
+	foreignKeys,
 	checks: [],
 	indexes: [],
+});
+
+/** A minimal inbound foreign key -- D106 R5-B1's own unit tests need one, and `tableFacts`'s own default (`foreignKeys: []`) never produced one before this round. */
+const foreignKeyTo = (
+	targetSchema: string,
+	targetTable: string,
+	name = "fk",
+): InferredForeignKey => ({
+	name,
+	sourceColumns: ["target_id"],
+	targetSchema,
+	targetTable,
+	targetColumns: [
+		{
+			sqlName: "id",
+			facts: {
+				schema: targetSchema,
+				table: targetTable,
+				name: "id",
+				sqlType: "uuid",
+				baseTypeName: "uuid",
+				isArray: false,
+				notNull: true,
+				catalogDefault: null,
+				identityKind: "",
+				generatedKind: "",
+				identityOptions: null,
+				isSerialOwned: false,
+				enumDeclaration: null,
+			},
+		},
+	],
+	onDelete: "a",
+	onUpdate: "a",
 });
 
 // D106 R4-B1: a table whose own catalog name `table()` cannot express
@@ -127,5 +169,101 @@ describe("withInventorySignal / D106 R4-B3", () => {
 		expect(result).toEqual([
 			{ schema: "app", sqlName: "Widgets", stillReportedInInventory: false },
 		]);
+	});
+});
+
+// D106 R5-B2: round-trippable alone is not enough -- a name can round-
+// trip and still fail D36 (`table()`'s own `assertSqlName`), and only
+// one predicate should ever answer "can this be declared".
+describe("isNameDeclarable / D106 R5-B2", () => {
+	it("accepts an ordinary column whose key round-trips to a D36 name", () => {
+		expect(isNameDeclarable("id", "id")).toBe(true);
+	});
+
+	it("rejects a leading-underscore name even though it is its own round-trip fixed point", () => {
+		// toSnakeCase("_id") === "_id" (the round trip holds), but
+		// assertSqlName's own pattern (^[a-z][a-z0-9_]*$) starts with
+		// a-z, not _ -- the exact gap D106 R5-B2 measured live.
+		expect(isNameDeclarable("_id", "_id")).toBe(false);
+	});
+
+	it("rejects a name whose key does not round-trip at all (the pre-existing case)", () => {
+		expect(isNameDeclarable("createdAt", "createdAt")).toBe(false);
+	});
+});
+
+// D106 R5-B1: a foreign key's own name being fine is not enough --
+// `referencesFor` (`infer/table.ts`) used to build an `existingTable`
+// handle against the target regardless of whether the reading itself
+// kept it, aborting the whole reading on a name it had already decided
+// to omit one report line up.
+describe("partitionForeignKeys / D106 R5-B1", () => {
+	it("keeps a foreign key whose target table survived", () => {
+		const orders = tableFacts("orders", [foreignKeyTo("app", "widgets")]);
+		const widgets = tableFacts("widgets");
+		const result = partitionForeignKeys(
+			[orders, widgets],
+			new Set(["app.orders", "app.widgets"]),
+			new Set(),
+		);
+
+		expect(result.omittedForeignKeys).toEqual([]);
+		expect(
+			result.tables.find((table) => table.tableName === "orders")?.foreignKeys,
+		).toHaveLength(1);
+	});
+
+	it("omits a foreign key whose target table was itself omitted, naming the target as a table", () => {
+		const orders = tableFacts("orders", [
+			foreignKeyTo("app", "Widgets", "fk_widget"),
+		]);
+		const result = partitionForeignKeys(
+			[orders],
+			new Set(["app.orders"]),
+			new Set(),
+		);
+
+		expect(result.omittedForeignKeys).toEqual([
+			{
+				schema: "app",
+				table: "orders",
+				name: "fk_widget",
+				targetKind: "table",
+				target: "app.Widgets",
+			},
+		]);
+		expect(result.tables[0]?.foreignKeys).toEqual([]);
+	});
+
+	it("omits a foreign key whose target schema was itself omitted, naming the target as a schema", () => {
+		const orders = tableFacts("orders", [
+			foreignKeyTo("App", "orders", "fk_owner"),
+		]);
+		const result = partitionForeignKeys(
+			[orders],
+			new Set(["app.orders"]),
+			new Set(["App"]),
+		);
+
+		expect(result.omittedForeignKeys).toEqual([
+			{
+				schema: "app",
+				table: "orders",
+				name: "fk_owner",
+				targetKind: "schema",
+				target: "App",
+			},
+		]);
+		expect(result.tables[0]?.foreignKeys).toEqual([]);
+	});
+
+	it("keeps a self-referencing foreign key even when the table's own identity is absent from the surviving set argument", () => {
+		const widgets = tableFacts("widgets", [
+			foreignKeyTo("app", "widgets", "fk_parent"),
+		]);
+		const result = partitionForeignKeys([widgets], new Set(), new Set());
+
+		expect(result.omittedForeignKeys).toEqual([]);
+		expect(result.tables[0]?.foreignKeys).toHaveLength(1);
 	});
 });

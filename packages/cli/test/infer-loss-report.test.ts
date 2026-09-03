@@ -29,6 +29,7 @@ const emptyFacts = (command: "import" | "pull"): LossReportFacts => ({
 	omittedTables: [],
 	omittedIndexes: [],
 	omittedChecks: [],
+	omittedForeignKeys: [],
 });
 
 describe("buildLossReport / 1.7", () => {
@@ -429,9 +430,43 @@ describe("detectUniqueIndexApproximations / 1.7", () => {
 			extensions: [],
 		};
 
-		expect(detectUniqueIndexApproximations(catalog)).toEqual([
-			{ schema: "app", table: "pairs", name: "pairs_a_b_unique" },
-		]);
+		expect(
+			detectUniqueIndexApproximations(catalog, new Set(["app.pairs"])),
+		).toEqual([{ schema: "app", table: "pairs", name: "pairs_a_b_unique" }]);
+	});
+
+	// D106 R5-N2: this detector alone read raw, schema-filtered catalog
+	// rows with no surviving-table filter, so a UNIQUE constraint on an
+	// omitted table (an invalid name) still announced an approximation
+	// for an object the very next report line said was never inferred.
+	it("names nothing for a UNIQUE constraint on a table the reading omitted", () => {
+		const catalog: Catalog = {
+			schemas: [],
+			tables: [],
+			columns: [],
+			constraints: [
+				{
+					schema: "app",
+					table: "Widgets",
+					name: "widgets_email_key",
+					type: "u",
+					columns: ["email"],
+				},
+			],
+			indexes: [],
+			enums: [],
+			sequences: [],
+			functions: [],
+			views: [],
+			policies: [],
+			triggers: [],
+			tableGrants: [],
+			schemaUsageGrants: [],
+			defaultTableGrants: [],
+			extensions: [],
+		};
+
+		expect(detectUniqueIndexApproximations(catalog, new Set())).toEqual([]);
 	});
 });
 

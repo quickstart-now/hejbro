@@ -11,12 +11,27 @@ export type UniqueIndexApproximation = {
 	readonly name: string;
 };
 
-/** Every named UNIQUE table constraint (CI-G1-R1-06 (B), lead-confirmed live: its backing index carries the identical name) -- 1.4's own adapter already reads it only as that index, so this is the report-side half naming the approximation. */
+/**
+ * Every named UNIQUE table constraint (CI-G1-R1-06 (B), lead-confirmed
+ * live: its backing index carries the identical name) -- 1.4's own
+ * adapter already reads it only as that index, so this is the
+ * report-side half naming the approximation. `survivingTableIdentities`
+ * (D106 R5-N2) is the same "<schema>.<table>" set every sibling
+ * detector reads off `mergedTables` -- this one alone used to read raw,
+ * schema-filtered catalog rows with no such filter, so a UNIQUE
+ * constraint on a table the reading itself omitted (an invalid name)
+ * still announced an approximation for an object the very next report
+ * line said was never inferred at all.
+ */
 export const detectUniqueIndexApproximations = (
 	catalog: Catalog,
+	survivingTableIdentities: ReadonlySet<string>,
 ): ReadonlyArray<UniqueIndexApproximation> =>
 	catalog.constraints
 		.filter((constraint) => constraint.type === "u")
+		.filter((constraint) =>
+			survivingTableIdentities.has(`${constraint.schema}.${constraint.table}`),
+		)
 		.map((constraint) => ({
 			schema: constraint.schema,
 			table: constraint.table,
@@ -149,6 +164,25 @@ export type OmittedCheck = {
 	readonly sqlName: string;
 };
 
+/**
+ * A foreign key whose own name is a valid hejbro SQL identifier, but
+ * whose *target* table or schema was itself omitted (D106 R5-B1) --
+ * `existingTable(fk.targetSchema, fk.targetTable, …)` would otherwise
+ * assert a name the reading already decided it could not carry,
+ * aborting the whole reading over a reference into an object one
+ * report line up already says is gone. Costs that foreign key alone;
+ * the table holding it and everything else on it are still declared.
+ */
+export type OmittedForeignKey = {
+	readonly schema: string;
+	readonly table: string;
+	readonly name: string;
+	/** Whether the target was left out because its own table name was inexpressible, or because its whole schema was. */
+	readonly targetKind: "table" | "schema";
+	/** `"<schema>.<table>"` for a `"table"` target, `"<schema>"` alone for a `"schema"` one -- the identity `undeclarableNameLine`'s own sibling lines already use. */
+	readonly target: string;
+};
+
 export type LossReportFacts = {
 	readonly command: "import" | "pull";
 	readonly roleNames: ReadonlyArray<string>;
@@ -166,6 +200,7 @@ export type LossReportFacts = {
 	readonly omittedTables: ReadonlyArray<OmittedTable>;
 	readonly omittedIndexes: ReadonlyArray<OmittedIndex>;
 	readonly omittedChecks: ReadonlyArray<OmittedCheck>;
+	readonly omittedForeignKeys: ReadonlyArray<OmittedForeignKey>;
 };
 
 const guessedLine = (
@@ -399,6 +434,54 @@ const omittedCheckLines = (
 		(check) => `${check.schema}.${check.table}.${check.sqlName}`,
 	).map(omittedCheckLine);
 
+/** import's own remedy: renaming the target (in the database) is what makes it reachable again, and only a fresh reading picks that up. */
+const omittedForeignKeyRemedyForImport = (
+	targetKind: OmittedForeignKey["targetKind"],
+): string => {
+	if (targetKind === "schema") {
+		return "rename the schema in the database, then re-run `hejbro import`.";
+	}
+	return "rename the table in the database, then re-run `hejbro import`.";
+};
+
+/** pull's own remedy, mirroring the schema/table omission lines' own pull wording -- no "re-run", since `pull` names the same live database on every run by construction. */
+const omittedForeignKeyRemedyForPull = (
+	targetKind: OmittedForeignKey["targetKind"],
+): string => {
+	if (targetKind === "schema") {
+		return "Rename the schema in the database, then link the schema repository.";
+	}
+	return "Rename the table in the database, then link the schema repository.";
+};
+
+/**
+ * D106 R5-B1: a foreign key whose own name is fine but whose *target*
+ * was omitted -- costs that one foreign key, never the table holding
+ * it (which is still declared, minus this one relation) nor the whole
+ * reading. Named by the target's own identity and kind, since "which
+ * kind of object is missing" changes nothing about *why* — only about
+ * what un-omitting it requires.
+ */
+const omittedForeignKeyLineForImport = (fk: OmittedForeignKey): string =>
+	`Omitted: foreign key "${fk.schema}.${fk.table}.${fk.name}" -- references ${fk.targetKind} "${fk.target}", which this reading left out. Next: ${omittedForeignKeyRemedyForImport(fk.targetKind)}`;
+
+const omittedForeignKeyLineForPull = (fk: OmittedForeignKey): string =>
+	`Omitted: foreign key "${fk.schema}.${fk.table}.${fk.name}" -- references ${fk.targetKind} "${fk.target}", which this reading left out. ${omittedForeignKeyRemedyForPull(fk.targetKind)}`;
+
+const omittedForeignKeyLines = (
+	foreignKeys: ReadonlyArray<OmittedForeignKey>,
+	command: LossReportFacts["command"],
+): ReadonlyArray<string> => {
+	const ordered = sortedBy(
+		foreignKeys,
+		(fk) => `${fk.schema}.${fk.table}.${fk.name}`,
+	);
+	if (command === "pull") {
+		return ordered.map(omittedForeignKeyLineForPull);
+	}
+	return ordered.map(omittedForeignKeyLineForImport);
+};
+
 const wayOutLine = (command: LossReportFacts["command"]): string => {
 	if (command === "pull") {
 		return "The loss ends when you link the schema repository.";
@@ -430,6 +513,7 @@ export const buildLossReport = (
 	...omittedTableLines(facts.omittedTables, facts.command),
 	...omittedIndexLines(facts.omittedIndexes),
 	...omittedCheckLines(facts.omittedChecks),
+	...omittedForeignKeyLines(facts.omittedForeignKeys, facts.command),
 	...undeclarableNameLines(facts.undeclarableNameColumns, facts.command),
 	wayOutLine(facts.command),
 ];

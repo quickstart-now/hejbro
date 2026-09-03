@@ -110,7 +110,20 @@ const psqlFile = (database: string, sql: string): void => {
  * it even when the table's own name would otherwise be fine. `app`
  * holds the ordinary sibling of each kind (`widgets`, its check and its
  * index) beside the one bad name of that kind (`"Widgets"`,
- * `"CK_Widgets"`, `"IX_Widgets"`).
+ * `"CK_Widgets"`, `"IX_Widgets"`) -- `"Widgets"` also carries its own
+ * `UNIQUE` constraint (D106 R5-N2 measurement/#711: another team's live
+ * measurement found this exact combination made the whole reading
+ * abort with `error[invalid-sql-name]`; this fixture is the live
+ * witness for what this branch actually does about it). `legacy`
+ * (D106 R5-B2) holds a
+ * leading-underscore column (`_id`) beside an ordinary one (`label`) --
+ * round-trippable (`toSnakeCase("_id") === "_id"`) but not a valid
+ * hejbro SQL identifier, the exact gap between the two rules that used
+ * to abort the whole reading. `line_items` (D106 R5-B1) holds two
+ * foreign keys into objects this reading omits for their own names --
+ * one into `app."Widgets"` (a table-kind omission), one into
+ * `"App".orders` (a schema-kind one) -- proving a bad name elsewhere
+ * costs only the relation into it, never `line_items` itself.
  */
 const SCHEMA_SQL = `
 create schema "App";
@@ -129,7 +142,20 @@ create index widgets_name_idx on app.widgets (name);
 create index "IX_Widgets" on app.widgets (name);
 
 create table app."Widgets" (
-	id uuid primary key default gen_random_uuid()
+	id uuid primary key default gen_random_uuid(),
+	sku text not null,
+	constraint "Widgets_sku_key" unique (sku)
+);
+
+create table app.legacy (
+	_id uuid primary key default gen_random_uuid(),
+	label text not null
+);
+
+create table app.line_items (
+	id uuid primary key default gen_random_uuid(),
+	widget_id uuid references app."Widgets"(id),
+	owner_order_id uuid references "App".orders(id)
 );
 `;
 
@@ -239,6 +265,14 @@ describe("catalog-inference / D106 R4-B1: a bad name costs the object, not the r
 			expect(first.stdout).toContain(
 				'Omitted: check constraint "app.widgets.CK_Widgets"',
 			);
+			// D106 R5-N2 measurement/#711: a `UNIQUE` constraint on an
+			// omitted table used to abort the whole reading on a live
+			// database (`error[invalid-sql-name]`, another team's own
+			// measurement) -- the run above already reached this line
+			// without throwing, and the constraint gets no approximation
+			// line naming an object the line just above already says was
+			// never inferred.
+			expect(first.stdout).not.toContain("Widgets_sku_key");
 			// D106 R4-B3/#707: three distinct consequence sentences, not one
 			// generic "check will not report this" line reused three times --
 			// "Widgets"'s own schema ("app") still declares "widgets", so
@@ -249,6 +283,21 @@ describe("catalog-inference / D106 R4-B1: a bad name costs the object, not the r
 			);
 			expect(first.stdout).toContain("unmanaged-table inventory");
 			expect(first.stdout).toContain("hejbro will not mention it again");
+			// D106 R5-B2: a leading-underscore column round-trips through its
+			// own TypeScript key but is not a valid hejbro SQL identifier --
+			// omitted and named like any other undeclarable column, never an
+			// abort of the whole reading.
+			expect(first.stdout).toContain('Omitted: column "app.legacy._id"');
+			// D106 R5-B1: a foreign key whose own name is a valid hejbro SQL
+			// identifier still costs only itself when its *target* was
+			// omitted -- one line per target kind (table vs. schema),
+			// `line_items` itself unaffected.
+			expect(first.stdout).toContain(
+				'Omitted: foreign key "app.line_items.line_items_widget_id_fkey" -- references table "app.Widgets"',
+			);
+			expect(first.stdout).toContain(
+				'Omitted: foreign key "app.line_items.line_items_owner_order_id_fkey" -- references schema "App"',
+			);
 
 			const schemaSource = readFileSync(
 				resolve(cwd, "src/schema/app.schema.ts"),
@@ -263,13 +312,47 @@ describe("catalog-inference / D106 R4-B1: a bad name costs the object, not the r
 			const declarationCode = schemaSource.slice(
 				schemaSource.indexOf("import {"),
 			);
+			/**
+			 * D106 R5 (post-slot correction, #711): the same class of gap
+			 * Round 4 already found once ("Widgets" matching the header's
+			 * own legitimate loss-report prose, not declared code) --
+			 * `_id` as a bare substring of `declarationCode` also matches
+			 * `widgets_name_idx` (a legitimately declared index name,
+			 * `..._id` + `x`), so that check has to narrow to the one
+			 * table's own declaration block, the same fix Round 4 applied
+			 * by narrowing to `declarationCode` in the first place.
+			 */
+			const exportBlocks = declarationCode.split(/(?=export const )/);
+			const legacyBlock = exportBlocks.find((block) =>
+				block.startsWith("export const legacy "),
+			);
+			if (legacyBlock === undefined) {
+				throw new Error(
+					`expected an "export const legacy" block in:\n${declarationCode}`,
+				);
+			}
 			expect(schemaSource).toContain('Omitted: table "app.Widgets"');
 			expect(declarationCode).toContain("widgets");
 			expect(declarationCode).toContain("widgets_name_not_blank");
 			expect(declarationCode).toContain("widgets_name_idx");
 			expect(declarationCode).not.toContain('"Widgets"');
+			// D106 R5-B2: `legacy` itself is still declared (the table is only
+			// *partly* declared, per the loss line above) -- its ordinary
+			// column survives, only `_id` does not.
+			expect(declarationCode).toContain("legacy");
+			expect(legacyBlock).toContain("label");
+			expect(legacyBlock).not.toMatch(/\b_id\b/);
 			expect(declarationCode).not.toContain("CK_Widgets");
 			expect(declarationCode).not.toContain("IX_Widgets");
+			// D106 R5-B1: `line_items` itself is declared, its two source
+			// columns survive as ordinary columns (the relationship is what
+			// was omitted, not the column), but neither omitted-target
+			// foreign key reaches the declaration -- no `existingTable`
+			// handle for either "Widgets" or "App" appears at all.
+			expect(declarationCode).toContain("lineItems");
+			expect(declarationCode).toContain("widgetId");
+			expect(declarationCode).toContain("ownerOrderId");
+			expect(declarationCode).not.toContain("existingTable");
 
 			expect(
 				execFileSync("ls", [resolve(cwd, "src/schema")], {

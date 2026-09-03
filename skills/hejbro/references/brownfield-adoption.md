@@ -248,12 +248,26 @@ as a raw expression, every default/check/generated/index-predicate
 expression as raw SQL text rather than a typed builder, and a foreign
 key whose own catalog name is not a valid hejbro SQL identifier,
 declared under the derived name instead (D106 round 3); and
-**Omitted** — a column whose SQL name no declaration key can round-trip
-(a quoted `"createdAt"`, since the DSL derives a column's SQL name from
-its key by snake_case) is left out of the starter file entirely rather
-than guessed at under the wrong name, and named here instead — `check`
+**Omitted** — each left out of the starter file entirely rather than
+guessed at under the wrong name, and named in the report instead. A
+column whose SQL name no declaration key can produce, either because
+it doesn't round-trip through snake_case (a quoted `"createdAt"`) or
+because the key it round-trips to is itself one the DSL's own
+identifier rule still rejects (a leading-underscore `_id`) — `check`
 keeps reporting that column as undeclared until it's added by hand or
-renamed in the database. `import` never hides any of this: every
+renamed in the database. Beyond a column, five further kinds of
+catalog name cost hejbro the object that carries it: a **schema**
+whose own name is not a valid hejbro SQL identifier (everything it
+holds — tables, enums, sequences — is omitted with it, unreported by
+`check` since nothing in it is declared); a **table** whose own name
+is not (everything it holds — columns, checks, indexes, foreign
+keys — is left undeclared with it); an **index** or a **check
+constraint** whose own name is not (each is never mentioned again,
+since `check` compares only what is declared); and a **foreign key**
+whose own target table or schema was itself omitted for one of the
+reasons above — the relationship is left out and named, naming the
+missing target, while the column that carried it stays declared as a
+plain column. `import` never hides any of this: every
 file's own header carries the full report, and the same report prints
 to the terminal on every run, ending with the way out ("The loss ends
 when you hand-edit the starter declarations"). Two schemas whose
