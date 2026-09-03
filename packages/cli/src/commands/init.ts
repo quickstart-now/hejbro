@@ -70,16 +70,18 @@ const kindAt = (path: string): NodeKind => {
  * `HejbroError` (lead-approved): a configured path exists but holds the
  * wrong kind of node for what it's supposed to be. Nothing is ever
  * replaced, so this stops the run rather than reporting the path as
- * already present. */
+ * already present. Names `label` (relative to `cwd`, D57/Task 14 --
+ * this CLI's own diagnostics never print an absolute path), not the
+ * resolved absolute path `checkPathKind` actually stat'd. */
 function throwPathConflict(
-	path: string,
+	label: string,
 	fieldName: string,
 	expectedKind: NodeKind,
 	actualKind: NodeKind,
 ): never {
 	return throwHejbroError(
 		"init-path-conflict",
-		`"${path}" was expected to be a ${expectedKind} for ${fieldName}, but a ${actualKind} is there. Next: move or remove the existing ${actualKind} at "${path}", then rerun \`hejbro init\`.`,
+		`"${label}" was expected to be a ${expectedKind} for ${fieldName}, but a ${actualKind} is there. Next: move or remove the existing ${actualKind} at "${label}", then rerun \`hejbro init\`.`,
 	);
 }
 
@@ -88,22 +90,27 @@ function throwPathConflict(
  * spelled with a trailing slash -- a directory spelling for a field
  * that needs a file, refused before even checking what (if anything)
  * exists there: writing a file to such a path fails with a raw,
- * confusing filesystem error instead of this named one. */
-function throwSpelledAsDirectory(path: string, fieldName: string): never {
+ * confusing filesystem error instead of this named one. Names `label`
+ * (relative to `cwd`), same reasoning as {@link throwPathConflict}. */
+function throwSpelledAsDirectory(label: string, fieldName: string): never {
 	return throwHejbroError(
 		"init-path-conflict",
-		`"${path}" is spelled as a directory (a trailing "/") for ${fieldName}, which needs a file. Next: drop the trailing slash from ${fieldName} in hejbro.config.ts, or point it at a file path.`,
+		`"${label}" names a directory (a trailing "/"), but ${fieldName} needs a file. Next: drop the trailing slash from ${fieldName} in hejbro.config.ts, or point it at a file path.`,
 	);
 }
 
 /** Refuses before creating anything (checked for every planned artifact
  * before any of them is created): a file artifact whose own path is
  * spelled as a directory, or an existing path that is the wrong kind
- * of node for what `artifact` names. */
-const checkPathKind = (artifact: Artifact): void => {
+ * of node for what `artifact` names. init resolves the same way
+ * `generate` does and never normalizes the configured value away --
+ * a trailing separator on a file field is refused, not trimmed. */
+const checkPathKind = (cwd: string, artifact: Artifact): void => {
 	const expectedKind = expectedKindOf(artifact);
 	if (expectedKind === "file" && artifact.path.endsWith("/")) {
-		throwSpelledAsDirectory(artifact.path, artifact.fieldName);
+		// `artifact.label` (`relative()`-derived) has already lost the
+		// trailing slash the message needs to show; `dirLabel` keeps it.
+		throwSpelledAsDirectory(dirLabel(cwd, artifact.path), artifact.fieldName);
 	}
 	if (!existsSync(artifact.path)) {
 		return;
@@ -111,7 +118,7 @@ const checkPathKind = (artifact: Artifact): void => {
 	const actualKind = kindAt(artifact.path);
 	if (actualKind !== expectedKind) {
 		throwPathConflict(
-			artifact.path,
+			artifact.label,
 			artifact.fieldName,
 			expectedKind,
 			actualKind,
@@ -290,7 +297,7 @@ export const runInit = async (cwd: string): Promise<InitResult> => {
 			migrationsArtifact,
 			snapshotArtifact,
 		].filter((artifact): artifact is Artifact => artifact !== null);
-		plannedArtifacts.map((artifact) => checkPathKind(artifact));
+		plannedArtifacts.map((artifact) => checkPathKind(cwd, artifact));
 
 		const report = [
 			applyArtifact(configArtifact),

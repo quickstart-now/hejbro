@@ -355,6 +355,25 @@ describe("runInit / path-kind conflicts and unconfigured fields (#687)", () => {
 		expect(existsSync(join(cwd, "db"))).toBe(false);
 	});
 
+	// Regression pin: before checkPathKind's pre-check, this exact
+	// configuration reached createArtifact's writeFileSync and crashed
+	// with a raw, unformatted ENOENT naming the absolute path -- runInit
+	// now refuses it with the coded diagnostic instead, and that
+	// diagnostic never names an absolute path (D57/Task 14 convention).
+	it("this configuration no longer reaches the raw writeFileSync crash, and names no absolute path", async () => {
+		await writeFile(
+			configPath(),
+			'export default { entry: ["src/**/*.schema.ts"], snapshotPath: "db/" };\n',
+		);
+
+		const result = await runInit(cwd);
+
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain("error[init-path-conflict]");
+		expect(result.stderr).not.toContain("ENOENT");
+		expect(result.stderr).not.toContain(cwd);
+	});
+
 	it("a matching directory at the configured migrations path is skipped as today (control)", async () => {
 		await writeFile(
 			configPath(),
