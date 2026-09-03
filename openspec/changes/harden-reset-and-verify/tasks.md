@@ -486,7 +486,7 @@ scenarios of `openspec show harden-reset-and-verify --diff` hold.
   ledger untouched, `status` truthful), and that a declared cycle is
   refused by the server and reported the same way. Files: the delta spec,
   the reference.
-- [ ] 4.4 ~5m — Red: none runnable. Green: `## Round 1 disposition` appended
+- [x] 4.4 ~5m — Red: none runnable. Green: `## Round 1 disposition` appended
   to `openspec/changes/harden-reset-and-verify/evaluation.md` (B1 fixed in
   4.1; N1 in 4.3; N2/N3 in 4.2; N4 → #776; N5 in 4.3), and
   `.changeset/fix-reset-d106-r1.md` (`hejbro: patch`, user-facing sentence:

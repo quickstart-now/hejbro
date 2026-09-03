@@ -220,3 +220,33 @@ stale skill is a broken user contract").
   no workspace-wide gate.
 - Cleanup: `docker rm -v -f hejbro-r1-review`; `/private/tmp/hejbro-r1*`
   removed; `git status` shows only this file.
+
+## Round 1 disposition
+
+- **B1** (blocking — `reset` reported success and dropped nothing when
+  the ledger table did not exist) — fixed in task 4.1: `applyReset` reads
+  `select to_regclass('hejbro.migration_ledger')` before opening the
+  transaction and clears the ledger only when it exists, never inside a
+  catch that could swallow the delete's own failure; the success line
+  claims "and cleared the ledger" only when it did. Live-witnessed
+  against the exact reproduction (migrations applied via `psql -f`, no
+  `hejbro.migration_ledger` ever created).
+- **N1** (wording — "the reverse of the one generation itself emits"
+  over-claimed a literal-sequence reversal) — fixed in task 4.3: both
+  spec sides now state the true relationship (the same dependency graph,
+  read in the opposite direction).
+- **N2** (the coded failure dropped the server's own `DETAIL` line) —
+  fixed in task 4.2: `driverErrorDetail` threads it in, verbatim, after
+  the reason. Live-witnessed against the outside-dependent scenario.
+- **N3** (the `Next:` advice always blamed "an object outside your
+  declarations", even for a declared cycle) — fixed in task 4.2: a
+  pre-transaction check for a same-kind cycle in the run's own drop plan
+  picks the correct advice. Live-witnessed against the cycle scenario.
+- **N4** (`verify` is silent about warnings `generate` prints for the
+  same declarations) — not a contradiction of this delta (which promises
+  refusal parity only, not warning parity); filed as its own follow-up,
+  #776.
+- **N5** (`skills/hejbro` never documented `reset`'s own contract) —
+  fixed in task 4.3: `generate-verify-workflow.md` gained a `hejbro
+  reset` section covering drop order, `reset-drop-failed`'s rollback/
+  ledger/status guarantee, and the declared-cycle refusal.
