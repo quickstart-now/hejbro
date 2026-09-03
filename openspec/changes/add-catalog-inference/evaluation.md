@@ -2776,3 +2776,108 @@ much as in the code.
 - In-process probes created, run and deleted in the same tool call (`packages/cli/test/_r8probe*.test.ts`, four batches) for the snapshot-vs-text handle counts, the description-vs-snapshot column sets, and the multi-directory loader sweep. No repository file other than this one was modified; `git status --porcelain` shows only `evaluation.md`.
 - Suites run: `infer-{compose,loss-report,tables,keys,adapter,constraints}`, `import-command`, `pull-command`, `declare-emit-{emit,file-cycle,topo-order,callback-shadow,enum-cycle-load}`, `contract-{from-catalog,origin}`, `outdated-database-origin`, `vendor-lock-origin`, `exports` — 18 files / 193 tests green; `packages/core` `table-surface`, `rename-plan`, `table-kind-diff`, `identifier-rules` — 4 files / 108 tests green.
 - Not run: `pnpm build`, `pnpm install`, full-workspace `pnpm test`/`check-types`, the Docker-gated `*.integration.test.ts` files (this round used one container of its own and re-measured what those witnesses assert directly).
+
+## Round 8 disposition
+
+The review is clean: no blocking finding, and every round-7 finding
+closed in the code, the delta and the skill. Of the two non-blocking
+findings, R8-N1 is fixed on this branch (#724) and R8-N2 is #712,
+carried by decision for the fourth round running. This is the last
+round; what follows the fix is the archive.
+
+**A correction to the report's own framing, recorded here rather than
+in it.** The report counts 24 delta scenarios with `cli-commands` at 10,
+describing them as "the same set round 7 reviewed". Round 7's own
+correction added one to that capability — *A table named like the
+emitted callback's parameter still loads* — so the count was inherited
+rather than re-derived. **The set round 8 actually reviewed was 25**:
+`catalog-inference` 8, `cli-commands` 11, `schema-vendoring` 3,
+`table-declaration` 3 — counted on the tip the reviewer read — and since
+neither non-blocking finding blocks a scenario, all 25 are OK. **The
+branch now carries 26**, because R8-N1's own fix below adds a ninth
+`catalog-inference` scenario; that one is in the archived specs and was,
+by construction, never in front of an adversarial round. Both numbers
+are stated because they answer different questions, and a reader lining
+this paragraph up against the archived specs would otherwise find an
+off-by-one and have no way to tell which kind it was. The report is
+committed unedited — a reviewer's record is not ours to rewrite — and
+the correction lives here. Nine counting errors in this change have been
+closed by writing the members before the number; this is the tenth,
+caught the same way, and the eleventh was caught in this very paragraph
+by the same cross-check.
+
+### R8-N1 — an approximation announced for what the reading omitted
+
+Two detectors filtered by *surviving table* and never asked whether the
+name itself was one a declaration can carry, so the report announced a
+UNIQUE constraint "inferred as a unique index of the same name" two
+lines above the line saying that index was omitted for that very name,
+and announced a `nextval` default kept by a column excluded for its
+name. Both lines were false on both halves — nothing was inferred, and
+nothing was kept.
+
+Both detectors now ask the same rule the omission band asks:
+`isExpressibleName` on the constraint's own name, `isNameDeclarable` on
+the column's. That required moving `isNameDeclarable` (and the private
+round-trip half it is built from) out of `compose.ts` into `table.ts`:
+`compose.ts` already imports these detectors from `loss-report.ts`, so
+the predicate could not live where the reading happens without making
+the import graph circular. It now sits where every caller on either side
+already imports from, and the move was proved behaviour-preserving
+before either detector changed.
+
+**The fix that was specified first is not the fix that shipped.** The
+plan said to feed the `nextval` detector the already-filtered list the
+snapshot is built from — true by construction, and the shape this team
+normally prefers. The implementer measured that the wiring lives inside
+an async, session-taking orchestrator with no synchronous seam, so that
+version could be pinned only by an integration test and would have
+shipped with no unit-level observer at all. Between a fix nothing
+observes and a fix a red can reach, this round took the second: the
+guarantee sits in the detectors, where a unit test fails when it is
+removed, and it holds for every caller rather than for one call site.
+Deliberately **not** also guarded at the call site — two guards for one
+property means a wiring regression hides behind whichever one still
+works.
+
+Pins: each red carries its own control in the same test — a validly
+named UNIQUE beside `"UQ_Code"` on one surviving table, a declarable
+`nextval` column beside `_bad` on another — so the assertion proves the
+band still speaks as well as that it stopped lying. A fix of this shape
+can pass by silencing the band, and a control in a separate test can
+pass independently of the case it is meant to guard. The mutant (both
+filters removed) failed exactly those two and left the file's other 25
+green.
+
+### R8-N2 — an enum type's catalog name
+
+#712, unchanged, for the fourth round. No delta scenario speaks to an
+enum's own name, so it is reported and tracked rather than classified.
+
+### What is archived unresolved
+
+Named here because the archive is where someone will look for it:
+
+- *Two tables sharing a constraint name keep their own expressions* and
+  *Every named schema was omitted for its name* are pinned by unit tests
+  and by no standing witness of our own. Both were measured live by the
+  round-6, round-7 and round-8 reviewers — including executing the
+  emitted DDL against a fresh database — so the behaviour is known good;
+  what is missing is a witness in this repository's own suite.
+- The foreign-key-name D36 exception has no scenario heading of its own
+  and is verified by cross-reading the two functions that implement it.
+- The wiring inside `inferFromCatalog` that decides which table list
+  reaches each detector has no regression test of its own. After this
+  round it does not carry the property that used to depend on it, but
+  the wiring itself is still unobserved.
+- **This round's own correction was never reviewed by an adversarial
+  round.** Every earlier round's fix was read by the round that
+  followed; round 8's has no successor, because round 8 is the one that
+  came back clean. What that leaves unreviewed is small and stated
+  plainly: two detector filters asking a predicate that already existed,
+  one predicate moved between modules to keep the import graph acyclic,
+  one delta scenario, and a changeset. It is pinned by two tests that
+  each carry their own control and by a mutant that fails exactly those
+  two. Anyone reopening this change should start there rather than
+  assume the gate covered it.
+- #712, above.
