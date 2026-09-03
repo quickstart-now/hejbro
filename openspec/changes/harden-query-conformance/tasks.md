@@ -184,7 +184,7 @@ Inside group 1, 1.2 makes 1.3's test red, so 1.3 follows it.
       `git checkout --`). Files:
       `packages/query/src/testing/driver-conformance.ts`,
       `packages/query/test/driver/conformance.test.ts`.
-- [ ] 4.2 (~5m) The two corrected set-operation scenarios get the
+- [x] 4.2 (~5m) The two corrected set-operation scenarios get the
       observers they name: a `tsc` pin for the whole-table form (identical
       to the branch read alone) and one for the object-projection form
       (the left branch's keys, widened with null). No production change —

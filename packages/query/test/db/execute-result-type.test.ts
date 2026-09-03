@@ -153,6 +153,51 @@ describe("Db.execute's resolved row type for a core-built set operation (task 3.
 	});
 });
 
+describe("the two corrected set-operation scenarios get their own observers (task 4.2, review repair)", () => {
+	// No red is available here -- ExecuteResult already resolves both
+	// forms via SelectResult<TProjection> (task 3.1); this pins the
+	// corrected delta sentences directly, spelled out concretely rather
+	// than through SelectResult, so a regression in SelectResult itself
+	// doesn't silently move both the production code and this pin
+	// together. The discriminating check is the mutant tasks.md names:
+	// switching ExecuteResult's SetOpStage branch to
+	// `SelectResult<TProjection, never>` must fail the object-projection
+	// pin below while leaving the whole-table pin green, since the
+	// whole-table branch of SelectResult never reads its second type
+	// argument at all (resolved from the table's own declaration) and
+	// the object-projection branch does (NestedOrExprResult widens with
+	// null only for the untracked/UntrackedJoins default, never for
+	// `never`, the fully-tracked-empty reading).
+	it("the whole-table form reads back identical to the same branch read alone (Scenario: A core-built set operation executed on a handle reads back as its left branch)", () => {
+		type Stage = SetOpStage<Posts>;
+		type BranchAlone = SelectLimited<Posts>;
+
+		expectTypeOf<ExecuteRows<Stage>>().toEqualTypeOf<
+			ExecuteRows<BranchAlone>
+		>();
+		expectTypeOf<ExecuteRows<Stage>[number]>().toEqualTypeOf<{
+			readonly id: string;
+			readonly status: string;
+			readonly amount: bigint | null;
+			readonly duration: IntervalValue | null;
+		}>();
+	});
+
+	it("the object-projection form widens the left branch's declared-notNull key with null, where the join record is missing (Scenario: An object projection widens where the join record is missing)", () => {
+		// posts.status is declared notNull -- chosen deliberately (unlike
+		// this file's other object-projection fixtures, which use the
+		// already-nullable posts.amount) so the widening this scenario
+		// promises is the reason this type differs from `string`, not an
+		// accident of an already-nullable column.
+		type Projection = { readonly label: Posts["status"] };
+		type Stage = SetOpStage<Projection>;
+
+		expectTypeOf<ExecuteRows<Stage>[number]>().toEqualTypeOf<{
+			readonly label: string | null;
+		}>();
+	});
+});
+
 describe("db.execute infers the left-joined set from the core stage (narrow-join-nullability, task 3.3)", () => {
 	it("no leftJoin at all (never): a notNull projected column narrows to non-null", () => {
 		type Stage = SelectLimited<{ readonly t: Posts["status"] }, never>;
