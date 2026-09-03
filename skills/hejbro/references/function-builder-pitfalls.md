@@ -47,6 +47,14 @@ name reaches the generated function unquoted, in the parameter list and
 in every body reference to it, so a name that would need quoting is
 refused before it can produce SQL Postgres can't parse.
 
+A literal `__proto__:` key in an `args` object literal doesn't declare an
+argument at all — it replaces the object's own prototype, the same way
+it would in any JS object literal. That's refused separately, with
+`args-prototype-key`. Writing it as a computed key (`["__proto__"]:
+uuid()`) does declare an argument under that name, and is refused the
+ordinary way instead, with `invalid-sql-name` (`__proto__` isn't
+lower-case snake_case).
+
 ## The body context API
 
 - `ctx.if(condition, then).elseIf(condition, then).else(then)` — an
@@ -81,6 +89,11 @@ refused before it can produce SQL Postgres can't parse.
   just the bare no-arg form — is accepted the same way (#634); the
   rendered `return query ...` carries exactly that projection's
   `RETURNING` list, never the full row.
+
+  `ctx.return` takes a mutation only *after* `.returning()` — a missing
+  stage is a type error, and `tsc`'s own message on that line won't
+  mention `.returning()` by name (it only says the value isn't
+  assignable), so read that failure as this rule first.
 
   A mutation that never called `.returning()` is not accepted: the
   pre-`.returning()` stage isn't assignable where `ctx.return` expects a
