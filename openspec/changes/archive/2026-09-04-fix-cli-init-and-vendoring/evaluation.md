@@ -386,3 +386,308 @@ schema-vendoring (MODIFIED — "The contract carries a typed function surface")
   unvendored name does (`unknown-contract-*` appears in no
   `openspec/specs/**`), so this landed as a plain fix with no delta — a
   gap for whenever the client surface gets a capability spec.
+
+## Round 2
+
+Context-free adversarial spec review (D106), second round, at `d5cda781`
+(the merged change plus its round-1 correction). Read: the two delta
+specs against the main specs, the public surface they name
+(`packages/cli/src/commands/init.ts`, `errors.ts`, `diagnostics.ts`,
+`vendor/validate-export.ts`, `packages/query/src/db/fn.ts`,
+`packages/query/src/client/name-keyed-db.ts`, `skills/hejbro/`, the two
+`.changeset/*.md` entries), and the test suite as evidence. Round 1's
+findings and disposition were read as claims to verify. Not read:
+proposal, design, tasks, PR bodies, git log messages, `blackbox/`,
+`.agents/`.
+
+### Verdict
+
+BLOCKING 0 / NON-BLOCKING 4 / OK 15
+
+(15 delta scenarios: 7 ADDED in cli-commands — one new since round 1,
+"A path that cannot hold the artifact stops the run before anything is
+created" — 3 ADDED + 5 MODIFIED in schema-vendoring. Every scenario's
+own WHEN produced its THEN at this build. The four non-blocking items
+are inputs adjacent to the scenarios' WHENs where the requirement prose
+still over-claims, plus one residue of round 1's N8 fix.)
+
+### Round-1 findings re-checked
+
+- **B1** — closed. `migrationsDir: "mig/"` (and `"mig//"`) with a file at
+  `mig` → `error[init-path-conflict]: mig/` / `"mig/" was expected to be a
+  directory for migrationsDir, but a file is there. Next: move or remove
+  the existing file at "mig"`, exit 1, tree unchanged; the `Next:` path
+  exists. `init.ts:80-81,325`; `init.test.ts:488-571`.
+- **N1** — closed. File at `a` with `migrationsDir: "a/b/mig"` or
+  `snapshotPath: "a/b/snap.json"` → `"a" was expected to be a directory
+  to hold migrationsDir|snapshotPath, but a file is there`, exit 1,
+  nothing created (the other field's own usable path included).
+  `init.ts:230-271`; `init.test.ts:573-667`.
+- **N2** — closed for equal paths; residue below (R2-N1). `"same"`/`"same"`
+  → `"same" is named by both migrationsDir and snapshotPath`;
+  `snapshotPath: "hejbro.config.ts"` and `migrationsDir:
+  "hejbro.config.ts"` → `named by both hejbro.config.ts and
+  snapshotPath|migrationsDir`; exit 1, nothing created. `init.ts:289-306`;
+  `init.test.ts:669-746`.
+- **N3** — closed. Directory at `hejbro.config.ts` → `"hejbro.config.ts"
+  was expected to be a file for hejbro.config.ts, but a directory is
+  there`, exit 1, nothing created, loader never reached. `init.ts:502`;
+  `init.test.ts:748-760`.
+- **N4** — still open, tracked (#745). `export default { entry: 5, … }` →
+  `config field "entry" in /…/_r2probe/i23/hejbro.config.ts is missing or
+  the wrong shape`; `init` and `generate` stderr byte-identical (diffed),
+  so the scenario holds and the absolute path is the shared loader's.
+- **N5** — still open, tracked (#743). `migrationsDir: "/abs/mig"`: `init`
+  reports `created abs/mig/` (correct), `generate` then prints `wrote
+  /abs/mig/0001_add_app.sql` while writing `<project>/abs/mig/…`.
+- **N6** — closed. `skills/hejbro/references/polyrepo.md:55-60` names the
+  `constructor`/`toString`/`hasOwnProperty` write-literal constraint as
+  TypeScript's own; reproduced this round (`tsc --strict` on a fresh
+  `insert` literal against the `__proto__`-contract: `Types of property
+  'constructor' are incompatible`).
+- **N7** — closed. `skills/hejbro/references/query-layer.md:1063-1064`
+  (`function-argument-count-mismatch`, `function-argument-unknown`) and
+  `:1070-1071` (`unknown-contract-table`, `unknown-contract-function`).
+- **N8** — closed for the unscoped client and for `fn` on both handles;
+  residue below (R2-N4) for the scoped handle's table surface. On a
+  contract vendoring nothing named `__proto__`: `client.fn.__proto__`,
+  `client.__proto__`, `client.fn.hasOwnProperty`, `client.hasOwnProperty`,
+  `client.fn.isPrototypeOf`, `client.nope` → `unknown-contract-function`
+  / `unknown-contract-table`; `then`/`toString`/`valueOf`/`constructor`/
+  `toJSON` pass through, so `await client === client`, `String(client)`
+  → `[object Object]`, `JSON.stringify(client)` and `util.inspect` all
+  work. `name-keyed-db.ts:223-241`; `errors.test.ts:165-260`.
+
+### Blocking
+
+None.
+
+### Non-blocking
+
+**R2-N1 — Two configured fields nested one inside the other: `init`
+creates the directory, then reports the file artifact as present, and
+`generate` crashes raw.** `migrationsDir: "mig/sub"`, `snapshotPath:
+"mig"` (both absent): `created mig/sub/` then `skipped mig (exists)`,
+exit 0; `generate` then dies with `Error: EISDIR: illegal operation on a
+directory, read` plus a Node stack with absolute paths. Mirror image
+`migrationsDir: "snap.json/mig"`, `snapshotPath: "snap.json"`: `created
+snap.json/mig/` then `skipped snap.json (exists)`; a second `init` on
+that tree refuses (`"snap.json" was expected to be a file … but a
+directory is there`) — the run before it made the broken project it
+now refuses. `checkNoDuplicatePaths` (`init.ts:289-306`) compares for
+equality only, so a planned file that is a planned directory's ancestor
+(or vice versa) passes every pre-creation check and is found by
+`applyArtifact`'s bare `existsSync` (`:354`) after `init` itself created
+it — the "tells a repair run that a broken project is whole" the
+requirement forbids, and the requirement's "a path an artifact would
+have to be created inside" read against a planned rather than an
+existing node. Neither scenario's WHEN names nested fields (the new
+scenario says "a regular file sits where a directory … would have to
+be, or … one path for both"), so an over-claim of the requirement
+prose, not a contradiction. (When the file already exists at the
+ancestor the ancestor check catches it correctly — that is N1.)
+
+**R2-N2 — An unwritable parent still ends in a raw Node stack with
+absolute paths, and in one variant a partial run.** `ro` chmod 555:
+`migrationsDir: "ro/mig"` → `Error: EACCES: permission denied, mkdir
+'/…/i12/ro/mig'` + nine-frame stack, exit 1; `snapshotPath:
+"ro/snap.json"` with `migrationsDir: "mig"` → same shape at
+`writeFileSync`, **after `mig/` was created** (tree: `mig`, `ro`). The
+round-1 disposition's "any non-`ENOENT` stat failure becomes
+`init-path-conflict`" holds for `stat` only (`init.ts:196-206`; a parent
+with mode 000 → `"nx/mig/" could not be checked for migrationsDir
+(EACCES)`, coded); the create step (`:342-351`) has no equivalent, and
+`asHejbroError` (`errors.ts:15-20`) rethrows anything that is not a
+`HejbroError`. Adjacent to the requirement's "coded failure … creating
+nothing" and to D57's no-absolute-path rule; no scenario names
+permissions, so non-blocking. The correction changeset's "instead of a
+raw filesystem crash" reads wider than what shipped.
+
+**R2-N3 — The stat-failure refusal's `Next:` names a path that does not
+exist.** `nx` chmod 000, `migrationsDir: "nx/mig"` → `"nx/mig/" could
+not be checked for migrationsDir (EACCES). Next: check permissions on
+"nx/mig/"`. The node whose permissions block the check is `nx`;
+`nx/mig` does not exist. `checkAncestors` walks `dirname` and stops at
+`nx` as "ok" because `stat(nx)` itself succeeds (`init.ts:230-248`),
+then `checkPathKind`'s own stat of the leaf fails and is labelled with
+the leaf (`:330`). Wording only; coded and exit 1.
+
+**R2-N4 — The scoped handle's table surface is not guarded; only its
+`fn` is.** `createDb(conn).as(context)` returns the plain spread object
+(`name-keyed-db.ts:478-484`), never passed through `wrapWithTableGuard`
+(only `createNameKeyedDb`'s own return is, `:486`). Measured on the
+plain contract: `s.nope` → `undefined` and `s.nope.select()` → uncoded
+`TypeError: Cannot read properties of undefined (reading 'select')`;
+`s.__proto__` → `Object.prototype`; `s.hasOwnProperty` → the inherited
+function — while `s.fn.nope`/`s.fn.__proto__` refuse with
+`unknown-contract-function` and the unscoped `client.nope` refuses with
+`unknown-contract-table`. The delta's `.as(context)` clause is about
+`fn` (which holds); the table-lookup refusal is specified nowhere (the
+round-1 disposition already notes `unknown-contract-*` has no spec), so
+this is the same gap N8's fix half-closed, not a scenario contradiction.
+
+### Verified scenarios
+
+cli-commands (ADDED — "init scaffolds what is missing, where the configuration says")
+
+- **An empty project is scaffolded** — OK. `created hejbro.config.ts` /
+  `created migrations/` / `created hejbro.snapshot.json`, exit 0; second
+  `init` → three `skipped … (exists)`, exit 0; `generate` wrote
+  `migrations/20260903151400_add_app.sql`, `verify` passed 5 checks,
+  `status` refused only for the missing connection — every artifact
+  `init` made is read by the next command. `init.test.ts:27-109`.
+- **A configured location is honoured** — OK. `../esc/mig` +
+  `../esc/snap.json` (escaping the project): `created ../esc/mig/`,
+  `created ../esc/snap.json`, nothing under the project, `generate`
+  wrote `../esc/mig/0001_add_app.sql`. `mig` + `mig/snap.json` (snapshot
+  inside the migrations directory): both created, `generate` wrote
+  `mig/0001_add_app.sql` beside it. `"."` for `migrationsDir` → `skipped
+  ./ (exists)`. `init.test.ts:111-210`.
+- **A configuration that names neither field gets neither artifact** —
+  OK. `migrationsDir not configured` / `snapshotPath not configured` /
+  `skipped hejbro.config.ts (exists)`, exit 0, tree unchanged;
+  `generate` then refuses `invalid-config: migrationsDir`.
+  `init.test.ts:443-470`.
+- **Only the absent piece is created** — OK. `init.test.ts:252-282`
+  (passing at this build); round 1's measurement not repeated.
+- **A path holding the wrong kind of node stops the run** — OK,
+  including round 1's B1 input. File at `mig` with `"mig/"`, `"mig//"`;
+  a symlink to a file at `mig` → refused as a file; a symlink to a
+  directory at `snap.json` → refused as a directory (`"snap.json" was
+  expected to be a file for snapshotPath, but a directory is there`);
+  `"db/snap.json/"` → `names a directory (a trailing "/"), but
+  snapshotPath needs a file`; directory at `hejbro.config.ts` (N3). In
+  every refusal nothing was created and no `skipped` line printed.
+  `init.test.ts:284-441,488-571,748-760`.
+- **A path that cannot hold the artifact stops the run before anything
+  is created** — OK. File two levels up (`a` under `a/b/mig`,
+  `a/b/snap.json`) → ancestor refusal naming `a`, nothing created though
+  the other field's path was usable; same path for both fields, and
+  either field naming `hejbro.config.ts` → duplicate refusal naming both
+  fields, nothing created. `init.test.ts:573-746`. (Nested planned
+  fields: R2-N1.)
+- **A configuration that cannot be read stops the run** — OK.
+  Unresolvable import → `error[config-load-failed]: hejbro.config.ts`;
+  invalid shape → `error[invalid-config]: entry`; each byte-identical to
+  `generate`'s stderr (diffed), exit 1, tree unchanged.
+  `init.test.ts:212-250,774-785`.
+
+schema-vendoring (ADDED — "An emitted key survives as data, whatever it is named")
+
+- **A column whose name is meaningful in an object literal is carried**
+  — OK. Vendored through real `git` + `hejbro link` + `hejbro vendor`
+  (twice, plus `vendor --check: up to date`); loaded module:
+  `Object.hasOwn(contractMetadata.tables.posts.columns, "__proto__")
+  === true` (emitted as `["__proto__"]: { sqlName: "c2", … }`);
+  `select` lists `"c2"`; `where(eq(columns["__proto__"], "v"))` renders
+  `"app"."posts"."c2" = $1`; `insert` renders `("title", "c2", "c5",
+  "c6", "c4")`; `update` renders `set "42" = $1, "c2" = $2, "c3" = $3`.
+  Same at the table position (`Object.hasOwn(tables, "__proto__")`,
+  `select "id", "note" from "app"."__proto__"`) and the function-export
+  position (`client.fn["__proto__"]({ x: 7 })` → `select "app"."f2"($1)
+  as "result"`, `[7]`) — with a table and a function both named
+  `__proto__` in one contract. `contract-emit.test.ts` (passing).
+- **What the description says under such a key reaches the contract** —
+  OK. Description key `"__proto__": { key: "protoAlias", mode: "number"
+  }` on a `bigint` column named `__proto__` → emitted `"protoAlias": {
+  sqlName: "__proto__", typeNode: bigint, mode: "number" }`, `Row.
+  protoAlias: number | null`, `where(eq(columns.protoAlias, 1))` →
+  `"app"."posts"."__proto__" = $1`. `validate-export.ts:50-63`;
+  `validate-export.test.ts` (passing).
+- **A key that only looks dangerous is carried the same way** — OK.
+  `constructor`, `prototype`, `hasOwnProperty`, `toString` (and `"42"`)
+  each `Object.hasOwn === true` on the loaded metadata and on
+  `client.posts.columns`; `select` lists `"c3"`, `"c4"`, `"c5"`, `"c6"`,
+  `"42"`; `insert`/`update` carry them (above). The TypeScript
+  write-literal consequence is now in the skill (N6).
+
+schema-vendoring (MODIFIED — "The contract carries a typed function surface")
+
+- **A scalar function crosses the boundary** — OK. `c.fn.add({ a: 1, b: 2
+  })` → `select "app"."add"($1, $2) as "result"`, `[1, 2]`, resolves to
+  the driver's `result`; `{ b: 2, a: 1 }` still sends `[1, 2]`
+  (declared order, `fn.ts:249-262`). `tsc --strict` accepts `const r:
+  Promise<number> = c.fn.add(…)`. Through `.as({ settings })` on a
+  role-less driver: `select set_config($1, $2, true)` then the same
+  invocation, for `add` and for `["__proto__"]`.
+- **A table-returning function crosses the boundary** — OK. `select
+  "42", "id", "title", "__proto__", "c2", … from "app"."list_posts"()`
+  — explicit list, no `*` — resolving to the driver's rows; `tsc`
+  accepts the rows typed with `protoAlias: number | null` and `"42":
+  string | null`. Same through `.as()`.
+- **A mismatched call fails the type check** — OK. `tsc --strict`
+  (5.9.3, `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`):
+  missing argument, extra property on a fresh literal, wrongly typed
+  argument, misspelled key on a fresh literal, and a scoped-handle
+  missing argument each consumed a `@ts-expect-error`; a widened
+  pre-built `{ a, b, c }` compiles (as the text says) and is the runtime
+  check's job. From JavaScript, 0 statements sent across every refusal
+  (recording driver): `{ a, c }` → `function-argument-unknown` naming
+  `"c"` and `"a", "b"`; `JSON.parse('{"a":1,"bee":2}')` → same naming
+  `"bee"`; `{ A, b }` → naming `"A"`; `JSON.parse('{"a":1,"__proto__":2}')`
+  → naming `"__proto__"`; `{ a, b, c }` / `{ a }` / `{ a, [sym] }` /
+  inherited `b` → `function-argument-count-mismatch`, text unchanged;
+  `{ a, b, [sym] }` and a non-enumerable extra are accepted and send
+  `[1, 2]`. Identical codes and messages through `.as(context)`, with no
+  `set_config` sent before a refusal. `fn.ts:183-222`;
+  `functions.test.ts` (passing).
+- **A function returning an uncarried table is absent** — OK
+  (`contract-emit.test.ts:311`, passing at this build; not re-measured
+  end-to-end).
+- **A synthesized trigger function is absent** — OK
+  (`contract-emit.test.ts:283`, passing at this build).
+
+### Method
+
+- Build: `packages/cli/dist/cli.js` at `d5cda781`, mtime 23:13 the
+  evening before (the lead's `pnpm build --force`); nothing rebuilt, no
+  `pnpm install`/`build`/full `test`/`check-types`/`check:crap`. Node
+  v26.7.0 (native type stripping loaded the vendored `contract.ts`
+  directly), TypeScript 5.9.3 from the worktree's `node_modules`. No
+  Postgres: `db.fn`/`select`/`insert`/`update` measurements used an
+  in-memory recording driver (`execute` pushes the compiled statement
+  and returns `[{ result: 3 }]`, or `[]` for the table-returning call;
+  `transaction` runs the callback; `roleLessPlatform: true`), so "before
+  any SQL is sent" is the recorded statement count.
+- Throwaway projects under `<worktree>/_r2probe/` (deleted at the end;
+  `git status --short` shows only this file), each with
+  `node_modules/hejbro → <worktree>/packages/cli` and
+  `node_modules/@hejbro/supabase → <worktree>/packages/supabase`, driven
+  through the built CLI as a child process from the project directory.
+- `init` matrix (25 projects, each followed by a `find` of the tree,
+  exit code captured directly): trailing separators on both fields
+  (single and double) with a file at the un-slashed path; a file two
+  levels up for each field; both fields one path; each field naming
+  `hejbro.config.ts`; a directory at `hejbro.config.ts`; a symlink to a
+  file where the directory belongs; a symlink to a directory where the
+  file belongs; a dangling symlink where the file belongs (`created
+  snap.json`, written through to the symlink's target — noted, not a
+  finding); a read-only parent for each field; a mode-000 parent;
+  `../esc/*`; `/abs/mig`; `"."`; no configuration run twice then
+  `generate`/`status`/`verify`; snapshot inside the migrations
+  directory; the two nested-field orders; neither field; unresolvable
+  import and invalid shape (each diffed against `generate`'s stderr).
+- Vendoring: one declaring project (`posts` with `id`/`title`/`amount
+  bigint`/`c2..c7`, `t2`, `add(a, b)`, `list_posts()`, `f2(x)`) →
+  `hejbro init` + `generate --export` → committed to a local `git init`
+  repository (plain contract); a copy whose `.hejbro/export/schema.json`
+  was rewritten by a Node script (`Object.fromEntries`, never a literal
+  `__proto__:` key): description key `__proto__` → `{ key: "protoAlias",
+  mode: "number" }` on the snapshot column renamed `__proto__`; `c2` →
+  key `__proto__`; `c3..c6` → `constructor`/`prototype`/`hasOwnProperty`/
+  `toString`; `c7` → `"42"` (SQL name and key); table `t2` → `__proto__`
+  (snapshot node key, `name`, and fact `tableName`); `f2`'s `exportName`
+  → `__proto__`. Each consumer ran `hejbro link <path>` then `hejbro
+  vendor` (the `__proto__` one twice, plus `vendor --check`). The emitted
+  module was **loaded**, not string-matched: `node` imported
+  `.hejbro/vendor/contract.ts` and inspected `Object.hasOwn`/`Object.keys`
+  on `contractMetadata`, the client, `client.fn`, `client.posts.columns`
+  and the scoped handle, then executed statements against the recording
+  driver. `tsc --noEmit` ran over a typed probe importing the contract
+  (`@ts-expect-error` for missing/extra/wrong-typed/misspelled arguments
+  on both handles, a widened pre-built value, `__proto__`/`"42"` row
+  fields, and a fresh `insert` literal against the `constructor` column).
+- Targeted tests run at this build: `packages/cli` `init.test.ts` +
+  `contract-emit.test.ts` + `validate-export.test.ts` (91 passed);
+  `packages/query` `test/client/errors.test.ts` +
+  `test/client/functions.test.ts` (19 passed).
