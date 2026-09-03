@@ -136,9 +136,9 @@ snapshot. Two more can apply on top, independently, each still file/
 declaration-based rather than a database connection: the export-
 freshness check (only when `generate --export` is in use) and every
 registered preset's own validators (only when the active config
-registers at least one preset) — up to seven checks in one run, whichever
-apply; a config with neither never mentions either and reports the same
-five it always has. Run it in CI. See
+registers at least one preset validator) — up to seven checks in one
+run, whichever apply; a config with neither never mentions either and
+reports the same five it always has. Run it in CI. See
 `packages/cli/src/commands/verify.ts` (guide page lands in #109).
 
 The **local Docker round-trip** (`pnpm roundtrip` in an example package)
