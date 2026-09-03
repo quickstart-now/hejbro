@@ -480,3 +480,88 @@ describe("runInit / path-kind conflicts and unconfigured fields (#687)", () => {
 		]);
 	});
 });
+
+// D106 R1 B1: a configured migrations directory spelled with a trailing
+// separator hid the file sitting there from checkPathKind's presence
+// check (existsSync("mig/") on a file at "mig" is false), so the run
+// reached mkdirSync's raw ENOTDIR crash instead of the coded refusal.
+describe("runInit / a trailing separator does not hide the node at a configured path (D106 R1 B1)", () => {
+	it.each(["mig/", "mig//"])(
+		"refuses a configured migrations directory spelled %j when a file sits at mig",
+		async (configuredValue) => {
+			await writeFile(
+				configPath(),
+				`export default { entry: ["src/**/*.schema.ts"], migrationsDir: ${JSON.stringify(configuredValue)} };\n`,
+			);
+			await writeFile(join(cwd, "mig"), "not a directory");
+
+			const result = await runInit(cwd);
+
+			expect(result.exitCode).toBe(1);
+			expect(result.stderr).toContain("error[init-path-conflict]");
+			expect(result.stderr).toContain("mig/");
+			expect(result.stderr).not.toContain("ENOTDIR");
+			expect(result.stderr).not.toContain(cwd);
+			expect(existsSync(snapshotPath())).toBe(false);
+		},
+	);
+
+	it("refuses a configured migrations directory spelled with a trailing slash when a file sits at the nested path", async () => {
+		await writeFile(
+			configPath(),
+			'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "db/mig/" };\n',
+		);
+		await mkdir(join(cwd, "db"), { recursive: true });
+		await writeFile(join(cwd, "db", "mig"), "not a directory");
+
+		const result = await runInit(cwd);
+
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain("error[init-path-conflict]");
+		expect(result.stderr).toContain("db/mig/");
+		expect(result.stderr).not.toContain("ENOTDIR");
+		expect(result.stderr).not.toContain(cwd);
+		expect(existsSync(snapshotPath())).toBe(false);
+	});
+
+	it("still creates a configured migrations directory spelled with a trailing slash when nothing sits there (control)", async () => {
+		await writeFile(
+			configPath(),
+			'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "mig/" };\n',
+		);
+
+		const result = await runInit(cwd);
+
+		expect(result.exitCode).toBe(0);
+		expect(result.report).toContain("created mig/");
+		expect(statSync(join(cwd, "mig")).isDirectory()).toBe(true);
+	});
+
+	it("still skips a configured migrations directory spelled with a trailing slash that already exists (control)", async () => {
+		await writeFile(
+			configPath(),
+			'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "mig/" };\n',
+		);
+		await mkdir(join(cwd, "mig"), { recursive: true });
+
+		const result = await runInit(cwd);
+
+		expect(result.exitCode).toBe(0);
+		expect(result.report).toContain("skipped mig/ (exists)");
+	});
+
+	it("keeps the plain-spelled refusal message text unchanged (control)", async () => {
+		await writeFile(
+			configPath(),
+			'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "mig" };\n',
+		);
+		await writeFile(join(cwd, "mig"), "not a directory");
+
+		const result = await runInit(cwd);
+
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain(
+			'"mig/" was expected to be a directory for migrationsDir, but a file is there.',
+		);
+	});
+});

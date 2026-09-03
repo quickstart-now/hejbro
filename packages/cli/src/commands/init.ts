@@ -1,4 +1,10 @@
-import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
+import {
+	existsSync,
+	mkdirSync,
+	type Stats,
+	statSync,
+	writeFileSync,
+} from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { emptySnapshot, renderSnapshot, throwHejbroError } from "@hejbro/core";
 import { defineCommand } from "citty";
@@ -59,12 +65,20 @@ const expectedKindOf = (artifact: Artifact): NodeKind => {
 	return "file";
 };
 
-const kindAt = (path: string): NodeKind => {
-	if (statSync(path).isDirectory()) {
+const kindOfStat = (stat: Stats): NodeKind => {
+	if (stat.isDirectory()) {
 		return "directory";
 	}
 	return "file";
 };
+
+/** A configured path's trailing `/`s dropped before it is stat'd -- POSIX
+ * `stat()` on a path spelled with a trailing separator refuses with
+ * `ENOTDIR` when the node there is a file (D106 R1 B1), which made
+ * `existsSync` report "nothing there" and let a later `mkdirSync` throw a
+ * raw, uncoded stack instead of this command's own diagnostic. */
+const stripTrailingSeparators = (path: string): string =>
+	path.replace(/\/+$/, "");
 
 /** Builds and throws the `init-path-conflict`-coded, enriched plain
  * `HejbroError` (lead-approved): a configured path exists but holds the
@@ -99,12 +113,64 @@ function throwSpelledAsDirectory(label: string, fieldName: string): never {
 	);
 }
 
+/** Builds and throws the `init-path-conflict`-coded, enriched plain
+ * `HejbroError` for a `stat` failure other than "nothing is there"
+ * (D106 R1 B1) -- an `EACCES`/`ELOOP`/etc, named by the operating
+ * system's own code instead of the raw Node stack this CLI's
+ * diagnostics never print (D57). */
+function throwStatFailed(
+	label: string,
+	fieldName: string,
+	code: string,
+): never {
+	return throwHejbroError(
+		"init-path-conflict",
+		`"${label}" could not be checked for ${fieldName} (${code}). Next: check permissions on "${label}", then rerun \`hejbro init\`.`,
+	);
+}
+
+/** The operating system's own error code off a caught `fs` failure, or
+ * `"unknown"` when the thrown value carries none -- never the raw error
+ * object, which a diagnostic must not print (D57). */
+const errorCode = (error: unknown): string => {
+	if (error !== null && typeof error === "object" && "code" in error) {
+		return String((error as NodeJS.ErrnoException).code);
+	}
+	return "unknown";
+};
+
+type StatOutcome =
+	| { readonly kind: "absent" }
+	| { readonly kind: "present"; readonly actualKind: NodeKind }
+	| { readonly kind: "stat-failed"; readonly code: string };
+
+/** `stat`'s own three outcomes at `path` (already trailing-separator-
+ * stripped by the caller, D106 R1 B1): the node's kind, "nothing is
+ * there" (`ENOENT` only), or any other failure, carried as data instead
+ * of being decided by a bare `existsSync` that a trailing separator can
+ * make silently `false` for a file that is really there. */
+const statOutcomeAt = (path: string): StatOutcome => {
+	try {
+		return { kind: "present", actualKind: kindOfStat(statSync(path)) };
+	} catch (error) {
+		const code = errorCode(error);
+		if (code === "ENOENT") {
+			return { kind: "absent" };
+		}
+		return { kind: "stat-failed", code };
+	}
+};
+
 /** Refuses before creating anything (checked for every planned artifact
  * before any of them is created): a file artifact whose own path is
  * spelled as a directory, or an existing path that is the wrong kind
  * of node for what `artifact` names. init resolves the same way
  * `generate` does and never normalizes the configured value away --
- * a trailing separator on a file field is refused, not trimmed. */
+ * a trailing separator on a file field is refused, not trimmed. The
+ * presence/kind check itself does strip trailing separators before
+ * stat'ing (D106 R1 B1): a directory field honours `"mig/"` the same as
+ * `"mig"`, so the check that path is inspected under must too, or a file
+ * sitting there escapes it and reaches a raw `mkdirSync` crash instead. */
 const checkPathKind = (cwd: string, artifact: Artifact): void => {
 	const expectedKind = expectedKindOf(artifact);
 	if (expectedKind === "file" && artifact.path.endsWith("/")) {
@@ -112,16 +178,19 @@ const checkPathKind = (cwd: string, artifact: Artifact): void => {
 		// trailing slash the message needs to show; `dirLabel` keeps it.
 		throwSpelledAsDirectory(dirLabel(cwd, artifact.path), artifact.fieldName);
 	}
-	if (!existsSync(artifact.path)) {
+	const outcome = statOutcomeAt(stripTrailingSeparators(artifact.path));
+	if (outcome.kind === "absent") {
 		return;
 	}
-	const actualKind = kindAt(artifact.path);
-	if (actualKind !== expectedKind) {
+	if (outcome.kind === "stat-failed") {
+		throwStatFailed(artifact.label, artifact.fieldName, outcome.code);
+	}
+	if (outcome.kind === "present" && outcome.actualKind !== expectedKind) {
 		throwPathConflict(
 			artifact.label,
 			artifact.fieldName,
 			expectedKind,
-			actualKind,
+			outcome.actualKind,
 		);
 	}
 };

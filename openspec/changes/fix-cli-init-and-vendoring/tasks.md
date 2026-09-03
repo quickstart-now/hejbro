@@ -1,6 +1,7 @@
 # Tasks: fix-cli-init-and-vendoring
 
-Two groups, one team (`cl`). The groups share no file. Estimates are pure
+Two groups, one team (`cl`), plus the D106 round-1 correction group
+(`cc`), which runs after both are merged. The groups share no file. Estimates are pure
 work minutes. Every task starts from its named red test. Verification
 (gates, `openspec validate --strict`, `show --diff`) is the definition of
 done, never a task.
@@ -210,6 +211,168 @@ one-way documentation cross-check is unaffected by adding a sibling.
       Files: `packages/cli/src/vendor/validate-export.ts`,
       `packages/cli/test/contract-emit.test.ts`,
       `packages/query/src/db/fn.ts` (comment only).
+
+## 3. D106 round-1 corrections (`d106-r1`)
+
+Files this group owns: `packages/cli/src/commands/init.ts`,
+`packages/cli/test/init.test.ts`,
+`packages/query/src/client/name-keyed-db.ts`,
+`packages/query/test/client/errors.test.ts`,
+`skills/hejbro/references/query-layer.md`,
+`skills/hejbro/references/polyrepo.md`,
+`openspec/changes/fix-cli-init-and-vendoring/specs/cli-commands/spec.md`,
+`openspec/changes/fix-cli-init-and-vendoring/evaluation.md`,
+`.changeset/fix-cli-init-d106-r1.md`.
+
+Groups 1 and 2 are merged, so this group shares a file with neither.
+
+- [x] 3.1 (~8m) `[design]` A configured directory spelled with a trailing
+      separator is inspected as the node it names. Red:
+      `packages/cli/test/init.test.ts` — "refuses a configured migrations
+      directory spelled with a trailing slash that holds a file". The
+      claim is universal (every spelling the run honours is inspected),
+      so the red starts from an input table, one real temporary project
+      per row (D110):
+
+      | field | configured value | what sits at the path | expected |
+      |---|---|---|---|
+      | `migrationsDir` | `"mig/"` | a regular file at `mig` | `init-path-conflict` naming `mig/` and the expected kind, nothing created |
+      | `migrationsDir` | `"mig//"` | a regular file at `mig` | the same refusal |
+      | `migrationsDir` | `"db/mig/"` | a regular file at `db/mig` | the same refusal, naming `db/mig/` |
+      | `migrationsDir` | `"mig/"` | a directory at `mig` | skipped `mig/` (control) |
+      | `migrationsDir` | `"mig/"` | nothing | created `mig/` (control) |
+      | `migrationsDir` | `"mig"` | a regular file at `mig` | unchanged from today (control: this message text does not move) |
+
+      Green: the presence and kind check stats the configured path with
+      its trailing separators removed, so a spelling the run otherwise
+      honours cannot skip the check by making `existsSync` false. Only
+      `ENOENT` counts as "nothing is there"; any other stat failure
+      becomes `init-path-conflict` naming the label and the operating
+      system's own error code, never a raw Node stack — this CLI's
+      diagnostics print no absolute path (D57).
+      Files: `packages/cli/src/commands/init.ts`, its test.
+
+- [ ] 3.2 (~9m) `[design]` A path an artifact must be created inside
+      stops the run before anything is created. Red:
+      `packages/cli/test/init.test.ts` — "refuses when a directory an
+      artifact needs is a file, and creates nothing". Input table:
+
+      | field | configured value | what sits there | expected |
+      |---|---|---|---|
+      | `snapshotPath` | `"db/snap.json"` | a regular file at `db` | `init-path-conflict` naming `db`, exit 1 |
+      | `migrationsDir` | `"db/mig"` | a regular file at `db` | the same refusal |
+      | `snapshotPath` | `"a/b/c/snap.json"` | a regular file at `a` | refusal naming `a` — the first node on the way that is not a directory, not the leaf |
+      | both fields set, `snapshotPath: "db/snap.json"` | — | a regular file at `db` | nothing is created: no `migrations/`, no `hejbro.config.ts` |
+      | `snapshotPath` | `"db/snap.json"` | a directory at `db` | created (control) |
+      | `migrationsDir` | `"../out/mig"` | nothing at `../out` | created, reported `../out/mig/` (control: an escaping path is not what this refuses) |
+
+      Green: before anything is created, each planned artifact's ancestor
+      chain is walked from its parent upward, and the walk continues past
+      both `ENOENT` and `ENOTDIR` — a stat below a file ancestor fails
+      with `ENOTDIR`, so treating that as a result rather than as "keep
+      going" would name the deepest segment (`a/b/c`) instead of the file
+      that actually blocks it (`a`). The walk stops at the first path that
+      stats successfully; if that node is not a directory it raises
+      `init-path-conflict` naming it. This runs before the leaf's own kind
+      check (3.1), so a leaf whose stat fails with `ENOTDIR` is reported
+      as the ancestor that caused it — after 3.1 alone, such a run refuses
+      naming the leaf, which is the intermediate state this task closes.
+      Recursive, never a loop (`check:bans`). The fourth row is the pin
+      for the requirement's own "creating nothing": today a refused run
+      has already written the migrations directory.
+      Files: `packages/cli/src/commands/init.ts`, its test.
+
+- [ ] 3.3 (~8m) `[design]` Two configured fields naming one path stop the
+      run. Red: `packages/cli/test/init.test.ts` — "refuses a
+      configuration whose fields resolve to the same path". Input table:
+
+      | `migrationsDir` | `snapshotPath` | expected |
+      |---|---|---|
+      | `"migrations"` | `"migrations"` | `init-path-conflict` naming both fields and the shared path, nothing created |
+      | `"mig/"` | `"mig"` | the same refusal — the comparison is of resolved paths, not of spellings |
+      | omitted | `"hejbro.config.ts"` | refusal naming `snapshotPath` and the configuration file |
+      | `"migrations"` | `"hejbro.snapshot.json"` | both created (control) |
+      | omitted | omitted | both reported not configured (control) |
+
+      Green: the planned artifacts' resolved paths are compared pairwise
+      before any is created; a repeat raises `init-path-conflict` naming
+      the two fields. Today the run creates one and reports the other as
+      already present — the "tells a repair run that a broken project is
+      whole" the requirement forbids. Also in this task: the delta
+      requirement gains one prose clause and one scenario covering this
+      case and 3.2's, and the existing wrong-kind scenario's WHEN gains
+      the configuration path (3.4).
+      Files: `packages/cli/src/commands/init.ts`, its test,
+      `openspec/changes/fix-cli-init-and-vendoring/specs/cli-commands/spec.md`.
+
+- [ ] 3.4 (~7m) `[design]` The configuration's own path is checked for
+      kind before it is loaded. Red: `packages/cli/test/init.test.ts` —
+      "refuses a directory sitting where the configuration file belongs".
+      Input table:
+
+      | what sits at `hejbro.config.ts` | expected |
+      |---|---|
+      | a directory | `init-path-conflict` naming `hejbro.config.ts` and the kind expected there, nothing created, and not `config-load-failed` |
+      | a readable configuration | loaded as today (control) |
+      | a configuration with an unresolvable import | `config-load-failed`, message unchanged (control) |
+      | nothing | scaffolded as today (control) |
+
+      Green: the configuration artifact's kind check runs before
+      `loadConfig`; the other two artifacts keep theirs where it is, since
+      they need the loaded configuration to know their paths. The
+      requirement already names the configuration among the artifacts
+      whose wrong-kind path stops the run; today the loader answers
+      instead, with a `Next:` line about import resolution.
+      Files: `packages/cli/src/commands/init.ts`, its test.
+
+- [ ] 3.5 (~7m) `[design]` A name the contract does not vendor is refused
+      even when `Object.prototype` carries one. Red:
+      `packages/query/test/client/errors.test.ts` — "refuses a lookup of
+      an inherited name the contract does not vendor". Input table, on a
+      contract vendoring `posts` and `add` and nothing else:
+
+      | lookup | expected |
+      |---|---|
+      | `client.fn.__proto__` | `unknown-contract-function` — today `Object.prototype`, then a `TypeError` on the call |
+      | `client.__proto__` | `unknown-contract-table` |
+      | `client.fn.hasOwnProperty` | `unknown-contract-function` |
+      | `client.posts` / `client.fn.add` | the vendored member (control) |
+      | `client.fn.__proto__` on a contract that does vendor `__proto__` | the vendored callable (control — the own property wins) |
+      | `await client`, `String(client)`, `JSON.stringify(client)` | no refusal: the names the language itself reads stay readable |
+
+      Green: both guards decide "unknown" with `Object.hasOwn` instead of
+      `prop in obj`, with one explicit passthrough list — `then`,
+      `toString`, `valueOf`, `constructor`, `toJSON` — carrying its
+      reason in a one-line comment: an `async` function returning the
+      client reads `then` off it, so a passthrough-free guard would
+      refuse a correct program.
+      Files: `packages/query/src/client/name-keyed-db.ts`, its test.
+
+- [ ] 3.6 (~6m) The skill documents the codes this surface raises and the
+      three column names TypeScript will not let a caller write. No test:
+      the observer is the file — `references/query-layer.md`'s Errors
+      table carries a row for none of these codes today, and "public API
+      surface changed → `skills/hejbro` updated in the same PR" was not
+      met when they landed.
+
+      | file | edit |
+      |---|---|
+      | `references/query-layer.md` | Errors table rows for `function-argument-unknown`, `function-argument-count-mismatch`, `unknown-contract-table`, `unknown-contract-function` |
+      | `references/polyrepo.md` | one sentence: a column named `constructor`, `toString` or `hasOwnProperty` is carried faithfully by the contract, but TypeScript resolves those names on every object type, so a write literal against such a table cannot type-check — a schema should not name a column that way. TypeScript's own rule, not the emitter's |
+
+      Close: `.changeset/fix-cli-init-d106-r1.md` (`patch`, `hejbro`), one
+      paragraph in user-facing terms covering the `init` refusals and the
+      contract-name guard.
+      Files: those two references, the changeset.
+
+- [ ] 3.7 (~6m) The round's own disposition is written down. Files:
+      `openspec/changes/fix-cli-init-and-vendoring/evaluation.md` — a
+      `## Round 1 disposition` section, one line per item (B1, N1–N8):
+      what was done, or why not, with the task that carries it. N4 and N5
+      are filed (#745, #743) and untouched here; N8 is recorded as a plain
+      fix with no delta, because no specification anywhere states what a
+      name-keyed lookup of an unvendored name does — a gap for whenever
+      the client surface gets a capability spec.
 
 Group close (each group): `openspec validate fix-cli-init-and-vendoring
 --strict` and `show --diff` with the MODIFIED requirement classified
