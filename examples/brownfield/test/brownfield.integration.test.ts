@@ -16,10 +16,11 @@ import {
  * runs under `pnpm test`/CI (Docker-gated, local-only, D49) --
  * `pnpm --filter example-brownfield test:integration`.
  *
- * One container, one database, applied once per PG image -- every case
- * below only ever *reads* the catalog (`import`), so sharing one already-
- * seeded database across every `it()` in this file is safe and avoids
- * re-applying the dump per case.
+ * One container, one database, applied once per PG image. Every case
+ * shares it, so at most ONE case may `baseline` + `migrate` (that writes
+ * the ledger into the shared database; a second such case would find a
+ * foreign chain already applied and fail on the ledger, not on the
+ * corpus -- measured, 2026-09-03). The others only ever `import`.
  */
 const PG_IMAGES = ["postgres:15-alpine", "postgres:17-alpine"] as const;
 const DATABASE = "brownfield";
@@ -35,8 +36,8 @@ const CLEAN_SCHEMAS = [
 	"catalog",
 	"Marketing",
 ] as const;
-const R5_BLOCKED_SCHEMAS = ["shop", "people", "inventory"] as const;
-const ALL_SCHEMAS = [...CLEAN_SCHEMAS, ...R5_BLOCKED_SCHEMAS] as const;
+const R5_SCHEMAS = ["shop", "people", "inventory"] as const;
+const ALL_SCHEMAS = [...CLEAN_SCHEMAS, ...R5_SCHEMAS] as const;
 
 const dockerAvailable = (): boolean => {
 	try {
@@ -253,25 +254,11 @@ describe.each(PG_IMAGES)("brownfield corpus / %s", (image) => {
 					cwd,
 					importArgs(url(), ALL_SCHEMAS, "src/schema"),
 				);
-				// red on dev until #711: the full-schema run stops at the
-				// FIRST R5 defect it reaches during the reading, not the
-				// last -- captured verbatim against postgres:17-alpine,
-				// 2026-09-03, tip 36520086 (dev):
-				//
-				//   error[invalid-sql-name]: _id
-				//     column name "_id" is not a valid hejbro SQL
-				//     identifier -- names must match ^[a-z][a-z0-9_]*$
-				//     (lower-case snake_case, no dots or symbols) so they
-				//     can be referenced from --rename/--confirm-drop
-				//     flags. Next: rename the column to snake_case.
-				//
-				// (R5-B2, #711 -- people.accounts._id fails table()'s own
-				// assertSqlName instead of being omitted.) shop's and
-				// inventory's own, different failure modes (a hard abort
-				// on an omitted table's UNIQUE constraint, and a silent
-				// check-expression swap with no abort at all) are
-				// invisible from this run alone -- 2b/2c fix each one to
-				// its own schema so neither stays hidden behind this one.
+				// A whole-database reading stops at the FIRST defect it
+				// reaches, so this run alone can only ever show one
+				// failure mode at a time (it showed R5-B2 before #711);
+				// 2b/2c below pin each schema's own mode separately so
+				// none stays hidden behind another.
 				expect(firstImport.exitCode).toBe(0);
 
 				// Written outside "src/" -- the default entry glob
@@ -305,15 +292,12 @@ describe.each(PG_IMAGES)("brownfield corpus / %s", (image) => {
 				const migrateResult = await runCli(cwd, ["migrate", "--url", url()]);
 				expect(migrateResult.exitCode).toBe(0);
 				const checkResult = await runCli(cwd, ["check", "--url", url()]);
-				// (d): observed, not asserted -- 2nd-token work (#711 also
-				// changes what the loss report and `check` say). Also
-				// observed on dev 36520086, unattributed to #711 -- filed
-				// as #716: every `serial()` column's own owned-sequence
-				// default (`nextval(...)`) is missing from the declaration
-				// `check` compares against, so a clean serial column reports
-				// as differing even though nothing about it was omitted or
-				// approximated in the loss report. Asserted once #716 is
-				// ruled on (2nd token or later).
+				// (d): observed, not asserted, until #716 is ruled on --
+				// every `serial()` column's own owned-sequence default
+				// (`nextval(...)`) is missing from the declaration `check`
+				// compares against, so a clean serial column reports as
+				// differing although the loss report omitted or
+				// approximated nothing about it.
 				const findingCount = (checkResult.stderr.match(/^error\[/gm) ?? [])
 					.length;
 				console.log(
@@ -326,16 +310,14 @@ describe.each(PG_IMAGES)("brownfield corpus / %s", (image) => {
 	});
 
 	/**
-	 * 2b (#714 bc-1): each R5-blocked schema run alone, so its own
-	 * distinct failure mode is captured on its own -- the full-corpus run
-	 * above only ever shows the first one it reaches (R5-B2, `people`).
-	 * `inventory` alone does not abort today (unlike `shop`/`people`) --
-	 * its own failure is a silent content swap, not an exit code, and is
-	 * fixed to green by a follow-up commit's content assertion instead
-	 * (2c) rather than here.
+	 * 2b (#714 bc-1): each schema D106 round 5 (#711) found a defect in,
+	 * run alone, so its own failure mode stays pinned on its own -- the
+	 * full-corpus run above only ever shows the first one it reaches.
+	 * `inventory`'s mode never was an exit code (a silent content swap),
+	 * so its pin is a content assertion (2c).
 	 */
-	describe("the three R5-blocked schemas, each in isolation", () => {
-		it('shop: red on #711 -- "Widgets" (and the UNIQUE on it) should be omitted, taking the FK that targets it with it', async () => {
+	describe("the three schemas D106 round 5 found defects in, each in isolation", () => {
+		it('shop: "Widgets" is omitted with its UNIQUE constraint, and the foreign key that targets it goes too', async () => {
 			const cwd = await createCliFixtureDir();
 			try {
 				await runCli(cwd, ["init"]);
@@ -343,42 +325,33 @@ describe.each(PG_IMAGES)("brownfield corpus / %s", (image) => {
 					cwd,
 					importArgs(url(), ["shop"], "src/schema"),
 				);
-				// red on dev until #711: R5-B1 (#711), confirmed -- the
-				// lead's own build --force'd dist (2026-09-03) ran
-				// `import --schema shop` directly against a live
-				// container and the abort's own stack frame is
-				// `referencesFor`'s `existingTable(fk.targetSchema,
-				// fk.targetTable, ...)` -- i.e. shop.orders.widget_id's
-				// inbound reference into the omitted "Widgets", not the
-				// UNIQUE constraint on "Widgets" itself (R5-N2, a
-				// different variable this same fixture also carries --
-				// see seed/brownfield.sql's own comment on "Widgets").
-				// Same red on both PG15 and PG17. Captured verbatim
-				// against postgres:17-alpine, 2026-09-03, tip 36520086
-				// (dev):
-				//
-				//   error[invalid-sql-name]: Widgets
-				//     table name "Widgets" is not a valid hejbro SQL
-				//     identifier -- names must match ^[a-z][a-z0-9_]*$
-				//     (lower-case snake_case, no dots or symbols) so they
-				//     can be referenced from --rename/--confirm-drop
-				//     flags. Next: rename the table to snake_case.
-				//
-				// Once #711 lands: "Widgets" and its UNIQUE constraint are
-				// omitted, the loss report names both, and shop.orders
-				// survives without the foreign key that used to target it.
+				// Two variables on one fixture (R5-B1: the inbound foreign
+				// key into an omitted table; R5-N2: a UNIQUE constraint on
+				// it), pinned separately. The starter's header carries the
+				// loss report, which legitimately names "shop.Widgets", so
+				// "the table is not declared" is asserted on the
+				// declarations below the header, never on the whole file.
 				expect(importResult.exitCode).toBe(0);
 				const source = readFileSync(
 					resolve(cwd, "src/schema/shop.schema.ts"),
 					"utf8",
 				);
-				expect(source).not.toContain("Widgets");
+				const header = source.slice(0, source.indexOf("*/"));
+				const declarations = source.slice(source.indexOf("*/"));
+				expect(declarations).not.toContain("Widgets");
+				expect(declarations).toMatch(/export const orders = table\(/);
+				expect(declarations).not.toContain("widget_id_fkey");
+				expect(header).toContain('Omitted: table "shop.Widgets"');
+				expect(header).toContain(
+					'Omitted: foreign key "shop.orders.orders_widget_id_fkey"',
+				);
+				expect(header).not.toContain("Approximated: the UNIQUE constraint");
 			} finally {
 				await removeCliFixtureDir(cwd);
 			}
 		});
 
-		it("people: red on #711 -- the leading-underscore column `_id` should be omitted, not abort the reading", async () => {
+		it("people: the leading-underscore column `_id` is omitted and named; the reading survives", async () => {
 			const cwd = await createCliFixtureDir();
 			try {
 				await runCli(cwd, ["init"]);
@@ -386,30 +359,26 @@ describe.each(PG_IMAGES)("brownfield corpus / %s", (image) => {
 					cwd,
 					importArgs(url(), ["people"], "src/schema"),
 				);
-				// red on dev until #711: R5-B2 (#711) -- captured verbatim
-				// against postgres:17-alpine, 2026-09-03, tip 36520086 (dev):
-				//
-				//   error[invalid-sql-name]: _id
-				//     column name "_id" is not a valid hejbro SQL
-				//     identifier -- names must match ^[a-z][a-z0-9_]*$
-				//     (lower-case snake_case, no dots or symbols) so they
-				//     can be referenced from --rename/--confirm-drop
-				//     flags. Next: rename the column to snake_case.
-				//
-				// Once #711 lands: people.accounts survives with `_id`
-				// omitted and named in the loss report, `id`/`email` intact.
+				// R5-B2: `_id` round-trips through the key rule but is not
+				// a declarable SQL name, so it must cost the column, not
+				// the run -- `id`/`email` stay declared.
 				expect(importResult.exitCode).toBe(0);
 				const source = readFileSync(
 					resolve(cwd, "src/schema/people.schema.ts"),
 					"utf8",
 				);
-				expect(source).not.toContain('"_id"');
+				const header = source.slice(0, source.indexOf("*/"));
+				const declarations = source.slice(source.indexOf("*/"));
+				expect(declarations).not.toContain('"_id"');
+				expect(declarations).toMatch(/export const accounts = table\(/);
+				expect(declarations).toContain("email");
+				expect(header).toContain('Omitted: column "people.accounts._id"');
 			} finally {
 				await removeCliFixtureDir(cwd);
 			}
 		});
 
-		it("inventory: red on #711 -- terminals' own check should not be registers' expression (silent content swap, R5-B3)", async () => {
+		it("inventory: terminals keeps its own check expression under the name it shares with registers", async () => {
 			// scope: adds a content assertion beyond BC-1's (a)(b)(c);
 			// droppable. A crash-free defect (R5-B3) can never be caught
 			// by an exit-code assertion alone -- import succeeds
@@ -440,14 +409,10 @@ describe.each(PG_IMAGES)("brownfield corpus / %s", (image) => {
 				};
 				const terminalsBlock = blockFor("terminals");
 				const registersBlock = blockFor("registers");
-				// red on dev until #711: R5-B3 -- verbatim, 2026-09-03,
-				// postgres:17-alpine, tip 36520086 (dev): checksFor matches
-				// a check expression on schema + constraint name only, so
-				// `terminals` (columns: id, status -- no "balance" column
-				// at all) silently inherits `registers`' own
-				// check("pos", "balance >= 0") expression instead of its
-				// own "status in (...)". Once #711 lands, each table keeps
-				// its own expression under the shared name "pos".
+				// R5-B3: a check looked up by schema + constraint name
+				// alone gave `terminals` (no "balance" column at all)
+				// `registers`' expression; each table must keep its own
+				// under the shared name "pos".
 				expect(terminalsBlock).not.toContain("balance");
 				expect(terminalsBlock).toMatch(/status/);
 				expect(registersBlock).toContain("balance");
@@ -455,63 +420,5 @@ describe.each(PG_IMAGES)("brownfield corpus / %s", (image) => {
 				await removeCliFixtureDir(cwd);
 			}
 		});
-	});
-
-	/**
-	 * 3 (#714 bc-1): the clean subset -- every schema R1-R4 (already on
-	 * dev) already cover cleanly, selected on its own via `--schema`.
-	 * Green today; proves the corpus's own non-R5 shapes (the
-	 * opposite-direction enum/FK cycle, the three-schema `users` chain,
-	 * default `_fkey` names, CamelCase schema/index/check omission, the
-	 * star-slash-in-a-name header escape, the approximation shapes) all
-	 * still work, without waiting on #711.
-	 *
-	 * #711 merged, re-check: once the full-corpus run in "the documented
-	 * import flow" above is green on its own, this axis is redundant with
-	 * it (this only exists because that one isn't green yet).
-	 */
-	describe("the clean subset (app, audit, billing, catalog, Marketing)", () => {
-		it("imports cleanly, twice identically, and every emitted file loads from every entry point", async () => {
-			const cwd = await createCliFixtureDir();
-			try {
-				const initResult = await runCli(cwd, ["init"]);
-				expect(initResult.exitCode).toBe(0);
-
-				const firstImport = await runCli(
-					cwd,
-					importArgs(url(), CLEAN_SCHEMAS, "src/schema"),
-				);
-				expect(firstImport.exitCode).toBe(0);
-
-				// Written outside "src/" -- see the full-corpus case above
-				// for why (the default entry glob would otherwise match
-				// both copies once baseline runs).
-				const secondImport = await runCli(
-					cwd,
-					importArgs(url(), CLEAN_SCHEMAS, "verify-schema"),
-				);
-				expect(secondImport.exitCode).toBe(0);
-				execFileSync("diff", [
-					"-rq",
-					resolve(cwd, "src/schema"),
-					resolve(cwd, "verify-schema"),
-				]);
-
-				const filesToProbe = CLEAN_SCHEMAS.filter(
-					(schema) => schema !== "Marketing",
-				).map((schema) => resolve(cwd, "src", "schema", `${schema}.schema.ts`));
-				await assertEveryEntryPointLoads(
-					resolve(cwd, "hejbro.config.ts"),
-					filesToProbe,
-				);
-
-				const baselineResult = await runCli(cwd, ["baseline"]);
-				expect(baselineResult.exitCode).toBe(0);
-				const migrateResult = await runCli(cwd, ["migrate", "--url", url()]);
-				expect(migrateResult.exitCode).toBe(0);
-			} finally {
-				await removeCliFixtureDir(cwd);
-			}
-		}, 60_000);
 	});
 });
