@@ -343,6 +343,10 @@ export const compareCheckAgainstCatalog = async (
 	const tableFindings = compareCatalog(snapshot, catalog, registry);
 	const expressionFindingLists = await Promise.all(
 		declaredCheckConstraints(snapshot).map((constraint) =>
+			// "server" unconditionally for now -- deriving the real mode from
+			// config.presets and threading it here is task 2.3's own scope
+			// (fix-nile-findings, #755); this keeps today's behavior exactly
+			// unchanged until then.
 			compareCheckConstraint(
 				session,
 				catalog,
@@ -350,6 +354,7 @@ export const compareCheckAgainstCatalog = async (
 				constraint.table,
 				constraint.name,
 				constraint.expression,
+				"server",
 			),
 		),
 	);
