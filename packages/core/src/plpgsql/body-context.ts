@@ -92,9 +92,35 @@ export type TriggerRow<TTable extends Table> = {
  * `ReturningProjection | undefined`, not the bare (`undefined`-only)
  * default (#634) -- a projected `.returning({...})` is the canonical
  * form the body requirement names, exactly as accepted as the bare
- * `.returning()` form.
+ * `.returning()` form. Names the third, stage argument as `"final"`
+ * explicitly (#686) -- `mutate.ts`'s own two-argument default now covers
+ * *both* stages (needed so `@hejbro/query`'s existing two-argument sites
+ * keep compiling, #686), so naming only `"final"` here, not omitting the
+ * argument, is what excludes a mutation that never called `.returning()`
+ * (`InsertReturnable`/`UpdateReturnable`/`DeleteReturnable`, stage
+ * `"returnable"`) -- `return query …` over a statement with no
+ * `RETURNING` clause is invalid plpgsql. `ExecutableQuery` below is the
+ * stage-agnostic sibling `ctx.execute()` accepts.
  */
 export type ReturnableQuery =
+	| SelectLimited
+	| InsertFinal<Table, ReturningProjection | undefined, "final">
+	| UpdateFinal<Table, ReturningProjection | undefined, "final">
+	| DeleteFinal<Table, ReturningProjection | undefined, "final">;
+
+/**
+ * What `ctx.execute()` accepts: the same four query shapes as
+ * {@link ReturnableQuery}, but at *either* mutation stage (#686) --
+ * `ctx.execute()` runs a statement for its effect, so a mutation that
+ * never called `.returning()` is exactly its common case, and one that
+ * did is still refused, at declaration time, by
+ * `execute-expects-no-returning` (a runtime check on the rendered query,
+ * not a type-level one -- both stages compile here on purpose). Uses the
+ * bare two-argument form deliberately -- `mutate.ts`'s `TStage` default
+ * is already the full `"returnable" | "final"` union, so this is the
+ * same shape every pre-existing two-argument mention already had.
+ */
+export type ExecutableQuery =
 	| SelectLimited
 	| InsertFinal<Table, ReturningProjection | undefined>
 	| UpdateFinal<Table, ReturningProjection | undefined>
@@ -113,8 +139,8 @@ export type BodyContext = {
 	readonly if: (condition: Condition, thenBranch: () => void) => IfChain;
 	readonly raise: (message: string, ...args: ReadonlyArray<RaiseArg>) => void;
 	readonly return: (value: TriggerRow<Table> | ReturnableQuery | Expr) => void;
-	/** Runs a statement for its side effect (#426) — a select renders `perform`, a mutation renders as-is. */
-	readonly execute: (statement: ReturnableQuery) => void;
+	/** Runs a statement for its side effect (#426) — a select renders `perform`, a mutation renders as-is, at either returning stage (#686). */
+	readonly execute: (statement: ExecutableQuery) => void;
 	readonly forEach: <TProjection extends RowProjection>(
 		query: SelectLimited<TProjection>,
 		body: (row: RowColumns<TProjection>) => void,
@@ -361,18 +387,20 @@ const isTriggerRow = (value: unknown): value is TriggerRow<Table> =>
 	typeof value === "object" && value !== null && triggerRowMeta in value;
 
 /**
- * Extracts the `QueryNode` a {@link ReturnableQuery} value carries, by
- * which of its four own fields is present — shared by {@link
- * recordReturnShape} and {@link recordExecute} so the same four-way
- * dispatch isn't repeated. Returns `null` only for a value matching none
- * of the four shapes — structurally unreachable for a type-correct
- * caller (`ReturnableQuery`'s own four members each carry exactly one of
- * these keys), the same class of gap a `switch`'s `default:
- * assertNever(...)` leaves elsewhere in this codebase, kept here as a
- * real `null` (not a throw) so each caller decides what "no shape
- * matched" means for itself.
+ * Extracts the `QueryNode` a {@link ReturnableQuery}/{@link ExecutableQuery}
+ * value carries, by which of its four own fields is present — shared by
+ * {@link recordReturnShape} and {@link recordExecute} so the same
+ * four-way dispatch isn't repeated. Takes the wider `ExecutableQuery`
+ * (both mutation stages, #686) since `recordExecute` accepts either
+ * stage; `recordReturnShape`'s own `ReturnableQuery` argument is always a
+ * narrower, compatible value. Returns `null` only for a value matching
+ * none of the four shapes — structurally unreachable for a type-correct
+ * caller (each member of both unions carries exactly one of these keys),
+ * the same class of gap a `switch`'s `default: assertNever(...)` leaves
+ * elsewhere in this codebase, kept here as a real `null` (not a throw) so
+ * each caller decides what "no shape matched" means for itself.
  */
-const returnableQueryNode = (value: ReturnableQuery): QueryNode | null => {
+const returnableQueryNode = (value: ExecutableQuery): QueryNode | null => {
 	if ("selectQuery" in value) {
 		return value.selectQuery;
 	}
@@ -412,6 +440,31 @@ const assertExecuteHasNoReturning = (
 };
 
 /**
+ * Refuses a mutation `QueryNode` that does NOT carry `.returning()` --
+ * the mirror of {@link assertExecuteHasNoReturning}. `return query …`
+ * needs a command that produces rows, and a mutation with no `RETURNING`
+ * clause produces none, so Postgres rejects such a body at create time
+ * (#686). `"returning" in query` is `false` for a `SelectNode` (a select
+ * always produces rows, so it's never refused here), so this only ever
+ * fires for the three mutation kinds -- reachable only by a caller that
+ * bypasses `ReturnableQuery`'s own type-level exclusion of this shape
+ * (task 2.1).
+ */
+const assertReturnHasReturning = (
+	state: RecordingState,
+	query: QueryNode,
+): void => {
+	if (!("returning" in query) || query.returning !== null) {
+		return;
+	}
+	throwHejbroError(
+		"return-expects-returning",
+		`ctx.return() in ${state.identity} received ${describeQueryKind(query)} that never called .returning() — plpgsql's "return query" needs a command that produces rows, and this ${query.queryKind} produces none. Next: add .returning() to this ${query.queryKind} when its rows are the function's result, or run it with ctx.execute(...) instead of ctx.return() for its effect.`,
+		state.declaredAt,
+	);
+};
+
+/**
  * `ctx.execute(...)` (#426): records a select/insert/update/delete
  * builder as a statement run for its side effect. `returnableQueryNode`
  * returning `null` is reachable only by a caller that ignores `ReturnableQuery`
@@ -422,7 +475,7 @@ const assertExecuteHasNoReturning = (
  * `unreachable` skips `check:next-marker`, and this site is reachable
  * once the type system is bypassed).
  */
-const recordExecute = (state: RecordingState, value: ReturnableQuery): void => {
+const recordExecute = (state: RecordingState, value: ExecutableQuery): void => {
 	const query = returnableQueryNode(value);
 	if (query === null) {
 		throwHejbroError(
@@ -506,6 +559,7 @@ const recordReturnQueryShape = (
 		);
 		return;
 	}
+	assertReturnHasReturning(state, query);
 	markConsumed(query);
 	pushStatement(state, { stmtKind: "returnQuery", query });
 };

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { TriggerSnapshotShape } from "../../src/index";
+import type { BodyContext, TriggerSnapshotShape } from "../../src/index";
 import {
 	defineFunction,
 	defineTrigger,
@@ -19,6 +19,16 @@ import {
 	update,
 	uuid,
 } from "../../src/index";
+
+/** The `code` of the HejbroError `run` throws — the codes are the stable contract, the prose is not (define-function.test.ts's own convention). */
+const codeOf = (run: () => unknown): string => {
+	try {
+		run();
+	} catch (error) {
+		return (error as { code: string }).code;
+	}
+	return "(did not throw)";
+};
 
 const app = schema("app");
 const comments = table(app, "comments", {
@@ -285,6 +295,75 @@ describe("renderFunctionSql", () => {
 
 		expect(() => renderFunctionSql(trigger.functionDeclaration)).toThrowError(
 			/collides with the dollar-quote tag/,
+		);
+	});
+});
+
+/**
+ * #686: a mutation whose chain never called `.returning()` type-checks
+ * only through the same bypass this file's other declaration-time-only
+ * refusals use (a real `@ts-expect-error` on a genuinely constructible
+ * value, not an unreachable shape) -- `ReturnableQuery` already refuses
+ * it at the type level (task 2.1); this is the runtime backstop for a
+ * caller that reaches `ctx.return` with the type bypassed. The three
+ * `.returning()` forms above (lines 90-173: update/insert/insert-projected/
+ * delete) are this rule's own control rows -- they render `return query
+ * …;` with their own `RETURNING` list, unaffected.
+ */
+describe("a returned mutation with no returning is refused (#686)", () => {
+	const rejectedCases: ReadonlyArray<{
+		readonly label: string;
+		readonly name: string;
+		readonly build: (ctx: BodyContext) => void;
+	}> = [
+		{
+			label: "insert",
+			name: "returns_no_returning_insert",
+			build: (ctx) => {
+				// @ts-expect-error a mutation with no .returning() is not a ReturnableQuery (#686)
+				ctx.return(insert(posts).values({ publishedAt: now() }));
+			},
+		},
+		{
+			label: "update",
+			name: "returns_no_returning_update",
+			build: (ctx) => {
+				// @ts-expect-error a mutation with no .returning() is not a ReturnableQuery (#686)
+				ctx.return(update(posts).set({ publishedAt: now() }));
+			},
+		},
+		{
+			label: "delete",
+			name: "returns_no_returning_delete",
+			build: (ctx) => {
+				// @ts-expect-error a mutation with no .returning() is not a ReturnableQuery (#686)
+				ctx.return(deleteFrom(posts));
+			},
+		},
+	];
+
+	it.each(rejectedCases)(
+		"refuses a returned $label with no .returning() with return-expects-returning",
+		({ name, build }) => {
+			expect(
+				codeOf(() => defineFunction(app, name, { returns: posts }, build)),
+			).toBe("return-expects-returning");
+		},
+	);
+
+	it("names the statement kind and both working forms in the refusal", () => {
+		expect(() =>
+			defineFunction(
+				app,
+				"returns_no_returning_message",
+				{ returns: posts },
+				(ctx) => {
+					// @ts-expect-error a mutation with no .returning() is not a ReturnableQuery (#686)
+					ctx.return(insert(posts).values({ publishedAt: now() }));
+				},
+			),
+		).toThrowError(
+			/received an insert that never called \.returning\(\).*Next:.*add \.returning\(\).*or run it with ctx\.execute\(\.\.\.\)/s,
 		);
 	});
 });

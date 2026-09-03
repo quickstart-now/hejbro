@@ -401,17 +401,16 @@ const requireColumnFact = (
 };
 
 /**
- * #662: the column half enters through the emitter's *other* input
+ * #662/#679: both halves enter through the emitter's *other* input
  * contract, a hand-editable `schema.json` whose reader never checks a
- * key's shape (`columnFactSchema.key` is `z.string()`) -- not through
- * `table()`, which D36's `assertSqlName` makes structurally incapable of
- * declaring a non-identifier column key (every key that survives it is
- * already a valid TS identifier; tasks.md 1.4's own measurement). So the
- * snapshot/description come from a real declaration, and only the export
- * table fact's TS keys are hand-edited afterward, standing in for a
- * committed `schema.json` a person touched. The function argument half
- * has no such D36 check (`defineFunction` validates reserved words only)
- * and rides the real DSL directly.
+ * key's shape (`columnFactSchema.key`/the function arg fact's `key` are
+ * both `z.string()`) -- not through `table()`/`defineFunction()`, which
+ * D36's `assertSqlName` makes structurally incapable of declaring a
+ * non-identifier column key or argument key (every key that survives it
+ * is already a valid TS identifier; tasks.md 1.4's own measurement for
+ * columns, 1.1's for arguments). So the snapshot/description come from a
+ * real declaration, and only the export facts' TS keys are hand-edited
+ * afterward, standing in for a committed `schema.json` a person touched.
  */
 describe("non-identifier keys are quoted in the emitted contract (#662)", () => {
 	it("quotes a column key and an argument key that are not identifiers", () => {
@@ -423,9 +422,9 @@ describe("non-identifier keys are quoted in the emitted contract (#662)", () => 
 		const echoArg = defineFunction(
 			app,
 			"echo_arg",
-			{ args: { "my-arg": uuid() }, returns: uuid() },
+			{ args: { myArg: uuid() }, returns: uuid() },
 			(ctx, args) => {
-				ctx.return(sql`${args["my-arg"]}`);
+				ctx.return(sql`${args.myArg}`);
 			},
 		);
 		const declarations: ReadonlyArray<HejbroInput> = [app, posts, echoArg];
@@ -448,11 +447,23 @@ describe("non-identifier keys are quoted in the emitted contract (#662)", () => 
 				[twoFaSqlName]: { ...twoFaFact, key: "2fa" },
 			},
 		};
-		// `posts` is the only declared table, so the patched array replaces
-		// `payload.tables` outright rather than searching it back out.
+		const echoArgFact = requireFunctionFact(payload, "echoArg");
+		const patchedFunction = {
+			...echoArgFact,
+			args: echoArgFact.args.map((arg) => {
+				if (arg.sqlName !== myArgSqlName) {
+					return arg;
+				}
+				return { ...arg, key: "my-arg" };
+			}),
+		};
+		// `posts`/`echoArg` are the only declared table/function, so the
+		// patched arrays replace `payload.tables`/`payload.functions`
+		// outright rather than searching them back out.
 		const patchedPayload: ExportPayload = {
 			...payload,
 			tables: [patchedTable],
+			functions: [patchedFunction],
 		};
 
 		const source = emitContract(patchedPayload, ORIGIN);
