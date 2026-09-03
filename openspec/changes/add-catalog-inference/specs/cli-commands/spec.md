@@ -55,7 +55,12 @@ local copy of the enum for an enum. A foreign key into a table no
 starter file declares — one whose schema this run never named — SHALL
 be declared against such a handle too, for a different reason: there is
 no file to import its target from. A starter file therefore never names
-a table this run did not read except through a handle of its own. No
+a table this run did not read except through a handle of its own, and it
+SHALL carry one handle per target rather than one per foreign key,
+however many of its keys point there: a handle names a table, not a
+relation, and the reading that produces them counts them the same way —
+two artifacts of one reading that count the same thing differently
+disagree about which of them is right. No
 identifier a starter file declares or imports SHALL collide with a name
 the file's own emitted text already binds, the extras callback's own
 parameter included: a table whose identifier would collide with it is
