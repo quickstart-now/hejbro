@@ -60,7 +60,14 @@ kept: it was not omitted but unread, and its own name may be one a
 declaration carries perfectly well — such a reference SHALL survive
 into the starter declarations and into the contract alike, carried as a
 reference to a table this repository does not declare, with nothing
-said about it in the loss report, since nothing was lost. Which tables
+said about it in the loss report, since nothing was lost. The reading
+SHALL carry such a target in the snapshot it yields as a table it names
+but does not declare, so that both consumers of one reading express the
+reference the same way: the starter declarations declare that handle in
+their own text, and the contract carries the reference as a relation
+whose target is listed among the tables it names without owning. One
+reading whose two consumers disagree about the same reference has one
+of them guessing. Which tables
 a reading kept is therefore never what decides a reference's fate;
 whether the target's own name can be carried is — a hosted database's
 platform schemas are exactly the ones a run leaves unnamed, so reading
@@ -111,9 +118,11 @@ the snapshot records what a declaration can express.
   declaration can carry
 - **THEN** the reading keeps that foreign key: the starter declaration
   references its target as a table this repository does not declare, the
-  pulled contract carries the reference with its target's own schema and
-  table, the loss report says nothing about it, and a following
-  `baseline` emits the constraint with the rest
+  pulled contract carries the reference as a relation and lists that
+  target among the tables it names without owning, the loss report says
+  nothing about it, and a following `baseline` emits the constraint with
+  the rest — while no starter file is written for the schema the run
+  never named
 
 #### Scenario: Two tables sharing a constraint name keep their own expressions
 - **WHEN** two tables in one schema each carry a check constraint of the

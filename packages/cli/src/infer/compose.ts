@@ -32,8 +32,17 @@ import {
 	notInferredSummary,
 	standaloneSequences,
 } from "./rest";
-import type { InferredForeignKey, InferredTableFacts } from "./table";
-import { inferTable, isExpressibleName } from "./table";
+import type {
+	ExistingTableHandle,
+	InferredForeignKey,
+	InferredForeignKeyTargetColumn,
+	InferredTableFacts,
+} from "./table";
+import {
+	buildExistingTableHandle,
+	inferTable,
+	isExpressibleName,
+} from "./table";
 
 export type InferSourceCommand = "import" | "pull";
 
@@ -346,6 +355,60 @@ export const partitionForeignKeys = (
 	};
 };
 
+type OutOfScopeTarget = {
+	readonly targetSchema: string;
+	readonly targetTable: string;
+	readonly columnsBySqlName: Map<string, InferredForeignKeyTargetColumn>;
+};
+
+/**
+ * D106 R6-B1 commit 5.5 (owner ruling D): `import` and `pull` used to
+ * build two different snapshots from one reading -- a loaded starter
+ * file has an existing-table node for a target this run never read
+ * (its own text declares the handle), `pull` never loads that text, so
+ * its snapshot had none, and `contract/tables.ts`'s own
+ * `findTableInSnapshot` returned `null`. The fix is the reading itself
+ * carries the handle, so both consumers see the same snapshot -- one
+ * `existingTable` handle per out-of-scope *identity*, not per foreign
+ * key (two keys into one target must resolve to the one object that
+ * gets declared, never two objects sharing an identity), built from
+ * the union of every such foreign key's own `targetColumns`.
+ */
+export const outOfScopeHandlesFor = (
+	tables: ReadonlyArray<InferredTableFacts>,
+	survivingTableIdentities: ReadonlySet<string>,
+): ReadonlyMap<string, ExistingTableHandle> => {
+	const targets = tables
+		.flatMap((facts) => facts.foreignKeys)
+		.filter(
+			(fk) =>
+				!survivingTableIdentities.has(`${fk.targetSchema}.${fk.targetTable}`),
+		)
+		.reduce((map, fk) => {
+			const identity = `${fk.targetSchema}.${fk.targetTable}`;
+			const target: OutOfScopeTarget = map.get(identity) ?? {
+				targetSchema: fk.targetSchema,
+				targetTable: fk.targetTable,
+				columnsBySqlName: new Map(),
+			};
+			fk.targetColumns.forEach((column) => {
+				target.columnsBySqlName.set(column.sqlName, column);
+			});
+			map.set(identity, target);
+			return map;
+		}, new Map<string, OutOfScopeTarget>());
+	return new Map(
+		[...targets.entries()]
+			.sort(([a], [b]) => a.localeCompare(b))
+			.map(([identity, target]) => [
+				identity,
+				buildExistingTableHandle(target.targetSchema, target.targetTable, [
+					...target.columnsBySqlName.values(),
+				]),
+			]),
+	);
+};
+
 /**
  * The single entry point over every `infer/` part (CI-G1-R1-14): one
  * session and a required schema list in, `{ snapshot, description,
@@ -438,16 +501,23 @@ export const inferFromCatalog = async (
 	);
 	const foreignKeyPartition = partitionForeignKeys(mergedTables);
 	const tablesWithReachableForeignKeys = foreignKeyPartition.tables;
+	const outOfScopeHandles = outOfScopeHandlesFor(
+		tablesWithReachableForeignKeys,
+		survivingTableIdentities,
+	);
 
 	const snapshotTables = tablesExcludingUndeclarableNames(
 		tablesWithReachableForeignKeys,
 	);
-	const built = snapshotTables.map((table) => inferTable(table));
+	const built = snapshotTables.map((table) =>
+		inferTable(table, outOfScopeHandles),
+	);
 	const typeLosses = built.flatMap((result) => result.losses);
 	const declarations: ReadonlyArray<HejbroInput> = [
 		...schemasByName.values(),
 		...enums.declarations,
 		...built.map((result) => result.table),
+		...[...outOfScopeHandles.values()].map((handle) => handle.table),
 	];
 	const migration = generateMigration({
 		declarations,

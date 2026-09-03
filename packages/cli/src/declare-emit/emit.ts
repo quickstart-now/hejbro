@@ -1300,7 +1300,17 @@ const resolveFileIdentifiers = (
 export const emitDeclarationFiles = (
 	result: InferCatalogResult,
 ): ReadonlyArray<DeclareEmitFile> => {
-	const tables = tablesInSnapshot(result.snapshot);
+	// D106 R6-B1 commit 5.5: `compose.ts` now declares an `existingTable`
+	// handle for a foreign-key target this run never read, so the
+	// snapshot carries an `existing: true` node for it -- named, but
+	// never this run's own to write a file for (it was never read, let
+	// alone inferred). Filtered here, before any file plan is built, so
+	// a target like this never gets its own schema file (undoing the
+	// very scoping D106 R6-B1 defends) and never enters the topological
+	// order or the identifier namespace either.
+	const tables = tablesInSnapshot(result.snapshot).filter(
+		(table) => table.existing !== true,
+	);
 	const enums = enumsInSnapshot(result.snapshot);
 	const sequences = sequencesInSnapshot(result.snapshot);
 	const tsKeyFor = buildTsKeyLookup(result.description);
