@@ -440,6 +440,31 @@ const assertExecuteHasNoReturning = (
 };
 
 /**
+ * Refuses a mutation `QueryNode` that does NOT carry `.returning()` --
+ * the mirror of {@link assertExecuteHasNoReturning}. `return query …`
+ * needs a command that produces rows, and a mutation with no `RETURNING`
+ * clause produces none, so Postgres rejects such a body at create time
+ * (#686). `"returning" in query` is `false` for a `SelectNode` (a select
+ * always produces rows, so it's never refused here), so this only ever
+ * fires for the three mutation kinds -- reachable only by a caller that
+ * bypasses `ReturnableQuery`'s own type-level exclusion of this shape
+ * (task 2.1).
+ */
+const assertReturnHasReturning = (
+	state: RecordingState,
+	query: QueryNode,
+): void => {
+	if (!("returning" in query) || query.returning !== null) {
+		return;
+	}
+	throwHejbroError(
+		"return-expects-returning",
+		`ctx.return() in ${state.identity} received ${describeQueryKind(query)} that never called .returning() — plpgsql's "return query" needs a command that produces rows, and this ${query.queryKind} produces none. Next: add .returning() to this ${query.queryKind} when its rows are the function's result, or run it with ctx.execute(...) instead of ctx.return() for its effect.`,
+		state.declaredAt,
+	);
+};
+
+/**
  * `ctx.execute(...)` (#426): records a select/insert/update/delete
  * builder as a statement run for its side effect. `returnableQueryNode`
  * returning `null` is reachable only by a caller that ignores `ReturnableQuery`
@@ -534,6 +559,7 @@ const recordReturnQueryShape = (
 		);
 		return;
 	}
+	assertReturnHasReturning(state, query);
 	markConsumed(query);
 	pushStatement(state, { stmtKind: "returnQuery", query });
 };
