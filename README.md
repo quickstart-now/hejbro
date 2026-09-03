@@ -1,7 +1,7 @@
 # hejbro
 
 <!-- crap-badge:start -->
-[![CRAP ≤ 5 · 0 / 1621](https://img.shields.io/badge/CRAP%20%E2%89%A4%205-0%20%2F%201621-brightgreen)](#status)
+[![CRAP ≤ 5 · 0 / 1631](https://img.shields.io/badge/CRAP%20%E2%89%A4%205-0%20%2F%201631-brightgreen)](#status)
 <!-- crap-badge:end -->
 <!-- tasktime-badges:start -->
 [![tasks · 584 done](https://img.shields.io/badge/tasks-584%20done-blue)](openspec/task-times.csv)
