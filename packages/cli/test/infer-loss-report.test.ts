@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { Catalog } from "../src/check/catalog";
-import type { LossReportFacts } from "../src/infer/loss-report";
+import type {
+	LossReportFacts,
+	UndeclarableNameColumn,
+} from "../src/infer/loss-report";
 import {
 	buildLossReport,
 	detectForeignKeyNameApproximations,
@@ -143,40 +146,86 @@ describe("buildLossReport / 1.7", () => {
 		).toBe(true);
 	});
 
-	it("import: names an undeclarable-name column, its table, and the exact consequence", () => {
-		const report = buildLossReport({
-			...emptyFacts("import"),
-			undeclarableNameColumns: [
-				{ schema: "app", table: "widgets", sqlName: "createdAt" },
-			],
-		});
+	/**
+	 * D106 R6-N1: the report's own measured table (evaluation.md, Round 6)
+	 * -- `_id`/`_created_at`/`_9lives` each round-trip through their own
+	 * key but fail D36 itself (`identifierRuleRejects`); `createdAt`/`a_`
+	 * have no key that round-trips them back to this SQL name at all
+	 * (`noDeclarationKey`). A claim that the report "gives the reason
+	 * that actually applies" starts from this table, not one example per
+	 * cause (D110).
+	 */
+	const undeclarableColumnCases: ReadonlyArray<
+		Pick<UndeclarableNameColumn, "sqlName" | "cause">
+	> = [
+		{ sqlName: "_id", cause: "identifierRuleRejects" },
+		{ sqlName: "_created_at", cause: "identifierRuleRejects" },
+		{ sqlName: "_9lives", cause: "identifierRuleRejects" },
+		{ sqlName: "createdAt", cause: "noDeclarationKey" },
+		{ sqlName: "a_", cause: "noDeclarationKey" },
+	];
 
-		const line = report.find((entry) => entry.includes("createdAt"));
-		expect(line).toBeDefined();
-		expect(line).toContain("app.widgets");
-		expect(line).toContain("only partly declared");
-		expect(line).toContain("check");
-		expect(line).toContain("declared by hand or renamed in the database");
+	it("import: gives each undeclarable column the reason that actually applies to it", () => {
+		undeclarableColumnCases.forEach(({ sqlName, cause }) => {
+			const report = buildLossReport({
+				...emptyFacts("import"),
+				undeclarableNameColumns: [
+					{ schema: "app", table: "widgets", sqlName, cause },
+				],
+			});
+
+			const line = report.find((entry) => entry.includes(sqlName));
+			expect(line, `${sqlName} (${cause})`).toBeDefined();
+			expect(line).toContain("app.widgets");
+			expect(line).toContain("only partly declared");
+			expect(line).toContain("check");
+			expect(line).toContain("renamed in the database");
+			// D106 R6-N1: "declared by hand" is never a real remedy for
+			// either cause -- no hand-written declaration can carry a name
+			// `buildColumnEntries` itself derives and validates.
+			expect(line).not.toContain("declared by hand");
+			if (cause === "identifierRuleRejects") {
+				expect(line).toContain(
+					"a key does produce this name back, but it is not a valid hejbro SQL identifier",
+				);
+			} else {
+				expect(line).toContain(
+					"no declaration key produces this SQL name back",
+				);
+			}
+		});
 	});
 
-	it("pull: names an undeclarable-name column too (CI-G1-R1-16: contract/emit.ts drops any table fact with no matching snapshot node), with its own consequence", () => {
-		const report = buildLossReport({
-			...emptyFacts("pull"),
-			undeclarableNameColumns: [
-				{ schema: "app", table: "widgets", sqlName: "createdAt" },
-			],
-		});
+	it("pull: gives each undeclarable column the reason that actually applies to it", () => {
+		undeclarableColumnCases.forEach(({ sqlName, cause }) => {
+			const report = buildLossReport({
+				...emptyFacts("pull"),
+				undeclarableNameColumns: [
+					{ schema: "app", table: "widgets", sqlName, cause },
+				],
+			});
 
-		const line = report.find((entry) => entry.includes("createdAt"));
-		expect(line).toBeDefined();
-		expect(line).toContain("app.widgets");
-		// pull's own wording differs from import's: the column cannot reach
-		// the contract at all (never "declared by hand or renamed").
-		expect(line).toContain("cannot be carried in the contract");
-		expect(line).not.toContain("only partly declared");
-		expect(
-			report.some((entry) => entry.includes("link the schema repository")),
-		).toBe(true);
+			const line = report.find((entry) => entry.includes(sqlName));
+			expect(line, `${sqlName} (${cause})`).toBeDefined();
+			expect(line).toContain("app.widgets");
+			// pull's own wording differs from import's: the column cannot
+			// reach the contract at all.
+			expect(line).toContain("cannot be carried in the contract");
+			expect(line).not.toContain("only partly declared");
+			expect(line).toContain(
+				"Rename the column in the database, then link the schema repository.",
+			);
+			expect(line).not.toContain("declared by hand");
+			if (cause === "identifierRuleRejects") {
+				expect(line).toContain(
+					"a key does produce this name back, but it is not a valid hejbro SQL identifier",
+				);
+			} else {
+				expect(line).toContain(
+					"no declaration key produces this SQL name back",
+				);
+			}
+		});
 	});
 
 	it("import: says the way out is hand-editing the starter declarations", () => {

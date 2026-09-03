@@ -166,6 +166,23 @@ const tablesExcludingUndeclarableNames = (
 		),
 	}));
 
+/**
+ * D106 R6-N1: which half of `isNameDeclarable` failed, set here where
+ * both halves are already in hand rather than re-derived in the
+ * renderer -- only ever called once that check has already failed, so
+ * `!isNameRoundTrippable` alone tells the two causes apart exhaustively
+ * (the round-trippable-but-D36-rejected case is everything left over).
+ */
+const undeclarableColumnCause = (
+	sqlName: string,
+	tsKey: string,
+): UndeclarableNameColumn["cause"] => {
+	if (!isNameRoundTrippable(sqlName, tsKey)) {
+		return "noDeclarationKey";
+	}
+	return "identifierRuleRejects";
+};
+
 /** Named in the loss report for both commands (CI-G1-R1-16) -- only the consequence sentence `buildLossReport` renders differs by command. */
 const undeclarableNameColumnsFor = (
 	tables: ReadonlyArray<InferredTableFacts>,
@@ -177,6 +194,7 @@ const undeclarableNameColumnsFor = (
 				schema: table.schema.schemaName,
 				table: table.tableName,
 				sqlName: column.sqlName,
+				cause: undeclarableColumnCause(column.sqlName, column.tsKey),
 			})),
 	);
 

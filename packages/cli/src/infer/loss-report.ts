@@ -116,11 +116,37 @@ export const detectForeignKeyNameApproximations = (
 		}),
 	);
 
-/** A column whose SQL name no declaration key can reproduce (CI-G1-R1-06 (C)) -- `import` omits it from the starter file; `pull` never does, its own contract carries every column regardless. */
+/**
+ * A column whose SQL name a declaration cannot carry, for one of two
+ * different reasons ({@link cause}) -- excluded from both commands' own
+ * snapshot (CI-G1-R1-16, `compose.ts`'s `tablesExcludingUndeclarableNames`),
+ * so neither `import`'s starter file nor `pull`'s contract ever carries
+ * it (the type doc this replaces claimed `pull`'s own contract carried
+ * every column regardless -- false: `contract/from-catalog.ts`'s own
+ * `computeTable`/`buildColumnEntries` iterate the snapshot's columns,
+ * never the description's, so an excluded column is simply never
+ * reached there either).
+ */
 export type UndeclarableNameColumn = {
 	readonly schema: string;
 	readonly table: string;
 	readonly sqlName: string;
+	/**
+	 * Which half of `isNameDeclarable` (`compose.ts`) failed, set there
+	 * where both halves are already in hand rather than re-derived here
+	 * (D106 R6-N1). `"noDeclarationKey"`: no key produces this SQL name
+	 * back at all (`toSnakeCase` never yields it -- a quoted
+	 * `"createdAt"`'s shape). `"identifierRuleRejects"`: a key does
+	 * produce this name back, but D36 itself refuses it (the
+	 * leading-underscore `_id` shape). Both have the same, and only,
+	 * remedy: renaming in the database. `buildColumnEntries`
+	 * (`core/src/dsl/table.ts`) derives every column's SQL name from its
+	 * key and accepts no explicit override, so no hand-written
+	 * declaration -- in this repository or a linked one -- can carry
+	 * either kind of name; "declared by hand" was never a real remedy
+	 * for either cause.
+	 */
+	readonly cause: "noDeclarationKey" | "identifierRuleRejects";
 };
 
 /**
@@ -311,15 +337,25 @@ const approximationLines = (
 	EXPRESSION_APPROXIMATION_LINE,
 ];
 
-/** import's own consequence: the table is left only partly declared, and `check` keeps reporting the column until it is declared by hand or renamed in the database. */
+/** D106 R6-N1: the reason clause `cause` actually earned, never one sentence stretched to cover both. */
+const undeclarableColumnReason = (
+	cause: UndeclarableNameColumn["cause"],
+): string => {
+	if (cause === "identifierRuleRejects") {
+		return "a key does produce this name back, but it is not a valid hejbro SQL identifier";
+	}
+	return "no declaration key produces this SQL name back";
+};
+
+/** import's own consequence: the table is left only partly declared, and `check` keeps reporting the column until it is renamed in the database -- the only remedy that exists for either cause (D106 R6-N1: "declared by hand" never was one). */
 const undeclarableNameLineForImport = (
 	column: UndeclarableNameColumn,
 ): string =>
-	`Omitted: column "${column.schema}.${column.table}.${column.sqlName}" -- its SQL name has no declaration key. The table "${column.schema}.${column.table}" is only partly declared, and \`check\` reports this column until it is declared by hand or renamed in the database.`;
+	`Omitted: column "${column.schema}.${column.table}.${column.sqlName}" -- ${undeclarableColumnReason(column.cause)}. The table "${column.schema}.${column.table}" is only partly declared, and \`check\` reports this column until it is renamed in the database.`;
 
-/** pull's own consequence (CI-G1-R1-16): `contract/emit.ts` drops any table fact with no matching snapshot node, so a column excluded from the snapshot cannot reach the contract at all, regardless of what the description carries -- `link` is the only way out. */
+/** pull's own consequence (CI-G1-R1-16): `contract/from-catalog.ts`'s own `computeTable`/`buildColumnEntries` iterate the snapshot's columns, never the description's, so a column excluded from the snapshot never reaches the contract -- renaming in the database, then linking the schema repository, is the only way out (D106 R6-N1: not "declared by hand", for either cause). */
 const undeclarableNameLineForPull = (column: UndeclarableNameColumn): string =>
-	`Omitted: column "${column.schema}.${column.table}.${column.sqlName}" -- its SQL name has no declaration key, so it cannot be carried in the contract. Link the schema repository to declare it by hand.`;
+	`Omitted: column "${column.schema}.${column.table}.${column.sqlName}" -- ${undeclarableColumnReason(column.cause)}, so it cannot be carried in the contract. Rename the column in the database, then link the schema repository.`;
 
 /** Excluded from both commands' snapshots (CI-G1-R1-16) -- neither can carry a column under a name the database does not have. Only the consequence sentence differs. */
 const undeclarableNameLines = (
