@@ -1872,3 +1872,262 @@ decided.
 - In-process probes created, run and deleted in the same tool call (`packages/cli/test/_r6probe*.test.ts`, six batches); one throwaway loader project under `/private/tmp/_r6proj` (symlinked `hejbro`/`jiti`, deleted afterwards) for the `jiti` cycle load. `git status --porcelain` shows only `evaluation.md`.
 - Suites run: `infer-compose`, `infer-constraints`, `infer-loss-report`, `infer-unique-on-omitted-table`, `infer-keys`, `infer-tables`, `infer-adapter`, `import-command`, `pull-command`, `contract-origin`, `outdated-database-origin`, `declare-emit-{emit,file-cycle,topo-order,enum-cycle-load}`, `exports`, `vendor-lock-origin` — 15 files / 158 tests + 2 files green; `packages/core` `identifier-rules`, `sql-identifier`, `rename-plan` — 3 files / 54 tests green. `link.test.ts`, `loader-cycle.test.ts`, `vendor-check.test.ts` fail only on the dist-freshness guard ("`@hejbro/core`'s dist/ is older than its src/"), read not fixed per this round's brief; every measurement above therefore runs from `src`, the one exception being `jiti`'s own resolution of `"hejbro"` in the cycle-load probe, where the loaded surface (`schema`/`table`/`pgEnum`/`uuid`/`existingTable`) predates this change.
 - Not run: `pnpm build`, `pnpm install`, full-workspace `pnpm test`/`check-types`, Docker-gated `*.integration.test.ts` (another team holds the gate slot and was running PG15/PG17 containers concurrently).
+
+## Round 6 disposition
+
+The blocking finding and four of the five non-blocking ones are fixed
+here; N5 stays with #712 by the same explicit decision round 5 made, not
+by omission. Every fix that changes behaviour is pinned by a red
+observed failing against the unfixed code; the one that does not — the
+name-guard refactor — has no red by decision, since a manufactured red
+for a behaviour-preserving change proves nothing, and is pinned instead
+by an input table checked against core's own rule and by a mutant.
+
+Of the eight reds, four are behavioural — an assertion on rendered text
+or on line order failing against the old behaviour — and four are
+signature failures, where a test written against a new, narrower
+signature crashes against the old code before it can disagree with it.
+A signature red proves that a test calls the new code, not that it can
+tell right from wrong, so in those places the discriminating evidence is
+the mutant rather than the red. Five mutants were run across three of
+the five code commits, each with both halves stated before it ran: what
+it must break, and what it must leave standing. In every case exactly
+the predicted tests failed and the named siblings stayed green.
+
+Gate (2026-09-03, on `03898587`, the correction's own tip before the
+merge-in): `pnpm --filter hejbro test:integration` 12 files / 68 passed,
+2 todo; `TURBO_FORCE=1 pnpm check` 723 files; unfiltered
+`TURBO_FORCE=1 pnpm check-types` 17/17 tasks, 0 cached; `TURBO_FORCE=1
+pnpm test` 17/17 tasks (`hejbro` 88 files / 773 tests, `cli-smoke` 2
+files / 6 tests); `pnpm check:bans` 235 files; `pnpm check:crap` 0 of
+1617 functions over CRAP 5, README unchanged; `changeset status` pending
+minor across the fixed group; `check:tasktime` current. Docker residue
+after every run of this round: 0 containers, 0 volumes of this suite's
+own. `upstream/dev` `4cc85c43` was then merged in at `90b8c854` —
+`check/compare.ts`, its two tests and a changeset, no file this round
+touched — and the delta was re-validated after the merge (`validate
+--strict` *and* `show --diff`, since the first does not check that a
+delta's target exists) with the round's own files plus dev's
+`check-compare` re-run file-scoped: 10 files / 133 tests. What follows
+that tip is test-only or documentation — the emitter pin and the
+witness's snapshot assertion (re-run after `pnpm build --force`: both
+halves, 2/2) and this record. The one source change after `03898587`
+arrived with `upstream/dev`'s own merge and was gated on `dev`.
+
+One measurement in that gate was only possible after an environment
+repair, recorded because it will recur: this worktree branched from a
+`dev` that had added a new workspace package (`examples/brownfield`),
+and `pnpm install` had never run in it. The missing `node_modules`
+failed one turbo task, which canceled an in-flight `@hejbro/core:build`
+*after* tsdown had deleted `dist` and before it wrote it back — so an
+unrelated example's missing install surfaced as `Cannot find module
+'@hejbro/core'` across the workspace. `pnpm install` plus
+`pnpm build --force`, then re-measure.
+
+One thing about this round's order is worth recording, because it
+decided the outcome: the live witness was written before the gates and
+run first inside the slot, and it failed. The blocking finding had two
+halves, and the unit tests could only see one of them. A round that had
+run the witness last would have shipped a correction that fixed
+`import` and left `pull` exactly as the report found it.
+
+### R6-B1 — a foreign key into a schema the run did not name was dropped
+
+Fixed by asking the question the guard was supposed to ask.
+`partitionForeignKeys` decided a reference's fate from
+`survivingTableIdentities` — *which tables this reading kept* — so a
+target outside the named schemas was indistinguishable from one the
+reading omitted for its name. It now asks whether the target's own
+schema and table names are ones a declaration can carry
+(`isExpressibleName` on each), which is the only property the round-5
+correction ever needed: the abort it fixed happened because
+`existingTable(...)` was handed a name D36 rejects, never because the
+target was out of scope. `targetKind` follows from which of the two
+names failed, so the report's own `schema`/`table` wording keeps
+matching the reason. `isSelfReference` was removed rather than kept: a
+table that reaches this point has passed `partitionTables`, so its own
+names are expressible and a self-reference is carried by the same rule
+as everything else.
+
+That alone would have replaced a silently missing constraint with a
+starter file that does not parse. `mustDeferForeignKey` sent a target
+the run never read down the ordinary path, where `identifierForTable`
+falls back to the raw dotted identity — measured, as the red this
+correction started from:
+
+```
+foreignKeys: [{ columns: [t.owner_id],
+  references: { table: ext.users, columns: [ext.users.id] }, … }]
+```
+
+`ext.users` is not an identifier. The emitter now routes any target it
+did not read through the same unexported `existingTable` handle it
+already builds for a cycle cut — the renderer needed no change, since it
+was already written to tolerate a target it cannot find.
+
+The contract needed a third change, and the witness is what found it.
+The two commands read **different artifacts of one reading**: `import`
+writes declaration text, which carries the handle and therefore the
+reference, while `pull` reads the snapshot alone — and the snapshot did
+not carry the target, so `contract/tables.ts`'s `findTableInSnapshot`
+dropped the relation. Loosening that rule (condition 5.9) was
+considered and rejected — the main `schema-vendoring` spec already says
+an `existingTable` target is carried as a relation, so 5.9 was right and
+the two snapshots were the defect. The reading now carries the unread
+target itself: one handle per target identity, built in `compose.ts`
+from the union of the columns any foreign key references, handed to
+`inferTable` so the object a key references *is* the object declared,
+and appended to the declarations for targets outside the survivor set
+only.
+
+Three measurements were taken before that landed, and one of them
+corrected a premise. The generated SQL is byte-identical with and
+without the handles (the snapshot gains `table:ext.users`; the DDL does
+not move), `generateMigration` accepts an `existingTable` whose schema
+is not declared, and the handle contributes `text()` columns — the
+referenced ones only — because a table this run never read has no
+catalog facts to draw on. A fourth measurement settles what the first
+three left open: the witness reads the `hejbro.snapshot.json` that
+`hejbro generate` writes from the emitted starter files and asserts that
+it holds **no** `table:ext.users` node — the emitted handle is
+unexported, so no loader ever collects it as a declaration. The two
+paths therefore do not converge on one snapshot; they converge on not
+losing the reference, and the DDL is identical either way. That is what
+the delta says, and it says nothing about node parity, which is not a
+property this change needs.
+
+For the same reason the contract names the target only through the
+relation and the foreign-key metadata and gives it **no entry of its
+own** among its tables (lead ruling, after this was measured): the
+handle carries the referenced columns under fallback types, so a table
+entry would be the contract asserting a column set and types for a
+table it never read. A contract that guesses is worse than one that
+says only what it knows.
+
+One side effect had to be closed in the same commit: nothing had ever
+filtered existing tables out of the emitted set — there was no need
+before, because no reading produced one — so with a node in the
+snapshot `emitDeclarationFiles` treated the target as a table to write,
+`targetSchemaOf("ext.users")` resolved to `"ext"`, the deferral took the
+back-edge branch instead of the unconditional one, and the emitter tried
+to import a `./ext.schema` file that is never written. Existing tables
+are now filtered out of the emitted set. The observer that caught it was
+an assertion added while reviewing the witness draft — that no starter
+file exists for the schema the run never named.
+
+Pins: `infer-compose.test.ts` — the out-of-scope case, and the two
+omitted-target cases rewritten so the target's *name* is what a
+declaration cannot carry, which is what makes them tell the two
+situations apart at all; `declare-emit-emit.test.ts` — the handle for an
+unread target, asserted inside that table's own export block, throwing
+if the block is not found, and — added after the fact, see below — that
+an existing-marked table is written to no file and imported by none;
+`contract-from-catalog.test.ts` — the relation and the foreign-key
+metadata reaching the contract, built through the real pipeline after a
+first draft that hand-built the snapshot and passed against the unfixed
+code. Live witness: `infer-unnamed-schema-reference.integration.test.ts`,
+both commands, a schema created and never named, through to the
+generated DDL, the written snapshot, and a real `tsc` over the contract.
+
+Both halves of this finding are places where the red was a signature
+failure rather than a behaviour: three of the compose reds crashed on
+the new one-argument `partitionForeignKeys` before they could disagree
+with the old one, and the contract half's first red was a missing
+function. The mutants are what show these pins discriminate, which is
+why they were run here and why the count matters. Reading this
+disposition back is what surfaced it, and it was answered rather than
+argued away: the emitter
+filter gained an in-process pin (it had no observer outside Docker), and
+two mutants were run against the committed code — removing the handles
+from the declarations failed only the contract pin, and removing the
+`existing` filter failed only the new emitter pin, each leaving every
+sibling in its file green.
+
+### R6-N1 — one sentence for two causes, and a remedy that does not exist
+
+`isNameDeclarable` has two halves and the report had one sentence, so a
+column omitted because D36 rejects its name was told its name had no
+declaration key — false for `_id`, `_created_at` and `_9lives`, which
+all have one. The omission now carries a cause
+(`noDeclarationKey` / `identifierRuleRejects`), set where both halves
+are already in hand, and each command renders the reason that applies.
+
+"Declared by hand" is gone from all four lines, including `pull`'s
+"Link the schema repository to declare it by hand". This is wider than
+the finding, on measurement: `buildColumnEntries` derives every column's
+SQL name from its TypeScript key and accepts no explicit name beside it,
+so no hand-written declaration — in this repository or in a linked one —
+can carry either kind of name. Renaming in the database is the only
+remedy that exists, and the report now offers no other. The delta and
+the skill say the same.
+
+Pins are input tables built from the round-6 report's own measurement
+(`_id`, `_created_at`, `_9lives` against `"createdAt"`, `a_`), not one
+example per branch. Corrected in passing, since the same comment block
+was already open: `UndeclarableNameColumn`'s claim that `pull` "carries
+every column regardless" was false — the contract emitter iterates the
+snapshot's columns, so an excluded column never reaches it either.
+
+### R6-N2 — a comment recording a repealed decision
+
+`isExpressibleName` wrapped `assertSqlName` in `try`/`catch` and its
+comment gave the reason: core exports only the throwing assertion. Core
+has exported `isSqlName` since round 5, precisely because that decision
+was withdrawn. The guard now calls it and the comment records what the
+code cannot show — one D36 rule, asked of core, plus the foreign-key
+name exception. Equivalence was measured rather than assumed
+(`assertSqlName`'s branch condition *is* `isSqlName`; its other
+arguments only build the message it throws) and pinned by an input table
+that checks the guard against both the expected literal and a local
+`try`/`catch`, with a mutant to prove the pin can fail.
+
+### R6-N3 — the way out was no longer the last line
+
+`import` appended its empty-schema lines after `buildLossReport` had
+already closed the report. The way-out line is now placed by
+`loss-report.ts` itself, which locates it by identity and re-appends it
+after the extra lines, so no command has to know which index is last and
+there is no throw path in a command. The test pins the order and the
+round-2 parity property together — stdout and every file header carry
+the same lines in the same order — so a future edit cannot fix one and
+leave the other.
+
+### R6-N4 — the release notes never mentioned the check-expression swap
+
+The round-5 changeset gained a paragraph for R5-B3 in the file's own
+voice: two tables sharing a check name swapped expressions, so `import`
+wrote a starter file whose check asserts against another table's columns
+and whose DDL the source server rejects. This round carries its own
+`patch` changeset for what it changes for a user.
+
+### R6-N5 — an enum type's catalog name
+
+Untouched, as in round 5: no delta scenario speaks to an enum's own
+name, and #712 holds it.
+
+### What this record got wrong before it was committed
+
+Four corrections, recorded because the corrections are evidence too.
+The first draft of this disposition claimed **every** pin was
+mutant-verified; two of five code commits had a mutant at the time, and
+the claim was scoped to what was actually run — then three more mutants
+and a unit pin were added, so the sentence above is now true rather than
+trimmed. It also cited the byte-identity measurement's own control as
+showing that a loaded starter gains no snapshot node; that control used
+a fixture with no out-of-scope target at all and touched no file-loading
+path, so it could show nothing of the kind — the witness now measures it
+directly. And one instruction for a mutant named a line inside
+`inferFromCatalog` that the test in question never calls, which would
+have made the mutant vacuous — a mutant that cannot change the outcome
+proves nothing, so it was aimed instead at the function the test does
+call, with the same observable effect. Fourth, a recount: the claim
+that all but one red was behavioural did not survive counting them —
+four of eight were signature failures, and the fix that has no red at
+all was being credited with one. The paragraph above now says which
+evidence carries which place.
+
+All four were found by the implementer reading the planner's own text
+against its own measurements, which is the check this change has now
+been saved by more than once. Three of the four were claims about
+*evidence* rather than about the code — the easiest kind of sentence to
+write loosely, because nothing in a green suite contradicts it.
