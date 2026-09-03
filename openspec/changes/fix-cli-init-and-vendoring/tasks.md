@@ -54,7 +54,7 @@ Files this group owns: `packages/cli/src/commands/init.ts`,
       `initCommand` prints `stderr` and sets the code; `runInit` mints no
       code of its own. Files: `packages/cli/src/commands/init.ts`, its
       test.
-- [ ] 1.3 (~7m) A partially present project is repaired at the configured
+- [x] 1.3 (~7m) A partially present project is repaired at the configured
       paths, and the skipped lines name those paths too. Red:
       `packages/cli/test/init.test.ts` — "creates only the configured
       snapshot when the configured migrations directory exists": the

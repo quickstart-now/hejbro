@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -251,4 +251,36 @@ describe("runInit / unreadable configuration (#687)", () => {
 			expect(existsSync(snapshotPath())).toBe(false);
 		},
 	);
+});
+
+describe("runInit / repairs a partially present project at configured paths (#687)", () => {
+	it("creates only the configured snapshot when the configured migrations directory exists", async () => {
+		await writeFile(
+			configPath(),
+			'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "db/migrations", snapshotPath: "db/hejbro.snapshot.json", presets: [] };\n',
+		);
+		const migrationsDirPath = join(cwd, "db", "migrations");
+		await mkdir(migrationsDirPath, { recursive: true });
+		await writeFile(
+			join(migrationsDirPath, "0001_a.sql"),
+			"-- hejbro migration\n",
+		);
+
+		const result = await runInit(cwd);
+
+		expect(result.exitCode).toBe(0);
+		expect(result.report).toEqual([
+			"skipped hejbro.config.ts (exists)",
+			"skipped db/migrations/ (exists)",
+			"created db/hejbro.snapshot.json",
+		]);
+		expect(
+			await readFile(join(migrationsDirPath, "0001_a.sql"), "utf8"),
+		).toBe("-- hejbro migration\n");
+		const snapshotContent = await readFile(
+			join(cwd, "db", "hejbro.snapshot.json"),
+			"utf8",
+		);
+		expect(snapshotContent).toContain('"formatVersion": 8');
+	});
 });
