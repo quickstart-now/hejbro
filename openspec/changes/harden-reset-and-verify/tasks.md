@@ -461,7 +461,7 @@ scenarios of `openspec show harden-reset-and-verify --diff` hold.
   (`packages/cli/test/apply-reset.test.ts`,
   `packages/cli/test/apply-reset.integration.test.ts`,
   `packages/cli/test/reset-command.test.ts`).
-- [ ] 4.2 ~8m — **N2 + N3.** Red: `packages/cli/test/apply-reset.test.ts`
+- [x] 4.2 ~8m — **N2 + N3.** Red: `packages/cli/test/apply-reset.test.ts`
   input table for `reset-drop-failed`: (i) a driver error carrying a
   `detail` ("view lab.outside_view depends on table lab.b_parent") → the
   message carries that detail verbatim after the server's reason; (ii) no

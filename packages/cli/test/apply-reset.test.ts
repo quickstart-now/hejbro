@@ -1,3 +1,4 @@
+import type { ColumnSnapshot, Snapshot, TableSnapshot } from "@hejbro/core";
 import {
 	buildSnapshot,
 	createDefaultRegistry,
@@ -533,5 +534,169 @@ describe("applyReset — a ledger that was never bootstrapped still lets every d
 
 		expect(error).toBeInstanceOf(HejbroError);
 		expect((error as HejbroError).code).toBe("reset-drop-failed");
+	});
+});
+
+describe("applyReset — reset-drop-failed carries the server's detail and picks its own Next: advice (D106 R1, N2+N3, #753 reopened)", () => {
+	const seedLedger = async (driver: Driver): Promise<void> => {
+		await driver.transaction(async (session) => {
+			await bootstrapLedger(session);
+			await recordAppliedMigration(session, "0001_add_managed.sql", "applied");
+		});
+	};
+
+	it("(i) a driver error carrying a detail -- the message carries it verbatim after the server's reason", async () => {
+		const { driver } = makeFakeDriver("testdb", {
+			thrown: Object.assign(
+				new Error(
+					"cannot drop table lab.b_parent because other objects depend on it",
+				),
+				{
+					code: "2BP01",
+					detail: "view lab.outside_view depends on table lab.b_parent",
+				},
+			),
+		});
+		await seedLedger(driver);
+
+		const error: unknown = await applyReset(
+			driver,
+			managedSnapshot,
+			registry,
+			"testdb:2",
+		).catch((caught: unknown) => caught);
+
+		const message = (error as HejbroError).message;
+		expect(message).toContain(
+			"cannot drop table lab.b_parent because other objects depend on it",
+		);
+		expect(message).toContain(
+			"view lab.outside_view depends on table lab.b_parent",
+		);
+		expect(message.indexOf("because other objects depend on it")).toBeLessThan(
+			message.indexOf("view lab.outside_view"),
+		);
+	});
+
+	it("(ii) no detail -- the message is unchanged from today", async () => {
+		const { driver } = makeFakeDriver("testdb", {
+			thrown: Object.assign(new Error("relation still has dependents"), {
+				code: "2BP01",
+			}),
+		});
+		await seedLedger(driver);
+
+		const error: unknown = await applyReset(
+			driver,
+			managedSnapshot,
+			registry,
+			"testdb:2",
+		).catch((caught: unknown) => caught);
+
+		const message = (error as HejbroError).message;
+		expect(message).toContain("relation still has dependents");
+		expect(message).not.toContain("()");
+	});
+
+	it("(iii) the failed object is referenced by another declared object -- Next: names the declarations, never 'outside your declarations'", async () => {
+		// A genuine mutual foreign-key cycle can't be built through table()
+		// itself (its `extras` callback resolves `references: { table }`
+		// eagerly, each side needing the other to already exist) -- spliced
+		// directly at the snapshot level instead, mirroring
+		// `diff-engine.test.ts`'s own "never throws on a genuine two-table
+		// cycle" fixture.
+		const cycleColumns: ReadonlyArray<ColumnSnapshot> = [
+			{ name: "id", typeNode: { typeName: "uuid" }, primaryKey: true },
+		];
+		const leftT: TableSnapshot = {
+			schema: "cyc",
+			name: "left_t",
+			columns: [
+				...cycleColumns,
+				{ name: "right_id", typeNode: { typeName: "uuid" } },
+			],
+			indexes: [],
+			foreignKeys: [
+				{
+					name: "left_t_right_id_fk",
+					columns: ["right_id"],
+					referencesTable: "cyc.right_t",
+					referencesColumns: ["id"],
+				},
+			],
+		};
+		const rightT: TableSnapshot = {
+			schema: "cyc",
+			name: "right_t",
+			columns: [
+				...cycleColumns,
+				{ name: "left_id", typeNode: { typeName: "uuid" } },
+			],
+			indexes: [],
+			foreignKeys: [
+				{
+					name: "right_t_left_id_fk",
+					columns: ["left_id"],
+					referencesTable: "cyc.left_t",
+					referencesColumns: ["id"],
+				},
+			],
+		};
+		const cycleSnapshot: Snapshot = {
+			...emptySnapshot,
+			objects: {
+				"schema:cyc": { name: "cyc" },
+				"table:cyc.left_t": leftT,
+				"table:cyc.right_t": rightT,
+			},
+		};
+		const changes = planReset(cycleSnapshot, registry);
+		const confirmation = requiredConfirmation("testdb", changes);
+		const { driver } = makeFakeDriver("testdb", {
+			thrown: Object.assign(
+				new Error(
+					"cannot drop table cyc.left_t because other objects depend on it",
+				),
+				{ code: "2BP01" },
+			),
+		});
+		await driver.transaction(async (session) => {
+			await bootstrapLedger(session);
+			await recordAppliedMigration(session, "0001_add_cycle.sql", "applied");
+		});
+
+		const error: unknown = await applyReset(
+			driver,
+			cycleSnapshot,
+			registry,
+			confirmation,
+		).catch((caught: unknown) => caught);
+
+		const message = (error as HejbroError).message;
+		expect(message).not.toContain("an object outside your declarations");
+		expect(message).toContain("your own declared objects");
+	});
+
+	it("(iv) the outside-dependent case keeps today's Next: advice", async () => {
+		const { driver } = makeFakeDriver("testdb", {
+			thrown: Object.assign(
+				new Error(
+					"cannot drop table app.managed because other objects depend on it",
+				),
+				{ code: "2BP01" },
+			),
+		});
+		await seedLedger(driver);
+
+		const error: unknown = await applyReset(
+			driver,
+			managedSnapshot,
+			registry,
+			"testdb:2",
+		).catch((caught: unknown) => caught);
+
+		expect((error as HejbroError).message).toContain(
+			"an object outside your declarations may still depend on one you're dropping",
+		);
 	});
 });

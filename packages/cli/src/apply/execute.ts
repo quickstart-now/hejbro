@@ -236,6 +236,28 @@ export const driverErrorReason = (error: unknown): string => {
 	return String(error);
 };
 
+/**
+ * [D106 R1, N2, #753 reopened] The database's own `DETAIL` line, when the
+ * failure carries one as a plain string -- `node-postgres`'s own
+ * `DatabaseError` exposes it as `.detail` (lower-case, mirrors `.code`).
+ * `null` when absent, never an empty string, the same convention
+ * {@link driverErrorCode} uses. This is the one fact a `Next:` line asking
+ * a caller to "resolve what the error above describes" needs and the bare
+ * `reason` (the primary message only) never carries -- reset's own
+ * `reset-drop-failed` is the first caller (a driver refusing a drop over a
+ * dependent object names that dependent in `DETAIL`, not in the message).
+ */
+export const driverErrorDetail = (error: unknown): string | null => {
+	if (error === null || typeof error !== "object" || !("detail" in error)) {
+		return null;
+	}
+	const detail = (error as { readonly detail?: unknown }).detail;
+	if (typeof detail === "string" && detail !== "") {
+		return detail;
+	}
+	return null;
+};
+
 /** `" (CODE)"`, or `""` when there is no code -- exported alongside {@link driverErrorCode}/{@link driverErrorReason} so a caller building its own message from `error.cause` renders the code the identical way this module does. */
 export const codeSuffix = (code: string | null): string => {
 	if (code === null) {

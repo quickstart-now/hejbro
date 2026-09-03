@@ -324,6 +324,10 @@ describe("hejbro reset — live witness (#753, task 1.5)", () => {
 			]);
 			expect(result.exitCode).toBe(1);
 			expect(result.stderr).toContain("error[reset-drop-failed]");
+			// [D106 R1, N2, #753 reopened] The server's own DETAIL line names
+			// the dependent (`external_refs`) -- exactly the one fact N2 found
+			// missing from this same scenario's message before this fix.
+			expect(result.stderr).toContain("external_refs");
 
 			const driver = pgDriver(hostUrl(database));
 			try {
@@ -387,6 +391,13 @@ describe("hejbro reset — live witness (#753, task 1.5)", () => {
 			expect(result.exitCode).toBe(1);
 			expect(result.stderr).toContain("error[reset-drop-failed]");
 			expect(result.stderr).toContain("(2BP01)");
+			// [D106 R1, N3, #753 reopened] The dependent here is one of the
+			// run's own declared tables (a genuine cycle), never something
+			// "outside your declarations".
+			expect(result.stderr).not.toContain(
+				"an object outside your declarations",
+			);
+			expect(result.stderr).toContain("your own declared objects");
 
 			const driver = pgDriver(hostUrl(database));
 			try {

@@ -1,4 +1,10 @@
-import type { KindChange, KindRegistry, Snapshot } from "@hejbro/core";
+import type {
+	JsonValue,
+	KindChange,
+	KindRegistry,
+	RegisteredObjectKind,
+	Snapshot,
+} from "@hejbro/core";
 import {
 	diffSnapshots,
 	emptySnapshot,
@@ -8,7 +14,12 @@ import {
 	throwHejbroError,
 } from "@hejbro/core";
 import type { Driver } from "@hejbro/query";
-import { codeSuffix, driverErrorCode, driverErrorReason } from "./execute";
+import {
+	codeSuffix,
+	driverErrorCode,
+	driverErrorDetail,
+	driverErrorReason,
+} from "./execute";
 import { clearLedgerRows, ledgerTableExists } from "./ledger";
 
 /**
@@ -170,20 +181,104 @@ const sqlToDrop = (
 };
 
 /**
+ * [D106 R1, N3, #753 reopened] Whether `changes` -- `reset`'s own drop
+ * plan -- contains a genuine same-kind cycle: two objects each naming the
+ * other via `kind.dependsOnIdentities` (task 1.2's own "never throws"
+ * case, e.g. two tables with a mutual foreign key). `reset`'s own plan is
+ * always drop-only, so `change.previous` is always the real node to read
+ * (mirrors core's own `nodeForOrdering`, drop side, which this module has
+ * no access to -- `registry.get`/`KindChange` are the public surface this
+ * reads instead). Computed once, before the transaction ever opens: not
+ * "did THIS failure come from a cycle" (the driver names an object, not
+ * an edge, and this module has no SQL parser), but "does this run's own
+ * declared set contain one at all" -- the delta's own two scenarios (an
+ * outside dependent vs. a declared cycle) are exactly this binary, and a
+ * plan with a cycle can only ever fail its drop for that reason (task
+ * 1.2: every other pair that isn't a cycle is ordered so its drop
+ * succeeds).
+ */
+const kindHasCycle = (
+	kind: RegisteredObjectKind,
+	kindChanges: ReadonlyArray<KindChange>,
+): boolean => {
+	const dependsOnIdentities = kind.dependsOnIdentities;
+	if (dependsOnIdentities === undefined || kindChanges.length <= 1) {
+		return false;
+	}
+	const identitySet = new Set(kindChanges.map((change) => change.identity));
+	const edgesFrom = new Map(
+		kindChanges.map((change) => [
+			change.identity,
+			new Set(
+				dependsOnIdentities(change.previous as JsonValue).filter(
+					(identity) =>
+						identitySet.has(identity) && identity !== change.identity,
+				),
+			),
+		]),
+	);
+	return kindChanges.some((change) =>
+		Array.from(edgesFrom.get(change.identity) ?? new Set<string>()).some(
+			(dependencyIdentity) =>
+				edgesFrom.get(dependencyIdentity)?.has(change.identity) ?? false,
+		),
+	);
+};
+
+/** {@link kindHasCycle}, across every kind in `changes` -- grouped first, since a cycle is only ever a same-kind edge (task 1.1/1.2: cross-kind ordering was never the gap). */
+const dropsContainCycle = (
+	changes: ReadonlyArray<KindChange>,
+	registry: KindRegistry,
+): boolean => {
+	const byKind = changes.reduce<ReadonlyMap<string, ReadonlyArray<KindChange>>>(
+		(acc, change) => {
+			const existing = acc.get(change.kind) ?? [];
+			return new Map(acc).set(change.kind, [...existing, change]);
+		},
+		new Map(),
+	);
+	return Array.from(byKind.entries()).some(([kindName, kindChanges]) =>
+		kindHasCycle(registry.get(kindName), kindChanges),
+	);
+};
+
+/** [D106 R1, N2, #753 reopened] The database's own `DETAIL` line, parenthesized right after `reason` -- `""` when there is none, so the message reads exactly as it did before this detail existed. */
+const detailSuffix = (detail: string | null): string => {
+	if (detail === null) {
+		return "";
+	}
+	return ` (${detail})`;
+};
+
+const OUTSIDE_DECLARATIONS_ADVICE =
+	"resolve what the error above describes (an object outside your declarations may still depend on one you're dropping)";
+
+/** [D106 R1, N3, #753 reopened] The dependent the server refused over is one of the run's own declared objects (a cycle, task 1.2's own "never throws" case) -- naming an object "outside your declarations" here would misdirect the very case the requirement's cycle sentence describes. */
+const DECLARED_CYCLE_ADVICE =
+	"resolve what the error above describes (another one of your own declared objects still depends on the one that failed to drop -- two objects referencing each other can't both be dropped first, so this run left them in identity order rather than refusing to plan at all)";
+
+const resetDropFailedAdvice = (dropsContainCycle: boolean): string => {
+	if (dropsContainCycle) {
+		return DECLARED_CYCLE_ADVICE;
+	}
+	return OUTSIDE_DECLARATIONS_ADVICE;
+};
+
+/**
  * [task 1.4, #753] Translates a failed drop into a coded
  * `reset-drop-failed` `HejbroError` instead of letting it escape uncaught
  * -- reuses `apply/execute.ts`'s own `driverErrorCode`/`driverErrorReason`/
- * `codeSuffix` (already exported for exactly this reuse; `raise.ts` does
- * the same), so this names the database's own reason the identical way
- * `apply`/`migrate`'s own failures do. The transaction this drop ran
- * inside has already rolled back by the time this runs (D108/D109: the
- * drops and the ledger's own clearing share one transaction), so nothing
- * more needs undoing here -- only the surfacing was ever the gap.
- * `error` is attached as `.cause` (mirrors `throwApplyFailure`), for a
- * caller that wants the raw failure structurally rather than by
- * re-parsing this message.
- */
-/**
+ * `driverErrorDetail`/`codeSuffix` (already exported for exactly this
+ * reuse; `raise.ts` does the same), so this names the database's own
+ * reason the identical way `apply`/`migrate`'s own failures do, plus the
+ * server's own `DETAIL` line (D106 R1, N2) the bare `reason` never
+ * carried. The transaction this drop ran inside has already rolled back
+ * by the time this runs (D108/D109: the drops and the ledger's own
+ * clearing share one transaction), so nothing more needs undoing here --
+ * only the surfacing was ever the gap. `error` is attached as `.cause`
+ * (mirrors `throwApplyFailure`), for a caller that wants the raw failure
+ * structurally rather than by re-parsing this message.
+ *
  * [task 3.8, #753] A `HejbroError` the transaction raises (e.g.
  * `resetMigrationSql`'s own `reset-migration-not-singular`, when the
  * hoist below can't already keep it out of this catch) is rethrown
@@ -191,16 +286,20 @@ const sqlToDrop = (
  * and its own advice, neither of which the drop-failure wording below
  * describes. Only a failure that is not one is re-coded.
  */
-const throwResetDropFailed = (error: unknown): never => {
+const throwResetDropFailed = (
+	error: unknown,
+	dropsContainCycle: boolean,
+): never => {
 	if (error instanceof HejbroError) {
 		throw error;
 	}
 	const code = driverErrorCode(error);
 	const reason = driverErrorReason(error);
+	const detail = driverErrorDetail(error);
 	throw Object.assign(
 		hejbroError(
 			"reset-drop-failed",
-			`hejbro reset failed to drop your declared objects${codeSuffix(code)}: ${reason}. The transaction was rolled back — nothing was dropped and the ledger is unchanged. Next: run \`hejbro status\` to confirm, resolve what the error above describes (an object outside your declarations may still depend on one you're dropping), then rerun \`hejbro reset\`.`,
+			`hejbro reset failed to drop your declared objects${codeSuffix(code)}: ${reason}${detailSuffix(detail)}. The transaction was rolled back — nothing was dropped and the ledger is unchanged. Next: run \`hejbro status\` to confirm, ${resetDropFailedAdvice(dropsContainCycle)}, then rerun \`hejbro reset\`.`,
 		),
 		{ cause: error },
 	);
@@ -272,6 +371,6 @@ export const applyReset = async (
 			return { ledgerCleared: ledgerExists };
 		});
 	} catch (error) {
-		return throwResetDropFailed(error);
+		return throwResetDropFailed(error, dropsContainCycle(changes, registry));
 	}
 };
