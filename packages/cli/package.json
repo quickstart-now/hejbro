@@ -41,6 +41,7 @@
 		"build": "tsdown",
 		"check-types": "tsc --noEmit",
 		"test": "vitest run",
+		"test:types": "vitest run --config vitest.types.config.ts",
 		"test:coverage": "vitest run --coverage",
 		"test:integration": "vitest run --config vitest.integration.config.ts",
 		"prepack": "pnpm build"
@@ -54,6 +55,7 @@
 		"zod": "^4.4.3"
 	},
 	"devDependencies": {
+		"@hejbro/nile": "workspace:*",
 		"@hejbro/pg": "workspace:*",
 		"@hejbro/supabase": "workspace:*",
 		"@vitest/coverage-v8": "catalog:",

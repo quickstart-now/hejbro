@@ -1,6 +1,6 @@
 -- hejbro migration
--- ~ table app.comments [foreign key "comments_post_id_fk" changed]
 -- ~ table app.posts [check "posts_status_check" changed]
+-- ~ table app.comments [foreign key "comments_post_id_fk" changed]
 
 alter table "app"."comments" drop constraint "comments_post_id_fk";
 

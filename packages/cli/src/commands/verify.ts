@@ -10,6 +10,7 @@ import type {
 	HejbroInput,
 	KindRegistry,
 	MigrationPrefixStrategy,
+	Snapshot,
 	Validator,
 } from "@hejbro/core";
 import {
@@ -33,6 +34,7 @@ import { fromHejbroError, renderDiagnostics } from "../diagnostics";
 import { asHejbroError } from "../errors";
 import { compareExport } from "../export-compare";
 import { sha256Hex } from "../hash";
+import { identityFromMessage, relativizeDeclaredAt } from "../identity";
 import type { LoadedDeclarations } from "../loader";
 import { loadConfig, loadDeclarations } from "../loader";
 import { buildRegistry, configValidators } from "../presets";
@@ -219,21 +221,23 @@ const SKIPPED_CHECK_3_LINE =
 	"skipped: chain linearity (needs every migration to have a unique version)";
 const SKIPPED_CHECK_4_LINE =
 	"skipped: chain tip ↔ snapshot (needs a parseable snapshot and a linear chain)";
+/** #752: the preset-validator check (settled shape, task 2.1/2.2) is
+ * gated on check 1 the same way check 2 is — it needs a parseable
+ * snapshot to diff the declarations against. */
+const SKIPPED_CHECK_PRESET_LINE =
+	"skipped: preset validators (needs a parseable snapshot)";
 
 const BASE_CHECKS = 5;
 
 /**
- * The export freshness check (R2-G3) only counts toward the total when it
- * applied — a repository that has never opted into the export sees the
- * exact same "5 checks" wording it always has, never a phantom 6th check
- * it can't act on.
+ * The export freshness check (R2-G3) and the preset-validator check
+ * (#752) only count toward the total when they apply — a repository that
+ * never opted into the export, or never registered a preset, sees the
+ * exact same wording it always has, never a phantom check it can't act
+ * on.
  */
-const totalChecks = (exportApplied: boolean): number => {
-	if (exportApplied) {
-		return BASE_CHECKS + 1;
-	}
-	return BASE_CHECKS;
-};
+const totalChecks = (exportApplied: boolean, presetApplied: boolean): number =>
+	BASE_CHECKS + Number(exportApplied) + Number(presetApplied);
 
 const failureSummaryLine = (
 	failedCount: number,
@@ -252,31 +256,46 @@ export type VerifyResult = {
 	readonly stderr: string | null;
 };
 
-const FIRST_QUOTED_SUBSTRING = /"([^"]+)"/;
-
-/** Same identity-extraction heuristic as generate.ts's toDiagnostic (see rename-diagnostics/generate.ts for the fuller rationale): every verify message leads with the path/filename it's about inside the first `"..."`. */
-const identityFromMessage = (message: string, fallback: string): string => {
-	const match = FIRST_QUOTED_SUBSTRING.exec(message);
-	if (match === null) {
-		return fallback;
-	}
-	return match[1] ?? fallback;
-};
-
+/**
+ * Rebuilt via the factory, not `{ ...error, declaredAt: ... }` --
+ * `HejbroError` is an `Error` subclass, and `Error.prototype.message` is
+ * own-but-non-enumerable, so an object spread silently drops it (same
+ * reasoning as `generate.ts`'s own `toDiagnostic`, which this mirrors:
+ * task 3.1 replaces verify's own stale, non-adjacent-pair-aware
+ * `identityFromMessage` copy with the shared `../identity.ts` helper
+ * `generate.ts` already uses, so two different tables refused in the
+ * same run are told apart by their diagnostic headers instead of both
+ * printing the same truncated identity; task 3.4 moves
+ * `relativizeDeclaredAt` to the same shared module, closing the second
+ * local copy this file had grown of the identical logic under a
+ * different name).
+ */
 const errorDiagnostic = (
 	error: HejbroError,
 	fallbackIdentity: string,
+	cwd: string,
 ): Diagnostic =>
-	fromHejbroError(error, identityFromMessage(error.message, fallbackIdentity));
+	fromHejbroError(
+		hejbroError(
+			error.code,
+			error.message,
+			relativizeDeclaredAt(error.declaredAt, cwd),
+		),
+		identityFromMessage(error.message, fallbackIdentity),
+	);
 
 /** A single, loader-precondition failure (config/entry) — rendered as its own early exit, before any of the 4 checks run (reviewer-confirmed: these are preconditions of the whole command, not one of the 4). */
 const preconditionErrorResult = (
 	error: HejbroError,
 	fallbackIdentity: string,
+	cwd: string,
 ): VerifyResult => ({
 	exitCode: 1,
 	stdout: [],
-	stderr: renderDiagnostics([errorDiagnostic(error, fallbackIdentity)], null),
+	stderr: renderDiagnostics(
+		[errorDiagnostic(error, fallbackIdentity, cwd)],
+		null,
+	),
 });
 
 /** Every migration file's hash-chain lines, in directory-sorted order — files with no hash lines at all (pre-Phase-5 history) are silently skipped, matching checkChain's "caller filters the unhashed prefix" contract. Exported (G7, #613): `migrate`/`status` read the same chain this way rather than a second copy of this walk. */
@@ -440,18 +459,26 @@ const runCheck1 = (
 	}
 };
 
-/** Check 2 (runs only when check 1 passed): the rebuilt-from-declarations snapshot text equals the on-disk text, byte for byte. Rebuilds against the *real* committed snapshot as its parent (D81) — an empty parent would rebuild every table's `allColumns` lists in declaration order, disagreeing with the committed snapshot's physical order the moment a column was ever inserted mid-declaration. */
-const runCheck2 = (
-	declarations: ReadonlyArray<HejbroInput>,
+/** #752: the sixth check's own outcome shape — genuinely different from
+ * every other {@link CheckOutcome} (2.2): a failure carries every
+ * refusal a registered validator raised in this run, not just the
+ * first, since "generate and verify agree" has to hold for a
+ * multi-refusal run too. */
+type PresetCheckOutcome =
+	| { readonly ok: true }
+	| { readonly ok: false; readonly errors: ReadonlyArray<HejbroError> };
+
+type Check2AndPresetResult = {
+	readonly check2: CheckOutcome;
+	readonly preset: PresetCheckOutcome;
+};
+
+/** Check 2's own pass/fail rule, factored out of {@link runCheck2AndPreset} so that function stays a straight-line read of "one generateMigration call, two independent outcomes". Rebuilds against the *real* committed snapshot as its parent (D81) — an empty parent would rebuild every table's `allColumns` lists in declaration order, disagreeing with the committed snapshot's physical order the moment a column was ever inserted mid-declaration. */
+const buildCheck2Outcome = (
+	currentSnapshot: Snapshot,
 	diskText: string,
 	snapshotPath: string,
-	registry: KindRegistry,
 ): CheckOutcome => {
-	const currentSnapshot = generateMigration({
-		declarations,
-		previousSnapshot: parseSnapshot(diskText, requiredKeysByKind(registry)),
-		registry,
-	}).snapshot;
 	if (renderSnapshot(currentSnapshot) === diskText) {
 		return { ok: true };
 	}
@@ -459,6 +486,42 @@ const runCheck2 = (
 		ok: false,
 		error: hejbroError("snapshot-stale", snapshotStaleMessage(snapshotPath)),
 	};
+};
+
+/**
+ * Check 2 (runs only when check 1 passed): the rebuilt-from-declarations
+ * snapshot text equals the on-disk text, byte for byte ({@link
+ * buildCheck2Outcome}).
+ *
+ * #752/task 2.1: also runs the sixth check, from the *same*
+ * `generateMigration({ validators })` call — never a second call
+ * recomputing the identical pipeline. `result.snapshot` is built
+ * regardless of whether a validator refused anything (`generateMigration`
+ * only ever skips SQL emission, never snapshot construction), so check 2
+ * is unaffected by `validators` being passed now where it previously
+ * wasn't; `result.errors` is empty whenever `validators` is `[]`
+ * (verify never passes renames/confirmedDrops, so nothing else could
+ * populate it), which is what lets a no-preset repository stay
+ * byte-identical to before this check existed.
+ */
+const runCheck2AndPreset = (
+	declarations: ReadonlyArray<HejbroInput>,
+	diskText: string,
+	snapshotPath: string,
+	registry: KindRegistry,
+	validators: ReadonlyArray<Validator>,
+): Check2AndPresetResult => {
+	const result = generateMigration({
+		declarations,
+		previousSnapshot: parseSnapshot(diskText, requiredKeysByKind(registry)),
+		registry,
+		validators,
+	});
+	const check2 = buildCheck2Outcome(result.snapshot, diskText, snapshotPath);
+	if (result.errors.length === 0) {
+		return { check2, preset: { ok: true } };
+	}
+	return { check2, preset: { ok: false, errors: result.errors } };
 };
 
 /** Check (always runs, before chain linearity — a version collision leaves chain order undefined, so it must be caught first): no two migration files claim the same version prefix. Pure detection (findDuplicateVersionGroups) over the raw filenames; the message's `--fix`/manual-`mv` options are both driven by `planDuplicateVersionFix` over the group's own hash-chain entries (`migrationsDirPath` reads the files; `migrationsDir`, config-relative, is what a printed command should use, never the absolute filesystem path). */
@@ -573,17 +636,24 @@ const runCheck4 = (
 	};
 };
 
-/** `null` when check 1 failed (check 2 needs a parseable snapshot); otherwise runs check 2. */
-const runCheck2IfEligible = (
+/** `null` when check 1 failed (check 2/the preset check both need a parseable snapshot); otherwise runs {@link runCheck2AndPreset}. */
+const runCheck2AndPresetIfEligible = (
 	check1DiskText: string | null,
 	declarations: ReadonlyArray<HejbroInput>,
 	snapshotPath: string,
 	registry: KindRegistry,
-): CheckOutcome | null => {
+	validators: ReadonlyArray<Validator>,
+): Check2AndPresetResult | null => {
 	if (check1DiskText === null) {
 		return null;
 	}
-	return runCheck2(declarations, check1DiskText, snapshotPath, registry);
+	return runCheck2AndPreset(
+		declarations,
+		check1DiskText,
+		snapshotPath,
+		registry,
+		validators,
+	);
 };
 
 /** `null` when check 1 failed, check 3 was itself skipped (duplicate-version failed), or check 3 ran but failed (check 4 needs a parseable snapshot and a linear chain); otherwise runs check 4. `snapshotPath`/`migrationsDir` are both config-relative, passed through for {@link chainTipMismatchMessage}. */
@@ -661,6 +731,59 @@ const exportOutcomes = (
 	return [exportCheck];
 };
 
+/**
+ * #752: the preset check's own three-way state — `"not-applicable"` when
+ * the active configuration registers no preset (absent from the report
+ * entirely, same treatment as {@link runExportCheck}'s own
+ * `"not-applicable"`); `"skipped"` when a preset is registered but check 1
+ * failed (same dependency every other check-1-gated check has, rendered
+ * via {@link presetCheckSkipLine}); otherwise the outcome
+ * {@link runCheck2AndPreset} computed.
+ */
+type PresetCheckState = PresetCheckOutcome | "not-applicable" | "skipped";
+
+const check2From = (
+	check2AndPreset: Check2AndPresetResult | null,
+): CheckOutcome | null => {
+	if (check2AndPreset === null) {
+		return null;
+	}
+	return check2AndPreset.check2;
+};
+
+const presetCheckState = (
+	presetsRegistered: boolean,
+	check2AndPreset: Check2AndPresetResult | null,
+): PresetCheckState => {
+	if (!presetsRegistered) {
+		return "not-applicable";
+	}
+	if (check2AndPreset === null) {
+		return "skipped";
+	}
+	return check2AndPreset.preset;
+};
+
+const presetCheckSkipLine = (state: PresetCheckState): string | null => {
+	if (state === "skipped") {
+		return SKIPPED_CHECK_PRESET_LINE;
+	}
+	return null;
+};
+
+/** `[]` when the preset check didn't run or passed — the errors it contributes to the rendered diagnostic batch, folded in as their own diagnostics (2.2: every refusal is reported, never only the first) while the check itself still counts as one failed check (`presetCheckFailed`), not one-per-refusal. */
+const presetCheckErrors = (
+	state: PresetCheckState,
+): ReadonlyArray<HejbroError> => {
+	if (state === "not-applicable" || state === "skipped" || state.ok) {
+		return [];
+	}
+	return state.errors;
+};
+
+const presetCheckFailed = (state: PresetCheckState): boolean =>
+	presetCheckErrors(state).length > 0;
+
 const check2SkipLine = (check2: CheckOutcome | null): string | null => {
 	if (check2 === null) {
 		return SKIPPED_CHECK_2_LINE;
@@ -704,6 +827,16 @@ const check4SkipLine = (check4: CheckOutcome | null): string | null => {
  * line instead. Loader errors (config-not-found/entry-not-found) are a
  * precondition of all five checks, not one of them — a single-diagnostic
  * early exit, as before. Exit 1 when any check failed.
+ *
+ * A sixth check (#752, gated on check 1 exactly like check 2 — same
+ * `generateMigration({ validators })` call, never a second one) runs
+ * every registered preset's validators over the same declared snapshot
+ * check 2 already builds, and refuses with the identical coded error
+ * `hejbro generate` would raise for the same declaration; every refusal
+ * in the run is reported, and the check still counts as one, pass or
+ * fail. A configuration with no preset registered never runs it and
+ * never counts it — the report stays byte-identical to before this
+ * check existed.
  *
  * `--fix` (`argv`, #220): before any check runs, resolvable
  * duplicate-migration-version groups are renamed on disk (content and
@@ -754,12 +887,16 @@ export const runVerify = async (
 			fileNames,
 		);
 
-		const check2 = runCheck2IfEligible(
+		const check2AndPreset = runCheck2AndPresetIfEligible(
 			check1.diskText,
 			declarations,
 			config.snapshotPath,
 			registry,
+			validators,
 		);
+		const check2 = check2From(check2AndPreset);
+		const presetsRegistered = validators.length > 0;
+		const presetState = presetCheckState(presetsRegistered, check2AndPreset);
 		const check4 = runCheck4IfEligible(
 			check1.diskText,
 			config.snapshotPath,
@@ -774,6 +911,7 @@ export const runVerify = async (
 			validators,
 		);
 		const exportApplied = exportCheck !== "not-applicable";
+		const checksApplied = totalChecks(exportApplied, presetsRegistered);
 
 		const outcomes = [
 			checkDuplicateVersion,
@@ -787,8 +925,9 @@ export const runVerify = async (
 			(outcome): outcome is Extract<CheckOutcome, { ok: false }> =>
 				outcome !== null && !outcome.ok,
 		);
+		const presetErrors = presetCheckErrors(presetState);
 
-		if (failures.length === 0) {
+		if (failures.length === 0 && !presetCheckFailed(presetState)) {
 			// failures.length === 0 means check1.outcome.ok (it's in outcomes
 			// above), so diskText is guaranteed non-null here — TS can't see
 			// that link across the two fields, hence the cast.
@@ -797,28 +936,32 @@ export const runVerify = async (
 				exitCode: 0,
 				stdout: [
 					...fixOutcome.lines,
-					`verify: ${totalChecks(exportApplied)} checks passed (${fileNames.length} migrations, snapshot ${snapshotHash.slice(0, 19)}…)`,
+					`verify: ${checksApplied} checks passed (${fileNames.length} migrations, snapshot ${snapshotHash.slice(0, 19)}…)`,
 				],
 				stderr: null,
 			};
 		}
 
-		const diagnostics = failures.map((failure) =>
-			errorDiagnostic(failure.error, fallbackIdentity),
-		);
+		const diagnostics = [
+			...failures.map((failure) =>
+				errorDiagnostic(failure.error, fallbackIdentity, cwd),
+			),
+			...presetErrors.map((error) =>
+				errorDiagnostic(error, fallbackIdentity, cwd),
+			),
+		];
 		const skippedLines = [
 			check3SkipLine(check3),
 			check2SkipLine(check2),
 			check4SkipLine(check4),
+			presetCheckSkipLine(presetState),
 		].filter((line): line is string => line !== null);
 		const skippedCount = skippedLines.length;
+		const failedCount =
+			failures.length + Number(presetCheckFailed(presetState));
 		const summary = [
 			...skippedLines,
-			failureSummaryLine(
-				failures.length,
-				skippedCount,
-				totalChecks(exportApplied),
-			),
+			failureSummaryLine(failedCount, skippedCount, checksApplied),
 		].join("\n");
 
 		return {
@@ -827,7 +970,7 @@ export const runVerify = async (
 			stderr: renderDiagnostics(diagnostics, summary),
 		};
 	} catch (error) {
-		return preconditionErrorResult(asHejbroError(error), fallbackIdentity);
+		return preconditionErrorResult(asHejbroError(error), fallbackIdentity, cwd);
 	}
 };
 

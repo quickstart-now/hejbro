@@ -38,7 +38,7 @@ import {
 	parseRenameFlag,
 } from "../flags";
 import { sha256Hex } from "../hash";
-import { identityFromMessage } from "../identity";
+import { identityFromMessage, relativizeDeclaredAt } from "../identity";
 import { loadConfig, loadDeclarations, ONBOARDING_EXAMPLE } from "../loader";
 import { buildRegistry, configValidators } from "../presets";
 import { buildAmbiguityDiagnostic } from "../rename-diagnostics";
@@ -190,42 +190,6 @@ const parseGenerateArgv = (
 	renameValues: collectFlagValues(rawArgs, "--rename"),
 	confirmDropValues: collectFlagValues(rawArgs, "--confirm-drop"),
 });
-
-const FILE_URL_PREFIX = "file://";
-
-/**
- * `declaredAt` (core's `captureDeclarationSite`) is always an absolute
- * path or `file://` URL — V8 stack traces have no notion of "relative to
- * what." Stripping `cwd` here (never in core, which has no cwd concept)
- * keeps the CLI's own "no absolute paths in output" rule (Task 14) — a
- * location outside `cwd` (e.g. a linked package) falls back to the
- * `file://`-stripped absolute path rather than a nonsensical `../../…`.
- */
-const stripFileUrlPrefix = (location: string): string => {
-	if (location.startsWith(FILE_URL_PREFIX)) {
-		return location.slice(FILE_URL_PREFIX.length);
-	}
-	return location;
-};
-
-const relativizeLocation = (location: string, cwd: string): string => {
-	const withoutFileUrl = stripFileUrlPrefix(location);
-	const cwdPrefix = `${cwd}/`;
-	if (withoutFileUrl.startsWith(cwdPrefix)) {
-		return withoutFileUrl.slice(cwdPrefix.length);
-	}
-	return withoutFileUrl;
-};
-
-const relativizeDeclaredAt = (
-	declaredAt: string | null,
-	cwd: string,
-): string | null => {
-	if (declaredAt === null) {
-		return null;
-	}
-	return relativizeLocation(declaredAt, cwd);
-};
 
 /** Codes whose fault lives in the snapshot itself, never in a
  * declaration -- `malformed-snapshot-node` (a corrupt on-disk node) and

@@ -29,3 +29,44 @@ export const identityFromMessage = (
 	}
 	return singleMatch[1] ?? fallback;
 };
+
+const FILE_URL_PREFIX = "file://";
+
+/**
+ * `declaredAt` (core's `captureDeclarationSite`) is always an absolute
+ * path or `file://` URL — V8 stack traces have no notion of "relative to
+ * what." Stripping `cwd` here (never in core, which has no cwd concept)
+ * keeps the CLI's own "no absolute paths in output" rule (Task 14) — a
+ * location outside `cwd` (e.g. a linked package) falls back to the
+ * `file://`-stripped absolute path rather than a nonsensical `../../…`.
+ * Shared by `generate.ts` and `verify.ts` (task 3.4, #753 review: two
+ * local copies of this exact logic had already drifted once in naming
+ * before this move — the same trap 3.1 closed for
+ * `identityFromMessage`, reproduced under different names).
+ */
+const stripFileUrlPrefix = (location: string): string => {
+	if (location.startsWith(FILE_URL_PREFIX)) {
+		return location.slice(FILE_URL_PREFIX.length);
+	}
+	return location;
+};
+
+export const relativizeLocation = (location: string, cwd: string): string => {
+	const withoutFileUrl = stripFileUrlPrefix(location);
+	const cwdPrefix = `${cwd}/`;
+	if (withoutFileUrl.startsWith(cwdPrefix)) {
+		return withoutFileUrl.slice(cwdPrefix.length);
+	}
+	return withoutFileUrl;
+};
+
+/** `relativizeLocation`'s own `null`-passthrough wrapper, for a `HejbroError.declaredAt`/`Diagnostic.declaredAt` field (both `string | null`). */
+export const relativizeDeclaredAt = (
+	declaredAt: string | null,
+	cwd: string,
+): string | null => {
+	if (declaredAt === null) {
+		return null;
+	}
+	return relativizeLocation(declaredAt, cwd);
+};

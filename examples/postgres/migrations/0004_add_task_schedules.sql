@@ -1,6 +1,6 @@
 -- hejbro migration
--- + table app.task_schedules [new]
 -- ~ table app.tasks [column "closed_at" added, column "due_at" dropped, index "tasks_project_id_due_at_idx" dropped]
+-- + table app.task_schedules [new]
 -- + rls app.task_schedules [new]
 -- + policy app.task_schedules.task_schedules_read_all [new]
 -- + policy app.task_schedules.task_schedules_write_all [new]
@@ -9,6 +9,12 @@
 -- snapshot: sha256:5a435954c1ab476479edfb018a39f99a462c7fbeb0c618728512d13d0b5d53f2
 
 drop view if exists "app"."open_tasks";
+
+drop index "app"."tasks_project_id_due_at_idx";
+
+alter table "app"."tasks" drop column "due_at";
+
+alter table "app"."tasks" add column "closed_at" timestamp with time zone;
 
 create table "app"."task_schedules" (
 	"task_id" uuid not null,
@@ -25,12 +31,6 @@ grant select on all tables in schema "app" to "app_auditor";
 grant select on all tables in schema "app" to "app_reader";
 
 grant select, insert, update, delete on all tables in schema "app" to "app_writer";
-
-drop index "app"."tasks_project_id_due_at_idx";
-
-alter table "app"."tasks" drop column "due_at";
-
-alter table "app"."tasks" add column "closed_at" timestamp with time zone;
 
 alter table "app"."task_schedules" enable row level security;
 

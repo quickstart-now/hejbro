@@ -180,11 +180,189 @@ const ownerIsExisting = (
 	return tableExisting(asTableSnapshot(authoritative));
 };
 
+/** The node `dependsOnIdentities` reads for ordering purposes: `next` for a create/alter, `previous` for a drop -- exactly the side that change actually carries a real node on (a create's `previous` is always `null`, a drop's `next` is always `null`; `ObjectKind.diff`'s own contract guarantees the side this function reads here is never null). */
+const nodeForOrdering = (change: KindChange): JsonValue => {
+	if (change.operation === "drop") {
+		return change.previous as JsonValue;
+	}
+	return change.next as JsonValue;
+};
+
+/** Which side of a same-kind dependency edge a target/predecessor pair falls on, by direction: on create, a dependency precedes its dependent (same sense as `rankKinds`); on drop, a dependent precedes what it depends on (the reverse — #753/task 1.2). */
+const edgeTargetAndPredecessor = (
+	direction: "create" | "drop",
+	changeIdentity: string,
+	dependencyIdentity: string,
+): { readonly target: string; readonly predecessor: string } => {
+	if (direction === "create") {
+		return { target: changeIdentity, predecessor: dependencyIdentity };
+	}
+	return { target: dependencyIdentity, predecessor: changeIdentity };
+};
+
+/**
+ * `identity -> the identities that must be placed before it`, built from
+ * `kind.dependsOnIdentities` over `changes` (already narrowed to one kind,
+ * one direction). An edge naming an identity outside `changes`' own
+ * identity set is dropped (task 1.2: "an ordinary, unrelated reference,
+ * not a constraint on this run's order").
+ */
+const buildPredecessors = (
+	dependsOnIdentities: (node: JsonValue) => ReadonlyArray<string>,
+	changes: ReadonlyArray<KindChange>,
+	identitySet: ReadonlySet<string>,
+	direction: "create" | "drop",
+): ReadonlyMap<string, ReadonlySet<string>> =>
+	changes.reduce<ReadonlyMap<string, ReadonlySet<string>>>((acc, change) => {
+		const dependencies = dependsOnIdentities(nodeForOrdering(change)).filter(
+			(identity) => identitySet.has(identity) && identity !== change.identity,
+		);
+		return dependencies.reduce((innerAcc, dependencyIdentity) => {
+			const { target, predecessor } = edgeTargetAndPredecessor(
+				direction,
+				change.identity,
+				dependencyIdentity,
+			);
+			const existing = innerAcc.get(target) ?? new Set<string>();
+			return new Map(innerAcc).set(target, new Set([...existing, predecessor]));
+		}, acc);
+	}, new Map());
+
+type WaveState = {
+	readonly placed: ReadonlySet<string>;
+	readonly ordered: ReadonlyArray<string>;
+};
+
+const isReady = (
+	predecessorsOf: ReadonlyMap<string, ReadonlySet<string>>,
+	placed: ReadonlySet<string>,
+	identity: string,
+): boolean =>
+	Array.from(predecessorsOf.get(identity) ?? new Set<string>()).every(
+		(predecessor) => placed.has(predecessor),
+	);
+
+/**
+ * A stable, cycle-tolerant topological sort over `identities` (already in
+ * their existing identity order), by waves: each step places every
+ * currently-unblocked identity (in its existing relative order), never
+ * one at a time by insertion order — this is what keeps an unconstrained
+ * pair in identity order (task 1.2: "a table referencing two independent
+ * tables... only 'referencing before both' is asserted"). When no
+ * identity is ever unblocked (a genuine cycle among what's left),
+ * `#753`/task 1.2 says never throw: the remaining identities are flushed
+ * in their existing relative order instead, since no order satisfies a
+ * cycle either way.
+ */
+const runWaves = (
+	identities: ReadonlyArray<string>,
+	predecessorsOf: ReadonlyMap<string, ReadonlySet<string>>,
+	state: WaveState,
+): WaveState => {
+	const remaining = identities.filter(
+		(identity) => !state.placed.has(identity),
+	);
+	if (remaining.length === 0) {
+		return state;
+	}
+	const ready = remaining.filter((identity) =>
+		isReady(predecessorsOf, state.placed, identity),
+	);
+	if (ready.length === 0) {
+		return {
+			placed: new Set([...state.placed, ...remaining]),
+			ordered: [...state.ordered, ...remaining],
+		};
+	}
+	return runWaves(identities, predecessorsOf, {
+		placed: new Set([...state.placed, ...ready]),
+		ordered: [...state.ordered, ...ready],
+	});
+};
+
+/**
+ * Refines one same-kind, same-direction group of changes (already sorted
+ * by identity) by `kind.dependsOnIdentities` (#753/task 1.2) — a no-op
+ * when the kind doesn't implement it (every kind but `tableKind` today)
+ * or the group has nothing to reorder.
+ */
+const refineByDependsOnIdentities = (
+	kind: RegisteredObjectKind,
+	changes: ReadonlyArray<KindChange>,
+	direction: "create" | "drop",
+): ReadonlyArray<KindChange> => {
+	const dependsOnIdentities = kind.dependsOnIdentities;
+	if (dependsOnIdentities === undefined || changes.length <= 1) {
+		return changes;
+	}
+	const identities = changes.map((change) => change.identity);
+	const identitySet = new Set(identities);
+	const byIdentity = new Map(
+		changes.map((change) => [change.identity, change] as const),
+	);
+	const predecessorsOf = buildPredecessors(
+		dependsOnIdentities,
+		changes,
+		identitySet,
+		direction,
+	);
+	const refined = runWaves(identities, predecessorsOf, {
+		placed: new Set(),
+		ordered: [],
+	});
+	return refined.ordered.map(
+		(identity) => byIdentity.get(identity) as KindChange,
+	);
+};
+
+/**
+ * Groups `sortedChanges` (already sorted by kind rank, so same-kind
+ * entries are already contiguous) into contiguous same-kind runs, via
+ * `reduce` accumulating by `.push` (never spread — quadratic on a large
+ * change set, `with.ts`'s own `entries.push()` precedent) into a local
+ * accumulator this function alone ever sees; the type this returns stays
+ * `ReadonlyArray`, so no caller can mutate it back.
+ */
+const groupContiguousByKind = (
+	sortedChanges: ReadonlyArray<KindChange>,
+): ReadonlyArray<ReadonlyArray<KindChange>> =>
+	sortedChanges.reduce<Array<Array<KindChange>>>((groups, change) => {
+		const lastGroup = groups.at(-1);
+		if (lastGroup !== undefined && lastGroup[0]?.kind === change.kind) {
+			lastGroup.push(change);
+			return groups;
+		}
+		groups.push([change]);
+		return groups;
+	}, []);
+
+/** Applies {@link refineByDependsOnIdentities} within every contiguous same-kind run of `sortedChanges`, leaving cross-kind order (already correct via `rankOf`) untouched. */
+const refineWithinKindGroups = (
+	sortedChanges: ReadonlyArray<KindChange>,
+	registry: KindRegistry,
+	direction: "create" | "drop",
+): ReadonlyArray<KindChange> =>
+	groupContiguousByKind(sortedChanges).flatMap((group) => {
+		const [first] = group;
+		if (first === undefined) {
+			return group;
+		}
+		return refineByDependsOnIdentities(
+			registry.get(first.kind),
+			group,
+			direction,
+		);
+	});
+
 /**
  * Diffs two snapshots into an ordered list of {@link KindChange}s.
  * Creates and alters are ordered by kind dependency order (topological
- * over `dependsOn`), sorted by identity (byte order) within a kind. Drops
- * are ordered in the reverse kind order, also sorted by identity.
+ * over `dependsOn`), sorted by identity (byte order) within a kind, then
+ * refined by any same-kind dependency edges a kind's own
+ * `dependsOnIdentities` names (#753/task 1.2: a table's own foreign keys,
+ * today — dependencies before dependents). Drops are ordered in the
+ * reverse kind order, also sorted by identity then refined the same way,
+ * reversed (a dependent before what it depends on).
  */
 export const diffSnapshots = (
 	previous: Snapshot,
@@ -210,25 +388,33 @@ export const diffSnapshots = (
 		}),
 	);
 
-	const createOrAlterChanges = rawChanges
-		.filter((change) => change.operation !== "drop")
-		.sort((a, b) => {
-			const rankDelta = rankOf(a.kind) - rankOf(b.kind);
-			if (rankDelta !== 0) {
-				return rankDelta;
-			}
-			return compareKeys(a.identity, b.identity);
-		});
+	const createOrAlterChanges = refineWithinKindGroups(
+		rawChanges
+			.filter((change) => change.operation !== "drop")
+			.sort((a, b) => {
+				const rankDelta = rankOf(a.kind) - rankOf(b.kind);
+				if (rankDelta !== 0) {
+					return rankDelta;
+				}
+				return compareKeys(a.identity, b.identity);
+			}),
+		registry,
+		"create",
+	);
 
-	const dropChanges = rawChanges
-		.filter((change) => change.operation === "drop")
-		.sort((a, b) => {
-			const rankDelta = rankOf(b.kind) - rankOf(a.kind);
-			if (rankDelta !== 0) {
-				return rankDelta;
-			}
-			return compareKeys(a.identity, b.identity);
-		});
+	const dropChanges = refineWithinKindGroups(
+		rawChanges
+			.filter((change) => change.operation === "drop")
+			.sort((a, b) => {
+				const rankDelta = rankOf(b.kind) - rankOf(a.kind);
+				if (rankDelta !== 0) {
+					return rankDelta;
+				}
+				return compareKeys(a.identity, b.identity);
+			}),
+		registry,
+		"drop",
+	);
 
 	return [...createOrAlterChanges, ...dropChanges];
 };

@@ -3,9 +3,12 @@ import {
 	diffSnapshots,
 	emptySnapshot,
 	generateMigrations,
+	HejbroError,
+	hejbroError,
 	throwHejbroError,
 } from "@hejbro/core";
 import type { Driver } from "@hejbro/query";
+import { codeSuffix, driverErrorCode, driverErrorReason } from "./execute";
 import { clearLedger } from "./ledger";
 
 /**
@@ -154,6 +157,55 @@ const resetMigrationSql = (
 	return result.migrations[0]?.sql as string;
 };
 
+/** `null` when there is nothing to drop (a no-op reset needs no SQL); otherwise {@link resetMigrationSql}'s own DDL. */
+const sqlToDrop = (
+	changes: ReadonlyArray<KindChange>,
+	currentSnapshot: Snapshot,
+	registry: KindRegistry,
+): string | null => {
+	if (changes.length === 0) {
+		return null;
+	}
+	return resetMigrationSql(currentSnapshot, registry);
+};
+
+/**
+ * [task 1.4, #753] Translates a failed drop into a coded
+ * `reset-drop-failed` `HejbroError` instead of letting it escape uncaught
+ * -- reuses `apply/execute.ts`'s own `driverErrorCode`/`driverErrorReason`/
+ * `codeSuffix` (already exported for exactly this reuse; `raise.ts` does
+ * the same), so this names the database's own reason the identical way
+ * `apply`/`migrate`'s own failures do. The transaction this drop ran
+ * inside has already rolled back by the time this runs (D108/D109: the
+ * drops and the ledger's own clearing share one transaction), so nothing
+ * more needs undoing here -- only the surfacing was ever the gap.
+ * `error` is attached as `.cause` (mirrors `throwApplyFailure`), for a
+ * caller that wants the raw failure structurally rather than by
+ * re-parsing this message.
+ */
+/**
+ * [task 3.8, #753] A `HejbroError` the transaction raises (e.g.
+ * `resetMigrationSql`'s own `reset-migration-not-singular`, when the
+ * hoist below can't already keep it out of this catch) is rethrown
+ * unchanged -- it is already a deliberate diagnostic, with its own code
+ * and its own advice, neither of which the drop-failure wording below
+ * describes. Only a failure that is not one is re-coded.
+ */
+const throwResetDropFailed = (error: unknown): never => {
+	if (error instanceof HejbroError) {
+		throw error;
+	}
+	const code = driverErrorCode(error);
+	const reason = driverErrorReason(error);
+	throw Object.assign(
+		hejbroError(
+			"reset-drop-failed",
+			`hejbro reset failed to drop your declared objects${codeSuffix(code)}: ${reason}. The transaction was rolled back — nothing was dropped and the ledger is unchanged. Next: run \`hejbro status\` to confirm, resolve what the error above describes (an object outside your declarations may still depend on one you're dropping), then rerun \`hejbro reset\`.`,
+		),
+		{ cause: error },
+	);
+};
+
 /**
  * Returns a database to the state before any migration was applied
  * (spec): refuses an empty declaration set outright (task 18.1, before
@@ -167,6 +219,12 @@ const resetMigrationSql = (
  * reset that would drop nothing writes nothing, the ledger included, so
  * the "nothing to drop needs no confirmation" carve-out above is a
  * genuine no-op rather than a silent, unconfirmed ledger clear.
+ *
+ * A drop the database refuses (task 1.4, #753) -- an object outside the
+ * declarations still depending on the one being dropped, most commonly --
+ * rolls the whole transaction back (nothing dropped, the ledger
+ * untouched) and surfaces as {@link throwResetDropFailed}'s coded error,
+ * never an unclassified, uncaught crash.
  */
 export const applyReset = async (
 	driver: Driver,
@@ -178,11 +236,20 @@ export const applyReset = async (
 	const changes = planReset(currentSnapshot, registry);
 	const databaseName = await currentDatabaseName(driver);
 	assertResetConfirmed(databaseName, changes, confirmed);
-	await driver.transaction(async (session) => {
-		if (changes.length > 0) {
-			const sql = resetMigrationSql(currentSnapshot, registry);
-			await session.execute({ sql, params: [], kind: "sql" });
-			await clearLedger(session);
-		}
-	});
+	// [task 3.8, #753] Computed here, not inside the transaction below: a
+	// pure computation, so a `reset-migration-not-singular` refusal (a
+	// hejbro bug, not a drop failure) surfaces before any statement is
+	// sent, rather than racing throwResetDropFailed's own rethrow-if-
+	// HejbroError guard to keep its code.
+	const sql = sqlToDrop(changes, currentSnapshot, registry);
+	try {
+		await driver.transaction(async (session) => {
+			if (sql !== null) {
+				await session.execute({ sql, params: [], kind: "sql" });
+				await clearLedger(session);
+			}
+		});
+	} catch (error) {
+		throwResetDropFailed(error);
+	}
 };

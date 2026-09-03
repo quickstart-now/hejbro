@@ -674,4 +674,12 @@ export const tableKind: ObjectKind<TableDeclaration> = {
 	},
 	emit: (change, siblingChanges, nextSnapshot) =>
 		emitTableSql(change, siblingChanges, nextSnapshot),
+	dependsOnIdentities: (node) => {
+		const snapshot = asTableSnapshot(node);
+		const selfIdentity = tableIdentity(snapshot.schema, snapshot.name);
+		const targets = snapshot.foreignKeys
+			.map((foreignKey) => foreignKey.referencesTable)
+			.filter((identity) => identity !== selfIdentity);
+		return Array.from(new Set(targets));
+	},
 };

@@ -1,18 +1,9 @@
 -- hejbro migration
 -- + schema app [new]
--- + table app.comments [new]
 -- + table app.posts [new]
+-- + table app.comments [new]
 
 create schema "app";
-
-create table "app"."comments" (
-	"id" uuid not null default gen_random_uuid(),
-	"post_id" uuid not null,
-	"parent_id" uuid,
-	"body" text not null,
-	constraint "comments_pkey" primary key ("id"),
-	constraint "comments_body_length_check" check (length("comments"."body") > 0)
-);
 
 create table "app"."posts" (
 	"id" uuid not null default gen_random_uuid(),
@@ -21,6 +12,15 @@ create table "app"."posts" (
 	constraint "posts_pkey" primary key ("id"),
 	constraint "posts_status_check" check ("posts"."status" in ('draft', 'published')),
 	constraint "posts_slug_format_check" check ("posts"."slug" ~ '^[a-z0-9-]+$')
+);
+
+create table "app"."comments" (
+	"id" uuid not null default gen_random_uuid(),
+	"post_id" uuid not null,
+	"parent_id" uuid,
+	"body" text not null,
+	constraint "comments_pkey" primary key ("id"),
+	constraint "comments_body_length_check" check (length("comments"."body") > 0)
 );
 
 alter table "app"."comments" add constraint "comments_parent_id_fk" foreign key ("parent_id") references "app"."comments" ("id") on delete cascade;

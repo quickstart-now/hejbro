@@ -17,6 +17,22 @@
 		"test": {
 			"outputs": []
 		},
+		// #673: measured winner (measurement-protocol.md, results.md --
+		// base/b failed 3/3 at 32 burners, c passed 3/3, U-series median
+		// 112s against base's 104s/130s bound). Two of the three tests
+		// that spawn a real `tsc` (packages/cli's
+		// declare-emit-callback-shadow.types.test.ts, examples/cli-smoke's
+		// e2e.types.test.ts) move out of `test` into this task, via their
+		// own vitest.types.config.ts -- the third, examples/cli-smoke's
+		// vendored-contract.test.ts, was miscounted in §2 and stays in
+		// the contended `test` phase (see that file's own vitest.config.ts
+		// comment). No `dependsOn` here -- turbo's per-package graph
+		// can't express "after every package's test", so the ordering
+		// (run only once `turbo run test` has finished monorepo-wide)
+		// lives in the root script's `&&` instead.
+		"test:types": {
+			"outputs": []
+		},
 		"test:coverage": {
 			"outputs": ["coverage/**"],
 			// Not cached: coverage-final.json (istanbul's per-function hit-map
