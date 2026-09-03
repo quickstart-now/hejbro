@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { emptySnapshot, renderSnapshot } from "@hejbro/core";
 import { defineCommand } from "citty";
+import type { HejbroConfig } from "../config";
 import { fromHejbroError, renderDiagnostics } from "../diagnostics";
 import { asHejbroError } from "../errors";
 import { identityFromMessage } from "../identity";
@@ -85,11 +86,29 @@ const fileLabel = (cwd: string, path: string): string => relative(cwd, path);
  */
 const resolveDestinations = (
 	cwd: string,
-	config: { readonly migrationsDir?: string; readonly snapshotPath?: string } | null,
-): { readonly migrationsDirPath: string; readonly snapshotFilePath: string } => ({
+	config: {
+		readonly migrationsDir?: string;
+		readonly snapshotPath?: string;
+	} | null,
+): {
+	readonly migrationsDirPath: string;
+	readonly snapshotFilePath: string;
+} => ({
 	migrationsDirPath: join(cwd, config?.migrationsDir ?? DEFAULT_MIGRATIONS_DIR),
 	snapshotFilePath: join(cwd, config?.snapshotPath ?? DEFAULT_SNAPSHOT_PATH),
 });
+
+/** `null` when no `hejbro.config.ts` sits at `cwd` -- the only case `runInit` scaffolds at the default paths (D3). */
+const readExistingConfig = async (
+	cwd: string,
+	configFilePath: string,
+): Promise<HejbroConfig | null> => {
+	if (!existsSync(configFilePath)) {
+		return null;
+	}
+	const { config } = await loadConfig(cwd, undefined);
+	return config;
+};
 
 /**
  * `hejbro init` (decision U7, extended #687): scaffolds `hejbro.config.ts`
@@ -108,9 +127,7 @@ export const runInit = async (cwd: string): Promise<InitResult> => {
 	const fallbackIdentity = "init";
 	const configFilePath = join(cwd, CONFIG_FILE_NAME);
 	try {
-		const config = existsSync(configFilePath)
-			? (await loadConfig(cwd, undefined)).config
-			: null;
+		const config = await readExistingConfig(cwd, configFilePath);
 		const { migrationsDirPath, snapshotFilePath } = resolveDestinations(
 			cwd,
 			config,

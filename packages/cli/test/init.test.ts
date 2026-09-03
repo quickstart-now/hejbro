@@ -261,9 +261,9 @@ describe("runInit / repairs a partially present project at configured paths (#68
 			"skipped db/migrations/ (exists)",
 			"created db/hejbro.snapshot.json",
 		]);
-		expect(
-			await readFile(join(migrationsDirPath, "0001_a.sql"), "utf8"),
-		).toBe("-- hejbro migration\n");
+		expect(await readFile(join(migrationsDirPath, "0001_a.sql"), "utf8")).toBe(
+			"-- hejbro migration\n",
+		);
 		const snapshotContent = await readFile(
 			join(cwd, "db", "hejbro.snapshot.json"),
 			"utf8",

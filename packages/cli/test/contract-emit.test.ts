@@ -818,10 +818,7 @@ describe("contractMetadata's emitted keys survive as own properties (#697, R2-N2
 			expect(Object.hasOwn(tables[key]?.columns ?? {}, key)).toBe(true);
 			expect(Object.keys(tables[key]?.columns ?? {})).toContain(key);
 
-			const functions = contractMetadata.functions as Record<
-				string,
-				unknown
-			>;
+			const functions = contractMetadata.functions as Record<string, unknown>;
 			expect(Object.hasOwn(functions, key)).toBe(true);
 			expect(Object.keys(functions)).toContain(key);
 		},
