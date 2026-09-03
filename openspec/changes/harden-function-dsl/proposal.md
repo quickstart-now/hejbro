@@ -16,8 +16,8 @@ let a declaration compile into SQL the database refuses:
   ReturningProjection | undefined>` and the pre-returning stage is
   `InsertFinal<Table, never>`, so `never` slips into the union and the
   body renders `return query insert into … values (…);` — a `return
-  query` over a command that produces no rows, which Postgres rejects
-  (#686).
+  query` over a command that produces no rows, which Postgres accepts at
+  create time and rejects the moment the function is called (#686).
 
 The second is the exact mirror of a guard that already ships:
 `ctx.execute` refuses a mutation that *carries* `.returning()`

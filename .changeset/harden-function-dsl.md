@@ -10,6 +10,7 @@ unquoted, invalid name into the generated DDL and function body.
 `.returning()`: the pre-`.returning()` stage is excluded at the type
 level, and a caller that reaches `ctx.return` with the type bypassed now
 fails at declaration time with `return-expects-returning` instead of
-rendering a `return query …;` statement Postgres rejects at create time.
-`ctx.execute` keeps accepting a mutation at either stage through the new
-exported `ExecutableQuery` type (re-exported by `hejbro`).
+rendering a `return query …;` statement Postgres rejects when the
+function is called. `ctx.execute` keeps accepting a mutation at either
+stage through the new exported `ExecutableQuery` type (re-exported by
+`hejbro`).

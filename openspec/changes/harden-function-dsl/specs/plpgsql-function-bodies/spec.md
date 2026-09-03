@@ -7,9 +7,10 @@ in the type it accepts, and, for a caller that reaches it with the type
 bypassed, at declaration time with `return-expects-returning`.
 
 A body's `return query …` needs a command that produces rows. A mutation
-with no `RETURNING` clause produces none, and Postgres rejects such a
-body when the function is created, so nothing is gained by deferring the
-refusal to apply time.
+with no `RETURNING` clause produces none, so Postgres fails such a body
+when the function is called (`INSERT query does not return tuples`), not
+when it is created — the declaration is the earliest place the mistake
+can be named.
 
 This is the mirror of the rule `ctx.execute` already carries: the
 returning form is `ctx.return`'s, the non-returning form is
