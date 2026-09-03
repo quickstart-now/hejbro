@@ -2880,4 +2880,13 @@ Named here because the archive is where someone will look for it:
   each carry their own control and by a mutant that fails exactly those
   two. Anyone reopening this change should start there rather than
   assume the gate covered it.
+
+  The rule that closes this, settled by the owner-delegate rather than
+  invented here: **when a clean round's own non-blocking correction
+  widens no contract and only makes the code obey a sentence the delta
+  already carried, the gate does not reopen — that correction is covered
+  by the archive pull request's own review instead.** Without a stated
+  rule, "correct, then review the correction" has no termination
+  condition; with it, the loop ends where the correction stops changing
+  what the specification promises.
 - #712, above.
