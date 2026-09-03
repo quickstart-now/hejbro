@@ -10,12 +10,12 @@ import type {
 } from "@hejbro/core";
 import {
 	asc,
-	assertSqlName,
 	check,
 	desc,
 	existingTable,
 	index,
 	indexMethods,
+	isSqlName,
 	op,
 	sql,
 	table,
@@ -153,28 +153,19 @@ const foreignKeyAction = (
 	FOREIGN_KEY_ACTION_TOKEN[code];
 
 /**
- * D106 R3-B3 (CI-R3-05: `@hejbro/core` exports only the throwing
- * assertion, not a boolean query -- a boolean predicate is not
- * otherwise public surface this package needs, so every caller here
- * wraps `assertSqlName` in a `try`/`catch` rather than restating its
- * pattern): whether `name` round-trips through the DSL's own D36 rule.
- * Shared by every catalog-inference call site that must omit an object
- * rather than let `assertSqlName` abort the whole reading (D106 R4-B1)
- * -- a table, schema, index or check whose catalog name Postgres
- * allowed but hejbro cannot express. A foreign key's own name is the
- * one exception: it keeps its round-trip-or-derive fallback
+ * Whether `name` round-trips through the DSL's own D36 rule -- asks
+ * `@hejbro/core`'s own `isSqlName` directly, the one predicate for that
+ * question, rather than restating its pattern. Shared by every
+ * catalog-inference call site that must omit an object rather than let
+ * `assertSqlName` abort the whole reading (D106 R4-B1) -- a table,
+ * schema, index or check whose catalog name Postgres allowed but hejbro
+ * cannot express. A foreign key's own name is the one exception: it
+ * keeps its round-trip-or-derive fallback
  * ({@link isExpressibleForeignKeyName}) rather than omission, since a
- * constraint's name is a label on a relation that still has one, while
- * a table/schema/index/check name is the object's own identity.
+ * constraint's name is a label on a relation that still exists, while a
+ * table/schema/index/check name is the object's own identity.
  */
-export const isExpressibleName = (name: string): boolean => {
-	try {
-		assertSqlName(name, "identifier", null);
-		return true;
-	} catch {
-		return false;
-	}
-};
+export const isExpressibleName = isSqlName;
 
 /**
  * D106 R3-B3: whether a foreign key's own catalog name round-trips
