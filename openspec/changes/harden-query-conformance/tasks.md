@@ -144,7 +144,7 @@ Inside group 1, 1.2 makes 1.3's test red, so 1.3 follows it.
 
 ## 3. A core-built set operation's execute result type
 
-- [ ] 3.1 (~8m) **[design]** `ExecuteResult` resolves a core-built
+- [x] 3.1 (~8m) **[design]** `ExecuteResult` resolves a core-built
       set-operation stage to the left branch's declared row shape — the
       projection that stage carries — instead of the driver's raw row
       shape. Settles which left-join tracking the resolved shape is

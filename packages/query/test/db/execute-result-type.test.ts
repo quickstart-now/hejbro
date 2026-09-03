@@ -6,6 +6,7 @@ import type {
 	IntervalValue,
 	QueryNode,
 	SelectLimited,
+	SetOpStage,
 	UpdateFinal,
 	UpdateReturnable,
 } from "@hejbro/core";
@@ -99,6 +100,55 @@ describe("Db.execute's resolved row type (task 4.11)", () => {
 	it("a bare (already-unwrapped) QueryNode keeps the plain DriverRow shape -- select's richness only exists at the builder-stage level, doesn't leak past compile()", () => {
 		expectTypeOf<ExecuteRows<QueryNode>>().toEqualTypeOf<
 			ReadonlyArray<Readonly<Record<string, unknown>>>
+		>();
+	});
+});
+
+describe("Db.execute's resolved row type for a core-built set operation (task 3.1, #551)", () => {
+	it("a whole-table union reads back as the left branch's declared row shape, not a raw driver row", () => {
+		type Stage = SetOpStage<Posts>;
+		expectTypeOf<ExecuteRows<Stage>>().toEqualTypeOf<
+			ReadonlyArray<SelectResult<Posts>>
+		>();
+	});
+
+	it("an object-projection union reads back as the left branch's declared keys and types -- no more, no less", () => {
+		type Projection = { readonly total: Posts["amount"] };
+		type Stage = SetOpStage<Projection>;
+		type Row = ExecuteRows<Stage>[number];
+
+		expectTypeOf<ExecuteRows<Stage>>().toEqualTypeOf<
+			ReadonlyArray<SelectResult<Projection>>
+		>();
+		// @ts-expect-error "status" was never projected -- not a key of Row.
+		type _Rejected = Row["status"];
+	});
+
+	it("a set-op stage further chained with orderBy()/limit() keeps the same resolved row type -- neither changes TProjection", () => {
+		type OrderedStage = ReturnType<SetOpStage<Posts>["orderBy"]>;
+		type LimitedStage = ReturnType<SetOpStage<Posts>["limit"]>;
+
+		expectTypeOf<ExecuteRows<OrderedStage>>().toEqualTypeOf<
+			ReadonlyArray<SelectResult<Posts>>
+		>();
+		expectTypeOf<ExecuteRows<LimitedStage>>().toEqualTypeOf<
+			ReadonlyArray<SelectResult<Posts>>
+		>();
+	});
+
+	// Controls, mirroring this file's own existing cases above -- not new
+	// claims, proof that touching db.ts's ExecuteResult for the SetOpStage
+	// branch left these two dispatch arms exactly where they were.
+	it("an already-unwrapped node stays the plain DriverRow shape -- unaffected by the new branch", () => {
+		expectTypeOf<ExecuteRows<QueryNode>>().toEqualTypeOf<
+			ReadonlyArray<Readonly<Record<string, unknown>>>
+		>();
+	});
+
+	it("a mutation chain still resolves through ReturningRow -- never mistaken for a SetOpStage", () => {
+		type Stage = InsertFinal<Posts>;
+		expectTypeOf<ExecuteRows<Stage>>().toEqualTypeOf<
+			ReadonlyArray<SelectResult<Posts>>
 		>();
 	});
 });
