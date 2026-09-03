@@ -312,6 +312,25 @@ describe("catalog-inference / D106 R4-B1: a bad name costs the object, not the r
 			const declarationCode = schemaSource.slice(
 				schemaSource.indexOf("import {"),
 			);
+			/**
+			 * D106 R5 (post-slot correction, #711): the same class of gap
+			 * Round 4 already found once ("Widgets" matching the header's
+			 * own legitimate loss-report prose, not declared code) --
+			 * `_id` as a bare substring of `declarationCode` also matches
+			 * `widgets_name_idx` (a legitimately declared index name,
+			 * `..._id` + `x`), so that check has to narrow to the one
+			 * table's own declaration block, the same fix Round 4 applied
+			 * by narrowing to `declarationCode` in the first place.
+			 */
+			const exportBlocks = declarationCode.split(/(?=export const )/);
+			const legacyBlock = exportBlocks.find((block) =>
+				block.startsWith("export const legacy "),
+			);
+			if (legacyBlock === undefined) {
+				throw new Error(
+					`expected an "export const legacy" block in:\n${declarationCode}`,
+				);
+			}
 			expect(schemaSource).toContain('Omitted: table "app.Widgets"');
 			expect(declarationCode).toContain("widgets");
 			expect(declarationCode).toContain("widgets_name_not_blank");
@@ -321,8 +340,8 @@ describe("catalog-inference / D106 R4-B1: a bad name costs the object, not the r
 			// *partly* declared, per the loss line above) -- its ordinary
 			// column survives, only `_id` does not.
 			expect(declarationCode).toContain("legacy");
-			expect(declarationCode).toContain("label");
-			expect(declarationCode).not.toContain("_id");
+			expect(legacyBlock).toContain("label");
+			expect(legacyBlock).not.toMatch(/\b_id\b/);
 			expect(declarationCode).not.toContain("CK_Widgets");
 			expect(declarationCode).not.toContain("IX_Widgets");
 			// D106 R5-B1: `line_items` itself is declared, its two source
