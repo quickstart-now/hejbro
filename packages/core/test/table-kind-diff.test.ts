@@ -39,6 +39,7 @@ import {
 	parseSnapshot,
 	renderSnapshot,
 } from "../src/snapshot/snapshot";
+import type { JsonValue } from "../src/snapshot/stable-json";
 import {
 	bigint,
 	bigserial,
@@ -273,6 +274,146 @@ describe("tableKind.identify", () => {
 		expect(tableKind.identify(tableKind.serialize(getTableMeta(posts)))).toBe(
 			"app.posts",
 		);
+	});
+});
+
+// #753/task 1.1: dependsOnIdentities names a table's own foreign-key
+// targets -- the intra-kind edge diffSnapshots (engine/diff-engine.ts)
+// refines the create/drop order by, reversed on drop.
+describe("tableKind.dependsOnIdentities (#753)", () => {
+	const dependsOnIdentitiesOf = (node: JsonValue): ReadonlyArray<string> => {
+		const fn = tableKind.dependsOnIdentities;
+		if (fn === undefined) {
+			throw new Error(
+				"expected tableKind.dependsOnIdentities to be implemented",
+			);
+		}
+		return fn(node);
+	};
+
+	it("names a table's own foreign-key targets", () => {
+		const posts = table(app, "posts", { id: uuid().primaryKey() });
+
+		// no foreign key -> empty
+		const tags = table(app, "tags", { id: uuid().primaryKey() });
+		expect(
+			dependsOnIdentitiesOf(tableKind.serialize(getTableMeta(tags))),
+		).toEqual([]);
+
+		// one foreign key to another table -> that table's identity
+		const comments = table(
+			app,
+			"comments",
+			{ id: uuid().primaryKey(), postId: uuid() },
+			(t) => ({
+				foreignKeys: [
+					{
+						columns: [t.postId],
+						references: { table: posts, columns: [posts.id] },
+					},
+				],
+			}),
+		);
+		expect(
+			dependsOnIdentitiesOf(tableKind.serialize(getTableMeta(comments))),
+		).toEqual(["app.posts"]);
+
+		// two foreign keys to two different tables -> both, in the table's own
+		// foreign-key order (D1: table()'s `foreignKeys` getter sorts
+		// canonically by local column name, independent of which declaration
+		// form wrote each one -- "author_id" < "post_id", so authors' target
+		// surfaces first regardless of the array literal's own order below)
+		const authors = table(app, "authors", { id: uuid().primaryKey() });
+		const reviews = table(
+			app,
+			"reviews",
+			{
+				id: uuid().primaryKey(),
+				postId: uuid(),
+				authorId: uuid(),
+			},
+			(t) => ({
+				foreignKeys: [
+					{
+						columns: [t.postId],
+						references: { table: posts, columns: [posts.id] },
+					},
+					{
+						columns: [t.authorId],
+						references: { table: authors, columns: [authors.id] },
+					},
+				],
+			}),
+		);
+		expect(
+			dependsOnIdentitiesOf(tableKind.serialize(getTableMeta(reviews))),
+		).toEqual(["app.authors", "app.posts"]);
+
+		// two foreign keys both targeting the same table -> one identity, not two
+		const replies = table(
+			app,
+			"replies",
+			{
+				id: uuid().primaryKey(),
+				postId: uuid(),
+				replyToPostId: uuid(),
+			},
+			(t) => ({
+				foreignKeys: [
+					{
+						columns: [t.postId],
+						references: { table: posts, columns: [posts.id] },
+					},
+					{
+						columns: [t.replyToPostId],
+						references: { table: posts, columns: [posts.id] },
+					},
+				],
+			}),
+		);
+		expect(
+			dependsOnIdentitiesOf(tableKind.serialize(getTableMeta(replies))),
+		).toEqual(["app.posts"]);
+
+		// a self-referencing foreign key -- excluded, empty
+		const nodes = table(
+			app,
+			"nodes",
+			{ id: uuid().primaryKey().defaultRandom(), parentId: uuid() },
+			(t) => ({
+				foreignKeys: [
+					{ columns: [t.parentId], references: { columns: [t.id] } },
+				],
+			}),
+		);
+		expect(
+			dependsOnIdentitiesOf(tableKind.serialize(getTableMeta(nodes))),
+		).toEqual([]);
+
+		// a composite, multi-column foreign key -- still one identity, not one per column
+		const projects = table(app, "projects", {
+			tenantId: uuid(),
+			id: uuid().primaryKey(),
+		});
+		const tasks = table(
+			app,
+			"tasks",
+			{ tenantId: uuid(), projectId: uuid() },
+			(t) => ({
+				foreignKeys: [
+					{
+						columns: [t.tenantId, t.projectId],
+						references: {
+							table: projects,
+							columns: [projects.tenantId, projects.id],
+						},
+					},
+				],
+			}),
+		);
+		expect(
+			dependsOnIdentitiesOf(tableKind.serialize(getTableMeta(tasks))),
+		).toEqual(["app.projects"]);
 	});
 });
 

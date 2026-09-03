@@ -153,4 +153,22 @@ export interface ObjectKind<TDeclaration extends HejbroDeclaration> {
 	 * create for what it fans out into, on either side of a handover.
 	 */
 	ownerTableIdentity?(node: JsonValue): string;
+	/**
+	 * `dependsOnIdentities` (#753, task 1.1) — the identities of *other
+	 * objects of this same kind* `node` depends on existing, e.g. a
+	 * table's own foreign-key targets. `dependsOn` (above) already orders
+	 * *across* kinds (every view before its own table); this is the one
+	 * gap `dependsOn` structurally can't close — an edge *within* one
+	 * kind, which `diffSnapshots` (`engine/diff-engine.ts`) refines the
+	 * create/drop order by, reversed on drop. Optional and additive, the
+	 * same way every other member here widened this interface: only
+	 * `tableKind` implements it — every other built-in kind's
+	 * cross-object dependency is already expressed at the kind level via
+	 * `dependsOn` (a view, a policy, a trigger, a sequence all name
+	 * `table` there), so no other kind has a same-kind edge to report.
+	 * `node`'s own identity is never included in its own result (a
+	 * self-referencing foreign key is not an edge to sort against), and
+	 * two edges to the same target collapse to one identity.
+	 */
+	dependsOnIdentities?(node: JsonValue): ReadonlyArray<string>;
 }
