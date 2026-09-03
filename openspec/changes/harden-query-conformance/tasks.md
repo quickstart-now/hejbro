@@ -15,7 +15,7 @@ Inside group 1, 1.2 makes 1.3's test red, so 1.3 follows it.
 
 ## 1. The conformance kit's obligations
 
-- [ ] 1.1 (~8m) **[design]** The `session-state: false` obligation becomes
+- [x] 1.1 (~8m) **[design]** The `session-state: false` obligation becomes
       the sentence it implements: a statement precedes the caller's own,
       and nothing is asserted about what follows. Settles the violation
       message for the "nothing preceded it" case, which is now the only

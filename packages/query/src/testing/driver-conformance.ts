@@ -61,9 +61,10 @@ function throwConformanceViolation(tier: string, reason: string): never {
 
 /**
  * The `session-state: false` tier's own obligation (driver-contract: "A
- * driver without session state guarantees its own statements") — the
- * caller's own compiled statement must be the LAST thing sent for that
- * one `execute()` call, with at least one entry ahead of it. Matched by
+ * driver without session state guarantees its own statements") — some
+ * statement precedes the caller's own compiled statement for that one
+ * `execute()` call; nothing is asserted about what follows it (a
+ * transaction-wrapping driver's trailing `COMMIT` conforms). Matched by
  * `sql` text only (never `params`): a settings statement and the
  * caller's own statement never share SQL text, so this is enough to
  * place the caller's statement without the kit ever needing to know what
@@ -74,17 +75,13 @@ const assertFalseTierConformance = (
 	recordedForOneExecute: ReadonlyArray<ConformanceStatement>,
 	callerStatement: ConformanceStatement,
 ): void => {
-	const last = recordedForOneExecute[recordedForOneExecute.length - 1];
-	if (last === undefined || last.sql !== callerStatement.sql) {
+	const index = recordedForOneExecute.findIndex(
+		(statement) => statement.sql === callerStatement.sql,
+	);
+	if (index <= 0) {
 		throwConformanceViolation(
 			"session-state:false",
-			"the caller's own statement was not the last thing sent for this execution.",
-		);
-	}
-	if (recordedForOneExecute.length < 2) {
-		throwConformanceViolation(
-			"session-state:false",
-			"the caller's statement was the only thing sent -- a session-state:false driver must carry the settings with every execution, not just declare the capability false.",
+			"nothing preceded the caller's own statement in what was sent for this execution -- a session-state:false driver must carry the settings with every execution, not just declare the capability false.",
 		);
 	}
 };

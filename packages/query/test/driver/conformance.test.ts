@@ -26,9 +26,9 @@ describe("assertSessionStateConformance (task 1.4/1.5, #481)", () => {
 
 	it("settings ride with the statement, in that order (also covers order, not just count: a caller statement sent first still fails)", () => {
 		// A compliant false-tier driver: the settings precede the caller's
-		// own statement, which lands last -- the kit never reads their SQL
-		// text (it doesn't know any driver's pin text), only their
-		// position relative to the caller's own statement.
+		// own statement -- the kit never reads their SQL text (it doesn't
+		// know any driver's pin text), only that something precedes the
+		// caller's own statement's position.
 		expect(() =>
 			assertSessionStateConformance(capabilitiesWithSessionState(false), {
 				recordedForOneExecute: [
@@ -134,6 +134,74 @@ describe("assertSessionStateConformance (task 1.4/1.5, #481)", () => {
 			}),
 		).not.toThrow();
 	});
+
+	describe.each([
+		{
+			name: "caller last after a settings statement (control -- must keep passing)",
+			recordedForOneExecute: [
+				{ sql: "set intervalstyle to 'postgres'", params: [] },
+				{ sql: "select 1", params: [] },
+			],
+			outcome: "pass" as const,
+		},
+		{
+			name: "caller followed by one trailing statement",
+			recordedForOneExecute: [
+				{ sql: "set intervalstyle to 'postgres'", params: [] },
+				{ sql: "select 1", params: [] },
+				{ sql: "commit", params: [] },
+			],
+			outcome: "pass" as const,
+		},
+		{
+			name: "caller followed by several trailing statements",
+			recordedForOneExecute: [
+				{ sql: "set intervalstyle to 'postgres'", params: [] },
+				{ sql: "select 1", params: [] },
+				{ sql: "commit", params: [] },
+				{ sql: "select pg_advisory_unlock_all()", params: [] },
+			],
+			outcome: "pass" as const,
+		},
+		{
+			name: "caller first with nothing ahead of it",
+			recordedForOneExecute: [
+				{ sql: "select 1", params: [] },
+				{ sql: "set intervalstyle to 'postgres'", params: [] },
+			],
+			outcome: "violation" as const,
+		},
+		{
+			name: "caller absent from the list",
+			recordedForOneExecute: [
+				{ sql: "set intervalstyle to 'postgres'", params: [] },
+				{ sql: "set bytea_output to 'hex'", params: [] },
+			],
+			outcome: "violation" as const,
+		},
+		{
+			name: "an empty list",
+			recordedForOneExecute: [],
+			outcome: "violation" as const,
+		},
+	])(
+		"the false tier asks only that a statement precedes the caller's own -- $name",
+		({ recordedForOneExecute, outcome }) => {
+			it(`outcome: ${outcome}`, () => {
+				const callerStatement = { sql: "select 1", params: [] };
+				const run = () =>
+					assertSessionStateConformance(
+						capabilitiesWithSessionState(false),
+						{ recordedForOneExecute, callerStatement },
+					);
+				if (outcome === "pass") {
+					expect(run).not.toThrow();
+					return;
+				}
+				expect(run).toThrowError(/session-state/);
+			});
+		},
+	);
 
 	it("the declaration is left alone -- the kit reads capabilities, never writes it, for either tier", () => {
 		// Structural guarantee, made explicit: `assertSessionStateConformance`
