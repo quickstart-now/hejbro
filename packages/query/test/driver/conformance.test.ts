@@ -245,6 +245,12 @@ describe("assertSessionStateConformance (task 1.4/1.5, #481)", () => {
 				{ sql: "commit", params: [] },
 			],
 			outcome: "violation" as const,
+			// An open transaction *was* found (the "begin") -- what's wrong
+			// is nothing sat between it and the caller, since the settings
+			// landed before the open. Message 2, not message 1: an open
+			// transaction did precede the caller.
+			expectedMessage:
+				/no statement was sent between the transaction's own opening/,
 		},
 		{
 			name: "open/settings/end/open/caller/end -- settings landed in an earlier, already-closed transaction",
@@ -257,6 +263,10 @@ describe("assertSessionStateConformance (task 1.4/1.5, #481)", () => {
 				{ sql: "commit", params: [] },
 			],
 			outcome: "violation" as const,
+			// The caller's own transaction (the second "begin") *did* open
+			// -- nothing sat between it and the caller. Message 2.
+			expectedMessage:
+				/no statement was sent between the transaction's own opening/,
 		},
 		{
 			name: "open/caller/end -- nothing precedes the caller inside the transaction",
@@ -266,11 +276,21 @@ describe("assertSessionStateConformance (task 1.4/1.5, #481)", () => {
 				{ sql: "commit", params: [] },
 			],
 			outcome: "violation" as const,
+			// Same shape as the row above, minimal form: an open transaction
+			// precedes the caller, nothing sits between them. Message 2.
+			expectedMessage:
+				/no statement was sent between the transaction's own opening/,
 		},
 		{
 			name: "caller with no transaction at all",
 			recordedOnConnection: [{ sql: "select 1", params: [] }],
 			outcome: "violation" as const,
+			// No transaction opened at all -- distinct failure from the
+			// three rows above, where an open transaction was found but
+			// empty. Message 1, not message 2: it would be false to say
+			// "nothing sat between the opening and the caller" when there
+			// was no opening to begin with.
+			expectedMessage: /was not sent inside an open transaction/,
 		},
 		{
 			name: "boundary vocabulary is whole-statement, never substring -- a function body's own do $$ begin … end $$ ahead of the caller is an ordinary statement, not a reopened transaction",
@@ -295,7 +315,12 @@ describe("assertSessionStateConformance (task 1.4/1.5, #481)", () => {
 		},
 	])(
 		"the transaction-envelope obligation for interactive-transactions:true + session-state:false -- $name",
-		({ recordedOnConnection, outcome, callerStatementOverride }) => {
+		({
+			recordedOnConnection,
+			outcome,
+			callerStatementOverride,
+			expectedMessage,
+		}) => {
 			it(`outcome: ${outcome}`, () => {
 				const callerStatement = callerStatementOverride ?? {
 					sql: "select 1",
@@ -310,7 +335,17 @@ describe("assertSessionStateConformance (task 1.4/1.5, #481)", () => {
 					expect(run).not.toThrow();
 					return;
 				}
-				expect(run).toThrowError(/session-state/);
+				// Two distinct violation messages share this tier (open
+				// never found vs. open found but empty) -- a bare
+				// `/session-state/` match would pass either one for the
+				// other, so every violation row here carries its own
+				// non-overlapping `expectedMessage`.
+				if (expectedMessage === undefined) {
+					throw new Error(
+						"this table row is missing its own expectedMessage -- see the two rows above for the pattern",
+					);
+				}
+				expect(run).toThrowError(expectedMessage);
 			});
 		},
 	);
@@ -335,8 +370,17 @@ describe("assertSessionStateConformance (task 1.4/1.5, #481)", () => {
 		} catch (error) {
 			caught = error;
 		}
+		// The mutant this test exists to catch (skipping the shape refusal
+		// and falling through to the plain false-tier check) doesn't throw
+		// at all for this input -- `recordedForOneExecute` already matches
+		// that check's own shape, and its one statement precedes the
+		// caller -- so `caught` stays `undefined` and fails `toMatchObject`
+		// regardless of which fields it names. `tier` is asserted anyway,
+		// to keep this test's identity check the same shape as its
+		// siblings above and rule out the other two tiers' violations.
 		expect(caught).toMatchObject({
 			code: "driver-conformance-violation",
+			tier: "session-state:false+interactive-transactions:true",
 		});
 	});
 
