@@ -4,7 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { runInit } from "../src/commands/init";
-import { assertBuiltCli } from "./support/cli-runner";
+import {
+	assertBuiltCli,
+	createCliFixtureDir,
+	removeCliFixtureDir,
+} from "./support/cli-runner";
 
 let cwd: string;
 
@@ -48,10 +52,23 @@ describe("runInit", () => {
 		expect(content).toContain('"objects": {}');
 	});
 
-	// These two load the template init just wrote, which imports "hejbro"
-	// -- real Node resolution, so it needs a built dist.
+	// The template init writes imports "hejbro", resolved by real Node
+	// resolution -- this fixture needs a resolvable node_modules/hejbro,
+	// as a real project has.
 	describe("round-trip against the real scaffolded template", () => {
 		beforeAll(assertBuiltCli);
+
+		let cwd: string;
+		const configPath = () => join(cwd, "hejbro.config.ts");
+		const snapshotPath = () => join(cwd, "hejbro.snapshot.json");
+
+		beforeEach(async () => {
+			cwd = await createCliFixtureDir();
+		});
+
+		afterEach(async () => {
+			await removeCliFixtureDir(cwd);
+		});
 
 		it("second run reports three skips, exits 0, and leaves files byte-identical", async () => {
 			await runInit(cwd);
