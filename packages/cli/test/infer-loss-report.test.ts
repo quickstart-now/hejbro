@@ -462,6 +462,34 @@ describe("buildLossReport / 1.7", () => {
 		expect(line).toContain("hejbro will not mention it again");
 	});
 
+	// D106 R7-N2: the DSL derives every column's SQL name from its
+	// TypeScript key and accepts no override, so no hand-written
+	// declaration -- under the catalog's own name or any other -- can
+	// carry either of these two names either. Renaming in the database is
+	// the only remedy; offering "declare it by hand" describes an option
+	// that does not exist.
+	it("names an omitted index and check without offering a hand-written declaration", () => {
+		const report = buildLossReport({
+			...emptyFacts("import"),
+			omittedIndexes: [
+				{ schema: "app", table: "widgets", sqlName: "IX_Widgets" },
+			],
+			omittedChecks: [
+				{ schema: "app", table: "widgets", sqlName: "CK_Widgets" },
+			],
+		});
+
+		const indexLine = report.find((entry) => entry.includes("IX_Widgets"));
+		const checkLine = report.find((entry) => entry.includes("CK_Widgets"));
+		expect(indexLine).toBeDefined();
+		expect(checkLine).toBeDefined();
+
+		expect(indexLine).not.toContain("declare it by hand");
+		expect(indexLine).toContain("rename it in the database");
+		expect(checkLine).not.toContain("declare it by hand");
+		expect(checkLine).toContain("rename it in the database");
+	});
+
 	// D106 R4-B3: the three "no ongoing check signal" wordings must be
 	// distinct sentences, one per fact this round actually measured
 	// (`check()` has no derived-name path; a whole omitted schema has
