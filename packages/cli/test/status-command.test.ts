@@ -1,5 +1,5 @@
 import { hejbroError } from "@hejbro/core";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { LedgerState } from "../src/apply/ledger";
 import type { PlanResult } from "../src/apply/plan";
 import { planFailureResult } from "../src/commands/migrate";
@@ -9,6 +9,7 @@ import {
 	runStatus,
 } from "../src/commands/status";
 import {
+	assertBuiltCli,
 	createCliFixtureDir,
 	removeCliFixtureDir,
 	writeFixtureFile,
@@ -196,6 +197,10 @@ export default defineConfig({
 // pending list would pass even if `status` had quietly applied
 // something first; this is the assertion that would catch that.
 describe("runStatus / 7.6, database unchanged", () => {
+	// This fixture's hejbro.config.ts imports "hejbro" -- real Node
+	// resolution, so it needs a built dist.
+	beforeAll(assertBuiltCli);
+
 	let cwd: string;
 
 	beforeEach(async () => {

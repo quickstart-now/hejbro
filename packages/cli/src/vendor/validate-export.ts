@@ -38,11 +38,35 @@ const columnFactSchema = z.object({
 	notNullElements: z.boolean(),
 });
 
+/** `Object.entries` before zod ever builds a record from `value`, so a
+ * key with object-literal meaning (`__proto__`) is read from the raw
+ * JSON value's own real own-property (measured: `JSON.parse` carries it
+ * correctly) rather than through `z.record`'s own internal per-key
+ * assignment, which silently drops that one key (#697, R2-N2 sibling —
+ * `z.record({...}).parse({"__proto__": ...})` measured directly:
+ * `Object.hasOwn` on its result is `false`). Non-object input passes
+ * through unchanged so the array schema below reports its own ordinary
+ * type-mismatch error. */
+const toEntries = (value: unknown): unknown => {
+	if (typeof value !== "object" || value === null || Array.isArray(value)) {
+		return value;
+	}
+	return Object.entries(value);
+};
+
+/** A column-facts map read as `[key, fact]` entries and reassembled with
+ * `Object.fromEntries` — which, unlike plain property assignment,
+ * always creates an own data property, so every key the description
+ * named (including `__proto__`) survives into `ExportColumns`. */
+const columnFactsSchema = z
+	.preprocess(toEntries, z.array(z.tuple([z.string(), columnFactSchema])))
+	.transform((entries) => Object.fromEntries(entries));
+
 const tableFactSchema = z.object({
 	schemaName: z.string(),
 	tableName: z.string(),
 	exportName: z.string().nullable(),
-	columns: z.record(z.string(), columnFactSchema),
+	columns: columnFactsSchema,
 	// add-unmanaged-objects: additive, no description-format bump -- an
 	// export written before this field existed carries no `existing` key
 	// at all, and MUST read as `false` (managed), never as a rejection.
