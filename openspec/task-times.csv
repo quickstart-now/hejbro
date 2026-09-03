@@ -780,3 +780,9 @@ date,change-id,task-id,group,est_min,actual_min,waited_user_min,notes
 2026-09-03,fix-test-infra-contention,G3.3,3,0,180,0,"ti team (#673): overhead row — 32-burner measurement series (base/b/c ×3 + final 3 runs on the real tree, 305/322/379s); waits on the machine, not pure work"
 2026-09-04,fix-test-infra-contention,G4.1,4,6,4,0,"lead close-out: AGENTS.md before-claiming-done line naming all three tsc-spawning files and which two moved"
 2026-09-04,fix-test-infra-contention,G4.3,4,8,10,0,"lead close-out: ledger rows reconstructed from plan.md and commit timestamps after the piece dissolved (actuals marked by source in notes); badges restamped"
+2026-09-04,harden-reset-and-verify,r74-detour,-,,6,0,path the lead first ruled and then reversed (accept the renamed example migrations); regeneration run twice and reverted; measured from date -u stamps 17:39:09..17:44:48
+2026-09-04,harden-reset-and-verify,3.9+3.11,3,15,10,0,one work window — git mv revert, the slug's decoupling from the refinement, and the example regeneration; measured from date -u stamps 17:41:30..17:51:40
+2026-09-04,harden-reset-and-verify,3.8,3,5,5,0,measured from date -u stamps 17:51:40..17:56:57 (start taken as the previous task's end)
+2026-09-04,harden-reset-and-verify,3.10,3,6,4,0,measured from date -u stamps 17:56:57..18:01:03 (start taken as the previous task's end)
+2026-09-04,harden-reset-and-verify,3.11-alter-pin,3,,1,0,fourth input row the reviewer asked for (a run whose first change is an alter); measured from date -u stamps 18:01:41..18:02:40
+2026-09-04,harden-reset-and-verify,merge-in,-,,2,0,second merge of upstream/dev (9affcef9) plus install and a forced rebuild; two conflicts resolved by keeping both sides' rows; measured from date -u stamps 18:03:00..18:04:51
