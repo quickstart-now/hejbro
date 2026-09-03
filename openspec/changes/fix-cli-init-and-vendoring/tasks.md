@@ -325,7 +325,7 @@ Groups 1 and 2 are merged, so this group shares a file with neither.
       instead, with a `Next:` line about import resolution.
       Files: `packages/cli/src/commands/init.ts`, its test.
 
-- [ ] 3.5 (~7m) `[design]` A name the contract does not vendor is refused
+- [x] 3.5 (~7m) `[design]` A name the contract does not vendor is refused
       even when `Object.prototype` carries one. Red:
       `packages/query/test/client/errors.test.ts` — "refuses a lookup of
       an inherited name the contract does not vendor". Input table, on a
