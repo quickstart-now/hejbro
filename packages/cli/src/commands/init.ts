@@ -486,7 +486,20 @@ const reportLineFor = (
 export const runInit = async (cwd: string): Promise<InitResult> => {
 	const fallbackIdentity = "init";
 	const configFilePath = join(cwd, CONFIG_FILE_NAME);
+	const configArtifact: Artifact = {
+		kind: "file",
+		label: CONFIG_FILE_NAME,
+		path: configFilePath,
+		content: CONFIG_FILE_CONTENT,
+		fieldName: "hejbro.config.ts",
+	};
 	try {
+		// The configuration's own kind is checked before it is loaded
+		// (D106 R1 N3): the requirement already names the configuration
+		// among the artifacts whose wrong-kind path stops the run, but
+		// the loader would otherwise answer first, with a config-load-
+		// failed diagnostic about import resolution instead of this one.
+		checkPathKind(cwd, configArtifact);
 		const config = await readExistingConfig(cwd, configFilePath);
 		const configPresent = config !== null;
 		const migrationsField = resolveField(
@@ -502,13 +515,6 @@ export const runInit = async (cwd: string): Promise<InitResult> => {
 			DEFAULT_SNAPSHOT_PATH,
 		);
 
-		const configArtifact: Artifact = {
-			kind: "file",
-			label: CONFIG_FILE_NAME,
-			path: configFilePath,
-			content: CONFIG_FILE_CONTENT,
-			fieldName: "hejbro.config.ts",
-		};
 		const migrationsArtifact = buildMigrationsArtifact(cwd, migrationsField);
 		const snapshotArtifact = buildSnapshotArtifact(cwd, snapshotField);
 

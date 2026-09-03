@@ -305,7 +305,7 @@ Groups 1 and 2 are merged, so this group shares a file with neither.
       Files: `packages/cli/src/commands/init.ts`, its test,
       `openspec/changes/fix-cli-init-and-vendoring/specs/cli-commands/spec.md`.
 
-- [ ] 3.4 (~7m) `[design]` The configuration's own path is checked for
+- [x] 3.4 (~7m) `[design]` The configuration's own path is checked for
       kind before it is loaded. Red: `packages/cli/test/init.test.ts` —
       "refuses a directory sitting where the configuration file belongs".
       Input table:

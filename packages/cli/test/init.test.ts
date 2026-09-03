@@ -740,3 +740,53 @@ describe("runInit / a configuration whose fields resolve to the same path (D106 
 		]);
 	});
 });
+
+// D106 R1 N3: a directory sitting where hejbro.config.ts belongs reached
+// the loader before its own kind was checked, so it failed as
+// config-load-failed (an import-resolution diagnostic) instead of this
+// command's own init-path-conflict.
+describe("runInit / a directory sitting where the configuration file belongs (D106 R1 N3)", () => {
+	it("refuses a directory sitting where the configuration file belongs", async () => {
+		await mkdir(configPath(), { recursive: true });
+
+		const result = await runInit(cwd);
+
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toBe(
+			'error[init-path-conflict]: hejbro.config.ts\n  "hejbro.config.ts" was expected to be a file for hejbro.config.ts, but a directory is there. Next: move or remove the existing directory at "hejbro.config.ts", then rerun `hejbro init`.',
+		);
+		expect(existsSync(join(cwd, "migrations"))).toBe(false);
+		expect(existsSync(snapshotPath())).toBe(false);
+	});
+
+	it("loads a readable configuration as today (control)", async () => {
+		await writeFile(
+			configPath(),
+			'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "db/migrations" };\n',
+		);
+
+		const result = await runInit(cwd);
+
+		expect(result.exitCode).toBe(0);
+		expect(result.report).toContain("created db/migrations/");
+	});
+
+	it("keeps config-load-failed unchanged for an unresolvable import (control)", async () => {
+		await writeFile(
+			configPath(),
+			'import "nope-pkg-xyz";\nexport default { entry: ["src/**/*.schema.ts"] };\n',
+		);
+
+		const result = await runInit(cwd);
+
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain("error[config-load-failed]");
+	});
+
+	it("scaffolds as today when nothing sits at the configuration path (control)", async () => {
+		const result = await runInit(cwd);
+
+		expect(result.exitCode).toBe(0);
+		expect(result.report).toContain("created hejbro.config.ts");
+	});
+});
