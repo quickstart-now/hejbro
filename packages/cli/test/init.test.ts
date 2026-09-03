@@ -8,14 +8,6 @@ import { assertBuiltCli } from "./support/cli-runner";
 
 let cwd: string;
 
-// #687 made `runInit` read an existing hejbro.config.ts through
-// `loadConfig`, which -- once that config imports "hejbro" (the template
-// `runInit` itself writes) -- resolves via real Node module resolution
-// to `dist`, the same as a subprocess test (D106 R1 NB1, #677). This
-// file needs the same dist-freshness guard every other in-process test
-// with that shape already carries (link.test.ts, vendor.test.ts, etc.).
-beforeAll(assertBuiltCli);
-
 beforeEach(async () => {
 	cwd = await mkdtemp(join(tmpdir(), "hejbro-init-"));
 });
@@ -56,40 +48,46 @@ describe("runInit", () => {
 		expect(content).toContain('"objects": {}');
 	});
 
-	it("second run reports three skips, exits 0, and leaves files byte-identical", async () => {
-		await runInit(cwd);
-		const [configBefore, snapshotBefore] = await Promise.all([
-			readFile(configPath(), "utf8"),
-			readFile(snapshotPath(), "utf8"),
-		]);
+	// These two load the template init just wrote, which imports "hejbro"
+	// -- real Node resolution, so it needs a built dist.
+	describe("round-trip against the real scaffolded template", () => {
+		beforeAll(assertBuiltCli);
 
-		const second = await runInit(cwd);
-		expect(second.exitCode).toBe(0);
-		expect(second.report).toEqual([
-			"skipped hejbro.config.ts (exists)",
-			"skipped migrations/ (exists)",
-			"skipped hejbro.snapshot.json (exists)",
-		]);
+		it("second run reports three skips, exits 0, and leaves files byte-identical", async () => {
+			await runInit(cwd);
+			const [configBefore, snapshotBefore] = await Promise.all([
+				readFile(configPath(), "utf8"),
+				readFile(snapshotPath(), "utf8"),
+			]);
 
-		const [configAfter, snapshotAfter] = await Promise.all([
-			readFile(configPath(), "utf8"),
-			readFile(snapshotPath(), "utf8"),
-		]);
-		expect(configAfter).toBe(configBefore);
-		expect(snapshotAfter).toBe(snapshotBefore);
-	});
+			const second = await runInit(cwd);
+			expect(second.exitCode).toBe(0);
+			expect(second.report).toEqual([
+				"skipped hejbro.config.ts (exists)",
+				"skipped migrations/ (exists)",
+				"skipped hejbro.snapshot.json (exists)",
+			]);
 
-	it("fills only the missing artifacts when some already exist", async () => {
-		await runInit(cwd);
-		await rm(snapshotPath());
+			const [configAfter, snapshotAfter] = await Promise.all([
+				readFile(configPath(), "utf8"),
+				readFile(snapshotPath(), "utf8"),
+			]);
+			expect(configAfter).toBe(configBefore);
+			expect(snapshotAfter).toBe(snapshotBefore);
+		});
 
-		const result = await runInit(cwd);
-		expect(result.exitCode).toBe(0);
-		expect(result.report).toEqual([
-			"skipped hejbro.config.ts (exists)",
-			"skipped migrations/ (exists)",
-			"created hejbro.snapshot.json",
-		]);
+		it("fills only the missing artifacts when some already exist", async () => {
+			await runInit(cwd);
+			await rm(snapshotPath());
+
+			const result = await runInit(cwd);
+			expect(result.exitCode).toBe(0);
+			expect(result.report).toEqual([
+				"skipped hejbro.config.ts (exists)",
+				"skipped migrations/ (exists)",
+				"created hejbro.snapshot.json",
+			]);
+		});
 	});
 });
 
