@@ -8,6 +8,22 @@ Real hejbro declarations that double as integration tests.
 | `supabase` | The Supabase preset (`presets: [supabasePreset]`) on a generic schema, seeded with sample rows. Storage bucket, `authUsers` FK, `authUid()` RLS, the exposed-table and view-security-invoker warnings, a committed four-step migration history, a local Docker round-trip, and a second local-Docker script (`verify:supabase-image`, D69) that checks the preset against a real `supabase/postgres` image. |
 | `cli-smoke` | A CLI end-to-end fixture: drives the built `hejbro` CLI (`init`/`generate`/`verify`) against a real schema in a tmp copy. |
 | `preset-smoke` | An extension-interface fixture: a toy custom object kind and expression helper, proving `@hejbro/core`'s provider extension interface (spec §4.1) is generic. |
+| `brownfield` | A hand-written, ORM-shaped dump of a database hejbro did not create (#714) — CamelCase schema/table/index/check names beside snake_case siblings, Postgres-default `_fkey` names, a shared check-constraint name, a leading-underscore column, a cross-schema enum reference against the grain of a foreign key, a three-schema `users` foreign-key chain, a foreign key and a UNIQUE constraint on an omitted table, and a quoted identifier containing `*/` — every shape a D106 round on `add-catalog-inference` had to invent its own throwaway database to find. `test:integration` runs `import` → `baseline` → `check` against it; local-only (D49), never in CI, same as every other example's Docker-gated suite below. |
+
+## Running the brownfield witness locally
+
+Unlike the other examples, `brownfield` has no declaration source of its
+own to round-trip -- `seed/brownfield.sql` is the fixture, applied fresh
+into a container the suite manages itself. Requires Docker; it does not
+run in CI (D49). Its `package.json` also carries no plain `test` script
+(every other example's own does): this package has no non-integration
+tests to run under `pnpm test`, so `test:integration` is the only entry
+point.
+
+```bash
+pnpm build
+pnpm --filter example-brownfield test:integration
+```
 
 ## Running the round-trip locally
 

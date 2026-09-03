@@ -1,0 +1,16 @@
+{
+	"name": "example-brownfield",
+	"version": "0.0.0",
+	"private": true,
+	"description": "A hand-written dump of a database hejbro did not create (#714) -- CamelCase names beside snake_case siblings, Postgres-default foreign-key names, a shared check-constraint name, a leading-underscore column, a cross-schema enum reference against the grain of a foreign key, a three-schema \"users\" foreign-key chain, and the D106 corpus every add-catalog-inference round had to invent for itself -- with a standing, Docker-gated import -> baseline -> check witness.",
+	"type": "module",
+	"scripts": {
+		"check-types": "tsc --noEmit",
+		"test:integration": "vitest run --config vitest.integration.config.ts"
+	},
+	"devDependencies": {
+		"jiti": "^2.7.0",
+		"typescript": "catalog:",
+		"vitest": "catalog:"
+	}
+}
