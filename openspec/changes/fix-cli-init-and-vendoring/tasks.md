@@ -365,7 +365,7 @@ Groups 1 and 2 are merged, so this group shares a file with neither.
       contract-name guard.
       Files: those two references, the changeset.
 
-- [ ] 3.7 (~6m) The round's own disposition is written down. Files:
+- [x] 3.7 (~6m) The round's own disposition is written down. Files:
       `openspec/changes/fix-cli-init-and-vendoring/evaluation.md` — a
       `## Round 1 disposition` section, one line per item (B1, N1–N8):
       what was done, or why not, with the task that carries it. N4 and N5
