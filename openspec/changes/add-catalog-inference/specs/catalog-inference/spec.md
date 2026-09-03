@@ -62,12 +62,14 @@ into the starter declarations and into the contract alike, carried as a
 reference to a table this repository does not declare, with nothing
 said about it in the loss report, since nothing was lost. The reading
 SHALL carry such a target in the snapshot it yields as a table it names
-but does not declare, so that both consumers of one reading express the
-reference the same way: the starter declarations declare that handle in
-their own text, and the contract carries the reference as a relation
-whose target is listed among the tables it names without owning. One
-reading whose two consumers disagree about the same reference has one
-of them guessing. Which tables
+but does not declare, so that neither consumer of one reading loses the
+reference: the starter declarations name it through a reference-only
+handle they do not export, and the contract names it through the
+relation and the foreign-key metadata. The contract SHALL NOT give that
+target an entry of its own among its tables — a table this run never
+read has no column set and no types the contract could state without
+guessing at them, and a contract that guesses is worse than one that
+says only what it knows. Which tables
 a reading kept is therefore never what decides a reference's fate;
 whether the target's own name can be carried is — a hosted database's
 platform schemas are exactly the ones a run leaves unnamed, so reading
@@ -117,12 +119,12 @@ the snapshot records what a declaration can express.
   a schema the run did not name, whose schema and table names a
   declaration can carry
 - **THEN** the reading keeps that foreign key: the starter declaration
-  references its target as a table this repository does not declare, the
-  pulled contract carries the reference as a relation and lists that
-  target among the tables it names without owning, the loss report says
-  nothing about it, and a following `baseline` emits the constraint with
-  the rest — while no starter file is written for the schema the run
-  never named
+  references its target through a reference-only handle it does not
+  export, the pulled contract carries the reference both as a relation
+  and in its foreign-key metadata while giving that target no entry of
+  its own among its tables, the loss report says nothing about it, and a
+  following `baseline` emits the constraint with the rest — while no
+  starter file is written for the schema the run never named
 
 #### Scenario: Two tables sharing a constraint name keep their own expressions
 - **WHEN** two tables in one schema each carry a check constraint of the
