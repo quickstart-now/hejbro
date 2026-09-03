@@ -77,6 +77,35 @@ describe("failure-capture / #533", () => {
 		expect(record.errorText).toBe("a plain string throw");
 	});
 
+	// Discovered empirically wiring this into a real `onTestFailed` hook
+	// for G2.4: Vitest's own `TestResult.errors` entries are not always
+	// real `Error` instances, and can be unstringifiable objects.
+	it("buildFailureRecord reads .message from an error-like object that isn't instanceof Error", () => {
+		const errorLike = { message: "assertion failed: 1 !== 2", diff: "..." };
+		const record = buildFailureRecord(
+			{ ...baseInput, error: errorLike },
+			() => "2026-09-03T00:00:00.000Z",
+		);
+		expect(record.errorText).toBe("assertion failed: 1 !== 2");
+	});
+
+	it("buildFailureRecord never throws on an object String() itself rejects", () => {
+		const unstringifiable = { toString: () => { throw new Error("no"); }, [Symbol.toPrimitive]: () => { throw new Error("no"); } };
+		expect(() =>
+			buildFailureRecord(
+				{ ...baseInput, error: unstringifiable },
+				() => "2026-09-03T00:00:00.000Z",
+			),
+		).not.toThrow();
+		const record = buildFailureRecord(
+			{ ...baseInput, error: unstringifiable },
+			() => "2026-09-03T00:00:00.000Z",
+		);
+		expect(record.errorText).toBe(
+			"<error text unavailable: could not stringify>",
+		);
+	});
+
 	it("captureFailure hands the built record to the sink and returns it", () => {
 		const sunk: unknown[] = [];
 		const record = captureFailure(

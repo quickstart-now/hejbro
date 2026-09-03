@@ -36,12 +36,41 @@ export type FailureRecord = {
 	readonly capturedAt: string;
 };
 
-/** The message text only, never a JS call stack -- a stack is non-deterministic across call sites and every observation captured for #533/#673 so far has quoted the message alone (`Error: Test timed out in 30000ms.` + its own next line), not a stack. */
+const hasStringMessage = (
+	error: unknown,
+): error is { readonly message: string } =>
+	typeof error === "object" &&
+	error !== null &&
+	"message" in error &&
+	typeof (error as { message: unknown }).message === "string";
+
+/**
+ * The message text only, never a JS call stack -- a stack is
+ * non-deterministic across call sites and every observation captured for
+ * #533/#673 so far has quoted the message alone (`Error: Test timed out
+ * in 30000ms.` + its own next line), not a stack.
+ *
+ * Real `instanceof Error` is checked first, but Vitest's own
+ * `TestResult.errors` entries are not always real `Error` instances
+ * (confirmed empirically wiring this into `onTestFailed` for G2.4:
+ * `String(error)` itself threw `TypeError: Cannot convert object to
+ * primitive value` on one) -- `hasStringMessage` covers that shape by
+ * duck typing before falling back to `String()`, which is itself
+ * wrapped so a genuinely unstringifiable value still produces a record
+ * instead of losing the whole capture.
+ */
 const errorTextOf = (error: unknown): string => {
 	if (error instanceof Error) {
 		return error.message;
 	}
-	return String(error);
+	if (hasStringMessage(error)) {
+		return error.message;
+	}
+	try {
+		return String(error);
+	} catch {
+		return "<error text unavailable: could not stringify>";
+	}
 };
 
 export type Clock = () => string;
