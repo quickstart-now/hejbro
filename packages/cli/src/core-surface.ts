@@ -222,6 +222,7 @@ export const ENGINE = [
 	"deriveForeignKeyName",
 	"deriveSlug",
 	"familyOfTypeNode",
+	"isSqlName",
 	"qualifyName",
 	"quoteIdentifier",
 	"quoteStringLiteral",

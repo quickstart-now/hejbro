@@ -1,5 +1,8 @@
 import { emptySnapshot, generateMigration, schema } from "@hejbro/core";
 import { describe, expect, it } from "vitest";
+import type { Catalog } from "../src/check/catalog";
+import { mergeTableFacts } from "../src/infer/adapter";
+import type { InferenceCatalog } from "../src/infer/catalog";
 import type { InferredColumnFacts } from "../src/infer/columns";
 import type { InferredTableFacts } from "../src/infer/table";
 import { inferTable } from "../src/infer/table";
@@ -86,6 +89,87 @@ describe("inferTable / 1.4 checks", () => {
 		expect(sql).toContain(
 			'constraint "widgets_name_not_blank" check ((length(name) > 0))',
 		);
+	});
+});
+
+// D106 R5-B3: `checksFor` (`infer/adapter.ts`) looked a check expression
+// up by schema+name alone -- Postgres only requires a constraint name
+// unique per table, so two tables in one schema sharing a name (legal)
+// silently swapped expressions. This drives the real adapter
+// (`mergeTableFacts`), not a hand-built `InferredTableFacts`, since the
+// bug lives in which raw catalog row the lookup finds, one level below
+// where `inferTable`'s own fixtures start.
+describe("mergeTableFacts / 1.4b checks are scoped per table (D106 R5-B3)", () => {
+	it("keeps each table's own check expression when two tables in one schema share a constraint name", () => {
+		const catalog: Catalog = {
+			schemas: [{ schema: "app" }],
+			tables: [
+				{ schema: "app", table: "a", rls: false },
+				{ schema: "app", table: "b", rls: false },
+			],
+			columns: [
+				{
+					schema: "app",
+					table: "a",
+					name: "x",
+					notNull: false,
+					catalogType: "integer",
+					baseTypeKind: "b",
+					baseTypeSchema: "pg_catalog",
+					baseTypeName: "int4",
+					catalogDefault: null,
+				},
+				{
+					schema: "app",
+					table: "b",
+					name: "y",
+					notNull: false,
+					catalogType: "integer",
+					baseTypeKind: "b",
+					baseTypeSchema: "pg_catalog",
+					baseTypeName: "int4",
+					catalogDefault: null,
+				},
+			],
+			constraints: [
+				{ schema: "app", table: "a", name: "pos", type: "c", columns: [] },
+				{ schema: "app", table: "b", name: "pos", type: "c", columns: [] },
+			],
+			indexes: [],
+			enums: [],
+			sequences: [],
+			functions: [],
+			views: [],
+			policies: [],
+			triggers: [],
+			tableGrants: [],
+			schemaUsageGrants: [],
+			defaultTableGrants: [],
+			extensions: [],
+		};
+		const inferenceCatalog: InferenceCatalog = {
+			columnDetails: [],
+			foreignKeyDetails: [],
+			checkExpressions: [
+				{ schema: "app", table: "a", name: "pos", expression: "(x > 0)" },
+				{ schema: "app", table: "b", name: "pos", expression: "(y < 0)" },
+			],
+			indexDetails: [],
+			enumLabels: [],
+			sequenceOwnership: [],
+		};
+
+		const result = mergeTableFacts(
+			catalog,
+			inferenceCatalog,
+			new Map(),
+			() => app,
+		);
+		const tableA = result.find((table) => table.tableName === "a");
+		const tableB = result.find((table) => table.tableName === "b");
+
+		expect(tableA?.checks).toEqual([{ name: "pos", expression: "(x > 0)" }]);
+		expect(tableB?.checks).toEqual([{ name: "pos", expression: "(y < 0)" }]);
 	});
 });
 

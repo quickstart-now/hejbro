@@ -327,6 +327,37 @@ describe("runImport / 3.1", () => {
 	});
 
 	/**
+	 * D106 R5-N3(b): `import-nothing-to-infer` used to fire whenever every
+	 * named schema produced zero snapshot objects, whether that was
+	 * genuine emptiness or an omission for the schema's own name -- the
+	 * refusal discarded the `Omitted: schema …` line the reading had
+	 * already produced, telling the user "nothing here" about a schema
+	 * that in fact held a table hejbro just could not name. The team
+	 * lead's ruling: this case still refuses (an empty `--out` directory
+	 * left behind by a zero-file "success" is worse than refusing before
+	 * `mkdirSync` ever runs), but under its own code -- `import-nothing-
+	 * to-infer` means "genuinely empty", `import-nothing-declarable`
+	 * means "held something, couldn't name it" -- and only after the
+	 * `Omitted: schema …` line has already reached stdout.
+	 */
+	it("refuses with its own code when every named schema was omitted for its name, not genuinely empty -- after naming the reason and before creating --out", async () => {
+		const omittedLine =
+			'Omitted: schema "App" -- its catalog name is not a valid hejbro SQL identifier.';
+		const result = resultFor([], [omittedLine], ["App"]);
+
+		const outcome = await runImport(
+			cwd,
+			["--url", "postgres://fixture", "--schema", "App", "--out", "src/schema"],
+			depsFor(result),
+		);
+
+		expect(outcome.exitCode).toBe(1);
+		expect(outcome.stderr).toContain("import-nothing-declarable");
+		expect(outcome.stdout).toContain(omittedLine);
+		expect(existsSync(join(cwd, "src/schema"))).toBe(false);
+	});
+
+	/**
 	 * D106 N7: when only *some* named schemas hold nothing, `import` wrote
 	 * a file for the ones that did and said nothing at all about the ones
 	 * that didn't -- no file, no diagnostic, no loss-report line. Only the

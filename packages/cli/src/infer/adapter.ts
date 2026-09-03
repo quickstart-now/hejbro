@@ -189,7 +189,9 @@ const checksFor = (
 		.flatMap((constraint) => {
 			const detail = inferenceCatalog.checkExpressions.find(
 				(row) =>
-					row.schema === constraint.schema && row.name === constraint.name,
+					row.schema === constraint.schema &&
+					row.table === constraint.table &&
+					row.name === constraint.name,
 			);
 			if (detail === undefined) {
 				return [];

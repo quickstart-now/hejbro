@@ -40,13 +40,23 @@ cannot name never reaches the snapshot. The snapshot SHALL hold no
 function, trigger, policy expression, view body, grant beyond its role
 name, column whose type no column builder expresses, standalone
 sequence that no column owns — the DSL has no `defineSequence()` (D66)
-— or table, schema, index or check whose catalog name no declaration
-can carry, since a declaration's identifiers are lower snake_case (D36)
-while a database hejbro did not create names its objects its own way;
-a table or schema left out takes the objects it holds with it. Leaving
-such an object out SHALL never stop the reading — everything else in
-the named schemas is still inferred — and the loss report SHALL name
-each of them. A column named there is
+— or column, table, schema, index or check whose catalog name no
+declaration can carry, since a declaration's identifiers are lower
+snake_case (D36) while a database hejbro did not create names its
+objects its own way. A name is one a declaration can carry exactly
+when core's own identifier rule accepts it and the key inferred for it
+produces that name back — the DSL's own rule, consulted, never a second
+rule predicting it, since two rules that disagree is precisely how a
+reading stops where it should have omitted: a quoted `"createdAt"`
+fails both halves, while a leading-underscore `_id` passes the round
+trip and fails the rule — the very case a rule predicting the DSL's
+answer got wrong — and both are omitted and named. A table or schema left out takes the
+objects it holds with it, and the foreign keys that point at it: a
+surviving declaration SHALL never reference an object this reading
+omitted, and the report SHALL never announce an approximation for one.
+Leaving such an object out SHALL never stop the reading — everything
+else in the named schemas is still inferred — and the loss report SHALL
+name each of them. A column named there is
 still described: the description records what the database holds, and
 the snapshot records what a declaration can express.
 
@@ -75,6 +85,23 @@ the snapshot records what a declaration can express.
   same holds for an index or a check whose name a declaration cannot
   carry, which costs that index or check alone
 
+#### Scenario: A reference into an omitted object is omitted with it
+- **WHEN** a surviving table holds a foreign key whose target table, or
+  whose target schema, is one this reading left out for its name
+- **THEN** the reading still completes, that one foreign key is left out
+  of the surviving table's declaration while its other keys stay, the
+  loss report names the foreign key together with the omitted object it
+  points at and what to do about that object, and no approximation is
+  announced for anything the reading omitted
+
+#### Scenario: Two tables sharing a constraint name keep their own expressions
+- **WHEN** two tables in one schema each carry a check constraint of the
+  same name, which Postgres allows because a constraint name is unique
+  per table rather than per schema
+- **THEN** each table's snapshot carries its own expression, so the DDL
+  that would recreate them asserts each check against the table whose
+  columns it names
+
 #### Scenario: What is not inferred is named
 - **WHEN** the database also holds a function, a trigger, a view, a
   column whose type no column builder expresses, and a sequence no
@@ -92,7 +119,9 @@ name, so re-creating it emits `create unique index` rather than
 `add constraint … unique`; a `nextval` default on a sequence the column
 does not own is kept as a raw default, naming that sequence;
 expressions are carried as raw SQL text rather than as the typed
-builders a hand-written declaration would use — and the command that
+builders a hand-written declaration would use; a foreign key whose own
+catalog name D36 cannot carry is declared under the derived name,
+naming both — and the command that
 removes the loss:
 linking the schema repository for `pull`, hand-editing the starter
 declarations for `import`.
