@@ -1131,6 +1131,35 @@ export const projects = table(app, "projects", {
 	});
 });
 
+/**
+ * Strips a trailing `\n\n<commandPrefix>:...` summary section (verify's
+ * own batch summary line, always present) from `stderr` -- a no-op for
+ * `generate`'s own stderr on a non-ambiguous batch, which carries no
+ * summary line at all (`batchSummary` only fires for an all-ambiguous-
+ * rename batch), so passing each side its own command name here is safe
+ * either way. Used to compare the two commands' diagnostic blocks byte
+ * for byte (review task 3.1/6, #753) without the one section that
+ * differs by design (the `verify:`/`generate:` summary line itself).
+ */
+const withoutSummarySection = (
+	stderr: string,
+	commandPrefix: string,
+): string => {
+	const marker = `\n\n${commandPrefix}:`;
+	const index = stderr.lastIndexOf(marker);
+	if (index === -1) {
+		return stderr;
+	}
+	return stderr.slice(0, index);
+};
+
+const stripSummaryLine = (stderr: string, commandPrefix: string): string =>
+	// `console.error`'s own trailing newline -- present on both sides, but
+	// only verify's own slice above already excludes it (it cut right
+	// before the summary section rather than at the string's own end), so
+	// generate's raw stderr needs the same one stripped to compare equal.
+	withoutSummarySection(stderr, commandPrefix).replace(/\n$/, "");
+
 // #752: `verify` runs every registered preset's validators as a sixth
 // check, over the same declared snapshot its existing snapshot-parity
 // check already builds, and refuses with the identical coded error
@@ -1233,16 +1262,28 @@ describe("hejbro verify — sixth check: registered preset validators (#752)", (
 		// task 3.1: the `at` line is cwd-relative, never the machine's own
 		// absolute fixture path.
 		expect(result.stderr).not.toContain(cwd);
+
+		// task 3.1/6 (#753 review): the multi-refusal shape agrees with
+		// generate byte for byte too, not just the single-refusal case
+		// below -- both diagnostic blocks, in the same order, differing
+		// only in the summary line neither renders the same way.
+		const generated = await runCli(cwd, ["generate"]);
+		expect(generated.exitCode).toBe(1);
+		expect(stripSummaryLine(result.stderr, "verify")).toBe(
+			stripSummaryLine(generated.stderr, "generate"),
+		);
 	});
 
 	// 2.3: the cross-command parity witness #752 itself states as the
 	// acceptance criterion -- generate and verify refuse the identical
-	// declaration with the identical coded error. Compares only the coded
-	// message body, never the surrounding `verify:`/`generate:` summary
-	// line (differs by design) or the diagnostic's `at`/identity line
-	// (verify's identity heuristic is a separate, pre-existing concern,
-	// unrelated to #752).
-	it("verify and generate agree on the identical coded error for the same refused declaration", async () => {
+	// declaration with the identical coded error. Compares the full
+	// diagnostic block byte for byte (code, identity, message, and the
+	// `at` line all included -- task 3.1/6, #753 review: a message-body-
+	// only comparison couldn't catch verify's own identity heuristic
+	// regressing back to its stale, non-adjacent-pair-aware copy, since
+	// the body never carried the identity or the `at` path), never the
+	// surrounding `verify:`/`generate:` summary line (differs by design).
+	it("verify and generate agree on the identical coded error for the same refused declaration, byte for byte", async () => {
 		await runCli(cwd, ["init"]);
 		await writeSchema(NILE_BAD_PK_SCHEMA);
 		await runCli(cwd, ["generate"]);
@@ -1253,16 +1294,11 @@ describe("hejbro verify — sixth check: registered preset validators (#752)", (
 		expect(verifyResult.exitCode).toBe(1);
 		expect(generateResult.exitCode).toBe(1);
 
-		const code = "nile-tenant-primary-key-missing";
-		const messageBody = (stderr: string): string => {
-			const headerIndex = stderr.indexOf(`error[${code}]:`);
-			expect(headerIndex).toBeGreaterThanOrEqual(0);
-			const afterHeader = stderr.slice(headerIndex).split("\n");
-			return (afterHeader[1] ?? "").trim();
-		};
-
-		expect(messageBody(verifyResult.stderr)).toBe(
-			messageBody(generateResult.stderr),
+		expect(verifyResult.stderr).toContain(
+			"error[nile-tenant-primary-key-missing]: app.items",
+		);
+		expect(stripSummaryLine(verifyResult.stderr, "verify")).toBe(
+			stripSummaryLine(generateResult.stderr, "generate"),
 		);
 	});
 });
