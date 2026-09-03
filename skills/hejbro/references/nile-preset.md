@@ -78,6 +78,16 @@ from the platform at runtime:
   which is not an execution surface and which the corpus already exempts,
   so the mandatory-context refusal never applies to it.
 
+## Table-bound column references render two-part
+
+A tenant-aware table lives internally under a `<database-id>_<schema>`
+name subject to the platform's 12-byte schema-name limit, so a
+schema-qualified column reference in a check constraint, a partial index
+predicate, an index expression, a generated column's expression, or a
+policy's `using`/`with check` fails at apply time with `42622`; hejbro
+renders every such table-bound column reference two-part
+(`"table"."column"`) instead.
+
 ## What this preset refuses, and why
 
 Every refusal fails `hejbro generate` with an explicit error naming the
