@@ -25,7 +25,7 @@ jobs:
 
 ## Exit codes
 
-`hejbro verify` exits `0` when all five checks pass, `1` if any fails. A failure prints every failing check as a diagnostic block plus a summary line:
+`hejbro verify` exits `0` when every check passes, `1` if any fails. Five checks always run; two more join independently when they apply — an export-freshness check (once `generate --export` is in use) and a check for every registered preset's own validators (once the active config registers at least one) — so the total is five to seven. A failure prints every failing check as a diagnostic block plus a summary line:
 
 ```
 error[snapshot-stale]: hejbro.snapshot.json
