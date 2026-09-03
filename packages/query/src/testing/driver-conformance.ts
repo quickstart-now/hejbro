@@ -124,10 +124,12 @@ const assertFalseTierConformance = (
  */
 type TransactionControlKind = "open" | "end" | undefined;
 
-const normalizeStatement = (sql: string): string => {
-	const lowered = sql.trim().toLowerCase();
-	return lowered.endsWith(";") ? lowered.slice(0, -1).trim() : lowered;
-};
+const normalizeStatement = (sql: string): string =>
+	sql
+		.trim()
+		.toLowerCase()
+		.replace(/;+\s*$/, "")
+		.trim();
 
 const transactionControlKind = (sql: string): TransactionControlKind => {
 	const [leadingWord, secondWord] = normalizeStatement(sql).split(/\s+/);
