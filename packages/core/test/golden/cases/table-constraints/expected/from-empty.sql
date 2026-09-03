@@ -11,7 +11,7 @@ create table "app"."comments" (
 	"parent_id" uuid,
 	"body" text not null,
 	constraint "comments_pkey" primary key ("id"),
-	constraint "comments_body_length_check" check (length("app"."comments"."body") > 0)
+	constraint "comments_body_length_check" check (length("comments"."body") > 0)
 );
 
 create table "app"."posts" (
@@ -19,8 +19,8 @@ create table "app"."posts" (
 	"status" text not null,
 	"slug" text not null,
 	constraint "posts_pkey" primary key ("id"),
-	constraint "posts_status_check" check ("app"."posts"."status" in ('draft', 'published')),
-	constraint "posts_slug_format_check" check ("app"."posts"."slug" ~ '^[a-z0-9-]+$')
+	constraint "posts_status_check" check ("posts"."status" in ('draft', 'published')),
+	constraint "posts_slug_format_check" check ("posts"."slug" ~ '^[a-z0-9-]+$')
 );
 
 alter table "app"."comments" add constraint "comments_parent_id_fk" foreign key ("parent_id") references "app"."comments" ("id") on delete cascade;

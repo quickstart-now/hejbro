@@ -29,8 +29,8 @@ alter table "app"."posts" enable row level security;
 
 drop policy if exists "comments_read_visible" on "app"."comments";
 
-create policy "comments_read_visible" on "app"."comments" for select to "anon" using (("app"."comments"."deleted_at" is null) and exists (select 1 from "app"."posts" where ("app"."posts"."id" = "app"."comments"."post_id") and ("app"."posts"."status" = 'published')));
+create policy "comments_read_visible" on "app"."comments" for select to "anon" using (("comments"."deleted_at" is null) and exists (select 1 from "app"."posts" where ("posts"."id" = "comments"."post_id") and ("posts"."status" = 'published')));
 
 drop policy if exists "posts_read_published" on "app"."posts";
 
-create policy "posts_read_published" on "app"."posts" for select to "anon" using (("app"."posts"."status" = 'published') and ("app"."posts"."published_at" is not null));
+create policy "posts_read_published" on "app"."posts" for select to "anon" using (("posts"."status" = 'published') and ("posts"."published_at" is not null));
