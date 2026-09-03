@@ -34,7 +34,7 @@ import { fromHejbroError, renderDiagnostics } from "../diagnostics";
 import { asHejbroError } from "../errors";
 import { compareExport } from "../export-compare";
 import { sha256Hex } from "../hash";
-import { identityFromMessage } from "../identity";
+import { identityFromMessage, relativizeDeclaredAt } from "../identity";
 import type { LoadedDeclarations } from "../loader";
 import { loadConfig, loadDeclarations } from "../loader";
 import { buildRegistry, configValidators } from "../presets";
@@ -257,43 +257,6 @@ export type VerifyResult = {
 };
 
 /**
- * `declaredAt` (core's `captureDeclarationSite`) is always an absolute
- * path or `file://` URL -- V8 stack traces have no notion of "relative
- * to what." Stripping `cwd` here keeps the CLI's own "no absolute paths
- * in output" rule, mirroring `generate.ts`'s own
- * `relativizeLocation`/`relativizeDeclaredAt` (task 3.1, #753 review:
- * verify's own diagnostics carried the machine's own absolute path
- * where generate's never did).
- */
-const FILE_URL_PREFIX = "file://";
-
-const stripFileUrlPrefix = (location: string): string => {
-	if (location.startsWith(FILE_URL_PREFIX)) {
-		return location.slice(FILE_URL_PREFIX.length);
-	}
-	return location;
-};
-
-const relativizeLocation = (location: string, cwd: string): string => {
-	const withoutFileUrl = stripFileUrlPrefix(location);
-	const cwdPrefix = `${cwd}/`;
-	if (withoutFileUrl.startsWith(cwdPrefix)) {
-		return withoutFileUrl.slice(cwdPrefix.length);
-	}
-	return withoutFileUrl;
-};
-
-const relativizeDeclaredAt = (
-	declaredAt: string | null,
-	cwd: string,
-): string | null => {
-	if (declaredAt === null) {
-		return null;
-	}
-	return relativizeLocation(declaredAt, cwd);
-};
-
-/**
  * Rebuilt via the factory, not `{ ...error, declaredAt: ... }` --
  * `HejbroError` is an `Error` subclass, and `Error.prototype.message` is
  * own-but-non-enumerable, so an object spread silently drops it (same
@@ -302,7 +265,10 @@ const relativizeDeclaredAt = (
  * `identityFromMessage` copy with the shared `../identity.ts` helper
  * `generate.ts` already uses, so two different tables refused in the
  * same run are told apart by their diagnostic headers instead of both
- * printing the same truncated identity).
+ * printing the same truncated identity; task 3.4 moves
+ * `relativizeDeclaredAt` to the same shared module, closing the second
+ * local copy this file had grown of the identical logic under a
+ * different name).
  */
 const errorDiagnostic = (
 	error: HejbroError,
