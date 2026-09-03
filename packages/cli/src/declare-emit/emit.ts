@@ -756,15 +756,51 @@ type ForeignKeyEntryRender = {
 	readonly comment: string | null;
 };
 
-/** (c)'s own constraint (CI-G2-R1-16, lead-approved wording: state the constraint only, never the round's own process history). */
+/**
+ * D106 R7-N3: why a foreign key's own handle exists -- a property of the
+ * *target*, not of any one foreign key that reaches it (D106 R7-N4 already
+ * made handles per-target; a target either was declared by this run
+ * somewhere, in which case every handle into it exists only to cut an
+ * import cycle, or it was not, in which case no handle into it could ever
+ * mean anything else). `mustDeferForeignKey`'s own three rules collapse
+ * to exactly these two reasons: its same-schema and cross-schema-back-edge
+ * branches are both a cycle cut, its "schema never read" branch is the
+ * other.
+ */
+type HandleReason = "cycleCut" | "unreadTarget";
+
+/** (c)'s own constraint when the target was declared by this run (CI-G2-R1-16, lead-approved wording: state the constraint only, never the round's own process history). */
 const HANDLE_CONSTRAINT_COMMENT =
 	"// Closes a declaration-file cycle -- any live reference to the other table, thunked or immediate, evaluates before that file finishes initializing, so this FK stays on a reference-only handle instead.";
 
-const commentForForeignKeyEntry = (isHandled: boolean): string | null => {
-	if (isHandled) {
+/** (c)'s own constraint when the target was never declared by this run at all (D106 R7-N3). */
+const UNREAD_TARGET_CONSTRAINT_COMMENT =
+	"// The target's schema was never read by this run -- there is no file to import it from, so this FK stays on a reference-only handle that names the table directly instead.";
+
+const commentForForeignKeyEntry = (
+	reason: HandleReason | null,
+): string | null => {
+	if (reason === "cycleCut") {
 		return HANDLE_CONSTRAINT_COMMENT;
 	}
+	if (reason === "unreadTarget") {
+		return UNREAD_TARGET_CONSTRAINT_COMMENT;
+	}
 	return null;
+};
+
+/** D106 R7-N3: `null` when `fk` isn't deferred at all; otherwise the reason its handle exists, read off whether the target is among this run's own tables (see {@link HandleReason}'s own doc comment). */
+const handleReasonFor = (
+	isHandled: boolean,
+	targetIsKnown: boolean,
+): HandleReason | null => {
+	if (!isHandled) {
+		return null;
+	}
+	if (targetIsKnown) {
+		return "cycleCut";
+	}
+	return "unreadTarget";
 };
 
 /**
@@ -991,6 +1027,10 @@ export const renderTable = (
 		table.foreignKeys.map((fk) => {
 			const isSelf = fk.referencesTable === ownIdentity;
 			const isHandled = classification.isHandled(fk);
+			const handleReason = handleReasonFor(
+				isHandled,
+				context.tablesByIdentity.has(fk.referencesTable),
+			);
 			const text = renderForeignKey(fk, {
 				isSelf,
 				targetIdentifier: resolveForeignKeyTargetIdentifier(
@@ -1005,7 +1045,7 @@ export const renderTable = (
 				targetTsKeyFor: (sqlName: string) =>
 					context.tsKeyFor(fk.referencesTable, sqlName),
 			});
-			return { text, comment: commentForForeignKeyEntry(isHandled) };
+			return { text, comment: commentForForeignKeyEntry(handleReason) };
 		});
 
 	const indexRenders = table.indexes.map((index) =>

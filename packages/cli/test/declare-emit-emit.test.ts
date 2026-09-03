@@ -1276,3 +1276,43 @@ describe("emitDeclarationFiles / D106 R7-N4", () => {
 		);
 	});
 });
+
+describe("emitDeclarationFiles / D106 R7-N3", () => {
+	it("comments an unread target's handle without claiming a cycle", () => {
+		const orders: TableSnapshot = {
+			schema: "app",
+			name: "orders",
+			columns: [
+				{
+					name: "id",
+					typeNode: { typeName: "uuid" },
+					notNull: true,
+					primaryKey: true,
+				},
+				{ name: "owner_id", typeNode: { typeName: "uuid" }, notNull: true },
+			],
+			indexes: [],
+			// "ext.users" is not among this snapshot's own tables -- this
+			// run never read schema "ext" at all, so the handle this FK
+			// goes through exists for a different reason than a cycle cut.
+			foreignKeys: [
+				{
+					name: "orders_owner_id_fkey",
+					columns: ["owner_id"],
+					referencesTable: "ext.users",
+					referencesColumns: ["id"],
+				},
+			],
+			primaryKeyName: "orders_pkey",
+		};
+
+		const files = emitDeclarationFiles(resultFor([orders]));
+		const [file] = files;
+		if (file === undefined) {
+			throw new Error("expected exactly one emitted file");
+		}
+
+		expect(file.source).not.toContain("Closes a declaration-file cycle");
+		expect(file.source).toContain("schema was never read by this run");
+	});
+});
