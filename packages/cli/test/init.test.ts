@@ -498,10 +498,9 @@ describe("runInit / a trailing separator does not hide the node at a configured 
 			const result = await runInit(cwd);
 
 			expect(result.exitCode).toBe(1);
-			expect(result.stderr).toContain("error[init-path-conflict]");
-			expect(result.stderr).toContain("mig/");
-			expect(result.stderr).not.toContain("ENOTDIR");
-			expect(result.stderr).not.toContain(cwd);
+			expect(result.stderr).toBe(
+				'error[init-path-conflict]: mig/\n  "mig/" was expected to be a directory for migrationsDir, but a file is there. Next: move or remove the existing file at "mig", then rerun `hejbro init`.',
+			);
 			expect(existsSync(snapshotPath())).toBe(false);
 		},
 	);
@@ -517,10 +516,9 @@ describe("runInit / a trailing separator does not hide the node at a configured 
 		const result = await runInit(cwd);
 
 		expect(result.exitCode).toBe(1);
-		expect(result.stderr).toContain("error[init-path-conflict]");
-		expect(result.stderr).toContain("db/mig/");
-		expect(result.stderr).not.toContain("ENOTDIR");
-		expect(result.stderr).not.toContain(cwd);
+		expect(result.stderr).toBe(
+			'error[init-path-conflict]: db/mig/\n  "db/mig/" was expected to be a directory for migrationsDir, but a file is there. Next: move or remove the existing file at "db/mig", then rerun `hejbro init`.',
+		);
 		expect(existsSync(snapshotPath())).toBe(false);
 	});
 

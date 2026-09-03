@@ -84,18 +84,24 @@ const stripTrailingSeparators = (path: string): string =>
  * `HejbroError` (lead-approved): a configured path exists but holds the
  * wrong kind of node for what it's supposed to be. Nothing is ever
  * replaced, so this stops the run rather than reporting the path as
- * already present. Names `label` (relative to `cwd`, D57/Task 14 --
- * this CLI's own diagnostics never print an absolute path), not the
- * resolved absolute path `checkPathKind` actually stat'd. */
+ * already present. The header and the main sentence name `label`
+ * exactly as the user configured it (relative to `cwd`, D57/Task 14 --
+ * this CLI's own diagnostics never print an absolute path); the `Next:`
+ * clause names the real node instead (D106 R1, lead-approved option A):
+ * a directory-style label always carries a trailing separator
+ * (`dirLabel`) even when the node found there is a file, and a file
+ * cannot be "at" a path spelled with one, so the actionable path in
+ * `Next:` drops it. */
 function throwPathConflict(
 	label: string,
 	fieldName: string,
 	expectedKind: NodeKind,
 	actualKind: NodeKind,
 ): never {
+	const realLabel = stripTrailingSeparators(label);
 	return throwHejbroError(
 		"init-path-conflict",
-		`"${label}" was expected to be a ${expectedKind} for ${fieldName}, but a ${actualKind} is there. Next: move or remove the existing ${actualKind} at "${label}", then rerun \`hejbro init\`.`,
+		`"${label}" was expected to be a ${expectedKind} for ${fieldName}, but a ${actualKind} is there. Next: move or remove the existing ${actualKind} at "${realLabel}", then rerun \`hejbro init\`.`,
 	);
 }
 
