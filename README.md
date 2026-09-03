@@ -199,11 +199,16 @@ Guides: [getting started](docs/guide/getting-started.md) ·
 ## For agents
 
 ```bash
-npx skills add quickstart-now/hejbro
+npx skills add quickstart-now/hejbro -s hejbro
 ```
 
 Teaches an agent the declaration DSL, the "no real JS control flow inside
 function bodies" pitfall, and the `generate`/`verify` workflow.
+
+Keep the `-s hejbro`: the skills CLI also discovers this repository's own
+`.claude/skills/` (the `openspec-*` commands and `roundtrip-verification`
+that develop hejbro), and without the selector it installs those too,
+overwriting same-named skills you already have from `openspec init`.
 
 ## Built AI-natively
 

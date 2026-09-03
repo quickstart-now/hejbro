@@ -16,7 +16,9 @@ Agent skills that teach coding agents how to use hejbro correctly:
 - Adopting hejbro into an existing (brownfield) database
 
 Source of truth: `/skills/hejbro` (installed with
-`npx skills add quickstart-now/hejbro`); this package is `private` and
+`npx skills add quickstart-now/hejbro -s hejbro` — the selector keeps the
+CLI from also installing this repository's own `.claude/skills/`, which
+are contributor tooling, not user surface); this package is `private` and
 ships no npm bundle — the repository stays the only distribution channel
 (D62). The frontmatter `version` field in `SKILL.md` is display-only —
 the skills CLI compares the folder's tree SHA, not the version string, to
