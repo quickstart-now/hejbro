@@ -533,6 +533,28 @@ const wayOutLine = (command: LossReportFacts["command"]): string => {
 };
 
 /**
+ * D106 R6-N3: a caller that must add lines to an already-built report
+ * (`commands/import.ts`'s own empty-schema lines, known only once
+ * `emitDeclarationFiles` has run, after `buildLossReport` already
+ * closed with the way-out line) needs them placed *before* the way-out
+ * line, which SHALL stay the report's own last line -- located here by
+ * identity (`wayOutLine(command)`), never by an assumed index, so
+ * there is no throw path in a command and no assumption that some
+ * index is the last one. The way-out line appears exactly once, as
+ * `buildLossReport`'s own final element, so removing every line equal
+ * to it and re-appending it is exact, not approximate.
+ */
+export const withReportLinesBeforeWayOut = (
+	report: ReadonlyArray<string>,
+	command: LossReportFacts["command"],
+	extraLines: ReadonlyArray<string>,
+): ReadonlyArray<string> => {
+	const wayOut = wayOutLine(command);
+	const withoutWayOut = report.filter((line) => line !== wayOut);
+	return [...withoutWayOut, ...extraLines, wayOut];
+};
+
+/**
  * Every command that uses a catalog reading SHALL print this (delta,
  * "The loss is announced, with the way out"): what was guessed, what
  * was not inferred, every approximation, and the command that removes
