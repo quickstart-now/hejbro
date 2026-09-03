@@ -2403,3 +2403,168 @@ the same decision rounds 5 and 6 recorded.
 - In-process probes created, run and deleted in the same tool call (`packages/cli/test/_r7probe*.test.ts`, eight batches). No repository file other than this one was modified; `git status --porcelain` shows only `evaluation.md`.
 - Suites run: `infer-compose`, `infer-loss-report`, `infer-tables`, `infer-keys`, `infer-adapter`, `import-command`, `pull-command`, `declare-emit-{emit,file-cycle,topo-order}`, `contract-{from-catalog,origin}`, `outdated-database-origin`, `vendor-lock-origin`, `exports` — 15 files / 155 tests green; `packages/core` `rename-plan`, `identifier-rules` — 2 files / 50 tests green.
 - Not run: `pnpm build`, `pnpm install`, full-workspace `pnpm test`/`check-types`, the Docker-gated `*.integration.test.ts` files (each starts its own container; this round used one container of its own instead, and re-measured what those witnesses assert directly).
+
+## Round 7 disposition
+
+The blocking finding and four of the five non-blocking ones are fixed
+here; N5 stays with #712, the same decision rounds 5 and 6 recorded.
+Six reds, every one behavioural — a file that fails to load, a count
+that comes back two instead of one, an assertion on rendered text
+failing against the old text — and four mutants, each with both halves
+stated before it ran. There are no signature reds in this round, which
+is the one measurable difference from round 6's evidence.
+
+Gate (2026-09-03, on `2394bd16`): `pnpm build --force` 7/7 tasks, 0
+cached; then, first and alone on that real build,
+`declare-emit-callback-shadow.test.ts` — the blocking finding's own
+observer — 3/3; `pnpm --filter hejbro test:integration` 12 files / 70
+passed, 2 todo; `TURBO_FORCE=1 pnpm check` 724 files; unfiltered
+`TURBO_FORCE=1 pnpm check-types` 17/17 tasks, 0 cached; `TURBO_FORCE=1
+pnpm test` 17/17 tasks (`hejbro` 89 files / 787 tests, `cli-smoke` 2
+files / 6); `pnpm check:bans` 235 files; `pnpm check:crap` ok, 0 of 1617
+functions over CRAP 5, README unchanged; `changeset status` pending
+minor across the fixed group; `check:tasktime` current. Docker residue
+of this round's own runs: none. `upstream/dev` was re-fetched and is
+unchanged at `310d2290`, so there is no merge-in and the gate's tip is
+the branch's tip.
+
+### R7-B1 — a starter file naming a table `t` could not be loaded
+
+Fixed by giving the file's identifier namespace the one name it did not
+know about. `renderExtrasBlock` binds a parameter in the text it emits;
+nothing reserved that name, so a table whose identifier matched it kept
+the identifier, and every reference to it from inside a callback
+resolved to the callback's own column proxy. The file then failed to
+load at all (`Cannot read properties of undefined (reading 'schema')`)
+and failed `tsc` with `TS2345` — a whole starter file lost to a name,
+with no report line mentioning it, on a table name D36 accepts.
+
+The parameter is now a constant that `renderExtrasBlock` and the
+namespace both read, so the emitter and the namespace cannot drift, and
+it is reserved unconditionally. A conditional reservation was
+considered and rejected: the correct condition is "any table *in this
+file* emits a callback", not "this table does", because the shadowing
+crosses tables — and a cross-table condition of that shape is what made
+round 6's blocking finding wrong. The measured saving was zero (no
+fixture or example anywhere names a table, schema or enum `t` in a file
+the emitter renders), so the branch would have bought risk and nothing
+else.
+
+**The first attempt at this fix was wrong, and the way it was wrong is
+worth recording.** The reservation was added to the set the plan named,
+`vocabulary` — which is also, literally, the barrel import list: the
+emitted `import { … } from "hejbro"` line is rendered by joining it. The
+patch produced files importing a symbol `hejbro` does not export. That
+is the same defect as round 6's blocking finding at a different scale:
+**one value answering two questions.** There it was one set answering
+both "which tables survived this reading" and "may this reference be
+declared"; here it was one set answering both "what do we import from
+the barrel" and "what names are taken in this file". Both times the
+answer was to give each question its own value rather than to add a
+condition — `vocabulary` kept its meaning and a derived
+`reservedIdentifiers` took over the two readers that answer the
+collision question, leaving the import line untouched.
+
+Pins: `declare-emit-callback-shadow.test.ts`, three cases — the table
+declared in the file that references it, the table imported from another
+file, and the table on the declared side of a cut cycle, that last one
+asserted in both entry orders, since the delta's claim is that loading
+does not depend on which file the loader reaches first. Each emits the
+files, loads them through the same loader `generate` uses, and
+type-checks them. The mutant (namespace pointed back at the barrel
+vocabulary) failed exactly those three and left every other emitter test
+green.
+
+### R7-N4 — one handle per foreign key in the text, one per target in the reading
+
+The emitter keyed a handle by `(owning table, foreign key name)` while
+the reading built one per target identity and said in its own comment
+why that is the rule. Three `existingTable("ext","users",…)` constants
+for one target were measured in a written file. Handles are now keyed by
+target, named for the target rather than for whichever relation needed
+one first, and their columns are the union of what every key into that
+target references — the same rule, stated once on each side.
+
+This was fixed before N3 deliberately: once a handle belongs to a
+target, "why does this handle exist" is a property of the target rather
+than of a relation, so two keys into one target can no longer imply two
+different reasons. The ordering removed a state N3 would otherwise have
+had to describe correctly.
+
+Pins: one handle for a target two keys share, and — added after the
+first version was found undiscriminating — a case where the two keys
+reference *different* columns, so the union is load-bearing. That
+second case matters: without it, a "first key wins" dedup passes every
+test in the suite, and the mutant proving it drops a column
+(`expected ' code: text() ' to contain 'id: text()'`) is what shows the
+pin can fail.
+
+### R7-N3 — the emitted comment claimed a cycle that did not exist
+
+`commentForForeignKeyEntry` took a boolean, which flattened a three-way
+distinction that `mustDeferForeignKey` still holds. Every handle
+therefore told the reader a declaration-file cycle had been closed,
+including handles that exist because the target's schema was never read
+— where there is no cycle, no other file, and nothing to initialise. The
+boolean is now the reason itself, and the two reasons render their own
+sentences. No delta changed: the requirement already separates the two
+cases in prose, which is exactly why the emitted comment collapsing them
+was drift rather than contradiction.
+
+### R7-N2 — a remedy the identifier rule makes impossible, still on two lines
+
+The omitted-index and omitted-check lines offered "declare it by hand or
+rename it in the database" one clause after saying no declaration can
+carry that name. Renaming is the only remedy, and the lines now say so,
+with one clause for the trap the reviewer measured: a hand-written
+declaration *can* be added under a different, valid name, and `generate`
+then emits a second index or constraint beside the one already in the
+database. This is the same false remedy round 6 removed from the column
+lines, and round 6 removed it only there.
+
+### R7-N1 — the skill still offered the remedy the code had retracted
+
+Round 6's disposition said "the delta and the skill say the same". It
+was true of the delta. Two places in the brownfield reference still
+offered a hand-written declaration, and one claimed `link` ends this
+loss the way it ends the others. Both now say what the code says:
+renaming in the database is the only way out for a name no declaration
+can carry, in this repository or a linked one, because the DSL derives
+every column's SQL name from its TypeScript key and accepts no override.
+The general claim about `link` is kept — it is true of every other kind
+of loss — and only the comparison is corrected.
+
+### R7-N5 — an enum type's catalog name
+
+Untouched, with #712, for the third round running.
+
+### What this round corrected in itself
+
+Three, recorded on the same principle as round 6's: how a round catches
+its own mistakes is evidence about the round.
+
+The **planner's approved mechanism was wrong**, and the instruction that
+caught it was "if any existing emitted bytes move, stop and report".
+They moved on the first run, the implementer stopped with the patch
+uncommitted, and the cause — the reserved set being also the barrel
+import list — was found before anything was built or committed. The fix
+that shipped is a different mechanism from the one the plan named.
+
+The **first version of the handle-union pin could not fail.** Both keys
+in it referenced the same column, so a "first key wins" dedup would have
+passed it; the implementer said so in its own report rather than
+banking the green, and the case was rebuilt with two different columns
+and mutant-verified. The finding this round is closing is itself about
+two artifacts counting the same thing differently, so a pin that cannot
+tell one count from two would have been a poor way to close it.
+
+A **guard was stepped around once and then retired.** After a revert
+bumped a source file's mtime past `dist`, the dist-freshness guard was
+satisfied by touching `dist` rather than rebuilding — sound at the time
+(the guard is about content staleness and the content was correct), but
+once a later commit moved that file's content the same move would have
+been false. The loader test was then left unrun rather than run
+dishonestly, and it was the first thing measured on the gate's real
+build. Reported as a judgement call, not as a procedure: the general
+rule is that a guard stepped around needs the argument written down,
+and the moment the argument stops holding, the run waits for the build.
