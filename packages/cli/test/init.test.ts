@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -116,20 +116,15 @@ describe("runInit / configured paths (#687)", () => {
 		readonly expectedReportLine: string;
 	};
 
-	// D110 input table: absent config, config present but the field
-	// omitted (falls back), a nested value, the same value with a
-	// trailing slash, and a leading slash -- both spellings still land
-	// under `join(cwd, value)` (D2 pin), never treated as absolute.
+	// D110 input table: absent config (falls back to the default), a
+	// nested value, the same value with a trailing slash, and a leading
+	// slash -- both spellings still land under `join(cwd, value)` (D2
+	// pin), never treated as absolute. "Config present, field omitted"
+	// moved to the "not configured" describe below (D3 revision, 1.4).
 	const migrationsDirRows: ReadonlyArray<ConfiguredDirRow> = [
 		{
 			label: "no hejbro.config.ts",
 			configContent: null,
-			expectedRelativeDir: "migrations",
-			expectedReportLine: "created migrations/",
-		},
-		{
-			label: "config present, migrationsDir omitted",
-			configContent: `export default { entry: ["src/**/*.schema.ts"] };\n`,
 			expectedRelativeDir: "migrations",
 			expectedReportLine: "created migrations/",
 		},
@@ -172,16 +167,12 @@ describe("runInit / configured paths (#687)", () => {
 		readonly expectedReportLine: string;
 	};
 
+	// "Config present, field omitted" moved to the "not configured"
+	// describe below (D3 revision, 1.4).
 	const snapshotPathRows: ReadonlyArray<ConfiguredFileRow> = [
 		{
 			label: "no hejbro.config.ts",
 			configContent: null,
-			expectedRelativeFile: "hejbro.snapshot.json",
-			expectedReportLine: "created hejbro.snapshot.json",
-		},
-		{
-			label: "config present, snapshotPath omitted",
-			configContent: `export default { entry: ["src/**/*.schema.ts"] };\n`,
 			expectedRelativeFile: "hejbro.snapshot.json",
 			expectedReportLine: "created hejbro.snapshot.json",
 		},
@@ -286,5 +277,166 @@ describe("runInit / repairs a partially present project at configured paths (#68
 			"utf8",
 		);
 		expect(snapshotContent).toContain('"formatVersion": 8');
+	});
+});
+
+describe("runInit / path-kind conflicts and unconfigured fields (#687)", () => {
+	it("refuses when the configured snapshot path holds a directory", async () => {
+		await writeFile(
+			configPath(),
+			'export default { entry: ["src/**/*.schema.ts"], snapshotPath: "db/state.json" };\n',
+		);
+		await mkdir(join(cwd, "db", "state.json"), { recursive: true });
+
+		const result = await runInit(cwd);
+
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain("error[init-path-conflict]");
+		// Nothing this run would have created exists -- the config file
+		// itself is the fixture's own pre-existing setup, untouched.
+		expect(existsSync(join(cwd, "migrations"))).toBe(false);
+		expect(statSync(join(cwd, "db", "state.json")).isDirectory()).toBe(true);
+	});
+
+	it("refuses when the configured migrations directory holds a file", async () => {
+		await writeFile(
+			configPath(),
+			'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "db/migrations" };\n',
+		);
+		await mkdir(join(cwd, "db"), { recursive: true });
+		await writeFile(join(cwd, "db", "migrations"), "not a directory");
+
+		const result = await runInit(cwd);
+
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain("error[init-path-conflict]");
+		expect(existsSync(snapshotPath())).toBe(false);
+		expect(await readFile(join(cwd, "db", "migrations"), "utf8")).toBe(
+			"not a directory",
+		);
+	});
+
+	it("refuses when a snapshotPath spelled with a trailing slash holds a directory", async () => {
+		await writeFile(
+			configPath(),
+			'export default { entry: ["src/**/*.schema.ts"], snapshotPath: "db/" };\n',
+		);
+		await mkdir(join(cwd, "db"), { recursive: true });
+
+		const result = await runInit(cwd);
+
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain("error[init-path-conflict]");
+	});
+
+	it("refuses an empty snapshotPath, which resolves to the project directory itself", async () => {
+		await writeFile(
+			configPath(),
+			'export default { entry: ["src/**/*.schema.ts"], snapshotPath: "" };\n',
+		);
+
+		const result = await runInit(cwd);
+
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain("error[init-path-conflict]");
+		expect(existsSync(join(cwd, "migrations"))).toBe(false);
+	});
+
+	it("refuses a snapshotPath spelled as a directory even when nothing sits there yet", async () => {
+		await writeFile(
+			configPath(),
+			'export default { entry: ["src/**/*.schema.ts"], snapshotPath: "db/" };\n',
+		);
+
+		const result = await runInit(cwd);
+
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain("error[init-path-conflict]");
+		expect(existsSync(join(cwd, "db"))).toBe(false);
+	});
+
+	it("a matching directory at the configured migrations path is skipped as today (control)", async () => {
+		await writeFile(
+			configPath(),
+			'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "db/migrations" };\n',
+		);
+		await mkdir(join(cwd, "db", "migrations"), { recursive: true });
+
+		const result = await runInit(cwd);
+
+		expect(result.exitCode).toBe(0);
+		expect(result.report).toContain("skipped db/migrations/ (exists)");
+	});
+
+	it("a matching file at the configured snapshot path is skipped, byte-untouched (control)", async () => {
+		await writeFile(
+			configPath(),
+			'export default { entry: ["src/**/*.schema.ts"], snapshotPath: "db/state.json" };\n',
+		);
+		await mkdir(join(cwd, "db"), { recursive: true });
+		await writeFile(join(cwd, "db", "state.json"), "pre-existing content");
+
+		const result = await runInit(cwd);
+
+		expect(result.exitCode).toBe(0);
+		expect(result.report).toContain("skipped db/state.json (exists)");
+		expect(await readFile(join(cwd, "db", "state.json"), "utf8")).toBe(
+			"pre-existing content",
+		);
+	});
+
+	it.each(["", "."])(
+		"an empty migrationsDir (%j) resolves to the project directory itself, reported ./",
+		async (emptyValue) => {
+			await writeFile(
+				configPath(),
+				`export default { entry: ["src/**/*.schema.ts"], migrationsDir: ${JSON.stringify(emptyValue)} };\n`,
+			);
+
+			const result = await runInit(cwd);
+
+			expect(result.exitCode).toBe(0);
+			expect(result.report).toContain("skipped ./ (exists)");
+		},
+	);
+
+	it("migrationsDir omitted from a present configuration creates nothing and reports not configured", async () => {
+		await writeFile(
+			configPath(),
+			'export default { entry: ["src/**/*.schema.ts"], snapshotPath: "hejbro.snapshot.json" };\n',
+		);
+
+		const result = await runInit(cwd);
+
+		expect(result.exitCode).toBe(0);
+		expect(result.report).toContain("migrationsDir not configured");
+		expect(existsSync(join(cwd, "migrations"))).toBe(false);
+	});
+
+	it("snapshotPath omitted from a present configuration creates nothing and reports not configured", async () => {
+		await writeFile(
+			configPath(),
+			'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "migrations" };\n',
+		);
+
+		const result = await runInit(cwd);
+
+		expect(result.exitCode).toBe(0);
+		expect(result.report).toContain("snapshotPath not configured");
+		expect(existsSync(snapshotPath())).toBe(false);
+	});
+
+	// No config file at all: both fields fall back to the defaults, as
+	// the top-level "creates all three artifacts" test already pins --
+	// restated here as the input table's own control row.
+	it("with no config file at all, both artifacts are created at the defaults (control)", async () => {
+		const result = await runInit(cwd);
+
+		expect(result.exitCode).toBe(0);
+		expect(result.report).toEqual([
+			"created hejbro.config.ts",
+			"created migrations/",
+			"created hejbro.snapshot.json",
+		]);
 	});
 });

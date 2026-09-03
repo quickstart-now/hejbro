@@ -66,9 +66,44 @@ Files this group owns: `packages/cli/src/commands/init.ts`,
       honours an existing configuration's paths. Files:
       `packages/cli/src/commands/init.ts`, its test, that reference.
 
+- [x] 1.4 (~10m) `[design]` A configured path holding the wrong kind of
+      node stops the run instead of being reported as present. Red:
+      `packages/cli/test/init.test.ts` — "refuses a configured path that
+      holds the wrong kind of node". Input table (each row a real
+      project, the report and the filesystem both asserted):
+
+      | configured field | what sits at the path | expected |
+      |---|---|---|
+      | `snapshotPath: "db/state.json"` | a directory | coded refusal, nothing created |
+      | `migrationsDir: "db/migrations"` | a file | coded refusal, nothing created |
+      | `snapshotPath: "db/"` | a directory | coded refusal, nothing created |
+      | `snapshotPath: ""` | the project directory itself | coded refusal, nothing created |
+      | `snapshotPath: "db/"` | nothing at that path | coded refusal: a file artifact whose path is spelled as a directory |
+      | `migrationsDir: "db/migrations"` | a directory | created or skipped as today |
+      | `snapshotPath: "db/state.json"` | a file | skipped, byte-untouched |
+      | `migrationsDir: ""` and `"."` | the project directory itself | skipped, reported `./` |
+      | `migrationsDir` omitted (config present) | — | not created, reported not configured |
+      | `snapshotPath` omitted (config present) | — | not created, reported not configured |
+      | no config file at all | — | both created at the defaults, as today |
+
+      Green: the presence test asks the node's kind (`statSync`), not
+      only its existence; a kind mismatch raises one new code naming the
+      path and the kind expected there, and the empty relative label
+      renders `./` rather than an empty string or `/`. Code name
+      `init-path-conflict` (lead-approved; `invalid-config` is wrong —
+      the configuration is valid and the filesystem is not), carrying a
+      `Next:` line like every coded failure here. Nothing is ever
+      replaced. A configuration present but silent about a field gets no
+      artifact for that field and one report line saying so — the
+      commands that write migrations refuse without it, so creating one
+      would leave a directory nothing reads, and a vendoring-only
+      repository must not acquire migration artifacts from `init`.
+      Files: `packages/cli/src/commands/init.ts`, its test.
+
 ## 2. Two silent losses on the vendoring boundary (#697)
 
 Files this group owns: `packages/cli/src/contract/emit.ts`,
+`packages/cli/src/vendor/validate-export.ts`,
 `packages/cli/test/contract-emit.test.ts`,
 `packages/query/src/db/fn.ts`,
 `packages/query/test/client/functions.test.ts`,
@@ -141,6 +176,40 @@ one-way documentation cross-check is unaffected by adding a sibling.
       covering all three fixes in user-facing terms, the guard among
       them. Files:
       `packages/query/src/db/fn.ts`, its test, the changeset.
+- [ ] 2.3 (~10m) `[design]` A column fact the description holds under a
+      key with object-literal meaning reaches the contract. Red:
+      `packages/cli/test/contract-emit.test.ts` — "carries the facts a
+      description holds under a __proto__ column key", driven through
+      the **real pipeline** (hand-written `schema.json` text →
+      `validateExport` → `emitContract` → load the emitted module), not
+      through a payload built in memory: the loss happens in the reader,
+      so a test that starts after the read cannot see it. Input table,
+      each column fact carrying a TypeScript key and a numeric mode that
+      differ from what a fallback would recover:
+
+      | description column key | expected in the contract |
+      |---|---|
+      | `__proto__` | the description's own key and mode |
+      | `constructor` | the description's own key and mode (control) |
+      | `plain` | the description's own key and mode (control) |
+
+      Green: the columns record is assembled so that every own key
+      survives — `Object.fromEntries` creates own properties where plain
+      assignment does not, so parsing into entries and assembling with it
+      is true by construction rather than by test. **Measure first and
+      report before choosing**: whether any test or message pins the
+      key name in a validation error path (an entries/tuple schema moves
+      those paths to indices). If one does, say so and stop — the
+      alternative is recovering the dropped key after the record parse.
+      Fix the class, not the instance: search `packages/cli/src/vendor`
+      for every `z.record` and say which ones carry
+      declaring-repository-chosen keys. Also in this task, one comment
+      fix: `assertArgNames`'s "there can be at most one past the
+      equal-length check" is false (`{user_id, lmt}` against two declared
+      arguments has two) — state what the code does, name the first.
+      Files: `packages/cli/src/vendor/validate-export.ts`,
+      `packages/cli/test/contract-emit.test.ts`,
+      `packages/query/src/db/fn.ts` (comment only).
 
 Group close (each group): `openspec validate fix-cli-init-and-vendoring
 --strict` and `show --diff` with the MODIFIED requirement classified

@@ -1,13 +1,17 @@
 ## ADDED Requirements
 
 ### Requirement: An emitted key survives as data, whatever it is named
-The contract's metadata is a JavaScript object literal, and one key name
-carries meaning there instead of becoming a property. The emitter SHALL
-render every table key, function key and column key so that it is an own
-property of `contractMetadata` at run time, whatever the schema named
-it. A key that is silently absorbed rather than carried would drop a
-column from every statement the client builds, with the contract still
-compiling and every type still claiming the column is there.
+One key name carries meaning in a JavaScript object instead of becoming
+a property, and a vendored schema travels through two objects keyed by
+what the declaring repository named things: the description that is read
+and the metadata that is emitted. Both SHALL carry every table key,
+function key and column key as an own property, whatever the schema
+named it — the facts a description holds under such a key SHALL reach
+the contract, and the contract's own keys SHALL be own properties at run
+time. A key that is silently absorbed rather than carried loses the
+column from every statement the client builds, or loses what the
+declaring repository said about it, with the contract still compiling
+and every type still claiming the column is there.
 
 #### Scenario: A column whose name is meaningful in an object literal is carried
 - **WHEN** an export carries a table whose column key is `__proto__`,
@@ -15,6 +19,12 @@ compiling and every type still claiming the column is there.
 - **THEN** the generated module's metadata lists that column among the
   table's own column keys, and a read of that table names the column in
   its statement like any other
+
+#### Scenario: What the description says under such a key reaches the contract
+- **WHEN** a vendored description holds a column fact under the key
+  `__proto__`, carrying that column's TypeScript key and numeric mode
+- **THEN** the contract carries that column with the key and the mode
+  the description gave it, not with values recovered from elsewhere
 
 #### Scenario: A key that only looks dangerous is carried the same way
 - **WHEN** an export carries column keys named `constructor`,

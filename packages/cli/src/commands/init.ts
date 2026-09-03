@@ -1,6 +1,6 @@
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
-import { emptySnapshot, renderSnapshot } from "@hejbro/core";
+import { emptySnapshot, renderSnapshot, throwHejbroError } from "@hejbro/core";
 import { defineCommand } from "citty";
 import type { HejbroConfig } from "../config";
 import { fromHejbroError, renderDiagnostics } from "../diagnostics";
@@ -38,15 +38,86 @@ type FileArtifact = {
 	readonly label: string;
 	readonly path: string;
 	readonly content: string;
+	readonly fieldName: string;
 };
 
 type DirArtifact = {
 	readonly kind: "dir";
 	readonly label: string;
 	readonly path: string;
+	readonly fieldName: string;
 };
 
 type Artifact = FileArtifact | DirArtifact;
+
+type NodeKind = "file" | "directory";
+
+const expectedKindOf = (artifact: Artifact): NodeKind => {
+	if (artifact.kind === "dir") {
+		return "directory";
+	}
+	return "file";
+};
+
+const kindAt = (path: string): NodeKind => {
+	if (statSync(path).isDirectory()) {
+		return "directory";
+	}
+	return "file";
+};
+
+/** Builds and throws the `init-path-conflict`-coded, enriched plain
+ * `HejbroError` (lead-approved): a configured path exists but holds the
+ * wrong kind of node for what it's supposed to be. Nothing is ever
+ * replaced, so this stops the run rather than reporting the path as
+ * already present. */
+function throwPathConflict(
+	path: string,
+	fieldName: string,
+	expectedKind: NodeKind,
+	actualKind: NodeKind,
+): never {
+	return throwHejbroError(
+		"init-path-conflict",
+		`"${path}" was expected to be a ${expectedKind} for ${fieldName}, but a ${actualKind} is there. Next: move or remove the existing ${actualKind} at "${path}", then rerun \`hejbro init\`.`,
+	);
+}
+
+/** Builds and throws the `init-path-conflict`-coded, enriched plain
+ * `HejbroError` for a file artifact whose own configured path is
+ * spelled with a trailing slash -- a directory spelling for a field
+ * that needs a file, refused before even checking what (if anything)
+ * exists there: writing a file to such a path fails with a raw,
+ * confusing filesystem error instead of this named one. */
+function throwSpelledAsDirectory(path: string, fieldName: string): never {
+	return throwHejbroError(
+		"init-path-conflict",
+		`"${path}" is spelled as a directory (a trailing "/") for ${fieldName}, which needs a file. Next: drop the trailing slash from ${fieldName} in hejbro.config.ts, or point it at a file path.`,
+	);
+}
+
+/** Refuses before creating anything (checked for every planned artifact
+ * before any of them is created): a file artifact whose own path is
+ * spelled as a directory, or an existing path that is the wrong kind
+ * of node for what `artifact` names. */
+const checkPathKind = (artifact: Artifact): void => {
+	const expectedKind = expectedKindOf(artifact);
+	if (expectedKind === "file" && artifact.path.endsWith("/")) {
+		throwSpelledAsDirectory(artifact.path, artifact.fieldName);
+	}
+	if (!existsSync(artifact.path)) {
+		return;
+	}
+	const actualKind = kindAt(artifact.path);
+	if (actualKind !== expectedKind) {
+		throwPathConflict(
+			artifact.path,
+			artifact.fieldName,
+			expectedKind,
+			actualKind,
+		);
+	}
+};
 
 const createArtifact = (artifact: Artifact): void => {
 	if (artifact.kind === "dir") {
@@ -70,33 +141,43 @@ const applyArtifact = (artifact: Artifact): string => {
 /** A directory's report label carries exactly one trailing slash (D1),
  * independent of how the configured value itself was spelled
  * (`relative` already drops any leading/trailing slash noise `join`
- * preserved). */
-const dirLabel = (cwd: string, path: string): string =>
-	`${relative(cwd, path)}/`;
+ * preserved) -- `./` when the resolved path is `cwd` itself (an empty
+ * relative path would otherwise render as a bare slash). */
+const dirLabel = (cwd: string, path: string): string => {
+	const rel = relative(cwd, path);
+	if (rel === "") {
+		return "./";
+	}
+	return `${rel}/`;
+};
 
 const fileLabel = (cwd: string, path: string): string => relative(cwd, path);
 
-/**
- * Resolves where the migrations directory and the snapshot file go:
- * `config`'s own fields when present (D2 pin — `join(cwd, value)`, the
- * same resolution `generate`/`history`/`status` already use, never
- * `resolve`), the scaffolded defaults otherwise. A field the
- * configuration omits falls back the same way a missing configuration
- * does.
- */
-const resolveDestinations = (
+/** A configured field's destination: `resolved` when the configuration
+ * names it (or there is no configuration at all, which falls back to
+ * the scaffolded default), `not-configured` when a configuration
+ * exists but is silent about this one field -- that field then gets no
+ * artifact at all (D3 revision, lead-approved): the commands that write
+ * migrations refuse without it, so a directory or file created for it
+ * would be one nothing reads. */
+type DestinationField =
+	| { readonly kind: "resolved"; readonly path: string }
+	| { readonly kind: "not-configured" };
+
+const resolveField = (
 	cwd: string,
-	config: {
-		readonly migrationsDir?: string;
-		readonly snapshotPath?: string;
-	} | null,
-): {
-	readonly migrationsDirPath: string;
-	readonly snapshotFilePath: string;
-} => ({
-	migrationsDirPath: join(cwd, config?.migrationsDir ?? DEFAULT_MIGRATIONS_DIR),
-	snapshotFilePath: join(cwd, config?.snapshotPath ?? DEFAULT_SNAPSHOT_PATH),
-});
+	configPresent: boolean,
+	value: string | undefined,
+	defaultValue: string,
+): DestinationField => {
+	if (!configPresent) {
+		return { kind: "resolved", path: join(cwd, defaultValue) };
+	}
+	if (value === undefined) {
+		return { kind: "not-configured" };
+	}
+	return { kind: "resolved", path: join(cwd, value) };
+};
 
 /** `null` when no `hejbro.config.ts` sits at `cwd` -- the only case `runInit` scaffolds at the default paths (D3). */
 const readExistingConfig = async (
@@ -110,6 +191,50 @@ const readExistingConfig = async (
 	return config;
 };
 
+const buildMigrationsArtifact = (
+	cwd: string,
+	field: DestinationField,
+): Artifact | null => {
+	if (field.kind === "not-configured") {
+		return null;
+	}
+	return {
+		kind: "dir",
+		label: dirLabel(cwd, field.path),
+		path: field.path,
+		fieldName: "migrationsDir",
+	};
+};
+
+const buildSnapshotArtifact = (
+	cwd: string,
+	field: DestinationField,
+): Artifact | null => {
+	if (field.kind === "not-configured") {
+		return null;
+	}
+	return {
+		kind: "file",
+		label: fileLabel(cwd, field.path),
+		path: field.path,
+		content: renderSnapshot(emptySnapshot),
+		fieldName: "snapshotPath",
+	};
+};
+
+/** `applyArtifact`'s report line for a field's own artifact, or the
+ * "not configured" line when the configuration was silent about it
+ * (there is no artifact to apply in that case). */
+const reportLineFor = (
+	artifact: Artifact | null,
+	notConfiguredLine: string,
+): string => {
+	if (artifact === null) {
+		return notConfiguredLine;
+	}
+	return applyArtifact(artifact);
+};
+
 /**
  * `hejbro init` (decision U7, extended #687): scaffolds `hejbro.config.ts`
  * (via `defineConfig`, with the documented defaults), the migrations
@@ -118,40 +243,60 @@ const readExistingConfig = async (
  * A `hejbro.config.ts` already on disk is read through `loadConfig` — the
  * loader every other command uses, no second reader — so the last two
  * artifacts land at its `migrationsDir`/`snapshotPath` when it names
- * them, never at a default path `generate` will not read. Idempotent:
+ * them, never at a default path `generate` will not read. A field the
+ * configuration omits gets no artifact and a "not configured" report
+ * line instead of a default-path fallback (D3 revision). Idempotent:
  * any artifact that already exists is left byte-untouched and reported
- * as skipped, at the path it was found at; always exits 0, so it doubles
- * as a safe "repair missing pieces" command.
+ * as skipped, at the path it was found at; a path holding the wrong
+ * kind of node refuses instead of being treated as present. Always
+ * exits 0 on success, so it doubles as a safe "repair missing pieces"
+ * command.
  */
 export const runInit = async (cwd: string): Promise<InitResult> => {
 	const fallbackIdentity = "init";
 	const configFilePath = join(cwd, CONFIG_FILE_NAME);
 	try {
 		const config = await readExistingConfig(cwd, configFilePath);
-		const { migrationsDirPath, snapshotFilePath } = resolveDestinations(
+		const configPresent = config !== null;
+		const migrationsField = resolveField(
 			cwd,
-			config,
+			configPresent,
+			config?.migrationsDir,
+			DEFAULT_MIGRATIONS_DIR,
 		);
-		const artifacts: ReadonlyArray<Artifact> = [
-			{
-				kind: "file",
-				label: CONFIG_FILE_NAME,
-				path: configFilePath,
-				content: CONFIG_FILE_CONTENT,
-			},
-			{
-				kind: "dir",
-				label: dirLabel(cwd, migrationsDirPath),
-				path: migrationsDirPath,
-			},
-			{
-				kind: "file",
-				label: fileLabel(cwd, snapshotFilePath),
-				path: snapshotFilePath,
-				content: renderSnapshot(emptySnapshot),
-			},
+		const snapshotField = resolveField(
+			cwd,
+			configPresent,
+			config?.snapshotPath,
+			DEFAULT_SNAPSHOT_PATH,
+		);
+
+		const configArtifact: Artifact = {
+			kind: "file",
+			label: CONFIG_FILE_NAME,
+			path: configFilePath,
+			content: CONFIG_FILE_CONTENT,
+			fieldName: "hejbro.config.ts",
+		};
+		const migrationsArtifact = buildMigrationsArtifact(cwd, migrationsField);
+		const snapshotArtifact = buildSnapshotArtifact(cwd, snapshotField);
+
+		// Every planned artifact's path kind is checked before any of
+		// them is created -- a conflict discovered on the snapshot must
+		// not leave a just-created config file or migrations directory
+		// behind it.
+		const plannedArtifacts: ReadonlyArray<Artifact> = [
+			configArtifact,
+			migrationsArtifact,
+			snapshotArtifact,
+		].filter((artifact): artifact is Artifact => artifact !== null);
+		plannedArtifacts.map((artifact) => checkPathKind(artifact));
+
+		const report = [
+			applyArtifact(configArtifact),
+			reportLineFor(migrationsArtifact, "migrationsDir not configured"),
+			reportLineFor(snapshotArtifact, "snapshotPath not configured"),
 		];
-		const report = artifacts.map((artifact) => applyArtifact(artifact));
 		return { report, exitCode: 0, stderr: null };
 	} catch (error) {
 		const hejbroError = asHejbroError(error);
