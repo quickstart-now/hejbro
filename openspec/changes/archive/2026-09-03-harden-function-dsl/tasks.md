@@ -32,6 +32,12 @@ are written once, in 2.3, and cover both groups' refusals.
       change to `identifier-rules.ts`.
       Files: `packages/core/src/dsl/define-function.ts`,
       `packages/core/test/define-function.test.ts`.
+      Superseded in part by 3.1: the parenthetical above was right about
+      the mechanism and wrong about the consequence — a plain `__proto__:`
+      key is not an own property, so this task's guard never sees it and
+      the declaration was produced with no arguments and no error. The
+      review closed that; both spellings are now refused, each by its own
+      code.
 - [x] 1.2 (~7m) The emitter's argument-key observer moves to the export
       it reads. Red: `packages/cli/test/contract-emit.test.ts` — "quotes
       a column key and an argument key that are not identifiers" throws
@@ -131,6 +137,44 @@ are written once, in 2.3, and cover both groups' refusals.
       refusals and that export.
       Files: `skills/hejbro/references/function-builder-pitfalls.md`,
       `.changeset/harden-function-dsl.md`.
+
+## 3. Piece-review round (review-born, no estimates)
+
+The piece reviewer ran context-free from the delta scenarios and the
+public surface, and every finding below is a delta sentence contradicted
+by shipped behavior. Durations are in `openspec/task-times.csv`.
+
+- [x] 3.1 A literal `__proto__:` key in `args` is refused. It replaces
+      the object's prototype rather than declaring an argument, so
+      `Object.entries` never sees it and 1.1's guard never ran: the
+      declaration was produced with no arguments and no error. New code
+      `args-prototype-key`, guard on `Object.getPrototypeOf(args)` before
+      the entries walk. Input table of five, side by side: literal,
+      computed, spread, `Object.create(null)`, and a literal beside a real
+      argument — the last one pins what the message must *not* claim.
+      Files: `packages/core/src/dsl/define-function.ts`, its test, the
+      `function-declaration` delta (scenario split), skill, changeset.
+- [x] 3.2 The failure-timing sentence is corrected. Measured on
+      PostgreSQL 15.19 and 17.11: `CREATE FUNCTION` succeeds and the body
+      fails on the first call (`INSERT query does not return tuples`).
+      The neighbouring shipped sentences for the scalar and trigger cases
+      were measured true and left untouched — this delta had generalized
+      a true sentence into a false one.
+      Files: the `plpgsql-function-bodies` delta, changeset, proposal.
+- [x] 3.3 `args-prototype-key` is named in the skill and the changeset
+      body, and `ctx.return`'s type refusal gains the sentence tsc's own
+      message cannot carry. A new diagnostic code is public surface on the
+      same standard as a new exported type, and no gate checks that.
+      Files: `skills/hejbro/references/function-builder-pitfalls.md`,
+      `.changeset/harden-function-dsl.md`.
+- Withdrawn: the `__proto__` **column** key fix. Implemented here, then
+      dropped before the push — the same lines belong to the cl piece
+      (#697), which had already fixed and reviewed them. Two pieces
+      editing one production file is what the ownership rule prevents.
+      The cost is recorded in the ledger because it was paid, and the work
+      independently reached cl's own conclusion, including a second
+      exposure of the same class (the runtime `functions` dictionary keyed
+      by a function's export name).
 
 Group close (each): the gate list derived from `.github/workflows/ci.yml`,
 not from memory; a forced rebuild (`TURBO_FORCE=1 pnpm check-types`,

@@ -460,19 +460,21 @@ function surface existed has — and expose an empty `fn`.
 The contract emitter SHALL quote a table column key or function argument
 key that is not a valid TypeScript identifier, and SHALL import every
 value type its own output names, so that a contract compiles whatever the
-schema declared.
+export carries.
 
-This requirement is about the emitted contract only. Whether the *DDL*
-side quotes a non-identifier function argument name is a separate axis
-this change does not touch and does not promise: it renders such a name
-unquoted, so a declaration carrying one still produces invalid migration
-SQL. That gap is tracked on its own.
+Such a key reaches the emitter from the export it reads, never from a
+declaration: a declared column key and a declared function argument key
+both derive a hejbro SQL name, and every key that survives that
+derivation is already a valid TypeScript identifier. The emitter carries
+the key the export holds and never re-derives it, so quoting is what
+keeps a hand-edited export — or one written by a toolchain whose rules
+differed — compiling.
 
 #### Scenario: A non-identifier key is quoted
-- **WHEN** a schema declaring a function argument under a key such as
-  `my-arg` is vendored, and an export whose table fact carries such a
-  column key is read
-- **THEN** the contract compiles and the key is preserved as written
+- **WHEN** an export whose table fact carries a column key such as
+  `user-id`, and whose function fact carries an argument key such as
+  `my-arg`, is vendored
+- **THEN** the contract compiles and each key is preserved as written
 
 #### Scenario: An interval column compiles
 - **WHEN** a schema declaring an `interval` column and an `interval`

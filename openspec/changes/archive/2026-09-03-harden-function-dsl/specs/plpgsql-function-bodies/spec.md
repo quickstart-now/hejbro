@@ -4,7 +4,10 @@
 `ctx.return(...)` SHALL accept a mutation only when its chain ends in
 `.returning()` — bare or projected — and SHALL refuse one that does not:
 in the type it accepts, and, for a caller that reaches it with the type
-bypassed, at declaration time with `return-expects-returning`.
+bypassed, at declaration time with `return-expects-returning`. That
+declaration-time refusal is reached only by a `setof <table>` body: a
+scalar body fails earlier with `scalar-return-expects-expression` and a
+trigger body with `trigger-return-expects-row`, in that fixed order.
 
 A body's `return query …` needs a command that produces rows. A mutation
 with no `RETURNING` clause produces none: Postgres accepts the function
