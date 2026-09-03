@@ -307,12 +307,13 @@ describe.each(PG_IMAGES)("brownfield corpus / %s", (image) => {
 				const checkResult = await runCli(cwd, ["check", "--url", url()]);
 				// (d): observed, not asserted -- 2nd-token work (#711 also
 				// changes what the loss report and `check` say). Also
-				// observed on dev 36520086, unattributed to #711 -- reported
-				// to the lead: every `serial()` column's own owned-sequence
+				// observed on dev 36520086, unattributed to #711 -- filed
+				// as #716: every `serial()` column's own owned-sequence
 				// default (`nextval(...)`) is missing from the declaration
 				// `check` compares against, so a clean serial column reports
 				// as differing even though nothing about it was omitted or
-				// approximated in the loss report.
+				// approximated in the loss report. Asserted once #716 is
+				// ruled on (2nd token or later).
 				const findingCount = (checkResult.stderr.match(/^error\[/gm) ?? [])
 					.length;
 				console.log(
@@ -342,13 +343,17 @@ describe.each(PG_IMAGES)("brownfield corpus / %s", (image) => {
 					cwd,
 					importArgs(url(), ["shop"], "src/schema"),
 				);
-				// red on dev until #711: R5-B1 + R5-N2 (#711) -- the UNIQUE
-				// constraint on the omitted "Widgets" table is detected
-				// against the schema-filtered catalog before R4's own
-				// table-level omission has excluded it, so this aborts
-				// before R5-B1's own FK-into-an-omitted-table path is ever
-				// separately reached. Captured verbatim against
-				// postgres:17-alpine, 2026-09-03, tip 36520086 (dev):
+				// red on dev until #711: R5-B1 and/or R5-N2 (#711) -- both
+				// concern this same fixture (a UNIQUE constraint on, and a
+				// foreign key into, an omitted table), and this run alone
+				// does not establish which of the two paths this
+				// particular abort goes through -- that needs a
+				// build --force'd measurement (pending the lead's slot),
+				// not this witness's own build. Captured verbatim against
+				// postgres:17-alpine, 2026-09-03, tip 36520086 (dev), this
+				// worktree's own build (packages/cli/dist/cli.js mtime
+				// 08:40:41 KST, newest packages/cli/src file 08:21:46 KST,
+				// packages/ status clean against dev tip):
 				//
 				//   error[invalid-sql-name]: Widgets
 				//     table name "Widgets" is not a valid hejbro SQL

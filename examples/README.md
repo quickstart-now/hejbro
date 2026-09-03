@@ -15,7 +15,10 @@ Real hejbro declarations that double as integration tests.
 Unlike the other examples, `brownfield` has no declaration source of its
 own to round-trip -- `seed/brownfield.sql` is the fixture, applied fresh
 into a container the suite manages itself. Requires Docker; it does not
-run in CI (D49).
+run in CI (D49). Its `package.json` also carries no plain `test` script
+(every other example's own does): this package has no non-integration
+tests to run under `pnpm test`, so `test:integration` is the only entry
+point.
 
 ```bash
 pnpm build
