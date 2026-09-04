@@ -1,10 +1,14 @@
 ## MODIFIED Requirements
 
 ### Requirement: An expression is compared through the server's own rendering
-Where `check` compares an expression — a check constraint, an index
-predicate, a generated column — it SHALL obtain the rendering of **both**
+Where `check` compares an expression through the server's rendering — a
+check constraint's expression — it SHALL obtain the rendering of **both**
 the declared expression and the database's own expression from **one
-statement**, and compare those.
+statement**, and compare those. An index's predicate and a generated
+column's expression are not compared this way: an index is compared by
+its existence and a generated column by its default text, so neither
+reaches this requirement's comparison, and extending it to them is a
+separate change.
 
 One statement, not two sent to one connection: a driver is free to pool
 connections, so two statements can land on two sessions whose
