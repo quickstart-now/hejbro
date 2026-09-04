@@ -475,9 +475,24 @@ export const runMigrate = async (
 				// classified right where it's caught -- the same driver, no
 				// rollback to wait for (unlike applyMigration's own ledger
 				// writes, task 1.4).
+				//
+				// [task 2.1, harden-ledger-diagnostics review repair] Read
+				// before bootstrapping, mirroring apply/raise.ts's own order:
+				// `create ... if not exists` checks the ACL before it checks
+				// existence, so bootstrapping first against an already-
+				// existing ledger can report "the bootstrap was refused" for
+				// a database that was never missing anything -- and which
+				// code comes back then depends on which grant happens to be
+				// absent, not on the fact that actually matters (the ledger
+				// exists and cannot be read). `readLedger` already reports an
+				// absent table as a state (`{ exists: false }`, D9), so
+				// bootstrapping only in that branch loses nothing planApply
+				// needs.
 				try {
-					await bootstrapLedger(driver);
 					const ledgerState = await readLedger(driver);
+					if (!ledgerState.exists) {
+						await bootstrapLedger(driver);
+					}
 					const plan = planApply(chain, ledgerState, baselineFileNames);
 					if (!plan.ok) {
 						return planFailureResult(plan);

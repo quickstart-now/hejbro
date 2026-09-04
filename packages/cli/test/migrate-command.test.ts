@@ -665,7 +665,7 @@ describe("runMigrate — a relation that is not the ledger at the ledger's name 
 		readonly type: string | null;
 	};
 
-	/** A full pgDriver fake -- unlike `makeFakeDriver` above (`applyFrom`'s own unit-level fake), this one goes through `runMigrate`'s real connection/bootstrap/apply path, answering the identity probe with `probeRows` and every other statement (bootstrap DDL, the advisory lock, the ledger recheck, the migration's own SQL, the ledger insert) with no rows -- the happy-path answer each of those needs to let a real apply through. */
+	/** A full pgDriver fake -- unlike `makeFakeDriver` above (`applyFrom`'s own unit-level fake), this one goes through `runMigrate`'s real connection/bootstrap/apply path, answering the identity probe with `probeRows` and every other statement (bootstrap DDL, the advisory lock, the ledger recheck, the migration's own SQL, the ledger insert) with no rows -- the happy-path answer each of those needs to let a real apply through. `probeRows.length === 0` (identity: absent) also makes `readLedger`'s own select answer `42P01` -- consistent with a genuinely untouched database (task 2.1, harden-ledger-diagnostics review repair: `migrate` now reads before it bootstraps, so this select has to answer the same "absent" fact the probe already promised, not a silent `{ exists: true, applied: [] }` that would skip the bootstrap this test means to exercise). */
 	const makeFakeMigrateImporter = (
 		probeRows: ReadonlyArray<ProbeRow>,
 	): { readonly importer: CheckDriverImporter; readonly calls: string[] } => {
@@ -676,6 +676,12 @@ describe("runMigrate — a relation that is not the ledger at the ledger's name 
 				const sql = compiled.sql.trim().toLowerCase();
 				if (sql.startsWith("select c.relkind")) {
 					return probeRows as unknown as ReadonlyArray<DriverRow>;
+				}
+				if (probeRows.length === 0 && sql.startsWith('select "filename"')) {
+					throw Object.assign(
+						new Error('relation "hejbro.migration_ledger" does not exist'),
+						{ code: "42P01" },
+					);
 				}
 				return [];
 			},
@@ -814,6 +820,79 @@ describe("applyFrom — a ledger failure is not the migration's failure / 1.5 (h
 	});
 });
 
+/** The four bootstrap columns, exactly as `bootstrapLedger` creates them -- makes the identity probe answer `ledger`, so the run reaches `bootstrapLedger`/`readLedger` instead of refusing on `apply-ledger-occupied` first. Shared by every describe below that needs a genuine (not absent, not occupied) ledger identity. */
+const LEDGER_SHAPE_PROBE_ROWS = [
+	{ relkind: "r", persistence: "p", name: "id", type: "bigint" },
+	{ relkind: "r", persistence: "p", name: "filename", type: "text" },
+	{ relkind: "r", persistence: "p", name: "origin", type: "text" },
+	{
+		relkind: "r",
+		persistence: "p",
+		name: "applied_at",
+		type: "timestamp with time zone",
+	},
+];
+
+/** A full pgDriver fake that answers the identity probe with `probeRows` (default: a genuine ledger shape), `select current_user` with a fixed role, `select "filename"...` (readLedger) with `ledgerRows` (default: empty, an existing-but-empty ledger) unless `failWhen` matches it first, and fails exactly one statement -- `failWhen` matches on the lower-cased SQL text, the fixture's own choice, never production code's (D4). */
+const makeFailingLedgerImporter = (
+	failWhen: (sql: string) => boolean,
+	failError: unknown,
+	options?: {
+		readonly probeRows?: ReadonlyArray<Record<string, unknown>>;
+		readonly ledgerRows?: ReadonlyArray<Record<string, unknown>>;
+	},
+): { readonly importer: CheckDriverImporter; readonly calls: string[] } => {
+	const calls: string[] = [];
+	const session: DriverSession = {
+		execute: async (compiled) => {
+			calls.push(compiled.sql);
+			const sql = compiled.sql.trim().toLowerCase();
+			if (sql.startsWith("select c.relkind")) {
+				return (options?.probeRows ??
+					LEDGER_SHAPE_PROBE_ROWS) as unknown as ReadonlyArray<DriverRow>;
+			}
+			if (failWhen(sql)) {
+				throw failError;
+			}
+			if (sql.startsWith("select current_user")) {
+				return [
+					{ currentUser: "ld_role" },
+				] as unknown as ReadonlyArray<DriverRow>;
+			}
+			if (sql.startsWith('select "filename"')) {
+				// probeRows explicitly [] means "absent" -- readLedger's own
+				// select has to answer that same fact (42P01), or a caller
+				// asking for an absent ledger would silently get "exists,
+				// empty" instead (task 2.1: migrate now reads this before
+				// deciding whether to bootstrap).
+				if (
+					options?.probeRows?.length === 0 &&
+					options.ledgerRows === undefined
+				) {
+					throw Object.assign(
+						new Error('relation "hejbro.migration_ledger" does not exist'),
+						{ code: "42P01" },
+					);
+				}
+				return (options?.ledgerRows ??
+					[]) as unknown as ReadonlyArray<DriverRow>;
+			}
+			return [];
+		},
+	};
+	const driver: CheckDriverConnection = {
+		capabilities: { "interactive-transactions": true, "session-state": true },
+		execute: session.execute,
+		transaction: async (callback) => callback(session),
+		setupSession: async () => {},
+		client: { end: async () => {} },
+	};
+	const importer: CheckDriverImporter = async () => ({
+		pgDriver: () => driver,
+	});
+	return { importer, calls };
+};
+
 describe("runMigrate — a ledger failure is not the migration's failure / 1.5 (harden-ledger-diagnostics)", () => {
 	let cwd: string;
 
@@ -836,56 +915,6 @@ describe("runMigrate — a ledger failure is not the migration's failure / 1.5 (
 		await removeCliFixtureDir(cwd);
 	});
 
-	/** The four bootstrap columns, exactly as `bootstrapLedger` creates them -- makes the identity probe answer `ledger`, so the run reaches `bootstrapLedger`/`readLedger` instead of refusing on `apply-ledger-occupied` first. */
-	const LedgerProbeRows = [
-		{ relkind: "r", persistence: "p", name: "id", type: "bigint" },
-		{ relkind: "r", persistence: "p", name: "filename", type: "text" },
-		{ relkind: "r", persistence: "p", name: "origin", type: "text" },
-		{
-			relkind: "r",
-			persistence: "p",
-			name: "applied_at",
-			type: "timestamp with time zone",
-		},
-	];
-
-	/** A full pgDriver fake that answers the identity probe with a genuine ledger shape, `select current_user` with a fixed role, and fails exactly one statement -- `failWhen` matches on the lower-cased SQL text, the fixture's own choice, never production code's (D4). */
-	const makeFailingLedgerImporter = (
-		failWhen: (sql: string) => boolean,
-		failError: unknown,
-	): { readonly importer: CheckDriverImporter; readonly calls: string[] } => {
-		const calls: string[] = [];
-		const session: DriverSession = {
-			execute: async (compiled) => {
-				calls.push(compiled.sql);
-				const sql = compiled.sql.trim().toLowerCase();
-				if (sql.startsWith("select c.relkind")) {
-					return LedgerProbeRows as unknown as ReadonlyArray<DriverRow>;
-				}
-				if (failWhen(sql)) {
-					throw failError;
-				}
-				if (sql.startsWith("select current_user")) {
-					return [
-						{ currentUser: "ld_role" },
-					] as unknown as ReadonlyArray<DriverRow>;
-				}
-				return [];
-			},
-		};
-		const driver: CheckDriverConnection = {
-			capabilities: { "interactive-transactions": true, "session-state": true },
-			execute: session.execute,
-			transaction: async (callback) => callback(session),
-			setupSession: async () => {},
-			client: { end: async () => {} },
-		};
-		const importer: CheckDriverImporter = async () => ({
-			pgDriver: () => driver,
-		});
-		return { importer, calls };
-	};
-
 	it("readLedger refused with 42501 before any apply -> exit 2, apply-ledger-unreadable", async () => {
 		const { importer } = makeFailingLedgerImporter(
 			(sql) => sql.startsWith('select "filename"'),
@@ -906,11 +935,17 @@ describe("runMigrate — a ledger failure is not the migration's failure / 1.5 (
 	});
 
 	it("bootstrap's create schema refused with 42501 -> exit 2, apply-ledger-unwritable naming the bootstrap (836/R2)", async () => {
+		// [task 2.1, harden-ledger-diagnostics] The identity probe answers
+		// absent -- bootstrapping is only ever attempted when the ledger
+		// genuinely doesn't exist yet (a "ledger" identity here would mean
+		// migrate never calls bootstrapLedger at all after 2.1's reorder,
+		// making this scenario unreachable).
 		const { importer } = makeFailingLedgerImporter(
 			(sql) => sql.startsWith("create schema"),
 			Object.assign(new Error("permission denied for database ldtest"), {
 				code: "42501",
 			}),
+			{ probeRows: [] },
 		);
 
 		const result = await runMigrate(
@@ -923,5 +958,115 @@ describe("runMigrate — a ledger failure is not the migration's failure / 1.5 (
 		expect(result.stderr).toContain("error[apply-ledger-unwritable]");
 		expect(result.stderr).toContain("bootstrap");
 		expect(result.stdout).toEqual([]);
+	});
+});
+
+describe("runMigrate — a ledger that exists but cannot be read is not reported as a bootstrap / 2.1 (harden-ledger-diagnostics review repair)", () => {
+	let cwd: string;
+
+	beforeEach(async () => {
+		cwd = await createCliFixtureDir();
+		await writeFixtureFile(cwd, "hejbro.config.ts", CONFIG_SOURCE);
+		await writeFixtureFile(
+			cwd,
+			"migrations/0001_a.sql",
+			[
+				"-- hejbro migration",
+				"-- parent-snapshot: sha256:aaaa",
+				"-- snapshot: sha256:bbbb",
+				'create table "app"."a" (id integer);',
+			].join("\n"),
+		);
+	});
+
+	afterEach(async () => {
+		await removeCliFixtureDir(cwd);
+	});
+
+	it("ledger present, select withheld -> apply-ledger-unreadable, no create schema sent", async () => {
+		const { importer, calls } = makeFailingLedgerImporter(
+			(sql) => sql.startsWith('select "filename"'),
+			Object.assign(new Error("permission denied for table migration_ledger"), {
+				code: "42501",
+			}),
+		);
+
+		const result = await runMigrate(
+			cwd,
+			["--url", "postgres://fake"],
+			importer,
+		);
+
+		expect(result.exitCode).toBe(2);
+		expect(result.stderr).toContain("error[apply-ledger-unreadable]");
+		expect(
+			calls.some((sql) => sql.toLowerCase().startsWith("create schema")),
+		).toBe(false);
+	});
+
+	it("ledger present, schema usage withheld (create granted) -> apply-ledger-unreadable, no create schema sent", async () => {
+		const { importer, calls } = makeFailingLedgerImporter(
+			(sql) => sql.startsWith('select "filename"'),
+			Object.assign(new Error("permission denied for schema hejbro"), {
+				code: "42501",
+			}),
+		);
+
+		const result = await runMigrate(
+			cwd,
+			["--url", "postgres://fake"],
+			importer,
+		);
+
+		expect(result.exitCode).toBe(2);
+		expect(result.stderr).toContain("error[apply-ledger-unreadable]");
+		expect(
+			calls.some((sql) => sql.toLowerCase().startsWith("create schema")),
+		).toBe(false);
+	});
+
+	it("regression: ledger absent and creatable -> bootstrap runs exactly once and the pending migration applies", async () => {
+		const { importer, calls } = makeFailingLedgerImporter(
+			() => false,
+			new Error("unreachable"),
+			{ probeRows: [] },
+		);
+
+		const result = await runMigrate(
+			cwd,
+			["--url", "postgres://fake"],
+			importer,
+		);
+
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toEqual([
+			"migrate: applied 1 migration(s):",
+			" - 0001_a.sql",
+		]);
+		expect(
+			calls.filter((sql) => sql.toLowerCase().startsWith("create schema")),
+		).toHaveLength(1);
+	});
+
+	it("regression: ledger present and readable -> today's report, the pending migration applies", async () => {
+		const { importer, calls } = makeFailingLedgerImporter(
+			() => false,
+			new Error("unreachable"),
+		);
+
+		const result = await runMigrate(
+			cwd,
+			["--url", "postgres://fake"],
+			importer,
+		);
+
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toEqual([
+			"migrate: applied 1 migration(s):",
+			" - 0001_a.sql",
+		]);
+		expect(
+			calls.some((sql) => sql.toLowerCase().startsWith("create schema")),
+		).toBe(false);
 	});
 });

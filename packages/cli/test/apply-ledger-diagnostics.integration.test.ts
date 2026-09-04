@@ -162,7 +162,7 @@ export const widgets = table(zz, "widgets", {
 `;
 
 describe("hejbro ledger diagnostics — live witness (#836/#823, task 1.9)", () => {
-	it("(a) a role that may connect but may not read the ledger -- status and raise --file each exit non-zero with apply-ledger-unreadable, naming the role and the SQLSTATE, no stack frame", async () => {
+	it("(a) a role that may connect but may not read the ledger -- status, raise --file and migrate each exit non-zero with apply-ledger-unreadable (task 2.1: migrate too, never a false bootstrap claim), naming the role and the SQLSTATE, no stack frame", async () => {
 		const database = "ld_read";
 		psqlCommand("postgres", `create database ${database};`);
 		const cwd = await createCliFixtureDir();
@@ -214,6 +214,24 @@ describe("hejbro ledger diagnostics — live witness (#836/#823, task 1.9)", () 
 			expect(raise.stderr).toContain("ld_read");
 			expect(raise.stderr).toContain("42501");
 			expect(raise.stderr).not.toMatch(STACK_FRAME_PATTERN);
+
+			// [task 2.1, harden-ledger-diagnostics review repair] migrate
+			// against the same already-bootstrapped, unreadable ledger --
+			// reads before it bootstraps, so this is apply-ledger-unreadable
+			// too, never a false "bootstrap refused" claim about a ledger
+			// that was never missing.
+			const migrateUnreadable = await runCli(cwd, [
+				"migrate",
+				"--url",
+				roleUrl(database, "ld_read"),
+			]);
+			expect(migrateUnreadable.exitCode).toBe(2);
+			expect(migrateUnreadable.stderr).toContain(
+				"error[apply-ledger-unreadable]",
+			);
+			expect(migrateUnreadable.stderr).toContain("ld_read");
+			expect(migrateUnreadable.stderr).toContain("42501");
+			expect(migrateUnreadable.stderr).not.toMatch(STACK_FRAME_PATTERN);
 		} finally {
 			await removeCliFixtureDir(cwd);
 		}
