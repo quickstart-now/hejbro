@@ -111,7 +111,7 @@ marks the tasks that carry them into code, not open questions.
       `packages/cli/src/apply/raise.ts`,
       `packages/cli/test/apply-raise.test.ts`.
 
-- [ ] 1.6 (~8m) **[design]** `kindHasCycle` detects a cycle of any
+- [x] 1.6 (~8m) **[design]** `kindHasCycle` detects a cycle of any
       length (797/R1): a recursive peel over the in-set edges — remove
       every identity whose remaining dependencies are all gone; a
       non-empty remainder that removes nothing is a cycle. Self-edges

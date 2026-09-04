@@ -396,7 +396,7 @@ describe("hejbro reset — live witness (#753, task 1.5)", () => {
 			// what the server actually refused over -- the advice states the
 			// cycle fact and keeps the outside-declarations possibility too,
 			// asserting neither as the one true cause.
-			expect(result.stderr).toContain("your own declared objects");
+			expect(result.stderr).toContain("your declared tables");
 			expect(result.stderr).toContain("an object outside your declarations");
 
 			const driver = pgDriver(hostUrl(database));

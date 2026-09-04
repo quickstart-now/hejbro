@@ -185,21 +185,55 @@ const sqlToDrop = (
 };
 
 /**
- * [D106 R1, N3, #753 reopened] Whether `changes` -- `reset`'s own drop
- * plan -- contains a genuine same-kind cycle: two objects each naming the
- * other via `kind.dependsOnIdentities` (task 1.2's own "never throws"
- * case, e.g. two tables with a mutual foreign key). `reset`'s own plan is
- * always drop-only, so `change.previous` is always the real node to read
- * (mirrors core's own `nodeForOrdering`, drop side, which this module has
- * no access to -- `registry.get`/`KindChange` are the public surface this
- * reads instead). Computed once, before the transaction ever opens: not
- * "did THIS failure come from a cycle" (the driver names an object, not
- * an edge, and this module has no SQL parser), but "does this run's own
- * declared set contain one at all" -- the delta's own two scenarios (an
- * outside dependent vs. a declared cycle) are exactly this binary, and a
- * plan with a cycle can only ever fail its drop for that reason (task
- * 1.2: every other pair that isn't a cycle is ordered so its drop
- * succeeds).
+ * [797/R1] A recursive topological peel over `edgesFrom` (Kahn's
+ * algorithm, recursion in place of the loop house style bans): remove
+ * every identity in `remaining` whose every edge already points outside
+ * `remaining`; a non-empty `remaining` from which nothing can be removed
+ * is a cycle. Detects a cycle of any length -- two identities each
+ * naming the other, same as any longer ring -- not only a direct mutual
+ * pair.
+ */
+const peelHasCycle = (
+	edgesFrom: ReadonlyMap<string, ReadonlySet<string>>,
+	remaining: ReadonlySet<string>,
+): boolean => {
+	if (remaining.size === 0) {
+		return false;
+	}
+	const removable = new Set(
+		Array.from(remaining).filter((identity) =>
+			Array.from(edgesFrom.get(identity) ?? new Set<string>()).every(
+				(dependencyIdentity) => !remaining.has(dependencyIdentity),
+			),
+		),
+	);
+	if (removable.size === 0) {
+		return true;
+	}
+	return peelHasCycle(
+		edgesFrom,
+		new Set(
+			Array.from(remaining).filter((identity) => !removable.has(identity)),
+		),
+	);
+};
+
+/**
+ * [D106 R1, N3, #753 reopened; 797/R1] Whether `changes` -- `reset`'s own
+ * drop plan -- contains a genuine same-kind cycle of any length via
+ * `kind.dependsOnIdentities` (task 1.2's own "never throws" case; a
+ * mutual pair is the shortest one, not the only one {@link peelHasCycle}
+ * detects). `reset`'s own plan is always drop-only, so `change.previous`
+ * is always the real node to read (mirrors core's own `nodeForOrdering`,
+ * drop side, which this module has no access to -- `registry.get`/
+ * `KindChange` are the public surface this reads instead). Computed once,
+ * before the transaction ever opens: not "did THIS failure come from a
+ * cycle" (the driver names an object, not an edge, and this module has no
+ * SQL parser), but "does this run's own declared set contain one at all"
+ * -- the delta's own two scenarios (an outside dependent vs. a declared
+ * cycle) are exactly this binary, and a plan with a cycle can only ever
+ * fail its drop for that reason (task 1.2: every other member that is not
+ * part of one is ordered so its drop succeeds).
  */
 const kindHasCycle = (
 	kind: RegisteredObjectKind,
@@ -221,12 +255,7 @@ const kindHasCycle = (
 			),
 		]),
 	);
-	return kindChanges.some((change) =>
-		Array.from(edgesFrom.get(change.identity) ?? new Set<string>()).some(
-			(dependencyIdentity) =>
-				edgesFrom.get(dependencyIdentity)?.has(change.identity) ?? false,
-		),
-	);
+	return peelHasCycle(edgesFrom, identitySet);
 };
 
 /** {@link kindHasCycle}, across every kind in `changes` -- grouped first, since a cycle is only ever a same-kind edge (task 1.1/1.2: cross-kind ordering was never the gap). */
@@ -287,7 +316,7 @@ const detailPointerClause = (detail: string | null): string => {
  * replace it with.
  */
 const declaredCycleAdvice = (detail: string | null): string =>
-	`resolve what the error above describes (${detailPointerClause(detail)}your own declared objects include a pair that reference each other, which no order satisfies, so they were left in identity order rather than refused outright, and an object outside your declarations may also still depend on one you're dropping)`;
+	`resolve what the error above describes (${detailPointerClause(detail)}a set of your declared tables that reference each other in a cycle, which no order satisfies, so they were left in identity order rather than refused outright, and an object outside your declarations may also still depend on one you're dropping)`;
 
 /**
  * [D106 R1, NB1, #753 reopened] Dependency advice only ever applies to

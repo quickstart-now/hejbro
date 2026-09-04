@@ -47,53 +47,94 @@ const managedSnapshot = buildSnapshot(
 // cycle" fixture. Shared by every cycle-shaped row below: `dropsContainCycle`
 // reads this run's own plan, not the driver error, so every one needs the
 // identical structurally-cyclic snapshot.
-const buildCycleSnapshot = (): Snapshot => {
-	const cycleColumns: ReadonlyArray<ColumnSnapshot> = [
-		{ name: "id", typeNode: { typeName: "uuid" }, primaryKey: true },
-	];
-	const leftT: TableSnapshot = {
-		schema: "cyc",
-		name: "left_t",
-		columns: [
-			...cycleColumns,
-			{ name: "right_id", typeNode: { typeName: "uuid" } },
-		],
-		indexes: [],
-		foreignKeys: [
-			{
-				name: "left_t_right_id_fk",
-				columns: ["right_id"],
-				referencesTable: "cyc.right_t",
-				referencesColumns: ["id"],
-			},
-		],
-	};
-	const rightT: TableSnapshot = {
-		schema: "cyc",
-		name: "right_t",
-		columns: [
-			...cycleColumns,
-			{ name: "left_id", typeNode: { typeName: "uuid" } },
-		],
-		indexes: [],
-		foreignKeys: [
-			{
-				name: "right_t_left_id_fk",
-				columns: ["left_id"],
-				referencesTable: "cyc.left_t",
-				referencesColumns: ["id"],
-			},
-		],
-	};
+const CYCLE_ID_COLUMN: ColumnSnapshot = {
+	name: "id",
+	typeNode: { typeName: "uuid" },
+	primaryKey: true,
+};
+
+/** One declared table in schema `cyc`, with a foreign key naming `targetName` (or no foreign key at all when `targetName` is `undefined` -- a chain's own last link). */
+const cycleTable = (name: string, targetName?: string): TableSnapshot => {
+	if (targetName === undefined) {
+		return {
+			schema: "cyc",
+			name,
+			columns: [CYCLE_ID_COLUMN],
+			indexes: [],
+			foreignKeys: [],
+		};
+	}
+	const fkColumn = `${targetName}_id`;
 	return {
-		...emptySnapshot,
-		objects: {
-			"schema:cyc": { name: "cyc" },
-			"table:cyc.left_t": leftT,
-			"table:cyc.right_t": rightT,
-		},
+		schema: "cyc",
+		name,
+		columns: [
+			CYCLE_ID_COLUMN,
+			{ name: fkColumn, typeNode: { typeName: "uuid" } },
+		],
+		indexes: [],
+		foreignKeys: [
+			{
+				name: `${name}_${fkColumn}_fk`,
+				columns: [fkColumn],
+				referencesTable: `cyc.${targetName}`,
+				referencesColumns: ["id"],
+			},
+		],
 	};
 };
+
+const emptyCycSnapshot: Snapshot = {
+	...emptySnapshot,
+	objects: { "schema:cyc": { name: "cyc" } },
+};
+
+const withCycleTable = (
+	snapshot: Snapshot,
+	table: TableSnapshot,
+): Snapshot => ({
+	...snapshot,
+	objects: { ...snapshot.objects, [`table:cyc.${table.name}`]: table },
+});
+
+/** A ring of `tableNames.length` declared tables, each referencing the next (wrapping around) -- a genuine cycle of that length. `["left_t", "right_t"]` reproduces today's pair. */
+const buildCycleSnapshot = (tableNames: ReadonlyArray<string>): Snapshot =>
+	tableNames.reduce((snapshot, name, index) => {
+		const targetName = tableNames[(index + 1) % tableNames.length];
+		return withCycleTable(snapshot, cycleTable(name, targetName));
+	}, emptyCycSnapshot);
+
+/** One table referencing itself -- excluded from `kindHasCycle`'s own peel (its drop takes its own constraint with it), so this is never a cycle. */
+const buildSelfReferencingSnapshot = (tableName: string): Snapshot =>
+	withCycleTable(emptyCycSnapshot, cycleTable(tableName, tableName));
+
+/** Two or more independent cycles, merged into one declared set -- a cycle exists even though it is not the whole set. */
+const buildDisjointCyclesSnapshot = (
+	groups: ReadonlyArray<ReadonlyArray<string>>,
+): Snapshot => ({
+	...emptyCycSnapshot,
+	objects: Object.assign(
+		{},
+		...groups.map((group) => buildCycleSnapshot(group).objects),
+	),
+});
+
+/** A linear chain, each table referencing the next, the last referencing nothing -- acyclic (`kindHasCycle`'s own peel resolves it in reverse-dependency order). */
+const buildChainSnapshot = (tableNames: ReadonlyArray<string>): Snapshot =>
+	tableNames.reduce((snapshot, name, index) => {
+		const targetName = tableNames[index + 1];
+		return withCycleTable(snapshot, cycleTable(name, targetName));
+	}, emptyCycSnapshot);
+
+/** A cycle plus one acyclic table that depends on one cycle member (never the reverse) -- the cycle must still be found among a larger declared set. */
+const buildCyclePlusDanglingSnapshot = (
+	cycleNames: ReadonlyArray<string>,
+	danglingName: string,
+): Snapshot =>
+	withCycleTable(
+		buildCycleSnapshot(cycleNames),
+		cycleTable(danglingName, cycleNames[0]),
+	);
 
 /** One `pg_class`/`pg_attribute` row shape, as `probeLedgerIdentity`'s own statement returns it. */
 type ProbeRow = {
@@ -811,7 +852,7 @@ describe("applyReset — reset-drop-failed carries the server's detail and picks
 	});
 
 	it("(iii) the run's own plan contains a cycle, no detail from the server -- Next: states the cycle fact, additive to the outside-declarations possibility, never claims a detail that isn't there", async () => {
-		const cycleSnapshot = buildCycleSnapshot();
+		const cycleSnapshot = buildCycleSnapshot(["left_t", "right_t"]);
 		const changes = planReset(cycleSnapshot, registry);
 		const confirmation = requiredConfirmation("testdb", changes);
 		const { driver } = makeFakeDriver("testdb", {
@@ -841,7 +882,7 @@ describe("applyReset — reset-drop-failed carries the server's detail and picks
 		// so the message states the cycle fact and keeps the
 		// outside-declarations clause too, asserting neither exclusively.
 		const message = (error as HejbroError).message;
-		expect(message).toContain("your own declared objects");
+		expect(message).toContain("your declared tables");
 		expect(message).toContain("an object outside your declarations");
 		// [C10, D106 R1 review round 2] This thrown error carries no
 		// `.detail` -- the detail-pointer clause must not claim one exists
@@ -873,7 +914,7 @@ describe("applyReset — reset-drop-failed carries the server's detail and picks
 	});
 
 	it("(v) the run's own plan contains a cycle AND the actual failure names an outside dependent -- Next: still carries both, asserting neither as the sole cause", async () => {
-		const cycleSnapshot = buildCycleSnapshot();
+		const cycleSnapshot = buildCycleSnapshot(["left_t", "right_t"]);
 		const changes = planReset(cycleSnapshot, registry);
 		const confirmation = requiredConfirmation("testdb", changes);
 		const { driver } = makeFakeDriver("testdb", {
@@ -901,9 +942,76 @@ describe("applyReset — reset-drop-failed carries the server's detail and picks
 
 		const message = (error as HejbroError).message;
 		expect(message).toContain("view outside_view depends on table cyc.left_t");
-		expect(message).toContain("your own declared objects");
+		expect(message).toContain("your declared tables");
 		expect(message).toContain("an object outside your declarations");
 	});
+});
+
+describe("applyReset — the cycle advice fires for a cycle of any length (harden-ledger-identity, 1.6, 797/R1)", () => {
+	const dependencyFailure = Object.assign(
+		new Error(
+			"cannot drop table cyc.some_table because other objects depend on it",
+		),
+		{ code: "2BP01" },
+	);
+
+	it.each<[string, Snapshot, boolean]>([
+		[
+			"a 2-cycle (regression pin)",
+			buildCycleSnapshot(["left_t", "right_t"]),
+			true,
+		],
+		["a 3-cycle", buildCycleSnapshot(["t_a", "t_b", "t_c"]), true],
+		["a 4-cycle", buildCycleSnapshot(["t_a", "t_b", "t_c", "t_d"]), true],
+		[
+			"a self-referencing table alone",
+			buildSelfReferencingSnapshot("t_self"),
+			false,
+		],
+		[
+			"two independent 2-cycles",
+			buildDisjointCyclesSnapshot([
+				["p_a", "p_b"],
+				["q_a", "q_b"],
+			]),
+			true,
+		],
+		[
+			"an acyclic chain a -> b -> c",
+			buildChainSnapshot(["t_a", "t_b", "t_c"]),
+			false,
+		],
+		[
+			"a 3-cycle plus one acyclic table hanging off it",
+			buildCyclePlusDanglingSnapshot(["t_a", "t_b", "t_c"], "t_d"),
+			true,
+		],
+	])(
+		"%s -- cycle advice present: %s",
+		async (_label, snapshot, expectAdvice) => {
+			const changes = planReset(snapshot, registry);
+			const confirmation = requiredConfirmation("testdb", changes);
+			const { driver } = makeFakeDriver("testdb", {
+				thrown: dependencyFailure,
+			});
+
+			const error: unknown = await applyReset(
+				driver,
+				snapshot,
+				registry,
+				confirmation,
+			).catch((caught: unknown) => caught);
+
+			const message = (error as HejbroError).message;
+			if (expectAdvice) {
+				expect(message).toContain("your declared tables");
+				expect(message).toContain("in a cycle");
+			} else {
+				expect(message).not.toContain("your declared tables");
+				expect(message).toContain("an object outside your declarations");
+			}
+		},
+	);
 });
 
 describe("applyReset — reset-drop-failed names the phase that actually failed (D106 R1, NB1+NB4, lead ruling R86, #753 reopened)", () => {
@@ -1021,7 +1129,7 @@ describe("applyReset — reset-drop-failed names the phase that actually failed 
 	});
 
 	it("⑤ 2BP01, a cycle in the plan -- detail-first ordering, both possibilities, neither asserted as the cause", async () => {
-		const cycleSnapshot = buildCycleSnapshot();
+		const cycleSnapshot = buildCycleSnapshot(["left_t", "right_t"]);
 		const changes = planReset(cycleSnapshot, registry);
 		const confirmation = requiredConfirmation("testdb", changes);
 		const { driver } = makeFakeDriver("testdb", {
@@ -1051,7 +1159,7 @@ describe("applyReset — reset-drop-failed names the phase that actually failed 
 		const detailPointerIndex = message.indexOf(
 			"the detail above names the actual dependent",
 		);
-		const cycleClauseIndex = message.indexOf("your own declared objects");
+		const cycleClauseIndex = message.indexOf("your declared tables");
 		const outsideClauseIndex = message.indexOf(
 			"an object outside your declarations",
 		);
