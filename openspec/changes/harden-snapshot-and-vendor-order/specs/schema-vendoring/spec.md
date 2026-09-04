@@ -16,16 +16,18 @@ object-keyed column map — SHALL still build a client; its statements
 keep the order that map yields.
 
 #### Scenario: Integer-like column names keep their physical position
-- **WHEN** an export whose table records columns `id`, `0`, `label`, `2`
-  in that physical order is vendored and the consumer reads the table
+- **WHEN** an export — hand-edited, or written by a toolchain whose
+  naming rules differ, since no hejbro declaration produces such names —
+  whose table records columns `id`, `0`, `label`, `2` in that physical
+  order is vendored and the consumer reads the table
 - **THEN** the emitted metadata lists the columns in that order and the
   rendered statement names them `"id", "0", "label", "2"`, not with the
   integer-like names first
 
 #### Scenario: Every column-name class keeps its position
-- **WHEN** an export's table records, in one physical order, columns
-  named like an integer, `__proto__`, `constructor`, in upper case, and
-  with a character that needs quoting
+- **WHEN** such an export's table records, in one physical order,
+  columns named like an integer, `__proto__`, `constructor`, in upper
+  case, and with a character that needs quoting
 - **THEN** the emitted metadata and the rendered statement carry them in
   exactly that order
 
