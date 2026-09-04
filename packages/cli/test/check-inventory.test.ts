@@ -111,7 +111,12 @@ describe("buildInventory / 5.1 extensions", () => {
 	});
 });
 
-const columnRow = (schema: string, table: string, name: string): ColumnRow => ({
+const columnRow = (
+	schema: string,
+	table: string,
+	name: string,
+	overrides: Partial<ColumnRow> = {},
+): ColumnRow => ({
 	schema,
 	table,
 	name,
@@ -122,6 +127,7 @@ const columnRow = (schema: string, table: string, name: string): ColumnRow => ({
 	baseTypeName: null,
 	catalogDefault: null,
 	catalogGenerated: null,
+	...overrides,
 });
 
 describe("the inventory's anchor is a managed table", () => {
@@ -243,4 +249,93 @@ describe("the inventory's anchor is a managed table", () => {
 			expect(inventory.unmanagedTables).toEqual(expectedUnmanagedTables);
 		},
 	);
+});
+
+describe("unmanaged columns", () => {
+	// harden-check-inventory, task 1.3 (#726): every kind of database-only
+	// column on a managed table is listed by identity alone -- existence
+	// only, by construction (spec Req5): `unmanagedColumns` never reads a
+	// row's `catalogType`, `catalogDefault` or `catalogGenerated`, so a
+	// generated or identity column is exactly as reportable as a plain
+	// one, and an undeclarable name (#706's own loss-report subject)
+	// passes through unchanged.
+	type ColumnKindRow = {
+		readonly label: string;
+		readonly catalogColumns: ReadonlyArray<ColumnRow>;
+		readonly expectedUnmanagedColumns: ReadonlyArray<{
+			readonly schema: string;
+			readonly table: string;
+			readonly name: string;
+		}>;
+	};
+
+	const posts = table(app, "posts", { id: uuid().primaryKey() });
+	const snapshot = buildTestSnapshot([posts]);
+
+	const rows: ReadonlyArray<ColumnKindRow> = [
+		{
+			label: "a column the declaration covers",
+			catalogColumns: [columnRow("app", "posts", "id")],
+			expectedUnmanagedColumns: [],
+		},
+		{
+			label: "a database-only plain column",
+			catalogColumns: [
+				columnRow("app", "posts", "id"),
+				columnRow("app", "posts", "legacy_note"),
+			],
+			expectedUnmanagedColumns: [
+				{ schema: "app", table: "posts", name: "legacy_note" },
+			],
+		},
+		{
+			label: "a database-only generated column",
+			catalogColumns: [
+				columnRow("app", "posts", "id"),
+				columnRow("app", "posts", "legacy_total", {
+					catalogGenerated: "(price * (qty)::numeric)",
+				}),
+			],
+			expectedUnmanagedColumns: [
+				{ schema: "app", table: "posts", name: "legacy_total" },
+			],
+		},
+		{
+			// The columns query (check/catalog.ts) carries no identity-specific
+			// field -- an identity column's row is indistinguishable from a
+			// plain one at this level, which is exactly why no special case
+			// is needed: `unmanagedColumns` never looks past the name either
+			// way.
+			label: "a database-only identity column",
+			catalogColumns: [
+				columnRow("app", "posts", "id"),
+				columnRow("app", "posts", "legacy_seq"),
+			],
+			expectedUnmanagedColumns: [
+				{ schema: "app", table: "posts", name: "legacy_seq" },
+			],
+		},
+		{
+			label: "a column whose name no declaration could carry",
+			catalogColumns: [
+				columnRow("app", "posts", "id"),
+				columnRow("app", "posts", "_id"),
+			],
+			expectedUnmanagedColumns: [
+				{ schema: "app", table: "posts", name: "_id" },
+			],
+		},
+	];
+
+	it.each(rows)("$label", ({ catalogColumns, expectedUnmanagedColumns }) => {
+		const catalog: Catalog = {
+			...emptyCatalog(),
+			tables: [{ schema: "app", table: "posts", rls: false }],
+			columns: catalogColumns,
+		};
+
+		const inventory = buildInventory(snapshot, catalog);
+
+		expect(inventory.unmanagedColumns).toEqual(expectedUnmanagedColumns);
+	});
 });
