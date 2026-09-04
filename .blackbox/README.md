@@ -57,13 +57,13 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#686](686/) | ctx.return accepts a mutation with no returning() and renders invalid plpgsql | closed | #733 | 0 | 3 (0 pending) |
 | ↳ [#687](687/) | init ignores the configured migrationsDir and snapshotPath | closed | #739 #759 #770 | 0 | 8 (0 pending) |
 | ↳ [#697](697/) | vendored fn guard is count-only and a __proto__ column key loses its column | closed | #739 | 0 | 4 (0 pending) |
-| ↳ [#701](701/) | array order in kind snapshots can produce a semantically empty alter | open |  | 0 | 4 (0 pending) |
-| ↳ [#740](740/) | Vendored contract column order follows JS key order, not the snapshot's physical order | open |  | 0 | 1 (0 pending) |
+| ↳ [#701](701/) | array order in kind snapshots can produce a semantically empty alter | closed | #858 | 0 | 4 (0 pending) |
+| ↳ [#740](740/) | Vendored contract column order follows JS key order, not the snapshot's physical order | closed | #858 | 0 | 1 (0 pending) |
 | ↳ [#741](741/) | `hejbro init --config <path>` is ignored and scaffolds a competing project | closed | #840 #847 | 0 | 4 (0 pending) |
 | ↳ [#743](743/) | `init` and `generate` name the same file two different ways | closed | #840 #847 | 0 | 1 (1 pending) |
 | ↳ [#744](744/) | `docker-rm-hygiene` can fail on a temporary file another test is deleting | closed | #773 | 0 | 1 (0 pending) |
 | ↳ [#748](748/) | core: "found" is missing from the plpgsql reserved-name list and shadows PL/pgSQL's FOUND silently | closed | #824 #833 | 0 | 6 (1 pending) |
-| ↳ [#749](749/) | a projected .returning() under returns setof <table> must cover the table's column list | open |  | 0 | 1 (1 pending) |
+| ↳ [#749](749/) | a projected .returning() under returns setof <table> must cover the table's column list | closed | #858 | 0 | 1 (1 pending) |
 | ↳ [#750](750/) | 0.2.0-pre.0: five findings from applying one declaration to Postgres 18, Neon, Nile and Supabase | closed | #784 #802 | 7 | 2 (0 pending) |
 | ↳ [#751](751/) | core: two function argument keys that derive to one SQL name are not refused | closed | #824 #833 | 0 | 1 (1 pending) |
 | ↳ [#752](752/) | verify does not run preset validators, so it passes a declaration generate refuses | closed | #775 #784 #799 | 0 | 2 (0 pending) |
