@@ -58,6 +58,18 @@
       "at": "2026-09-04T23:13Z",
       "title": "ld review round 1: B1 read-before-bootstrap, B2 no 42P01 tolerance inside a transaction, B3 pg pool error listener (scope extension), B4 column-specific hint; group 2, narrow re-review",
       "ratified": null
+    },
+    {
+      "id": "R5",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R4",
+        "412/D13"
+      ],
+      "at": "2026-09-04T23:16Z",
+      "title": "B3: option A stands; defect size recorded as #864 (closes with this PR); NB3 → #865; 2.5 wording accepted",
+      "ratified": null
     }
   ],
   "work": [
