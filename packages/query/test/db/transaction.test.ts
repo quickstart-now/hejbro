@@ -508,6 +508,165 @@ describe("db().transaction (task 4.6)", () => {
 		expect(outcome).toBe(boom);
 	});
 
+	/**
+	 * #449: a statement issued through the `tx` that started an in-flight
+	 * nested transaction lands inside the nested savepoint bracket and
+	 * shares its fate, rolled back with it if the nested callback throws --
+	 * silently, since nothing refuses it today. Every shape below shares
+	 * the same connection as `tx.transaction(a)`; only the first three rows
+	 * are new refusals, the rest are controls that must keep passing.
+	 */
+	describe("a statement beside an in-flight nested transaction is refused (#449)", () => {
+		it("tx.execute is refused, and the nested transaction's own work survives", async () => {
+			const { driver, sessionExecute } = transactionalDriver(true);
+			const handle = db({ posts }, driver);
+
+			await handle.transaction(async (tx) => {
+				const [aOutcome, executeOutcome] = await Promise.all([
+					tx.transaction(async (inner) => {
+						await inner.execute(select(posts));
+						return "a-survived";
+					}),
+					tx.execute(select(posts)).catch((error: unknown) => error),
+				]);
+
+				expect(aOutcome).toBe("a-survived");
+				expect(executeOutcome).toHaveProperty(
+					"code",
+					"statement-during-nested-transaction",
+				);
+			});
+
+			const sql = sessionExecute.mock.calls.map(
+				(call) => (call[0] as { sql: string }).sql,
+			);
+			expect(sql).toEqual([
+				'savepoint "hejbro_sp_1"',
+				expect.stringContaining("select"),
+				'release savepoint "hejbro_sp_1"',
+			]);
+		});
+
+		it("a select chain built before the nested transaction starts is refused at the await, not at construction", async () => {
+			const { driver } = transactionalDriver(true);
+			const handle = db({ posts }, driver);
+
+			await handle.transaction(async (tx) => {
+				const chain = tx.select(posts);
+				// Building refuses nothing -- it sends nothing (task 1.3/Q3d).
+				expect(typeof chain.then).toBe("function");
+				expect(chain.compile()).toBeDefined();
+
+				const [aOutcome, chainOutcome] = await Promise.all([
+					tx.transaction(async (inner) => {
+						await inner.execute(select(posts));
+						return "a-survived";
+					}),
+					Promise.resolve(chain).catch((error: unknown) => error),
+				]);
+
+				expect(aOutcome).toBe("a-survived");
+				expect(chainOutcome).toHaveProperty(
+					"code",
+					"statement-during-nested-transaction",
+				);
+			});
+		});
+
+		it("an insert chain and a with chain are refused the same way", async () => {
+			const { driver } = transactionalDriver(true);
+			const handle = db({ posts }, driver);
+
+			await handle.transaction(async (tx) => {
+				const insertChain = tx
+					.insert(posts)
+					.values({ id: "11111111-1111-1111-1111-111111111111", status: "draft" });
+				const withChain = tx.with((w) => {
+					const ranked = w.as("ranked", select(posts));
+					return select({ id: ranked.id, status: ranked.status }, ranked);
+				});
+
+				const [aOutcome, insertOutcome, withOutcome] = await Promise.all([
+					tx.transaction(async (inner) => {
+						await inner.execute(select(posts));
+						return "a-survived";
+					}),
+					Promise.resolve(insertChain).catch((error: unknown) => error),
+					Promise.resolve(withChain).catch((error: unknown) => error),
+				]);
+
+				expect(aOutcome).toBe("a-survived");
+				expect(insertOutcome).toHaveProperty(
+					"code",
+					"statement-during-nested-transaction",
+				);
+				expect(withOutcome).toHaveProperty(
+					"code",
+					"statement-during-nested-transaction",
+				);
+			});
+		});
+
+		it("two concurrent nested transactions on the same tx still reject with concurrent-nested-transaction (control, #445 unchanged)", async () => {
+			const { driver } = transactionalDriver(true);
+			const handle = db({ posts }, driver);
+
+			await handle.transaction(async (tx) => {
+				const [firstOutcome, secondOutcome] = await Promise.all([
+					tx.transaction(async (inner) => {
+						await inner.execute(select(posts));
+						return "first-survived";
+					}),
+					tx.transaction(async () => {}).catch((error: unknown) => error),
+				]);
+
+				expect(firstOutcome).toBe("first-survived");
+				expect(secondOutcome).toHaveProperty(
+					"code",
+					"concurrent-nested-transaction",
+				);
+			});
+		});
+
+		it("sequential use after a nested transaction settles still runs normally (control)", async () => {
+			const { driver } = transactionalDriver(true);
+			const handle = db({ posts }, driver);
+
+			await handle.transaction(async (tx) => {
+				await tx.transaction(async (inner) => {
+					await inner.execute(select(posts));
+				});
+				await expect(tx.execute(select(posts))).resolves.toEqual([]);
+			});
+		});
+
+		it("the nested callback's own tx sends its own statements normally (control)", async () => {
+			const { driver } = transactionalDriver(true);
+			const handle = db({ posts }, driver);
+
+			await handle.transaction(async (tx) => {
+				await expect(
+					tx.transaction(async (inner) => inner.execute(select(posts))),
+				).resolves.toEqual([]);
+			});
+		});
+
+		it("a nested transaction that throws, caught, still lets the outer tx send afterward (control, existing behavior)", async () => {
+			const { driver } = transactionalDriver(true);
+			const handle = db({ posts }, driver);
+			const boom = new Error("inner failed");
+
+			await handle.transaction(async (tx) => {
+				await tx
+					.transaction(async () => {
+						throw boom;
+					})
+					.catch(() => {});
+				await expect(tx.execute(select(posts))).resolves.toEqual([]);
+			});
+		});
+	});
+
 	it("a nested transaction() call fails fast with nested-transaction-unsupported, before any further send", async () => {
 		const { driver } = transactionalDriver(true);
 		const handle = db({ posts }, driver);

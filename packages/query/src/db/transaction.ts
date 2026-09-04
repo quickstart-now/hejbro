@@ -59,12 +59,25 @@ export type Tx<TSchema = Record<string, unknown>> = ChainApi<TSchema> & {
 };
 
 /**
- * The savepoint counter one transaction's whole `tx` tree shares —
- * monotonic, never per-depth. Depth-keyed names would reuse a name after
- * a sibling rolled back to it (`ROLLBACK TO` keeps the savepoint alive),
- * leaving two live savepoints with one name; a counter cannot.
+ * One transaction's whole `tx` tree shares this state (#449): `next` is
+ * the savepoint counter -- monotonic, never per-depth, since depth-keyed
+ * names would reuse a name after a sibling rolled back to it (`ROLLBACK
+ * TO` keeps the savepoint alive), leaving two live savepoints with one
+ * name; a counter cannot. `innermost` names which `tx` in the tree may
+ * currently send: the outermost `tx`'s own token at rest, reassigned to
+ * a nested transaction's fresh token for the span its callback is in
+ * flight (before its own `SAVEPOINT` is even sent, so a statement raced
+ * against it synchronously never slips through), and restored once that
+ * nested transaction has settled either way.
  */
-export type SavepointCounter = { next: number };
+export type TransactionTree = { next: number; innermost: object };
+
+/** Refuses a statement sent through `token` when it is not `tree`'s own innermost in-flight token (#449) -- only the innermost `tx` of a transaction tree may send while a nested transaction is in flight. */
+function assertInnermost(tree: TransactionTree, token: object): void {
+	if (tree.innermost !== token) {
+		throwStatementDuringNestedTransaction();
+	}
+}
 
 /** Savepoint names are generated here and never caller-supplied, so quoting is belt-and-braces rather than the only defense (contrast `SET LOCAL ROLE` in `context.ts`). */
 const savepointStatement = (verb: string, name: string): CompileResult => ({
@@ -80,6 +93,16 @@ function throwConcurrentNestedTransaction(): never {
 			'transaction() was called on this "tx" while a previous nested transaction started from it is still in flight. Next: await one nested transaction before starting the next on the same "tx" -- concurrent siblings would interleave one SAVEPOINT sequence on a single connection, which can silently discard one sibling\'s work or abort the whole transaction depending on the interleaving.',
 		),
 		{ code: "concurrent-nested-transaction" },
+	);
+}
+
+/** Builds and throws the `statement-during-nested-transaction`-coded error (D57) guarding the shape #449 found: a statement sent through a `tx` that is not the innermost in-flight transaction lands inside that nested transaction's own savepoint bracket and shares its fate -- rolled back with it, silently, if the nested callback throws. */
+function throwStatementDuringNestedTransaction(): never {
+	throw Object.assign(
+		new Error(
+			'a statement was sent through this "tx" while a nested transaction started from it (or from a "tx" above it) is still in flight. Next: issue this statement through the nested callback\'s own "tx" when it belongs to that nested work, or await the nested transaction first when it does not.',
+		),
+		{ code: "statement-during-nested-transaction" },
 	);
 }
 
@@ -186,11 +209,12 @@ async function recoverFromFailedRelease(
 	);
 }
 
-/** Builds the `transaction` member a {@link Tx} carries — one savepoint per call, released on return and rolled back on a throw, guarded against a second nested transaction starting on this same `tx` while one is still in flight (#445/D1). */
+/** Builds the `transaction` member a {@link Tx} carries — one savepoint per call, released on return and rolled back on a throw, guarded against a second nested transaction starting on this same `tx` while one is still in flight (#445/D1). `token` is this `tx`'s own place in `tree` -- restored as `tree.innermost` once the nested transaction settles, so the enclosing `tx` may send again (#449). */
 const createSavepointApi = (
 	session: DriverSession,
 	tables: Declarations["tables"],
-	counter: SavepointCounter,
+	tree: TransactionTree,
+	token: object,
 ): Tx["transaction"] => {
 	const state = { active: false };
 	return (async <T>(callback: (tx: Tx) => Promise<T>): Promise<T> => {
@@ -198,9 +222,15 @@ const createSavepointApi = (
 			throwConcurrentNestedTransaction();
 		}
 		state.active = true;
+		// Reassigned synchronously, before anything is awaited (#449): a
+		// statement racing this call via `Promise.all` runs its own guard in
+		// this same synchronous turn, so it must already see the nested
+		// transaction's token, not the old one, by the time it checks.
+		const childToken = {};
+		tree.innermost = childToken;
 		try {
-			const name = `hejbro_sp_${counter.next}`;
-			counter.next += 1;
+			const name = `hejbro_sp_${tree.next}`;
+			tree.next += 1;
 			await sendCompiled(session, savepointStatement("savepoint", name));
 			// `Promise.resolve().then(...)` (#445 review B1), not a plain
 			// `callback(...)` call: a callback that throws SYNCHRONOUSLY
@@ -211,7 +241,7 @@ const createSavepointApi = (
 			// throw without a second, nested try (and without the `let`
 			// that would otherwise be needed to carry the result out of it).
 			const result = await Promise.resolve()
-				.then(() => callback(buildTx(session, tables, counter)))
+				.then(() => callback(buildTx(session, tables, tree, childToken)))
 				.catch((callbackError: unknown) =>
 					rollbackToSavepoint(session, name, callbackError),
 				);
@@ -225,6 +255,7 @@ const createSavepointApi = (
 			}
 			return result;
 		} finally {
+			tree.innermost = token;
 			state.active = false;
 		}
 	}) as Tx["transaction"];
@@ -245,16 +276,25 @@ const createSavepointApi = (
 export const buildTx = (
 	session: DriverSession,
 	tables: Declarations["tables"],
-	counter: SavepointCounter = { next: 1 },
+	tree: TransactionTree = { next: 1, innermost: {} },
+	token: object = tree.innermost,
 ): Tx => ({
-	...createChainApi(() => (send) => send(session), tables),
+	...createChainApi(
+		() => (send) => {
+			assertInnermost(tree, token);
+			return send(session);
+		},
+		tables,
+	),
 	// executeOn's own runtime return is always the plain DriverRow shape --
 	// this cast is ExecuteResult's compile-time-only narrowing of that same
 	// value, never a distinct runtime reshape (same reasoning as db.ts's own
 	// `executeImpl` cast).
-	execute: ((statement: CompileInput) =>
-		executeOn(session, statement, tables)) as Tx["execute"],
-	transaction: createSavepointApi(session, tables, counter),
+	execute: (async (statement: CompileInput) => {
+		assertInnermost(tree, token);
+		return await executeOn(session, statement, tables);
+	}) as Tx["execute"],
+	transaction: createSavepointApi(session, tables, tree, token),
 });
 
 /** Builds and throws the `nested-transaction-unsupported`-coded, enriched plain `Error` (D57) — a `function` declaration, not `const f = (): never => …` (handoff note, g2/g3). */
