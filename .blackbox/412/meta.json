@@ -392,6 +392,15 @@
       "at": "2026-09-03T00:00Z",
       "title": "Owner input 7",
       "raw": []
+    },
+    {
+      "id": "D8",
+      "by": "owner",
+      "at": "2026-09-04T08:25Z",
+      "title": "After pre.1 ships: polish the bot avatar, then work through the oldest open issues",
+      "raw": [
+        "ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#47"
+      ]
     }
   ],
   "work": [

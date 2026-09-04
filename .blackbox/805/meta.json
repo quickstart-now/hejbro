@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#805",
+  "title": "bot and org avatars: no white badge ring around a square photo",
+  "parent": "quickstart-now/hejbro#412",
+  "status": "open",
+  "opened": "2026-09-04",
+  "closed": null,
+  "decisions": [
+    {
+      "id": "D1",
+      "by": "owner",
+      "at": "2026-09-04T08:25Z",
+      "title": "The bot avatar must not show a square photo floating in a white badge circle",
+      "raw": [
+        "ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#46"
+      ]
+    }
+  ],
+  "work": [],
+  "prs": [],
+  "origin": null,
+  "followUps": []
+}

@@ -404,3 +404,12 @@ _evaluator · 2026-09-04T07:21Z_
 
 AGENTS.md's 'Before claiming done' list names three commands and omits the CI-only check:* scripts, which is why PR #784 went red; deriving the gate list from package.json is the root fix and the ruling itself flags the missing documentation line.
 
+<a id="d8"></a>
+## D8 — After pre.1 ships: polish the bot avatar, then work through the oldest open issues
+
+_owner · 2026-09-04T08:25Z · raw ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#47_
+
+"Once 0.2.0-pre.1 is deployed, let's improve the bot image a bit, and then work through the issues on page 3 of the tracker (the oldest open issues)."
+
+Order after the release, as read by the lead: (1) the avatar polish tracked as #805, (2) the oldest open issues (tracker page 3, sorted newest first) — taken up under this queue, each in its own work item.
+
