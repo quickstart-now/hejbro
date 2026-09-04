@@ -27,6 +27,13 @@
       "title": "Conformance kit classifies by the leading word past a glued semicolon",
       "pr": null,
       "decisions": []
+    },
+    {
+      "id": "W2",
+      "at": "2026-09-04T16:34Z",
+      "title": "Savepoint rollback keeps its optional work/transaction word",
+      "pr": null,
+      "decisions": []
     }
   ],
   "prs": [],

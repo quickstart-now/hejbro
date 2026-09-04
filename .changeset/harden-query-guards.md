@@ -14,9 +14,16 @@ refused with `statement-during-nested-transaction` before it is ever
 sent, instead of landing inside a savepoint bracket it never chose and
 silently rolling back with it. A nested `tx` kept past its own
 callback's return is refused the same way, under `statement-after-nested-transaction`,
-naming the enclosing `tx` as where the statement belongs.
+naming the enclosing `tx` as where the statement belongs. The `tx` a
+top-level `transaction()` callback itself received is refused the same
+way once that transaction has committed or rolled back — under
+`statement-after-transaction` — instead of quietly running its next
+statement on whatever connection the pool hands out next, outside any
+transaction.
 
 The repo-internal driver-conformance kit now classifies a transaction-control
 statement by the word it leads with once a semicolon glued to that word
 is stripped too, matching the driver-contract requirement's own wording
-exactly.
+exactly — including a savepoint rollback's optional `work`/`transaction`
+word, which now keeps the statement ordinary rather than ending the
+transaction.

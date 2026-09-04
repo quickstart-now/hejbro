@@ -193,7 +193,7 @@ documents everything and comes last.
       after `work`/`transaction`. Files:
       `packages/query/src/testing/driver-conformance.ts`, that test.
 
-- [ ] 1.4c (~7m) **[design]** A transaction's own handle refuses after
+- [x] 1.4c (~7m, actual ~5m) **[design]** A transaction's own handle refuses after
       the transaction settled. Found in review: a kept top-level `tx`
       used after `db.transaction` committed ran its statement on the
       next pooled connection, outside any transaction, and committed

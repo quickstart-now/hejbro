@@ -52,6 +52,13 @@
       "title": "Statements beside or after a nested transaction are refused",
       "pr": null,
       "decisions": []
+    },
+    {
+      "id": "W2",
+      "at": "2026-09-04T16:34Z",
+      "title": "A transaction's own handle is refused after it settled",
+      "pr": null,
+      "decisions": []
     }
   ],
   "prs": [],
