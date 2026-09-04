@@ -57,6 +57,15 @@
       "at": "2026-09-04T03:52Z",
       "title": "issue.sh start/close open and close the folder",
       "ratified": null
+    },
+    {
+      "id": "D5",
+      "by": "owner",
+      "at": "2026-09-04T04:48Z",
+      "title": "No test code travels with the vendored tool",
+      "raw": [
+        "ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#1"
+      ]
     }
   ],
   "work": [

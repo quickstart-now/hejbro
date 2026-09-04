@@ -52,3 +52,12 @@ _lead · interpretation · basis D1 · 2026-09-04T03:52Z · ratified: pending_
 
 The owner's local `managing-hejbro-issues` skill already owns the issue lifecycle, so `issue.sh start N` now runs `blackbox new N` when the checkout is a feature branch (and prints the command when on dev/main, where the folder must not be created), and `issue.sh close N` runs `blackbox close N` when the folder is present. Best-effort: a failure there never blocks the issue operation.
 
+<a id="d5"></a>
+## D5 — No test code travels with the vendored tool
+
+_owner · 2026-09-04T04:48Z · raw ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#1_
+
+> Owner: "One more concern — when a repository adopts blackbox through the install, the test code must not come along; doesn't that need a setting?"
+
+Decided (confirmed as already the case): `blackbox init` copies exactly one file, the running `bin/blackbox.mjs`, into `<repo>/.blackbox/bin/`; the test suite stays in the skill repository (`skills/dd-blackbox/test/`) and runs only in agent-skills' CI. No setting is needed because the structure never offers the tests for copying.
+
