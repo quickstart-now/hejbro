@@ -42,6 +42,19 @@
       "at": "2026-09-04T16:12Z",
       "title": "Review: an index compares its whole ordered key list by position, both directions; generated-vs-plain may quote the database default",
       "ratified": null
+    },
+    {
+      "id": "R4",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R1",
+        "R2",
+        "R3"
+      ],
+      "at": "2026-09-04T20:48Z",
+      "title": "ck (c) accepted: constructor review round 3 0/0/21 at fd7c9cfd; rebased onto dev; PR by the lead",
+      "ratified": null
     }
   ],
   "work": [
