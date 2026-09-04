@@ -438,18 +438,24 @@ describe("hejbro reset — live witness (#753, task 1.5)", () => {
 			await writeFixtureFile(cwd, "src/lab.schema.ts", LAB_SCHEMA_SOURCE);
 			await runCli(cwd, ["generate"]);
 
+			// [lead-approved, R88] A single `generate` run can write more
+			// than one migration file (engine/split.ts's own transaction-
+			// boundary condition) -- every `.sql` file this run wrote is
+			// applied, in sorted (chain) order, standing in for "the whole
+			// chain applied without hejbro ever touching the ledger", not
+			// only its first file.
 			const migrationsDir = join(cwd, "migrations");
-			const migrationFile = readdirSync(migrationsDir).find((name) =>
-				name.endsWith(".sql"),
-			);
-			if (migrationFile === undefined) {
-				throw new Error(
-					`expected exactly one migration file in ${migrationsDir}`,
-				);
+			const migrationFiles = readdirSync(migrationsDir)
+				.filter((name) => name.endsWith(".sql"))
+				.sort();
+			if (migrationFiles.length === 0) {
+				throw new Error(`expected at least one migration file in ${migrationsDir}`);
 			}
-			psqlApplySql(
-				database,
-				readFileSync(join(migrationsDir, migrationFile), "utf-8"),
+			migrationFiles.map((migrationFile) =>
+				psqlApplySql(
+					database,
+					readFileSync(join(migrationsDir, migrationFile), "utf-8"),
+				),
 			);
 
 			const refused = await runCli(cwd, ["reset", "--url", hostUrl(database)]);
