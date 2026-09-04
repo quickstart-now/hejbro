@@ -553,7 +553,11 @@ export default defineConfig({
 			readonly label: string;
 			readonly command: "generate" | "verify";
 			readonly setup: (fixtureCwd: string) => Promise<void>;
-			readonly outcome: "refused" | "reads-as-today" | "snapshot-not-found";
+			readonly outcome:
+				| "refused"
+				| "reads-as-today"
+				| "snapshot-not-found"
+				| "invalid-config";
 			readonly expectedPathSubstring?: string;
 		};
 
@@ -587,7 +591,7 @@ export default defineConfig({
 			},
 			{
 				label:
-					'generate, a directory at snapshotPath: "db/state.json/" (trailing separator stripped before the stat)',
+					'generate, a snapshotPath: "db/state.json/" is refused as a spelling fault (#846 D1), never read as a directory',
 				command: "generate",
 				setup: async (fixtureCwd) => {
 					await writeFixtureFile(
@@ -608,12 +612,9 @@ export default defineConfig({
 						"src/app.schema.ts",
 						SCHEMA_SOURCE,
 					);
-					await mkdir(join(fixtureCwd, "db", "state.json"), {
-						recursive: true,
-					});
 				},
-				outcome: "refused",
-				expectedPathSubstring: "db/state.json",
+				outcome: "invalid-config",
+				expectedPathSubstring: "db/state.json/",
 			},
 			{
 				label:
@@ -663,6 +664,15 @@ export default defineConfig({
 					expect(result.exitCode).toBe(1);
 					expect(result.stderr).toContain("error[snapshot-not-found]");
 					expect(result.stderr).toContain("hejbro.snapshot.json");
+					return;
+				}
+				if (outcome === "invalid-config") {
+					expect(result.exitCode).toBe(1);
+					expect(result.stderr).toContain("error[invalid-config]");
+					expect(result.stderr).toContain("snapshotPath");
+					expect(result.stderr).toContain(expectedPathSubstring);
+					expect(result.stderr).toContain("Next:");
+					expect(await hasNoSqlFilesWritten(cwd)).toBe(true);
 					return;
 				}
 				expect(result.exitCode).toBe(1);

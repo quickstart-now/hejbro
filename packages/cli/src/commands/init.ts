@@ -134,20 +134,6 @@ function throwPathConflict(
 }
 
 /** Builds and throws the `init-path-conflict`-coded, enriched plain
- * `HejbroError` for a file artifact whose own configured path is
- * spelled with a trailing slash -- a directory spelling for a field
- * that needs a file, refused before even checking what (if anything)
- * exists there: writing a file to such a path fails with a raw,
- * confusing filesystem error instead of this named one. Names `label`
- * (relative to `cwd`), same reasoning as {@link throwPathConflict}. */
-function throwSpelledAsDirectory(label: string, fieldName: string): never {
-	return throwHejbroError(
-		"init-path-conflict",
-		`"${label}" names a directory (a trailing "/"), but ${fieldName} needs a file. Next: drop the trailing slash from ${fieldName} in hejbro.config.ts, or point it at a file path.`,
-	);
-}
-
-/** Builds and throws the `init-path-conflict`-coded, enriched plain
  * `HejbroError` for a file sitting in a planned artifact's own ancestor
  * chain (D106 R1 N1) -- distinct wording from {@link throwPathConflict}
  * (`to hold ${fieldName}` rather than `for ${fieldName}`) because
@@ -497,22 +483,18 @@ const culpritFor = (cwd: string, artifact: Artifact, code: string): string => {
 };
 
 /** Refuses before creating anything (checked for every planned artifact
- * before any of them is created): a file artifact whose own path is
- * spelled as a directory, or an existing path that is the wrong kind
- * of node for what `artifact` names. init resolves the same way
- * `generate` does and never normalizes the configured value away --
- * a trailing separator on a file field is refused, not trimmed. The
- * presence/kind check itself does strip trailing separators before
- * stat'ing (D106 R1 B1): a directory field honours `"mig/"` the same as
- * `"mig"`, so the check that path is inspected under must too, or a file
- * sitting there escapes it and reaches a raw `mkdirSync` crash instead. */
+ * before any of them is created): an existing path that is the wrong
+ * kind of node for what `artifact` names. init resolves the same way
+ * `generate` does and never normalizes the configured value away. A
+ * `snapshotPath` spelled as a directory never reaches this check at all
+ * (#846 D1): `parseConfig` refuses that spelling when the configuration
+ * is read, before `init` builds any artifact from it. The presence/kind
+ * check itself does strip trailing separators before stat'ing (D106 R1
+ * B1): a directory field honours `"mig/"` the same as `"mig"`, so the
+ * check that path is inspected under must too, or a file sitting there
+ * escapes it and reaches a raw `mkdirSync` crash instead. */
 const checkPathKind = (cwd: string, artifact: Artifact): void => {
 	const expectedKind = expectedKindOf(artifact);
-	if (expectedKind === "file" && artifact.path.endsWith("/")) {
-		// `artifact.label` (`relative()`-derived) has already lost the
-		// trailing slash the message needs to show; `dirLabel` keeps it.
-		throwSpelledAsDirectory(dirLabel(cwd, artifact.path), artifact.fieldName);
-	}
 	const outcome = statOutcomeAt(cwd, stripTrailingSeparators(artifact.path));
 	if (outcome.kind === "absent") {
 		return;

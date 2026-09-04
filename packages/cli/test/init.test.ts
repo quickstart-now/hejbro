@@ -345,7 +345,10 @@ describe("runInit / path-kind conflicts and unconfigured fields (#687)", () => {
 		);
 	});
 
-	it("refuses when a snapshotPath spelled with a trailing slash holds a directory", async () => {
+	// #846 D1: a snapshotPath spelled as a directory is now refused when
+	// the configuration is read (invalid-config), before init ever looks
+	// at what sits on disk -- moved from init-path-conflict.
+	it("refuses a snapshotPath spelled with a trailing slash at config read, before looking at disk", async () => {
 		await writeFile(
 			configPath(),
 			'export default { entry: ["src/**/*.schema.ts"], snapshotPath: "db/" };\n',
@@ -355,10 +358,12 @@ describe("runInit / path-kind conflicts and unconfigured fields (#687)", () => {
 		const result = await runInit(cwd);
 
 		expect(result.exitCode).toBe(1);
-		expect(result.stderr).toContain("error[init-path-conflict]");
+		expect(result.stderr).toContain("error[invalid-config]");
 	});
 
-	it("refuses an empty snapshotPath, which resolves to the project directory itself", async () => {
+	// #846 D1: moved from init-path-conflict -- an empty snapshotPath is
+	// refused at config read, before any artifact is planned.
+	it("refuses an empty snapshotPath at config read, before any artifact is planned", async () => {
 		await writeFile(
 			configPath(),
 			'export default { entry: ["src/**/*.schema.ts"], snapshotPath: "" };\n',
@@ -367,17 +372,17 @@ describe("runInit / path-kind conflicts and unconfigured fields (#687)", () => {
 		const result = await runInit(cwd);
 
 		expect(result.exitCode).toBe(1);
-		expect(result.stderr).toContain("error[init-path-conflict]");
+		expect(result.stderr).toContain("error[invalid-config]");
 		expect(existsSync(join(cwd, "migrations"))).toBe(false);
 	});
 
 	// Regression pin (reviewer-observed on 1bc19b32): an empty relative
-	// label rendered as a bare "" in the refusal, leaving an empty
-	// identifier and an unfollowable "move or remove ... at """ line --
-	// the same D1 "./" fold the report line already applies must reach
-	// the refusal label too.
+	// label used to render as a bare "" in the refusal, leaving an
+	// unfollowable "move or remove ... at """ line. #846 D1 moved both
+	// values to the config-read refusal (invalid-config); the message
+	// never echoes a bare "" and still names an action to take.
 	it.each(["", "."])(
-		"names the project directory as ./ in the refusal, never a bare empty string (snapshotPath: %j)",
+		"refuses at config read without ever printing a bare empty string (snapshotPath: %j)",
 		async (emptyValue) => {
 			await writeFile(
 				configPath(),
@@ -387,12 +392,17 @@ describe("runInit / path-kind conflicts and unconfigured fields (#687)", () => {
 			const result = await runInit(cwd);
 
 			expect(result.exitCode).toBe(1);
-			expect(result.stderr).toContain("./");
+			expect(result.stderr).toContain("error[invalid-config]");
+			expect(result.stderr).toContain("snapshotPath");
+			expect(result.stderr).toContain("Next:");
 			expect(result.stderr).not.toContain('""');
 		},
 	);
 
-	it("refuses a snapshotPath spelled as a directory even when nothing sits there yet", async () => {
+	// #846 D1: moved from init-path-conflict, same reasoning as the row
+	// above -- the spelling is refused at config read regardless of what
+	// (if anything) sits on disk.
+	it("refuses a snapshotPath spelled as a directory at config read even when nothing sits there yet", async () => {
 		await writeFile(
 			configPath(),
 			'export default { entry: ["src/**/*.schema.ts"], snapshotPath: "db/" };\n',
@@ -401,15 +411,16 @@ describe("runInit / path-kind conflicts and unconfigured fields (#687)", () => {
 		const result = await runInit(cwd);
 
 		expect(result.exitCode).toBe(1);
-		expect(result.stderr).toContain("error[init-path-conflict]");
+		expect(result.stderr).toContain("error[invalid-config]");
 		expect(existsSync(join(cwd, "db"))).toBe(false);
 	});
 
-	// Regression pin: before checkPathKind's pre-check, this exact
+	// Regression pin: before this refusal existed, this exact
 	// configuration reached createArtifact's writeFileSync and crashed
 	// with a raw, unformatted ENOENT naming the absolute path -- runInit
-	// now refuses it with the coded diagnostic instead, and that
-	// diagnostic never names an absolute path (D57/Task 14 convention).
+	// now refuses it with the coded diagnostic instead (#846 D1: at
+	// config read, invalid-config), and that diagnostic never names an
+	// absolute path (D57/Task 14 convention).
 	it("this configuration no longer reaches the raw writeFileSync crash, and names no absolute path", async () => {
 		await writeFile(
 			configPath(),
@@ -419,7 +430,7 @@ describe("runInit / path-kind conflicts and unconfigured fields (#687)", () => {
 		const result = await runInit(cwd);
 
 		expect(result.exitCode).toBe(1);
-		expect(result.stderr).toContain("error[init-path-conflict]");
+		expect(result.stderr).toContain("error[invalid-config]");
 		expect(result.stderr).not.toContain("ENOENT");
 		expect(result.stderr).not.toContain(cwd);
 	});
@@ -1433,10 +1444,14 @@ describe("runInit / a planned file that would have to hold another planned path 
 			outcome: "nested-refusal",
 		},
 		{
+			// #846 D1: snapshotPath can no longer be spelled with a trailing
+			// separator at all (refused at config read before this check
+			// runs) -- migrationsDir keeps that spelling, so its own
+			// normalization is still the row's point.
 			label:
-				'migrationsDir: "mig/sub/", snapshotPath: "mig/" (spellings, not strings)',
+				'migrationsDir: "mig/sub/", snapshotPath: "mig" (migrationsDir spelling, not string)',
 			migrationsDir: "mig/sub/",
-			snapshotPath: "mig/",
+			snapshotPath: "mig",
 			onDisk: "nothing",
 			outcome: "nested-refusal",
 		},

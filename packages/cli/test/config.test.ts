@@ -156,7 +156,6 @@ describe("parseConfig", () => {
 				value: "../out/migrations",
 				outcome: "accepted",
 			},
-			{ field: "snapshotPath", value: "", outcome: "accepted" },
 		];
 
 		it.each(rows)(
@@ -180,6 +179,77 @@ describe("parseConfig", () => {
 					expect(error).toMatchObject({ code: "invalid-config" });
 					const message = (error as { message: string }).message;
 					expect(message).toContain(field);
+					expect(message).toContain("Next:");
+					expect(message).not.toContain("/repo/hejbro.config.ts");
+				}
+			},
+		);
+	});
+
+	// #846 NB2/NB6, D1: a snapshotPath spelled as a directory (trailing
+	// separator, empty, or a last segment of "." or "..") used to reach
+	// init's own directory-spelling refusal while the read side stripped
+	// the separator, stat'd a real file underneath, and reported an
+	// unrelated permissions failure -- one configuration, two answers.
+	// Refusing at parse time is shared by every command that reads the
+	// configuration. `migrationsDir` is a directory and keeps every one
+	// of these spellings (D110 input table).
+	describe("parseConfig / a snapshotPath spelled as a directory (#846 D1)", () => {
+		type Row = {
+			readonly field: "migrationsDir" | "snapshotPath";
+			readonly value: string;
+			readonly outcome: "refused" | "accepted";
+		};
+
+		const rows: ReadonlyArray<Row> = [
+			{ field: "snapshotPath", value: "state.json/", outcome: "refused" },
+			{ field: "snapshotPath", value: "db/state.json//", outcome: "refused" },
+			{ field: "snapshotPath", value: "", outcome: "refused" },
+			{ field: "snapshotPath", value: ".", outcome: "refused" },
+			{ field: "snapshotPath", value: "./", outcome: "refused" },
+			{ field: "snapshotPath", value: "..", outcome: "refused" },
+			{ field: "snapshotPath", value: "db/..", outcome: "refused" },
+			{ field: "snapshotPath", value: "state.json", outcome: "accepted" },
+			{
+				field: "snapshotPath",
+				value: "./db/state.json",
+				outcome: "accepted",
+			},
+			{
+				field: "snapshotPath",
+				value: "../up/state.json",
+				outcome: "accepted",
+			},
+			{
+				field: "snapshotPath",
+				value: "a.b/state.json",
+				outcome: "accepted",
+			},
+			{ field: "migrationsDir", value: "mig/", outcome: "accepted" },
+			{ field: "migrationsDir", value: "", outcome: "accepted" },
+		];
+
+		it.each(rows)(
+			"refuses a snapshotPath whose spelling names a directory, naming the field ($field: $value -> $outcome)",
+			({ field, value, outcome }) => {
+				const configValue = {
+					entry: ["src/**/*.schema.ts"],
+					presets: [],
+					[field]: value,
+				};
+				if (outcome === "accepted") {
+					expect(
+						parseConfig(configValue, "/repo/hejbro.config.ts"),
+					).toMatchObject({ [field]: value });
+					return;
+				}
+				try {
+					parseConfig(configValue, "/repo/hejbro.config.ts");
+					throw new Error("expected parseConfig to throw");
+				} catch (error) {
+					expect(error).toMatchObject({ code: "invalid-config" });
+					const message = (error as { message: string }).message;
+					expect(message).toContain("snapshotPath");
 					expect(message).toContain("Next:");
 					expect(message).not.toContain("/repo/hejbro.config.ts");
 				}
