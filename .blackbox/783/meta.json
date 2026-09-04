@@ -63,6 +63,13 @@
       "title": "ledger judged by identity across migrate/status/reset/raise",
       "pr": null,
       "decisions": []
+    },
+    {
+      "id": "W2",
+      "at": "2026-09-04T14:27Z",
+      "title": "review repairs: relkind words, columns clause, unlogged",
+      "pr": null,
+      "decisions": []
     }
   ],
   "prs": [],
