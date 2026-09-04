@@ -45,7 +45,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | [#374](374/) | adversarial spec-only review stage in the opsx cycle | closed | #539 | 1 | 0 (0 pending) |
 | [#377](377/) | snapshot format stability policy for 1.0 | closed | #383 | 1 | 0 (0 pending) |
 | [#378](378/) | defect-leakage metric over escaped defects | closed | #384 | 1 | 0 (0 pending) |
-| [#412](412/) | 0.2.x: post-release commitments | open | #715 #808 #824 | 12 | 26 (0 pending) |
+| [#412](412/) | 0.2.x: post-release commitments | open | #715 #808 #824 #835 | 12 | 26 (0 pending) |
 | ↳ [#528](528/) | driver-conformance kit mis-observes transaction-wrapping session-state:false drivers | closed | #737 #760 | 0 | 6 (0 pending) |
 | ↳ [#531](531/) | pg checkout reads its own setupSession; the spec's late-binding scenario fails for spread decorators | closed | #737 | 0 | 3 (0 pending) |
 | ↳ [#533](533/) | cli restore-command test flakes on first heavy parallel run after install | open | #773 | 0 | 1 (0 pending) |
@@ -65,14 +65,14 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#754](754/) | Nile rejects the schema-qualified column references rendered inside CHECK and partial-index predicates (42622) | closed | #780 #795 #802 | 0 | 4 (0 pending) |
 | ↳ [#755](755/) | check cannot compare CHECK constraints on Nile because Nile has no EXPLAIN | closed | #780 #795 | 0 | 6 (0 pending) |
 | ↳ [#774](774/) | core: diff-engine byIdentity reassembly drops a second same-identity, same-direction change from one kind | closed | #824 #833 | 0 | 1 (1 pending) |
-| ↳ [#783](783/) | reset: a table that merely shares the ledger's name has all its rows deleted and is reported as the cleared ledger | open |  | 0 | 5 (2 pending) |
+| ↳ [#783](783/) | reset: a table that merely shares the ledger's name has all its rows deleted and is reported as the cleared ledger | closed | #835 | 0 | 5 (2 pending) |
 | ↳ [#785](785/) | blackbox v2: per-issue folders under .blackbox, hooks + CI-first gate, shipped by the dd-blackbox script | closed | #786 | 5 | 2 (0 pending) |
 | ↳ [#787](787/) | blackbox: migrate the lead ruling ledger R1–R90 into issue folders (first ratification queue of 0.2.1) | closed | #789 | 0 | 0 (0 pending) |
 | ↳ [#788](788/) | blackbox: migrate the 78 legacy single-file entries into issue folders | closed | #790 | 0 | 0 (0 pending) |
 | ↳ [#791](791/) | blackbox: vendor the tool with the harness wake-up fix (agent-skills #18) | closed | #792 | 0 | 0 (0 pending) |
 | ↳ [#793](793/) | blackbox: first PR pinned by CI over the owner's BLACKBOX_TOKEN | closed | #794 | 2 | 0 (0 pending) |
-| ↳ [#796](796/) | status crashes with a raw stack when a foreign object occupies the ledger's name | open |  | 0 | 0 (0 pending) |
-| ↳ [#797](797/) | reset: a cycle longer than two tables gets the outside-dependent advice | open |  | 0 | 1 (0 pending) |
+| ↳ [#796](796/) | status crashes with a raw stack when a foreign object occupies the ledger's name | closed | #835 | 0 | 0 (0 pending) |
+| ↳ [#797](797/) | reset: a cycle longer than two tables gets the outside-dependent advice | closed | #835 | 0 | 1 (0 pending) |
 | ↳ [#800](800/) | amend D99: notNullElements check renders its column by table, not fully qualified | closed | #822 | 0 | 1 (1 pending) |
 | ↳ [#801](801/) | make the README metric-block stamp merge-safe instead of freezing dev merges | closed | #802 | 0 | 0 (0 pending) |
 | ↳ [#804](804/) | blackbox CI: release PRs run only the release conditions, bot PRs skip the job | closed | #806 | 1 | 0 (0 pending) |
@@ -96,6 +96,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | [#570](570/) | relicense from MIT to Apache License 2.0 (owner decision 2026-08-31) | closed | #571 | 1 | 0 (0 pending) |
 | [#573](573/) | nile preset: measure identity columns and keyless tables on tenant-aware tables (D106 F9) | closed | #578 | 1 | 0 (0 pending) |
 | [#603](603/) | Apply engine (D12 revised): hejbro owns migrate and reset, production included | closed | #628 | 0 | 0 (0 pending) |
+| [#823](823/) | migrate: a failed ledger insert is reported as the migration's failure | open | #835 | 0 | 0 (0 pending) |
 | [#832](832/) | core: category-C keywords fail as argument names but are not refused; the stated class does not match the list | open | #833 | 0 | 0 (0 pending) |
 
 ## Totals
