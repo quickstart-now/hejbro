@@ -30,6 +30,19 @@
       "at": "2026-09-04T15:17Z",
       "title": "harden-query-guards approved; D-1 ADDED requirement for the whole lookup surface; Q1 scoped handle guarded by the same builder",
       "ratified": null
+    },
+    {
+      "id": "R3",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "D1",
+        "R1",
+        "R2"
+      ],
+      "at": "2026-09-04T16:50Z",
+      "title": "Review disposition: passed; 1.2b and 1.4c taken; #845 filed; O1 filed",
+      "ratified": null
     }
   ],
   "work": [

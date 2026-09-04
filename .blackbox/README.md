@@ -71,7 +71,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#766](766/) | init: nested migrationsDir/snapshotPath pass the duplicate check, then generate crashes EISDIR | closed | #840 #847 | 0 | 1 (1 pending) |
 | ↳ [#767](767/) | init: EACCES at mkdir/write surfaces as a raw stack with absolute paths, after a partial create | closed | #840 #847 | 0 | 0 (0 pending) |
 | ↳ [#768](768/) | init: stat-failure refusal's Next: names the missing leaf, not the blocking ancestor | closed | #840 #847 | 0 | 1 (0 pending) |
-| ↳ [#769](769/) | query: createDb(conn).as(ctx) table surface skips the unknown-member guard | open |  | 0 | 2 (0 pending) |
+| ↳ [#769](769/) | query: createDb(conn).as(ctx) table surface skips the unknown-member guard | open |  | 0 | 3 (0 pending) |
 | ↳ [#774](774/) | core: diff-engine byIdentity reassembly drops a second same-identity, same-direction change from one kind | closed | #824 #833 | 0 | 1 (1 pending) |
 | ↳ [#783](783/) | reset: a table that merely shares the ledger's name has all its rows deleted and is reported as the cleared ledger | closed | #835 #838 | 0 | 6 (2 pending) |
 | ↳ [#785](785/) | blackbox v2: per-issue folders under .blackbox, hooks + CI-first gate, shipped by the dd-blackbox script | closed | #786 | 5 | 2 (0 pending) |
@@ -116,7 +116,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 
 ## Totals
 
-Owner decisions 80 · rulings 132 (interpretation 82, extension 48, stop 2) · pending extensions 10 · rejected 2
+Owner decisions 80 · rulings 133 (interpretation 83, extension 48, stop 2) · pending extensions 10 · rejected 2
 
 ## Conventions
 

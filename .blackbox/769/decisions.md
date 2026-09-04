@@ -17,3 +17,10 @@ _lead · interpretation · basis D1, R1 · 2026-09-04T15:17Z · ratified: pendin
 Proposal and delta of `harden-query-guards` approved under the delegation (#412 D12/D13 on dev): `validate --strict` valid; schema-vendoring ADDED 1 (D-1 accepted — no requirement described the name-keyed client's unknown-member guard, so the whole surface, client and scoped handle and `fn`, is stated once as "A lookup of a name the contract does not vendor is refused", the unscoped rows as controls), driver-contract MODIFIED 1, query-execution ADDED 1; D-2 (the #449 guard covers the whole transaction tree and settled nested handles) accepted as Q3b.
 Q1 (#769): (a) the scoped handle's table surface is guarded by the same builder as the client — same code `unknown-contract-table`, same vendored-list message; (b) `scoped.as` is refused like any unknown name (an `undefined` there is the silent shape this change removes); (c) the pass-through list stays (`then`/`toString`/`valueOf`/`constructor`/`toJSON` and symbol keys).
 
+<a id="r3"></a>
+## R3 — Review disposition: passed; 1.2b and 1.4c taken; #845 filed; O1 filed
+
+_lead · interpretation · basis D1, R1, R2 · 2026-09-04T16:50Z · ratified: pending_
+
+Spec-bound review with live PG 17, two rounds (6dde3b13 → c8910936): passed with no blocker in round 1; the two non-blocking items inside this change's purpose were taken (1.2b: `rollback [work|transaction] to savepoint` is a savepoint operation, matching the requirement's own sentence; 1.4c: a settled root `tx` handle is refused with `statement-after-transaction` at every root site and surface — the last door of the #449 invariant), a vendored table named `fn`/`as` masked by the client's members filed as #845; round 2 confirmed both repairs on the wire and found only a tasks.md numbering warning, repaired. Observation O1 (a nested transaction the callback never awaited outlives the root commit and commits its rows alone) is the remaining shape of the same class and is filed for the next query batch. Basis: D13 on dev — what the user wrote must not run silently somewhere else.
+
