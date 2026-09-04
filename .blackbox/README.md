@@ -68,8 +68,8 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#791](791/) | blackbox: vendor the tool with the harness wake-up fix (agent-skills #18) | closed | #792 | 0 | 0 (0 pending) |
 | ↳ [#793](793/) | blackbox: first PR pinned by CI over the owner's BLACKBOX_TOKEN | closed | #794 | 2 | 0 (0 pending) |
 | ↳ [#801](801/) | make the README metric-block stamp merge-safe instead of freezing dev merges | closed | #802 | 0 | 0 (0 pending) |
-| ↳ [#804](804/) | blackbox CI: release PRs run only the release conditions, bot PRs skip the job | open |  | 1 | 0 (0 pending) |
-| ↳ [#805](805/) | bot and org avatars: no white badge ring around a square photo | open |  | 1 | 0 (0 pending) |
+| ↳ [#804](804/) | blackbox CI: release PRs run only the release conditions, bot PRs skip the job | closed | #806 | 1 | 0 (0 pending) |
+| ↳ [#805](805/) | bot and org avatars: no white badge ring around a square photo | open | #806 | 1 | 0 (0 pending) |
 | [#415](415/) | add-set-operations: union/intersect/except | closed | #418 | 1 | 0 (0 pending) |
 | [#416](416/) | add-window-and-aggregates: over(), aggregate functions, group by | closed | #462 | 1 | 0 (0 pending) |
 | [#417](417/) | add-ctes: with, named row sources, recursive | closed | #492 | 0 | 0 (0 pending) |

@@ -19,7 +19,24 @@
     }
   ],
   "work": [],
-  "prs": [],
+  "prs": [
+    {
+      "number": 806,
+      "ref": "quickstart-now/hejbro#806",
+      "title": "ci(blackbox): release check only on release prs, skip the job on bot prs",
+      "head": "37a8eab64ce4f88c0657a8180de4af5134803568",
+      "headRef": "fix-blackbox-release-gate",
+      "base": "dev",
+      "merged": null,
+      "pinnedAt": "2026-09-04T08:26Z",
+      "refs": [
+        {
+          "path": ".github/workflows/ci.yml",
+          "blob": "14f479819d5c77334282c4b00af7e84124c84f23"
+        }
+      ]
+    }
+  ],
   "origin": null,
   "followUps": []
 }
