@@ -138,8 +138,9 @@ import type {
  *   always about the code, not about which package throws it.
  */
 
-const LEDGER_SCHEMA = "hejbro";
-const LEDGER_TABLE = "migration_ledger";
+/** Shared with `ledger-identity.ts`'s probe -- one spelling of the ledger's schema and table name, never a second one assembled elsewhere. */
+export const LEDGER_SCHEMA = "hejbro";
+export const LEDGER_TABLE = "migration_ledger";
 const QUALIFIED_LEDGER_TABLE = `"${LEDGER_SCHEMA}"."${LEDGER_TABLE}"`;
 
 /**
