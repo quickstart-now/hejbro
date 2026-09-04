@@ -32,3 +32,10 @@ Group 1 (b) accepted at 1c8fb17f: 9/9 tasks, every gate green (test 18/18 with h
 5. Out-of-piece observations: (a) "`blackbox index` does not regenerate the root README" — not reproduced by the lead (index rewrote `.blackbox/README.md` at 3437086a during the ck rebase; the conflict case needs the markers removed first) — no issue; (b) the restate fallback's CLI reachability shrank by design — no issue.
 Reviewer summoned: spec-bound over the five deltas, constructor mode for #740 (hand-written vendored contracts, list form and legacy object form, rendered through `createDb`) and #749 (real `create function` and calls on postgres:17-alpine), detached worktree at 1c8fb17f.
 
+<a id="r4"></a>
+## R4 — so (c) accepted at c8f90f5d: review 0/3/17; NB-1/NB-2 filed under #815, corpus to #714; PR by the lead
+
+_lead · interpretation · basis R3, 412/D13 · 2026-09-04T21:54Z · ratified: pending_
+
+(c) accepted at c8f90f5d (d9be6ec9 + one docs commit: the two schema-vendoring WHEN clauses name the hand-edited / foreign-toolchain provenance of a non-identifier key). Constructor review at d9be6ec9: BLOCKING 0 / NON-BLOCKING 3 / OK 17, every gate green in the detached worktree. NB-1 (two update events on one trigger: canonical order not total, but Postgres refuses the SQL) and NB-2 (duplicate set members pass) are pre-existing input-validation gaps outside this delta — filed as follow-ups under #815 (trigger events; policy roles); the corpus candidates went to #714. NB-3 repaired in wording only, no re-review (normative sentences and code unchanged). Lead's next: rebase onto dev after #855 merges, gates, PR (Closes #701 #740 #749), pin, merge, D106.
+

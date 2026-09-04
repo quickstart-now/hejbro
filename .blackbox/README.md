@@ -57,7 +57,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#686](686/) | ctx.return accepts a mutation with no returning() and renders invalid plpgsql | closed | #733 | 0 | 3 (0 pending) |
 | ↳ [#687](687/) | init ignores the configured migrationsDir and snapshotPath | closed | #739 #759 #770 | 0 | 8 (0 pending) |
 | ↳ [#697](697/) | vendored fn guard is count-only and a __proto__ column key loses its column | closed | #739 | 0 | 4 (0 pending) |
-| ↳ [#701](701/) | array order in kind snapshots can produce a semantically empty alter | open |  | 0 | 3 (0 pending) |
+| ↳ [#701](701/) | array order in kind snapshots can produce a semantically empty alter | open |  | 0 | 4 (0 pending) |
 | ↳ [#740](740/) | Vendored contract column order follows JS key order, not the snapshot's physical order | open |  | 0 | 1 (0 pending) |
 | ↳ [#741](741/) | `hejbro init --config <path>` is ignored and scaffolds a competing project | closed | #840 #847 | 0 | 4 (0 pending) |
 | ↳ [#743](743/) | `init` and `generate` name the same file two different ways | closed | #840 #847 | 0 | 1 (1 pending) |
@@ -132,7 +132,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 
 ## Totals
 
-Owner decisions 80 · rulings 146 (interpretation 95, extension 49, stop 2) · pending extensions 11 · rejected 2
+Owner decisions 80 · rulings 147 (interpretation 96, extension 49, stop 2) · pending extensions 11 · rejected 2
 
 ## Conventions
 

@@ -43,6 +43,18 @@
       "at": "2026-09-04T21:29Z",
       "title": "so (b) accepted at 1c8fb17f: restate pins rewritten per the approved delta; per-key canonicalization; reviewer summoned",
       "ratified": null
+    },
+    {
+      "id": "R4",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R3",
+        "412/D13"
+      ],
+      "at": "2026-09-04T21:54Z",
+      "title": "so (c) accepted at c8f90f5d: review 0/3/17; NB-1/NB-2 filed under #815, corpus to #714; PR by the lead",
+      "ratified": null
     }
   ],
   "work": [
