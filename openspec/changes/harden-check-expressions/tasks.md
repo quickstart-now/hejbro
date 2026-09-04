@@ -162,6 +162,23 @@ scenarios of `openspec show harden-check-expressions --diff` hold.
   and method existence-only).
   Files: `packages/cli/src/commands/check.ts`, the two tests, the skill
   reference.
+- [x] 1.11 ~6m — Red: `packages/cli/test/check-catalog.test.ts` "INCLUDE
+  columns are not keys": the pinned `indexes` query bounds the key walk by
+  `indnkeyatts`; plus `packages/cli/test/check-expression.test.ts` "4.2"
+  gains the rows declared `a` vs catalog keys `[a]` (the database's
+  `include (b)` absent from `keys`) → no finding, and declared `a, b` vs
+  catalog keys `[a]` → one `check-object-differs` on the count (one vs
+  two), no probe; and `check-live.integration.test.ts` gains a database
+  index `(a) include (b)` against a declared `on(t.a)` → exit 0, and
+  against `on(t.a, t.b)` → exit 1 with one finding. Also the text-mode
+  boundary line says "index predicates and keys" in place of "index
+  predicates and expression columns" (`check-command.test.ts` 1.6
+  assertion updated), and `skills/hejbro/references/brownfield-adoption.md`
+  no longer cites `.blackbox/` (a flight-recorder path is not a user
+  reference). Green: `k.n <= ix.indnkeyatts` in `catalog.ts`, the
+  boundary constant, the reference sentence.
+  Files: `packages/cli/src/check/catalog.ts`,
+  `packages/cli/src/commands/check.ts`, the three tests, the reference.
 - [x] 1.8 ~6m — Red: none runnable (documentation); the definition of done
   is `openspec validate harden-check-expressions --strict` green and
   `pnpm check:crap`/`pnpm check:tasktime` clean. Green:

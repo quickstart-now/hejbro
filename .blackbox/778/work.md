@@ -50,3 +50,66 @@ Gates: `pnpm check` (clean) · `pnpm check-types` (18/18) · `pnpm check:bans` (
 
 Commits: `c583427d fix(cli): compare an index as an ordered key list` (1.9: catalog.ts keys field, expression.ts compareIndexKeys), `c777a348 test(cli): pin the collation blind spot explain's output drops` (follow-up measurement after 1.9's own commit), `d6ca00a5 fix(cli): every declared index reaches the key comparison` (1.10: filter removed, Docker witness, brownfield-adoption.md).
 
+<a id="w3"></a>
+## W3 — review round 2: include columns are not keys
+
+_2026-09-04T20:21Z_
+
+## Review round 2, B4: a covering index's INCLUDE columns are not keys
+
+### Reproduction (measured, docker postgres:17-alpine)
+- `create index i on t (a) include (b)`: `pg_index.indkey` lists both `a`
+  and `b`, in that order; `pg_index.indnkeyatts` is `1` (only `a` is a
+  real key).
+- Declared `on(t.a)` against that database index, under the pre-fix
+  `unnest(ix.indkey) with ordinality` (unbounded): catalog `keys` reads
+  `[a, b]`, declared reads `[a]` -- reported "1 key(s) vs 2 key(s)",
+  permanently, since hejbro's DSL has no way to declare `INCLUDE` and
+  make the counts agree.
+- Declared `on(t.a, t.b)` against the same database index: catalog
+  `keys` reads `[a, b]`, declared reads `[a, b]` -- counts agree, and
+  position 2 is plain on both sides, so `compareIndexKeys`'s own rule
+  (a plain-plain position is not compared beyond existence) drops it --
+  "no differences", though the database's second key is an `INCLUDE`
+  column, not a real key the index orders by.
+
+### Root cause
+`pg_index.indkey` (an `int2vector`) is documented to list key columns
+first, then `INCLUDE` columns -- `pg_index.indnkeyatts` gives the
+boundary. The pre-fix query walked the whole vector unconditionally.
+
+### Fix
+`catalog.ts`: `where k.n <= ix.indnkeyatts` bounds the
+`unnest(ix.indkey) with ordinality` walk to real keys only, so an
+`INCLUDE` column never reaches `IndexRow.keys` at all -- excluded at the
+catalog boundary, not filtered downstream. `compareIndexKeys` itself is
+unchanged: it already had no notion of `INCLUDE`, and now never sees one.
+
+### Delta and docs
+`spec.md`: "An index is compared as an ordered key list" gains "A
+database index's `INCLUDE` columns are not keys -- they carry no
+ordering and cannot be declared -- so they are neither counted nor
+compared", plus a new scenario pinning both directions (declared `a` vs
+catalog `a` `include (b)` -> no difference; declared `a, b` vs the same
+database index -> one `check-object-differs` on the count, one against
+two). `design.md` records the `indnkeyatts` bound. The text-mode
+coverage-boundary line ("index predicates and expression columns") is
+corrected to "index predicates and keys", matching the ordered-key-list
+model the boundary line has described since round 1.
+`skills/hejbro/references/brownfield-adoption.md` states the `INCLUDE`
+rule and drops its `.blackbox/778/` citation (a flight-recorder path is
+not a user-facing reference).
+
+### Verified
+- Unit: `check-catalog.test.ts` pins `indnkeyatts` in the indexes query
+  text; `check-expression.test.ts` 4.2 gains the two `compareIndexKeys`
+  rows (agrees when INCLUDE excluded; differs one-against-two when a
+  declared key is only ever the INCLUDE column);
+  `check-command.test.ts` 1.6's boundary-line assertion updated.
+- Docker live witness (`check-live.integration.test.ts`, new describe
+  block): hejbro's own DSL cannot declare `INCLUDE`, so the covering
+  column is added with `psql` directly onto a hejbro-generated index --
+  declared `on(t.a)` against `(a) include (b)` exits 0 with no
+  differences; declared `on(t.a, t.b)` against the same database index
+  exits 1 with exactly one `check-object-differs` naming the index.
+
