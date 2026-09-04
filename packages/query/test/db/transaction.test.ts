@@ -937,7 +937,10 @@ describe("db().transaction (task 4.6)", () => {
 			const chainOutcome = await Promise.resolve(settled.select(posts)).catch(
 				(error: unknown) => error,
 			);
-			expect(chainOutcome).toHaveProperty("code", "statement-after-transaction");
+			expect(chainOutcome).toHaveProperty(
+				"code",
+				"statement-after-transaction",
+			);
 
 			const withChain = settled.with((w) => {
 				const ranked = w.as("ranked", select(posts));
@@ -996,7 +999,10 @@ describe("db().transaction (task 4.6)", () => {
 			const chainOutcome = await Promise.resolve(settled.select(posts)).catch(
 				(error: unknown) => error,
 			);
-			expect(chainOutcome).toHaveProperty("code", "statement-after-transaction");
+			expect(chainOutcome).toHaveProperty(
+				"code",
+				"statement-after-transaction",
+			);
 
 			const withChain = settled.with((w) => {
 				const ranked = w.as("ranked", select(posts));

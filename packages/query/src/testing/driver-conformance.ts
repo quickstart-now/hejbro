@@ -159,8 +159,9 @@ const leadingWords = (
 	readonly third: string | undefined;
 } => {
 	const normalized = sql.trim().toLowerCase();
-	const match =
-		/^[\s;]*([^\s;]+)(\s+)?([^\s;]+)?(\s+)?([^\s;]+)?/.exec(normalized);
+	const match = /^[\s;]*([^\s;]+)(\s+)?([^\s;]+)?(\s+)?([^\s;]+)?/.exec(
+		normalized,
+	);
 	if (match === null) {
 		return { first: undefined, second: undefined, third: undefined };
 	}
