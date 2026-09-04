@@ -1,9 +1,61 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { join, relative } from "node:path";
 import { throwHejbroError } from "@hejbro/core";
 import type { HejbroConfig } from "./config";
 import type { ConfigCommand } from "./config-required";
 import { requireConfigFields } from "./config-required";
+import {
+	errorCode,
+	permissionCulpritFor,
+	stripTrailingSeparators,
+} from "./path-probe";
+
+type SnapshotFsOutcome =
+	| { readonly kind: "present" }
+	| { readonly kind: "directory" }
+	| { readonly kind: "absent" }
+	| { readonly kind: "stat-failed"; readonly code: string };
+
+/** `statSync`'s own outcomes at `path` -- a directory kept separate from
+ * "present" (#766 second ask): `existsSync` alone is `true` for a
+ * directory too, and the `readFileSync` that used to follow it died with
+ * a raw `EISDIR`. A stat failure other than `ENOENT` used to rethrow raw
+ * (#767's class); it is now carried as data too (#767 review, D7), coded
+ * by the caller as `snapshot-unreadable`. */
+const snapshotFsOutcome = (path: string): SnapshotFsOutcome => {
+	try {
+		const stat = statSync(path);
+		if (stat.isDirectory()) {
+			return { kind: "directory" };
+		}
+		return { kind: "present" };
+	} catch (error) {
+		const code = errorCode(error);
+		if (code === "ENOENT") {
+			return { kind: "absent" };
+		}
+		return { kind: "stat-failed", code };
+	}
+};
+
+/** The label a stat-failure's `Next:` line names (#767 review, D7): the
+ * directory `path-probe`'s own walk finds blocking the look-up (`init`'s
+ * own rule -- "one fact, one answer on both sides"), or the configured
+ * spelling itself when the walk finds no permission-blocked ancestor (a
+ * non-permission code, or the untested chance the walk doesn't resolve
+ * to one). */
+const ancestorCulpritLabel = (
+	cwd: string,
+	configuredPath: string,
+	strippedFsPath: string,
+	code: string,
+): string => {
+	const culpritPath = permissionCulpritFor(cwd, strippedFsPath, code);
+	if (culpritPath === null) {
+		return configuredPath;
+	}
+	return relative(cwd, culpritPath);
+};
 
 /** Every `.sql` filename in `migrationsDirPath`, sorted — `[]` if the directory doesn't exist. */
 export const listMigrationFiles = (
@@ -40,8 +92,36 @@ export const readSnapshotFileText = (
 	command: ConfigCommand,
 ): string => {
 	const snapshotFsPath = join(cwd, config.snapshotPath);
-	if (existsSync(snapshotFsPath)) {
-		return readFileSync(snapshotFsPath, "utf8");
+	const strippedFsPath = stripTrailingSeparators(snapshotFsPath);
+	const outcome = snapshotFsOutcome(strippedFsPath);
+	if (outcome.kind === "directory") {
+		return throwHejbroError(
+			"snapshot-not-a-file",
+			`"${config.snapshotPath}" is named by snapshotPath, but a directory is there — the snapshot is a file hejbro writes. Next: move or remove that directory, then rerun \`hejbro init\` to scaffold an empty snapshot (or restore the file from version control if migrations already exist).`,
+		);
+	}
+	if (outcome.kind === "stat-failed") {
+		const culprit = ancestorCulpritLabel(
+			cwd,
+			config.snapshotPath,
+			strippedFsPath,
+			outcome.code,
+		);
+		return throwHejbroError(
+			"snapshot-unreadable",
+			`"${config.snapshotPath}" is named by snapshotPath, but it could not be checked (${outcome.code}): "${culprit}" does not let this process look inside it. Next: check permissions on "${culprit}", then rerun.`,
+		);
+	}
+	if (outcome.kind === "present") {
+		try {
+			return readFileSync(snapshotFsPath, "utf8");
+		} catch (error) {
+			const code = errorCode(error);
+			return throwHejbroError(
+				"snapshot-unreadable",
+				`"${config.snapshotPath}" is named by snapshotPath, but this process cannot read it (${code}). Next: check permissions on "${config.snapshotPath}", then rerun.`,
+			);
+		}
 	}
 	requireConfigFields(config, command, ["migrationsDir"]);
 	const migrationsDirPath = join(cwd, config.migrationsDir);

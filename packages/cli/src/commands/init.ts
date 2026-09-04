@@ -1,22 +1,58 @@
 import {
+	accessSync,
+	constants,
 	existsSync,
+	lstatSync,
 	mkdirSync,
+	rmSync,
 	type Stats,
 	statSync,
 	writeFileSync,
 } from "node:fs";
-import { dirname, join, relative } from "node:path";
+import { dirname, isAbsolute, join, relative } from "node:path";
 import { emptySnapshot, renderSnapshot, throwHejbroError } from "@hejbro/core";
 import { defineCommand } from "citty";
 import type { HejbroConfig } from "../config";
 import { fromHejbroError, renderDiagnostics } from "../diagnostics";
 import { asHejbroError } from "../errors";
+import { normalizeEqualsFlags } from "../flags";
 import { identityFromMessage } from "../identity";
-import { loadConfig } from "../loader";
+import { loadConfig, resolveConfigPath } from "../loader";
+import {
+	errorCode,
+	permissionCulpritFor,
+	stripTrailingSeparators,
+	symlinkTargetLabel,
+	walkAncestors,
+} from "../path-probe";
 
 const CONFIG_FILE_NAME = "hejbro.config.ts";
 const DEFAULT_MIGRATIONS_DIR = "migrations";
 const DEFAULT_SNAPSHOT_PATH = "hejbro.snapshot.json";
+
+const INIT_ARGS = {
+	config: {
+		type: "string",
+		description: "path to hejbro.config.ts (default: ./hejbro.config.ts)",
+	},
+} as const;
+
+const lastFlagValue = (
+	rawArgs: ReadonlyArray<string>,
+	flagName: string,
+): string | undefined => {
+	const values = rawArgs.flatMap((token, index) => {
+		if (token !== flagName) {
+			return [];
+		}
+		const value = rawArgs[index + 1];
+		if (value === undefined) {
+			return [];
+		}
+		return [value];
+	});
+	return values.at(-1);
+};
 
 const CONFIG_FILE_CONTENT = `import { defineConfig } from "hejbro";
 
@@ -71,14 +107,6 @@ const kindOfStat = (stat: Stats): NodeKind => {
 	}
 	return "file";
 };
-
-/** A configured path's trailing `/`s dropped before it is stat'd -- POSIX
- * `stat()` on a path spelled with a trailing separator refuses with
- * `ENOTDIR` when the node there is a file (D106 R1 B1), which made
- * `existsSync` report "nothing there" and let a later `mkdirSync` throw a
- * raw, uncoded stack instead of this command's own diagnostic. */
-const stripTrailingSeparators = (path: string): string =>
-	path.replace(/\/+$/, "");
 
 /** Builds and throws the `init-path-conflict`-coded, enriched plain
  * `HejbroError` (lead-approved): a configured path exists but holds the
@@ -158,44 +186,168 @@ function throwDuplicatePath(
 }
 
 /** Builds and throws the `init-path-conflict`-coded, enriched plain
+ * `HejbroError` for a planned file whose own path would have to hold
+ * another planned artifact (#766, D3): a planned file cannot hold a
+ * planned node, and `checkNoDuplicatePaths`'s equality check does not
+ * see containment. Both labels via {@link fileLabel} -- the directory
+ * field's usual trailing-slash label would misstate a path that is
+ * being refused, not created. */
+function throwNestedPathConflict(
+	fileNodeLabel: string,
+	fileFieldName: string,
+	otherLabel: string,
+	otherFieldName: string,
+): never {
+	return throwHejbroError(
+		"init-path-conflict",
+		`"${fileNodeLabel}" is named by ${fileFieldName}, and ${otherFieldName} ("${otherLabel}") would have to be created inside it — a file cannot hold a directory. Next: point ${fileFieldName} at a file outside ${otherFieldName}, then rerun \`hejbro init\`.`,
+	);
+}
+
+/** Builds and throws the `init-path-conflict`-coded, enriched plain
  * `HejbroError` for a `stat` failure other than "nothing is there"
  * (D106 R1 B1) -- an `EACCES`/`ELOOP`/etc, named by the operating
  * system's own code instead of the raw Node stack this CLI's
- * diagnostics never print (D57). */
+ * diagnostics never print (D57). `culprit` is the node whose permissions
+ * actually block the check (#768, D4) -- equal to `label` for every
+ * non-permission failure, which keeps today's one-sentence wording;
+ * different from it only when a permission failure was traced to an
+ * ancestor, which adds the sentence naming that ancestor. `stat`'s
+ * `EACCES` is always a directory on the way, never the leaf. The
+ * non-permission branch's own `Next:` names what the failing node
+ * *points at*, not its permissions (#767 review, D8 non-blocking 3): a
+ * loop (`ELOOP`) is never a permission problem. */
 function throwStatFailed(
 	label: string,
 	fieldName: string,
 	code: string,
+	culprit: string,
 ): never {
+	if (culprit === label) {
+		return throwHejbroError(
+			"init-path-conflict",
+			`"${label}" could not be checked for ${fieldName} (${code}). Next: check what "${label}" points at, then rerun \`hejbro init\`.`,
+		);
+	}
 	return throwHejbroError(
 		"init-path-conflict",
-		`"${label}" could not be checked for ${fieldName} (${code}). Next: check permissions on "${label}", then rerun \`hejbro init\`.`,
+		`"${label}" could not be checked for ${fieldName} (${code}): "${culprit}" does not let this process look inside it. Next: check permissions on "${culprit}", then rerun \`hejbro init\`.`,
 	);
 }
 
-/** The operating system's own error code off a caught `fs` failure, or
- * `"unknown"` when the thrown value carries none -- never the raw error
- * object, which a diagnostic must not print (D57). */
-const errorCode = (error: unknown): string => {
-	if (error !== null && typeof error === "object" && "code" in error) {
-		return String((error as NodeJS.ErrnoException).code);
+/** Builds and throws the `init-path-conflict`-coded, enriched plain
+ * `HejbroError` for an absent artifact whose deepest existing ancestor
+ * denies this process permission to *write* into it (#767 review, D6
+ * check side) -- distinct wording from {@link throwStatFailed} (`cannot
+ * be created for` / `write into it`, not `could not be checked for` /
+ * `look inside it`): the stat pass proves the tree's shape, not that
+ * this process may add to it. */
+function throwNotWritable(
+	label: string,
+	fieldName: string,
+	code: string,
+	culprit: string,
+): never {
+	return throwHejbroError(
+		"init-path-conflict",
+		`"${label}" cannot be created for ${fieldName} (${code}): "${culprit}" does not let this process write into it. Next: check permissions on "${culprit}", then rerun \`hejbro init\`.`,
+	);
+}
+
+/** Builds and throws the `init-path-conflict`-coded, enriched plain
+ * `HejbroError` for a creation that fails for a reason other than
+ * permissions (#767 review, D6 create side) -- `ENOSPC`, `EDQUOT`, etc.
+ * Names the node the operating system itself named, since there is no
+ * ancestor to blame the way {@link throwNotWritable} does. */
+function throwCreateDiskFailed(
+	label: string,
+	fieldName: string,
+	code: string,
+	path: string,
+): never {
+	return throwHejbroError(
+		"init-path-conflict",
+		`"${label}" cannot be created for ${fieldName} (${code}): "${path}" refused it. Next: check the disk and permissions at "${path}", then rerun \`hejbro init\`.`,
+	);
+}
+
+/** Builds and throws the `init-path-conflict`-coded, enriched plain
+ * `HejbroError` for a dangling symbolic link at an artifact's own leaf
+ * (#767 review, D8): `statSync` follows a link, so a dangling one reads
+ * as absent and a write would go straight through it to a target the
+ * report never named. Judged by what it points at, not treated as
+ * absent. */
+function throwDanglingLink(
+	label: string,
+	fieldName: string,
+	expectedKind: NodeKind,
+	target: string,
+): never {
+	return throwHejbroError(
+		"init-path-conflict",
+		`"${label}" was expected to be a ${expectedKind} for ${fieldName}, but a dangling symbolic link is there, pointing at "${target}". Next: remove the link or create its target, then rerun \`hejbro init\`.`,
+	);
+}
+
+/** Builds and throws the `init-path-conflict`-coded, enriched plain
+ * `HejbroError` for a dangling symbolic link sitting in a planned
+ * artifact's own ancestor chain (#767 review, D8) -- distinct wording
+ * from {@link throwDanglingLink}, same reasoning as
+ * {@link throwAncestorConflict} vs {@link throwPathConflict}. */
+function throwAncestorDanglingLink(
+	label: string,
+	fieldName: string,
+	target: string,
+): never {
+	return throwHejbroError(
+		"init-path-conflict",
+		`"${label}" was expected to be a directory to hold ${fieldName}, but a dangling symbolic link is there, pointing at "${target}". Next: remove the link or create its target, then rerun \`hejbro init\`.`,
+	);
+}
+
+/** The operating system's own `path` off a caught `fs` failure, or
+ * `fallback` when the thrown value carries none (#767 review, D6 create
+ * side) -- never the raw error object (D57). */
+const errorPath = (error: unknown, fallback: string): string => {
+	if (error !== null && typeof error === "object" && "path" in error) {
+		const path = (error as NodeJS.ErrnoException).path;
+		if (typeof path === "string") {
+			return path;
+		}
 	}
-	return "unknown";
+	return fallback;
 };
 
 type StatOutcome =
 	| { readonly kind: "absent" }
 	| { readonly kind: "present"; readonly actualKind: NodeKind }
+	| { readonly kind: "dangling"; readonly target: string }
 	| { readonly kind: "stat-failed"; readonly code: string };
 
-/** `stat`'s own three outcomes at `path` (already trailing-separator-
- * stripped by the caller, D106 R1 B1): the node's kind, "nothing is
- * there" (`ENOENT` only), or any other failure, carried as data instead
- * of being decided by a bare `existsSync` that a trailing separator can
- * make silently `false` for a file that is really there. */
-const statOutcomeAt = (path: string): StatOutcome => {
+/** `stat`'s own outcomes at `path` (already trailing-separator-stripped
+ * by the caller, D106 R1 B1): the node's kind, "nothing is there"
+ * (`ENOENT` only), a dangling symbolic link (#767 review, D8 -- `stat`
+ * follows a link and a dangling one also fails `ENOENT`, indistinguish-
+ * able from "nothing there" without `lstat`ing first), or any other
+ * failure. `lstat`s first: a non-link node's `lstat` already carries its
+ * kind, so only a link needs the second, following `stat`. Carried as
+ * data instead of being decided by a bare `existsSync` that a trailing
+ * separator can make silently `false` for a file that is really there. */
+const statOutcomeAt = (cwd: string, path: string): StatOutcome => {
 	try {
-		return { kind: "present", actualKind: kindOfStat(statSync(path)) };
+		const lstat = lstatSync(path);
+		if (!lstat.isSymbolicLink()) {
+			return { kind: "present", actualKind: kindOfStat(lstat) };
+		}
+		try {
+			return { kind: "present", actualKind: kindOfStat(statSync(path)) };
+		} catch (error) {
+			const code = errorCode(error);
+			if (code === "ENOENT") {
+				return { kind: "dangling", target: symlinkTargetLabel(cwd, path) };
+			}
+			return { kind: "stat-failed", code };
+		}
 	} catch (error) {
 		const code = errorCode(error);
 		if (code === "ENOENT") {
@@ -205,69 +357,40 @@ const statOutcomeAt = (path: string): StatOutcome => {
 	}
 };
 
-type AncestorOutcome =
-	| { readonly kind: "ok" }
-	| {
-			readonly kind: "conflict";
-			readonly path: string;
-			readonly actualKind: NodeKind;
-	  }
-	| {
-			readonly kind: "stat-failed";
-			readonly path: string;
-			readonly code: string;
-	  };
-
-/** Walks `path`'s own chain of parents upward (never `path` itself --
- * callers pass an artifact's `dirname`), continuing past both `ENOENT`
- * ("nothing there yet") and `ENOTDIR` (a `stat` below a file ancestor
- * fails this way too, D106 R1 N1 -- stopping there instead of
- * continuing up would name the deepest segment tried, not the file
- * actually blocking the chain) until a `stat` succeeds. Recursive,
- * never a loop (`check:bans`); `dirname` of the filesystem root is
- * itself, which ends the recursion even in the case nothing on the way
- * up ever exists. */
-const walkAncestors = (path: string): AncestorOutcome => {
-	try {
-		const stat = statSync(path);
-		if (stat.isDirectory()) {
-			return { kind: "ok" };
-		}
-		return { kind: "conflict", path, actualKind: "file" };
-	} catch (error) {
-		const code = errorCode(error);
-		if (code === "ENOENT" || code === "ENOTDIR") {
-			const parent = dirname(path);
-			if (parent === path) {
-				return { kind: "ok" };
-			}
-			return walkAncestors(parent);
-		}
-		return { kind: "stat-failed", path, code };
-	}
-};
-
 /** Refuses before creating anything: a file sitting somewhere in a
  * planned artifact's own directory chain, not just at its leaf
- * (D106 R1 N1). Runs before {@link checkPathKind}: a leaf whose own
- * `stat` also fails with `ENOTDIR` (because an ancestor, not the leaf,
- * is the file) is named here by the ancestor that actually blocks it,
- * instead of by the leaf with a bare OS code. Labelled with
+ * (D106 R1 N1), or a directory on the way that denies this process
+ * permission to look inside it (#768, D4). Runs before
+ * {@link checkPathKind}: a leaf whose own `stat` also fails with
+ * `ENOTDIR`/`EACCES` (because an ancestor, not the leaf, is the file or
+ * the blocked directory) is named here by the ancestor that actually
+ * blocks it, instead of by the leaf with a bare OS code. Labelled with
  * {@link fileLabel} (no trailing separator, D106 R1 lead-approved
  * option A extended to ancestors): unlike a leaf's own field, no user
  * ever spelled this path with a trailing slash for this function to
  * preserve -- it is derived from a nested field's own value, so both
  * the quote and the `Next:` clause name the one real path. */
 const checkAncestors = (cwd: string, artifact: Artifact): void => {
-	const outcome = walkAncestors(dirname(artifact.path));
+	const outcome = walkAncestors(cwd, dirname(artifact.path));
 	if (outcome.kind === "ok") {
 		return;
+	}
+	if (outcome.kind === "blocked") {
+		throwStatFailed(
+			artifact.label,
+			artifact.fieldName,
+			outcome.code,
+			fileLabel(cwd, outcome.culprit),
+		);
 	}
 	const label = fileLabel(cwd, outcome.path);
 	if (outcome.kind === "conflict") {
 		throwAncestorConflict(label, artifact.fieldName, outcome.actualKind);
 	}
-	throwStatFailed(label, artifact.fieldName, outcome.code);
+	if (outcome.kind === "dangling") {
+		throwAncestorDanglingLink(label, artifact.fieldName, outcome.target);
+	}
+	throwStatFailed(label, artifact.fieldName, outcome.code, label);
 };
 
 type ArtifactPair = readonly [Artifact, Artifact];
@@ -305,6 +428,74 @@ const checkNoDuplicatePaths = (
 	);
 };
 
+/** Whether `filePath` (a planned file artifact's own path, separator-
+ * stripped) is a strict ancestor of `otherPath` (also stripped): a
+ * planned file cannot hold a planned node, and the equality check above
+ * does not see containment (#766, D3). `relative` returning a segment
+ * that neither escapes (`..`) nor is itself absolute means `otherPath`
+ * sits somewhere inside `filePath`. */
+const isStrictAncestor = (filePath: string, otherPath: string): boolean => {
+	const rel = relative(
+		stripTrailingSeparators(filePath),
+		stripTrailingSeparators(otherPath),
+	);
+	return rel !== "" && !isAbsolute(rel) && !rel.startsWith("..");
+};
+
+type NestedConflict = { readonly file: Artifact; readonly other: Artifact };
+
+/** `pair` labelled as a nested conflict when either side is a file
+ * artifact whose own path would have to hold the other's -- checked in
+ * both orientations, since `artifactPairs` fixes no kind to either
+ * position. */
+const nestedConflictIn = (pair: ArtifactPair): NestedConflict | null => {
+	const [a, b] = pair;
+	if (a.kind === "file" && isStrictAncestor(a.path, b.path)) {
+		return { file: a, other: b };
+	}
+	if (b.kind === "file" && isStrictAncestor(b.path, a.path)) {
+		return { file: b, other: a };
+	}
+	return null;
+};
+
+/** Refuses before creating anything, and before any disk-based check
+ * (D3, lead ruling): a planned file that would have to hold another
+ * planned path is a fault in the configuration itself, so it answers
+ * whatever already sits on disk -- the same priority the duplicate
+ * check above already gives an equal-path fault over a wrong-kind one. */
+const checkNoNestedPaths = (
+	cwd: string,
+	artifacts: ReadonlyArray<Artifact>,
+): void => {
+	const conflict = artifactPairs(artifacts)
+		.map(nestedConflictIn)
+		.find((candidate): candidate is NestedConflict => candidate !== null);
+	if (conflict === undefined) {
+		return;
+	}
+	throwNestedPathConflict(
+		fileLabel(cwd, conflict.file.path),
+		conflict.file.fieldName,
+		fileLabel(cwd, conflict.other.path),
+		conflict.other.fieldName,
+	);
+};
+
+/** The node whose permissions actually block a leaf's own failed `stat`
+ * (#768, D4), labelled -- the walk itself is `path-probe`'s
+ * {@link permissionCulpritFor} (#767 review, D7: shared with
+ * `snapshot-file.ts`); `artifact.label` itself when there is no walked
+ * culprit (a non-permission code, or the untested chance the walk
+ * doesn't resolve to one). */
+const culpritFor = (cwd: string, artifact: Artifact, code: string): string => {
+	const culpritPath = permissionCulpritFor(cwd, artifact.path, code);
+	if (culpritPath === null) {
+		return artifact.label;
+	}
+	return fileLabel(cwd, culpritPath);
+};
+
 /** Refuses before creating anything (checked for every planned artifact
  * before any of them is created): a file artifact whose own path is
  * spelled as a directory, or an existing path that is the wrong kind
@@ -322,12 +513,25 @@ const checkPathKind = (cwd: string, artifact: Artifact): void => {
 		// trailing slash the message needs to show; `dirLabel` keeps it.
 		throwSpelledAsDirectory(dirLabel(cwd, artifact.path), artifact.fieldName);
 	}
-	const outcome = statOutcomeAt(stripTrailingSeparators(artifact.path));
+	const outcome = statOutcomeAt(cwd, stripTrailingSeparators(artifact.path));
 	if (outcome.kind === "absent") {
 		return;
 	}
+	if (outcome.kind === "dangling") {
+		throwDanglingLink(
+			artifact.label,
+			artifact.fieldName,
+			expectedKind,
+			outcome.target,
+		);
+	}
 	if (outcome.kind === "stat-failed") {
-		throwStatFailed(artifact.label, artifact.fieldName, outcome.code);
+		throwStatFailed(
+			artifact.label,
+			artifact.fieldName,
+			outcome.code,
+			culpritFor(cwd, artifact, outcome.code),
+		);
 	}
 	if (outcome.kind === "present" && outcome.actualKind !== expectedKind) {
 		throwPathConflict(
@@ -337,6 +541,39 @@ const checkPathKind = (cwd: string, artifact: Artifact): void => {
 			outcome.actualKind,
 		);
 	}
+};
+
+/** Refuses before creating anything (#767 review, D6 check side; runs
+ * after the kind/ancestor pass, over every planned artifact): an absent
+ * artifact whose deepest existing ancestor (the node `walkAncestors`
+ * stops at) denies this process permission to write into it. The stat
+ * pass above proves the tree's shape, not that this process may add to
+ * it. An artifact already present is never checked -- it will be
+ * skipped, not created. */
+const checkWritable = (
+	cwd: string,
+	artifacts: ReadonlyArray<Artifact>,
+): void => {
+	artifacts.forEach((artifact) => {
+		if (existsSync(artifact.path)) {
+			return;
+		}
+		const outcome = walkAncestors(cwd, dirname(artifact.path));
+		if (outcome.kind !== "ok") {
+			// Already refused by checkAncestors, above -- unreachable.
+			return;
+		}
+		try {
+			accessSync(outcome.path, constants.W_OK);
+		} catch (error) {
+			throwNotWritable(
+				artifact.label,
+				artifact.fieldName,
+				errorCode(error),
+				fileLabel(cwd, outcome.path),
+			);
+		}
+	});
 };
 
 const createArtifact = (artifact: Artifact): void => {
@@ -350,12 +587,123 @@ const createArtifact = (artifact: Artifact): void => {
 	writeFileSync(artifact.path, artifact.content);
 };
 
-const applyArtifact = (artifact: Artifact): string => {
-	if (existsSync(artifact.path)) {
-		return `skipped ${artifact.label} (exists)`;
+/** The first node this run's own creation of `artifact` would add
+ * (#767 review, D6 create side): the deepest existing ancestor (from
+ * {@link walkAncestors}'s own "ok" outcome, already proven writable by
+ * {@link checkWritable}) joined with the next path segment on the way
+ * to `artifact.path` -- computed before creating anything, since a
+ * `mkdirSync(recursive)` that fails part-way reports nothing about
+ * which segments it made. That single node is what a rollback removes:
+ * `rmSync(..., { recursive: true })` clears everything under it. */
+const firstNodeToCreate = (cwd: string, artifact: Artifact): string => {
+	const outcome = walkAncestors(cwd, dirname(artifact.path));
+	if (outcome.kind !== "ok") {
+		// Already refused by checkAncestors/checkWritable -- unreachable.
+		return artifact.path;
 	}
-	createArtifact(artifact);
-	return `created ${artifact.label}`;
+	const remainder = relative(outcome.path, artifact.path);
+	const firstSegment = remainder.split("/")[0] ?? remainder;
+	return join(outcome.path, firstSegment);
+};
+
+/** Builds and throws the coded failure for a creation that still fails
+ * after every check (#767 review, D6 create side): `access` can be
+ * wrong (ACLs, immutable flags, a disk that fills, a race), so the
+ * create step is the one place a failure can still surface raw. For
+ * `EACCES`/`EPERM` the culprit is the directory that refused the write
+ * -- `dirname(error.path)` -- in {@link throwNotWritable}'s own
+ * sentence; any other code names `error.path` itself through
+ * {@link throwCreateDiskFailed}. */
+const throwCreateFailed = (
+	cwd: string,
+	artifact: Artifact,
+	error: unknown,
+): never => {
+	const code = errorCode(error);
+	const rawPath = errorPath(error, artifact.path);
+	if (code === "EACCES" || code === "EPERM") {
+		throwNotWritable(
+			artifact.label,
+			artifact.fieldName,
+			code,
+			fileLabel(cwd, dirname(rawPath)),
+		);
+	}
+	throwCreateDiskFailed(
+		artifact.label,
+		artifact.fieldName,
+		code,
+		fileLabel(cwd, rawPath),
+	);
+};
+
+/** Removes every node this run created, deepest (most recently created)
+ * first (#767 review, D6 create side) -- `force: true` makes removing a
+ * node that was never actually created (the check-side `access` proved
+ * wrong before anything reached disk) a silent no-op rather than a
+ * second error hiding the first. */
+const rollbackCreated = (created: ReadonlyArray<string>): void => {
+	[...created].reverse().forEach((path) => {
+		rmSync(path, { recursive: true, force: true });
+	});
+};
+
+/** One line of `runInit`'s report: either a fixed line (a field the
+ * configuration was silent about) or a planned artifact to apply. */
+type ReportStep =
+	| { readonly kind: "fixed"; readonly line: string }
+	| { readonly kind: "artifact"; readonly artifact: Artifact };
+
+const reportStepFor = (
+	artifact: Artifact | null,
+	notConfiguredLine: string,
+): ReportStep => {
+	if (artifact === null) {
+		return { kind: "fixed", line: notConfiguredLine };
+	}
+	return { kind: "artifact", artifact };
+};
+
+/** The apply pass's own running state: the report built so far, and
+ * every node *this run* has created (#767 review, D6 create side) -- an
+ * artifact found already present never joins `created`, so a rollback
+ * never removes something the run didn't make. */
+type ApplyState = {
+	readonly report: ReadonlyArray<string>;
+	readonly created: ReadonlyArray<string>;
+};
+
+/** Applies one `ReportStep` against `state`, returning the next state --
+ * `runInit`'s own `reduce` step (#767 review, D6 create side; never a
+ * loop, `check:bans`). On a creation that still fails, rolls back every
+ * node accumulated in `state.created` *and* this step's own first node
+ * (a partially-made `mkdirSync(recursive)` tree included) before
+ * throwing the coded failure -- a refused run leaves the project as it
+ * found it. */
+const applyStep = (
+	cwd: string,
+	state: ApplyState,
+	step: ReportStep,
+): ApplyState => {
+	if (step.kind === "fixed") {
+		return { report: [...state.report, step.line], created: state.created };
+	}
+	const { artifact } = step;
+	if (existsSync(artifact.path)) {
+		return {
+			report: [...state.report, `skipped ${artifact.label} (exists)`],
+			created: state.created,
+		};
+	}
+	const firstNode = firstNodeToCreate(cwd, artifact);
+	const created = [...state.created, firstNode];
+	try {
+		createArtifact(artifact);
+	} catch (error) {
+		rollbackCreated(created);
+		throwCreateFailed(cwd, artifact, error);
+	}
+	return { report: [...state.report, `created ${artifact.label}`], created };
 };
 
 /** A directory's report label carries exactly one trailing slash (D1),
@@ -410,15 +758,20 @@ const resolveField = (
 	return { kind: "resolved", path: join(cwd, value) };
 };
 
-/** `null` when no `hejbro.config.ts` sits at `cwd` -- the only case `runInit` scaffolds at the default paths (D3). */
+/** `null` when nothing sits at `configFilePath` -- the only case `runInit`
+ * scaffolds at the default paths (D3). `configFlag` is passed through to
+ * `loadConfig` unchanged (#741, D1): it resolves the same path a second
+ * time internally, which is the one resolver (`resolveConfigPath`) every
+ * command shares, never a second one. */
 const readExistingConfig = async (
 	cwd: string,
 	configFilePath: string,
+	configFlag: string | undefined,
 ): Promise<HejbroConfig | null> => {
 	if (!existsSync(configFilePath)) {
 		return null;
 	}
-	const { config } = await loadConfig(cwd, undefined);
+	const { config } = await loadConfig(cwd, configFlag);
 	return config;
 };
 
@@ -453,19 +806,6 @@ const buildSnapshotArtifact = (
 	};
 };
 
-/** `applyArtifact`'s report line for a field's own artifact, or the
- * "not configured" line when the configuration was silent about it
- * (there is no artifact to apply in that case). */
-const reportLineFor = (
-	artifact: Artifact | null,
-	notConfiguredLine: string,
-): string => {
-	if (artifact === null) {
-		return notConfiguredLine;
-	}
-	return applyArtifact(artifact);
-};
-
 /**
  * `hejbro init` (decision U7, extended #687): scaffolds `hejbro.config.ts`
  * (via `defineConfig`, with the documented defaults), the migrations
@@ -483,15 +823,19 @@ const reportLineFor = (
  * exits 0 on success, so it doubles as a safe "repair missing pieces"
  * command.
  */
-export const runInit = async (cwd: string): Promise<InitResult> => {
+export const runInit = async (
+	cwd: string,
+	rawArgs: ReadonlyArray<string> = [],
+): Promise<InitResult> => {
 	const fallbackIdentity = "init";
-	const configFilePath = join(cwd, CONFIG_FILE_NAME);
+	const configFlag = lastFlagValue(normalizeEqualsFlags(rawArgs), "--config");
+	const configFilePath = resolveConfigPath(cwd, configFlag);
 	const configArtifact: Artifact = {
 		kind: "file",
-		label: CONFIG_FILE_NAME,
+		label: fileLabel(cwd, configFilePath),
 		path: configFilePath,
 		content: CONFIG_FILE_CONTENT,
-		fieldName: "hejbro.config.ts",
+		fieldName: CONFIG_FILE_NAME,
 	};
 	try {
 		// The configuration's own kind is checked before it is loaded
@@ -500,7 +844,7 @@ export const runInit = async (cwd: string): Promise<InitResult> => {
 		// the loader would otherwise answer first, with a config-load-
 		// failed diagnostic about import resolution instead of this one.
 		checkPathKind(cwd, configArtifact);
-		const config = await readExistingConfig(cwd, configFilePath);
+		const config = await readExistingConfig(cwd, configFilePath, configFlag);
 		const configPresent = config !== null;
 		const migrationsField = resolveField(
 			cwd,
@@ -533,16 +877,22 @@ export const runInit = async (cwd: string): Promise<InitResult> => {
 			snapshotArtifact,
 		].filter((artifact): artifact is Artifact => artifact !== null);
 		checkNoDuplicatePaths(cwd, plannedArtifacts);
+		checkNoNestedPaths(cwd, plannedArtifacts);
 		plannedArtifacts.forEach((artifact) => {
 			checkAncestors(cwd, artifact);
 			checkPathKind(cwd, artifact);
 		});
+		checkWritable(cwd, plannedArtifacts);
 
-		const report = [
-			applyArtifact(configArtifact),
-			reportLineFor(migrationsArtifact, "migrationsDir not configured"),
-			reportLineFor(snapshotArtifact, "snapshotPath not configured"),
+		const reportSteps: ReadonlyArray<ReportStep> = [
+			{ kind: "artifact", artifact: configArtifact },
+			reportStepFor(migrationsArtifact, "migrationsDir not configured"),
+			reportStepFor(snapshotArtifact, "snapshotPath not configured"),
 		];
+		const { report } = reportSteps.reduce<ApplyState>(
+			(state, step) => applyStep(cwd, state, step),
+			{ report: [], created: [] },
+		);
 		return { report, exitCode: 0, stderr: null };
 	} catch (error) {
 		const hejbroError = asHejbroError(error);
@@ -565,8 +915,9 @@ export const initCommand = defineCommand({
 		description:
 			"Scaffold hejbro.config.ts, the migrations directory, and an empty snapshot file.",
 	},
-	run: async () => {
-		const result = await runInit(process.cwd());
+	args: INIT_ARGS,
+	run: async (ctx) => {
+		const result = await runInit(process.cwd(), ctx.rawArgs);
 		result.report.map((line) => console.log(line));
 		if (result.stderr !== null) {
 			console.error(result.stderr);

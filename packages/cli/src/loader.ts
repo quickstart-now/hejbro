@@ -81,7 +81,7 @@ const importOrDiagnose = async <T>(
 
 const DEFAULT_CONFIG_FILE_NAME = "hejbro.config.ts";
 
-const resolveConfigPath = (
+export const resolveConfigPath = (
 	cwd: string,
 	configFlag: string | undefined,
 ): string => {

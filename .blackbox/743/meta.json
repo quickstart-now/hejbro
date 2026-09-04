@@ -1,0 +1,116 @@
+{
+  "version": 1,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#743",
+  "title": "`init` and `generate` name the same file two different ways",
+  "parent": "quickstart-now/hejbro#412",
+  "status": "closed",
+  "opened": "2026-09-04",
+  "closed": "2026-09-04",
+  "decisions": [
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "D1"
+      ],
+      "at": "2026-09-04T13:07Z",
+      "title": "D2: an absolute-looking artifact path is refused with invalid-config; the re-rooting scenario is retired as REMOVED + ADDED",
+      "ratified": null
+    }
+  ],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-04T14:11Z",
+      "title": "absolute-looking artifact paths refused at parse",
+      "pr": null,
+      "decisions": []
+    }
+  ],
+  "prs": [
+    {
+      "number": 840,
+      "ref": "quickstart-now/hejbro#840",
+      "title": "fix(cli): init honours --config, refuses bad paths, undoes partial creates (#741 #743 #766 #767 #768)",
+      "head": "1e943512070c8783e7c1edaf0e196aaf8335e011",
+      "headRef": "fix-init-paths",
+      "base": "dev",
+      "merged": null,
+      "pinnedAt": "2026-09-04T16:03Z",
+      "refs": [
+        {
+          "path": ".changeset/harden-init-paths.md",
+          "blob": "dd367c5f1b993d0100f35f2931668aa34a84c421"
+        },
+        {
+          "path": "README.md",
+          "blob": "e8daaa2cf13a078bd06c409459a814eedb719a09"
+        },
+        {
+          "path": "openspec/changes/harden-init-paths/design.md",
+          "blob": "49953ae155c375cbd7f2afacbbdc96ba9e804448"
+        },
+        {
+          "path": "openspec/changes/harden-init-paths/proposal.md",
+          "blob": "f13466438140a2bb9e1ad7140e12115dd002f37b"
+        },
+        {
+          "path": "openspec/changes/harden-init-paths/specs/cli-commands/spec.md",
+          "blob": "16dae7ec87159f727170d20ec296b86312d10f09"
+        },
+        {
+          "path": "openspec/changes/harden-init-paths/tasks.md",
+          "blob": "8a91c6d01129b7814f2b1476c485c9950b94f25a"
+        },
+        {
+          "path": "openspec/task-times.csv",
+          "blob": "e5827ff853e042b609a2a31a8aaa1377fc82c616"
+        },
+        {
+          "path": "packages/cli/src/commands/init.ts",
+          "blob": "db4a7c7882e0ab63f5ca4d17c9180c3774dd52c6"
+        },
+        {
+          "path": "packages/cli/src/config.ts",
+          "blob": "c987da912b4df17a5095452e174dd16ea5bc302a"
+        },
+        {
+          "path": "packages/cli/src/loader.ts",
+          "blob": "bbeb8d4b5b175541fa337dd168af505df651355f"
+        },
+        {
+          "path": "packages/cli/src/path-probe.ts",
+          "blob": "d9d287f952ea42eaeda506a28d2cff25426fdd14"
+        },
+        {
+          "path": "packages/cli/src/snapshot-file.ts",
+          "blob": "db9af7996450afd37dea9c4a2eebd61b9b10fa56"
+        },
+        {
+          "path": "packages/cli/test/config.test.ts",
+          "blob": "c9d31b4fea20f6c78719599ff1ee0096519f33e3"
+        },
+        {
+          "path": "packages/cli/test/generate-command.test.ts",
+          "blob": "9e3aba70b47db3453301e62cf3098fb6a193ae21"
+        },
+        {
+          "path": "packages/cli/test/help.test.ts",
+          "blob": "858a53218ed430390373ee60e6b624b7e6328dbb"
+        },
+        {
+          "path": "packages/cli/test/init.test.ts",
+          "blob": "9949ad9a8366c7c61ebf1c15aff71beb706fc9f5"
+        },
+        {
+          "path": "skills/hejbro/references/generate-verify-workflow.md",
+          "blob": "22cbd2ff0453726b3c56c285795173fe52a82c62"
+        }
+      ]
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

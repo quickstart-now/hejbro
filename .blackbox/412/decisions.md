@@ -448,3 +448,30 @@ _owner · 2026-09-04T12:16Z · raw ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#112_
 "Handle it directly." — said when the lead reported that the 0.2.0-pre.1 `release-publish` run was waiting at the `npm` environment review, the one irreversible release step reserved for the owner.
 
 Read by the lead as the owner's approval of this publish, with the lead pressing the button on the owner's behalf: the deployment review was approved through the API with the comment "approved by the owner in conversation ('handle it directly'), pressed by the lead", and the seven packages shipped as 0.2.0-pre.1. The gate itself is unchanged: the next release needs the owner's word again.
+
+<a id="d39"></a>
+## D39 — Process the queue in parallel where the batches are independent
+
+_owner · 2026-09-04T12:52Z · raw ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#117_
+
+"Let's process in parallel the issues that can be processed in parallel."
+
+Read by the lead as: fill the team cap (three concurrent teams, team-up) with batches whose files do not overlap — the li batch (ledger identity, `packages/cli/src/apply/*`, `commands/migrate|status`) is joined by an init-paths batch (`packages/cli/src/commands/init.ts`, `config.ts`) and a core batch (`packages/core/src/*`).
+
+<a id="d40"></a>
+## D40 — Owner steps away: the queue run continues under delegation, owner gates untouched
+
+_owner · 2026-09-04T13:50Z · raw ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#118_
+
+"I have to step away, so I am delegating."
+
+Read by the lead as the standing delegation (#750 D3/D7) extended over the whole #412 queue run now in flight: the three batches (li, ip, co) go through review, PR, squash merge, the D106 context-free round and archive without the owner; the lead rules where the rules are silent and records each ruling for ratification; further batches from the queue are started as teams free up, in the recorded order (#412/R1, R2). Owner gates stay owner gates — no decision-log amendment, no release, no core runtime dependency — and stay on the return queue.
+
+<a id="d41"></a>
+## D41 — The whole #412 queue is delegated, decisions included; the lead judges and records
+
+_owner · 2026-09-04T13:52Z · raw ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#120_
+
+"Handle every sub-issue under #412. I delegate the decisions too — judge for yourself and handle them."
+
+Read by the lead as: the whole #412 queue (and its continuation #815) is processed to completion without the owner; where an item needs a product decision — including the ones earlier rulings parked for the owner (#500 under D105, #776, #777, #782, #712, the D99 amendment #800) — the lead decides, records the decision as an extension ruling with its basis, and moves on; every such ruling stays on the ratification queue. The three hard gates in AGENTS.md (publishing, core runtime dependencies, decision-log changes) are read narrowly under this delegation: a decision-log amendment that only makes an entry agree with shipped, specified behavior (#800) is done and marked as amended under delegation; a release or a new core runtime dependency still waits for the owner.

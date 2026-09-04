@@ -200,3 +200,17 @@ describe("hejbro generate --help", () => {
 		);
 	});
 });
+
+// #741, task 1.5: init gained --config alongside every other command that
+// reads hejbro.config.ts -- --help is this surface's own documentation,
+// and a regression here would mean the flag works but isn't discoverable.
+describe("hejbro init --help", () => {
+	it("lists --config", async () => {
+		const result = await runHelp(cwd, ["init", "--help"]);
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("--config");
+		expect(result.stdout).toContain(
+			"path to hejbro.config.ts (default: ./hejbro.config.ts)",
+		);
+	});
+});
