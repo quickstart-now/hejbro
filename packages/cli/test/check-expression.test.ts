@@ -2072,6 +2072,131 @@ describe("compareIndexKeys / 4.2 an index's predicate and ordered key list", () 
 		expect(calls).toHaveLength(1);
 	});
 
+	// ck-planner's own follow-up measurement after 1.9's own commit: EXPLAIN's
+	// `Output` drops a `COLLATE` clause from *both* sides alike (measured,
+	// docker postgres:17-alpine), so a collation-only difference is
+	// invisible to the server-mode comparison -- the same declared
+	// `col collate "C"` agrees under server mode whether or not the
+	// database's own key actually carries that collation. Text mode does
+	// not share this blind spot: normalization never strips a collation
+	// suffix, so the two texts genuinely differ there.
+	it("agrees under text mode when a declared collated expression matches a catalog plain key carrying the same collation suffix (B3)", async () => {
+		const widgets = table(
+			app,
+			"widgets",
+			{ id: uuid().primaryKey(), email: text() },
+			(t) => ({
+				indexes: [index("widgets_email_idx").on(sql`${t.email} collate "C"`)],
+			}),
+		);
+		const snapshot = buildTestSnapshot([widgets]);
+		const { session, calls } = makeIndexFakeSession({});
+
+		const findings = await compareIndexKeys(
+			session,
+			catalogWithIndex({
+				name: "widgets_email_idx",
+				predicate: null,
+				keys: [plainKey('email collate "C"')],
+			}),
+			"app",
+			"widgets",
+			declaredIndexNode(snapshot, "app.widgets", "widgets_email_idx"),
+			"text",
+		);
+
+		expect(findings).toEqual([]);
+		expect(calls).toHaveLength(0);
+	});
+
+	it("agrees under server mode even when the catalog's plain key carries no collation suffix at all -- EXPLAIN's own collation blind spot", async () => {
+		const widgets = table(
+			app,
+			"widgets",
+			{ id: uuid().primaryKey(), email: text() },
+			(t) => ({
+				indexes: [index("widgets_email_idx").on(sql`${t.email} collate "C"`)],
+			}),
+		);
+		const snapshot = buildTestSnapshot([widgets]);
+		const { session } = makeIndexFakeSession({
+			explainOutput: ["email", "email"],
+		});
+
+		const findings = await compareIndexKeys(
+			session,
+			catalogWithIndex({
+				name: "widgets_email_idx",
+				predicate: null,
+				keys: [plainKey("email")],
+			}),
+			"app",
+			"widgets",
+			declaredIndexNode(snapshot, "app.widgets", "widgets_email_idx"),
+			"server",
+		);
+
+		expect(findings).toEqual([]);
+	});
+
+	it("is not compared under text mode when the catalog's plain key carries no collation suffix, unlike server mode", async () => {
+		const widgets = table(
+			app,
+			"widgets",
+			{ id: uuid().primaryKey(), email: text() },
+			(t) => ({
+				indexes: [index("widgets_email_idx").on(sql`${t.email} collate "C"`)],
+			}),
+		);
+		const snapshot = buildTestSnapshot([widgets]);
+		const { session } = makeIndexFakeSession({});
+
+		const findings = await compareIndexKeys(
+			session,
+			catalogWithIndex({
+				name: "widgets_email_idx",
+				predicate: null,
+				keys: [plainKey("email")],
+			}),
+			"app",
+			"widgets",
+			declaredIndexNode(snapshot, "app.widgets", "widgets_email_idx"),
+			"text",
+		);
+
+		expect(findings).toHaveLength(1);
+		expect(findings[0]?.error).toMatchObject({ code: "check-not-compared" });
+	});
+
+	it("agrees under text mode when the declared expression is a parenthesized column and the catalog holds the position as a plain key (B3)", async () => {
+		const widgets = table(
+			app,
+			"widgets",
+			{ id: uuid().primaryKey(), email: text() },
+			(t) => ({
+				indexes: [index("widgets_email_idx").on(sql`(${t.email})`)],
+			}),
+		);
+		const snapshot = buildTestSnapshot([widgets]);
+		const { session, calls } = makeIndexFakeSession({});
+
+		const findings = await compareIndexKeys(
+			session,
+			catalogWithIndex({
+				name: "widgets_email_idx",
+				predicate: null,
+				keys: [plainKey("email")],
+			}),
+			"app",
+			"widgets",
+			declaredIndexNode(snapshot, "app.widgets", "widgets_email_idx"),
+			"text",
+		);
+
+		expect(findings).toEqual([]);
+		expect(calls).toHaveLength(0);
+	});
+
 	it("agrees on a genuine expression key that renders identically", async () => {
 		const widgets = table(
 			app,
