@@ -105,7 +105,7 @@ same `assertBuiltCli` dist-freshness guard (`packages/cli/test/loader-cycle.test
 - **Comments state the constraint only.** A comment records what the code
   cannot show (the "why", the invariant, the trap); measurement
   narratives, derivations, and process history go to the PR body or
-  `blackbox/` (D89) — never multi-screen comment blocks.
+  `.blackbox/` (D89) — never multi-screen comment blocks.
 - TypeScript strict. Our own source: no `any`, no `let`/`var`, no
   `for`/`while`, no ternary. Machine-enforced, not habit (#447): Biome
   covers `any`/`var`/ternary; `pnpm check:bans` (CI) walks `packages/*/src`
@@ -187,13 +187,26 @@ rejected (decided 2026-08-26):
 
 ## Provenance
 
-`blackbox/` at the repository root is the flight recorder (D89): one
-non-summarized decision record per owner-driven change — what the owner
-asked for, what the assistant answered and built, why, and the internal
-processing — content-pinned by per-file git blob SHAs. See
-`blackbox/README.md` for the conventions. Read it only when investigating
-a rule's origin; never load it during normal work. An owner-driven change
-lands its entry in the same commit or PR as the change.
+`.blackbox/` at the repository root is the flight recorder (D89; folder
+form since #785). One folder per work item, keyed by its issue number
+(`.blackbox/785/`), holds `meta.json` (machine-owned: kind, parent,
+status, per-PR content pins), `decisions.md` (every decision as it is
+made — owner decisions `D#` as English rewrites of the owner's words, AI
+rulings `R#` with kind interpretation/extension/stop, basis and
+ratification) and `work.md` (what was built and measured, `W#`). Entries
+older than #785 are single files, listed as legacy by the generated
+`.blackbox/README.md`. The tool is `pnpm blackbox …`
+(`node .blackbox/bin/blackbox.mjs`, vendored from the `dd-blackbox`
+skill); the conventions live in that skill and in the generated README.
+Enforcement is not this paragraph: the Claude Code hooks in
+`.claude/settings.json` save owner inputs at the keystroke, refuse a team
+brief that cites no recorded ruling, and gate `gh pr merge` on the
+record; CI's `blackbox` job runs the same check before every other job
+and, through the `hello-pooh-blackbox` GitHub App, pins the PR itself —
+the pin commit is created by the Git Data API, signed by GitHub and
+attributed to the App, so it passes the signed-commit ruleset.
+Read the folders only when investigating a rule's origin; never load
+them during normal work.
 
 ## Before claiming done
 
@@ -224,5 +237,9 @@ lands its entry in the same commit or PR as the change.
       contended phase under its 120s ceiling (24s at 32 burners, 30s on
       GitHub's runner). Counting two instead of three is the mistake the
       measurement itself made once
-- [ ] Owner-driven change carries its `blackbox/` entry in the same PR
+- [ ] The PR's work item is recorded and pinned: `pnpm blackbox new <issue>`
+      at start, `pnpm blackbox add decision|ruling|work …` as things happen,
+      and `pnpm blackbox pin <issue> --pr <N> && pnpm blackbox index` in the
+      PR's checkout after the last content commit — `pnpm blackbox check
+      --pr <N>` must pass (the merge hook and CI's first job run it too)
 - [ ] PR body lists the commits to be squashed

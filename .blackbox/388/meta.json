@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#388",
+  "title": "add-generated-columns group 4: real-server witness",
+  "parent": "quickstart-now/hejbro#308",
+  "status": "closed",
+  "opened": "2026-09-04",
+  "closed": "2026-08-28",
+  "decisions": [],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-08-28T00:00Z",
+      "title": "generated-columns group 4 \u2014 the real server signs off on group 2's ordering",
+      "pr": null,
+      "decisions": []
+    }
+  ],
+  "prs": [
+    {
+      "number": 392,
+      "ref": "quickstart-now/hejbro#392",
+      "title": "test(pg): real-server witness for identity and generated columns",
+      "head": "f7633fe437226c60f329fd646af3ff787ca8fd21",
+      "headRef": "phase10-gen-g4",
+      "base": "dev",
+      "merged": "2026-08-28T04:33:42Z",
+      "pinnedAt": "2026-08-28T00:00Z",
+      "migrated": true,
+      "refs": [
+        {
+          "path": "packages/pg/test/integration.test.ts",
+          "blob": "faf628d48328b027ca5b68aab4624602b0fedd2a"
+        }
+      ]
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

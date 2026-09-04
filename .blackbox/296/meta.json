@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#296",
+  "title": "Adopt Claude Code large-codebases guide settings (fit-tested)",
+  "parent": "quickstart-now/hejbro#282",
+  "status": "closed",
+  "opened": "2026-09-04",
+  "closed": "2026-08-26",
+  "decisions": [
+    {
+      "id": "D1",
+      "by": "owner",
+      "at": "2026-08-26T00:00Z",
+      "title": "manage per the guide, and make it portable",
+      "raw": []
+    }
+  ],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-08-26T00:00Z",
+      "title": "2026-08-26 \u2014 Large-codebases guide adopted by fit-test (D90)",
+      "pr": null,
+      "decisions": []
+    }
+  ],
+  "prs": [
+    {
+      "number": 297,
+      "ref": "quickstart-now/hejbro#297",
+      "title": "chore(process): large-codebases guide fit-test \u2014 deny rules, skill (d90)",
+      "head": "08bcac15f986c26237606ee9255b61bd84143b93",
+      "headRef": "phase10-repo-setup",
+      "base": "dev",
+      "merged": "2026-08-26T08:34:29Z",
+      "pinnedAt": "2026-08-26T00:00Z",
+      "migrated": true,
+      "refs": [
+        {
+          "path": ".claude/settings.json",
+          "blob": "9b105895c853abd772d9fce14ececcd95aad85db"
+        },
+        {
+          "path": ".claude/skills/roundtrip-verification/SKILL.md",
+          "blob": "03a5e513e0c342304155be17b46300e775221066"
+        },
+        {
+          "path": "AGENTS.md",
+          "blob": "ee19aa976a683e646f0fae978019c22ebeaa68ed"
+        },
+        {
+          "path": "docs/specs/2026-08-19-hejbro-design.md",
+          "blob": "e319003e6030b0265ebdd003d3ff59312747c82c"
+        }
+      ]
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

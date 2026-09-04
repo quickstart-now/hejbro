@@ -1,0 +1,128 @@
+{
+  "version": 1,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#750",
+  "title": "0.2.0-pre.0: five findings from applying one declaration to Postgres 18, Neon, Nile and Supabase",
+  "parent": "quickstart-now/hejbro#412",
+  "status": "open",
+  "opened": "2026-09-04",
+  "closed": null,
+  "decisions": [
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "D110"
+      ],
+      "at": "2026-09-03T15:10Z",
+      "title": "The first external report is split into six sub-issues under #412",
+      "ratified": null
+    },
+    {
+      "id": "D1",
+      "by": "owner",
+      "at": "2026-09-04T00:00Z",
+      "title": "Owner input 1",
+      "raw": []
+    },
+    {
+      "id": "D2",
+      "by": "owner",
+      "at": "2026-09-04T00:00Z",
+      "title": "Owner input 2",
+      "raw": []
+    },
+    {
+      "id": "D3",
+      "by": "owner",
+      "at": "2026-09-04T00:00Z",
+      "title": "Owner input 3",
+      "raw": []
+    },
+    {
+      "id": "D4",
+      "by": "owner",
+      "at": "2026-09-04T00:00Z",
+      "title": "Owner input 4",
+      "raw": []
+    },
+    {
+      "id": "D5",
+      "by": "owner",
+      "at": "2026-09-04T00:00Z",
+      "title": "Owner input 5",
+      "raw": []
+    }
+  ],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-04T00:00Z",
+      "title": "2026-09-04 — The #750 findings processed under the owner's delegation",
+      "pr": null,
+      "decisions": []
+    }
+  ],
+  "prs": [
+    {
+      "number": 784,
+      "ref": "quickstart-now/hejbro#784",
+      "title": "fix(cli): reset never reports a rolled-back run as success (d106 round-1 correction of #775)",
+      "head": "2d01bc62d830473e6f1846ae16fde72249ee88bd",
+      "headRef": "fix-reset-d106-r1",
+      "base": "dev",
+      "merged": "2026-09-04T02:17:48Z",
+      "pinnedAt": "2026-09-04T00:00Z",
+      "migrated": true,
+      "refs": [
+        {
+          "path": "packages/cli/src/apply/reset.ts",
+          "blob": "f2390c644e978c1eaca7224c6aa8de66b46ef371"
+        },
+        {
+          "path": "packages/cli/src/apply/ledger.ts",
+          "blob": "7159cf181629321cdb2f83ae4e455e7bee229591"
+        },
+        {
+          "path": "scripts/check-next-marker.mjs",
+          "blob": "f9c33adea716481dd9ac8445d81bed19e8d5c4b5"
+        },
+        {
+          "path": "openspec/changes/harden-reset-and-verify/evaluation.md",
+          "blob": "9947ce21ffd4cd3b5da2788b607658ed93038a2c"
+        },
+        {
+          "path": "openspec/changes/harden-reset-and-verify/tasks.md",
+          "blob": "8f7ae0d24ae3c34b6796c434da8f7acf2946bbab"
+        },
+        {
+          "path": "openspec/changes/harden-reset-and-verify/specs/migration-apply/spec.md",
+          "blob": "b6f93f877bcbeb72ea82169145a1c0f347aafd04"
+        },
+        {
+          "path": "openspec/changes/harden-reset-and-verify/specs/cli-commands/spec.md",
+          "blob": "6906ffb92c44f9a447b4b988858985e7b7b7a247"
+        },
+        {
+          "path": "packages/core/src/expr/render-sql.ts",
+          "blob": "df4513ee8c6ac3776a71dad9c4db9b4cb586e956"
+        },
+        {
+          "path": "packages/cli/src/check/expression.ts",
+          "blob": "0dc746e48a2475ddd1d125df014e78ee00bd94e1"
+        },
+        {
+          "path": "openspec/changes/fix-nile-findings/specs/cli-commands/spec.md",
+          "blob": "540397fea31bbbed533752e3bec3e896127823c8"
+        },
+        {
+          "path": "openspec/changes/fix-nile-findings/specs/table-declaration/spec.md",
+          "blob": "def0fad116ffefb104b656ad3d26b37f62676fa6"
+        }
+      ]
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

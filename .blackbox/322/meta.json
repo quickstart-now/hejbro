@@ -1,0 +1,149 @@
+{
+  "version": 1,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#322",
+  "title": "insert() value types reject the very types the column DSL declares",
+  "parent": "quickstart-now/hejbro#282",
+  "status": "closed",
+  "opened": "2026-09-04",
+  "closed": "2026-08-27",
+  "decisions": [
+    {
+      "id": "D1",
+      "by": "owner",
+      "at": "2026-08-27T00:00Z",
+      "title": "Owner decisions carried in",
+      "raw": []
+    }
+  ],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-08-27T00:00Z",
+      "title": "harden-query-layer group 2 \u2014 write-side value types",
+      "pr": null,
+      "decisions": []
+    }
+  ],
+  "prs": [
+    {
+      "number": 345,
+      "ref": "quickstart-now/hejbro#345",
+      "title": "fix(core): mutation inputs accept the declared read types",
+      "head": "0ef36fdd2b7dc43426be63300235d8412997d054",
+      "headRef": "phase10-harden-g2",
+      "base": "dev",
+      "merged": "2026-08-27T11:55:50Z",
+      "pinnedAt": "2026-08-27T00:00Z",
+      "migrated": true,
+      "refs": [
+        {
+          "path": "openspec/changes/harden-query-layer/design.md",
+          "blob": "10a6d3287311899691503118e3a334cc284ac93a"
+        },
+        {
+          "path": "openspec/changes/harden-query-layer/specs/query-type-inference/spec.md",
+          "blob": "f0d581dba3dd3e10ee376b26819bec286193a30a"
+        },
+        {
+          "path": "openspec/changes/harden-query-layer/tasks.md",
+          "blob": "8d638dca9c82d9dea218a4699ee152ece7fa9168"
+        },
+        {
+          "path": "packages/core/src/expr/ast.ts",
+          "blob": "d9714d8779c7db629c7d05740e6d861e6fd6ae53"
+        },
+        {
+          "path": "packages/core/src/expr/codec.ts",
+          "blob": "f260ce2d64e551c30bd549ad1f2fab56a6d5a24b"
+        },
+        {
+          "path": "packages/core/src/expr/literal.ts",
+          "blob": "94e833740a53393ec596c753a49d9b41c4c80a5c"
+        },
+        {
+          "path": "packages/core/src/index.ts",
+          "blob": "04d6ef6befc1578940f79ea55abccf9ed09f3d0a"
+        },
+        {
+          "path": "packages/core/src/query/column-value.ts",
+          "blob": "35ff895ef6335e726cff6b21451140ed359db42d"
+        },
+        {
+          "path": "packages/core/src/query/mutate.ts",
+          "blob": "0c30e4a9293c56385664ba9a3655e3903f0484fc"
+        },
+        {
+          "path": "packages/core/src/types/array-literal-write.ts",
+          "blob": "6a0536e9ecca2b29de215c2196f60fb81862f32a"
+        },
+        {
+          "path": "packages/core/src/types/column-builder.ts",
+          "blob": "bcd90958d9dcf76f6eee5c3ed9865db4516c613e"
+        },
+        {
+          "path": "packages/core/src/types/interval-serialize.ts",
+          "blob": "315f172c337c26ce04adb266c5b16c6e0c6e07a4"
+        },
+        {
+          "path": "packages/core/test/expr/literal.test.ts",
+          "blob": "a4c04ebfea47569ab0fbb657d4702c9082c5d268"
+        },
+        {
+          "path": "packages/core/test/interval-serialize.test.ts",
+          "blob": "00721b5ba2fc71bfa6c79324459df073e8e24ec5"
+        },
+        {
+          "path": "packages/core/test/plpgsql/mutation-value-body.test.ts",
+          "blob": "c8c9584c0abe160848a1ab9631e35eaf6875cd3d"
+        },
+        {
+          "path": "packages/core/test/query/column-value.test.ts",
+          "blob": "ceedfa4d3d2829fed1d6bd81e95cbe2eba0c867c"
+        },
+        {
+          "path": "packages/core/test/query/mutate.test.ts",
+          "blob": "0f3d9ce983cfffb41bdcc757ef23c4d3a71fdbe1"
+        },
+        {
+          "path": "packages/core/test/query/snapshot-reachability.test.ts",
+          "blob": "51a383cdd6257c58996f9db9fbc3bdf40befd560"
+        },
+        {
+          "path": "packages/core/test/types/array-literal-write.test.ts",
+          "blob": "939b6a4d2f20ebe7c8bbdf4b560b92970b646557"
+        },
+        {
+          "path": "packages/query/src/compile/params.ts",
+          "blob": "a66ea890261be880f40f9eef96bf52d4490e4817"
+        },
+        {
+          "path": "packages/query/src/types/column-map.ts",
+          "blob": "1109c4cc02a63162a693dbbf8cd97fd0dd6d8947"
+        },
+        {
+          "path": "packages/query/src/types/interval.ts",
+          "blob": "6b98af4681296ad99470554b3f1fdb5c82e740f5"
+        },
+        {
+          "path": "packages/query/test/compile/mutation.test.ts",
+          "blob": "0a74af6b0e7ffd605f60fee15d0bbeeeb9d3cd1d"
+        },
+        {
+          "path": "packages/query/test/db/chain.test.ts",
+          "blob": "ea86c3924e89336168a9204fd1317822f37fc9ed"
+        },
+        {
+          "path": "packages/query/test/types/interval-serialize.test.ts",
+          "blob": "51bc3037eb4136efbe9dd4cf96d1c18325d77578"
+        },
+        {
+          "path": "packages/query/test/types/interval.test.ts",
+          "blob": "c133825351524d8fac864697630c25813995acfe"
+        }
+      ]
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

@@ -1,0 +1,116 @@
+{
+  "version": 1,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#785",
+  "title": "blackbox v2: per-issue folders under .blackbox, hooks + CI-first gate, shipped by the dd-blackbox script",
+  "parent": "quickstart-now/hejbro#412",
+  "status": "closed",
+  "opened": "2026-09-04",
+  "closed": "2026-09-04",
+  "decisions": [
+    {
+      "id": "D1",
+      "by": "owner",
+      "at": "2026-09-04T03:52Z",
+      "title": "Adopt the folder-form recorder in hejbro, enforced by hooks and CI",
+      "raw": []
+    },
+    {
+      "id": "D2",
+      "by": "owner",
+      "at": "2026-09-04T03:52Z",
+      "title": "The blackbox CI job runs first and pins are checked both ways",
+      "raw": []
+    },
+    {
+      "id": "D3",
+      "by": "owner",
+      "at": "2026-09-04T03:52Z",
+      "title": "Migrate the lead's ruling ledger in full",
+      "raw": []
+    },
+    {
+      "id": "D4",
+      "by": "owner",
+      "at": "2026-09-04T03:52Z",
+      "title": "hejbro is one item",
+      "raw": []
+    },
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "D2"
+      ],
+      "at": "2026-09-04T03:52Z",
+      "title": "#511 is superseded by blackbox check",
+      "ratified": null
+    },
+    {
+      "id": "R2",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "D1"
+      ],
+      "at": "2026-09-04T03:52Z",
+      "title": "issue.sh start/close open and close the folder",
+      "ratified": null
+    },
+    {
+      "id": "D5",
+      "by": "owner",
+      "at": "2026-09-04T04:48Z",
+      "title": "No test code travels with the vendored tool",
+      "raw": [
+        "ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#1"
+      ]
+    }
+  ],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-04T03:52Z",
+      "title": "Recorder moved to .blackbox with the vendored tool, hooks, CI-first job and AGENTS.md",
+      "pr": null,
+      "decisions": []
+    }
+  ],
+  "prs": [
+    {
+      "number": 786,
+      "ref": "quickstart-now/hejbro#786",
+      "title": "chore(blackbox): folder-form recorder under .blackbox with the vendored tool, hooks and a CI-first gate",
+      "head": "b2e7449c7425ec122a7fc45c5789dad21a94b752",
+      "headRef": "blackbox-v2",
+      "base": "dev",
+      "merged": null,
+      "pinnedAt": "2026-09-04T04:21Z",
+      "refs": [
+        {
+          "path": ".claude/settings.json",
+          "blob": "fefacfc0f7afbc90fd0ba2450e86e0620319f8f8"
+        },
+        {
+          "path": ".github/workflows/ci.yml",
+          "blob": "494190e5a4e4cd93be6864d8c1d155f18b316b68"
+        },
+        {
+          "path": "AGENTS.md",
+          "blob": "74a24e02b87437a2eb38f401b3e44fd43578dbc9"
+        },
+        {
+          "path": "biome.json",
+          "blob": "0da3ca975934ffc3e0ce14fbbc83520a4812141a"
+        },
+        {
+          "path": "package.json",
+          "blob": "8f8b8cdf612c775c195010d89b939b0946280ad7"
+        }
+      ]
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

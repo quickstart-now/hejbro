@@ -2,7 +2,7 @@ import type { CompileResult, DriverRow, DriverSession } from "@hejbro/query";
 import { describe, expect, it } from "vitest";
 import {
 	bootstrapLedger,
-	clearLedger,
+	clearLedgerRows,
 	readLedger,
 	recordAppliedMigration,
 } from "../src/apply/ledger";
@@ -238,14 +238,14 @@ describe("recordAppliedMigration / 16.1 (D106 M7)", () => {
 	});
 });
 
-describe("clearLedger / 5.3", () => {
+describe("clearLedgerRows / 5.3, D106 R1 B1", () => {
 	it("clears every row in the ledger", async () => {
 		const { session } = makeInMemoryLedgerSession();
 		await bootstrapLedger(session);
 		await recordAppliedMigration(session, "0001_init.sql", "applied");
 		await recordAppliedMigration(session, "0002_add_column.sql", "applied");
 
-		await clearLedger(session);
+		await clearLedgerRows(session);
 		const state = await readLedger(session);
 
 		// Rows are gone, but the table itself still is one -- reset (group
@@ -254,9 +254,15 @@ describe("clearLedger / 5.3", () => {
 		expect(state).toEqual({ exists: true, applied: [] });
 	});
 
-	it("does nothing when the ledger was never bootstrapped", async () => {
+	// [D106 R1, B1, #753 reopened] No leniency for an absent table -- the
+	// one caller (`reset.ts`) checks `ledgerTableExists` first and only
+	// calls this when that read says the table is there; a failure here is
+	// a genuine one, never a silent no-op.
+	it("throws when the ledger was never bootstrapped", async () => {
 		const session = makeUnbootstrappedSession();
 
-		await expect(clearLedger(session)).resolves.toBeUndefined();
+		await expect(clearLedgerRows(session)).rejects.toMatchObject({
+			code: "42P01",
+		});
 	});
 });

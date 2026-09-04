@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#300",
+  "title": "@hejbro/neon preset with driver",
+  "parent": "quickstart-now/hejbro#282",
+  "status": "closed",
+  "opened": "2026-09-04",
+  "closed": "2026-08-29",
+  "decisions": [
+    {
+      "id": "D1",
+      "by": "owner",
+      "at": "2026-08-29T00:00Z",
+      "title": "Owner context",
+      "raw": []
+    }
+  ],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-08-29T00:00Z",
+      "title": "2026-08-29 \u2014 `@hejbro/neon`, the second provider preset",
+      "pr": null,
+      "decisions": []
+    }
+  ],
+  "prs": [],
+  "origin": null,
+  "followUps": []
+}

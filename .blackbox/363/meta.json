@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#363",
+  "title": "add-array-ergonomics group 4: real-server witness for notNullElements",
+  "parent": "quickstart-now/hejbro#354",
+  "status": "closed",
+  "opened": "2026-09-04",
+  "closed": "2026-08-27",
+  "decisions": [],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-08-28T00:00Z",
+      "title": "array-ergonomics group 4 \u2014 the witness that talks to a real server",
+      "pr": null,
+      "decisions": []
+    }
+  ],
+  "prs": [
+    {
+      "number": 364,
+      "ref": "quickstart-now/hejbro#364",
+      "title": "test(pg): witness non-null array elements against a real server",
+      "head": "b09936f582089df88e1fa5f3f336b5461c84ea26",
+      "headRef": "phase10-array-g4",
+      "base": "dev",
+      "merged": "2026-08-27T19:11:38Z",
+      "pinnedAt": "2026-08-28T00:00Z",
+      "migrated": true,
+      "refs": [
+        {
+          "path": "packages/pg/test/integration.test.ts",
+          "blob": "88c53246544d65986d8ba882d10f7b93ad05650a"
+        }
+      ]
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

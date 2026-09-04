@@ -61,8 +61,13 @@ export type ResetResult = {
 	readonly stderr: string | null;
 };
 
-const SUCCESS_LINE =
-	"reset: dropped every object your declarations manage, and cleared the ledger.";
+/** [D106 R1, B1, #753 reopened] Claims "cleared the ledger" only when {@link applyReset} actually did -- a ledger that never existed (every migration applied outside hejbro) is not cleared, and saying otherwise is exactly the false-success B1 reported. The absent-ledger line still states that fact, rather than staying silent about it: an operator who believes `hejbro migrate` manages this database reads "no hejbro ledger" as a drift signal, and this line is the only place that ever says so. */
+const successLine = (ledgerCleared: boolean): string => {
+	if (ledgerCleared) {
+		return "reset: dropped every object your declarations manage, and cleared the ledger.";
+	}
+	return "reset: dropped every object your declarations manage. There was no hejbro ledger to clear.";
+};
 
 const preconditionResult = (error: unknown): ResetResult => {
 	const hejbroErr = asHejbroError(error);
@@ -94,8 +99,13 @@ export const applyResetReport = async (
 	confirmed: string | undefined,
 ): Promise<ResetResult> => {
 	assertInteractiveTransactions(driver, RESET_COMMAND);
-	await applyReset(driver, currentSnapshot, registry, confirmed);
-	return { exitCode: 0, stdout: [SUCCESS_LINE], stderr: null };
+	const { ledgerCleared } = await applyReset(
+		driver,
+		currentSnapshot,
+		registry,
+		confirmed,
+	);
+	return { exitCode: 0, stdout: [successLine(ledgerCleared)], stderr: null };
 };
 
 /**
