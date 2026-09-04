@@ -17,7 +17,10 @@ import {
 import type { CompileResult, DriverRow, DriverSession } from "@hejbro/query";
 import { describe, expect, it } from "vitest";
 import type { Catalog } from "../src/check/catalog";
-import { compareCheckConstraint } from "../src/check/expression";
+import {
+	compareCheckConstraint,
+	normalizeCheckText,
+} from "../src/check/expression";
 
 const app = schema("app");
 
@@ -103,6 +106,7 @@ type FakeSessionOptions = {
 	/** The single combined EXPLAIN statement's own `Output` -- `[declaredText, catalogText]` -- or `null`/omitted to simulate a plan with no usable Output (elided). */
 	readonly explainOutput?: ReadonlyArray<string> | null;
 	readonly explainError?: Error;
+	readonly metadataError?: Error;
 };
 
 /**
@@ -146,6 +150,9 @@ const makeFakeSession = (
 		execute: async (compiled) => {
 			calls.push(compiled);
 			if (compiled.sql.includes("pg_constraint")) {
+				if (options.metadataError !== undefined) {
+					throw options.metadataError;
+				}
 				if (options.metadata === undefined) {
 					return [];
 				}
@@ -1248,5 +1255,137 @@ describe("compareCheckConstraint / 3.5 text comparison", () => {
 		);
 
 		expect(explainCallCount(calls)).toBe(0);
+	});
+});
+
+// fix-nile-findings, D106 round 1 (R1-B1, R1-N4, R1-N1): the corrections
+// below are each a shipped-behavior-contradicts-delta finding turned into
+// the row that would have caught it.
+describe("compareCheckConstraint / 3.6 literal content is never normalized", () => {
+	const declared = (value: string) => {
+		const posts = table(
+			app,
+			"posts",
+			{ id: uuid().primaryKey(), format: text() },
+			(t) => ({ checks: [check("posts_format", eq(t.format, value))] }),
+		);
+		const snapshot = buildTestSnapshot([posts]);
+		return declaredCheckExpression(snapshot, "app.posts", "posts_format");
+	};
+	const run = async (value: string, catalog: string) => {
+		const { session } = makeFakeSession({
+			metadata: { expression: catalog, convalidated: true },
+		});
+		return compareCheckConstraint(
+			session,
+			withPostsTable(),
+			"app",
+			"posts",
+			"posts_format",
+			declared(value),
+			"text",
+		);
+	};
+
+	it.each([
+		{
+			label:
+				"a quoted word inside a literal is content, not an identifier (step 4)",
+			value: '"json"',
+			catalog: "format = 'json'",
+			agrees: false,
+		},
+		{
+			label: "the same literal on both sides agrees",
+			value: '"json"',
+			catalog: "format = '\"json\"'",
+			agrees: true,
+		},
+		{
+			label:
+				"a table qualifier inside a literal is content, not a reference (step 3)",
+			value: 'see "posts"."name"',
+			catalog: "format = 'see name'",
+			agrees: false,
+		},
+		{
+			label: "outside a literal the qualifier still normalizes away",
+			value: "plain",
+			catalog: "(format = 'plain'::text)",
+			agrees: true,
+		},
+	])("$label", async ({ value, catalog, agrees }) => {
+		const findings = await run(value, catalog);
+		if (agrees) {
+			expect(findings).toEqual([]);
+			return;
+		}
+		expect(findings).toHaveLength(1);
+		expect(findings[0]?.error).toMatchObject({ code: "check-not-compared" });
+	});
+});
+
+describe("normalizeCheckText / step 4 unquotes only what the server would render unquoted", () => {
+	it.each([
+		{ input: '"name" is not null', expected: "name is not null" },
+		{ input: '"order" is not null', expected: '"order" is not null' },
+		{ input: "\"user\" <> 'x'", expected: "\"user\" <> 'x'" },
+		{ input: '"select" > 0', expected: '"select" > 0' },
+		{ input: '"Name" is not null', expected: '"Name" is not null' },
+	])("$input → $expected", ({ input, expected }) => {
+		expect(normalizeCheckText(input, "app", "posts")).toBe(expected);
+	});
+});
+
+describe("compareCheckConstraint / 3.7 a failed catalog read under text mode", () => {
+	const declared = () => {
+		const posts = table(
+			app,
+			"posts",
+			{ id: uuid().primaryKey(), name: text() },
+			(t) => ({ checks: [check("posts_name_check", isNotNull(t.name))] }),
+		);
+		const snapshot = buildTestSnapshot([posts]);
+		return declaredCheckExpression(snapshot, "app.posts", "posts_name_check");
+	};
+	const failing = () =>
+		makeFakeSession({
+			metadataError: Object.assign(
+				new Error("permission denied for function pg_get_expr"),
+				{ code: "42501" },
+			),
+		}).session;
+
+	it("names the catalog read, never EXPLAIN, when the preset declares no planning", async () => {
+		const findings = await compareCheckConstraint(
+			failing(),
+			withPostsTable(),
+			"app",
+			"posts",
+			"posts_name_check",
+			declared(),
+			"text",
+		);
+		expect(findings).toHaveLength(1);
+		expect(findings[0]?.error).toMatchObject({ code: "check-not-compared" });
+		expect(findings[0]?.error.message).toContain(
+			"permission denied for function pg_get_expr",
+		);
+		expect(findings[0]?.error.message).not.toMatch(/explain/i);
+		expect(findings[0]?.error.message).toMatch(/Next: .*pg_constraint/);
+	});
+
+	it("keeps asking for EXPLAIN under server mode, where it is the remedy", async () => {
+		const findings = await compareCheckConstraint(
+			failing(),
+			withPostsTable(),
+			"app",
+			"posts",
+			"posts_name_check",
+			declared(),
+			"server",
+		);
+		expect(findings).toHaveLength(1);
+		expect(findings[0]?.error.message).toContain("EXPLAIN");
 	});
 });

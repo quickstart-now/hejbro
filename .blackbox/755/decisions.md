@@ -47,3 +47,10 @@ Ledger R87.
 
 D106 nl R1 = B1 / NB5 / OK13. B1: normalisation steps 3 and 4 (table qualifier removal, identifier unquoting) applied inside string literals, so a real drift (`'"json"'` versus `'json'`) was judged a match — corrected through `transformOutsideSpans`. N1: on a conbin lookup error the text mode still pointed at EXPLAIN in its Next (a SHALL NOT violation with no scenario) — corrected. N4: the reserved word `"order"` was unquoted too (wording drift) — corrected. N5: skills' nile-preset.md linked design.md and said "silently, exactly as …" — corrected. N2 = #781 confirmed (comment). N3 (`NULL::text` casts make a notNullElements check permanently not-compared in text mode) is a follow-up issue for the owner (#782). Per the owner's instruction (only rc and nl to finish before the planned downgrade) the correction team runs in the next session: worktree `fix-nile-d106-r1` (base 333dae88, evaluation.md 4f7b4335); the old nl worktree is removed.
 
+<a id="r6"></a>
+## R6 — The D106 round-1 correction of fix-nile-findings is lead-run, without a piece team
+
+_lead · extension · basis hejbro#785/D3 · 2026-09-04T06:43Z · ratified: pending_
+
+Four mechanical tasks (two normalization scopes, one Next wording, one document line), each with its red test written from the round-1 finding, do not justify summoning a planner, an implementer and a reviewer; the lead ran them with TDD in `fix-nile-d106-r1` and lets the D106 round-2 evaluator be the independent check. This extends the team-up rule "one group = one team summon" for correction rounds of this size; the owner said "the way of working is the same delegation as before" and ratifies or rejects this at the release gate.
+

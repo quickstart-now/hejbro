@@ -104,3 +104,39 @@ of `openspec show fix-nile-findings --diff` hold.
   and the file-a-follow-up for view/query references on Nile
   tenant-aware tables (sub-issue of #412).
   Files: the two references.
+
+## 3. D106 round-1 correction (B1 · N1 · N4 · N5)
+
+- [x] 3.1 ~8m — Red: `packages/cli/test/check-expression.test.ts` "3.6 literal
+  content is never normalized" with an input table: a declared literal
+  `'"json"'` against a catalog `'json'` (step 4 inside a literal) → not
+  compared; the same literal on both sides → agree; a declared literal
+  `'see "posts"."name"'` against a catalog `'see name'` (step 3 inside a
+  literal) → not compared; the same text outside a literal still normalizes.
+  Green: steps 3 and 4 run through `transformOutsideSpans(text,
+  STRING_LITERAL, …)` like steps 1 and 6 (R1-B1).
+  Files: `packages/cli/src/check/expression.ts`, the test.
+- [x] 3.2 ~6m — Red: the exported `normalizeCheckText` keeps a reserved word
+  quoted (`"order"`, `"user"`, `"select"`) and unquotes a plain identifier
+  (`"name"`), with a table of both classes. Green: step 4's predicate is
+  "plain lower-case identifier that is not a reserved keyword", matching the
+  delta sentence "would render unquoted anyway" (R1-N4).
+  Files: `packages/cli/src/check/expression.ts`, the test.
+- [x] 3.3 ~7m — Red: "3.7 a failed catalog read under text mode" — a fake
+  session whose `pg_constraint` lookup throws, `mode: "text"` → one
+  `check-not-compared` finding carrying the server's reason whose `Next:`
+  names the catalog read and never the word `EXPLAIN`; under `"server"` the
+  existing `Next:` is unchanged. Green: the conbin-error branch chooses its
+  `Next:` by mode (R1-N1); the cli-commands delta gains the scenario
+  "a failed catalog read is not compared without asking for EXPLAIN".
+  Files: `packages/cli/src/check/expression.ts`, the test,
+  `openspec/changes/fix-nile-findings/specs/cli-commands/spec.md`.
+- [x] 3.4 ~5m — Red: `packages/skills/test/nile-preset-doc.test.ts` asserts
+  `nile-preset.md` links no `openspec/changes/` path and does not claim
+  "silently, exactly as on a platform that can plan". Green: the reference
+  points at `openspec/specs/cli-commands/spec.md` and the sentence states
+  the literal-content rule (R1-N5). Plus the round-1 disposition in
+  `evaluation.md` (N2 → #781, N3 → #782) and a patch changeset.
+  Files: `skills/hejbro/references/nile-preset.md`, the test,
+  `openspec/changes/fix-nile-findings/evaluation.md`, `.changeset/`.
+

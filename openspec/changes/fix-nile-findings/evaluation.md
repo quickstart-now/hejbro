@@ -226,3 +226,35 @@ Test suites run as evidence: `packages/core` `test/expr/render-table-bound.test.
   same command; `git status` was clean after each probe.
 - Cleanup: `docker rm -v -f r1-nile-review`, `/private/tmp/r1nile` removed;
   the other team's `hejbro-rc-review` container was not touched.
+
+## Round 1 disposition
+
+Correction round in `fix-nile-d106-r1` (tasks.md group 3), lead-run under
+the owner's delegation (recorded as a ruling in `.blackbox/755/`).
+
+- **R1-B1** — fixed: normalization steps 3 (table qualifier) and 4
+  (identifier unquoting) now run through `transformOutsideSpans(text,
+  STRING_LITERAL, …)` like steps 1 and 6, so a string literal's content is
+  never rewritten. Pinned by `check-expression.test.ts` "3.6 literal
+  content is never normalized" (four rows: quoted word in a literal,
+  same literal both sides, qualifier-like text in a literal, the same
+  text outside a literal). The delta gains the scenario "a string
+  literal's content is never normalized".
+- **R1-N1** — fixed: a failed `pg_constraint` read under `mode: "text"`
+  is reported with a `Next:` that names the catalog read and never
+  `EXPLAIN` (`notComparedCatalogReadFinding`); server mode keeps its
+  `EXPLAIN` remedy. Pinned by "3.7 a failed catalog read under text
+  mode"; the delta gains the scenario "a failed catalog read is not
+  compared without asking for EXPLAIN".
+- **R1-N2** — tracked as #781 (a matching generated column is always
+  reported as a default difference).
+- **R1-N3** — tracked as #782 (`.notNullElements()` under an
+  `explainUnavailable` preset); widening step 5 is an owner call.
+- **R1-N4** — fixed: step 4's predicate now excludes Postgres's reserved
+  keywords, matching "would render unquoted anyway"; `normalizeCheckText`
+  is exported and pinned by a five-row table.
+- **R1-N5** — fixed: `nile-preset.md` links the main `cli-commands` spec
+  instead of the change's `design.md`, and states the literal rule in
+  place of "silently, exactly as on a platform that can plan"; pinned by
+  `nile-preset-doc.test.ts`.
+

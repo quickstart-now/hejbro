@@ -807,3 +807,7 @@ date,change-id,task-id,group,est_min,actual_min,waited_user_min,notes
 2026-09-04,harden-reset-and-verify,4.5,4,10,57,0,"commit span 09:23:25..09:56:06 (33m) for the phase-tagging fix (lead ruling R86); includes review-repair C9 (09:56:06..10:00:55, 5m, ledger-phase self-contradiction), C10+C11 (10:00:55..10:18:26, 18m, mutant-driven test pins for the no-detail case and the unknown phase), and C12 (10:18:26..10:19:52, 1m, evaluation.md note); no stopwatch"
 2026-09-04,harden-reset-and-verify,merge-in,-,,5,0,"third merge of upstream/dev (333dae88, fix-nile-findings) plus install, a forced rebuild, and the live no-ledger harness fix (R88, apply every migration file, not only the first); merge itself was conflict-free; measured from date -u stamps 01:19:52..01:24:50"
 2026-09-04,harden-reset-and-verify,close-out,-,,7,0,"task-times.csv rows for 4.1-4.5 + this row, pnpm check:tasktime badge restamp, pnpm check:crap (0 violations, unchanged), and the full TURBO_FORCE=1 check/check-types/test/live-integration gate; measured from date -u stamps 01:24:50..01:32:00"
+2026-09-04,fix-nile-findings,3.1,3,8,9,0,lead-run correction (D106 R1 B1); four-row literal table
+2026-09-04,fix-nile-findings,3.2,3,6,5,0,reserved-keyword predicate; normalizeCheckText exported
+2026-09-04,fix-nile-findings,3.3,3,7,7,0,text-mode catalog-read Next; delta scenario added
+2026-09-04,fix-nile-findings,3.4,3,5,6,0,skill doc + disposition + changeset
