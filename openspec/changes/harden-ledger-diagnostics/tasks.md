@@ -263,7 +263,7 @@ The reviewer built privilege-starved roles and altered ledgers against
 disagreeing with the delta, not the delta needing rework; two more are
 text that says something untrue. Every repair keeps the delta as approved.
 
-- [ ] 2.1 (~9m) **[design]** `migrate` reads the ledger before it
+- [x] 2.1 (~9m) **[design]** `migrate` reads the ledger before it
       bootstraps one. Measured by the reviewer: against a database whose
       ledger exists but whose read is refused, `status` and `raise` answer
       `apply-ledger-unreadable` while `migrate` answers
@@ -292,7 +292,7 @@ text that says something untrue. Every repair keeps the delta as approved.
       `packages/cli/test/migrate-command.test.ts`,
       `packages/cli/test/apply-ledger-diagnostics.integration.test.ts`.
 
-- [ ] 2.2 (~9m) **[design]** The in-transaction recheck never swallows a
+- [x] 2.2 (~9m) **[design]** The in-transaction recheck never swallows a
       vanished ledger. Measured (2 of 2): with the ledger dropped while
       `migrate` holds its transaction, `isMigrationRecorded`'s 42P01
       leniency returns "not recorded", the aborted transaction refuses the
@@ -351,7 +351,7 @@ text that says something untrue. Every repair keeps the delta as approved.
       `packages/cli/src/apply/ledger-diagnostics.ts`,
       `packages/cli/test/apply-ledger-diagnostics.test.ts`.
 
-- [ ] 2.4 (~6m) One identity for the ledger's own diagnostics. Measured:
+- [x] 2.4 (~6m) One identity for the ledger's own diagnostics. Measured:
       the same code prints two kinds of header —
       `error[apply-ledger-unwritable]: "hejbro"."migration_ledger"` from
       `migrate`, `error[apply-ledger-unreadable]: hejbro status` from the
@@ -364,10 +364,20 @@ text that says something untrue. Every repair keeps the delta as approved.
       `packages/cli/test/apply-reset.test.ts`: each command's ledger
       diagnostic header is `error[<code>]: "hejbro"."migration_ledger"`,
       while every non-ledger diagnostic each command raises keeps the
-      header it has today (regression rows). Files:
+      header it has today (regression rows). Files (corrected during
+      implementation — the header is rendered by the command layer;
+      `apply/raise.ts` and `apply/reset.ts` only throw the already
+      classified error, the same split 1.6 and 1.8 met):
+      `packages/cli/src/apply/ledger-diagnostics.ts` (the shared identity
+      constant and a `isLedgerDiagnosticCode` predicate),
       `packages/cli/src/commands/status.ts`,
-      `packages/cli/src/apply/raise.ts`, `packages/cli/src/apply/reset.ts`,
-      and the three tests.
+      `packages/cli/src/commands/raise.ts`,
+      `packages/cli/src/commands/reset.ts`,
+      `packages/cli/test/status-command.test.ts`,
+      `packages/cli/test/raise-command.test.ts`,
+      `packages/cli/test/reset-command.test.ts` (the header only becomes
+      visible through `runReset`, so the pin runs that path, not
+      `applyResetReport` alone).
 
 - [ ] 2.5 (~6m) A raised snapshot file is not called a migration.
       Measured: `raise`'s write refusal says "the row recording
