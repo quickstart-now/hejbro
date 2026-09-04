@@ -30,6 +30,18 @@
       "at": "2026-09-04T14:28Z",
       "title": "harden-check-expressions approved; one rule for four expression surfaces; Q1 Q3 Q5 Q7 Q8 as recommended",
       "ratified": null
+    },
+    {
+      "id": "R3",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "D1",
+        "R2"
+      ],
+      "at": "2026-09-04T16:12Z",
+      "title": "Review: an index compares its whole ordered key list by position, both directions; generated-vs-plain may quote the database default",
+      "ratified": null
     }
   ],
   "work": [
