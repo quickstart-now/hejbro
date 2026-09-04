@@ -47,53 +47,116 @@ const managedSnapshot = buildSnapshot(
 // cycle" fixture. Shared by every cycle-shaped row below: `dropsContainCycle`
 // reads this run's own plan, not the driver error, so every one needs the
 // identical structurally-cyclic snapshot.
-const buildCycleSnapshot = (): Snapshot => {
-	const cycleColumns: ReadonlyArray<ColumnSnapshot> = [
-		{ name: "id", typeNode: { typeName: "uuid" }, primaryKey: true },
-	];
-	const leftT: TableSnapshot = {
-		schema: "cyc",
-		name: "left_t",
-		columns: [
-			...cycleColumns,
-			{ name: "right_id", typeNode: { typeName: "uuid" } },
-		],
-		indexes: [],
-		foreignKeys: [
-			{
-				name: "left_t_right_id_fk",
-				columns: ["right_id"],
-				referencesTable: "cyc.right_t",
-				referencesColumns: ["id"],
-			},
-		],
-	};
-	const rightT: TableSnapshot = {
-		schema: "cyc",
-		name: "right_t",
-		columns: [
-			...cycleColumns,
-			{ name: "left_id", typeNode: { typeName: "uuid" } },
-		],
-		indexes: [],
-		foreignKeys: [
-			{
-				name: "right_t_left_id_fk",
-				columns: ["left_id"],
-				referencesTable: "cyc.left_t",
-				referencesColumns: ["id"],
-			},
-		],
-	};
+const CYCLE_ID_COLUMN: ColumnSnapshot = {
+	name: "id",
+	typeNode: { typeName: "uuid" },
+	primaryKey: true,
+};
+
+/** One declared table in schema `cyc`, with a foreign key naming `targetName` (or no foreign key at all when `targetName` is `undefined` -- a chain's own last link). */
+const cycleTable = (name: string, targetName?: string): TableSnapshot => {
+	if (targetName === undefined) {
+		return {
+			schema: "cyc",
+			name,
+			columns: [CYCLE_ID_COLUMN],
+			indexes: [],
+			foreignKeys: [],
+		};
+	}
+	const fkColumn = `${targetName}_id`;
 	return {
-		...emptySnapshot,
-		objects: {
-			"schema:cyc": { name: "cyc" },
-			"table:cyc.left_t": leftT,
-			"table:cyc.right_t": rightT,
-		},
+		schema: "cyc",
+		name,
+		columns: [
+			CYCLE_ID_COLUMN,
+			{ name: fkColumn, typeNode: { typeName: "uuid" } },
+		],
+		indexes: [],
+		foreignKeys: [
+			{
+				name: `${name}_${fkColumn}_fk`,
+				columns: [fkColumn],
+				referencesTable: `cyc.${targetName}`,
+				referencesColumns: ["id"],
+			},
+		],
 	};
 };
+
+const emptyCycSnapshot: Snapshot = {
+	...emptySnapshot,
+	objects: { "schema:cyc": { name: "cyc" } },
+};
+
+const withCycleTable = (
+	snapshot: Snapshot,
+	table: TableSnapshot,
+): Snapshot => ({
+	...snapshot,
+	objects: { ...snapshot.objects, [`table:cyc.${table.name}`]: table },
+});
+
+/** A ring of `tableNames.length` declared tables, each referencing the next (wrapping around) -- a genuine cycle of that length. `["left_t", "right_t"]` reproduces today's pair. */
+const buildCycleSnapshot = (tableNames: ReadonlyArray<string>): Snapshot =>
+	tableNames.reduce((snapshot, name, index) => {
+		const targetName = tableNames[(index + 1) % tableNames.length];
+		return withCycleTable(snapshot, cycleTable(name, targetName));
+	}, emptyCycSnapshot);
+
+/** One table referencing itself -- excluded from `kindHasCycle`'s own peel (its drop takes its own constraint with it), so this is never a cycle. */
+const buildSelfReferencingSnapshot = (tableName: string): Snapshot =>
+	withCycleTable(emptyCycSnapshot, cycleTable(tableName, tableName));
+
+/** Two or more independent cycles, merged into one declared set -- a cycle exists even though it is not the whole set. */
+const buildDisjointCyclesSnapshot = (
+	groups: ReadonlyArray<ReadonlyArray<string>>,
+): Snapshot => ({
+	...emptyCycSnapshot,
+	objects: Object.assign(
+		{},
+		...groups.map((group) => buildCycleSnapshot(group).objects),
+	),
+});
+
+/** A linear chain, each table referencing the next, the last referencing nothing -- acyclic (`kindHasCycle`'s own peel resolves it in reverse-dependency order). */
+const buildChainSnapshot = (tableNames: ReadonlyArray<string>): Snapshot =>
+	tableNames.reduce((snapshot, name, index) => {
+		const targetName = tableNames[index + 1];
+		return withCycleTable(snapshot, cycleTable(name, targetName));
+	}, emptyCycSnapshot);
+
+/** A cycle plus one acyclic table that depends on one cycle member (never the reverse) -- the cycle must still be found among a larger declared set. */
+const buildCyclePlusDanglingSnapshot = (
+	cycleNames: ReadonlyArray<string>,
+	danglingName: string,
+): Snapshot =>
+	withCycleTable(
+		buildCycleSnapshot(cycleNames),
+		cycleTable(danglingName, cycleNames[0]),
+	);
+
+/** One `pg_class`/`pg_attribute` row shape, as `probeLedgerIdentity`'s own statement returns it. */
+type ProbeRow = {
+	readonly relkind: string;
+	/** [2.2, 783/R5] `c.relpersistence` -- optional because only the real-ledger fixture below needs `"p"` (logged) to be judged `ledger`; every occupied-only row's own word/judgement is persistence-independent. */
+	readonly persistence?: string;
+	readonly name: string | null;
+	readonly type: string | null;
+};
+
+/** The four bootstrap columns, exactly as `bootstrapLedger` creates them -- the fake's default "ledger" answer when a caller does not override the probe. */
+const LEDGER_PROBE_ROWS: ReadonlyArray<ProbeRow> = [
+	{ relkind: "r", persistence: "p", name: "id", type: "bigint" },
+	{ relkind: "r", persistence: "p", name: "filename", type: "text" },
+	{ relkind: "r", persistence: "p", name: "origin", type: "text" },
+	{
+		relkind: "r",
+		persistence: "p",
+		name: "applied_at",
+		type: "timestamp with time zone",
+	},
+];
 
 /**
  * A fake `Driver` whose `transaction()` hands the callback one in-memory
@@ -116,17 +179,22 @@ const buildCycleSnapshot = (): Snapshot => {
  * `ledgerDeleteFailure` (D106 R1, B1, #753 reopened): when set, the
  * ledger's own `delete from` statement throws `ledgerDeleteFailure.thrown`
  * instead of succeeding, independent of `dropFailure` -- standing in for
- * the ledger delete failing even though `select to_regclass(...)` already
- * answered "this table exists" (the exact edge the fix must not swallow).
- * `ledgerBootstrapped` tracks whether `create schema`/`create table` ever
- * ran (mirroring `bootstrapLedger`'s own two statements), so the fake's
- * `select to_regclass(...)` branch can answer honestly instead of always
- * claiming the ledger exists.
+ * the ledger delete failing even though the identity probe already found
+ * the real ledger (the exact edge the fix must not swallow).
+ *
+ * `probeRows` (harden-ledger-identity, 1.2): when set, answers
+ * `probeLedgerIdentity`'s own statement with exactly these rows,
+ * regardless of bootstrap state -- how the occupied-name scenarios are
+ * built. When unset, the probe answers honestly from `ledgerState`
+ * (`bootstrapped`, tracking `create schema`/`create table` the same way
+ * the old `select to_regclass(...)` branch did): the real ledger's four
+ * columns once bootstrapped, no row before that.
  */
 const makeFakeDriver = (
 	databaseName = "testdb",
 	dropFailure?: { readonly thrown: unknown },
 	ledgerDeleteFailure?: { readonly thrown: unknown },
+	probeRows?: ReadonlyArray<ProbeRow>,
 ): {
 	readonly driver: Driver;
 	readonly calls: CompileResult[];
@@ -142,11 +210,14 @@ const makeFakeDriver = (
 			if (sql.startsWith("select current_database()")) {
 				return [{ name: databaseName }];
 			}
-			if (sql.startsWith("select to_regclass(")) {
-				if (ledgerState.bootstrapped) {
-					return [{ reg: "hejbro.migration_ledger" }];
+			if (sql.startsWith("select c.relkind")) {
+				if (probeRows !== undefined) {
+					return probeRows as unknown as ReadonlyArray<DriverRow>;
 				}
-				return [{ reg: null }];
+				if (ledgerState.bootstrapped) {
+					return LEDGER_PROBE_ROWS as unknown as ReadonlyArray<DriverRow>;
+				}
+				return [];
 			}
 			if (sql.startsWith("create schema") || sql.startsWith("create table")) {
 				ledgerState.bootstrapped = true;
@@ -378,14 +449,147 @@ describe("applyReset / 5.3", () => {
 		await expect(
 			applyReset(driver, managedSnapshot, registry, undefined),
 		).rejects.toMatchObject({ code: "reset-not-confirmed" });
-		// The one call that IS allowed through is the read-only
-		// current_database() probe -- refusing still has to know which
-		// database it is refusing to drop.
+		// The two calls that ARE allowed through are the read-only identity
+		// probe and current_database() -- refusing still has to know the
+		// ledger is really the ledger and which database it is refusing to
+		// drop.
 		expect(
-			calls.filter(
-				(call) => !call.sql.toLowerCase().startsWith("select current_database"),
-			),
+			calls.filter((call) => {
+				const sql = call.sql.toLowerCase();
+				return (
+					!sql.startsWith("select current_database") &&
+					!sql.startsWith("select c.relkind")
+				);
+			}),
 		).toHaveLength(0);
+	});
+});
+
+describe("applyReset — a relation that is not the ledger at the ledger's name is refused before any confirmation is asked (harden-ledger-identity, 1.2)", () => {
+	it.each<[string, ReadonlyArray<ProbeRow>, string, ReadonlyArray<string>]>([
+		["a view", [{ relkind: "v", name: "x", type: "integer" }], "view", ["x"]],
+		[
+			"a table holding rows (name, payload)",
+			[
+				{ relkind: "r", name: "name", type: "text" },
+				{ relkind: "r", name: "payload", type: "jsonb" },
+			],
+			"table",
+			["name", "payload"],
+		],
+		[
+			"a table (id, filename)",
+			[
+				{ relkind: "r", name: "id", type: "bigint" },
+				{ relkind: "r", name: "filename", type: "text" },
+			],
+			"table",
+			["id", "filename"],
+		],
+	])(
+		"refuses with apply-ledger-occupied, confirmed undefined -- %s",
+		async (_label, probeRows, relationWord, columns) => {
+			const { driver, calls } = makeFakeDriver(
+				"testdb",
+				undefined,
+				undefined,
+				probeRows,
+			);
+
+			const error: unknown = await applyReset(
+				driver,
+				managedSnapshot,
+				registry,
+				undefined,
+			).catch((caught: unknown) => caught);
+
+			expect(error).toBeInstanceOf(HejbroError);
+			expect((error as HejbroError).code).toBe("apply-ledger-occupied");
+			const message = (error as HejbroError).message;
+			expect(message).toContain(relationWord);
+			columns.map((column) => expect(message).toContain(column));
+			expect(message).toContain("Next:");
+			expect(
+				calls.some((call) =>
+					call.sql.toLowerCase().startsWith("select current_database"),
+				),
+			).toBe(false);
+			expect(
+				calls.some((call) => call.sql.toLowerCase().startsWith("drop")),
+			).toBe(false);
+			expect(
+				calls.some((call) => call.sql.toLowerCase().startsWith("delete from")),
+			).toBe(false);
+		},
+	);
+
+	it("regression: an absent ledger with confirmation drops and clears nothing, ledgerCleared false", async () => {
+		const { driver, calls } = makeFakeDriver(
+			"testdb",
+			undefined,
+			undefined,
+			[],
+		);
+
+		const result = await applyReset(
+			driver,
+			managedSnapshot,
+			registry,
+			"testdb:2",
+		);
+
+		expect(result).toEqual({ ledgerCleared: false });
+		expect(
+			calls.some((call) => call.sql.toLowerCase().startsWith("delete from")),
+		).toBe(false);
+	});
+
+	it("regression: an absent ledger without confirmation still refuses reset-not-confirmed, not apply-ledger-occupied", async () => {
+		const { driver } = makeFakeDriver("testdb", undefined, undefined, []);
+
+		await expect(
+			applyReset(driver, managedSnapshot, registry, undefined),
+		).rejects.toMatchObject({ code: "reset-not-confirmed" });
+	});
+
+	it("regression: the exact ledger drops and clears, ledgerCleared true", async () => {
+		const { driver, calls } = makeFakeDriver(
+			"testdb",
+			undefined,
+			undefined,
+			LEDGER_PROBE_ROWS,
+		);
+
+		const result = await applyReset(
+			driver,
+			managedSnapshot,
+			registry,
+			"testdb:2",
+		);
+
+		expect(result).toEqual({ ledgerCleared: true });
+		expect(
+			calls.some((call) => call.sql.toLowerCase().startsWith("delete from")),
+		).toBe(true);
+	});
+
+	it("regression: the ledger with an extra column drops and clears the same as the exact ledger", async () => {
+		const { driver, calls } = makeFakeDriver("testdb", undefined, undefined, [
+			...LEDGER_PROBE_ROWS,
+			{ relkind: "r", name: "note", type: "text" },
+		]);
+
+		const result = await applyReset(
+			driver,
+			managedSnapshot,
+			registry,
+			"testdb:2",
+		);
+
+		expect(result).toEqual({ ledgerCleared: true });
+		expect(
+			calls.some((call) => call.sql.toLowerCase().startsWith("delete from")),
+		).toBe(true);
 	});
 });
 
@@ -655,7 +859,7 @@ describe("applyReset — reset-drop-failed carries the server's detail and picks
 	});
 
 	it("(iii) the run's own plan contains a cycle, no detail from the server -- Next: states the cycle fact, additive to the outside-declarations possibility, never claims a detail that isn't there", async () => {
-		const cycleSnapshot = buildCycleSnapshot();
+		const cycleSnapshot = buildCycleSnapshot(["left_t", "right_t"]);
 		const changes = planReset(cycleSnapshot, registry);
 		const confirmation = requiredConfirmation("testdb", changes);
 		const { driver } = makeFakeDriver("testdb", {
@@ -685,7 +889,7 @@ describe("applyReset — reset-drop-failed carries the server's detail and picks
 		// so the message states the cycle fact and keeps the
 		// outside-declarations clause too, asserting neither exclusively.
 		const message = (error as HejbroError).message;
-		expect(message).toContain("your own declared objects");
+		expect(message).toContain("your declared tables");
 		expect(message).toContain("an object outside your declarations");
 		// [C10, D106 R1 review round 2] This thrown error carries no
 		// `.detail` -- the detail-pointer clause must not claim one exists
@@ -717,7 +921,7 @@ describe("applyReset — reset-drop-failed carries the server's detail and picks
 	});
 
 	it("(v) the run's own plan contains a cycle AND the actual failure names an outside dependent -- Next: still carries both, asserting neither as the sole cause", async () => {
-		const cycleSnapshot = buildCycleSnapshot();
+		const cycleSnapshot = buildCycleSnapshot(["left_t", "right_t"]);
 		const changes = planReset(cycleSnapshot, registry);
 		const confirmation = requiredConfirmation("testdb", changes);
 		const { driver } = makeFakeDriver("testdb", {
@@ -745,9 +949,76 @@ describe("applyReset — reset-drop-failed carries the server's detail and picks
 
 		const message = (error as HejbroError).message;
 		expect(message).toContain("view outside_view depends on table cyc.left_t");
-		expect(message).toContain("your own declared objects");
+		expect(message).toContain("your declared tables");
 		expect(message).toContain("an object outside your declarations");
 	});
+});
+
+describe("applyReset — the cycle advice fires for a cycle of any length (harden-ledger-identity, 1.6, 797/R1)", () => {
+	const dependencyFailure = Object.assign(
+		new Error(
+			"cannot drop table cyc.some_table because other objects depend on it",
+		),
+		{ code: "2BP01" },
+	);
+
+	it.each<[string, Snapshot, boolean]>([
+		[
+			"a 2-cycle (regression pin)",
+			buildCycleSnapshot(["left_t", "right_t"]),
+			true,
+		],
+		["a 3-cycle", buildCycleSnapshot(["t_a", "t_b", "t_c"]), true],
+		["a 4-cycle", buildCycleSnapshot(["t_a", "t_b", "t_c", "t_d"]), true],
+		[
+			"a self-referencing table alone",
+			buildSelfReferencingSnapshot("t_self"),
+			false,
+		],
+		[
+			"two independent 2-cycles",
+			buildDisjointCyclesSnapshot([
+				["p_a", "p_b"],
+				["q_a", "q_b"],
+			]),
+			true,
+		],
+		[
+			"an acyclic chain a -> b -> c",
+			buildChainSnapshot(["t_a", "t_b", "t_c"]),
+			false,
+		],
+		[
+			"a 3-cycle plus one acyclic table hanging off it",
+			buildCyclePlusDanglingSnapshot(["t_a", "t_b", "t_c"], "t_d"),
+			true,
+		],
+	])(
+		"%s -- cycle advice present: %s",
+		async (_label, snapshot, expectAdvice) => {
+			const changes = planReset(snapshot, registry);
+			const confirmation = requiredConfirmation("testdb", changes);
+			const { driver } = makeFakeDriver("testdb", {
+				thrown: dependencyFailure,
+			});
+
+			const error: unknown = await applyReset(
+				driver,
+				snapshot,
+				registry,
+				confirmation,
+			).catch((caught: unknown) => caught);
+
+			const message = (error as HejbroError).message;
+			if (expectAdvice) {
+				expect(message).toContain("your declared tables");
+				expect(message).toContain("in a cycle");
+			} else {
+				expect(message).not.toContain("your declared tables");
+				expect(message).toContain("an object outside your declarations");
+			}
+		},
+	);
 });
 
 describe("applyReset — reset-drop-failed names the phase that actually failed (D106 R1, NB1+NB4, lead ruling R86, #753 reopened)", () => {
@@ -865,7 +1136,7 @@ describe("applyReset — reset-drop-failed names the phase that actually failed 
 	});
 
 	it("⑤ 2BP01, a cycle in the plan -- detail-first ordering, both possibilities, neither asserted as the cause", async () => {
-		const cycleSnapshot = buildCycleSnapshot();
+		const cycleSnapshot = buildCycleSnapshot(["left_t", "right_t"]);
 		const changes = planReset(cycleSnapshot, registry);
 		const confirmation = requiredConfirmation("testdb", changes);
 		const { driver } = makeFakeDriver("testdb", {
@@ -895,7 +1166,7 @@ describe("applyReset — reset-drop-failed names the phase that actually failed 
 		const detailPointerIndex = message.indexOf(
 			"the detail above names the actual dependent",
 		);
-		const cycleClauseIndex = message.indexOf("your own declared objects");
+		const cycleClauseIndex = message.indexOf("your declared tables");
 		const outsideClauseIndex = message.indexOf(
 			"an object outside your declarations",
 		);

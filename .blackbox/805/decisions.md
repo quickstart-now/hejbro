@@ -11,3 +11,12 @@ _owner · 2026-09-04T08:25Z · raw ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#46_
 
 The owner then uploaded the circle-masked PNG the lead prepared and sent a second screenshot ("this is how it comes out"): the badge preview still shows the cat small inside a white ring, because GitHub scales the logo inside the badge and fills the rest with the badge background color (#ffffff). Remedy proposed to the owner: badge background color sampled from the image (App #a78769, org #b09378). To be finished after 0.2.0-pre.1 ships (D in #412).
 
+<a id="d2"></a>
+## D2 — Close #805: the avatar work is done on the owner's side
+
+_owner · 2026-09-04T12:20Z · raw ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#116_
+
+"Close #805."
+
+The owner uploaded the circle-masked avatars and settled the badge; the item is done on the owner's side and closes.
+

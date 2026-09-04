@@ -440,3 +440,11 @@ _owner · 2026-09-04T13:54Z · raw ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#122_
 
 Correction of the lead's reading of D10 on this branch (the decision rule): the boundary is the product's purpose, not the smallest diff. When a decision comes up, restate what hejbro is for — the owner's production tool for declaring a Postgres database in TypeScript with deterministic migrations; the test is "does it cover my database" — and choose what serves that purpose, fully, inside that category. Work that falls outside hejbro's purpose is what "widening" means; a complete fix inside it is not.
 
+<a id="d38"></a>
+## D38 — 0.2.0-pre.1 npm publish approved: the owner told the lead to press the environment review
+
+_owner · 2026-09-04T12:16Z · raw ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#112_
+
+"Handle it directly." — said when the lead reported that the 0.2.0-pre.1 `release-publish` run was waiting at the `npm` environment review, the one irreversible release step reserved for the owner.
+
+Read by the lead as the owner's approval of this publish, with the lead pressing the button on the owner's behalf: the deployment review was approved through the API with the comment "approved by the owner in conversation ('handle it directly'), pressed by the lead", and the seven packages shipped as 0.2.0-pre.1. The gate itself is unchanged: the next release needs the owner's word again.

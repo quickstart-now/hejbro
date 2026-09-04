@@ -9,6 +9,10 @@ import {
 } from "./execute";
 import type { LedgerState } from "./ledger";
 import { bootstrapLedger, readLedger } from "./ledger";
+import {
+	assertLedgerNotOccupied,
+	probeLedgerIdentity,
+} from "./ledger-identity";
 
 /**
  * [task 6.1, design] Raise's own input, generalized on purpose (spec,
@@ -118,12 +122,15 @@ const rethrowIfAlreadyExists = (
 
 /**
  * [task 6.1/6.3] Stands an empty database up from a snapshot SQL file.
- * Reads the ledger first (task 16.5, D106 m4) -- `readLedger` already
- * tolerates a table that does not exist yet (`{exists: false}`, the same
- * leniency `bootstrapLedger` itself does not need to run for) -- and
- * refuses if it already has history (6.2, layer 1) *before* this call
- * creates anything: a database refused by the ledger precheck no longer
- * gains `hejbro.migration_ledger` as a souvenir of the refusal. This does
+ * [harden-ledger-identity, 783/R2] Probes the ledger's identity first --
+ * an occupied name refuses before `readLedger`, `bootstrapLedger`, or the
+ * file's own statement ever run. Reads the ledger next (task 16.5, D106
+ * m4) -- `readLedger` already tolerates a table that does not exist yet
+ * (`{exists: false}`, the same leniency `bootstrapLedger` itself does not
+ * need to run for) -- and refuses if it already has history (6.2, layer
+ * 1) *before* this call creates anything: a database refused by the
+ * ledger precheck no longer gains `hejbro.migration_ledger` as a souvenir
+ * of the refusal. This does
  * NOT hold for a layer-2 refusal (D106 m4) -- bootstrap below still runs,
  * idempotently, before the catalog collision that layer discovers is
  * ever reached, so that refusal's own database keeps the (empty) ledger
@@ -154,6 +161,8 @@ export const applyRaise = async (
 	snapshotFile: SnapshotFile,
 	commandName: string,
 ): Promise<void> => {
+	const identity = await probeLedgerIdentity(driver);
+	assertLedgerNotOccupied(identity, commandName);
 	const ledgerState = await readLedger(driver);
 	assertDatabaseEmptyByLedger(ledgerState, commandName);
 	await bootstrapLedger(driver);

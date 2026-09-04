@@ -190,6 +190,73 @@ export default defineConfig({
 });
 `;
 
+/** One `pg_class`/`pg_attribute` row shape, as `probeLedgerIdentity`'s own statement returns it. */
+type ProbeRow = {
+	readonly relkind: string;
+	/** [2.2, 783/R5] `c.relpersistence` -- optional because only the real-ledger fixture below needs `"p"` (logged) to be judged `ledger`. */
+	readonly persistence?: string;
+	readonly name: string | null;
+	readonly type: string | null;
+};
+
+/** The four bootstrap columns, exactly as `bootstrapLedger` creates them -- the probe answer that makes `readLedger`'s own mocked rows below internally consistent (a real ledger, not merely an absent one). */
+const LEDGER_PROBE_ROWS: ReadonlyArray<ProbeRow> = [
+	{ relkind: "r", persistence: "p", name: "id", type: "bigint" },
+	{ relkind: "r", persistence: "p", name: "filename", type: "text" },
+	{ relkind: "r", persistence: "p", name: "origin", type: "text" },
+	{
+		relkind: "r",
+		persistence: "p",
+		name: "applied_at",
+		type: "timestamp with time zone",
+	},
+];
+
+/** A fake importer whose driver answers the identity probe with `probeRows` and `readLedger`'s own statement with no rows -- every other statement (including a write) is recorded so a test can assert none was ever sent. */
+const makeFakeStatusImporter = (
+	probeRows: ReadonlyArray<ProbeRow>,
+): {
+	readonly importer: () => Promise<{
+		readonly pgDriver: () => {
+			readonly capabilities: {
+				readonly "interactive-transactions": boolean;
+				readonly "session-state": boolean;
+			};
+			readonly execute: (compiled: {
+				readonly sql: string;
+			}) => Promise<ReadonlyArray<Record<string, unknown>>>;
+			readonly transaction: () => Promise<never>;
+			readonly setupSession: () => Promise<void>;
+			readonly client: { readonly end: () => Promise<void> };
+		};
+	}>;
+	readonly calls: string[];
+} => {
+	const calls: string[] = [];
+	const importer = async () => ({
+		pgDriver: () => ({
+			capabilities: {
+				"interactive-transactions": false,
+				"session-state": false,
+			},
+			execute: async (compiled: { readonly sql: string }) => {
+				calls.push(compiled.sql);
+				const sql = compiled.sql.trim().toLowerCase();
+				if (sql.startsWith("select c.relkind")) {
+					return probeRows;
+				}
+				return [];
+			},
+			transaction: async () => {
+				throw new Error("status must never open a transaction");
+			},
+			setupSession: async () => {},
+			client: { end: async () => {} },
+		}),
+	});
+	return { importer, calls };
+};
+
 // [spec: "Pending migrations are reported without being applied"] `status`
 // never opens a transaction and sends no DDL at all -- proved here by
 // recording every statement a fake driver ever receives and asserting
@@ -228,28 +295,7 @@ describe("runStatus / 7.6, database unchanged", () => {
 	});
 
 	it("sends no write statement while reporting pending migrations", async () => {
-		const calls: string[] = [];
-		const importer = async () => ({
-			pgDriver: () => ({
-				capabilities: {
-					"interactive-transactions": false,
-					"session-state": false,
-				},
-				execute: async (compiled: { readonly sql: string }) => {
-					calls.push(compiled.sql);
-					const sql = compiled.sql.trim().toLowerCase();
-					if (sql.startsWith('select "filename"')) {
-						return [];
-					}
-					return [];
-				},
-				transaction: async () => {
-					throw new Error("status must never open a transaction");
-				},
-				setupSession: async () => {},
-				client: { end: async () => {} },
-			}),
-		});
+		const { importer, calls } = makeFakeStatusImporter(LEDGER_PROBE_ROWS);
 
 		const result = await runStatus(cwd, ["--url", "postgres://fake"], importer);
 
@@ -262,6 +308,43 @@ describe("runStatus / 7.6, database unchanged", () => {
 		expect(
 			calls.some((sql) =>
 				/^\s*(insert|update|delete|create|drop|alter)\b/i.test(sql),
+			),
+		).toBe(false);
+	});
+
+	// [harden-ledger-identity, 1.3] The same regression pin as above, over
+	// the probe branch only -- proves the probe answering "ledger" changes
+	// nothing about today's report (byte-identical stdout, exit 0).
+	it("reports today's output byte-for-byte when the probe finds the real ledger", async () => {
+		const { importer } = makeFakeStatusImporter(LEDGER_PROBE_ROWS);
+
+		const result = await runStatus(cwd, ["--url", "postgres://fake"], importer);
+
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toEqual([
+			"status: the ledger table exists and records no migrations yet.",
+			"status: 1 migration(s) pending:",
+			" - 0001_a.sql",
+		]);
+	});
+
+	// [harden-ledger-identity, 1.3] A relation that is not the ledger at the
+	// ledger's name is a coded diagnostic, never `readLedger`'s own raw
+	// `column "origin" does not exist` stack (#796).
+	it("a relation that is not the ledger is reported as a coded diagnostic, never a raw failure", async () => {
+		const { importer, calls } = makeFakeStatusImporter([
+			{ relkind: "v", name: "x", type: "integer" },
+		]);
+
+		const result = await runStatus(cwd, ["--url", "postgres://fake"], importer);
+
+		expect(result.exitCode).toBe(1);
+		expect(result.stdout).toEqual([]);
+		expect(result.stderr).toContain("error[apply-ledger-occupied]");
+		expect(result.stderr).toContain("Next:");
+		expect(
+			calls.some((sql) =>
+				sql.trim().toLowerCase().startsWith('select "filename"'),
 			),
 		).toBe(false);
 	});

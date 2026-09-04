@@ -215,6 +215,30 @@ export const rightT = table(cyc, "right_t", {
 });
 `;
 
+// [harden-ledger-identity, 1.8, 797/R1] A genuine three-table cycle --
+// cyc3.t_a -> t_b -> t_c -> t_a, each edge a column-level
+// `.references(() => ...)` for the same import-order-safety reason
+// `CYCLE_SCHEMA_SOURCE` above uses it for the two-table pair.
+const CYCLE3_SCHEMA_SOURCE = `import { schema, table, uuid } from "hejbro";
+
+export const cyc3 = schema("cyc3");
+
+export const tA = table(cyc3, "t_a", {
+	id: uuid().primaryKey().defaultRandom(),
+	bId: uuid().references(() => tB.id),
+});
+
+export const tB = table(cyc3, "t_b", {
+	id: uuid().primaryKey().defaultRandom(),
+	cId: uuid().references(() => tC.id),
+});
+
+export const tC = table(cyc3, "t_c", {
+	id: uuid().primaryKey().defaultRandom(),
+	aId: uuid().references(() => tA.id),
+});
+`;
+
 const CONFIRM_DROP_PATTERN = /--confirm-drop (\S+) to confirm/;
 
 /**
@@ -396,7 +420,7 @@ describe("hejbro reset — live witness (#753, task 1.5)", () => {
 			// what the server actually refused over -- the advice states the
 			// cycle fact and keeps the outside-declarations possibility too,
 			// asserting neither as the one true cause.
-			expect(result.stderr).toContain("your own declared objects");
+			expect(result.stderr).toContain("your declared tables");
 			expect(result.stderr).toContain("an object outside your declarations");
 
 			const driver = pgDriver(hostUrl(database));
@@ -409,6 +433,67 @@ describe("hejbro reset — live witness (#753, task 1.5)", () => {
 				// Nothing dropped -- the whole transaction rolled back.
 				expect(rows[0]?.left_t).not.toBeNull();
 				expect(rows[0]?.right_t).not.toBeNull();
+			} finally {
+				await driver.client.end();
+			}
+
+			const status = await runCli(cwd, ["status", "--url", hostUrl(database)]);
+			expect(status.exitCode).toBe(0);
+			expect(status.stdout).toContain("recorded as applied:");
+			expect(status.stdout).toContain("nothing pending");
+		} finally {
+			await removeCliFixtureDir(cwd);
+		}
+	}, 60_000);
+
+	// [harden-ledger-identity, 1.8, 797/R1] The any-length cycle detector's
+	// own live witness -- the unit rows (`apply-reset.test.ts`) fake the
+	// driver; this proves a genuine three-table cycle refuses against a
+	// real server the same way the two-table pair above does, with the
+	// generalized "your declared tables ... in a cycle" wording.
+	it("fails to drop a genuine three-table cycle, states the cycle fact, and leaves status showing every migration applied", async () => {
+		const database = "reset_cycle3";
+		psqlCommand("postgres", `create database ${database};`);
+		const cwd = await createCliFixtureDir();
+		try {
+			await runCli(cwd, ["init"]);
+			await writeFixtureFile(cwd, "src/cycle3.schema.ts", CYCLE3_SCHEMA_SOURCE);
+			await runCli(cwd, ["generate"]);
+			const migrate = await runCli(cwd, [
+				"migrate",
+				"--url",
+				hostUrl(database),
+			]);
+			expect(migrate.exitCode).toBe(0);
+
+			const refused = await runCli(cwd, ["reset", "--url", hostUrl(database)]);
+			expect(refused.exitCode).toBe(1);
+			const confirmation = extractRequiredConfirmation(refused.stderr);
+
+			const result = await runCli(cwd, [
+				"reset",
+				"--url",
+				hostUrl(database),
+				"--confirm-drop",
+				confirmation,
+			]);
+			expect(result.exitCode).toBe(1);
+			expect(result.stderr).toContain("error[reset-drop-failed]");
+			expect(result.stderr).toContain("(2BP01)");
+			expect(result.stderr).toContain("your declared tables");
+			expect(result.stderr).toContain("in a cycle");
+
+			const driver = pgDriver(hostUrl(database));
+			try {
+				const rows = await driver.execute({
+					sql: "select to_regclass('cyc3.t_a') as t_a, to_regclass('cyc3.t_b') as t_b, to_regclass('cyc3.t_c') as t_c",
+					params: [],
+					kind: "sql",
+				});
+				// Nothing dropped -- the whole transaction rolled back.
+				expect(rows[0]?.t_a).not.toBeNull();
+				expect(rows[0]?.t_b).not.toBeNull();
+				expect(rows[0]?.t_c).not.toBeNull();
 			} finally {
 				await driver.client.end();
 			}
@@ -494,6 +579,179 @@ describe("hejbro reset — live witness (#753, task 1.5)", () => {
 			} finally {
 				await driver.client.end();
 			}
+		} finally {
+			await removeCliFixtureDir(cwd);
+		}
+	}, 60_000);
+});
+
+/**
+ * [harden-ledger-identity, 1.7, 783/R2-R4] The shared identity refusal's
+ * own live witness -- the unit rows (`apply-reset.test.ts`,
+ * `status-command.test.ts`, `migrate-command.test.ts`, `apply-raise.test.ts`)
+ * fake the catalog probe; this proves all four ledger-touching commands
+ * refuse the same way against a real relation occupying the ledger's
+ * name, over a real server. Declared objects are applied with `psql`
+ * (never `hejbro migrate`), so `hejbro.migration_ledger` is never
+ * bootstrapped before the occupying relation is created at that name --
+ * the exact database shape 783's own reproduction measured.
+ */
+describe("identity refusal — live witness (harden-ledger-identity, 1.7, 783/R2-R4)", () => {
+	/** Declares `lab.projects`/`lab.tasks`, generates the chain, and applies it with `psql` (never `hejbro migrate`) -- returns the first migration file's own path, relative to `cwd`, for `raise --file`. */
+	const setUpDeclaredObjectsWithoutLedger = async (
+		database: string,
+	): Promise<{ readonly cwd: string; readonly migrationFile: string }> => {
+		psqlCommand("postgres", `create database ${database};`);
+		const cwd = await createCliFixtureDir();
+		await runCli(cwd, ["init"]);
+		await writeFixtureFile(cwd, "src/lab.schema.ts", LAB_SCHEMA_SOURCE);
+		await runCli(cwd, ["generate"]);
+		const migrationsDir = join(cwd, "migrations");
+		const migrationFiles = readdirSync(migrationsDir)
+			.filter((name) => name.endsWith(".sql"))
+			.sort();
+		if (migrationFiles.length === 0) {
+			throw new Error(
+				`expected at least one migration file in ${migrationsDir}`,
+			);
+		}
+		migrationFiles.map((migrationFile) =>
+			psqlApplySql(
+				database,
+				readFileSync(join(migrationsDir, migrationFile), "utf-8"),
+			),
+		);
+		return {
+			cwd,
+			migrationFile: join("migrations", migrationFiles[0] as string),
+		};
+	};
+
+	const declaredTablesStand = async (database: string): Promise<void> => {
+		const driver = pgDriver(hostUrl(database));
+		try {
+			const rows = await driver.execute({
+				sql: "select to_regclass('lab.tasks') as tasks, to_regclass('lab.projects') as projects",
+				params: [],
+				kind: "sql",
+			});
+			expect(rows[0]?.tasks).not.toBeNull();
+			expect(rows[0]?.projects).not.toBeNull();
+		} finally {
+			await driver.client.end();
+		}
+	};
+
+	it("(a) an unrelated table at the ledger's name: reset, status, migrate and raise all refuse, coded, nothing touched", async () => {
+		const database = "identity_table";
+		const { cwd, migrationFile } =
+			await setUpDeclaredObjectsWithoutLedger(database);
+		try {
+			psqlCommand(database, "create schema hejbro;");
+			psqlCommand(
+				database,
+				"create table hejbro.migration_ledger (name text, payload jsonb);",
+			);
+			psqlCommand(
+				database,
+				"insert into hejbro.migration_ledger values ('a', '{}'::jsonb), ('b', '{}'::jsonb), ('c', '{}'::jsonb);",
+			);
+
+			const reset = await runCli(cwd, ["reset", "--url", hostUrl(database)]);
+			expect(reset.exitCode).toBe(1);
+			expect(reset.stderr).toContain("error[apply-ledger-occupied]");
+			expect(reset.stderr).not.toContain("--confirm-drop");
+			await declaredTablesStand(database);
+
+			const status = await runCli(cwd, ["status", "--url", hostUrl(database)]);
+			expect(status.exitCode).toBe(1);
+			expect(status.stderr).toContain("error[apply-ledger-occupied]");
+			expect(status.stderr).not.toContain('column "origin"');
+			expect(status.stderr).not.toContain("    at ");
+
+			const migrate = await runCli(cwd, [
+				"migrate",
+				"--url",
+				hostUrl(database),
+			]);
+			expect(migrate.exitCode).toBe(2);
+			expect(migrate.stderr).toContain("error[apply-ledger-occupied]");
+
+			const raise = await runCli(cwd, [
+				"raise",
+				"--file",
+				migrationFile,
+				"--url",
+				hostUrl(database),
+			]);
+			expect(raise.exitCode).toBe(1);
+			expect(raise.stderr).toContain("error[apply-ledger-occupied]");
+
+			const driver = pgDriver(hostUrl(database));
+			try {
+				const rows = await driver.execute({
+					sql: "select count(*) as count from hejbro.migration_ledger",
+					params: [],
+					kind: "sql",
+				});
+				expect(String(rows[0]?.count)).toBe("3");
+				const catalog = await driver.execute({
+					sql: "select c.relkind as relkind from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'hejbro' and c.relname = 'migration_ledger'",
+					params: [],
+					kind: "sql",
+				});
+				// relkind r, columns name/payload -- bootstrap never ran (no
+				// caller reached `bootstrapLedger`/`create table if not exists`).
+				expect(catalog[0]?.relkind).toBe("r");
+			} finally {
+				await driver.client.end();
+			}
+		} finally {
+			await removeCliFixtureDir(cwd);
+		}
+	}, 60_000);
+
+	it('(b) a view at the ledger\'s name: reset, status, migrate and raise all refuse, the message names "view"', async () => {
+		const database = "identity_view";
+		const { cwd, migrationFile } =
+			await setUpDeclaredObjectsWithoutLedger(database);
+		try {
+			psqlCommand(database, "create schema hejbro;");
+			psqlCommand(
+				database,
+				"create view hejbro.migration_ledger as select 1 as x;",
+			);
+
+			const reset = await runCli(cwd, ["reset", "--url", hostUrl(database)]);
+			expect(reset.exitCode).toBe(1);
+			expect(reset.stderr).toContain("error[apply-ledger-occupied]");
+			expect(reset.stderr).toContain("view");
+			await declaredTablesStand(database);
+
+			const status = await runCli(cwd, ["status", "--url", hostUrl(database)]);
+			expect(status.exitCode).toBe(1);
+			expect(status.stderr).toContain("error[apply-ledger-occupied]");
+			expect(status.stderr).toContain("view");
+
+			const migrate = await runCli(cwd, [
+				"migrate",
+				"--url",
+				hostUrl(database),
+			]);
+			expect(migrate.exitCode).toBe(2);
+			expect(migrate.stderr).toContain("error[apply-ledger-occupied]");
+			expect(migrate.stderr).toContain("view");
+
+			const raise = await runCli(cwd, [
+				"raise",
+				"--file",
+				migrationFile,
+				"--url",
+				hostUrl(database),
+			]);
+			expect(raise.exitCode).toBe(1);
+			expect(raise.stderr).toContain("error[apply-ledger-occupied]");
+			expect(raise.stderr).toContain("view");
 		} finally {
 			await removeCliFixtureDir(cwd);
 		}

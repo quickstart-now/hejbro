@@ -254,10 +254,11 @@ describe("clearLedgerRows / 5.3, D106 R1 B1", () => {
 		expect(state).toEqual({ exists: true, applied: [] });
 	});
 
-	// [D106 R1, B1, #753 reopened] No leniency for an absent table -- the
-	// one caller (`reset.ts`) checks `ledgerTableExists` first and only
-	// calls this when that read says the table is there; a failure here is
-	// a genuine one, never a silent no-op.
+	// [D106 R1, B1, #753 reopened; harden-ledger-identity, 783/R2] No
+	// leniency for an absent table -- the one caller (`reset.ts`) probes
+	// the ledger's identity first and only calls this when that probe
+	// found the real ledger; a failure here is a genuine one, never a
+	// silent no-op.
 	it("throws when the ledger was never bootstrapped", async () => {
 		const session = makeUnbootstrappedSession();
 
