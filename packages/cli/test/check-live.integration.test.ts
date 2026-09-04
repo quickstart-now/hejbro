@@ -777,6 +777,19 @@ export const widgets = table(
 		indexes: [
 			index("widgets_active_idx").on(t.id).where(ne(t.status, "archived")),
 			index("widgets_email_idx").on(sql\`lower(\${t.email})\`),
+			// Review round 1 B3: Postgres stores each of these as a *plain*
+			// key (indexprs null), never as an expression -- the round-trip
+			// witness for the fix that stopped comparing expression-column
+			// *count* and started comparing the ordered key list instead.
+			index("widgets_bare_idx").on(sql\`\${t.email}\`),
+			index("widgets_paren_idx").on(sql\`(\${t.email})\`),
+			index("widgets_collate_idx").on(sql\`\${t.email} collate "C"\`),
+			// Review round 1 B1/B2: genuinely plain declared indexes, each
+			// recreated by the database as something the declaration never
+			// had -- the reverse-direction witness for the declared-side
+			// filter that used to skip a plain index outright.
+			index("widgets_status_plain_idx").on(t.status),
+			index("widgets_id_plain_idx").on(t.id),
 		],
 	}),
 );
@@ -867,6 +880,24 @@ export default defineConfig({
 		expect(result.stdout).toContain("check: no differences.");
 	});
 
+	// Review round 1 B3: a bare column reference, a parenthesized column
+	// and a collated column, all declared as index keys via `sql`, are
+	// stored by Postgres as *plain* keys (never `indexprs`) -- the exact
+	// migration hejbro generated for them applies and re-reads as no
+	// difference, live, not only through the unit-level fake session.
+	it("round-trips a bare column reference, a parenthesized column and a collated column declared as index keys, with no finding", async () => {
+		const result = await runCli(serverProjectDir, [
+			"check",
+			"--url",
+			serverUrl(),
+		]);
+
+		expect(result.exitCode).toBe(0);
+		expect(result.stderr).not.toContain("widgets_bare_idx");
+		expect(result.stderr).not.toContain("widgets_paren_idx");
+		expect(result.stderr).not.toContain("widgets_collate_idx");
+	});
+
 	it("reports exactly the altered predicate, expression index and generated column, never as not-compared", async () => {
 		psqlCommand(
 			ServerDb,
@@ -895,6 +926,37 @@ export default defineConfig({
 		expect(result.stderr).toContain("widgets_active_idx");
 		expect(result.stderr).toContain("widgets_email_idx");
 		expect(result.stderr).toContain("app.widgets.total");
+	});
+
+	// Review round 1 B1/B2: the database gaining a key expression or a
+	// predicate the declaration never had used to pass as "no
+	// differences" -- `declaredIndexExpressions` skipped a plain declared
+	// index outright, so `compareIndexKeys` was never even called for it.
+	// Cumulative with the mutation test above (this same database, same
+	// container): 3 there, 2 more here.
+	it("reports a database-only expression key and a database-only partial predicate, against plain declarations (review B1/B2)", async () => {
+		psqlCommand(
+			ServerDb,
+			"drop index app.widgets_status_plain_idx; create index widgets_status_plain_idx on app.widgets (lower(status));",
+		);
+		psqlCommand(
+			ServerDb,
+			"drop index app.widgets_id_plain_idx; create index widgets_id_plain_idx on app.widgets (id) where id is not null;",
+		);
+
+		const result = await runCli(serverProjectDir, [
+			"check",
+			"--url",
+			serverUrl(),
+		]);
+
+		expect(result.exitCode).toBe(1);
+		const differsCount = (result.stderr.match(/check-object-differs/g) ?? [])
+			.length;
+		expect(differsCount).toBe(5);
+		expect(result.stderr).not.toContain("check-not-compared");
+		expect(result.stderr).toContain("widgets_status_plain_idx");
+		expect(result.stderr).toContain("widgets_id_plain_idx");
 	});
 
 	it("under an explainUnavailable preset, agrees on both indexes and reports the generated column not-compared, exit 2, issuing zero explain", async () => {

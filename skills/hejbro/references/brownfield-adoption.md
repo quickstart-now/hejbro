@@ -99,18 +99,27 @@ the other.
 
 `check` does not compare everything. View bodies are never compared
 (only that a declared view exists). Primary keys, unique constraints
-and foreign keys are checked for existence only, not their exact shape;
-an index's plain columns, its uniqueness and its access method are the
-same — existence only. Four expression-bearing surfaces get both —
-existence, and the expression itself, matched by running the declared
-and the catalog's own rendering through the server in the same
-statement (Postgres often rewrites an expression on write, so comparing
-rendered text directly would false-positive): a check constraint's
-expression (plus whether the database enforces it), a partial index's
-predicate, an index's own expression columns, and a generated column's
-expression (compared as its own axis, never as a default — a generated
-column cannot carry one). The report states this coverage boundary on
-every run, pass or fail. It also prints an **inventory** section —
+and foreign keys are checked for existence only, not their exact shape.
+An index is compared as its whole **ordered key list** (review round 1,
+`.blackbox/778/` R3), not as a filtered "expression columns" subset:
+Postgres stores a bare column reference, a parenthesized column, or a
+column with an explicit collation as a *plain* key, so a position where
+both the declaration and the database hold a plain column is never
+compared beyond the index's existence — only a position at which
+*either* side is an expression is matched by rendering, so a declared
+plain column against a database expression key is caught, and the
+reverse too. A key's sort direction, `NULLS FIRST`/`LAST`, operator
+class, an index's uniqueness, and its access method stay existence-only
+regardless. Check constraints and generated columns get their
+expression compared too — a check constraint's expression (plus
+whether the database enforces it) and a generated column's expression
+(compared as its own axis, never as a default — a generated column
+cannot carry one) — every expression match running the declared and the
+catalog's own rendering through the server in the same statement
+(Postgres often rewrites an expression on write, so comparing rendered
+text directly would false-positive). The report states this coverage
+boundary on every run, pass or fail. It also prints an **inventory**
+section —
 tables inside your declared schemas that no declaration covers, and the
 database's installed extensions — informational only, never a `check`
 finding and never affecting the exit code.

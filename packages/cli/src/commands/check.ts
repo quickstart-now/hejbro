@@ -390,16 +390,17 @@ type DeclaredIndexExpression = {
 	readonly index: LocalIndexSnapshot;
 };
 
-/** `true` for an index with a partial predicate or at least one expression column -- a plain index has nothing this group compares (existence only, `compare.ts`'s `compareIndexes`, unchanged). */
-const hasExpressionSurface = (index: LocalIndexSnapshot): boolean =>
-	index.where !== undefined ||
-	index.columns.some((column) => "expression" in column);
-
 /**
- * Every declared index that carries a predicate or an expression column,
- * across every declared table (#778, task 1.6) -- a plain index is never
- * walked here at all, since it has no expression axis for
- * `compareIndexKeys` to compare.
+ * Every declared index, across every declared table (#778, task 1.6;
+ * filter removed, review round 1 B1/B2, `.blackbox/778/` R3) -- a plain
+ * declared index is walked too, never skipped: skipping it was exactly
+ * the gap that let a database index that grew a predicate or an
+ * expression key the declaration never had pass as "no differences",
+ * because `compareIndexKeys` was never even called for that index.
+ * `compareIndexKeys`'s own key-count-then-presence guards (task 1.9)
+ * catch that direction correctly once it runs, and its own
+ * `pairSources.length === 0` guard means a plain-vs-plain index still
+ * costs zero statements.
  */
 export const declaredIndexExpressions = (
 	snapshot: Snapshot,
@@ -408,13 +409,11 @@ export const declaredIndexExpressions = (
 		.filter(([key]) => key.startsWith("table:"))
 		.flatMap(([, node]) => {
 			const tableNode = node as LocalTableSnapshot;
-			return (tableNode.indexes ?? [])
-				.filter(hasExpressionSurface)
-				.map((index) => ({
-					schema: tableNode.schema,
-					table: tableNode.name,
-					index,
-				}));
+			return (tableNode.indexes ?? []).map((index) => ({
+				schema: tableNode.schema,
+				table: tableNode.name,
+				index,
+			}));
 		});
 
 type DeclaredGeneratedColumn = {

@@ -1134,3 +1134,165 @@ describe("compareCheckAgainstCatalog / 1.6 every expression surface reaches the 
 		).toBe(true);
 	});
 });
+
+/**
+ * Review round 1, B1/B2 (`.blackbox/778/` R3): `declaredIndexExpressions`'s
+ * own filter used to skip a declared index that carries neither a
+ * predicate nor an expression column, so a database index that grew one
+ * (or a partial predicate) the declaration never had passed as "no
+ * differences" -- the filter never let `compareIndexKeys` even run for
+ * that index. This pins the fix directly through
+ * `compareCheckAgainstCatalog`, the seam the bug actually lived in.
+ */
+describe("compareCheckAgainstCatalog / 1.10 every declared index reaches the key comparison (review B1/B2)", () => {
+	const textColumnRow = (name: string) => ({
+		schema: "app",
+		table: "widgets",
+		name,
+		notNull: false,
+		catalogType: "text",
+		baseTypeKind: null,
+		baseTypeSchema: null,
+		baseTypeName: null,
+		catalogDefault: null,
+		catalogGenerated: null,
+	});
+
+	const widgetsCatalogWithIndex = (indexRow: {
+		readonly predicate: string | null;
+		readonly keys: { readonly text: string; readonly expression: boolean }[];
+	}): Catalog => ({
+		...emptyCatalog(),
+		tables: [{ schema: "app", table: "widgets", rls: false }],
+		constraints: [
+			{
+				schema: "app",
+				table: "widgets",
+				name: "widgets_pkey",
+				type: "p",
+				columns: ["id"],
+			},
+		],
+		columns: [
+			idColumnRow("widgets"),
+			textColumnRow("a"),
+			textColumnRow("status"),
+		],
+		indexes: [
+			{ schema: "app", table: "widgets", name: "widgets_idx", ...indexRow },
+		],
+	});
+
+	/** `explainOutput` defaults to an empty `Output` -- fine for the two scenarios here that short-circuit on the count or presence guard before any statement is sent; the one scenario whose shape agrees and reaches a real probe (a genuinely differing pair) supplies its own mismatched pair. */
+	const makeIndexOnlySession = (
+		explainOutput?: ReadonlyArray<string>,
+	): { readonly session: DriverSession; readonly calls: CompileResult[] } => {
+		const calls: CompileResult[] = [];
+		const session: DriverSession = {
+			execute: async (compiled) => {
+				calls.push(compiled);
+				return [explainRow(explainOutput ?? [])];
+			},
+		};
+		return { session, calls };
+	};
+
+	it("reports a declared plain index against a catalog index on lower(a)", async () => {
+		const snapshot = buildTestSnapshot([
+			table(app, "widgets", { id: uuid().primaryKey(), a: text() }, (t) => ({
+				indexes: [index("widgets_idx").on(t.a)],
+			})),
+		]);
+		const catalog = widgetsCatalogWithIndex({
+			predicate: null,
+			keys: [{ text: "lower(a)", expression: true }],
+		});
+		// The count (1 vs 1) and predicate presence (neither) both agree, so
+		// this position is genuinely probed (the declared plain column against
+		// the catalog's expression key) -- a mismatched pair, exactly the
+		// finding this scenario exists to catch.
+		const { session, calls } = makeIndexOnlySession(["a", "lower(a)"]);
+
+		const findings = await compareCheckAgainstCatalog(
+			snapshot,
+			catalog,
+			session,
+		);
+
+		const indexFindings = findings.filter(
+			(finding) => finding.identity === "app.widgets.widgets_idx",
+		);
+		expect(indexFindings).toHaveLength(1);
+		expect(indexFindings[0]?.error).toMatchObject({
+			code: "check-object-differs",
+		});
+		const explainCalls = calls.filter((call) =>
+			call.sql.trim().toLowerCase().startsWith("explain"),
+		);
+		expect(explainCalls).toHaveLength(1);
+	});
+
+	it("reports a declared totally plain index against a catalog partial one", async () => {
+		const snapshot = buildTestSnapshot([
+			table(
+				app,
+				"widgets",
+				{ id: uuid().primaryKey(), a: text(), status: text() },
+				(t) => ({ indexes: [index("widgets_idx").on(t.a)] }),
+			),
+		]);
+		const catalog = widgetsCatalogWithIndex({
+			predicate: "(status <> 'archived'::text)",
+			keys: [{ text: "a", expression: false }],
+		});
+		const { session, calls } = makeIndexOnlySession();
+
+		const findings = await compareCheckAgainstCatalog(
+			snapshot,
+			catalog,
+			session,
+		);
+
+		const indexFindings = findings.filter(
+			(finding) => finding.identity === "app.widgets.widgets_idx",
+		);
+		expect(indexFindings).toHaveLength(1);
+		expect(indexFindings[0]?.error).toMatchObject({
+			code: "check-object-differs",
+		});
+		const explainCalls = calls.filter((call) =>
+			call.sql.trim().toLowerCase().startsWith("explain"),
+		);
+		expect(explainCalls).toHaveLength(0);
+	});
+
+	it("issues no statement and no finding when a plain index matches a plain catalog index", async () => {
+		const snapshot = buildTestSnapshot([
+			table(app, "widgets", { id: uuid().primaryKey(), a: text() }, (t) => ({
+				indexes: [index("widgets_idx").on(t.a)],
+			})),
+		]);
+		const catalog = widgetsCatalogWithIndex({
+			predicate: null,
+			keys: [{ text: "a", expression: false }],
+		});
+		const { session, calls } = makeIndexOnlySession();
+
+		const findings = await compareCheckAgainstCatalog(
+			snapshot,
+			catalog,
+			session,
+		);
+
+		expect(
+			findings.filter(
+				(finding) => finding.identity === "app.widgets.widgets_idx",
+			),
+		).toEqual([]);
+		expect(
+			calls.filter((call) =>
+				call.sql.trim().toLowerCase().startsWith("explain"),
+			),
+		).toEqual([]);
+	});
+});
