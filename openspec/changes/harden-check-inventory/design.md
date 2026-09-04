@@ -119,7 +119,10 @@ to be trusted in. (Measured: see "Measurements" below.)
 
 **Recommendation: (a).** The exclusion rule reads as one sentence — "the
 declaration already accounts for this index under that constraint's own
-name" — and leaves no object unnamed. Note the naming consequence a
+name" — and leaves no object unnamed. It needs nothing new from the
+snapshot either: `primaryKeyName` and a column's `uniqueName` are the
+same fields `compare.ts` already compares against `pg_constraint`, and
+Postgres names the backing index after the constraint (M4). Note the naming consequence a
 reviewer will see: a database-only primary key prints as an *unmanaged
 index* line, which is true of the `pg_index` row it names.
 
@@ -186,15 +189,46 @@ one this change invents for one section.
 
 ## Measurements
 
-Run in the worktree against `postgres:17-alpine` (container `cv-pg`),
-built CLI, by cv-implementer. Filled in before this document is judged.
+Run by cv-implementer in this worktree (built `dist/cli.js`,
+`hejbro v0.2.0-pre.1`) against `postgres:17-alpine` (container `cv-pg`,
+port 15734), on a scratch project declaring one table:
+`id uuid primaryKey`, `email text notNull unique`, `name text notNull`,
+one declared index `users_name_idx`, one declared check `users_name_ck`,
+with hejbro's own generated migration applied.
 
-- M0 — a hejbro-generated schema applied to an empty database:
-  `check` output and exit code (baseline).
-- M1 (#726) — one database-only column on a managed table: today's
-  output and exit code.
-- M2 (#707) — one database-only index and one database-only check
-  constraint on a managed table: today's output and exit code.
-- M3/M4 (Q4) — every `pg_index` row on the hejbro-generated schema, with
-  the constraint each one backs and whether the index name equals the
-  constraint name.
+**M0 — baseline.** `check` prints the three coverage-boundary lines,
+`installed extensions: plpgsql`, `check: no differences.`, exit 0.
+
+**M1 (#726) — a database-only column.**
+`alter table app.users add column legacy_note text;` → `check`'s output
+is **byte-identical to M0**, exit 0; the string `legacy_note` appears
+nowhere in stdout.
+
+**M2 (#707) — a database-only index and check constraint.**
+`create index users_legacy_idx on app.users (email);` and
+`alter table app.users add constraint users_legacy_ck check (length(name) < 500);`
+→ output again **byte-identical to M0**, exit 0; neither name appears.
+
+Both issues reproduce exactly as filed: the report is not merely
+incomplete, it is unchanged by the presence of the objects.
+
+**M3/M4 (Q4) — what the catalog holds on a table hejbro itself created.**
+
+```
+ nspname |  tbl  |       idx        | backs_constraint
+---------+-------+------------------+------------------
+ app     | users | users_email_key  | u
+ app     | users | users_legacy_idx |
+ app     | users | users_name_idx   |
+ app     | users | users_pkey       | p
+```
+
+Four `pg_index` rows against **one** declared index. Two of them
+(`users_pkey`, `users_email_key`) back the declared primary key and the
+declared unique column, and their index names are **identical** to the
+constraint names hejbro's own migration wrote — so the declared side
+already carries those names, as `primaryKeyName` and the column's
+`uniqueName`. A set difference over index names alone would print two
+unmanaged-index lines for a database hejbro produced from these very
+declarations: a 2-in-4 false-report rate on the simplest possible table,
+growing with every key declared. This is the measurement Q4(a) rests on.
