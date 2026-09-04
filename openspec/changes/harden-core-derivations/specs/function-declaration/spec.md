@@ -14,9 +14,11 @@ named.
 The check runs where the column check runs: after every key's own
 refusals — the SQL-name refusal and the reserved-name refusal, each
 applied to keys in declaration order — and over the whole argument list
-at once. Of several collisions the first pair in declaration order is
-reported; the argument order the declaration keeps is unchanged for
-every list that passes.
+at once. Of several collisions, the one reported is the first key in
+declaration order whose derived name repeats an earlier key's, reported
+together with that earlier key — so `{ aB, xY, x_y, a_b }` reports
+`xY` and `x_y`, not `aB` and `a_b`. The argument order the declaration
+keeps is unchanged for every list that passes.
 
 #### Scenario: Two keys deriving to one SQL name are refused
 - **WHEN** a function declares two arguments whose keys derive to one
@@ -24,10 +26,11 @@ every list that passes.
   `user_id`, in either order), a digit boundary (`v2Id` and `v2_id`), a
   single-letter segment (`aB` and `a_b`), a trailing underscore
   (`userId_` and `user_id_`), or three keys of which two collide
-  (`userId`, `userID`, `user_id`)
+  (`userId`, `userID`, `user_id`), or four keys forming two pairs
+  (`aB`, `xY`, `x_y`, `a_b`)
 - **THEN** the declaration fails with `duplicate-argument`, naming the
-  function, both colliding keys and the shared SQL name, and no
-  declaration is produced
+  function, both colliding keys and the shared SQL name — for the
+  four-key list, `xY` and `x_y` — and no declaration is produced
 
 #### Scenario: Keys that only look alike keep their own names
 - **WHEN** a function declares arguments under `postID` and `postId`, or
