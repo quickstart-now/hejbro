@@ -429,7 +429,45 @@ describe("buildLossReport / 1.7", () => {
 		expect(line).toContain("Rename the schema in the database");
 	});
 
-	it("names an omitted index, its table, and says hejbro will not mention it again -- the same line for both commands, since a contract never carries indexes", () => {
+	// harden-check-inventory, task 1.7 (#726): regression pins, byte for
+	// byte, against the two lines this change does NOT touch -- the
+	// column line already promised what `check` now actually does
+	// (#726's own fix is in `check`'s behavior, not this sentence), and
+	// the table line already named `check`'s own inventory correctly.
+	it("pins the omitted-column line's exact text (regression, unchanged by this change)", () => {
+		const report = buildLossReport({
+			...emptyFacts("import"),
+			undeclarableNameColumns: [
+				{
+					schema: "app",
+					table: "widgets",
+					sqlName: "_id",
+					cause: "identifierRuleRejects",
+				},
+			],
+		});
+
+		const line = report.find((entry) => entry.includes("_id"));
+		expect(line).toBe(
+			'Omitted: column "app.widgets._id" -- a key does produce this name back, but it is not a valid hejbro SQL identifier. The table "app.widgets" is only partly declared, and `check` reports this column until it is renamed in the database.',
+		);
+	});
+
+	it("pins the omitted-table line's exact text when its schema still anchors an inventory scan (regression, unchanged by this change)", () => {
+		const report = buildLossReport({
+			...emptyFacts("import"),
+			omittedTables: [
+				{ schema: "app", sqlName: "Widgets", stillReportedInInventory: true },
+			],
+		});
+
+		const line = report.find((entry) => entry.includes("Widgets"));
+		expect(line).toBe(
+			'Omitted: table "app.Widgets" -- its catalog name is not a valid hejbro SQL identifier, so no declaration can carry it. Everything it holds (columns, checks, indexes and foreign keys) is left undeclared, and `check` keeps listing the table itself in its unmanaged-table inventory (informational, never a failing check) until it is renamed in the database.',
+		);
+	});
+
+	it("names an omitted index, its table, and says check keeps listing it as unmanaged -- the same line for both commands, since a contract never carries indexes", () => {
 		const facts = {
 			omittedIndexes: [
 				{ schema: "app", table: "widgets", sqlName: "IX_Widgets" },
@@ -445,10 +483,13 @@ describe("buildLossReport / 1.7", () => {
 		expect(importLine).toBeDefined();
 		expect(importLine).toBe(pullLine);
 		expect(importLine).toContain('index "app.widgets.IX_Widgets"');
-		expect(importLine).toContain("hejbro will not mention it again");
+		expect(importLine).toContain(
+			"`check` keeps listing it as unmanaged until it is renamed in the database",
+		);
+		expect(importLine).not.toContain("will not mention it again");
 	});
 
-	it("names an omitted check constraint, its table, and says hejbro will not mention it again", () => {
+	it("names an omitted check constraint, its table, and says check keeps listing it as unmanaged", () => {
 		const report = buildLossReport({
 			...emptyFacts("import"),
 			omittedChecks: [
@@ -459,7 +500,10 @@ describe("buildLossReport / 1.7", () => {
 		const line = report.find((entry) => entry.includes("CK_Widgets"));
 		expect(line).toBeDefined();
 		expect(line).toContain('check constraint "app.widgets.CK_Widgets"');
-		expect(line).toContain("hejbro will not mention it again");
+		expect(line).toContain(
+			"`check` keeps listing it as unmanaged until it is renamed in the database",
+		);
+		expect(line).not.toContain("will not mention it again");
 	});
 
 	// D106 R7-N2: the DSL derives every column's SQL name from its
@@ -485,18 +529,19 @@ describe("buildLossReport / 1.7", () => {
 		expect(checkLine).toBeDefined();
 
 		expect(indexLine).not.toContain("declare it by hand");
-		expect(indexLine).toContain("rename it in the database");
+		expect(indexLine).toContain("renamed in the database");
 		expect(checkLine).not.toContain("declare it by hand");
-		expect(checkLine).toContain("rename it in the database");
+		expect(checkLine).toContain("renamed in the database");
 	});
 
-	// D106 R4-B3: the three "no ongoing check signal" wordings must be
-	// distinct sentences, one per fact this round actually measured
-	// (`check()` has no derived-name path; a whole omitted schema has
-	// nothing left to anchor an inventory scan on; an omitted index or
-	// check is never scanned for at all) -- never a single generic
-	// "check will not report this" line reused three times.
-	it("uses three distinct consequence sentences for a schema, an unanchored table, and an index/check omission -- never one generic line", () => {
+	// D106 R4-B3, updated by harden-check-inventory (#707): the three
+	// consequence wordings must stay distinct sentences, one per fact
+	// this round actually measured (`check()` has no derived-name path;
+	// a whole omitted schema has nothing left to anchor an inventory
+	// scan on; an omitted index now *is* scanned for, via `check`'s own
+	// object-level inventory, and says so) -- never a single generic
+	// line reused three times.
+	it("uses three distinct consequence sentences for a schema, an unanchored table, and an index omission -- never one generic line", () => {
 		const schemaLine = buildLossReport({
 			...emptyFacts("import"),
 			omittedSchemas: [{ sqlName: "App" }],
@@ -518,7 +563,9 @@ describe("buildLossReport / 1.7", () => {
 		expect(unanchoredTableLine).toContain(
 			"only thing that schema would have declared",
 		);
-		expect(indexLine).toContain("hejbro will not mention it again");
+		expect(indexLine).toContain(
+			"`check` keeps listing it as unmanaged until it is renamed in the database",
+		);
 
 		const consequenceSentences = new Set([
 			schemaLine,
