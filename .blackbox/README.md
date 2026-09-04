@@ -45,11 +45,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | [#374](374/) | adversarial spec-only review stage in the opsx cycle | closed | #539 | 1 | 0 (0 pending) |
 | [#377](377/) | snapshot format stability policy for 1.0 | closed | #383 | 1 | 0 (0 pending) |
 | [#378](378/) | defect-leakage metric over escaped defects | closed | #384 | 1 | 0 (0 pending) |
-<<<<<<< HEAD
-| [#412](412/) | 0.2.x: post-release commitments | open | #715 #808 #824 | 11 | 26 (0 pending) |
-=======
-| [#412](412/) | 0.2.x: post-release commitments | open | #715 #808 | 10 | 26 (0 pending) |
->>>>>>> 5e3e68f5 (chore(blackbox): li batch folders and rulings (783 r1-r4, 797 r1))
+| [#412](412/) | 0.2.x: post-release commitments | open | #715 #808 #824 | 12 | 26 (0 pending) |
 | ↳ [#528](528/) | driver-conformance kit mis-observes transaction-wrapping session-state:false drivers | closed | #737 #760 | 0 | 6 (0 pending) |
 | ↳ [#531](531/) | pg checkout reads its own setupSession; the spec's late-binding scenario fails for spread decorators | closed | #737 | 0 | 3 (0 pending) |
 | ↳ [#533](533/) | cli restore-command test flakes on first heavy parallel run after install | open | #773 | 0 | 1 (0 pending) |
@@ -68,22 +64,16 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#753](753/) | reset drops a referenced table before the table that references it, and the ledger hides the half-reset state | closed | #775 #784 | 0 | 14 (0 pending) |
 | ↳ [#754](754/) | Nile rejects the schema-qualified column references rendered inside CHECK and partial-index predicates (42622) | closed | #780 #795 #802 | 0 | 4 (0 pending) |
 | ↳ [#755](755/) | check cannot compare CHECK constraints on Nile because Nile has no EXPLAIN | closed | #780 #795 | 0 | 6 (0 pending) |
-<<<<<<< HEAD
 | ↳ [#774](774/) | core: diff-engine byIdentity reassembly drops a second same-identity, same-direction change from one kind | closed | #824 | 0 | 1 (1 pending) |
-=======
 | ↳ [#783](783/) | reset: a table that merely shares the ledger's name has all its rows deleted and is reported as the cleared ledger | open |  | 0 | 4 (2 pending) |
->>>>>>> 5e3e68f5 (chore(blackbox): li batch folders and rulings (783 r1-r4, 797 r1))
 | ↳ [#785](785/) | blackbox v2: per-issue folders under .blackbox, hooks + CI-first gate, shipped by the dd-blackbox script | closed | #786 | 5 | 2 (0 pending) |
 | ↳ [#787](787/) | blackbox: migrate the lead ruling ledger R1–R90 into issue folders (first ratification queue of 0.2.1) | closed | #789 | 0 | 0 (0 pending) |
 | ↳ [#788](788/) | blackbox: migrate the 78 legacy single-file entries into issue folders | closed | #790 | 0 | 0 (0 pending) |
 | ↳ [#791](791/) | blackbox: vendor the tool with the harness wake-up fix (agent-skills #18) | closed | #792 | 0 | 0 (0 pending) |
 | ↳ [#793](793/) | blackbox: first PR pinned by CI over the owner's BLACKBOX_TOKEN | closed | #794 | 2 | 0 (0 pending) |
-<<<<<<< HEAD
-| ↳ [#800](800/) | amend D99: notNullElements check renders its column by table, not fully qualified | closed | #822 | 0 | 1 (1 pending) |
-=======
 | ↳ [#796](796/) | status crashes with a raw stack when a foreign object occupies the ledger's name | open |  | 0 | 0 (0 pending) |
 | ↳ [#797](797/) | reset: a cycle longer than two tables gets the outside-dependent advice | open |  | 0 | 1 (0 pending) |
->>>>>>> 5e3e68f5 (chore(blackbox): li batch folders and rulings (783 r1-r4, 797 r1))
+| ↳ [#800](800/) | amend D99: notNullElements check renders its column by table, not fully qualified | closed | #822 | 0 | 1 (1 pending) |
 | ↳ [#801](801/) | make the README metric-block stamp merge-safe instead of freezing dev merges | closed | #802 | 0 | 0 (0 pending) |
 | ↳ [#804](804/) | blackbox CI: release PRs run only the release conditions, bot PRs skip the job | closed | #806 | 1 | 0 (0 pending) |
 | ↳ [#805](805/) | bot and org avatars: no white badge ring around a square photo | closed | #806 | 2 | 0 (0 pending) |
@@ -109,11 +99,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 
 ## Totals
 
-<<<<<<< HEAD
-Owner decisions 75 · rulings 111 (interpretation 67, extension 42, stop 2) · pending extensions 4 · rejected 2
-=======
-Owner decisions 75 · rulings 108 (interpretation 66, extension 40, stop 2) · pending extensions 2 · rejected 2
->>>>>>> 5e3e68f5 (chore(blackbox): li batch folders and rulings (783 r1-r4, 797 r1))
+Owner decisions 77 · rulings 116 (interpretation 70, extension 44, stop 2) · pending extensions 6 · rejected 2
 
 ## Conventions
 

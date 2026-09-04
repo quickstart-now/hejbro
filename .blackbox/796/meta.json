@@ -8,7 +8,15 @@
   "opened": "2026-09-04",
   "closed": null,
   "decisions": [],
-  "work": [],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-04T13:31Z",
+      "title": "status refuses an occupied ledger name with apply-ledger-occupied",
+      "pr": null,
+      "decisions": []
+    }
+  ],
   "prs": [],
   "origin": null,
   "followUps": []

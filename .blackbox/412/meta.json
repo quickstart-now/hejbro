@@ -414,7 +414,6 @@
     {
       "id": "D10",
       "by": "owner",
-<<<<<<< HEAD
       "at": "2026-09-04T13:53Z",
       "title": "Decide against the product we are building, at the smallest scope; do not widen the work",
       "raw": [
@@ -428,12 +427,15 @@
       "title": "The boundary is hejbro's purpose, not the smallest diff",
       "raw": [
         "ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#122"
-=======
+      ]
+    },
+    {
+      "id": "D38",
+      "by": "owner",
       "at": "2026-09-04T12:16Z",
       "title": "0.2.0-pre.1 npm publish approved: the owner told the lead to press the environment review",
       "raw": [
         "ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#112"
->>>>>>> 5e3e68f5 (chore(blackbox): li batch folders and rulings (783 r1-r4, 797 r1))
       ]
     }
   ],
@@ -441,7 +443,7 @@
     {
       "id": "W1",
       "at": "2026-09-03T00:00Z",
-      "title": "2026-09-03 — Three process amendments after the round-5 review (D110)",
+      "title": "2026-09-03 \u2014 Three process amendments after the round-5 review (D110)",
       "pr": null,
       "decisions": []
     }
