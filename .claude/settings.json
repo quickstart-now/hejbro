@@ -7,5 +7,53 @@
 			"Read(./**/coverage/**)",
 			"Read(./**/.turbo/**)"
 		]
+	},
+	"hooks": {
+		"UserPromptSubmit": [
+			{
+				"hooks": [
+					{
+						"type": "command",
+						"command": "node \"$CLAUDE_PROJECT_DIR\"/.blackbox/bin/blackbox.mjs hook prompt",
+						"timeout": 20
+					}
+				]
+			}
+		],
+		"Stop": [
+			{
+				"hooks": [
+					{
+						"type": "command",
+						"command": "node \"$CLAUDE_PROJECT_DIR\"/.blackbox/bin/blackbox.mjs hook stop",
+						"timeout": 20
+					}
+				]
+			}
+		],
+		"PreToolUse": [
+			{
+				"matcher": "Bash|Write|Edit|mcp__.*merge_pull_request",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "node \"$CLAUDE_PROJECT_DIR\"/.blackbox/bin/blackbox.mjs hook pre-tool",
+						"timeout": 120
+					}
+				]
+			}
+		],
+		"PostToolUse": [
+			{
+				"matcher": "Write|Edit|MultiEdit",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "node \"$CLAUDE_PROJECT_DIR\"/.blackbox/bin/blackbox.mjs hook post-tool",
+						"timeout": 20
+					}
+				]
+			}
+		]
 	}
 }

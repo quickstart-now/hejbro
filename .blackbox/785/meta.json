@@ -1,0 +1,74 @@
+{
+  "version": 1,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#785",
+  "title": "blackbox v2: per-issue folders under .blackbox, hooks + CI-first gate, shipped by the dd-blackbox script",
+  "parent": "quickstart-now/hejbro#412",
+  "status": "open",
+  "opened": "2026-09-04",
+  "closed": null,
+  "decisions": [
+    {
+      "id": "D1",
+      "by": "owner",
+      "at": "2026-09-04T03:52Z",
+      "title": "Adopt the folder-form recorder in hejbro, enforced by hooks and CI",
+      "raw": []
+    },
+    {
+      "id": "D2",
+      "by": "owner",
+      "at": "2026-09-04T03:52Z",
+      "title": "The blackbox CI job runs first and pins are checked both ways",
+      "raw": []
+    },
+    {
+      "id": "D3",
+      "by": "owner",
+      "at": "2026-09-04T03:52Z",
+      "title": "Migrate the lead's ruling ledger in full",
+      "raw": []
+    },
+    {
+      "id": "D4",
+      "by": "owner",
+      "at": "2026-09-04T03:52Z",
+      "title": "hejbro is one item",
+      "raw": []
+    },
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "D2"
+      ],
+      "at": "2026-09-04T03:52Z",
+      "title": "#511 is superseded by blackbox check",
+      "ratified": null
+    },
+    {
+      "id": "R2",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "D1"
+      ],
+      "at": "2026-09-04T03:52Z",
+      "title": "issue.sh start/close open and close the folder",
+      "ratified": null
+    }
+  ],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-04T03:52Z",
+      "title": "Recorder moved to .blackbox with the vendored tool, hooks, CI-first job and AGENTS.md",
+      "pr": null,
+      "decisions": []
+    }
+  ],
+  "prs": [],
+  "origin": null,
+  "followUps": []
+}
