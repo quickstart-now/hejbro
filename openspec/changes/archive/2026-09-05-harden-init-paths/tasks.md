@@ -287,3 +287,12 @@ scenario dropped or renamed; the CI-derived gate sweep with
 `TURBO_FORCE=1` in the worktree; `openspec/task-times.csv` rows and the
 README badge restamp (`pnpm check:tasktime`, `pnpm check:crap`); then
 the reviewer is requested (constructor mode, #412/R3).
+
+## 3. D106 round-1 disposition (wording)
+
+- [x] 3.1 ~4m — NB1 (a trailing separator on a file path is refused, not
+  honoured), NB4 (the artifact label keeps `nx/a/mig`; the reason and
+  `Next:` name `nx`), NB7 (a link target is spelled relative to the
+  working directory) stated in the delta. Code findings NB2, NB3, NB5,
+  NB6, NB8 → #846. Files: the cli-commands delta.
+

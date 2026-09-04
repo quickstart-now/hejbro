@@ -13,8 +13,10 @@ working directory, so honouring it would mean silently re-rooting a
 path the user spelled as absolute, and one command reporting the
 spelling while another reports the joined location is exactly the
 disagreement this rule ends. A relative value SHALL be honoured as
-spelled, including a leading `./`, a trailing separator, and a `..`
-that leaves the working directory.
+spelled, including a leading `./`, a trailing separator on a directory
+path, and a `..` that leaves the working directory — a trailing
+separator on a file path (`snapshotPath`) names a directory where a file
+belongs and is refused by the kind check below, never re-spelled.
 
 #### Scenario: An absolute-looking configured path is refused by every command
 - **WHEN** a configuration sets `migrationsDir` or `snapshotPath` to a
@@ -98,7 +100,8 @@ overwrite this command never does. A symbolic link at such a path is
 judged by what it points at: a link to a node of the expected kind is
 that node, present and left untouched; a link whose target does not
 exist is neither kind, and SHALL be refused the same way, naming the
-path and the target the link points at — writing through it would
+path and the target the link points at, spelled relative to the working
+directory like every other path in a report — writing through it would
 create the artifact somewhere the report never named, and reporting it
 as absent would be the same lie one step later. A link that sits where
 an artifact would have to be created inside SHALL be judged the same
@@ -274,8 +277,9 @@ from `generate`.
 #### Scenario: A permission that blocks the check is reported at the directory that blocks it
 - **WHEN** `hejbro init` runs with `migrationsDir: "nx/a/mig"` and the
   directory `nx` exists with no permission to look inside it
-- **THEN** the run fails with a coded refusal whose message and `Next:`
-  line name `nx` — not `nx/a`, not `nx/a/mig` — and nothing is created
+- **THEN** the run fails with a coded refusal whose reason and `Next:`
+  line name `nx` as the directory that blocks — the artifact label
+  still reads `nx/a/mig` — and nothing is created
 
 #### Scenario: A parent that cannot be written into stops the run before anything is created
 - **WHEN** `hejbro init` runs with `migrationsDir: "mig"` and
