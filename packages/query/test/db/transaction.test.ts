@@ -708,6 +708,42 @@ describe("db().transaction (task 4.6)", () => {
 			});
 		});
 
+		it("a nested transaction the callback never awaited keeps the starting tx refused until it settles, then restores it (D106 round 1 NB4)", async () => {
+			const { driver } = transactionalDriver(true);
+			const handle = db({ posts }, driver);
+			const gate = { open: () => {} };
+			const wait = new Promise<void>((resolve) => {
+				gate.open = resolve;
+			});
+
+			await handle.transaction(async (outer) => {
+				const floating = outer.transaction(async (mid) => {
+					// Started inside a nested callback that returns without awaiting it.
+					const deeper = mid.transaction(async (inner) => {
+						await wait;
+						await inner.execute(select(posts));
+						return "deeper-done";
+					});
+					return { deeper };
+				});
+				const { deeper } = await floating;
+				// `mid` settled while `deeper` is still in flight: `outer` must
+				// stay refused -- the tree still has a transaction in flight --
+				// and the message must not point at a settled token.
+				const duringOutcome = await outer
+					.execute(select(posts))
+					.catch((error: unknown) => error);
+				expect(duringOutcome).toHaveProperty(
+					"code",
+					"statement-during-nested-transaction",
+				);
+				gate.open();
+				expect(await deeper).toBe("deeper-done");
+				// `deeper` settled: the starting tx accepts statements again.
+				await expect(outer.execute(select(posts))).resolves.toBeDefined();
+			});
+		});
+
 		it("any tx above an in-flight nested transaction is refused alike (grandparent)", async () => {
 			const { driver, sessionExecute } = transactionalDriver(true);
 			const handle = db({ posts }, driver);

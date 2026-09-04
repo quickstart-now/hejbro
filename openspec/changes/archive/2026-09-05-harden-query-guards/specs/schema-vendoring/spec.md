@@ -4,15 +4,18 @@
 The name-keyed client SHALL refuse a member lookup of a name the contract
 does not vendor, with a coded error naming the vendored list, on every
 surface it exposes: the client itself, the handle `client.as(context)`
-returns, and `fn` on both. A lookup resolves only to an own property the
-surface actually carries: a name inherited from `Object.prototype`
-(`__proto__`, `hasOwnProperty`, …) is not carried and is refused, unless
-the contract vendors that exact name, which always wins. The names the
-language itself reads off any value — `then`, `toString`, `valueOf`,
-`constructor` and `toJSON` — and symbol-keyed lookups SHALL stay readable
-rather than refused, so awaiting, stringifying, inspecting and
-serializing the client value itself keep working; on those names too an
-own property wins. The refusal is raised at the lookup, before any
+returns, and `fn` on both. A lookup resolves only to a member the surface
+carries as its own — a vendored table, `fn`, `as` — or is refused: a name
+inherited from `Object.prototype` (`__proto__`, `hasOwnProperty`, …) is
+refused, unless the contract vendors that exact name, which always wins.
+The one exception is the names the language itself reads off any value —
+`then`, `toString`, `valueOf`, `constructor` and `toJSON` — and
+symbol-keyed lookups: those SHALL stay readable rather than refused, and
+where the surface carries no own member of that name they resolve to
+what the language provides (the inherited `toString`, `valueOf` and
+`constructor`; `undefined` for `then` and `toJSON`), so awaiting,
+stringifying, inspecting and serializing the client value itself keep
+working; on those names too an own property wins. The refusal is raised at the lookup, before any
 statement is built, so a call chained onto the result never reaches an
 uncoded `TypeError`.
 

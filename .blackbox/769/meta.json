@@ -43,6 +43,18 @@
       "at": "2026-09-04T16:50Z",
       "title": "Review disposition: passed; 1.2b and 1.4c taken; #845 filed; O1 filed",
       "ratified": null
+    },
+    {
+      "id": "R4",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "D1",
+        "R3"
+      ],
+      "at": "2026-09-04T20:31Z",
+      "title": "D106 round 1 disposition: kit trailing comment and innermost restoration repaired at archive; NB2 wording; #845/#848 stand; archived",
+      "ratified": null
     }
   ],
   "work": [

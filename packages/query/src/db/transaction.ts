@@ -68,7 +68,20 @@ export type Tx<TSchema = Record<string, unknown>> = ChainApi<TSchema> & {
  * transaction, for the root token (#449, task 1.4c). `kind` picks which
  * of those two truths the settled refusal states.
  */
-export type TxToken = { settled: boolean; readonly kind: "root" | "nested" };
+export type TxToken = {
+	settled: boolean;
+	readonly kind: "root" | "nested";
+	/** The token this nested transaction was started from -- walked upward when it settles, so the tree's innermost never lands on a token that settled meanwhile (D106 round 1, NB4). */
+	readonly parent?: TxToken;
+};
+
+/** The nearest token in the chain that is still in flight -- `token` itself, or the first unsettled ancestor. */
+const liveAncestor = (token: TxToken): TxToken => {
+	if (!token.settled || token.parent === undefined) {
+		return token;
+	}
+	return liveAncestor(token.parent);
+};
 
 /**
  * One transaction's whole `tx` tree shares this state (#449): `next` is
@@ -276,7 +289,11 @@ const createSavepointApi = (
 		// transaction's token, not the old one, by the time it checks --
 		// this ordering (flip `innermost` before the SAVEPOINT is even sent)
 		// is what actually closes the race, not merely having a token.
-		const childToken: TxToken = { settled: false, kind: "nested" };
+		const childToken: TxToken = {
+			settled: false,
+			kind: "nested",
+			parent: token,
+		};
 		tree.innermost = childToken;
 		try {
 			const name = `hejbro_sp_${tree.next}`;
@@ -306,7 +323,15 @@ const createSavepointApi = (
 			return result;
 		} finally {
 			childToken.settled = true;
-			tree.innermost = token;
+			// Restore only what this call installed (D106 round 1, NB4): a
+			// nested transaction the callback never awaited may still be in
+			// flight and innermost; writing over it would leave the tree
+			// pointing at a settled token and refuse the parent with a
+			// message that is false. That floating transaction restores the
+			// parent itself when it settles.
+			if (tree.innermost === childToken) {
+				tree.innermost = liveAncestor(token);
+			}
 			state.active = false;
 		}
 	}) as Tx["transaction"];

@@ -26,4 +26,4 @@ statement by the word it leads with once a semicolon glued to that word
 is stripped too, matching the driver-contract requirement's own wording
 exactly — including a savepoint rollback's optional `work`/`transaction`
 word, which now keeps the statement ordinary rather than ending the
-transaction.
+transaction. A comment glued to a control word (`commit-- x`) no longer hides it from the conformance kit, and a nested transaction the callback never awaited keeps the starting `tx` refused only while it is in flight — its settling restores the starting `tx`, never a stale one.

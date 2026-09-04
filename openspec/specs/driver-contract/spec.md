@@ -411,10 +411,22 @@ where a transaction opens and ends reads SQL's own transaction-control
 statements only; the check still reads no driver's own settings text. A
 statement is recognized by the transaction-control keyword it leads
 with, not by its exact text, so the ordinary spellings of opening and
-ending a transaction are all seen. A statement is classified by the word
-its text leads with once that text is trimmed, lower-cased, and
-stripped of any trailing semicolons; a string is never split on an
-interior `;`. A statement that only manipulates a
+ending a transaction are all seen. A statement is classified by its
+leading word: the text is trimmed and lower-cased, and the leading word
+is the first run of characters that are neither whitespace nor `;`, so
+a semicolon glued to the word, and any semicolons around it, never
+become part of it. Where a control word is read together with the words
+after it (`start transaction`; `rollback`, which rolls back to a
+savepoint — and so stays ordinary — when `to` follows it directly or
+after one optional `work` or `transaction`, and ends the transaction
+otherwise), each following word counts only when whitespace alone
+separates it from the one before; a `;` between them ends the leading
+statement, and nothing past it is read. A string is never split on an interior `;`
+into several statements: a string carrying several is classified by its
+first alone, and what a later statement in it does is not seen. Text
+that leads with a comment leads with the comment's own characters and
+is classified as an ordinary statement; the check reads no SQL lexical
+structure beyond the leading word. A statement that only manipulates a
 savepoint — establishing one, releasing one, or rolling back to one —
 neither opens nor ends a transaction, and counts as an ordinary
 statement here. The refusal above reads which record the caller handed
@@ -471,6 +483,42 @@ modify this requirement.
 - **THEN** the check refuses on which record it was handed rather than
   on what that record contains, instead of applying the obligation to
   statements that cannot show where the transaction begins
+
+#### Scenario: A semicolon glued to the leading word does not hide it
+- **WHEN** an envelope carries, in the position of a transaction
+  boundary, any of `commit;`, `commit; ;`, `COMMIT;;`, `;commit`,
+  `rollback; to savepoint x`, `  BEGIN ;`, `begin; set local x`
+- **THEN** each is classified by its leading word — the `commit` and
+  `rollback` forms end the transaction, so a caller statement after one
+  of them is reported as sent outside an open transaction, and the
+  `begin` forms open one, so a conforming wire that opens with either is
+  not refused
+
+#### Scenario: Nothing past the leading statement is read
+- **WHEN** an envelope carries, between the transaction's opening and
+  the caller's own statement, any of `start; transaction`,
+  `savepoint x;`, `select 'begin; commit'`, `select ';'`
+- **THEN** each counts as an ordinary statement — `start; transaction`
+  opens nothing because its second word is past a `;`, and a semicolon
+  or a control word inside a string literal is never reached — so the
+  envelope conforms with that statement standing in for the settings
+
+#### Scenario: A savepoint rollback keeps its optional words
+- **WHEN** an envelope carries, between the transaction's opening and
+  the caller's own statement, any of `rollback transaction to savepoint
+  x`, `rollback work to savepoint x`, `ROLLBACK TRANSACTION TO SAVEPOINT
+  s`
+- **THEN** each counts as an ordinary statement, exactly as `rollback to
+  savepoint x` does, so the envelope conforms — while `rollback work`
+  and `rollback transaction` on their own still end the transaction
+
+#### Scenario: A comment-led statement is ordinary
+- **WHEN** an envelope carries `-- opens\nbegin` where the opening would
+  be, or `/* trace */ commit` between the opening and the caller
+- **THEN** each is classified as an ordinary statement — the first
+  envelope has no opening and is reported as such, the second conforms —
+  because the leading word is the comment's own text, and that is the
+  limit of what this check reads
 
 ### Requirement: A provider whose paths are indistinguishable in the client value takes the path as a declaration
 Where a provider's connection paths differ in capability but are carried
