@@ -122,6 +122,11 @@ same `assertBuiltCli` dist-freshness guard (`packages/cli/test/loader-cycle.test
 - Base branch `dev`. Feature branches, PR back to `dev`, **squash merge**.
   PR body lists the commits to be squashed and references the related
   issue.
+- CI on a PR runs the heavy checks only when the owner approves them
+  (#809): `verify` waits at the `ci-pr` environment review; the cheap
+  `blackbox` job runs on every push and lands the pins first, and a newer
+  head cancels a run still waiting, so one approval per PR, on its final
+  head. Pushes to `dev`/`main` and bot PRs are not gated this way.
 - Releases: `dev` → `main` PR, **merge commit** (never squash/rebase).
 - Conventional commits, enforced by commitlint (husky):
   `<type>(<scope>): <subject>` — lower-case subject, ≤72 chars.

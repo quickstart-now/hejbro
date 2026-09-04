@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#809",
+  "title": "ci: verify on a pr waits for the owner's environment approval",
+  "parent": "quickstart-now/hejbro#412",
+  "status": "open",
+  "opened": "2026-09-04",
+  "closed": null,
+  "decisions": [
+    {
+      "id": "D1",
+      "by": "owner",
+      "at": "2026-09-04T08:52Z",
+      "title": "The heavy PR checks run only once the owner approves them (environment review)",
+      "raw": [
+        "ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#66"
+      ]
+    },
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "D1"
+      ],
+      "at": "2026-09-04T08:52Z",
+      "title": "Environment gate on verify, cheap blackbox job free, one approval per PR through concurrency cancellation",
+      "ratified": null
+    }
+  ],
+  "work": [],
+  "prs": [],
+  "origin": null,
+  "followUps": []
+}
