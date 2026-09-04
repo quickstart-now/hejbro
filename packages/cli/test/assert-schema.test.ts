@@ -100,6 +100,7 @@ const matchingCatalog = (): Catalog => ({
 			baseTypeSchema: null,
 			baseTypeName: null,
 			catalogDefault: null,
+			catalogGenerated: null,
 		},
 	],
 });

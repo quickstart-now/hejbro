@@ -18,10 +18,12 @@ import {
 	integer,
 	isNotNull,
 	literal,
+	numeric,
 	pgEnum,
 	rls,
 	schema,
 	serial,
+	sql,
 	table,
 	text,
 	uuid,
@@ -101,6 +103,7 @@ describe("compareCatalog / 2.2 column type comparison", () => {
 					baseTypeSchema: null,
 					baseTypeName: null,
 					catalogDefault: null,
+					catalogGenerated: null,
 				},
 				{
 					schema: "app",
@@ -112,6 +115,7 @@ describe("compareCatalog / 2.2 column type comparison", () => {
 					baseTypeSchema: null,
 					baseTypeName: null,
 					catalogDefault: null,
+					catalogGenerated: null,
 				},
 			],
 		};
@@ -155,6 +159,7 @@ describe("compareCatalog / 2.2 column type comparison", () => {
 					baseTypeSchema: null,
 					baseTypeName: null,
 					catalogDefault: null,
+					catalogGenerated: null,
 				},
 				{
 					schema: "app",
@@ -168,6 +173,7 @@ describe("compareCatalog / 2.2 column type comparison", () => {
 					baseTypeSchema: "app",
 					baseTypeName: "status",
 					catalogDefault: null,
+					catalogGenerated: null,
 				},
 			],
 		};
@@ -208,6 +214,7 @@ describe("compareCatalog / 2.3 notNull and default comparison", () => {
 					baseTypeSchema: null,
 					baseTypeName: null,
 					catalogDefault: null,
+					catalogGenerated: null,
 				},
 				{
 					schema: "app",
@@ -219,6 +226,7 @@ describe("compareCatalog / 2.3 notNull and default comparison", () => {
 					baseTypeSchema: null,
 					baseTypeName: null,
 					catalogDefault: "'member'::text",
+					catalogGenerated: null,
 				},
 			],
 		};
@@ -257,6 +265,7 @@ describe("compareCatalog / 2.3 notNull and default comparison", () => {
 					baseTypeSchema: null,
 					baseTypeName: null,
 					catalogDefault: null,
+					catalogGenerated: null,
 				},
 				{
 					schema: "app",
@@ -268,6 +277,7 @@ describe("compareCatalog / 2.3 notNull and default comparison", () => {
 					baseTypeSchema: null,
 					baseTypeName: null,
 					catalogDefault: null,
+					catalogGenerated: null,
 				},
 			],
 		};
@@ -306,6 +316,7 @@ describe("compareCatalog / 2.3 notNull and default comparison", () => {
 					baseTypeSchema: null,
 					baseTypeName: null,
 					catalogDefault: null,
+					catalogGenerated: null,
 				},
 				{
 					schema: "app",
@@ -317,6 +328,7 @@ describe("compareCatalog / 2.3 notNull and default comparison", () => {
 					baseTypeSchema: null,
 					baseTypeName: null,
 					catalogDefault: null,
+					catalogGenerated: null,
 				},
 			],
 		};
@@ -332,6 +344,157 @@ describe("compareCatalog / 2.3 notNull and default comparison", () => {
 		const messages = findings.map((finding) => finding.error.message).join(" ");
 		expect(messages).toContain("not null");
 		expect(messages).toContain("character varying(120)");
+	});
+});
+
+/**
+ * #778/#781: a generated column's own axis is neither its type/notNull nor
+ * its default -- `compareColumnDefault` reading `row.catalogGenerated` as
+ * "a default the declaration does not have" (the #781 bug) reported every
+ * matching generated column as differing, permanently. `compareColumn`
+ * gains a fifth axis (`compareColumnGenerated`, whether each side is
+ * generated at all) and skips the default axis entirely once either side
+ * is generated -- the actual expression match/mismatch is group 3's async
+ * `compareGeneratedColumn` (wired in 1.6), not this synchronous function,
+ * so a column generated identically on both sides produces no finding
+ * here either.
+ */
+describe("compareCatalog / 2.6 a generated column's own axis (#778/#781)", () => {
+	const catalogGeneratedColumn = () => ({
+		schema: "app",
+		table: "widgets",
+		name: "id",
+		notNull: true,
+		catalogType: "uuid",
+		baseTypeKind: null,
+		baseTypeSchema: null,
+		baseTypeName: null,
+		catalogDefault: null,
+		catalogGenerated: null,
+	});
+	const widgetsCatalog = (totalRow: {
+		readonly catalogDefault: string | null;
+		readonly catalogGenerated: string | null;
+	}): Catalog => ({
+		...emptyCatalog(),
+		tables: [{ schema: "app", table: "widgets", rls: false }],
+		constraints: [
+			{
+				schema: "app",
+				table: "widgets",
+				name: "widgets_pkey",
+				type: "p",
+				columns: ["id"],
+			},
+		],
+		columns: [
+			catalogGeneratedColumn(),
+			{
+				schema: "app",
+				table: "widgets",
+				name: "total",
+				notNull: false,
+				catalogType: "numeric",
+				baseTypeKind: null,
+				baseTypeSchema: null,
+				baseTypeName: null,
+				catalogDefault: totalRow.catalogDefault,
+				catalogGenerated: totalRow.catalogGenerated,
+			},
+		],
+	});
+
+	it("reports no finding for a column generated on both sides (the #781 control)", () => {
+		const widgets = table(app, "widgets", {
+			id: uuid().primaryKey(),
+			total: numeric().generatedAlwaysAs(sql`price * qty`),
+		});
+		const snapshot = buildTestSnapshot([widgets]);
+		const catalog = widgetsCatalog({
+			catalogDefault: null,
+			catalogGenerated: "(price * (qty)::numeric)",
+		});
+
+		const findings = compareCatalog(snapshot, catalog);
+
+		expect(findings).toEqual([]);
+	});
+
+	it("reports a declared-generated column the database holds plain, naming the generation, never asking to add a default", () => {
+		const widgets = table(app, "widgets", {
+			id: uuid().primaryKey(),
+			total: numeric().generatedAlwaysAs(sql`price * qty`),
+		});
+		const snapshot = buildTestSnapshot([widgets]);
+		const catalog = widgetsCatalog({
+			catalogDefault: null,
+			catalogGenerated: null,
+		});
+
+		const findings = compareCatalog(snapshot, catalog);
+
+		expect(findings).toHaveLength(1);
+		expect(findings[0]?.identity).toBe("app.widgets.total");
+		expect(findings[0]?.error).toMatchObject({ code: "check-object-differs" });
+		expect(findings[0]?.error.message).toContain("generated");
+		expect(findings[0]?.error.message).not.toContain("add the default");
+	});
+
+	it("reports exactly one finding -- never a second on the default axis -- when the database's plain column also carries a default", () => {
+		const widgets = table(app, "widgets", {
+			id: uuid().primaryKey(),
+			total: numeric().generatedAlwaysAs(sql`price * qty`),
+		});
+		const snapshot = buildTestSnapshot([widgets]);
+		const catalog = widgetsCatalog({
+			catalogDefault: "'x'::text",
+			catalogGenerated: null,
+		});
+
+		const findings = compareCatalog(snapshot, catalog);
+
+		expect(findings).toHaveLength(1);
+		expect(findings[0]?.identity).toBe("app.widgets.total");
+		// The one finding must be the generation axis, not the default axis
+		// (#781's own bug: "has no default, but the database has one" is
+		// exactly the wrong-axis message this pins against).
+		expect(findings[0]?.error.message).not.toContain("has no default");
+		expect(findings[0]?.error.message).toContain("generated");
+	});
+
+	it("reports a declared-plain column the database holds generated, naming the database's expression", () => {
+		const widgets = table(app, "widgets", {
+			id: uuid().primaryKey(),
+			total: numeric(),
+		});
+		const snapshot = buildTestSnapshot([widgets]);
+		const catalog = widgetsCatalog({
+			catalogDefault: null,
+			catalogGenerated: "(price * (qty)::numeric)",
+		});
+
+		const findings = compareCatalog(snapshot, catalog);
+
+		expect(findings).toHaveLength(1);
+		expect(findings[0]?.identity).toBe("app.widgets.total");
+		expect(findings[0]?.error).toMatchObject({ code: "check-object-differs" });
+		expect(findings[0]?.error.message).toContain("(price * (qty)::numeric)");
+	});
+
+	it("still compares the default axis normally for a plain column (regression)", () => {
+		const widgets = table(app, "widgets", {
+			id: uuid().primaryKey(),
+			total: numeric().default(0),
+		});
+		const snapshot = buildTestSnapshot([widgets]);
+		const catalog = widgetsCatalog({
+			catalogDefault: "0",
+			catalogGenerated: null,
+		});
+
+		const findings = compareCatalog(snapshot, catalog);
+
+		expect(findings).toEqual([]);
 	});
 });
 
@@ -365,6 +528,7 @@ describe("compareCatalog / a serial column's owned-sequence default (#716)", () 
 					baseTypeSchema: null,
 					baseTypeName: null,
 					catalogDefault: "nextval('t_id_seq'::regclass)",
+					catalogGenerated: null,
 				},
 			],
 			sequences: [{ schema: "public", name: "t_id_seq" }],
@@ -392,6 +556,7 @@ describe("compareCatalog / a serial column's owned-sequence default (#716)", () 
 					baseTypeSchema: null,
 					baseTypeName: null,
 					catalogDefault: "nextval('app.t_id_seq'::regclass)",
+					catalogGenerated: null,
 				},
 			],
 			sequences: [{ schema: "app", name: "t_id_seq" }],
@@ -419,6 +584,7 @@ describe("compareCatalog / a serial column's owned-sequence default (#716)", () 
 					baseTypeSchema: null,
 					baseTypeName: null,
 					catalogDefault: null,
+					catalogGenerated: null,
 				},
 			],
 			sequences: [{ schema: "app", name: "t_id_seq" }],
@@ -450,6 +616,7 @@ describe("compareCatalog / a serial column's owned-sequence default (#716)", () 
 					baseTypeSchema: null,
 					baseTypeName: null,
 					catalogDefault: "nextval('other_seq'::regclass)",
+					catalogGenerated: null,
 				},
 			],
 			sequences: [{ schema: "app", name: "t_id_seq" }],
@@ -488,6 +655,7 @@ describe("compareCatalog / a serial column's owned-sequence default (#716)", () 
 					baseTypeSchema: null,
 					baseTypeName: null,
 					catalogDefault: "'member'::text",
+					catalogGenerated: null,
 				},
 			],
 		};
@@ -514,6 +682,7 @@ describe("compareCatalog / a serial column's owned-sequence default (#716)", () 
 					baseTypeSchema: null,
 					baseTypeName: null,
 					catalogDefault: "nextval('x_seq'::regclass)",
+					catalogGenerated: null,
 				},
 			],
 		};
@@ -575,6 +744,7 @@ describe("compareCatalog / 2.4 existence for every declared kind", () => {
 					baseTypeSchema: null,
 					baseTypeName: null,
 					catalogDefault: null,
+					catalogGenerated: null,
 				},
 			],
 			// posts_touch's own implicit function (posts_touch_fn) exists;
@@ -643,6 +813,7 @@ const uuidColumnRow = (table: string, name: string) => ({
 	baseTypeSchema: null,
 	baseTypeName: null,
 	catalogDefault: null,
+	catalogGenerated: null,
 });
 
 describe("compareCatalog / 2.5 table sub-object existence", () => {

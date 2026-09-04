@@ -1,0 +1,191 @@
+{
+  "version": 1,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#778",
+  "title": "check: index predicates and generated-column expressions are not compared through the server's rendering as the spec claims",
+  "parent": "quickstart-now/hejbro#412",
+  "status": "closed",
+  "opened": "2026-09-04",
+  "closed": "2026-09-04",
+  "decisions": [
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "D1"
+      ],
+      "at": "2026-09-04T14:14Z",
+      "title": "Batch ck = #778 #779 #781 as one change harden-check-expressions, parallel to li and ip",
+      "ratified": null
+    },
+    {
+      "id": "R2",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "D1",
+        "R1"
+      ],
+      "at": "2026-09-04T14:28Z",
+      "title": "harden-check-expressions approved; one rule for four expression surfaces; Q1 Q3 Q5 Q7 Q8 as recommended",
+      "ratified": null
+    },
+    {
+      "id": "R3",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "D1",
+        "R2"
+      ],
+      "at": "2026-09-04T16:12Z",
+      "title": "Review: an index compares its whole ordered key list by position, both directions; generated-vs-plain may quote the database default",
+      "ratified": null
+    },
+    {
+      "id": "R4",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R1",
+        "R2",
+        "R3"
+      ],
+      "at": "2026-09-04T20:48Z",
+      "title": "ck (c) accepted: constructor review round 3 0/0/21 at fd7c9cfd; rebased onto dev; PR by the lead",
+      "ratified": null
+    }
+  ],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-04T15:35Z",
+      "title": "check compares index predicates, expression columns and generated columns through the server's rendering",
+      "pr": null,
+      "decisions": []
+    },
+    {
+      "id": "W2",
+      "at": "2026-09-04T16:45Z",
+      "title": "review round 1: index compared as an ordered key list",
+      "pr": null,
+      "decisions": []
+    },
+    {
+      "id": "W3",
+      "at": "2026-09-04T20:21Z",
+      "title": "review round 2: include columns are not keys",
+      "pr": null,
+      "decisions": []
+    }
+  ],
+  "prs": [
+    {
+      "number": 851,
+      "ref": "quickstart-now/hejbro#851",
+      "title": "fix(cli): compare every table-bound expression through the server's rendering (#778, #779, #781)",
+      "head": "a4f92fd352cfbda8655eb7314dca11ba9908282b",
+      "headRef": "fix-check-expressions",
+      "base": "dev",
+      "merged": null,
+      "pinnedAt": "2026-09-04T21:12Z",
+      "refs": [
+        {
+          "path": ".changeset/harden-check-expressions.md",
+          "blob": "3a714e4ad63db000955ad4f917e31b290c87a7e6"
+        },
+        {
+          "path": "README.md",
+          "blob": "b3b8a44b023aba5348ab44000a94c7af331110c3"
+        },
+        {
+          "path": "openspec/changes/harden-check-expressions/design.md",
+          "blob": "6307ddcedc302f6af89c5abe449e60b9659c6b1c"
+        },
+        {
+          "path": "openspec/changes/harden-check-expressions/proposal.md",
+          "blob": "346b4ffae0cb8a38bc9e53c2162211a4b995e37f"
+        },
+        {
+          "path": "openspec/changes/harden-check-expressions/specs/cli-commands/spec.md",
+          "blob": "a0a50cf0cbd3746ef07d7fff807660420a2f62b0"
+        },
+        {
+          "path": "openspec/changes/harden-check-expressions/tasks.md",
+          "blob": "096ba7047acacd7f8b43b113e1c5c1ce5d7d1982"
+        },
+        {
+          "path": "openspec/task-times.csv",
+          "blob": "3a98cca3f60368b945dc4713682599ed7a253b22"
+        },
+        {
+          "path": "packages/cli/src/check/catalog.ts",
+          "blob": "57f5ed08a33a89d4d8f1786d8da4609977ba93d1"
+        },
+        {
+          "path": "packages/cli/src/check/compare.ts",
+          "blob": "4e65a2d54ac02f78d674f0665bde123bb9146015"
+        },
+        {
+          "path": "packages/cli/src/check/expression.ts",
+          "blob": "b1443b907938309f828036351d67f6fb7ecf880e"
+        },
+        {
+          "path": "packages/cli/src/commands/check.ts",
+          "blob": "e39bb94665dd3e13e6b504e0fe8a738b04538c12"
+        },
+        {
+          "path": "packages/cli/test/assert-schema.test.ts",
+          "blob": "0d469ee9de607946363a4bd7b8d566c66eb9397c"
+        },
+        {
+          "path": "packages/cli/test/check-catalog.test.ts",
+          "blob": "86a85421fcf26c86229ce86011fda24613e8a079"
+        },
+        {
+          "path": "packages/cli/test/check-command.test.ts",
+          "blob": "05c8cead6f90b0f5c6b60b5e712a9defa4b55646"
+        },
+        {
+          "path": "packages/cli/test/check-compare.test.ts",
+          "blob": "a242ceb7d6ad9f6e988d5fcd1fbb6d4da272ebf1"
+        },
+        {
+          "path": "packages/cli/test/check-expression.test.ts",
+          "blob": "95b42c5956630b4fdc27d0dae000454ac12f57c0"
+        },
+        {
+          "path": "packages/cli/test/check-live.integration.test.ts",
+          "blob": "986df46edb37a011ea0be12df892422b57b68ae1"
+        },
+        {
+          "path": "packages/cli/test/infer-adapter.test.ts",
+          "blob": "3c0a2371ab634b47b3b1acb22cad4afa0d7a1c92"
+        },
+        {
+          "path": "packages/cli/test/infer-constraints.test.ts",
+          "blob": "a4208dfdba3e9b519930a5998c49c95b32f297ac"
+        },
+        {
+          "path": "packages/cli/test/infer-description.test.ts",
+          "blob": "9ff3f24acbe1fd6cb8a79639aec833b3322e63c7"
+        },
+        {
+          "path": "packages/cli/test/infer-unique-on-omitted-table.test.ts",
+          "blob": "d28fc6aae9cc6aa56203432e1bfec0caf2a303d1"
+        },
+        {
+          "path": "skills/hejbro/references/brownfield-adoption.md",
+          "blob": "c8f79cdb37b55abcaa112e6789fc9cfea73137c2"
+        },
+        {
+          "path": "skills/hejbro/references/nile-preset.md",
+          "blob": "f3d0fd53a6edbec31cb3db78a0ce7ab357bfe405"
+        }
+      ]
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

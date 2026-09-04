@@ -45,7 +45,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | [#374](374/) | adversarial spec-only review stage in the opsx cycle | closed | #539 | 1 | 0 (0 pending) |
 | [#377](377/) | snapshot format stability policy for 1.0 | closed | #383 | 1 | 0 (0 pending) |
 | [#378](378/) | defect-leakage metric over escaped defects | closed | #384 | 1 | 0 (0 pending) |
-| [#412](412/) | 0.2.x: post-release commitments | open | #715 #808 #824 #835 #840 #849 | 15 | 26 (0 pending) |
+| [#412](412/) | 0.2.x: post-release commitments | open | #715 #808 #824 #835 #840 #849 #851 | 15 | 26 (0 pending) |
 | ↳ [#449](449/) | concurrent tx.execute beside a nested transaction is unguarded | closed | #849 #850 | 0 | 3 (2 pending) |
 | ↳ [#528](528/) | driver-conformance kit mis-observes transaction-wrapping session-state:false drivers | closed | #737 #760 | 0 | 6 (0 pending) |
 | ↳ [#531](531/) | pg checkout reads its own setupSession; the spec's late-binding scenario fails for spread decorators | closed | #737 | 0 | 3 (0 pending) |
@@ -73,6 +73,9 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#768](768/) | init: stat-failure refusal's Next: names the missing leaf, not the blocking ancestor | closed | #840 #847 | 0 | 1 (0 pending) |
 | ↳ [#769](769/) | query: createDb(conn).as(ctx) table surface skips the unknown-member guard | closed | #849 #850 | 0 | 4 (0 pending) |
 | ↳ [#774](774/) | core: diff-engine byIdentity reassembly drops a second same-identity, same-direction change from one kind | closed | #824 #833 | 0 | 1 (1 pending) |
+| ↳ [#778](778/) | check: index predicates and generated-column expressions are not compared through the server's rendering as the spec claims | closed | #851 | 0 | 4 (0 pending) |
+| ↳ [#779](779/) | check: not-compared finding delimits expression texts with the same quote SQL identifiers use | closed | #851 | 0 | 1 (0 pending) |
+| ↳ [#781](781/) | check: a matching generated column is always reported as a default difference | closed | #851 | 0 | 1 (0 pending) |
 | ↳ [#783](783/) | reset: a table that merely shares the ledger's name has all its rows deleted and is reported as the cleared ledger | closed | #835 #838 | 0 | 6 (2 pending) |
 | ↳ [#785](785/) | blackbox v2: per-issue folders under .blackbox, hooks + CI-first gate, shipped by the dd-blackbox script | closed | #786 | 5 | 2 (0 pending) |
 | ↳ [#787](787/) | blackbox: migrate the lead ruling ledger R1–R90 into issue folders (first ratification queue of 0.2.1) | closed | #789 | 0 | 0 (0 pending) |
@@ -104,6 +107,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | [#570](570/) | relicense from MIT to Apache License 2.0 (owner decision 2026-08-31) | closed | #571 | 1 | 0 (0 pending) |
 | [#573](573/) | nile preset: measure identity columns and keyless tables on tenant-aware tables (D106 F9) | closed | #578 | 1 | 0 (0 pending) |
 | [#603](603/) | Apply engine (D12 revised): hejbro owns migrate and reset, production included | closed | #628 | 0 | 0 (0 pending) |
+| [#714](714/) | add a brownfield corpus: a database hejbro did not create, with a standing import→baseline→check witness | open | #851 | 0 | 0 (0 pending) |
 | [#819](819/) | cli: --config is honoured by every command and one root resolves every configured path | open | #840 | 0 | 0 (0 pending) |
 | [#820](820/) | cli: a migrationsDir that is a file crashes generate with a raw ENOTDIR | open | #840 | 0 | 0 (0 pending) |
 | [#823](823/) | migrate: a failed ledger insert is reported as the migration's failure | open | #835 | 0 | 0 (0 pending) |
@@ -112,13 +116,17 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | [#832](832/) | core: category-C keywords fail as argument names but are not refused; the stated class does not match the list | open | #833 | 0 | 0 (0 pending) |
 | [#836](836/) | status: a permission error on a real ledger reaches the user as a raw node-postgres object | open | #838 | 0 | 0 (0 pending) |
 | [#837](837/) | raise --file with an absolute path is joined onto the cwd and dies with a raw ENOENT | open | #838 | 0 | 0 (0 pending) |
+| [#841](841/) | check: the backtick delimiter around expression texts collides with a backtick inside a string literal | open | #851 | 0 | 0 (0 pending) |
+| [#842](842/) | pg driver: set intervalstyle / set bytea_output per connection contradicts the no-session-state clause | open | #851 | 0 | 0 (0 pending) |
+| [#843](843/) | check: a not-compared outcome folds into exit 1 with real differences | open | #851 | 0 | 0 (0 pending) |
+| [#844](844/) | check: plain index key columns, uniqueness and method are still compared for existence only | open | #851 | 0 | 0 (0 pending) |
 | [#845](845/) | vendor: a table named fn or as is unreachable behind the client's own members | open | #849 #850 | 0 | 0 (0 pending) |
 | [#846](846/) | init/config paths round 2: read-side trailing separator, config ancestor order, nesting wording, dangling link on read, empty --config | open | #847 | 0 | 0 (0 pending) |
 | [#848](848/) | query: a nested transaction the root callback never awaited commits alone after the root commit | open | #849 #850 | 0 | 0 (0 pending) |
 
 ## Totals
 
-Owner decisions 80 · rulings 134 (interpretation 84, extension 48, stop 2) · pending extensions 10 · rejected 2
+Owner decisions 80 · rulings 140 (interpretation 90, extension 48, stop 2) · pending extensions 10 · rejected 2
 
 ## Conventions
 

@@ -8,6 +8,7 @@ import type {
 	TypeNode,
 } from "@hejbro/core";
 import {
+	columnGenerated,
 	createDefaultRegistry,
 	decodeExprNode,
 	hejbroError,
@@ -73,6 +74,7 @@ type LocalColumnSnapshot = {
 	readonly typeNode: TypeNode;
 	readonly notNull?: true;
 	readonly default?: JsonValue;
+	readonly generated?: JsonValue;
 	readonly uniqueName?: string;
 };
 
@@ -364,6 +366,67 @@ const compareColumnDefault = (
 	];
 };
 
+/**
+ * The generated-column axis (#778/#781): whether each side is generated at
+ * all, never the expression itself -- a matching or differing generation
+ * *expression* is group 3's async `compareGeneratedColumn` (wired in
+ * 1.6), which reuses this row's already-read `catalogGenerated` text
+ * rather than issuing a second catalog read. A column generated on
+ * neither, or on both, sides produces no finding here; {@link
+ * compareColumnDefault} is never run for either (the default axis and
+ * this axis are mutually exclusive -- a generated column cannot carry a
+ * default, so a mismatch reported on that axis would be one the user
+ * cannot act on).
+ */
+/** `""` when the database's plain column carries no default either, else a parenthetical naming it -- a guard clause, not a ternary (house style). */
+const catalogDefaultSuffix = (catalogDefault: string | null): string => {
+	if (catalogDefault === null) {
+		return "";
+	}
+	return ` (the database's column instead has a default, \`${catalogDefault}\`)`;
+};
+
+const compareColumnGenerated = (
+	identity: string,
+	column: LocalColumnSnapshot,
+	row: ColumnRow,
+): ReadonlyArray<Finding> => {
+	const declared = columnGenerated(column);
+	if (declared !== null && row.catalogGenerated === null) {
+		const suffix = catalogDefaultSuffix(row.catalogDefault);
+		return [
+			differsFinding(
+				identity,
+				`declared column "${identity}" is generated always as \`${declared}\` stored, but the database's column is not generated${suffix}.`,
+				"remove the generated expression from the declaration, or write a migration that makes the column generated to match.",
+			),
+		];
+	}
+	if (declared === null && row.catalogGenerated !== null) {
+		return [
+			differsFinding(
+				identity,
+				`declared column "${identity}" is a plain column, but the database's column is generated always as \`${row.catalogGenerated}\` stored.`,
+				"add a matching `.generatedAlwaysAs(...)` to the declaration, or write a migration that drops the column's generation.",
+			),
+		];
+	}
+	return [];
+};
+
+/** `[]` when either side is generated (the default axis never applies there, #778/#781) -- a guard clause, not a ternary (house style), mirroring {@link optionalName} below. */
+const compareColumnDefaultUnlessGenerated = (
+	identity: string,
+	column: LocalColumnSnapshot,
+	row: ColumnRow,
+	owner: SequenceSnapshot | undefined,
+): ReadonlyArray<Finding> => {
+	if (columnGenerated(column) !== null || row.catalogGenerated !== null) {
+		return [];
+	}
+	return compareColumnDefault(identity, column, row, owner);
+};
+
 const findColumnRow = (
 	catalog: Catalog,
 	schema: string,
@@ -408,7 +471,8 @@ const compareColumn = (
 	return [
 		...compareColumnNotNull(identity, column, row),
 		...compareColumnType(identity, column, row),
-		...compareColumnDefault(identity, column, row, owner),
+		...compareColumnGenerated(identity, column, row),
+		...compareColumnDefaultUnlessGenerated(identity, column, row, owner),
 	];
 };
 

@@ -32,6 +32,8 @@ const columnRow = z.object({
 	baseTypeSchema: z.string().nullable(),
 	baseTypeName: z.string().nullable(),
 	catalogDefault: z.string().nullable(),
+	/** `pg_get_expr` over the column's own `pg_attrdef` row when `attgenerated` reads generated (`'s'` for `stored`); `null` for a plain column, which cannot have this axis (`compare.ts`'s generated-column axis, #778/#781). Exactly one of `catalogDefault`/`catalogGenerated` is non-null -- a plain column's `attgenerated` is `''`, never `NULL` (measured, `postgres:17-alpine`). */
+	catalogGenerated: z.string().nullable(),
 });
 export type ColumnRow = z.infer<typeof columnRow>;
 
@@ -44,10 +46,23 @@ const constraintRow = z.object({
 });
 export type ConstraintRow = z.infer<typeof constraintRow>;
 
+/** One key of an index's own ordered key list, in position order (review round 1, `.blackbox/778/` R3: the unit of comparison is the whole key list, not a filtered "expression columns" subset -- Postgres stores a bare column reference, a parenthesized column, or `col collate "C"` as a *plain* key, so counting expression columns alone reported a difference no migration could fix). */
+const indexKeyRow = z.object({
+	/** `pg_get_indexdef(ix.indexrelid, n::int, true)` (the bare key text, no `DESC`/`NULLS`/opclass) with a ` collate "<name>"` suffix appended when the position's own collation is neither the default nor -- for a plain key -- the column's own collation, since the per-column form of `pg_get_indexdef` never renders `COLLATE` itself (measured, docker postgres:17-alpine: the whole-index form does, the per-column form does not). */
+	text: z.string(),
+	/** `indkey[n-1] = 0`. */
+	expression: z.boolean(),
+});
+export type IndexKeyRow = z.infer<typeof indexKeyRow>;
+
 const indexRow = z.object({
 	schema: z.string(),
 	table: z.string(),
 	name: z.string(),
+	/** `pg_get_expr(ix.indpred, ix.indrelid)` -- `null` for a non-partial index (#778's index-predicate surface). */
+	predicate: z.string().nullable(),
+	/** The index's ordered key list (#778's index-key surface, review round 1 R3) -- `n` is cast to `int`: `unnest(...) with ordinality` always yields a `bigint` ordinality column, and `pg_get_indexdef`'s own column-number parameter is `int` with no bigint overload -- measured directly (docker postgres:17-alpine, task 1.7): the uncast form fails outright with "function pg_get_indexdef(oid, bigint, boolean) does not exist". Bounded to `n <= indnkeyatts` (review round 2 B4): `indkey` also lists a covering index's `INCLUDE` columns after the last key position, and those carry no ordering and cannot be declared, so they are excluded here rather than filtered downstream. */
+	keys: z.array(indexKeyRow),
 });
 export type IndexRow = z.infer<typeof indexRow>;
 
@@ -110,7 +125,8 @@ export const CHECK_CATALOG_QUERIES = {
 			bt.typtype as "baseTypeKind",
 			btn.nspname as "baseTypeSchema",
 			bt.typname as "baseTypeName",
-			pg_get_expr(ad.adbin, ad.adrelid) as "catalogDefault"
+			case a.attgenerated when '' then pg_get_expr(ad.adbin, ad.adrelid) end as "catalogDefault",
+			case a.attgenerated when '' then null else pg_get_expr(ad.adbin, ad.adrelid) end as "catalogGenerated"
 		from pg_class c
 		join pg_namespace n on n.oid = c.relnamespace
 		join pg_attribute a on a.attrelid = c.oid
@@ -138,7 +154,27 @@ export const CHECK_CATALOG_QUERIES = {
 		order by schema, "table", name
 	`,
 	indexes: `
-		select n.nspname as schema, c.relname as "table", ic.relname as name
+		select n.nspname as schema, c.relname as "table", ic.relname as name,
+			pg_get_expr(ix.indpred, ix.indrelid) as predicate,
+			coalesce((
+				select json_agg(
+					json_build_object(
+						'text',
+						pg_get_indexdef(ix.indexrelid, k.n::int, true) ||
+							case
+								when ix.indcollation[k.n - 1] <> 0
+									and ix.indcollation[k.n - 1] <> coalesce(a.attcollation, 100)
+								then ' collate ' || quote_ident(coll.collname)
+								else ''
+							end,
+						'expression', k.attnum = 0
+					) order by k.n
+				)
+				from unnest(ix.indkey) with ordinality as k(attnum, n)
+				left join pg_attribute a on a.attrelid = ix.indrelid and a.attnum = k.attnum
+				left join pg_collation coll on coll.oid = ix.indcollation[k.n - 1]
+				where k.n <= ix.indnkeyatts
+			), '[]'::json) as keys
 		from pg_index ix
 		join pg_class c on c.oid = ix.indrelid
 		join pg_class ic on ic.oid = ix.indexrelid

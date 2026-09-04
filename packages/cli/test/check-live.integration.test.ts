@@ -734,3 +734,374 @@ export const widgets = table(
 		expect(logDelta.toLowerCase()).not.toContain("explain");
 	});
 });
+
+/**
+ * #778/#781, task 1.7: the live witness for the three surfaces group 3-5
+ * added -- a partial index, an expression index and a generated column,
+ * each declared and applied for real, then each altered underneath by
+ * `psql` so the report can only be right by actually asking the server.
+ * Two project directories share the identical schema (`generate`'s own
+ * emitted SQL is presets-independent for a declaration set no validator
+ * refuses): one plain (server mode), one registering a local
+ * `explainUnavailable` preset (text mode) -- the same split the
+ * text-comparison witness above uses, generalized to every surface this
+ * change added.
+ */
+describe("hejbro check / expression surfaces live witness (#778/#781, task 1.7)", () => {
+	const ServerDb = "expr_surfaces_server";
+	const TextDb = "expr_surfaces_text";
+	let serverProjectDir = "";
+	let textProjectDir = "";
+
+	const surfacesSchemaSource = `import { index, integer, ne, numeric, schema, sql, table, text, uuid } from "hejbro";
+
+export const app = schema("app");
+
+export const widgets = table(
+	app,
+	"widgets",
+	{
+		id: uuid().primaryKey().defaultRandom(),
+		email: text().notNull(),
+		status: text().notNull(),
+		price: numeric().notNull(),
+		// A mismatched sibling type (integer, not numeric) is deliberate: it is
+		// what makes Postgres append the "::numeric" cast this fixture's
+		// text-mode witness needs (measured, task 1.7) -- two numeric()
+		// columns produce no cast at all, and the generated column agrees
+		// even under text mode, which this fixture is not testing.
+		qty: integer().notNull(),
+		total: numeric().generatedAlwaysAs(sql\`price * qty\`),
+	},
+	(t) => ({
+		indexes: [
+			index("widgets_active_idx").on(t.id).where(ne(t.status, "archived")),
+			index("widgets_email_idx").on(sql\`lower(\${t.email})\`),
+			// Review round 1 B3: Postgres stores each of these as a *plain*
+			// key (indexprs null), never as an expression -- the round-trip
+			// witness for the fix that stopped comparing expression-column
+			// *count* and started comparing the ordered key list instead.
+			index("widgets_bare_idx").on(sql\`\${t.email}\`),
+			index("widgets_paren_idx").on(sql\`(\${t.email})\`),
+			index("widgets_collate_idx").on(sql\`\${t.email} collate "C"\`),
+			// Review round 1 B1/B2: genuinely plain declared indexes, each
+			// recreated by the database as something the declaration never
+			// had -- the reverse-direction witness for the declared-side
+			// filter that used to skip a plain index outright.
+			index("widgets_status_plain_idx").on(t.status),
+			index("widgets_id_plain_idx").on(t.id),
+		],
+	}),
+);
+`;
+
+	const plainConfigSource = `import { defineConfig } from "hejbro";
+
+export default defineConfig({
+	entry: ["src/**/*.schema.ts"],
+	migrationsDir: "migrations",
+	snapshotPath: "hejbro.snapshot.json",
+	prefixStrategy: "timestamp",
+	presets: [],
+});
+`;
+
+	const explainUnavailableConfigSource = `import { defineConfig } from "hejbro";
+
+export default defineConfig({
+	entry: ["src/**/*.schema.ts"],
+	migrationsDir: "migrations",
+	snapshotPath: "hejbro.snapshot.json",
+	prefixStrategy: "timestamp",
+	presets: [
+		{
+			name: "explain-unavailable-witness",
+			kinds: [],
+			validators: [],
+			explainUnavailable: true,
+		},
+	],
+});
+`;
+
+	/** `generate` under `projectDir` (already `init`-ed), applying the resulting migration to `database` -- shared by both project dirs below, since the emitted SQL never depends on which preset a config registers for a declaration set no validator refuses. */
+	const buildAndApply = async (
+		projectDir: string,
+		configSource: string,
+		database: string,
+	): Promise<void> => {
+		await runCli(projectDir, ["init"]);
+		await writeFixtureFile(projectDir, "hejbro.config.ts", configSource);
+		await writeFixtureFile(
+			projectDir,
+			"src/app.schema.ts",
+			surfacesSchemaSource,
+		);
+		const generated = await runCli(projectDir, ["generate"]);
+		expect(generated.exitCode).toBe(0);
+		const migrationsDir = resolve(projectDir, "migrations");
+		const [migrationFile] = readdirSync(migrationsDir).filter((name) =>
+			name.endsWith(".sql"),
+		);
+		if (migrationFile === undefined) {
+			throw new Error("generate did not write a migration file");
+		}
+		psqlFile(
+			database,
+			readFileSync(resolve(migrationsDir, migrationFile), "utf-8"),
+		);
+	};
+
+	beforeAll(async () => {
+		psqlCommand("postgres", `create database ${ServerDb};`);
+		psqlCommand("postgres", `create database ${TextDb};`);
+		serverProjectDir = await createCliFixtureDir();
+		textProjectDir = await createCliFixtureDir();
+		await buildAndApply(serverProjectDir, plainConfigSource, ServerDb);
+		await buildAndApply(textProjectDir, explainUnavailableConfigSource, TextDb);
+	}, 120_000);
+
+	afterAll(async () => {
+		await removeCliFixtureDir(serverProjectDir);
+		await removeCliFixtureDir(textProjectDir);
+	});
+
+	const serverUrl = (): string => hostUrl("postgres", ServerDb);
+	const textUrl = (): string => hostUrl("postgres", TextDb);
+
+	it("exits 0 for the fixture's own unaltered declarations (control)", async () => {
+		const result = await runCli(serverProjectDir, [
+			"check",
+			"--url",
+			serverUrl(),
+		]);
+
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("check: no differences.");
+	});
+
+	// Review round 1 B3: a bare column reference, a parenthesized column
+	// and a collated column, all declared as index keys via `sql`, are
+	// stored by Postgres as *plain* keys (never `indexprs`) -- the exact
+	// migration hejbro generated for them applies and re-reads as no
+	// difference, live, not only through the unit-level fake session.
+	it("round-trips a bare column reference, a parenthesized column and a collated column declared as index keys, with no finding", async () => {
+		const result = await runCli(serverProjectDir, [
+			"check",
+			"--url",
+			serverUrl(),
+		]);
+
+		expect(result.exitCode).toBe(0);
+		expect(result.stderr).not.toContain("widgets_bare_idx");
+		expect(result.stderr).not.toContain("widgets_paren_idx");
+		expect(result.stderr).not.toContain("widgets_collate_idx");
+	});
+
+	it("reports exactly the altered predicate, expression index and generated column, never as not-compared", async () => {
+		psqlCommand(
+			ServerDb,
+			"drop index app.widgets_active_idx; create index widgets_active_idx on app.widgets (id) where status <> 'done';",
+		);
+		psqlCommand(
+			ServerDb,
+			"drop index app.widgets_email_idx; create index widgets_email_idx on app.widgets (upper(email));",
+		);
+		psqlCommand(
+			ServerDb,
+			"alter table app.widgets drop column total; alter table app.widgets add column total numeric generated always as (price + qty) stored;",
+		);
+
+		const result = await runCli(serverProjectDir, [
+			"check",
+			"--url",
+			serverUrl(),
+		]);
+
+		expect(result.exitCode).toBe(1);
+		const differsCount = (result.stderr.match(/check-object-differs/g) ?? [])
+			.length;
+		expect(differsCount).toBe(3);
+		expect(result.stderr).not.toContain("check-not-compared");
+		expect(result.stderr).toContain("widgets_active_idx");
+		expect(result.stderr).toContain("widgets_email_idx");
+		expect(result.stderr).toContain("app.widgets.total");
+	});
+
+	// Review round 1 B1/B2: the database gaining a key expression or a
+	// predicate the declaration never had used to pass as "no
+	// differences" -- `declaredIndexExpressions` skipped a plain declared
+	// index outright, so `compareIndexKeys` was never even called for it.
+	// Cumulative with the mutation test above (this same database, same
+	// container): 3 there, 2 more here.
+	it("reports a database-only expression key and a database-only partial predicate, against plain declarations (review B1/B2)", async () => {
+		psqlCommand(
+			ServerDb,
+			"drop index app.widgets_status_plain_idx; create index widgets_status_plain_idx on app.widgets (lower(status));",
+		);
+		psqlCommand(
+			ServerDb,
+			"drop index app.widgets_id_plain_idx; create index widgets_id_plain_idx on app.widgets (id) where id is not null;",
+		);
+
+		const result = await runCli(serverProjectDir, [
+			"check",
+			"--url",
+			serverUrl(),
+		]);
+
+		expect(result.exitCode).toBe(1);
+		const differsCount = (result.stderr.match(/check-object-differs/g) ?? [])
+			.length;
+		expect(differsCount).toBe(5);
+		expect(result.stderr).not.toContain("check-not-compared");
+		expect(result.stderr).toContain("widgets_status_plain_idx");
+		expect(result.stderr).toContain("widgets_id_plain_idx");
+	});
+
+	it("under an explainUnavailable preset, agrees on both indexes and reports the generated column not-compared, exit 2, issuing zero explain", async () => {
+		const before = execFileSync("docker", ["logs", CONTAINER], {
+			encoding: "utf-8",
+		});
+
+		const result = await runCli(textProjectDir, ["check", "--url", textUrl()]);
+
+		const after = execFileSync("docker", ["logs", CONTAINER], {
+			encoding: "utf-8",
+		});
+		const logDelta = after.slice(before.length);
+
+		expect(result.exitCode).toBe(2);
+		expect(result.stderr).not.toContain("widgets_active_idx");
+		expect(result.stderr).not.toContain("widgets_email_idx");
+		expect(result.stderr).toContain("check-not-compared");
+		expect(result.stderr).toContain("app.widgets.total");
+		expect(result.stderr).not.toContain("check-object-differs");
+		expect(logDelta.toLowerCase()).not.toContain("explain");
+	});
+});
+
+// Review round 2 B4: `indkey` also lists a covering index's `INCLUDE`
+// columns after the last key position -- hejbro's own DSL cannot declare
+// `INCLUDE` (there is nothing to round-trip), so the covering column is
+// added directly with `psql`, matching the database-only shape the review
+// measured.
+describe("hejbro check / a covering index's INCLUDE column is not a key (review round 2 B4)", () => {
+	const IncludeAgreeDb = "include_agree";
+	const IncludeDiffersDb = "include_differs";
+	let agreeProjectDir = "";
+	let differsProjectDir = "";
+
+	const oneKeySchemaSource = `import { index, schema, table, text, uuid } from "hejbro";
+
+export const app = schema("app");
+
+export const widgets = table(
+	app,
+	"widgets",
+	{ id: uuid().primaryKey().defaultRandom(), a: text().notNull(), b: text().notNull() },
+	(t) => ({
+		indexes: [index("widgets_a_idx").on(t.a)],
+	}),
+);
+`;
+
+	const twoKeySchemaSource = `import { index, schema, table, text, uuid } from "hejbro";
+
+export const app = schema("app");
+
+export const widgets = table(
+	app,
+	"widgets",
+	{ id: uuid().primaryKey().defaultRandom(), a: text().notNull(), b: text().notNull() },
+	(t) => ({
+		indexes: [index("widgets_a_idx").on(t.a, t.b)],
+	}),
+);
+`;
+
+	const includeConfigSource = `import { defineConfig } from "hejbro";
+
+export default defineConfig({
+	entry: ["src/**/*.schema.ts"],
+	migrationsDir: "migrations",
+	snapshotPath: "hejbro.snapshot.json",
+	prefixStrategy: "timestamp",
+	presets: [],
+});
+`;
+
+	const buildApplyAndCover = async (
+		projectDir: string,
+		schemaSource: string,
+		database: string,
+	): Promise<void> => {
+		await runCli(projectDir, ["init"]);
+		await writeFixtureFile(projectDir, "hejbro.config.ts", includeConfigSource);
+		await writeFixtureFile(projectDir, "src/app.schema.ts", schemaSource);
+		const generated = await runCli(projectDir, ["generate"]);
+		expect(generated.exitCode).toBe(0);
+		const migrationsDir = resolve(projectDir, "migrations");
+		const [migrationFile] = readdirSync(migrationsDir).filter((name) =>
+			name.endsWith(".sql"),
+		);
+		if (migrationFile === undefined) {
+			throw new Error("generate did not write a migration file");
+		}
+		psqlFile(
+			database,
+			readFileSync(resolve(migrationsDir, migrationFile), "utf-8"),
+		);
+		psqlCommand(
+			database,
+			"drop index app.widgets_a_idx; create index widgets_a_idx on app.widgets (a) include (b);",
+		);
+	};
+
+	beforeAll(async () => {
+		psqlCommand("postgres", `create database ${IncludeAgreeDb};`);
+		psqlCommand("postgres", `create database ${IncludeDiffersDb};`);
+		agreeProjectDir = await createCliFixtureDir();
+		differsProjectDir = await createCliFixtureDir();
+		await buildApplyAndCover(
+			agreeProjectDir,
+			oneKeySchemaSource,
+			IncludeAgreeDb,
+		);
+		await buildApplyAndCover(
+			differsProjectDir,
+			twoKeySchemaSource,
+			IncludeDiffersDb,
+		);
+	}, 120_000);
+
+	afterAll(async () => {
+		await removeCliFixtureDir(agreeProjectDir);
+		await removeCliFixtureDir(differsProjectDir);
+	});
+
+	it("agrees when the declared key list matches the covering index's real keys, the INCLUDE column excluded", async () => {
+		const result = await runCli(agreeProjectDir, [
+			"check",
+			"--url",
+			hostUrl("postgres", IncludeAgreeDb),
+		]);
+
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("check: no differences.");
+	});
+
+	it("reports a differing key count, one against two, when a declared key is only ever the covering index's INCLUDE column", async () => {
+		const result = await runCli(differsProjectDir, [
+			"check",
+			"--url",
+			hostUrl("postgres", IncludeDiffersDb),
+		]);
+
+		expect(result.exitCode).toBe(1);
+		const differsCount = (result.stderr.match(/check-object-differs/g) ?? [])
+			.length;
+		expect(differsCount).toBe(1);
+		expect(result.stderr).toContain("widgets_a_idx");
+	});
+});

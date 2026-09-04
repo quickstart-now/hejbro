@@ -2,16 +2,20 @@ import type { HejbroInput, JsonValue, Snapshot } from "@hejbro/core";
 import {
 	between,
 	check,
+	columnRef,
 	emptySnapshot,
 	eq,
 	generateMigration,
 	inArray,
+	index,
 	isNotNull,
+	ne,
 	numeric,
 	schema,
 	sql,
 	table,
 	text,
+	timestamptz,
 	uuid,
 } from "@hejbro/core";
 import type { CompileResult, DriverRow, DriverSession } from "@hejbro/query";
@@ -19,6 +23,8 @@ import { describe, expect, it } from "vitest";
 import type { Catalog } from "../src/check/catalog";
 import {
 	compareCheckConstraint,
+	compareGeneratedColumn,
+	compareIndexKeys,
 	normalizeCheckText,
 } from "../src/check/expression";
 
@@ -1359,6 +1365,1228 @@ describe("normalizeCheckText / step 5 strips the whole cast the server appends t
 		{ input: "tags <> null::text[]", expected: "tags <> null::text[]" },
 	])("$input → $expected", ({ input, expected }) => {
 		expect(normalizeCheckText(input, "app", "posts")).toBe(expected);
+	});
+});
+
+/**
+ * #779: the not-compared and differs messages used to wrap each expression
+ * text in the same double quote SQL uses for identifiers, so a table-bound
+ * declared expression (which always begins `"schema"."table"."column"`
+ * under server mode, or `"table"."column"` under text mode) collided with
+ * its own delimiter. Every case below pins the replacement delimiter
+ * (backticks) at the three message sites, with the `code` and the `Next:`
+ * substring asserted unchanged against the pre-change strings (tasks.md
+ * 1.1).
+ */
+describe("compareCheckConstraint / 3.8 expression texts are delimited by backticks", () => {
+	const declaredRoleCheckExpression = (): JsonValue => {
+		const posts = table(
+			app,
+			"posts",
+			{ id: uuid().primaryKey(), role: text() },
+			(t) => ({ checks: [check("posts_role_check", eq(t.role, "owner"))] }),
+		);
+		const snapshot = buildTestSnapshot([posts]);
+		return declaredCheckExpression(snapshot, "app.posts", "posts_role_check");
+	};
+
+	describe("server-mode not-compared, carrying both texts", () => {
+		it.each([
+			{
+				label: "catalog text begins with a quoted identifier",
+				catalogText: `"posts"."role" = 'owner'`,
+			},
+			{
+				label: "catalog text carries a double quote inside a literal",
+				catalogText: `format = '"json"'`,
+			},
+			{
+				label: "catalog text carries a cast",
+				catalogText: `role = 'owner'::text`,
+			},
+		])("$label", async ({ catalogText }) => {
+			const { session } = makeFakeSession({
+				metadata: { expression: catalogText, convalidated: true },
+				explainError: Object.assign(
+					new Error("permission denied for table posts"),
+					{ code: "42501" },
+				),
+			});
+
+			const findings = await compareCheckConstraint(
+				session,
+				withPostsTable(),
+				"app",
+				"posts",
+				"posts_role_check",
+				declaredRoleCheckExpression(),
+				"server",
+			);
+
+			expect(findings).toHaveLength(1);
+			const message = findings[0]?.error.message ?? "";
+			expect(findings[0]?.error).toMatchObject({ code: "check-not-compared" });
+			// The declared side always renders `"app"."posts"."role" = ...` under
+			// server mode -- itself a quoted-identifier-starting text -- so its
+			// own delimiter is asserted generically here.
+			expect(message).toMatch(/Declared expression: `.*`\./);
+			expect(message).not.toMatch(/Declared expression: ".*"\./);
+			expect(message).toContain(`Catalog expression: \`${catalogText}\`.`);
+			expect(message).not.toContain(`Catalog expression: "${catalogText}"`);
+			expect(message).toContain(
+				"Next: confirm the connected role can run EXPLAIN against this table, then rerun `hejbro check`.",
+			);
+		});
+	});
+
+	describe("text-mode not-compared", () => {
+		it.each([
+			{
+				label: "catalog text begins with a quoted identifier",
+				catalogText: `"other"."role" = 'owner'`,
+			},
+			{
+				label: "catalog text carries a double quote inside a literal",
+				catalogText: `format = '"json"'`,
+			},
+			{
+				label: "catalog text carries a cast",
+				catalogText: `(role = 'owner'::text) and false`,
+			},
+		])("$label", async ({ catalogText }) => {
+			const { session } = makeFakeSession({
+				metadata: { expression: catalogText, convalidated: true },
+			});
+
+			const findings = await compareCheckConstraint(
+				session,
+				withPostsTable(),
+				"app",
+				"posts",
+				"posts_role_check",
+				declaredRoleCheckExpression(),
+				"text",
+			);
+
+			expect(findings).toHaveLength(1);
+			const message = findings[0]?.error.message ?? "";
+			expect(findings[0]?.error).toMatchObject({ code: "check-not-compared" });
+			// The declared side always renders `"posts"."role" = ...` under text
+			// mode -- itself quoted-identifier-starting -- asserted generically.
+			expect(message).toMatch(/Declared expression: `.*`\./);
+			expect(message).not.toMatch(/Declared expression: ".*"\./);
+			expect(message).toContain(`Catalog expression: \`${catalogText}\`.`);
+			expect(message).not.toContain(`Catalog expression: "${catalogText}"`);
+			// The restatement pointer is not itself a delimited site -- unchanged.
+			expect(message).toContain(
+				`Next: restate the declaration to match the catalog's own spelling: ${catalogText}`,
+			);
+		});
+	});
+
+	describe("differs, carrying both renderings", () => {
+		it.each([
+			{
+				label: "both renderings begin with a quoted identifier",
+				declaredText: `"posts"."role" = 'owner'`,
+				catalogText: `"posts"."role" = 'admin'`,
+			},
+			{
+				label: "a rendering carries a double quote inside a literal",
+				declaredText: `format = '"json"'`,
+				catalogText: `format = '"xml"'`,
+			},
+			{
+				label: "a rendering carries a cast",
+				declaredText: `role = 'owner'::text`,
+				catalogText: `role = 'admin'::text`,
+			},
+		])("$label", async ({ declaredText, catalogText }) => {
+			const { session } = makeFakeSession({
+				metadata: {
+					expression: "irrelevant, differs regardless",
+					convalidated: true,
+				},
+				explainOutput: [declaredText, catalogText],
+			});
+
+			const findings = await compareCheckConstraint(
+				session,
+				withPostsTable(),
+				"app",
+				"posts",
+				"posts_role_check",
+				declaredRoleCheckExpression(),
+				"server",
+			);
+
+			expect(findings).toHaveLength(1);
+			const message = findings[0]?.error.message ?? "";
+			expect(findings[0]?.error).toMatchObject({
+				code: "check-object-differs",
+			});
+			expect(message).toContain(`renders as \`${declaredText}\`,`);
+			expect(message).toContain(`renders as \`${catalogText}\`.`);
+			expect(message).not.toContain(`renders as "${declaredText}"`);
+			expect(message).not.toContain(`renders as "${catalogText}"`);
+			expect(message).toContain(
+				"Next: change the declaration to match the database, or write a migration that alters the constraint to the declared expression.",
+			);
+		});
+	});
+});
+
+/**
+ * #778/#781, task 1.4: `compareGeneratedColumn`'s own axis is the
+ * expression only -- whether each side is generated at all is
+ * `compare.ts`'s synchronous `compareColumnGenerated` (1.3). Real
+ * `columnRef`s (not a bare `sql` template) so the declared side renders
+ * table-bound, qualified columns the way an actual generated column
+ * declaration does (matching design.md's own measured examples) -- the
+ * same primitive `table()` uses to build its own `t` proxy, per
+ * `column-builder.ts`'s tsdoc on why a sibling can't be read off `t`
+ * inside `generatedAlwaysAs()` itself.
+ */
+describe("compareGeneratedColumn / 4.1 a generated column's expression", () => {
+	const priceRef = () =>
+		columnRef("app", "widgets", "price", numeric().columnState.typeNode);
+	const qtyRef = () =>
+		columnRef("app", "widgets", "qty", numeric().columnState.typeNode);
+
+	const declaredTotalExpression = (): JsonValue => {
+		const widgets = table(app, "widgets", {
+			price: numeric(),
+			qty: numeric(),
+			total: numeric().generatedAlwaysAs(sql`${priceRef()} * ${qtyRef()}`),
+		});
+		const snapshot = buildTestSnapshot([widgets]);
+		const node = snapshot.objects["table:app.widgets"] as {
+			readonly columns: ReadonlyArray<{
+				readonly name: string;
+				readonly generated?: JsonValue;
+			}>;
+		};
+		const column = node.columns.find((entry) => entry.name === "total");
+		if (column?.generated === undefined) {
+			throw new Error(
+				'expected column "total" to carry a generated expression',
+			);
+		}
+		return column.generated;
+	};
+
+	const catalogWithTotal = (catalogGenerated: string | null): Catalog => ({
+		...emptyCatalog(),
+		tables: [{ schema: "app", table: "widgets", rls: false }],
+		columns: [
+			{
+				schema: "app",
+				table: "widgets",
+				name: "total",
+				notNull: false,
+				catalogType: "numeric",
+				baseTypeKind: null,
+				baseTypeSchema: null,
+				baseTypeName: null,
+				catalogDefault: null,
+				catalogGenerated,
+			},
+		],
+	});
+
+	type GeneratedFakeSessionOptions = {
+		readonly explainOutput?: ReadonlyArray<string> | null;
+		readonly explainError?: Error;
+	};
+
+	/** No `pg_constraint` lookup exists for a generated column (unlike a check constraint) -- every call is the single `explain` probe, or none at all in text mode. */
+	const makeGeneratedFakeSession = (
+		options: GeneratedFakeSessionOptions,
+	): { readonly session: DriverSession; readonly calls: CompileResult[] } => {
+		const calls: CompileResult[] = [];
+		const session: DriverSession = {
+			execute: async (compiled) => {
+				calls.push(compiled);
+				if (options.explainError !== undefined) {
+					throw options.explainError;
+				}
+				if (
+					options.explainOutput === undefined ||
+					options.explainOutput === null
+				) {
+					return [explainRow([])];
+				}
+				return [explainRow(options.explainOutput)];
+			},
+		};
+		return { session, calls };
+	};
+
+	it("reports no finding when the server renders both sides identically", async () => {
+		const matching = "(price * (qty)::numeric)";
+		const { session, calls } = makeGeneratedFakeSession({
+			explainOutput: [matching, matching],
+		});
+
+		const findings = await compareGeneratedColumn(
+			session,
+			catalogWithTotal("(price * (qty)::numeric)"),
+			"app",
+			"widgets",
+			"total",
+			declaredTotalExpression(),
+			"server",
+		);
+
+		expect(findings).toEqual([]);
+		expect(calls).toHaveLength(1);
+	});
+
+	it("reports a differing generation expression, naming the generated column", async () => {
+		const { session } = makeGeneratedFakeSession({
+			explainOutput: ["(price * (qty)::numeric)", "(price + (qty)::numeric)"],
+		});
+
+		const findings = await compareGeneratedColumn(
+			session,
+			catalogWithTotal("(price + (qty)::numeric)"),
+			"app",
+			"widgets",
+			"total",
+			declaredTotalExpression(),
+			"server",
+		);
+
+		expect(findings).toHaveLength(1);
+		expect(findings[0]?.identity).toBe("app.widgets.total");
+		expect(findings[0]?.error).toMatchObject({ code: "check-object-differs" });
+		expect(findings[0]?.error.message).toContain("generated column");
+		expect(findings[0]?.error.message).toContain(
+			"renders as `(price * (qty)::numeric)`,",
+		);
+		expect(findings[0]?.error.message).toContain(
+			"renders as `(price + (qty)::numeric)`.",
+		);
+	});
+
+	it("reports not-compared with backticked texts and an EXPLAIN Next: when the probe fails", async () => {
+		const { session } = makeGeneratedFakeSession({
+			explainError: Object.assign(
+				new Error("permission denied for table widgets"),
+				{ code: "42501" },
+			),
+		});
+
+		const findings = await compareGeneratedColumn(
+			session,
+			catalogWithTotal("(price * (qty)::numeric)"),
+			"app",
+			"widgets",
+			"total",
+			declaredTotalExpression(),
+			"server",
+		);
+
+		expect(findings).toHaveLength(1);
+		expect(findings[0]?.error).toMatchObject({ code: "check-not-compared" });
+		expect(findings[0]?.error.message).toContain("permission denied");
+		expect(findings[0]?.error.message).toMatch(/Declared expression: `.*`\./);
+		expect(findings[0]?.error.message).toMatch(/Catalog expression: `.*`\./);
+		expect(findings[0]?.error.message).toContain("EXPLAIN");
+	});
+
+	it("agrees under text mode after the declaring table's qualifier normalizes away", async () => {
+		const { session, calls } = makeGeneratedFakeSession({});
+
+		const findings = await compareGeneratedColumn(
+			session,
+			catalogWithTotal("(price * qty)"),
+			"app",
+			"widgets",
+			"total",
+			declaredTotalExpression(),
+			"text",
+		);
+
+		expect(findings).toEqual([]);
+		expect(calls).toHaveLength(0);
+	});
+
+	it("is not compared under text mode when the catalog carries a column cast normalization never strips", async () => {
+		const { session } = makeGeneratedFakeSession({});
+
+		const findings = await compareGeneratedColumn(
+			session,
+			catalogWithTotal("(price * (qty)::numeric)"),
+			"app",
+			"widgets",
+			"total",
+			declaredTotalExpression(),
+			"text",
+		);
+
+		expect(findings).toHaveLength(1);
+		expect(findings[0]?.error).toMatchObject({ code: "check-not-compared" });
+		expect(findings[0]?.error.message).not.toMatch(/EXPLAIN/i);
+	});
+
+	it("reports nothing and issues zero statements when the catalog column is not generated", async () => {
+		const { session, calls } = makeGeneratedFakeSession({});
+
+		const findings = await compareGeneratedColumn(
+			session,
+			catalogWithTotal(null),
+			"app",
+			"widgets",
+			"total",
+			declaredTotalExpression(),
+			"server",
+		);
+
+		expect(findings).toEqual([]);
+		expect(calls).toHaveLength(0);
+	});
+
+	it("reports nothing and issues zero statements when the column is absent from the catalog", async () => {
+		const { session, calls } = makeGeneratedFakeSession({});
+
+		const findings = await compareGeneratedColumn(
+			session,
+			emptyCatalog(),
+			"app",
+			"widgets",
+			"total",
+			declaredTotalExpression(),
+			"server",
+		);
+
+		expect(findings).toEqual([]);
+		expect(calls).toHaveLength(0);
+	});
+});
+
+/**
+ * Review round 1, `.blackbox/778/` R3: the unit of comparison is an
+ * index's whole **ordered key list**, not a filtered "expression columns"
+ * subset -- Postgres stores a bare column reference, a parenthesized
+ * column, or `col collate "C"` as a *plain* key (`indexprs` null), so
+ * counting expression columns reported a difference hejbro's own
+ * migration produces and no migration can fix (B3), and a declared-side
+ * filter let a database index that grew a predicate or an expression
+ * pass as present (B1/B2, task 1.9/1.10). `compareIndexKeys`'s own axes
+ * are the key-list length, the predicate's presence, and then the
+ * rendered text at every position where *either* side is an expression
+ * -- a declared plain column pairs against a catalog expression key, and
+ * a declared expression Postgres stores as a plain key (bare/paren/
+ * collate) pairs against a catalog plain key too, rendered as the
+ * column's own reference on the declared side (design.md: "a plain
+ * column renders as itself"). A position at which both sides are plain
+ * is never paired.
+ */
+describe("compareIndexKeys / 4.2 an index's predicate and ordered key list", () => {
+	type LocalIndexNode = {
+		readonly name: string;
+		readonly columns: ReadonlyArray<
+			{ readonly name: string } | { readonly expression: JsonValue }
+		>;
+		readonly where?: JsonValue;
+	};
+
+	/** Reads one declared index node off a real snapshot, the same "never hand-encoded" discipline `declaredCheckExpression` uses. */
+	const declaredIndexNode = (
+		snapshot: Snapshot,
+		tableIdentity: string,
+		indexName: string,
+	): LocalIndexNode => {
+		const node = snapshot.objects[`table:${tableIdentity}`] as {
+			readonly indexes: ReadonlyArray<LocalIndexNode>;
+		};
+		const found = node.indexes.find((entry) => entry.name === indexName);
+		if (found === undefined) {
+			throw new Error(
+				`expected an index named "${indexName}" in the built snapshot`,
+			);
+		}
+		return found;
+	};
+
+	type CatalogKey = { readonly text: string; readonly expression: boolean };
+
+	const catalogWithIndex = (row: {
+		readonly name: string;
+		readonly predicate: string | null;
+		readonly keys: CatalogKey[];
+	}): Catalog => ({
+		...emptyCatalog(),
+		tables: [{ schema: "app", table: "widgets", rls: false }],
+		indexes: [{ schema: "app", table: "widgets", ...row }],
+	});
+
+	const plainKey = (text: string): CatalogKey => ({ text, expression: false });
+	const exprKey = (text: string): CatalogKey => ({ text, expression: true });
+
+	type IndexFakeSessionOptions = {
+		readonly explainOutput?: ReadonlyArray<string> | null;
+		readonly explainError?: Error;
+	};
+
+	/** No `pg_constraint` lookup exists for an index either -- every call is the single combined `explain` probe, or none at all in text mode / before the probe is reached. */
+	const makeIndexFakeSession = (
+		options: IndexFakeSessionOptions,
+	): { readonly session: DriverSession; readonly calls: CompileResult[] } => {
+		const calls: CompileResult[] = [];
+		const session: DriverSession = {
+			execute: async (compiled) => {
+				calls.push(compiled);
+				if (options.explainError !== undefined) {
+					throw options.explainError;
+				}
+				if (
+					options.explainOutput === undefined ||
+					options.explainOutput === null
+				) {
+					return [explainRow([])];
+				}
+				return [explainRow(options.explainOutput)];
+			},
+		};
+		return { session, calls };
+	};
+
+	it("agrees on a partial predicate that differs only by Postgres's rewriting", async () => {
+		const widgets = table(
+			app,
+			"widgets",
+			{ id: uuid().primaryKey(), status: text() },
+			(t) => ({
+				indexes: [
+					index("widgets_status_idx").on(t.status).where(ne(t.status, "done")),
+				],
+			}),
+		);
+		const snapshot = buildTestSnapshot([widgets]);
+		const rewritten = "(status <> 'done'::text)";
+		const { session, calls } = makeIndexFakeSession({
+			explainOutput: [rewritten, rewritten],
+		});
+
+		const findings = await compareIndexKeys(
+			session,
+			catalogWithIndex({
+				name: "widgets_status_idx",
+				predicate: rewritten,
+				keys: [plainKey("status")],
+			}),
+			"app",
+			"widgets",
+			declaredIndexNode(snapshot, "app.widgets", "widgets_status_idx"),
+			"server",
+		);
+
+		expect(findings).toEqual([]);
+		expect(calls).toHaveLength(1);
+	});
+
+	it("reports a partial predicate that genuinely differs", async () => {
+		const widgets = table(
+			app,
+			"widgets",
+			{ id: uuid().primaryKey(), archivedAt: timestamptz() },
+			(t) => ({
+				indexes: [
+					index("widgets_active_idx").on(t.id).where(isNotNull(t.archivedAt)),
+				],
+			}),
+		);
+		const snapshot = buildTestSnapshot([widgets]);
+		const { session } = makeIndexFakeSession({
+			explainOutput: ["(archived_at IS NULL)", "(archived_at IS NOT NULL)"],
+		});
+
+		const findings = await compareIndexKeys(
+			session,
+			catalogWithIndex({
+				name: "widgets_active_idx",
+				predicate: "(archived_at IS NOT NULL)",
+				keys: [plainKey("id")],
+			}),
+			"app",
+			"widgets",
+			declaredIndexNode(snapshot, "app.widgets", "widgets_active_idx"),
+			"server",
+		);
+
+		expect(findings).toHaveLength(1);
+		expect(findings[0]?.identity).toBe("app.widgets.widgets_active_idx");
+		expect(findings[0]?.error).toMatchObject({ code: "check-object-differs" });
+	});
+
+	it("issues no pair, and no finding, when both sides hold the position as a plain column", async () => {
+		const widgets = table(
+			app,
+			"widgets",
+			{ id: uuid().primaryKey(), email: text() },
+			(t) => ({ indexes: [index("widgets_email_idx").on(t.email)] }),
+		);
+		const snapshot = buildTestSnapshot([widgets]);
+		const { session, calls } = makeIndexFakeSession({});
+
+		const findings = await compareIndexKeys(
+			session,
+			catalogWithIndex({
+				name: "widgets_email_idx",
+				predicate: null,
+				keys: [plainKey("email")],
+			}),
+			"app",
+			"widgets",
+			declaredIndexNode(snapshot, "app.widgets", "widgets_email_idx"),
+			"server",
+		);
+
+		expect(findings).toEqual([]);
+		expect(calls).toHaveLength(0);
+	});
+
+	it("reports a declared plain column against a catalog expression key at that position", async () => {
+		const widgets = table(
+			app,
+			"widgets",
+			{ id: uuid().primaryKey(), email: text() },
+			(t) => ({ indexes: [index("widgets_email_idx").on(t.email)] }),
+		);
+		const snapshot = buildTestSnapshot([widgets]);
+		const { session, calls } = makeIndexFakeSession({
+			explainOutput: ["email", "lower(email)"],
+		});
+
+		const findings = await compareIndexKeys(
+			session,
+			catalogWithIndex({
+				name: "widgets_email_idx",
+				predicate: null,
+				keys: [exprKey("lower(email)")],
+			}),
+			"app",
+			"widgets",
+			declaredIndexNode(snapshot, "app.widgets", "widgets_email_idx"),
+			"server",
+		);
+
+		expect(findings).toHaveLength(1);
+		expect(findings[0]?.error).toMatchObject({ code: "check-object-differs" });
+		expect(findings[0]?.error.message).toContain("index key 1");
+		expect(calls).toHaveLength(1);
+	});
+
+	it("agrees when the declared expression is a bare column reference and the catalog holds the position as a plain key (B3)", async () => {
+		const widgets = table(
+			app,
+			"widgets",
+			{ id: uuid().primaryKey(), email: text() },
+			(t) => ({
+				indexes: [index("widgets_email_idx").on(sql`${t.email}`)],
+			}),
+		);
+		const snapshot = buildTestSnapshot([widgets]);
+		const { session, calls } = makeIndexFakeSession({
+			explainOutput: ["email", "email"],
+		});
+
+		const findings = await compareIndexKeys(
+			session,
+			catalogWithIndex({
+				name: "widgets_email_idx",
+				predicate: null,
+				keys: [plainKey("email")],
+			}),
+			"app",
+			"widgets",
+			declaredIndexNode(snapshot, "app.widgets", "widgets_email_idx"),
+			"server",
+		);
+
+		expect(findings).toEqual([]);
+		expect(calls).toHaveLength(1);
+	});
+
+	it("agrees when the declared expression is a parenthesized column and the catalog holds the position as a plain key (B3)", async () => {
+		const widgets = table(
+			app,
+			"widgets",
+			{ id: uuid().primaryKey(), email: text() },
+			(t) => ({
+				indexes: [index("widgets_email_idx").on(sql`(${t.email})`)],
+			}),
+		);
+		const snapshot = buildTestSnapshot([widgets]);
+		const { session, calls } = makeIndexFakeSession({
+			explainOutput: ["email", "email"],
+		});
+
+		const findings = await compareIndexKeys(
+			session,
+			catalogWithIndex({
+				name: "widgets_email_idx",
+				predicate: null,
+				keys: [plainKey("email")],
+			}),
+			"app",
+			"widgets",
+			declaredIndexNode(snapshot, "app.widgets", "widgets_email_idx"),
+			"server",
+		);
+
+		expect(findings).toEqual([]);
+		expect(calls).toHaveLength(1);
+	});
+
+	it("agrees when a declared collated expression matches a catalog plain key carrying the same collation suffix (B3)", async () => {
+		const widgets = table(
+			app,
+			"widgets",
+			{ id: uuid().primaryKey(), email: text() },
+			(t) => ({
+				indexes: [index("widgets_email_idx").on(sql`${t.email} collate "C"`)],
+			}),
+		);
+		const snapshot = buildTestSnapshot([widgets]);
+		const { session, calls } = makeIndexFakeSession({
+			explainOutput: ["email", "email"],
+		});
+
+		const findings = await compareIndexKeys(
+			session,
+			catalogWithIndex({
+				name: "widgets_email_idx",
+				predicate: null,
+				keys: [plainKey('email collate "C"')],
+			}),
+			"app",
+			"widgets",
+			declaredIndexNode(snapshot, "app.widgets", "widgets_email_idx"),
+			"server",
+		);
+
+		expect(findings).toEqual([]);
+		expect(calls).toHaveLength(1);
+	});
+
+	// ck-planner's own follow-up measurement after 1.9's own commit: EXPLAIN's
+	// `Output` drops a `COLLATE` clause from *both* sides alike (measured,
+	// docker postgres:17-alpine), so a collation-only difference is
+	// invisible to the server-mode comparison -- the same declared
+	// `col collate "C"` agrees under server mode whether or not the
+	// database's own key actually carries that collation. Text mode does
+	// not share this blind spot: normalization never strips a collation
+	// suffix, so the two texts genuinely differ there.
+	it("agrees under text mode when a declared collated expression matches a catalog plain key carrying the same collation suffix (B3)", async () => {
+		const widgets = table(
+			app,
+			"widgets",
+			{ id: uuid().primaryKey(), email: text() },
+			(t) => ({
+				indexes: [index("widgets_email_idx").on(sql`${t.email} collate "C"`)],
+			}),
+		);
+		const snapshot = buildTestSnapshot([widgets]);
+		const { session, calls } = makeIndexFakeSession({});
+
+		const findings = await compareIndexKeys(
+			session,
+			catalogWithIndex({
+				name: "widgets_email_idx",
+				predicate: null,
+				keys: [plainKey('email collate "C"')],
+			}),
+			"app",
+			"widgets",
+			declaredIndexNode(snapshot, "app.widgets", "widgets_email_idx"),
+			"text",
+		);
+
+		expect(findings).toEqual([]);
+		expect(calls).toHaveLength(0);
+	});
+
+	it("agrees under server mode even when the catalog's plain key carries no collation suffix at all -- EXPLAIN's own collation blind spot", async () => {
+		const widgets = table(
+			app,
+			"widgets",
+			{ id: uuid().primaryKey(), email: text() },
+			(t) => ({
+				indexes: [index("widgets_email_idx").on(sql`${t.email} collate "C"`)],
+			}),
+		);
+		const snapshot = buildTestSnapshot([widgets]);
+		const { session } = makeIndexFakeSession({
+			explainOutput: ["email", "email"],
+		});
+
+		const findings = await compareIndexKeys(
+			session,
+			catalogWithIndex({
+				name: "widgets_email_idx",
+				predicate: null,
+				keys: [plainKey("email")],
+			}),
+			"app",
+			"widgets",
+			declaredIndexNode(snapshot, "app.widgets", "widgets_email_idx"),
+			"server",
+		);
+
+		expect(findings).toEqual([]);
+	});
+
+	it("is not compared under text mode when the catalog's plain key carries no collation suffix, unlike server mode", async () => {
+		const widgets = table(
+			app,
+			"widgets",
+			{ id: uuid().primaryKey(), email: text() },
+			(t) => ({
+				indexes: [index("widgets_email_idx").on(sql`${t.email} collate "C"`)],
+			}),
+		);
+		const snapshot = buildTestSnapshot([widgets]);
+		const { session } = makeIndexFakeSession({});
+
+		const findings = await compareIndexKeys(
+			session,
+			catalogWithIndex({
+				name: "widgets_email_idx",
+				predicate: null,
+				keys: [plainKey("email")],
+			}),
+			"app",
+			"widgets",
+			declaredIndexNode(snapshot, "app.widgets", "widgets_email_idx"),
+			"text",
+		);
+
+		expect(findings).toHaveLength(1);
+		expect(findings[0]?.error).toMatchObject({ code: "check-not-compared" });
+	});
+
+	it("agrees under text mode when the declared expression is a parenthesized column and the catalog holds the position as a plain key (B3)", async () => {
+		const widgets = table(
+			app,
+			"widgets",
+			{ id: uuid().primaryKey(), email: text() },
+			(t) => ({
+				indexes: [index("widgets_email_idx").on(sql`(${t.email})`)],
+			}),
+		);
+		const snapshot = buildTestSnapshot([widgets]);
+		const { session, calls } = makeIndexFakeSession({});
+
+		const findings = await compareIndexKeys(
+			session,
+			catalogWithIndex({
+				name: "widgets_email_idx",
+				predicate: null,
+				keys: [plainKey("email")],
+			}),
+			"app",
+			"widgets",
+			declaredIndexNode(snapshot, "app.widgets", "widgets_email_idx"),
+			"text",
+		);
+
+		expect(findings).toEqual([]);
+		expect(calls).toHaveLength(0);
+	});
+
+	it("agrees on a genuine expression key that renders identically", async () => {
+		const widgets = table(
+			app,
+			"widgets",
+			{ id: uuid().primaryKey(), email: text() },
+			(t) => ({
+				indexes: [index("widgets_email_idx").on(sql`lower(${t.email})`)],
+			}),
+		);
+		const snapshot = buildTestSnapshot([widgets]);
+		const { session } = makeIndexFakeSession({
+			explainOutput: ["lower(email)", "lower(email)"],
+		});
+
+		const findings = await compareIndexKeys(
+			session,
+			catalogWithIndex({
+				name: "widgets_email_idx",
+				predicate: null,
+				keys: [exprKey("lower(email)")],
+			}),
+			"app",
+			"widgets",
+			declaredIndexNode(snapshot, "app.widgets", "widgets_email_idx"),
+			"server",
+		);
+
+		expect(findings).toEqual([]);
+	});
+
+	it("reports a genuine expression key that differs, naming the key position", async () => {
+		const widgets = table(
+			app,
+			"widgets",
+			{ id: uuid().primaryKey(), email: text() },
+			(t) => ({
+				indexes: [index("widgets_email_idx").on(sql`lower(${t.email})`)],
+			}),
+		);
+		const snapshot = buildTestSnapshot([widgets]);
+		const { session } = makeIndexFakeSession({
+			explainOutput: ["lower(email)", "upper(email)"],
+		});
+
+		const findings = await compareIndexKeys(
+			session,
+			catalogWithIndex({
+				name: "widgets_email_idx",
+				predicate: null,
+				keys: [exprKey("upper(email)")],
+			}),
+			"app",
+			"widgets",
+			declaredIndexNode(snapshot, "app.widgets", "widgets_email_idx"),
+			"server",
+		);
+
+		expect(findings).toHaveLength(1);
+		expect(findings[0]?.error).toMatchObject({ code: "check-object-differs" });
+		expect(findings[0]?.error.message).toContain("index key 1");
+	});
+
+	it.each([
+		{ label: "declared 2, catalog 3 keys", declaredKeys: 2, catalogKeys: 3 },
+		{ label: "declared 3, catalog 2 keys", declaredKeys: 3, catalogKeys: 2 },
+	])(
+		"reports a differing key count ($label), naming both counts, probing nothing",
+		async ({ declaredKeys, catalogKeys }) => {
+			const declaredColumns = ["email", "status", "name"].slice(
+				0,
+				declaredKeys,
+			);
+			const widgets = table(
+				app,
+				"widgets",
+				{
+					id: uuid().primaryKey(),
+					email: text(),
+					status: text(),
+					name: text(),
+				},
+				(t) => ({
+					indexes: [
+						index("widgets_multi_idx").on(
+							...declaredColumns.map((name) => t[name as keyof typeof t]),
+						),
+					],
+				}),
+			);
+			const snapshot = buildTestSnapshot([widgets]);
+			const { session, calls } = makeIndexFakeSession({});
+
+			const findings = await compareIndexKeys(
+				session,
+				catalogWithIndex({
+					name: "widgets_multi_idx",
+					predicate: null,
+					keys: Array.from({ length: catalogKeys }, (_, i) =>
+						plainKey(`col${i}`),
+					),
+				}),
+				"app",
+				"widgets",
+				declaredIndexNode(snapshot, "app.widgets", "widgets_multi_idx"),
+				"server",
+			);
+
+			expect(findings).toHaveLength(1);
+			expect(findings[0]?.error).toMatchObject({
+				code: "check-object-differs",
+			});
+			expect(findings[0]?.error.message).toContain(`has ${declaredKeys} key`);
+			expect(findings[0]?.error.message).toContain(`has ${catalogKeys}`);
+			const explainCalls = calls.filter((call) =>
+				call.sql.trim().toLowerCase().startsWith("explain"),
+			);
+			expect(explainCalls).toHaveLength(0);
+		},
+	);
+
+	// review round 2 B4: a database index's INCLUDE columns are read out of
+	// `keys` at the catalog boundary (catalog.ts, indnkeyatts) -- these two
+	// rows pin that `compareIndexKeys` itself never sees them, so a
+	// covering column neither forces a false count mismatch nor hides a
+	// genuinely missing declared key.
+	it("a covering index's INCLUDE column is absent from catalog keys, so a declared key list of the same length agrees", async () => {
+		const widgets = table(
+			app,
+			"widgets",
+			{ id: uuid().primaryKey(), a: text(), b: text() },
+			(t) => ({
+				indexes: [index("widgets_a_idx").on(t.a)],
+			}),
+		);
+		const snapshot = buildTestSnapshot([widgets]);
+		const { session, calls } = makeIndexFakeSession({});
+
+		const findings = await compareIndexKeys(
+			session,
+			catalogWithIndex({
+				name: "widgets_a_idx",
+				predicate: null,
+				keys: [plainKey("a")],
+			}),
+			"app",
+			"widgets",
+			declaredIndexNode(snapshot, "app.widgets", "widgets_a_idx"),
+			"server",
+		);
+
+		expect(findings).toHaveLength(0);
+		expect(calls).toHaveLength(0);
+	});
+
+	it("a declared key the database only carries as an INCLUDE column reports a differing count, one against two", async () => {
+		const widgets = table(
+			app,
+			"widgets",
+			{ id: uuid().primaryKey(), a: text(), b: text() },
+			(t) => ({
+				indexes: [index("widgets_ab_idx").on(t.a, t.b)],
+			}),
+		);
+		const snapshot = buildTestSnapshot([widgets]);
+		const { session, calls } = makeIndexFakeSession({});
+
+		const findings = await compareIndexKeys(
+			session,
+			catalogWithIndex({
+				name: "widgets_ab_idx",
+				predicate: null,
+				keys: [plainKey("a")],
+			}),
+			"app",
+			"widgets",
+			declaredIndexNode(snapshot, "app.widgets", "widgets_ab_idx"),
+			"server",
+		);
+
+		expect(findings).toHaveLength(1);
+		expect(findings[0]?.error).toMatchObject({ code: "check-object-differs" });
+		expect(findings[0]?.error.message).toContain("has 2 key");
+		expect(findings[0]?.error.message).toContain("has 1");
+		const explainCalls = calls.filter((call) =>
+			call.sql.trim().toLowerCase().startsWith("explain"),
+		);
+		expect(explainCalls).toHaveLength(0);
+	});
+
+	it("reports a predicate declared on only one side (declared has one, catalog has none), probing nothing", async () => {
+		const widgets = table(
+			app,
+			"widgets",
+			{ id: uuid().primaryKey(), archivedAt: timestamptz() },
+			(t) => ({
+				indexes: [
+					index("widgets_active_idx").on(t.id).where(isNotNull(t.archivedAt)),
+				],
+			}),
+		);
+		const snapshot = buildTestSnapshot([widgets]);
+		const { session, calls } = makeIndexFakeSession({});
+
+		const findings = await compareIndexKeys(
+			session,
+			catalogWithIndex({
+				name: "widgets_active_idx",
+				predicate: null,
+				keys: [plainKey("id")],
+			}),
+			"app",
+			"widgets",
+			declaredIndexNode(snapshot, "app.widgets", "widgets_active_idx"),
+			"server",
+		);
+
+		expect(findings).toHaveLength(1);
+		expect(findings[0]?.error).toMatchObject({ code: "check-object-differs" });
+		const explainCalls = calls.filter((call) =>
+			call.sql.trim().toLowerCase().startsWith("explain"),
+		);
+		expect(explainCalls).toHaveLength(0);
+	});
+
+	it("reports a predicate declared on only one side (declared has none, catalog has one), probing nothing", async () => {
+		const widgets = table(
+			app,
+			"widgets",
+			{ id: uuid().primaryKey(), archivedAt: timestamptz() },
+			(t) => ({
+				indexes: [index("widgets_active_idx").on(t.id)],
+			}),
+		);
+		const snapshot = buildTestSnapshot([widgets]);
+		const { session, calls } = makeIndexFakeSession({});
+
+		const findings = await compareIndexKeys(
+			session,
+			catalogWithIndex({
+				name: "widgets_active_idx",
+				predicate: "(archived_at IS NOT NULL)",
+				keys: [plainKey("id")],
+			}),
+			"app",
+			"widgets",
+			declaredIndexNode(snapshot, "app.widgets", "widgets_active_idx"),
+			"server",
+		);
+
+		expect(findings).toHaveLength(1);
+		expect(findings[0]?.error).toMatchObject({ code: "check-object-differs" });
+		const explainCalls = calls.filter((call) =>
+			call.sql.trim().toLowerCase().startsWith("explain"),
+		);
+		expect(explainCalls).toHaveLength(0);
+	});
+
+	it("probes a predicate and two expression positions in one statement, six Output entries, one finding per differing pair", async () => {
+		const widgets = table(
+			app,
+			"widgets",
+			{ id: uuid().primaryKey(), email: text(), archivedAt: timestamptz() },
+			(t) => ({
+				indexes: [
+					index("widgets_multi_idx")
+						.on(sql`lower(${t.email})`, sql`upper(${t.email})`)
+						.where(isNotNull(t.archivedAt)),
+				],
+			}),
+		);
+		const snapshot = buildTestSnapshot([widgets]);
+		const { session, calls } = makeIndexFakeSession({
+			explainOutput: [
+				"(archived_at IS NOT NULL)",
+				"(archived_at IS NOT NULL)",
+				"lower(email)",
+				"lower(email)",
+				"upper(email)",
+				"UPPER(email)",
+			],
+		});
+
+		const findings = await compareIndexKeys(
+			session,
+			catalogWithIndex({
+				name: "widgets_multi_idx",
+				predicate: "(archived_at IS NOT NULL)",
+				keys: [exprKey("lower(email)"), exprKey("UPPER(email)")],
+			}),
+			"app",
+			"widgets",
+			declaredIndexNode(snapshot, "app.widgets", "widgets_multi_idx"),
+			"server",
+		);
+
+		expect(findings).toHaveLength(1);
+		expect(findings[0]?.error.message).toContain("index key 2");
+		const explainCalls = calls.filter((call) =>
+			call.sql.trim().toLowerCase().startsWith("explain"),
+		);
+		expect(explainCalls).toHaveLength(1);
+		const [explainCall] = explainCalls;
+		const occurrences = (explainCall?.sql.match(/\(/g) ?? []).length;
+		expect(occurrences).toBeGreaterThanOrEqual(6);
+	});
+
+	it("agrees under text mode for a predicate after the declaring table's qualifier normalizes away", async () => {
+		const widgets = table(
+			app,
+			"widgets",
+			{ id: uuid().primaryKey(), archivedAt: timestamptz() },
+			(t) => ({
+				indexes: [
+					index("widgets_active_idx").on(t.id).where(isNotNull(t.archivedAt)),
+				],
+			}),
+		);
+		const snapshot = buildTestSnapshot([widgets]);
+		const { session, calls } = makeIndexFakeSession({});
+
+		const findings = await compareIndexKeys(
+			session,
+			catalogWithIndex({
+				name: "widgets_active_idx",
+				predicate: "(archived_at IS NOT NULL)",
+				keys: [plainKey("id")],
+			}),
+			"app",
+			"widgets",
+			declaredIndexNode(snapshot, "app.widgets", "widgets_active_idx"),
+			"text",
+		);
+
+		expect(findings).toEqual([]);
+		expect(calls).toHaveLength(0);
+	});
+
+	it("is not compared under text mode for an expression key carrying a cast normalization never strips", async () => {
+		const widgets = table(
+			app,
+			"widgets",
+			{ id: uuid().primaryKey(), price: numeric(), qty: numeric() },
+			(t) => ({
+				indexes: [index("widgets_total_idx").on(sql`${t.price} * ${t.qty}`)],
+			}),
+		);
+		const snapshot = buildTestSnapshot([widgets]);
+		const { session } = makeIndexFakeSession({});
+
+		const findings = await compareIndexKeys(
+			session,
+			catalogWithIndex({
+				name: "widgets_total_idx",
+				predicate: null,
+				keys: [exprKey("(price * (qty)::numeric)")],
+			}),
+			"app",
+			"widgets",
+			declaredIndexNode(snapshot, "app.widgets", "widgets_total_idx"),
+			"text",
+		);
+
+		expect(findings).toHaveLength(1);
+		expect(findings[0]?.error).toMatchObject({ code: "check-not-compared" });
+		expect(findings[0]?.error.message).not.toMatch(/EXPLAIN/i);
+	});
+
+	it("reports nothing and issues zero statements when the index is absent from the catalog", async () => {
+		const widgets = table(
+			app,
+			"widgets",
+			{ id: uuid().primaryKey(), email: text() },
+			(t) => ({
+				indexes: [index("widgets_email_idx").on(sql`lower(${t.email})`)],
+			}),
+		);
+		const snapshot = buildTestSnapshot([widgets]);
+		const { session, calls } = makeIndexFakeSession({});
+
+		const findings = await compareIndexKeys(
+			session,
+			emptyCatalog(),
+			"app",
+			"widgets",
+			declaredIndexNode(snapshot, "app.widgets", "widgets_email_idx"),
+			"server",
+		);
+
+		expect(findings).toEqual([]);
+		expect(calls).toHaveLength(0);
 	});
 });
 

@@ -51,6 +51,7 @@ describe("mergeTableFacts / 1.4b adapter", () => {
 					baseTypeSchema: "pg_catalog",
 					baseTypeName: "uuid",
 					catalogDefault: null,
+					catalogGenerated: null,
 				},
 				{
 					schema: "app",
@@ -62,6 +63,7 @@ describe("mergeTableFacts / 1.4b adapter", () => {
 					baseTypeSchema: "pg_catalog",
 					baseTypeName: "uuid",
 					catalogDefault: null,
+					catalogGenerated: null,
 				},
 				{
 					schema: "app",
@@ -73,6 +75,7 @@ describe("mergeTableFacts / 1.4b adapter", () => {
 					baseTypeSchema: "pg_catalog",
 					baseTypeName: "uuid",
 					catalogDefault: null,
+					catalogGenerated: null,
 				},
 				{
 					schema: "app",
@@ -84,6 +87,7 @@ describe("mergeTableFacts / 1.4b adapter", () => {
 					baseTypeSchema: "pg_catalog",
 					baseTypeName: "text",
 					catalogDefault: null,
+					catalogGenerated: null,
 				},
 			],
 			constraints: [
@@ -117,9 +121,27 @@ describe("mergeTableFacts / 1.4b adapter", () => {
 				},
 			],
 			indexes: [
-				{ schema: "app", table: "parents", name: "parents_pkey" },
-				{ schema: "app", table: "children", name: "children_pkey" },
-				{ schema: "app", table: "children", name: "children_name_idx" },
+				{
+					schema: "app",
+					table: "parents",
+					name: "parents_pkey",
+					predicate: null,
+					keys: [],
+				},
+				{
+					schema: "app",
+					table: "children",
+					name: "children_pkey",
+					predicate: null,
+					keys: [],
+				},
+				{
+					schema: "app",
+					table: "children",
+					name: "children_name_idx",
+					predicate: null,
+					keys: [],
+				},
 			],
 		};
 		const inferenceCatalog: InferenceCatalog = {
@@ -318,6 +340,7 @@ describe("mergeTableFacts / 1.4b adapter", () => {
 					baseTypeSchema: "pg_catalog",
 					baseTypeName: "uuid",
 					catalogDefault: null,
+					catalogGenerated: null,
 				},
 				{
 					schema: "app",
@@ -329,6 +352,7 @@ describe("mergeTableFacts / 1.4b adapter", () => {
 					baseTypeSchema: "pg_catalog",
 					baseTypeName: "uuid",
 					catalogDefault: null,
+					catalogGenerated: null,
 				},
 				{
 					schema: "app",
@@ -340,6 +364,7 @@ describe("mergeTableFacts / 1.4b adapter", () => {
 					baseTypeSchema: "pg_catalog",
 					baseTypeName: "uuid",
 					catalogDefault: null,
+					catalogGenerated: null,
 				},
 				{
 					schema: "app",
@@ -351,6 +376,7 @@ describe("mergeTableFacts / 1.4b adapter", () => {
 					baseTypeSchema: "pg_catalog",
 					baseTypeName: "uuid",
 					catalogDefault: null,
+					catalogGenerated: null,
 				},
 				{
 					schema: "app",
@@ -362,6 +388,7 @@ describe("mergeTableFacts / 1.4b adapter", () => {
 					baseTypeSchema: "pg_catalog",
 					baseTypeName: "int4",
 					catalogDefault: null,
+					catalogGenerated: null,
 				},
 			],
 			constraints: [
@@ -395,8 +422,20 @@ describe("mergeTableFacts / 1.4b adapter", () => {
 				},
 			],
 			indexes: [
-				{ schema: "app", table: "widgets", name: "widgets_z_idx" },
-				{ schema: "app", table: "widgets", name: "widgets_a_idx" },
+				{
+					schema: "app",
+					table: "widgets",
+					name: "widgets_z_idx",
+					predicate: null,
+					keys: [],
+				},
+				{
+					schema: "app",
+					table: "widgets",
+					name: "widgets_a_idx",
+					predicate: null,
+					keys: [],
+				},
 			],
 		};
 		const baseInferenceCatalog: InferenceCatalog = {

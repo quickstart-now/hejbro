@@ -118,6 +118,7 @@ describe("mergeTableFacts / 1.4b checks are scoped per table (D106 R5-B3)", () =
 					baseTypeSchema: "pg_catalog",
 					baseTypeName: "int4",
 					catalogDefault: null,
+					catalogGenerated: null,
 				},
 				{
 					schema: "app",
@@ -129,6 +130,7 @@ describe("mergeTableFacts / 1.4b checks are scoped per table (D106 R5-B3)", () =
 					baseTypeSchema: "pg_catalog",
 					baseTypeName: "int4",
 					catalogDefault: null,
+					catalogGenerated: null,
 				},
 			],
 			constraints: [

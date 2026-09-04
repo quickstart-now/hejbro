@@ -7,10 +7,14 @@ import {
 	getTableMeta,
 	hejbroError,
 	inArray,
+	index,
 	isNotNull,
+	numeric,
 	schema,
+	sql,
 	table,
 	text,
+	timestamptz,
 	uuid,
 } from "@hejbro/core";
 import type { CompileResult, DriverRow, DriverSession } from "@hejbro/query";
@@ -264,6 +268,7 @@ const idColumnRow = (table: string) => ({
 	baseTypeSchema: null,
 	baseTypeName: null,
 	catalogDefault: null,
+	catalogGenerated: null,
 });
 
 const statusColumnRow = (table: string) => ({
@@ -276,6 +281,7 @@ const statusColumnRow = (table: string) => ({
 	baseTypeSchema: null,
 	baseTypeName: null,
 	catalogDefault: null,
+	catalogGenerated: null,
 });
 
 /** One row of `EXPLAIN (FORMAT JSON, COSTS OFF, VERBOSE)` output, shaped exactly as a real postgres:17 returns it (same fixture shape check-expression.test.ts verified directly) -- `output` is `[declaredText, catalogText]`, the single-statement probe's own two-entry `Output`. */
@@ -617,6 +623,7 @@ describe("an existing declaration is neither compared nor inventoried (add-unman
 					baseTypeSchema: null,
 					baseTypeName: null,
 					catalogDefault: null,
+					catalogGenerated: null,
 				},
 			],
 		};
@@ -920,5 +927,372 @@ describe("compareCheckAgainstCatalog / renderCheckReport text mode (fix-nile-fin
 			"text",
 		);
 		expect(report.exitCode).not.toBe(0);
+	});
+});
+
+/**
+ * #778/#781, task 1.6: an index's predicate and expression column, and a
+ * generated column's expression, reach the same run a check constraint's
+ * always did -- `declaredIndexExpressions`/`declaredGeneratedColumns`
+ * merged into `compareCheckAgainstCatalog`. One index carries both a
+ * partial predicate and an expression column, so its own probe is one
+ * `explain` statement regardless of how many pairs it carries (1.5); the
+ * generated column is the second and last object, so "one per object"
+ * is exactly two statements total, with no check constraint declared at
+ * all.
+ */
+describe("compareCheckAgainstCatalog / 1.6 every expression surface reaches the run", () => {
+	const buildWidgetsSnapshot = (): Snapshot =>
+		buildTestSnapshot([
+			table(
+				app,
+				"widgets",
+				{
+					id: uuid().primaryKey(),
+					email: text(),
+					archivedAt: timestamptz(),
+					price: numeric(),
+					qty: numeric(),
+					total: numeric().generatedAlwaysAs(sql`price * qty`),
+				},
+				(t) => ({
+					indexes: [
+						index("widgets_email_idx")
+							.on(sql`lower(${t.email})`)
+							.where(isNotNull(t.archivedAt)),
+					],
+				}),
+			),
+		]);
+
+	const numericColumnRow = (name: string, catalogGenerated: string | null) => ({
+		schema: "app",
+		table: "widgets",
+		name,
+		notNull: false,
+		catalogType: "numeric",
+		baseTypeKind: null,
+		baseTypeSchema: null,
+		baseTypeName: null,
+		catalogDefault: null,
+		catalogGenerated,
+	});
+
+	const widgetsCatalog = (): Catalog => ({
+		...emptyCatalog(),
+		tables: [{ schema: "app", table: "widgets", rls: false }],
+		constraints: [
+			{
+				schema: "app",
+				table: "widgets",
+				name: "widgets_pkey",
+				type: "p",
+				columns: ["id"],
+			},
+		],
+		columns: [
+			idColumnRow("widgets"),
+			{
+				schema: "app",
+				table: "widgets",
+				name: "email",
+				notNull: false,
+				catalogType: "text",
+				baseTypeKind: null,
+				baseTypeSchema: null,
+				baseTypeName: null,
+				catalogDefault: null,
+				catalogGenerated: null,
+			},
+			{
+				schema: "app",
+				table: "widgets",
+				name: "archived_at",
+				notNull: false,
+				catalogType: "timestamp with time zone",
+				baseTypeKind: null,
+				baseTypeSchema: null,
+				baseTypeName: null,
+				catalogDefault: null,
+				catalogGenerated: null,
+			},
+			numericColumnRow("price", null),
+			numericColumnRow("qty", null),
+			numericColumnRow("total", "(price * (qty)::numeric)"),
+		],
+		indexes: [
+			{
+				schema: "app",
+				table: "widgets",
+				name: "widgets_email_idx",
+				predicate: "(archived_at IS NOT NULL)",
+				keys: [{ text: "lower(email)", expression: true }],
+			},
+		],
+	});
+
+	/** Routes by a substring unique to each object's own probe SQL -- `qty` only ever appears in the generated column's select list, `email` only in the index's (its predicate and its expression column both reference `archived_at`/`email`, never `qty`). No `pg_constraint` lookup exists for either surface. */
+	const makeSurfaceFakeSession = (
+		indexOutput: ReadonlyArray<string>,
+		generatedOutput: ReadonlyArray<string>,
+	): { readonly session: DriverSession; readonly calls: CompileResult[] } => {
+		const calls: CompileResult[] = [];
+		const session: DriverSession = {
+			execute: async (compiled) => {
+				calls.push(compiled);
+				if (compiled.sql.includes("qty")) {
+					return [explainRow(generatedOutput)];
+				}
+				if (compiled.sql.includes("email")) {
+					return [explainRow(indexOutput)];
+				}
+				return [explainRow([])];
+			},
+		};
+		return { session, calls };
+	};
+
+	it("issues exactly two explain statements in server mode, one per object", async () => {
+		const { session, calls } = makeSurfaceFakeSession(
+			[
+				"(archived_at IS NOT NULL)",
+				"(archived_at IS NOT NULL)",
+				"lower(email)",
+				"lower(email)",
+			],
+			["(price * (qty)::numeric)", "(price * (qty)::numeric)"],
+		);
+
+		await compareCheckAgainstCatalog(
+			buildWidgetsSnapshot(),
+			widgetsCatalog(),
+			session,
+		);
+
+		const explainCalls = calls.filter((call) =>
+			call.sql.trim().toLowerCase().startsWith("explain"),
+		);
+		expect(explainCalls).toHaveLength(2);
+	});
+
+	it("issues no explain statement in text mode", async () => {
+		const { session, calls } = makeSurfaceFakeSession([], []);
+
+		await compareCheckAgainstCatalog(
+			buildWidgetsSnapshot(),
+			widgetsCatalog(),
+			session,
+			undefined,
+			"text",
+		);
+
+		const explainCalls = calls.filter((call) =>
+			call.sql.trim().toLowerCase().startsWith("explain"),
+		);
+		expect(explainCalls).toHaveLength(0);
+	});
+
+	it("exits 0 and names no column when every surface agrees (#781 end-to-end)", async () => {
+		const { session } = makeSurfaceFakeSession(
+			[
+				"(archived_at IS NOT NULL)",
+				"(archived_at IS NOT NULL)",
+				"lower(email)",
+				"lower(email)",
+			],
+			["(price * (qty)::numeric)", "(price * (qty)::numeric)"],
+		);
+
+		const findings = await compareCheckAgainstCatalog(
+			buildWidgetsSnapshot(),
+			widgetsCatalog(),
+			session,
+		);
+		const report = renderCheckReport(findings, EMPTY_INVENTORY);
+
+		expect(report.exitCode).toBe(0);
+		expect(findings.some((finding) => finding.identity.includes("total"))).toBe(
+			false,
+		);
+	});
+
+	it("names every expression surface in the text-mode coverage boundary", () => {
+		const report = renderCheckReport(
+			[],
+			EMPTY_INVENTORY,
+			undefined,
+			undefined,
+			"text",
+		);
+
+		expect(
+			report.stdout.some((line) =>
+				line.includes(
+					"expressions (check constraints, index predicates and keys, generated columns) were compared by normalized text",
+				),
+			),
+		).toBe(true);
+	});
+});
+
+/**
+ * Review round 1, B1/B2 (`.blackbox/778/` R3): `declaredIndexExpressions`'s
+ * own filter used to skip a declared index that carries neither a
+ * predicate nor an expression column, so a database index that grew one
+ * (or a partial predicate) the declaration never had passed as "no
+ * differences" -- the filter never let `compareIndexKeys` even run for
+ * that index. This pins the fix directly through
+ * `compareCheckAgainstCatalog`, the seam the bug actually lived in.
+ */
+describe("compareCheckAgainstCatalog / 1.10 every declared index reaches the key comparison (review B1/B2)", () => {
+	const textColumnRow = (name: string) => ({
+		schema: "app",
+		table: "widgets",
+		name,
+		notNull: false,
+		catalogType: "text",
+		baseTypeKind: null,
+		baseTypeSchema: null,
+		baseTypeName: null,
+		catalogDefault: null,
+		catalogGenerated: null,
+	});
+
+	const widgetsCatalogWithIndex = (indexRow: {
+		readonly predicate: string | null;
+		readonly keys: { readonly text: string; readonly expression: boolean }[];
+	}): Catalog => ({
+		...emptyCatalog(),
+		tables: [{ schema: "app", table: "widgets", rls: false }],
+		constraints: [
+			{
+				schema: "app",
+				table: "widgets",
+				name: "widgets_pkey",
+				type: "p",
+				columns: ["id"],
+			},
+		],
+		columns: [
+			idColumnRow("widgets"),
+			textColumnRow("a"),
+			textColumnRow("status"),
+		],
+		indexes: [
+			{ schema: "app", table: "widgets", name: "widgets_idx", ...indexRow },
+		],
+	});
+
+	/** `explainOutput` defaults to an empty `Output` -- fine for the two scenarios here that short-circuit on the count or presence guard before any statement is sent; the one scenario whose shape agrees and reaches a real probe (a genuinely differing pair) supplies its own mismatched pair. */
+	const makeIndexOnlySession = (
+		explainOutput?: ReadonlyArray<string>,
+	): { readonly session: DriverSession; readonly calls: CompileResult[] } => {
+		const calls: CompileResult[] = [];
+		const session: DriverSession = {
+			execute: async (compiled) => {
+				calls.push(compiled);
+				return [explainRow(explainOutput ?? [])];
+			},
+		};
+		return { session, calls };
+	};
+
+	it("reports a declared plain index against a catalog index on lower(a)", async () => {
+		const snapshot = buildTestSnapshot([
+			table(app, "widgets", { id: uuid().primaryKey(), a: text() }, (t) => ({
+				indexes: [index("widgets_idx").on(t.a)],
+			})),
+		]);
+		const catalog = widgetsCatalogWithIndex({
+			predicate: null,
+			keys: [{ text: "lower(a)", expression: true }],
+		});
+		// The count (1 vs 1) and predicate presence (neither) both agree, so
+		// this position is genuinely probed (the declared plain column against
+		// the catalog's expression key) -- a mismatched pair, exactly the
+		// finding this scenario exists to catch.
+		const { session, calls } = makeIndexOnlySession(["a", "lower(a)"]);
+
+		const findings = await compareCheckAgainstCatalog(
+			snapshot,
+			catalog,
+			session,
+		);
+
+		const indexFindings = findings.filter(
+			(finding) => finding.identity === "app.widgets.widgets_idx",
+		);
+		expect(indexFindings).toHaveLength(1);
+		expect(indexFindings[0]?.error).toMatchObject({
+			code: "check-object-differs",
+		});
+		const explainCalls = calls.filter((call) =>
+			call.sql.trim().toLowerCase().startsWith("explain"),
+		);
+		expect(explainCalls).toHaveLength(1);
+	});
+
+	it("reports a declared totally plain index against a catalog partial one", async () => {
+		const snapshot = buildTestSnapshot([
+			table(
+				app,
+				"widgets",
+				{ id: uuid().primaryKey(), a: text(), status: text() },
+				(t) => ({ indexes: [index("widgets_idx").on(t.a)] }),
+			),
+		]);
+		const catalog = widgetsCatalogWithIndex({
+			predicate: "(status <> 'archived'::text)",
+			keys: [{ text: "a", expression: false }],
+		});
+		const { session, calls } = makeIndexOnlySession();
+
+		const findings = await compareCheckAgainstCatalog(
+			snapshot,
+			catalog,
+			session,
+		);
+
+		const indexFindings = findings.filter(
+			(finding) => finding.identity === "app.widgets.widgets_idx",
+		);
+		expect(indexFindings).toHaveLength(1);
+		expect(indexFindings[0]?.error).toMatchObject({
+			code: "check-object-differs",
+		});
+		const explainCalls = calls.filter((call) =>
+			call.sql.trim().toLowerCase().startsWith("explain"),
+		);
+		expect(explainCalls).toHaveLength(0);
+	});
+
+	it("issues no statement and no finding when a plain index matches a plain catalog index", async () => {
+		const snapshot = buildTestSnapshot([
+			table(app, "widgets", { id: uuid().primaryKey(), a: text() }, (t) => ({
+				indexes: [index("widgets_idx").on(t.a)],
+			})),
+		]);
+		const catalog = widgetsCatalogWithIndex({
+			predicate: null,
+			keys: [{ text: "a", expression: false }],
+		});
+		const { session, calls } = makeIndexOnlySession();
+
+		const findings = await compareCheckAgainstCatalog(
+			snapshot,
+			catalog,
+			session,
+		);
+
+		expect(
+			findings.filter(
+				(finding) => finding.identity === "app.widgets.widgets_idx",
+			),
+		).toEqual([]);
+		expect(
+			calls.filter((call) =>
+				call.sql.trim().toLowerCase().startsWith("explain"),
+			),
+		).toEqual([]);
 	});
 });

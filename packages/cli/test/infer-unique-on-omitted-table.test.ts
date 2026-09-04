@@ -36,6 +36,7 @@ const CHECK_FIXTURE_ROWS: {
 			baseTypeSchema: null,
 			baseTypeName: null,
 			catalogDefault: null,
+			catalogGenerated: null,
 		},
 	],
 	constraints: [
@@ -47,7 +48,15 @@ const CHECK_FIXTURE_ROWS: {
 			columns: ["id"],
 		},
 	],
-	indexes: [{ schema: "shop", table: "Widgets", name: "widgets_id_key" }],
+	indexes: [
+		{
+			schema: "shop",
+			table: "Widgets",
+			name: "widgets_id_key",
+			predicate: null,
+			keys: [],
+		},
+	],
 	enums: [],
 	sequences: [],
 	functions: [],
