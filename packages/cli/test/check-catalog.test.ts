@@ -39,6 +39,7 @@ const FIXTURE_ROWS: {
 			name: "posts_slug_idx",
 			predicate: null,
 			keys: [],
+			constraintName: null,
 		},
 	],
 	enums: [{ schema: "app", name: "status" }],
@@ -178,6 +179,7 @@ describe("readCatalog / 1.2 columns and indexes carry expression texts", () => {
 					{ text: "lower(email)", expression: true },
 					{ text: "name", expression: false },
 				],
+				constraintName: null,
 			},
 		];
 		const session: DriverSession = {
@@ -212,6 +214,7 @@ describe("readCatalog / 1.2 columns and indexes carry expression texts", () => {
 				name: "posts_name_c_idx",
 				predicate: null,
 				keys: [{ text: 'name collate "C"', expression: false }],
+				constraintName: null,
 			},
 		];
 		const session: DriverSession = {
@@ -296,6 +299,61 @@ describe("CHECK_CATALOG_QUERIES.tableGrants / 1.4", () => {
 			"pg_get_userbyid",
 		);
 		expect(CHECK_CATALOG_QUERIES.defaultTableGrants).not.toContain("regrole");
+	});
+});
+
+describe("readCatalog / 1.2 an index carries the constraint it backs", () => {
+	// harden-check-inventory design.md: which constraint an index backs is
+	// read from the catalog's own record of it (conindid), never inferred
+	// from the index and the constraint sharing a name -- an ordinary
+	// index whose name happens to match an unrelated constraint would
+	// otherwise be misreported as backing it.
+	it("pins the indexes query text to a pg_constraint join on conindid", () => {
+		expect(CHECK_CATALOG_QUERIES.indexes).toContain("pg_constraint");
+		expect(CHECK_CATALOG_QUERIES.indexes).toContain("conindid");
+	});
+
+	it("parses an index row naming the constraint it backs, and one backing none", async () => {
+		const rows: ReadonlyArray<DriverRow> = [
+			{
+				schema: "app",
+				table: "posts",
+				name: "posts_pkey",
+				predicate: null,
+				keys: [{ text: "id", expression: false }],
+				constraintName: "posts_pkey",
+			},
+			{
+				schema: "app",
+				table: "posts",
+				name: "posts_slug_idx",
+				predicate: null,
+				keys: [{ text: "slug", expression: false }],
+				constraintName: null,
+			},
+		];
+		const session: DriverSession = {
+			execute: async (compiled) => {
+				if (compiled.sql === CHECK_CATALOG_QUERIES.indexes) {
+					return rows;
+				}
+				const entry = (
+					Object.entries(CHECK_CATALOG_QUERIES) as ReadonlyArray<
+						[CatalogQueryKey, string]
+					>
+				).find(([key, sql]) => key !== "indexes" && sql === compiled.sql);
+				if (entry === undefined) {
+					throw new Error(
+						`unexpected query sent to readCatalog: ${compiled.sql}`,
+					);
+				}
+				return FIXTURE_ROWS[entry[0]];
+			},
+		};
+
+		const catalog = await readCatalog(session);
+
+		expect(catalog.indexes).toEqual(rows);
 	});
 });
 

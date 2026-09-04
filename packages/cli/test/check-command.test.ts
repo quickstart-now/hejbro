@@ -1029,6 +1029,7 @@ describe("compareCheckAgainstCatalog / 1.6 every expression surface reaches the 
 				name: "widgets_email_idx",
 				predicate: "(archived_at IS NOT NULL)",
 				keys: [{ text: "lower(email)", expression: true }],
+				constraintName: null,
 			},
 		],
 	});
@@ -1181,7 +1182,13 @@ describe("compareCheckAgainstCatalog / 1.10 every declared index reaches the key
 			textColumnRow("status"),
 		],
 		indexes: [
-			{ schema: "app", table: "widgets", name: "widgets_idx", ...indexRow },
+			{
+				schema: "app",
+				table: "widgets",
+				name: "widgets_idx",
+				constraintName: null,
+				...indexRow,
+			},
 		],
 	});
 

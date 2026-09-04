@@ -127,6 +127,7 @@ describe("mergeTableFacts / 1.4b adapter", () => {
 					name: "parents_pkey",
 					predicate: null,
 					keys: [],
+					constraintName: null,
 				},
 				{
 					schema: "app",
@@ -134,6 +135,7 @@ describe("mergeTableFacts / 1.4b adapter", () => {
 					name: "children_pkey",
 					predicate: null,
 					keys: [],
+					constraintName: null,
 				},
 				{
 					schema: "app",
@@ -141,6 +143,7 @@ describe("mergeTableFacts / 1.4b adapter", () => {
 					name: "children_name_idx",
 					predicate: null,
 					keys: [],
+					constraintName: null,
 				},
 			],
 		};
@@ -428,6 +431,7 @@ describe("mergeTableFacts / 1.4b adapter", () => {
 					name: "widgets_z_idx",
 					predicate: null,
 					keys: [],
+					constraintName: null,
 				},
 				{
 					schema: "app",
@@ -435,6 +439,7 @@ describe("mergeTableFacts / 1.4b adapter", () => {
 					name: "widgets_a_idx",
 					predicate: null,
 					keys: [],
+					constraintName: null,
 				},
 			],
 		};

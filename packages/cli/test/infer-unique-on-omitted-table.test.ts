@@ -55,6 +55,7 @@ const CHECK_FIXTURE_ROWS: {
 			name: "widgets_id_key",
 			predicate: null,
 			keys: [],
+			constraintName: "widgets_id_key",
 		},
 	],
 	enums: [],
