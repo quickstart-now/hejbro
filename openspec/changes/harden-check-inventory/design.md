@@ -266,3 +266,22 @@ already carries those names, as `primaryKeyName` and the column's
 unmanaged-index lines for a database hejbro produced from these very
 declarations: a 2-in-4 false-report rate on the simplest possible table,
 growing with every key declared. This is the measurement Q4(a) rests on.
+
+**M5 — the `conindid` join adds no row.** The committed `indexes` query
+text, scoped to the schema under test and otherwise unmodified, run
+against the same database:
+
+```
+ schema | table |       name       | constraintName
+--------+-------+------------------+-----------------
+ app    | users | users_email_key  | users_email_key
+ app    | users | users_legacy_idx |
+ app    | users | users_name_idx   |
+ app    | users | users_pkey       | users_pkey
+(4 rows)
+```
+
+Four rows before the join and four after: a constraint's `conindid` is
+one index, so the left join cannot multiply a row. The fact each index
+carries is the catalog's own, and the two indexes that back nothing
+carry null rather than a name that merely looks unrelated.

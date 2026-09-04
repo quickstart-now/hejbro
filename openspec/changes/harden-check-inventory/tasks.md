@@ -119,3 +119,22 @@ delta scenarios of `openspec show harden-check-inventory --diff` hold.
   1.1–1.6 are right; a corpus-level disagreement is a finding to report,
   not to patch here.
   Files: `examples/brownfield/test/brownfield.integration.test.ts`.
+- [ ] 1.10 ~7m — Completes 1.3's and 1.4's input tables with the rows
+  that can actually fail. Red: `packages/cli/test/check-inventory.test.ts`
+  — in "unmanaged columns", one row where a column name is *declared on
+  one managed table and database-only on another* (`app.users.note`
+  declared, `app.orders.note` not: only `app.orders.note` is listed),
+  and one where two managed tables share a name across schemas
+  (`app.users.legacy` declared, `shop.users.legacy` not: only
+  `shop.users.legacy` is listed) — a declared-name set gathered globally,
+  or a table identity taken without its schema, fails here. The identity
+  column row is dropped from that table: at this layer its input is
+  byte-identical to the plain database-only column's, and the catalog
+  read carries no `attidentity` — a comment states that instead. In
+  "unmanaged indexes", the row whose database primary key carries a name
+  the declaration does not (`widgets_pk` against a declared
+  `widgets_pkey`) replaces any input a real database could not hold.
+  Green: nothing new if the axes key on `schema.table.name`; a red row
+  is a real defect and is fixed in `inventory.ts` here.
+  Files: `packages/cli/src/check/inventory.ts`,
+  `packages/cli/test/check-inventory.test.ts`.
