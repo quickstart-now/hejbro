@@ -654,7 +654,7 @@ describe("applyReset — reset-drop-failed carries the server's detail and picks
 		expect(message).not.toContain("()");
 	});
 
-	it("(iii) the run's own plan contains a cycle -- Next: states the cycle fact, additive to the outside-declarations possibility, never a replacement for it", async () => {
+	it("(iii) the run's own plan contains a cycle, no detail from the server -- Next: states the cycle fact, additive to the outside-declarations possibility, never claims a detail that isn't there", async () => {
 		const cycleSnapshot = buildCycleSnapshot();
 		const changes = planReset(cycleSnapshot, registry);
 		const confirmation = requiredConfirmation("testdb", changes);
@@ -687,6 +687,10 @@ describe("applyReset — reset-drop-failed carries the server's detail and picks
 		const message = (error as HejbroError).message;
 		expect(message).toContain("your own declared objects");
 		expect(message).toContain("an object outside your declarations");
+		// [C10, D106 R1 review round 2] This thrown error carries no
+		// `.detail` -- the detail-pointer clause must not claim one exists
+		// when `driverErrorDetail` read null.
+		expect(message).not.toContain("the detail above");
 	});
 
 	it("(iv) the outside-dependent case keeps today's Next: advice", async () => {
@@ -921,5 +925,54 @@ describe("applyReset — reset-drop-failed names the phase that actually failed 
 
 		expect(error).toBeInstanceOf(HejbroError);
 		expect((error as HejbroError).code).toBe("reset-migration-not-singular");
+	});
+
+	it("⑦ an untagged failure from the transaction machinery itself -- unknown-phase wording, no drop/ledger claim, no dependency advice", async () => {
+		const session: DriverSession = {
+			execute: async (compiled) => {
+				const sql = compiled.sql.trim().toLowerCase();
+				if (sql.startsWith("select current_database()")) {
+					return [{ name: "testdb" }];
+				}
+				if (sql.startsWith("select to_regclass(")) {
+					return [{ reg: "hejbro.migration_ledger" }];
+				}
+				return [];
+			},
+		};
+		const driver: Driver = {
+			capabilities: {
+				"interactive-transactions": true,
+				"session-state": true,
+			},
+			execute: session.execute,
+			// Rejects before the callback ever runs -- standing in for BEGIN
+			// itself failing, or the connection dropping before any
+			// statement is sent. Never tagged by `throwPhaseTagged` (that
+			// only wraps the two statements inside the callback), so this
+			// is exactly `resetPhaseOf`'s "unknown" fallback.
+			transaction: async () => {
+				throw Object.assign(
+					new Error("connection terminated unexpectedly"),
+					{ code: "08006" },
+				);
+			},
+			setupSession: async () => {},
+		};
+
+		const error: unknown = await applyReset(
+			driver,
+			managedSnapshot,
+			registry,
+			"testdb:2",
+		).catch((caught: unknown) => caught);
+
+		expect(error).toBeInstanceOf(HejbroError);
+		expect((error as HejbroError).code).toBe("reset-drop-failed");
+		const message = (error as HejbroError).message;
+		expect(message).toContain("hejbro reset's transaction failed");
+		expect(message).not.toContain("failed to drop your declared objects");
+		expect(message).not.toContain("failed while clearing the ledger");
+		expect(message).not.toContain("resolve what the error above describes (");
 	});
 });
