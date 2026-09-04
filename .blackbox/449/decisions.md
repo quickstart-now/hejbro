@@ -16,3 +16,13 @@ _lead · interpretation · basis D1, R1 · 2026-09-04T15:46Z · ratified: pendin
 
 Tripwire during 1.4: a nested handle kept after its callback settled refuses `execute` and chains with `statement-after-nested-transaction`, but `leaked.transaction(cb)` still opens and releases a new savepoint (measured on the wire) and, worse, its `finally` restores `tree.innermost` to the settled token, after which the live parent's statements are wrongly refused. Ruling (i): starting a nested transaction from a settled handle is refused with the same code and remedy — the handle is that nested transaction and nothing else, and a savepoint opened from it is as much "through it" as a statement is; refusing statements while allowing savepoints (ii) is an asymmetry with no explanation. Delta: the requirement's second paragraph gains "— or a nested transaction started from it —", the settled-handle scenario's WHEN gains "or starts a nested transaction"; the check sits at the savepoint entry before the sibling guard. Basis: R1's invariant (only the innermost transaction in progress may send) and D13 on dev.
 
+<a id="r3"></a>
+## R3 — Review: settled root handle refused with statement-after-transaction (1.4c); rollback-to-savepoint is not an end (1.2b); N2 filed
+
+_lead · extension · basis D1, R1, R2 · 2026-09-04T16:24Z · ratified: pending_
+
+Review (spec-bound, live PG 17): passed, four non-blocking. Two are inside this change's purpose and are taken now, under D13 on dev (what the user wrote must not run somewhere else silently):
+- N3: a top-level `tx` handle kept after its callback settled (the transaction committed or rolled back) still sends statements, which then run outside any transaction on the connection — the same invariant as #449 ("only a transaction in progress may send") at the root of the tree. Task 1.4c: refuse with a new code `statement-after-transaction` (remedy differs from the nested case: "that transaction is over — open a new `transaction()`"), scenario added to query-execution, red rows for `execute`, a chain and `with` on a settled root handle; narrow re-review.
+- N1 (#761): the kit classifies `rollback transaction to savepoint x` as ending the transaction, contradicting the requirement's own savepoint sentence. Task 1.2b: a `rollback [work|transaction] to savepoint` form is a savepoint operation, not an end; row added to the statement table.
+N2 (a vendored table named `fn` or `as` is masked by the client's own members — pre-existing) is filed; N4 (pooler wire observation) recorded only.
+

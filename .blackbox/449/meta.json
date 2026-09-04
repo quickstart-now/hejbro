@@ -30,6 +30,19 @@
       "at": "2026-09-04T15:46Z",
       "title": "1.4b: a nested transaction started from a settled handle is refused with statement-after-nested-transaction",
       "ratified": null
+    },
+    {
+      "id": "R3",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "D1",
+        "R1",
+        "R2"
+      ],
+      "at": "2026-09-04T16:24Z",
+      "title": "Review: settled root handle refused with statement-after-transaction (1.4c); rollback-to-savepoint is not an end (1.2b); N2 filed",
+      "ratified": null
     }
   ],
   "work": [
