@@ -7,7 +7,21 @@
   "status": "open",
   "opened": "2026-09-04",
   "closed": null,
-  "decisions": [],
+  "decisions": [
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "412/D12",
+        "412/D13",
+        "412/R27"
+      ],
+      "at": "2026-09-04T21:02Z",
+      "title": "attribution of a failed ledger write: site named, rolled back stated, 23502 branch, tag before apply-failed, exit 2 (see 836/R1)",
+      "ratified": null
+    }
+  ],
   "work": [],
   "prs": [
     {

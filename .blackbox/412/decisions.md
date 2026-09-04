@@ -482,38 +482,3 @@ _lead · interpretation · basis D12, D13, R1, R2, R3 · 2026-09-04T20:51Z · ra
 
 Batch composition after qy archived (#850) and ck opened (#851): the freed slot takes #836 + #823 as one change, `harden-ledger-diagnostics` (branch fix-ledger-diagnostics, base dev 625be135). Both are the same defect class the ledger-identity change left outside its delta — a database error on hejbro's own ledger reaching the user raw (#836, 42501 on a real ledger in `status`) or misattributed (#823, a failed ledger insert reported as the migration's failure) — and both live in `packages/cli` ledger read/write paths (`commands/status.ts`, `apply/ledger.ts`, the migrate ledger insert), which no running piece touches (so: contract/emit, snapshot canonicalizer, verify check 2; cp: init/config/path-probe). Purpose bound (412 D13): every command that reads the ledger gets the same coded diagnostic, not only `status`; a ledger write failure is attributed to the ledger in every apply path. Check-area issues (#819, #837, #726) wait for #851 to merge; #832 (core reserved category C) and #694 (handover then adoption) follow when the next slot frees. Reviewer in constructor mode (catalog input, D110).
 
-<a id="r28"></a>
-## R28 — next batch: #707 + #726 as harden-check-inventory (column/index/check inventory on managed tables, option b)
-
-_lead · interpretation · basis D12, D13, R27 · 2026-09-04T22:06Z · ratified: pending_
-
-Batch composition after so opened (#858) and the ck archive merged (#855): the freed slot takes #707 + #726 as one change, `harden-check-inventory` (branch fix-check-inventory, base dev fcb8abd7). Both are the same asymmetry in `hejbro check`'s inventory axis: a table no declaration covers is named, but a column, index or check constraint that exists on a managed table and is declared nowhere produces no signal — and the loss report's column line (#726) promises a signal `check` never gives. Decision under 412 D13 (the tool answers "does it cover my database"): option (b) of #726 — `check` gains an inventory line for catalog-only columns, indexes and check constraints on managed tables, one rule for the three object kinds (#707's shape, one axis further), and the loss report's sentence becomes true by the behaviour, not by rewording. Files: `packages/cli/src/check/*` and `infer/loss-report.ts` — no overlap with cp (init/config/loader) or ld (apply/ledger, status/migrate/raise/reset). #819 waits for cp to merge (loader and every command), #837 for ld (raise path), #832 and #694 take the next free slots. Reviewer in constructor mode (catalog input, D110).
-
-<a id="d16"></a>
-## D16 — parent-issue meta.json grows without bound and repeats the same PR pin; ask for an improvement
-
-_owner · 2026-09-04T23:36Z · raw ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#190_
-
-The owner points at a problem: a parent issue such as #412 ends up with an enormous `meta.json` in its blackbox folder (commit 6d78a05d on dev), and inside it the same PR entry (`"number": 858`) is repeated four times. The owner does not think the growth itself can be avoided, but asks what improvement is possible.
-
-<a id="d17"></a>
-## D17 — is there database theory for this record shape; likely well studied
-
-_owner · 2026-09-04T23:37Z · raw ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#191_
-
-The owner asks whether there is a body of database theory that covers managing this kind of record (the blackbox's per-issue provenance with content pins), remarking it sounds like something MIT people would like and is probably already well researched.
-
-<a id="d18"></a>
-## D18 — blackbox v3: the migration must be versioned (v2 → v3); wants a theory-based architecture and an understandable direction
-
-_owner · 2026-09-04T23:45Z · raw ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#192_
-
-The owner says the dd-blackbox migration itself must be versioned: the current format is presumably v2, so the next is v3. They want the architecture to follow the theory named earlier but do not know which option is efficient, and ask for the fix direction explained in a way they can understand.
-
-<a id="d19"></a>
-## D19 — start blackbox v3 now: build it in agent-skills, then vendor into hejbro
-
-_owner · 2026-09-04T23:52Z · raw ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#193_
-
-The owner decides: start v3 now. Build it in the agent-skills repository (dd-blackbox), and carry it through to the hejbro vendoring.
-

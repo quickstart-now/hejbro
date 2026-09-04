@@ -7,7 +7,21 @@
   "status": "open",
   "opened": "2026-09-04",
   "closed": null,
-  "decisions": [],
+  "decisions": [
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "412/D12",
+        "412/D13",
+        "412/R27"
+      ],
+      "at": "2026-09-04T21:02Z",
+      "title": "ld proposal approved; D1-D9 settled (codes unreadable/unwritable, current_user, one 23502 branch, tags in ledger.ts, migrate exit 2, reset delete to ledger code, measured path table, probe under read code, 42P01 tolerance kept)",
+      "ratified": null
+    }
+  ],
   "work": [],
   "prs": [
     {
