@@ -92,7 +92,11 @@ names it and points here), so no `cli-commands` delta is needed;
 
 ## Impact
 
-- **Affected code**: `packages/cli` only —
+- **Affected code**: `packages/cli`, plus one line of `packages/pg`
+  (836/R4: its pool had no `error` listener, so a connection lost during
+  a ledger read killed the process before any `catch` could report it —
+  the delta's "no error reaches the user raw" sentence cannot hold
+  without it; the driver contract never promised a crash) —
   `src/apply/ledger.ts` (the classification and its two codes),
   `src/apply/execute.ts` (which half of the transaction failed),
   `src/apply/raise.ts`, `src/apply/reset.ts`, `src/commands/status.ts`,

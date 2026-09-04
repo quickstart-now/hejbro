@@ -305,6 +305,15 @@ text that says something untrue. Every repair keeps the delta as approved.
       bootstrap, so an absent ledger there is a race, not the "never
       applied to" state `readLedger` reports. `readLedger`'s own leniency
       is untouched — outside a transaction, absence is still a state (D9).
+      Which code the escaped failure takes is settled by the statement,
+      not by the operation in progress (836/R6, correcting R4's "a failed
+      ledger write"): the recheck is a read, so a ledger that vanishes
+      before it answers is `apply-ledger-unreadable`; a ledger that
+      vanishes before the row is written is `apply-ledger-unwritable`.
+      Both exit two, both roll back, both name the ledger. Making the
+      transaction's *context* decide instead would strand the direction
+      tag `ledger.ts` attaches and re-introduce, on another axis, exactly
+      the inconsistency 2.1 removes.
       Red: `packages/cli/test/apply-execute.test.ts`, case *"a ledger that
       vanishes mid-transaction is the ledger's failure"*: the fake driver
       answers the recheck with 42P01 → the tagged read failure escapes
@@ -318,22 +327,28 @@ text that says something untrue. Every repair keeps the delta as approved.
       `packages/cli/test/migrate-command.test.ts`,
       `packages/cli/test/apply-ledger-diagnostics.integration.test.ts`.
 
-- [ ] 2.3 (~6m) The `23502` hint is about `id` and is said only about
-      `id`. Measured: dropping the default from `applied_at` — or from an
-      extra `not null` column the identity rule explicitly tolerates —
-      produces "The ledger's "applied_at" column has no identity and no
-      default; the ledger hejbro bootstraps declares it `bigint generated
-      always as identity`", which is false about that column (the
-      bootstrap declares `applied_at timestamptz not null default now()`).
-      The sentence is D3's one SQLSTATE branch and it exists for #823's
-      own measured case, so it is said when the driver's `.column` is
-      `id`, and every other column falls to the generic branch that names
-      the column without claiming what the bootstrap gave it. Red:
+- [ ] 2.3 (~8m) **[design]** The `23502` hint names what the bootstrap
+      actually declares for *that* column (836/R4). Measured: dropping the
+      default from `applied_at` — or from an extra `not null` column the
+      identity rule explicitly tolerates — produces "The ledger's
+      "applied_at" column has no identity and no default; the ledger
+      hejbro bootstraps declares it `bigint generated always as
+      identity`", which is false about that column. The branch keys on the
+      column the driver reports and says what the bootstrap gives it:
+      `id` → `bigint generated always as identity`; `applied_at` →
+      `timestamptz not null default now()`; a bootstrap column that
+      carries no default of its own (`filename`, `origin`) → the value is
+      one hejbro supplies per row, so a null there means the row hejbro
+      sent was rejected, not that the ledger's shape drifted; any other
+      column → a column the ledger's bootstrap does not declare, which is
+      the tolerated-extra case and the one hejbro can say least about.
+      The column-less branch keeps today's `id` sentence. Red:
       `packages/cli/test/apply-ledger-diagnostics.test.ts`, input table:
-      `23502` on `id` (hint present, regression), on `applied_at` (column
-      named, no identity claim), on a tolerated extra `not null` column
-      (same), and with no `.column` at all (today's generic sentence,
-      regression). Files: `packages/cli/src/apply/ledger-diagnostics.ts`,
+      `23502` on `id`, on `applied_at`, on `filename`, on an extra
+      `not null` column, and with no `.column` at all — each asserting the
+      declaration named is the one the bootstrap really writes, and that
+      no row claims `identity` for a column that has none. Files:
+      `packages/cli/src/apply/ledger-diagnostics.ts`,
       `packages/cli/test/apply-ledger-diagnostics.test.ts`.
 
 - [ ] 2.4 (~6m) One identity for the ledger's own diagnostics. Measured:
@@ -369,3 +384,31 @@ text that says something untrue. Every repair keeps the delta as approved.
       `packages/cli/test/migrate-command.test.ts` (migrate's own message
       still states the rollback, regression). Files:
       `packages/cli/src/apply/ledger-diagnostics.ts`, the two tests.
+
+- [ ] 2.6 (~9m) **[design]** A lost connection is refused, not fatal
+      (836/R4, R5 — scope widened to `@hejbro/pg`, recorded; **closes
+      #864**, which carries the defect's real size: the pool's missing
+      listener kills every command, not only a ledger read). Measured by the
+      reviewer (2 of 2): terminating the backend while a ledger read waits
+      kills the process with twelve raw stack frames, because
+      `packages/pg/src/driver.ts`'s `new Pool(...)` has no `error`
+      listener and Node treats an unhandled `'error'` event as fatal —
+      before any `catch` in the CLI exists to run. The delta's sentence is
+      right and the product is wrong: a failure carrying no server code is
+      still a failure hejbro reports. The pool gains an `error` listener,
+      so an idle client's failure surfaces as the rejection of the query
+      that was waiting rather than as process death, and the ledger
+      classifier renders it from the driver's own message with no
+      SQLSTATE clause (the `no code at all` row 1.1 and 1.2 already carry
+      in their input tables). This is not a driver-contract change: the
+      contract never promised a crash. Red:
+      `packages/pg/test/driver.test.ts` — a pool `'error'` event does not
+      end the process and the query in flight rejects; plus the
+      integration witness for the terminated backend, asserting
+      `error[apply-ledger-unreadable]` and no stack frame. The changeset
+      gains one sentence for `@hejbro/pg` (the fixed seven-package group
+      already moves together), and `proposal.md`'s Impact line stops
+      saying `packages/cli` only. Files: `packages/pg/src/driver.ts`,
+      `packages/pg/test/driver.test.ts`,
+      `packages/cli/test/apply-ledger-diagnostics.integration.test.ts`,
+      `.changeset/harden-ledger-diagnostics.md`.
