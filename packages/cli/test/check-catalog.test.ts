@@ -38,7 +38,7 @@ const FIXTURE_ROWS: {
 			table: "posts",
 			name: "posts_slug_idx",
 			predicate: null,
-			expressions: [],
+			keys: [],
 		},
 	],
 	enums: [{ schema: "app", name: "status" }],
@@ -118,10 +118,12 @@ describe("readCatalog / 1.2 columns and indexes carry expression texts", () => {
 	// and expression columns are new catalog-read fields this group's
 	// comparison (1.3-1.5) needs -- pinned here at the read boundary so a
 	// later regression shows up as a parse failure, not a silent `null`.
-	it("pins the columns query text to attgenerated, and the indexes query text to indpred and pg_get_indexdef", () => {
+	it("pins the columns query text to attgenerated, and the indexes query text to indpred, pg_get_indexdef, indcollation and attcollation", () => {
 		expect(CHECK_CATALOG_QUERIES.columns).toContain("attgenerated");
 		expect(CHECK_CATALOG_QUERIES.indexes).toContain("indpred");
 		expect(CHECK_CATALOG_QUERIES.indexes).toContain("pg_get_indexdef");
+		expect(CHECK_CATALOG_QUERIES.indexes).toContain("indcollation");
+		expect(CHECK_CATALOG_QUERIES.indexes).toContain("attcollation");
 	});
 
 	it("parses a generated column's row with catalogGenerated set and catalogDefault null", async () => {
@@ -163,14 +165,53 @@ describe("readCatalog / 1.2 columns and indexes carry expression texts", () => {
 		expect(catalog.columns).toEqual(rows);
 	});
 
-	it("parses a partial, expression index's row with predicate and expressions set", async () => {
+	it("parses a partial index's row whose ordered key list mixes an expression key and a plain key", async () => {
+		// (lower(email), name): the review's own ordered-key-list unit --
+		// position 1 is an expression, position 2 a plain key, in that order.
 		const rows: ReadonlyArray<DriverRow> = [
 			{
 				schema: "app",
 				table: "posts",
 				name: "posts_partial_lower_idx",
 				predicate: "(archived_at IS NULL)",
-				expressions: ["lower(email)"],
+				keys: [
+					{ text: "lower(email)", expression: true },
+					{ text: "name", expression: false },
+				],
+			},
+		];
+		const session: DriverSession = {
+			execute: async (compiled) => {
+				if (compiled.sql === CHECK_CATALOG_QUERIES.indexes) {
+					return rows;
+				}
+				const entry = (
+					Object.entries(CHECK_CATALOG_QUERIES) as ReadonlyArray<
+						[CatalogQueryKey, string]
+					>
+				).find(([key, sql]) => key !== "indexes" && sql === compiled.sql);
+				if (entry === undefined) {
+					throw new Error(
+						`unexpected query sent to readCatalog: ${compiled.sql}`,
+					);
+				}
+				return FIXTURE_ROWS[entry[0]];
+			},
+		};
+
+		const catalog = await readCatalog(session);
+
+		expect(catalog.indexes).toEqual(rows);
+	});
+
+	it("parses a plain key row whose text carries a non-default collation suffix", async () => {
+		const rows: ReadonlyArray<DriverRow> = [
+			{
+				schema: "app",
+				table: "posts",
+				name: "posts_name_c_idx",
+				predicate: null,
+				keys: [{ text: 'name collate "C"', expression: false }],
 			},
 		];
 		const session: DriverSession = {

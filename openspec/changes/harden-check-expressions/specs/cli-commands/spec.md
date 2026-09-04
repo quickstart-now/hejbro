@@ -43,10 +43,11 @@ added to it:
   below)
 - for a check constraint additionally: whether the database enforces it
   (`NOT VALID` is reported even when the expression matches)
-- for an index additionally: how many of its columns are expressions,
-  compared before the expressions themselves. An index's plain columns,
-  its uniqueness and its access method are not compared beyond the
-  index's existence
+- for an index additionally: the number of keys in its ordered key list,
+  and every key position at which either side is an expression, through
+  the server's own rendering (its own requirement below). A position at
+  which both sides are plain columns, an index's uniqueness and its
+  access method are not compared beyond the index's existence
 - for a grant declared over *all tables in a schema*: the tables the
   declarations cover, not every table the schema happens to contain (a
   table hejbro does not declare is inventory, never a finding: hejbro
@@ -107,12 +108,12 @@ difference's, and exit two.
   a plain column of that name, or the declaration holds a plain column
   and the database holds it generated
 - **THEN** `check` reports that column as differing, stating which side
-  is generated, and reports nothing about its default
+  is generated, and reports no finding on its default axis
 
 ### Requirement: An expression is compared through the server's own rendering
 Where `check` compares an expression through the server's rendering — a
 check constraint's expression, an index's predicate, an index's
-expression columns, a generated column's expression — it SHALL obtain
+keys, a generated column's expression — it SHALL obtain
 the rendering of **both** the declared expression and the database's own
 expression from **one statement**, and compare those. The four surfaces
 SHALL be compared by one rule: the same statement form, the same fallback
@@ -121,13 +122,29 @@ be compared. An expression `check` knows how to compare on one surface
 and leaves uncompared on another would report as present what it never
 looked at.
 
-An index's expression columns are compared pairwise in index order — the
-declared expression columns against the database's, the plain columns
-between them ignored — and the number of expression columns is compared
-before any expression is rendered: an index whose count differs is
-reported as differing on that count, and its expressions are not probed. An index's plain columns, uniqueness and access method are
-not compared by this requirement or any other beyond the index's
-existence.
+An index is compared as an ordered key list. The declared keys and the
+database's keys are paired by position, and every position at which
+either side is an expression is compared through the rendering — a plain
+column renders as itself, so a declared expression the server stores as a
+plain key (a bare column reference, a parenthesized column, a column with
+a collation) agrees with the database that hejbro's own migration
+produced, and a declared plain column against a database expression
+differs. The database's key text carries its collation where that
+collation is not the column's default, so a declared `col collate "C"` is
+paired with what the database actually holds; the server's rendering
+drops a collation from both sides alike, so a difference in collation
+alone is not visible through the rendering and is not reported — the
+same limit that leaves a key's sort direction and operator class
+uncompared. A key list whose length
+differs is reported as differing on the count, in either direction, and
+no rendering is probed for it; a predicate present on one side only is
+reported as differing the same way, in either direction. Every declared
+index reaches this comparison, whether or not the declaration itself
+carries a predicate or an expression: a filter on the declared side alone
+would pass a database index that grew a predicate or an expression the
+declaration never had. A position at which both sides are plain columns
+is not compared by this requirement or any other beyond the index's
+existence, nor are an index's uniqueness and access method.
 
 One statement, not two sent to one connection: a driver is free to pool
 connections, so two statements can land on two sessions whose
@@ -137,7 +154,7 @@ unenforceable from outside the driver — a single statement makes it true
 by construction instead, and costs a round trip less. It also stays
 within the no-capability rule: pinning a connection any other way means a
 transaction. One object's expressions — an index's predicate and its
-expression columns — MAY share one statement; two objects' never need to.
+keys — MAY share one statement; two objects' never need to.
 
 Comparing hejbro's rendered text against the catalog's text directly is
 not permitted where a rendering can be obtained. Postgres rewrites an
@@ -170,8 +187,8 @@ literals, one parenthesis pair enclosing the whole text, the enclosing
 table's qualifier on a column reference, identifier quoting where the
 identifier would render unquoted anyway, a type cast the server appended
 to a string literal, and letter case outside quoted identifiers and
-string literals — and nothing else, on every one of the four surfaces, each expression
-column of an index normalized on its own. Texts equal after that normalization SHALL count as
+string literals — and nothing else, on every one of the four surfaces, each compared key
+position of an index normalized on its own. Texts equal after that normalization SHALL count as
 agreeing. Texts that still differ SHALL be reported as **not compared**,
 carrying both texts and a `Next:` that names restating the declaration in
 the catalog's own spelling; they SHALL NOT be reported as differing,
@@ -238,12 +255,33 @@ claims, and its expression matches all the same.
   of that name is on `upper(email)`
 - **THEN** `check` reports that index as differing
 
-#### Scenario: An index whose expression-column count differs is reported on the count
+#### Scenario: A key that is an expression on one side only is reported in either direction
 - **WHEN** a declared index is on `lower(email)` and the database's index
-  of that name is on the plain column `email`
-- **THEN** `check` reports that index as differing, stating that the
-  declaration has one expression column and the database's index none,
-  and no rendering is probed for it
+  of that name is on the plain column `email` — or the declared index is
+  on the plain column `email` and the database's index of that name is on
+  `lower(email)`
+- **THEN** `check` reports that index as differing at that key position,
+  in either direction
+
+#### Scenario: An index whose key count differs is reported on the count
+- **WHEN** a declared index has two keys and the database's index of that
+  name has three, or the reverse
+- **THEN** `check` reports that index as differing, stating both key
+  counts, and no rendering is probed for it
+
+#### Scenario: A declared expression the server stores as a plain key is not a difference
+- **WHEN** a declaration's index key is a bare column reference, a
+  parenthesized column, or `col collate "C"` written as an expression, the
+  migration hejbro generated for it is applied, and `hejbro check` runs
+- **THEN** it reports no difference for that index, because the
+  database's key renders as the same thing the declaration renders as
+
+#### Scenario: An index partial on one side only is reported in either direction
+- **WHEN** a declared index carries a predicate and the database's index
+  of that name carries none, or the declared index carries none and the
+  database's index of that name carries `where archived_at is null`
+- **THEN** `check` reports that index as differing, stating which side is
+  partial, and no rendering is probed for it
 
 #### Scenario: A generated column whose expression matches passes
 - **WHEN** a declared column is `generated always as (price * qty) stored`

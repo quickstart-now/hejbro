@@ -54,7 +54,7 @@ const CHECK_FIXTURE_ROWS: {
 			table: "Widgets",
 			name: "widgets_id_key",
 			predicate: null,
-			expressions: [],
+			keys: [],
 		},
 	],
 	enums: [],

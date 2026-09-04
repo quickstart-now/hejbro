@@ -24,7 +24,7 @@ import type { Catalog } from "../src/check/catalog";
 import {
 	compareCheckConstraint,
 	compareGeneratedColumn,
-	compareIndexExpressions,
+	compareIndexKeys,
 	normalizeCheckText,
 } from "../src/check/expression";
 
@@ -1766,15 +1766,24 @@ describe("compareGeneratedColumn / 4.1 a generated column's expression", () => {
 });
 
 /**
- * #778, task 1.5: `compareIndexExpressions`' own axes are the predicate's
- * and each expression column's *presence* (count, then presence, both
- * before any probe) and, once both sides agree on shape, the rendered
- * text itself -- one statement per index, predicate pair first then one
- * pair per expression column (design.md's "pair layout"). An index's
- * plain columns, uniqueness and access method are untouched here
- * (`compare.ts`'s `compareIndexes`, existence-only, unchanged).
+ * Review round 1, `.blackbox/778/` R3: the unit of comparison is an
+ * index's whole **ordered key list**, not a filtered "expression columns"
+ * subset -- Postgres stores a bare column reference, a parenthesized
+ * column, or `col collate "C"` as a *plain* key (`indexprs` null), so
+ * counting expression columns reported a difference hejbro's own
+ * migration produces and no migration can fix (B3), and a declared-side
+ * filter let a database index that grew a predicate or an expression
+ * pass as present (B1/B2, task 1.9/1.10). `compareIndexKeys`'s own axes
+ * are the key-list length, the predicate's presence, and then the
+ * rendered text at every position where *either* side is an expression
+ * -- a declared plain column pairs against a catalog expression key, and
+ * a declared expression Postgres stores as a plain key (bare/paren/
+ * collate) pairs against a catalog plain key too, rendered as the
+ * column's own reference on the declared side (design.md: "a plain
+ * column renders as itself"). A position at which both sides are plain
+ * is never paired.
  */
-describe("compareIndexExpressions / 4.2 an index's predicate and expression columns", () => {
+describe("compareIndexKeys / 4.2 an index's predicate and ordered key list", () => {
 	type LocalIndexNode = {
 		readonly name: string;
 		readonly columns: ReadonlyArray<
@@ -1801,15 +1810,20 @@ describe("compareIndexExpressions / 4.2 an index's predicate and expression colu
 		return found;
 	};
 
+	type CatalogKey = { readonly text: string; readonly expression: boolean };
+
 	const catalogWithIndex = (row: {
 		readonly name: string;
 		readonly predicate: string | null;
-		readonly expressions: string[];
+		readonly keys: CatalogKey[];
 	}): Catalog => ({
 		...emptyCatalog(),
 		tables: [{ schema: "app", table: "widgets", rls: false }],
 		indexes: [{ schema: "app", table: "widgets", ...row }],
 	});
+
+	const plainKey = (text: string): CatalogKey => ({ text, expression: false });
+	const exprKey = (text: string): CatalogKey => ({ text, expression: true });
 
 	type IndexFakeSessionOptions = {
 		readonly explainOutput?: ReadonlyArray<string> | null;
@@ -1856,12 +1870,12 @@ describe("compareIndexExpressions / 4.2 an index's predicate and expression colu
 			explainOutput: [rewritten, rewritten],
 		});
 
-		const findings = await compareIndexExpressions(
+		const findings = await compareIndexKeys(
 			session,
 			catalogWithIndex({
 				name: "widgets_status_idx",
 				predicate: rewritten,
-				expressions: [],
+				keys: [plainKey("status")],
 			}),
 			"app",
 			"widgets",
@@ -1889,12 +1903,12 @@ describe("compareIndexExpressions / 4.2 an index's predicate and expression colu
 			explainOutput: ["(archived_at IS NULL)", "(archived_at IS NOT NULL)"],
 		});
 
-		const findings = await compareIndexExpressions(
+		const findings = await compareIndexKeys(
 			session,
 			catalogWithIndex({
 				name: "widgets_active_idx",
 				predicate: "(archived_at IS NOT NULL)",
-				expressions: [],
+				keys: [plainKey("id")],
 			}),
 			"app",
 			"widgets",
@@ -1907,7 +1921,158 @@ describe("compareIndexExpressions / 4.2 an index's predicate and expression colu
 		expect(findings[0]?.error).toMatchObject({ code: "check-object-differs" });
 	});
 
-	it("agrees on an expression column that renders identically", async () => {
+	it("issues no pair, and no finding, when both sides hold the position as a plain column", async () => {
+		const widgets = table(
+			app,
+			"widgets",
+			{ id: uuid().primaryKey(), email: text() },
+			(t) => ({ indexes: [index("widgets_email_idx").on(t.email)] }),
+		);
+		const snapshot = buildTestSnapshot([widgets]);
+		const { session, calls } = makeIndexFakeSession({});
+
+		const findings = await compareIndexKeys(
+			session,
+			catalogWithIndex({
+				name: "widgets_email_idx",
+				predicate: null,
+				keys: [plainKey("email")],
+			}),
+			"app",
+			"widgets",
+			declaredIndexNode(snapshot, "app.widgets", "widgets_email_idx"),
+			"server",
+		);
+
+		expect(findings).toEqual([]);
+		expect(calls).toHaveLength(0);
+	});
+
+	it("reports a declared plain column against a catalog expression key at that position", async () => {
+		const widgets = table(
+			app,
+			"widgets",
+			{ id: uuid().primaryKey(), email: text() },
+			(t) => ({ indexes: [index("widgets_email_idx").on(t.email)] }),
+		);
+		const snapshot = buildTestSnapshot([widgets]);
+		const { session, calls } = makeIndexFakeSession({
+			explainOutput: ["email", "lower(email)"],
+		});
+
+		const findings = await compareIndexKeys(
+			session,
+			catalogWithIndex({
+				name: "widgets_email_idx",
+				predicate: null,
+				keys: [exprKey("lower(email)")],
+			}),
+			"app",
+			"widgets",
+			declaredIndexNode(snapshot, "app.widgets", "widgets_email_idx"),
+			"server",
+		);
+
+		expect(findings).toHaveLength(1);
+		expect(findings[0]?.error).toMatchObject({ code: "check-object-differs" });
+		expect(findings[0]?.error.message).toContain("index key 1");
+		expect(calls).toHaveLength(1);
+	});
+
+	it("agrees when the declared expression is a bare column reference and the catalog holds the position as a plain key (B3)", async () => {
+		const widgets = table(
+			app,
+			"widgets",
+			{ id: uuid().primaryKey(), email: text() },
+			(t) => ({
+				indexes: [index("widgets_email_idx").on(sql`${t.email}`)],
+			}),
+		);
+		const snapshot = buildTestSnapshot([widgets]);
+		const { session, calls } = makeIndexFakeSession({
+			explainOutput: ["email", "email"],
+		});
+
+		const findings = await compareIndexKeys(
+			session,
+			catalogWithIndex({
+				name: "widgets_email_idx",
+				predicate: null,
+				keys: [plainKey("email")],
+			}),
+			"app",
+			"widgets",
+			declaredIndexNode(snapshot, "app.widgets", "widgets_email_idx"),
+			"server",
+		);
+
+		expect(findings).toEqual([]);
+		expect(calls).toHaveLength(1);
+	});
+
+	it("agrees when the declared expression is a parenthesized column and the catalog holds the position as a plain key (B3)", async () => {
+		const widgets = table(
+			app,
+			"widgets",
+			{ id: uuid().primaryKey(), email: text() },
+			(t) => ({
+				indexes: [index("widgets_email_idx").on(sql`(${t.email})`)],
+			}),
+		);
+		const snapshot = buildTestSnapshot([widgets]);
+		const { session, calls } = makeIndexFakeSession({
+			explainOutput: ["email", "email"],
+		});
+
+		const findings = await compareIndexKeys(
+			session,
+			catalogWithIndex({
+				name: "widgets_email_idx",
+				predicate: null,
+				keys: [plainKey("email")],
+			}),
+			"app",
+			"widgets",
+			declaredIndexNode(snapshot, "app.widgets", "widgets_email_idx"),
+			"server",
+		);
+
+		expect(findings).toEqual([]);
+		expect(calls).toHaveLength(1);
+	});
+
+	it("agrees when a declared collated expression matches a catalog plain key carrying the same collation suffix (B3)", async () => {
+		const widgets = table(
+			app,
+			"widgets",
+			{ id: uuid().primaryKey(), email: text() },
+			(t) => ({
+				indexes: [index("widgets_email_idx").on(sql`${t.email} collate "C"`)],
+			}),
+		);
+		const snapshot = buildTestSnapshot([widgets]);
+		const { session, calls } = makeIndexFakeSession({
+			explainOutput: ["email", "email"],
+		});
+
+		const findings = await compareIndexKeys(
+			session,
+			catalogWithIndex({
+				name: "widgets_email_idx",
+				predicate: null,
+				keys: [plainKey('email collate "C"')],
+			}),
+			"app",
+			"widgets",
+			declaredIndexNode(snapshot, "app.widgets", "widgets_email_idx"),
+			"server",
+		);
+
+		expect(findings).toEqual([]);
+		expect(calls).toHaveLength(1);
+	});
+
+	it("agrees on a genuine expression key that renders identically", async () => {
 		const widgets = table(
 			app,
 			"widgets",
@@ -1921,12 +2086,12 @@ describe("compareIndexExpressions / 4.2 an index's predicate and expression colu
 			explainOutput: ["lower(email)", "lower(email)"],
 		});
 
-		const findings = await compareIndexExpressions(
+		const findings = await compareIndexKeys(
 			session,
 			catalogWithIndex({
 				name: "widgets_email_idx",
 				predicate: null,
-				expressions: ["lower(email)"],
+				keys: [exprKey("lower(email)")],
 			}),
 			"app",
 			"widgets",
@@ -1937,7 +2102,7 @@ describe("compareIndexExpressions / 4.2 an index's predicate and expression colu
 		expect(findings).toEqual([]);
 	});
 
-	it("reports an expression column that genuinely differs, naming the column position", async () => {
+	it("reports a genuine expression key that differs, naming the key position", async () => {
 		const widgets = table(
 			app,
 			"widgets",
@@ -1951,12 +2116,12 @@ describe("compareIndexExpressions / 4.2 an index's predicate and expression colu
 			explainOutput: ["lower(email)", "upper(email)"],
 		});
 
-		const findings = await compareIndexExpressions(
+		const findings = await compareIndexKeys(
 			session,
 			catalogWithIndex({
 				name: "widgets_email_idx",
 				predicate: null,
-				expressions: ["upper(email)"],
+				keys: [exprKey("upper(email)")],
 			}),
 			"app",
 			"widgets",
@@ -1966,62 +2131,87 @@ describe("compareIndexExpressions / 4.2 an index's predicate and expression colu
 
 		expect(findings).toHaveLength(1);
 		expect(findings[0]?.error).toMatchObject({ code: "check-object-differs" });
-		expect(findings[0]?.error.message).toContain("index expression column 1");
+		expect(findings[0]?.error.message).toContain("index key 1");
 	});
 
-	it("reports a differing expression-column count, naming both counts, probing nothing", async () => {
-		const widgets = table(
-			app,
-			"widgets",
-			{ id: uuid().primaryKey(), email: text() },
-			(t) => ({
-				indexes: [index("widgets_email_idx").on(sql`lower(${t.email})`)],
-			}),
-		);
-		const snapshot = buildTestSnapshot([widgets]);
-		const { session, calls } = makeIndexFakeSession({});
+	it.each([
+		{ label: "declared 2, catalog 3 keys", declaredKeys: 2, catalogKeys: 3 },
+		{ label: "declared 3, catalog 2 keys", declaredKeys: 3, catalogKeys: 2 },
+	])(
+		"reports a differing key count ($label), naming both counts, probing nothing",
+		async ({ declaredKeys, catalogKeys }) => {
+			const declaredColumns = ["email", "status", "name"].slice(
+				0,
+				declaredKeys,
+			);
+			const widgets = table(
+				app,
+				"widgets",
+				{
+					id: uuid().primaryKey(),
+					email: text(),
+					status: text(),
+					name: text(),
+				},
+				(t) => ({
+					indexes: [
+						index("widgets_multi_idx").on(
+							...declaredColumns.map((name) => t[name as keyof typeof t]),
+						),
+					],
+				}),
+			);
+			const snapshot = buildTestSnapshot([widgets]);
+			const { session, calls } = makeIndexFakeSession({});
 
-		const findings = await compareIndexExpressions(
-			session,
-			catalogWithIndex({
-				name: "widgets_email_idx",
-				predicate: null,
-				expressions: [],
-			}),
-			"app",
-			"widgets",
-			declaredIndexNode(snapshot, "app.widgets", "widgets_email_idx"),
-			"server",
-		);
+			const findings = await compareIndexKeys(
+				session,
+				catalogWithIndex({
+					name: "widgets_multi_idx",
+					predicate: null,
+					keys: Array.from({ length: catalogKeys }, (_, i) =>
+						plainKey(`col${i}`),
+					),
+				}),
+				"app",
+				"widgets",
+				declaredIndexNode(snapshot, "app.widgets", "widgets_multi_idx"),
+				"server",
+			);
 
-		expect(findings).toHaveLength(1);
-		expect(findings[0]?.error).toMatchObject({ code: "check-object-differs" });
-		expect(findings[0]?.error.message).toContain("has 1 expression column(s)");
-		expect(findings[0]?.error.message).toContain("has 0");
-		const explainCalls = calls.filter((call) =>
-			call.sql.trim().toLowerCase().startsWith("explain"),
-		);
-		expect(explainCalls).toHaveLength(0);
-	});
+			expect(findings).toHaveLength(1);
+			expect(findings[0]?.error).toMatchObject({
+				code: "check-object-differs",
+			});
+			expect(findings[0]?.error.message).toContain(`has ${declaredKeys} key`);
+			expect(findings[0]?.error.message).toContain(`has ${catalogKeys}`);
+			const explainCalls = calls.filter((call) =>
+				call.sql.trim().toLowerCase().startsWith("explain"),
+			);
+			expect(explainCalls).toHaveLength(0);
+		},
+	);
 
-	it("reports a predicate declared on only one side, probing nothing", async () => {
+	it("reports a predicate declared on only one side (declared has one, catalog has none), probing nothing", async () => {
 		const widgets = table(
 			app,
 			"widgets",
 			{ id: uuid().primaryKey(), archivedAt: timestamptz() },
 			(t) => ({
-				indexes: [index("widgets_active_idx").on(t.id)],
+				indexes: [
+					index("widgets_active_idx").on(t.id).where(isNotNull(t.archivedAt)),
+				],
 			}),
 		);
 		const snapshot = buildTestSnapshot([widgets]);
 		const { session, calls } = makeIndexFakeSession({});
 
-		const findings = await compareIndexExpressions(
+		const findings = await compareIndexKeys(
 			session,
 			catalogWithIndex({
 				name: "widgets_active_idx",
-				predicate: "(archived_at IS NOT NULL)",
-				expressions: [],
+				predicate: null,
+				keys: [plainKey("id")],
 			}),
 			"app",
 			"widgets",
@@ -2037,7 +2227,40 @@ describe("compareIndexExpressions / 4.2 an index's predicate and expression colu
 		expect(explainCalls).toHaveLength(0);
 	});
 
-	it("probes a predicate and two expression columns in one statement, six Output entries, one finding per differing pair", async () => {
+	it("reports a predicate declared on only one side (declared has none, catalog has one), probing nothing", async () => {
+		const widgets = table(
+			app,
+			"widgets",
+			{ id: uuid().primaryKey(), archivedAt: timestamptz() },
+			(t) => ({
+				indexes: [index("widgets_active_idx").on(t.id)],
+			}),
+		);
+		const snapshot = buildTestSnapshot([widgets]);
+		const { session, calls } = makeIndexFakeSession({});
+
+		const findings = await compareIndexKeys(
+			session,
+			catalogWithIndex({
+				name: "widgets_active_idx",
+				predicate: "(archived_at IS NOT NULL)",
+				keys: [plainKey("id")],
+			}),
+			"app",
+			"widgets",
+			declaredIndexNode(snapshot, "app.widgets", "widgets_active_idx"),
+			"server",
+		);
+
+		expect(findings).toHaveLength(1);
+		expect(findings[0]?.error).toMatchObject({ code: "check-object-differs" });
+		const explainCalls = calls.filter((call) =>
+			call.sql.trim().toLowerCase().startsWith("explain"),
+		);
+		expect(explainCalls).toHaveLength(0);
+	});
+
+	it("probes a predicate and two expression positions in one statement, six Output entries, one finding per differing pair", async () => {
 		const widgets = table(
 			app,
 			"widgets",
@@ -2062,12 +2285,12 @@ describe("compareIndexExpressions / 4.2 an index's predicate and expression colu
 			],
 		});
 
-		const findings = await compareIndexExpressions(
+		const findings = await compareIndexKeys(
 			session,
 			catalogWithIndex({
 				name: "widgets_multi_idx",
 				predicate: "(archived_at IS NOT NULL)",
-				expressions: ["lower(email)", "UPPER(email)"],
+				keys: [exprKey("lower(email)"), exprKey("UPPER(email)")],
 			}),
 			"app",
 			"widgets",
@@ -2076,7 +2299,7 @@ describe("compareIndexExpressions / 4.2 an index's predicate and expression colu
 		);
 
 		expect(findings).toHaveLength(1);
-		expect(findings[0]?.error.message).toContain("index expression column 2");
+		expect(findings[0]?.error.message).toContain("index key 2");
 		const explainCalls = calls.filter((call) =>
 			call.sql.trim().toLowerCase().startsWith("explain"),
 		);
@@ -2100,12 +2323,12 @@ describe("compareIndexExpressions / 4.2 an index's predicate and expression colu
 		const snapshot = buildTestSnapshot([widgets]);
 		const { session, calls } = makeIndexFakeSession({});
 
-		const findings = await compareIndexExpressions(
+		const findings = await compareIndexKeys(
 			session,
 			catalogWithIndex({
 				name: "widgets_active_idx",
 				predicate: "(archived_at IS NOT NULL)",
-				expressions: [],
+				keys: [plainKey("id")],
 			}),
 			"app",
 			"widgets",
@@ -2117,7 +2340,7 @@ describe("compareIndexExpressions / 4.2 an index's predicate and expression colu
 		expect(calls).toHaveLength(0);
 	});
 
-	it("is not compared under text mode for an expression column carrying a cast normalization never strips", async () => {
+	it("is not compared under text mode for an expression key carrying a cast normalization never strips", async () => {
 		const widgets = table(
 			app,
 			"widgets",
@@ -2129,12 +2352,12 @@ describe("compareIndexExpressions / 4.2 an index's predicate and expression colu
 		const snapshot = buildTestSnapshot([widgets]);
 		const { session } = makeIndexFakeSession({});
 
-		const findings = await compareIndexExpressions(
+		const findings = await compareIndexKeys(
 			session,
 			catalogWithIndex({
 				name: "widgets_total_idx",
 				predicate: null,
-				expressions: ["(price * (qty)::numeric)"],
+				keys: [exprKey("(price * (qty)::numeric)")],
 			}),
 			"app",
 			"widgets",
@@ -2159,7 +2382,7 @@ describe("compareIndexExpressions / 4.2 an index's predicate and expression colu
 		const snapshot = buildTestSnapshot([widgets]);
 		const { session, calls } = makeIndexFakeSession({});
 
-		const findings = await compareIndexExpressions(
+		const findings = await compareIndexKeys(
 			session,
 			emptyCatalog(),
 			"app",

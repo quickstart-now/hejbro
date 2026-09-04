@@ -1026,7 +1026,7 @@ describe("compareCheckAgainstCatalog / 1.6 every expression surface reaches the 
 				table: "widgets",
 				name: "widgets_email_idx",
 				predicate: "(archived_at IS NOT NULL)",
-				expressions: ["lower(email)"],
+				keys: [{ text: "lower(email)", expression: true }],
 			},
 		],
 	});

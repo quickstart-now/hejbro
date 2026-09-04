@@ -3,12 +3,13 @@ import {
 	decodeExprNode,
 	hejbroError,
 	qualifyName,
+	quoteIdentifier,
 	renderExpr,
 	renderTableBoundExpr,
 } from "@hejbro/core";
 import type { DriverSession } from "@hejbro/query";
 import { z } from "zod";
-import type { Catalog } from "./catalog";
+import type { Catalog, IndexKeyRow } from "./catalog";
 import type { Finding } from "./compare";
 import { differsFinding } from "./compare";
 import { describeDriverError } from "./error-message";
@@ -801,47 +802,114 @@ const isLocalExpressionColumn = (
 	{ readonly expression: JsonValue }
 > => "expression" in column;
 
-/** One pair still to compare, plus the surface that names it in a finding -- built once, shared by both the text-mode and the server-mode path below (design.md: "pair layout `[pred?, e1, e2, …]`"). */
-type IndexPairSource = {
+/**
+ * One pair still to compare, plus the surface that names it in a finding
+ * -- built once, shared by both the text-mode and the server-mode path
+ * below. `declaredSql` takes whether the rendering is table-bound
+ * (`true` for text mode, matching every other surface's declared-side
+ * convention) so a declared *plain* key can render as its own column
+ * reference without needing an `ExprNode` for it (review round 1,
+ * `.blackbox/778/` R3: a plain key has no expression to decode).
+ */
+type IndexKeyPairSource = {
 	readonly surface: ExpressionSurface;
-	readonly declaredExpression: JsonValue;
+	readonly declaredSql: (tableBound: boolean) => string;
 	readonly catalogText: string;
 };
 
-/** `[]` when either side has no partial predicate -- the presence-mismatch case is its own guard in {@link compareIndexExpressions}, reached before this ever runs, so both being present is this function's only remaining input. */
-const predicatePairSource = (
+/** `[]` when either side has no partial predicate -- the presence-mismatch case is its own guard in {@link compareIndexKeys}, reached before this ever runs, so both being present is this function's only remaining input. */
+const predicateKeyPairSource = (
 	identity: string,
 	where: JsonValue | undefined,
 	predicate: string | null,
-): ReadonlyArray<IndexPairSource> => {
+): ReadonlyArray<IndexKeyPairSource> => {
 	if (where === undefined || predicate === null) {
 		return [];
 	}
 	return [
 		{
 			surface: { identity, describe: "index predicate" },
-			declaredExpression: where,
+			declaredSql: (tableBound: boolean) => {
+				if (tableBound) {
+					return renderTableBoundExpr(decodeExprNode(where));
+				}
+				return renderExpr(decodeExprNode(where));
+			},
 			catalogText: predicate,
 		},
 	];
 };
 
-/** One pair source per declared expression column, in index order, naming its 1-based position (design.md: the count already matches the catalog's by the time this runs). */
-const expressionColumnPairSources = (
+/**
+ * A declared plain key rendered as its own column reference (design.md:
+ * "a plain column renders as itself") -- the same rule that makes a bare
+ * column reference, a parenthesized column, or a collated column the
+ * server stores as a plain key (review round 1, B3) compare correctly
+ * against it: hejbro's own migration produced exactly that plain key, so
+ * the declared side must render as the column, not as the expression
+ * text that produced it. Table-bound (two-part) in text mode, matching
+ * every other surface's declared-side rendering; three-part in server
+ * mode, matching `renderExpr`'s own column-ref convention.
+ */
+const renderPlainKeyReference = (
+	schema: string,
+	table: string,
+	name: string,
+	tableBound: boolean,
+): string => {
+	if (tableBound) {
+		return `${quoteIdentifier(table)}.${quoteIdentifier(name)}`;
+	}
+	return `${qualifyName(schema, table)}.${quoteIdentifier(name)}`;
+};
+
+/**
+ * One pair source per key position at which *either* side is an
+ * expression, in index order, naming its 1-based position -- a position
+ * at which both sides are a plain column is never paired (design.md,
+ * review round 1 R3: "a position at which both sides are plain columns
+ * is not compared by this requirement or any other beyond the index's
+ * existence"). The count already matches the catalog's by the time this
+ * runs.
+ */
+const keyPairSources = (
 	identity: string,
-	columns: ReadonlyArray<
-		Extract<LocalIndexColumnSnapshot, { readonly expression: JsonValue }>
-	>,
-	catalogExpressions: ReadonlyArray<string>,
-): ReadonlyArray<IndexPairSource> =>
-	columns.map((column, index) => ({
-		surface: {
-			identity,
-			describe: `index expression column ${index + 1}`,
-		},
-		declaredExpression: column.expression,
-		catalogText: catalogExpressions[index] ?? "",
-	}));
+	schema: string,
+	table: string,
+	declaredKeys: ReadonlyArray<LocalIndexColumnSnapshot>,
+	catalogKeys: ReadonlyArray<IndexKeyRow>,
+): ReadonlyArray<IndexKeyPairSource> =>
+	declaredKeys.flatMap((declaredKey, index) => {
+		const catalogKey = catalogKeys[index];
+		if (catalogKey === undefined) {
+			return [];
+		}
+		if (!isLocalExpressionColumn(declaredKey) && !catalogKey.expression) {
+			return [];
+		}
+		return [
+			{
+				surface: { identity, describe: `index key ${index + 1}` },
+				declaredSql: (tableBound: boolean) => {
+					if (isLocalExpressionColumn(declaredKey)) {
+						if (tableBound) {
+							return renderTableBoundExpr(
+								decodeExprNode(declaredKey.expression),
+							);
+						}
+						return renderExpr(decodeExprNode(declaredKey.expression));
+					}
+					return renderPlainKeyReference(
+						schema,
+						table,
+						declaredKey.name,
+						tableBound,
+					);
+				},
+				catalogText: catalogKey.text,
+			},
+		];
+	});
 
 /** `"has a partial predicate"`/`"has no partial predicate"` -- a guard clause, not a ternary (house style). */
 const partialPredicatePresenceLabel = (hasPredicate: boolean): string => {
@@ -860,24 +928,30 @@ const catalogPredicateLabel = (predicate: string | null): string => {
 };
 
 /**
- * Compares one declared index's predicate and expression columns against
- * the database's own, through the server's own rendering of every pair
- * from **one statement** (#778, task 1.5) -- the check-constraint probe,
- * generalized to a whole index at once (predicate pair first, then one
- * pair per expression column, design.md's "pair layout"), or by normalized
- * text per pair (fix-nile-findings' rule, applied uniformly) when `mode`
- * is `"text"`. An index's plain columns, uniqueness and access method are
- * never compared here or anywhere beyond existence (`compare.ts`'s
- * `compareIndexes`, unchanged).
+ * Compares one declared index's ordered key list against the database's
+ * own, through the server's own rendering of every pair from **one
+ * statement** (#778, review round 1 `.blackbox/778/` R3) -- the
+ * check-constraint probe, generalized to a whole index at once
+ * (predicate pair first, then one pair per key position at which either
+ * side is an expression), or by normalized text per pair
+ * (fix-nile-findings' rule, applied uniformly) when `mode` is `"text"`.
+ * The unit of comparison is the key list, not a filtered "expression
+ * columns" subset: Postgres stores a bare column reference, a
+ * parenthesized column, or `col collate "C"` as a *plain* key
+ * (`indexprs` null), so a position at which the declaration is an
+ * expression Postgres stored as a plain key is still paired and still
+ * agrees, rendered against the catalog's own plain-key text. A position
+ * at which both sides are plain is never paired -- an index's plain
+ * columns, uniqueness and access method are never compared here or
+ * anywhere beyond existence (`compare.ts`'s `compareIndexes`, unchanged).
  *
  * Existence takes precedence (an absent index is `compare.ts`'s own
- * missing finding, task 2.5) and so does the expression-column *count*
- * and the predicate's *presence* on each side -- both checked, and
- * reported as their own differing axis, before any rendering is probed:
- * an index whose shape already disagrees has nothing meaningful left to
- * render (task 1.5's own count-then-presence-then-probe order).
+ * missing finding, task 2.5) and so does the key-list *length* and the
+ * predicate's *presence* on each side -- both checked, and reported as
+ * their own differing axis, before any rendering is probed: an index
+ * whose shape already disagrees has nothing meaningful left to render.
  */
-export const compareIndexExpressions = async (
+export const compareIndexKeys = async (
 	session: DriverSession,
 	catalog: Catalog,
 	schema: string,
@@ -895,15 +969,12 @@ export const compareIndexExpressions = async (
 	if (row === undefined) {
 		return [];
 	}
-	const declaredExpressionColumns = index.columns.filter(
-		isLocalExpressionColumn,
-	);
-	if (declaredExpressionColumns.length !== row.expressions.length) {
+	if (index.columns.length !== row.keys.length) {
 		return [
 			differsFinding(
 				identity,
-				`declared index "${identity}" has ${declaredExpressionColumns.length} expression column(s), but the database's index has ${row.expressions.length}.`,
-				"change the declaration to match the database, or write a migration that alters the index's expression columns.",
+				`declared index "${identity}" has ${index.columns.length} key(s), but the database's index has ${row.keys.length}.`,
+				"change the declaration to match the database, or write a migration that alters the index's keys.",
 			),
 		];
 	}
@@ -919,39 +990,42 @@ export const compareIndexExpressions = async (
 		];
 	}
 	const pairSources = [
-		...predicatePairSource(identity, index.where, row.predicate),
-		...expressionColumnPairSources(
-			identity,
-			declaredExpressionColumns,
-			row.expressions,
-		),
+		...predicateKeyPairSource(identity, index.where, row.predicate),
+		...keyPairSources(identity, schema, table, index.columns, row.keys),
 	];
 	if (pairSources.length === 0) {
 		return [];
 	}
 	if (mode === "text") {
-		return pairSources.flatMap((source) =>
-			compareByText(
-				source.surface,
+		return pairSources.flatMap((source) => {
+			const declaredSql = source.declaredSql(true);
+			const normalizedDeclared = normalizeCheckText(declaredSql, schema, table);
+			const normalizedCatalog = normalizeCheckText(
+				source.catalogText,
 				schema,
 				table,
-				source.declaredExpression,
-				source.catalogText,
-			),
-		);
+			);
+			if (normalizedDeclared !== normalizedCatalog) {
+				return [
+					notComparedByTextFinding(
+						source.surface,
+						declaredSql,
+						source.catalogText,
+					),
+				];
+			}
+			return [];
+		});
 	}
-	const declaredSqls = pairSources.map((source) =>
-		renderExpr(decodeExprNode(source.declaredExpression)),
-	);
-	const pairs = pairSources.map((source, index) => ({
-		declaredSql: declaredSqls[index] ?? "",
+	const pairs = pairSources.map((source) => ({
+		declaredSql: source.declaredSql(false),
 		catalogSql: source.catalogText,
 	}));
 	const probe = await probeRenderings(session, schema, table, pairs);
 	if (!probe.ok) {
-		return pairSources.map((source, index) =>
+		return pairSources.map((source) =>
 			notComparedFinding(source.surface, probe.reason, {
-				declared: declaredSqls[index] ?? "",
+				declared: source.declaredSql(false),
 				catalog: source.catalogText,
 			}),
 		);

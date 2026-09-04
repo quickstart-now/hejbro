@@ -27,7 +27,7 @@ import type {
 import {
 	compareCheckConstraint,
 	compareGeneratedColumn,
-	compareIndexExpressions,
+	compareIndexKeys,
 } from "../check/expression";
 import type { Inventory } from "../check/inventory";
 import { buildInventory } from "../check/inventory";
@@ -399,7 +399,7 @@ const hasExpressionSurface = (index: LocalIndexSnapshot): boolean =>
  * Every declared index that carries a predicate or an expression column,
  * across every declared table (#778, task 1.6) -- a plain index is never
  * walked here at all, since it has no expression axis for
- * `compareIndexExpressions` to compare.
+ * `compareIndexKeys` to compare.
  */
 export const declaredIndexExpressions = (
 	snapshot: Snapshot,
@@ -456,7 +456,7 @@ export const declaredGeneratedColumns = (
 /**
  * `compareCatalog` (existence/columns) plus, for every declared check
  * constraint, index expression surface and generated column,
- * `compareCheckConstraint`/`compareIndexExpressions`/`compareGeneratedColumn`
+ * `compareCheckConstraint`/`compareIndexKeys`/`compareGeneratedColumn`
  * (task 1.6, #778/#781: the three walks the same `mode`, merged into one
  * findings list) -- merged into one findings list. Takes `session`, not a
  * full `Driver`, so a test injects a fake one with no real I/O at all;
@@ -493,7 +493,7 @@ export const compareCheckAgainstCatalog = async (
 	);
 	const indexFindingLists = await Promise.all(
 		declaredIndexExpressions(snapshot).map((entry) =>
-			compareIndexExpressions(
+			compareIndexKeys(
 				session,
 				catalog,
 				entry.schema,

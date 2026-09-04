@@ -47,9 +47,12 @@ preset that declares no planning, and the same not-compared reporting.
   from one statement — the check-constraint probe, generalized — and by
   normalized text where a registered preset declares the platform cannot
   plan a statement. Existence keeps precedence: a missing index or column
-  is reported once, as missing. An index's plain columns, uniqueness and
-  access method stay compared by existence only, and the spec now says so
-  where it previously claimed otherwise.
+  is reported once, as missing. An index is compared as an ordered key
+  list — every position at which either side is an expression, through
+  the rendering — while a position where both sides are plain columns,
+  a key's sort direction, operator class and collation, and an index's
+  uniqueness and access method stay outside the comparison (#844), and
+  the spec now says so where it previously claimed otherwise.
 - **A generated column is compared as a generated column.** The catalog
   read tells a generation expression apart from a default
   (`pg_attribute.attgenerated`); a column generated on both sides has its

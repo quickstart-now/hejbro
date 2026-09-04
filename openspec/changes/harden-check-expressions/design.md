@@ -70,17 +70,51 @@ takes. Every server fact below was measured on `postgres:17-alpine`.
   from the already-read column row, so no new read. Missing column/table →
   `compare.ts`'s existing missing finding, nothing from the expression path.
 
-## Indexes (`compare.ts` unchanged, `expression.ts`)
+## Indexes (`compare.ts` unchanged, `expression.ts`) — ordered key list
 
-- `compareIndexExpressions` reads the index's own catalog row. Absent →
-  nothing (existence already reported). Expression-column count differs →
-  one `check-object-differs` naming both counts, no probe. Predicate on one
-  side only → one `check-object-differs` naming which side is partial.
-  Otherwise one statement carries every pair; each pair that differs is
-  its own finding (`index predicate` / `index expression column n`), so
-  every axis is reported from one run. Plain columns, uniqueness, method:
-  untouched, still existence-only, and the skill's brownfield reference
-  says so.
+Settled after the constructor review (`.blackbox/778/` R3): the unit of
+comparison is the index's **ordered key list**, not its expression
+columns. Postgres stores a declared expression that is a bare column
+reference, a parenthesized column or `col collate "C"` as a *plain* key
+(`indexprs` null, the collation in `indcollation`), so counting expression
+columns reported a difference hejbro's own migration produces and no
+migration can fix; and a declared-side filter let a database index that
+grew an expression or a predicate pass as present.
+
+- **Catalog** (`catalog.ts`): the `indexes` query returns `keys`, a JSON
+  array in position order of `{ text, expression }` for every key —
+  `text` = `pg_get_indexdef(ix.indexrelid, n::int, true)` (the bare key:
+  a column name or the expression, never `DESC`/`NULLS`/opclass) with
+  ` collate <quote_ident(collname)>` appended where `indcollation[n-1]`
+  is neither 0 nor the plain column's own `attcollation` (for an
+  expression key: neither 0 nor the database default collation);
+  `expression` = `indkey[n-1] = 0`. Plus `predicate` as before. Measured:
+  `((email))` is stored as a plain key (`indkey ≠ 0`); `pg_get_indexdef`
+  with a column number omits `COLLATE` (the full form shows it); and
+  `EXPLAIN`'s `Output` renders `email collate "C"` and `email` identically
+  — so the collation suffix matters to the text mode only, and a
+  collation-only difference is invisible to the server-mode comparison
+  (stated as a limit in the delta, beside sort direction and opclass).
+  Comparing a key's sort direction, operator class, collation and a
+  plain column's name as attributes is #844, not this change; the
+  declared side's collation sits inside raw SQL and cannot be read
+  structurally, so no text-mode complement is attempted here either.
+- **Comparison** (`compareIndexKeys`): absent index → nothing. Key count
+  differs → one `check-object-differs` naming both counts, no probe.
+  Predicate on one side only → one `check-object-differs` naming which
+  side is partial. Then one statement carries the predicate pair (if
+  both) and one pair per position at which *either* side is an
+  expression — the declared plain column rendered as its own column
+  reference, the declared expression rendered as today; each differing
+  pair is its own finding (`index predicate` / `index key n`). A position
+  at which both sides are plain columns is not paired (Q7 stands; a
+  plain-column name mismatch stays existence-only and is tracked apart).
+  Text mode normalizes each paired position on its own.
+- **Wiring**: every declared index reaches the comparison — no
+  declared-side filter; an index with no predicate on either side and no
+  expression at any position issues no statement.
+- Uniqueness and access method: untouched, still existence-only, and the
+  skill's brownfield reference says so.
 
 ## Wiring (`commands/check.ts`)
 
