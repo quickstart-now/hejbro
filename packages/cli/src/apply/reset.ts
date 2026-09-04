@@ -331,10 +331,10 @@ export type ResetOutcome = { readonly ledgerCleared: boolean };
  * error: a ledger-delete failure that happens anyway is a genuine one and
  * propagates like any other drop failure, into {@link throwResetDropFailed}
  * below, rather than being swallowed into a rollback nobody is told about
- * (B1's own root cause -- `clearLedger`'s 42P01 leniency, reached from
- * inside this same transaction, left it aborted with no error surfaced,
- * and a plain `COMMIT` on an aborted transaction is a rollback Postgres
- * never reports as a failure).
+ * (B1's own root cause -- a caught 42P01 inside this same transaction
+ * left it aborted with no error surfaced, and a plain `COMMIT` on an
+ * aborted transaction is a rollback Postgres never reports as a
+ * failure).
  *
  * A drop the database refuses (task 1.4, #753) -- an object outside the
  * declarations still depending on the one being dropped, most commonly --

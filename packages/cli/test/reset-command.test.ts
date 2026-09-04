@@ -115,7 +115,7 @@ describe("applyResetReport / 7.7", () => {
 		);
 
 		expect(result.stdout).toEqual([
-			"reset: dropped every object your declarations manage.",
+			"reset: dropped every object your declarations manage. There was no hejbro ledger to clear.",
 		]);
 	});
 
@@ -164,11 +164,11 @@ describe("applyResetReport / 18.1 (D106 M6)", () => {
 	// Arrives green: `assertResetConfirmed` already throws before
 	// `driver.transaction` ever runs whenever `changes.length > 0`, so
 	// this is a pin (D106 M6 wants it named as a scenario), not a red.
-	// Measured, not assumed: the branch-move mutant (moving `clearLedger`
+	// Measured, not assumed: the branch-move mutant (moving `clearLedgerRows`
 	// back outside the `changes.length > 0` branch) does NOT turn this
 	// test red -- `assertResetConfirmed`'s refusal for a non-empty
 	// `changes` set happens before the transaction runs regardless of
-	// where `clearLedger` sits inside it, so this scenario alone cannot
+	// where `clearLedgerRows` sits inside it, so this scenario alone cannot
 	// discriminate the branch move. See the completion report for what
 	// does: `changes.length === 0` is unreachable from a non-empty
 	// declaration set (every registered kind reports "drop" when an

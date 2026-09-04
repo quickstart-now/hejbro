@@ -426,9 +426,9 @@ describe("hejbro reset — live witness (#753, task 1.5)", () => {
 	// reproduction: every migration applied without `hejbro migrate` ever
 	// running (`psql -f`, a valid apply path this project documents), so
 	// `hejbro.migration_ledger` never exists. Before the fix, `reset`
-	// reported success and dropped nothing -- `clearLedger`'s own 42P01
-	// leniency, reached from inside the drop transaction, left it aborted
-	// with no error ever surfaced.
+	// reported success and dropped nothing -- a caught 42P01, reached from
+	// inside the drop transaction, left it aborted with no error ever
+	// surfaced.
 	it("declared objects applied without hejbro (no hejbro.migration_ledger): reset still drops everything and never claims the ledger was cleared", async () => {
 		const database = "reset_noledger";
 		psqlCommand("postgres", `create database ${database};`);
@@ -464,18 +464,25 @@ describe("hejbro reset — live witness (#753, task 1.5)", () => {
 				confirmation,
 			]);
 			expect(result.exitCode).toBe(0);
+			expect(result.stdout).toContain(
+				"dropped every object your declarations manage",
+			);
 			expect(result.stdout).not.toContain("cleared the ledger");
 
 			const driver = pgDriver(hostUrl(database));
 			try {
 				const rows = await driver.execute({
-					sql: "select to_regclass('lab.tasks') as tasks, to_regclass('lab.projects') as projects, (select nspname from pg_namespace where nspname = 'lab') as lab_schema",
+					sql: "select to_regclass('lab.tasks') as tasks, to_regclass('lab.projects') as projects, (select nspname from pg_namespace where nspname = 'lab') as lab_schema, to_regclass('hejbro.migration_ledger') as ledger",
 					params: [],
 					kind: "sql",
 				});
 				expect(rows[0]?.tasks).toBeNull();
 				expect(rows[0]?.projects).toBeNull();
 				expect(rows[0]?.lab_schema).toBeNull();
+				// [C4] `reset` never bootstraps the ledger it found absent --
+				// it doesn't get to "succeed" by creating the very bookkeeping
+				// B1's own reproduction never had.
+				expect(rows[0]?.ledger).toBeNull();
 			} finally {
 				await driver.client.end();
 			}
