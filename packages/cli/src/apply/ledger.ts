@@ -453,8 +453,13 @@ export const recordAppliedMigration = async (
  * than be swallowed into a silent no-op that leaves the transaction's
  * earlier statements (the drops) uncommitted but unreported. A race that
  * drops the table between that probe and this delete surfaces its own
- * 42P01 uncaught, into `reset-drop-failed` -- honest about the race
- * rather than silently rolled back the way B1 was.
+ * 42P01, tagged like every other failure this function's own `exec` call
+ * sends (task 1.1) and classified as `apply-ledger-unwritable` by the
+ * caller (harden-ledger-diagnostics, task 1.7: which statement failed
+ * decides the code, not which SQLSTATE the server gave it -- a delete
+ * that found no ledger to delete from is a ledger write, not a failed
+ * drop) -- honest about the race rather than silently rolled back the
+ * way B1 was.
  */
 export const clearLedgerRows = async (
 	session: DriverSession,
