@@ -239,9 +239,14 @@ stale skill is a broken user contract").
   fixed in task 4.2: `driverErrorDetail` threads it in, verbatim, after
   the reason. Live-witnessed against the outside-dependent scenario.
 - **N3** (the `Next:` advice always blamed "an object outside your
-  declarations", even for a declared cycle) — fixed in task 4.2: a
+  declarations", even for a declared cycle) — fixed in tasks 4.2/C5: a
   pre-transaction check for a same-kind cycle in the run's own drop plan
-  picks the correct advice. Live-witnessed against the cycle scenario.
+  adds the cycle fact to the advice without asserting it as the cause —
+  the outside-declarations possibility stays in the same message, since
+  this module cannot tell which one the server actually refused over
+  (the driver names an object, not an edge); N2's own `DETAIL` line is
+  what names the real dependent. Live-witnessed against the cycle
+  scenario.
 - **N4** (`verify` is silent about warnings `generate` prints for the
   same declarations) — not a contradiction of this delta (which promises
   refusal parity only, not warning parity); filed as its own follow-up,
