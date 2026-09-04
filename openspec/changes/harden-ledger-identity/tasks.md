@@ -70,7 +70,7 @@ marks the tasks that carry them into code, not open questions.
       `packages/cli/test/apply-reset.test.ts`,
       `packages/cli/test/reset-command.test.ts`.
 
-- [ ] 1.3 (~7m) `status` refuses on `occupied` with the same code.
+- [x] 1.3 (~7m) `status` refuses on `occupied` with the same code.
       `runStatus` probes before `readLedger` and renders the refusal
       through its existing `preconditionResult` path (exit 1); `absent`
       and `ledger` proceed exactly as today. Red:

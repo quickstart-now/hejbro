@@ -3,6 +3,10 @@ import { defineCommand } from "citty";
 import { APPLY_CONNECTION_CODES } from "../apply/capability";
 import type { LedgerState } from "../apply/ledger";
 import { readLedger } from "../apply/ledger";
+import {
+	assertLedgerNotOccupied,
+	probeLedgerIdentity,
+} from "../apply/ledger-identity";
 import type { PlanResult } from "../apply/plan";
 import { planApply } from "../apply/plan";
 import type { CheckDriverImporter } from "../check/driver";
@@ -201,6 +205,8 @@ export const runStatus = async (
 			process.env,
 			{ commandName: STATUS_COMMAND, codes: APPLY_CONNECTION_CODES },
 			async (driver) => {
+				const identity = await probeLedgerIdentity(driver);
+				assertLedgerNotOccupied(identity, STATUS_COMMAND);
 				const ledgerState = await readLedger(driver);
 				const plan = planApply(chain, ledgerState);
 				if (!plan.ok) {
