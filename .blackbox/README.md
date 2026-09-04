@@ -60,8 +60,8 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#750](750/) | 0.2.0-pre.0: five findings from applying one declaration to Postgres 18, Neon, Nile and Supabase | open | #784 | 5 | 1 (0 pending) |
 | ↳ [#752](752/) | verify does not run preset validators, so it passes a declaration generate refuses | closed | #775 #784 | 0 | 2 (1 pending) |
 | ↳ [#753](753/) | reset drops a referenced table before the table that references it, and the ledger hides the half-reset state | closed | #775 #784 | 0 | 14 (3 pending) |
-| ↳ [#754](754/) | Nile rejects the schema-qualified column references rendered inside CHECK and partial-index predicates (42622) | closed | #780 | 0 | 4 (2 pending) |
-| ↳ [#755](755/) | check cannot compare CHECK constraints on Nile because Nile has no EXPLAIN | closed | #780 | 0 | 5 (2 pending) |
+| ↳ [#754](754/) | Nile rejects the schema-qualified column references rendered inside CHECK and partial-index predicates (42622) | closed | #780 #795 | 0 | 4 (2 pending) |
+| ↳ [#755](755/) | check cannot compare CHECK constraints on Nile because Nile has no EXPLAIN | closed | #780 | 0 | 6 (3 pending) |
 | ↳ [#785](785/) | blackbox v2: per-issue folders under .blackbox, hooks + CI-first gate, shipped by the dd-blackbox script | closed | #786 | 5 | 2 (0 pending) |
 | ↳ [#787](787/) | blackbox: migrate the lead ruling ledger R1–R90 into issue folders (first ratification queue of 0.2.1) | closed | #789 | 0 | 0 (0 pending) |
 | ↳ [#788](788/) | blackbox: migrate the 78 legacy single-file entries into issue folders | closed | #790 | 0 | 0 (0 pending) |
@@ -85,7 +85,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 
 ## Totals
 
-Owner decisions 61 · rulings 94 (interpretation 55, extension 37, stop 2) · pending extensions 37 · rejected 0
+Owner decisions 61 · rulings 95 (interpretation 55, extension 38, stop 2) · pending extensions 38 · rejected 0
 
 ## Conventions
 

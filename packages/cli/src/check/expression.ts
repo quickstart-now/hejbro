@@ -74,6 +74,22 @@ const notComparedByTextFinding = (
 	),
 });
 
+/**
+ * The catalog read itself failed under a preset that declares no
+ * planning (D106 round 1, N1): the remedy is the catalog read, and the
+ * `Next:` must not ask for `EXPLAIN` -- no role could satisfy that here.
+ */
+const notComparedCatalogReadFinding = (
+	identity: string,
+	reason: string,
+): Finding => ({
+	identity,
+	error: hejbroError(
+		"check-not-compared",
+		`declared check constraint "${identity}" could not be compared: ${reason}. Next: confirm the connected role can read this table's constraint from pg_constraint (pg_get_constraintdef), then rerun \`hejbro check\`.`,
+	),
+});
+
 /** A single-quoted string literal — `''` is the SQL escape for an embedded quote, never a literal boundary. */
 const STRING_LITERAL = /'(?:[^']|'')*'/g;
 
@@ -196,19 +212,103 @@ const stripTableQualifier = (
 	return text.replace(threePart, '"$1"').replace(twoPart, '"$1"');
 };
 
-/** A quoted identifier Postgres would render unquoted anyway: a plain lower-case name, no digits-first, no special characters. */
+/** A quoted identifier Postgres would render unquoted anyway: a plain lower-case name, no digits-first, no special characters -- and not a reserved keyword, which `pg_get_expr` keeps quoted (D106 round 1, N4). */
 const PLAIN_IDENTIFIER = /^[a-z_][a-z0-9_]*$/;
 
+/** Postgres's reserved keywords (`pg_get_keywords()` category R): the server quotes these when it renders an identifier, so unquoting them would not be meaning-preserving. */
+const RESERVED_KEYWORDS = new Set([
+	"all",
+	"analyse",
+	"analyze",
+	"and",
+	"any",
+	"array",
+	"as",
+	"asc",
+	"asymmetric",
+	"both",
+	"case",
+	"cast",
+	"check",
+	"collate",
+	"column",
+	"constraint",
+	"create",
+	"current_catalog",
+	"current_date",
+	"current_role",
+	"current_time",
+	"current_timestamp",
+	"current_user",
+	"default",
+	"deferrable",
+	"desc",
+	"distinct",
+	"do",
+	"else",
+	"end",
+	"except",
+	"false",
+	"fetch",
+	"for",
+	"foreign",
+	"from",
+	"grant",
+	"group",
+	"having",
+	"in",
+	"initially",
+	"intersect",
+	"into",
+	"lateral",
+	"leading",
+	"limit",
+	"localtime",
+	"localtimestamp",
+	"not",
+	"null",
+	"offset",
+	"on",
+	"only",
+	"or",
+	"order",
+	"placing",
+	"primary",
+	"references",
+	"returning",
+	"select",
+	"session_user",
+	"some",
+	"symmetric",
+	"system_user",
+	"table",
+	"then",
+	"to",
+	"trailing",
+	"true",
+	"union",
+	"unique",
+	"user",
+	"using",
+	"variadic",
+	"when",
+	"where",
+	"window",
+	"with",
+]);
+
 const unquoteIfPlain = (whole: string, inner: string): string => {
-	if (PLAIN_IDENTIFIER.test(inner)) {
+	if (PLAIN_IDENTIFIER.test(inner) && !RESERVED_KEYWORDS.has(inner)) {
 		return inner;
 	}
 	return whole;
 };
 
-/** Unquotes a quoted identifier only when it is a plain lower-case identifier (design.md, normalization step 4) -- a mixed-case or reserved identifier stays quoted, so a genuine case difference (`"Name"` vs `"name"`) stays visible. */
+/** Unquotes a quoted identifier only when it is a plain lower-case identifier the server would render unquoted (design.md, normalization step 4) -- a mixed-case or reserved identifier stays quoted, so a genuine case difference (`"Name"` vs `"name"`) stays visible. Runs outside string literals only: a quoted word inside a literal is content (D106 round 1, B1). */
 const unquotePlainIdentifiers = (text: string): string =>
-	text.replace(/"([^"]+)"/g, unquoteIfPlain);
+	transformOutsideSpans(text, STRING_LITERAL, (segment) =>
+		segment.replace(/"([^"]+)"/g, unquoteIfPlain),
+	);
 
 /** Strips a `::type` cast the server appended directly to a string literal (design.md, normalization step 5) -- `'x'::text` and `'x'` compare equal, nothing else does. */
 const stripStringLiteralCast = (text: string): string =>
@@ -241,7 +341,7 @@ const foldCaseOutsideQuotes = (text: string): string =>
  * literal; letter case outside quoted identifiers and string literals —
  * and nothing else, applied in this fixed order.
  */
-const normalizeCheckText = (
+export const normalizeCheckText = (
 	text: string,
 	schema: string,
 	table: string,
@@ -249,10 +349,10 @@ const normalizeCheckText = (
 	foldCaseOutsideQuotes(
 		stripStringLiteralCast(
 			unquotePlainIdentifiers(
-				stripTableQualifier(
+				transformOutsideSpans(
 					stripEnclosingParens(collapseWhitespaceOutsideLiterals(text)),
-					schema,
-					table,
+					STRING_LITERAL,
+					(segment) => stripTableQualifier(segment, schema, table),
 				),
 			),
 		),
@@ -497,6 +597,9 @@ export const compareCheckConstraint = async (
 		return [];
 	}
 	if (metadata.kind === "error") {
+		if (mode === "text") {
+			return [notComparedCatalogReadFinding(identity, metadata.reason)];
+		}
 		return [notComparedFinding(identity, metadata.reason, null)];
 	}
 	if (mode === "text") {

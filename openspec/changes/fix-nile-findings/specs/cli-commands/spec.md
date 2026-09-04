@@ -101,6 +101,23 @@ claims, and its expression matches all the same.
   catalog's spelling and never mentions `EXPLAIN`, and the run does not
   exit zero
 
+#### Scenario: Under a preset that declares no planning, a string literal's content is never normalized
+- **WHEN** a registered preset declares the platform cannot plan a
+  statement, the declaration renders `"projects"."format" <> '"json"'`,
+  and the catalog holds `(format <> 'json'::text)`
+- **THEN** `check` reports that constraint as not compared: no
+  normalization step rewrites the inside of a string literal, so the
+  quoted word in the literal and the qualifier-like text a literal may
+  carry stay exactly as written on both sides
+
+#### Scenario: Under a preset that declares no planning, a failed catalog read is not compared without asking for EXPLAIN
+- **WHEN** a registered preset declares the platform cannot plan a
+  statement, and reading the constraint's own expression from
+  `pg_constraint` fails
+- **THEN** `check` reports the constraint as not compared with the
+  server's own reason, and its `Next:` names the catalog read to confirm
+  and never asks the user to run or be granted `EXPLAIN`
+
 #### Scenario: Without such a declaration, a failed rendering is reported as before
 - **WHEN** no registered preset declares the platform cannot plan a
   statement, and the rendering statement fails

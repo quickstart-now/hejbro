@@ -101,7 +101,9 @@ declaring table's own qualifier from a column reference, unquoting a
 plain lower-case identifier, stripping a `::type` cast the server
 appended to a string literal, and folding letter case outside quoted
 identifiers and string literals. Two spellings that normalize to the same
-text agree, silently, exactly as on a platform that can plan.
+text agree. No step ever rewrites anything inside a string literal — a quoted
+word or a table-like name inside a literal is content, so a difference the
+literal carries is always reported, never normalized away.
 
 Two spellings that still differ after normalization are reported
 `check-not-compared`, carrying both texts and a `Next:` that names
@@ -124,8 +126,9 @@ expressions that actually differ). The `Next:` line never asks the reader
 to run or be granted `EXPLAIN` on such a platform — the whole reason this
 mode exists is that no role could satisfy that request here. See
 `packages/cli/src/check/expression.ts` for the exact normalization order
-and `openspec/changes/fix-nile-findings/design.md`'s "`check` without
-EXPLAIN" section for the full rationale.
+and `openspec/specs/cli-commands/spec.md`'s "compares by text where the
+preset declares no planning" requirement for the contract each step
+serves.
 
 Whether a view body or a query-builder statement referencing a
 tenant-aware table's three-part column references is itself accepted by

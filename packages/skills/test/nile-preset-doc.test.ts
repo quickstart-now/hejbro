@@ -70,3 +70,16 @@ describe("nile-preset.md records the COMMENT fact hejbro cannot express as a val
 		expect(REFERENCE_FLAT).toMatch(/no comment declaration/);
 	});
 });
+
+// fix-nile-findings, D106 round 1 (R1-N5): the archive relocates a change
+// directory, and the "silently, exactly as" sentence was the one R1-B1
+// falsified.
+describe("nile-preset.md survives the archive and states the literal rule (cli-commands: 'Under a preset that declares no planning')", () => {
+	it("links no path under openspec/changes/", () => {
+		expect(REFERENCE).not.toMatch(/openspec\/changes\//);
+	});
+	it("does not claim that equal normalized texts agree 'exactly as on a platform that can plan'", () => {
+		expect(REFERENCE).not.toContain("silently, exactly as");
+		expect(REFERENCE).toMatch(/inside a string literal/);
+	});
+});
