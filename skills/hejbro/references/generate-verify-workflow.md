@@ -22,13 +22,34 @@ A `migrationsDir` or `snapshotPath` spelled as an absolute path
 field — both fields are relative to the working directory, and every
 command used to silently re-root the leading `/` under it instead (a
 behaviour change for a configuration that used to be honoured). A
-directory sitting at the configured `snapshotPath` is refused with
+`snapshotPath` spelled as a directory (a trailing `/`, an empty value, or
+a last segment of `.`/`..`) is refused the same way, at the same
+`error[invalid-config]` — the snapshot is a file, and no spelling that
+names a directory can ever hold one. A directory or a dangling symbolic
+link sitting at the configured `snapshotPath` is refused with
 `error[snapshot-not-a-file]` — the snapshot is a file hejbro writes,
 never a directory it reads into. A snapshot file this process cannot
-read (permissions, or a directory on the way that blocks the look-up) is
-refused with `error[snapshot-unreadable]`, naming the path and the
-operating system's own code. All three name a `Next:` step; none ever
-print an absolute path.
+read (permissions, an ancestor on the way that's a file or a dangling
+link, or a directory on the way that blocks the look-up) is refused with
+`error[snapshot-unreadable]`, naming the path and the operating system's
+own code. A `migrationsDir` that is a file or a dangling link is refused
+with `error[migrations-dir-not-a-directory]`; the same ancestor or
+permission faults on the way to it are refused with
+`error[migrations-dir-unreadable]` — nothing at `migrationsDir` is not a
+fault, since the commands that write into it create it.
+
+`--config` names a file the same way for `init`, `generate`, `baseline`
+and `history`: an empty value (`--config=`, or a trailing `--config`
+with nothing after it) is refused with `error[invalid-config-flag]`
+before any path is even resolved, never silently the working directory.
+A directory or a dangling symbolic link at the resolved configuration
+path is refused with `error[config-not-a-file]`; an ancestor in the way,
+or a path that cannot even be inspected, is refused with
+`error[config-unreadable]`. `init` refuses the same trees under its own
+`error[init-path-conflict]`, naming the same node.
+
+Every one of these names a `Next:` step; none ever print an absolute
+path.
 
 ## Reading the banner
 

@@ -1576,7 +1576,7 @@ describe("runInit / a directory sitting where the configuration file belongs (D1
 
 		expect(result.exitCode).toBe(1);
 		expect(result.stderr).toBe(
-			'error[init-path-conflict]: hejbro.config.ts\n  "hejbro.config.ts" was expected to be a file for hejbro.config.ts, but a directory is there. Next: move or remove the existing directory at "hejbro.config.ts", then rerun `hejbro init`.',
+			'error[init-path-conflict]: hejbro.config.ts\n  "hejbro.config.ts" is the configuration path, but a directory is there — the configuration is a file hejbro reads. Next: move or remove the existing directory at "hejbro.config.ts", or name another file with --config, then rerun `hejbro init`.',
 		);
 		expect(existsSync(join(cwd, "migrations"))).toBe(false);
 		expect(existsSync(snapshotPath())).toBe(false);
@@ -1611,6 +1611,137 @@ describe("runInit / a directory sitting where the configuration file belongs (D1
 
 		expect(result.exitCode).toBe(0);
 		expect(result.report).toContain("created hejbro.config.ts");
+	});
+});
+
+// #846 D5 phrasing/D6 (#831, NB5): the configuration path's own name
+// used to appear twice ("... for hejbro.config.ts"), and a planned file
+// that would have to hold another planned artifact always said "a file
+// cannot hold a directory", wrong whenever the held artifact was itself
+// a file (the configuration, or a snapshotPath nested inside it).
+describe("runInit / the configuration path's own messages (#846 D5 phrasing, D6)", () => {
+	it("describes a directory at --config as the configuration path, naming it once", async () => {
+		await mkdir(join(cwd, "sub", "h.ts"), { recursive: true });
+
+		const result = await runInit(cwd, ["--config", "sub/h.ts"]);
+
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toBe(
+			'error[init-path-conflict]: sub/h.ts\n  "sub/h.ts" is the configuration path, but a directory is there — the configuration is a file hejbro reads. Next: move or remove the existing directory at "sub/h.ts", or name another file with --config, then rerun `hejbro init`.',
+		);
+	});
+
+	it("refuses a snapshotPath nested inside the configuration path, naming the held kind (file)", async () => {
+		await writeFile(
+			configPath(),
+			'export default { entry: ["src/**/*.schema.ts"], snapshotPath: "hejbro.config.ts/state.json" };\n',
+		);
+
+		const result = await runInit(cwd);
+
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toBe(
+			'error[init-path-conflict]: hejbro.config.ts\n  "hejbro.config.ts" is the configuration path, and snapshotPath ("hejbro.config.ts/state.json") would have to be created inside it — a file cannot hold a file. Next: point snapshotPath outside "hejbro.config.ts", then rerun `hejbro init`.',
+		);
+	});
+
+	it("refuses a migrationsDir nested inside the configuration path, naming the held kind (directory)", async () => {
+		await writeFile(
+			configPath(),
+			'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "hejbro.config.ts/mig" };\n',
+		);
+
+		const result = await runInit(cwd);
+
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toBe(
+			'error[init-path-conflict]: hejbro.config.ts\n  "hejbro.config.ts" is the configuration path, and migrationsDir ("hejbro.config.ts/mig") would have to be created inside it — a file cannot hold a directory. Next: point migrationsDir outside "hejbro.config.ts", then rerun `hejbro init`.',
+		);
+	});
+
+	it("refuses the configuration path nested inside snapshotPath, naming --config and snapshotPath in Next:", async () => {
+		// The configuration file itself must be readable to know its own
+		// snapshotPath field -- "state.json" is a real directory holding
+		// it, which is exactly the nesting this run refuses.
+		await mkdir(join(cwd, "state.json"), { recursive: true });
+		await writeFile(
+			join(cwd, "state.json", "h.ts"),
+			'export default { entry: ["src/**/*.schema.ts"], snapshotPath: "state.json" };\n',
+		);
+
+		const result = await runInit(cwd, ["--config", "state.json/h.ts"]);
+
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toBe(
+			'error[init-path-conflict]: state.json\n  "state.json" is named by snapshotPath, and the configuration path ("state.json/h.ts") would have to be created inside it — a file cannot hold a file. Next: name a configuration file outside snapshotPath with --config, or point snapshotPath elsewhere, then rerun `hejbro init`.',
+		);
+	});
+
+	// Control: neither side is the configuration artifact -- the existing
+	// sentence (D106 R1 N1) stays byte-unchanged.
+	it("keeps the existing nested sentence byte-unchanged when neither side is the configuration artifact (control)", async () => {
+		await writeFile(
+			configPath(),
+			'export default { entry: ["src/**/*.schema.ts"], snapshotPath: "mig", migrationsDir: "mig/sub" };\n',
+		);
+
+		const result = await runInit(cwd);
+
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toBe(
+			'error[init-path-conflict]: mig\n  "mig" is named by snapshotPath, and migrationsDir ("mig/sub") would have to be created inside it — a file cannot hold a directory. Next: point snapshotPath at a file outside migrationsDir, then rerun `hejbro init`.',
+		);
+	});
+
+	describe("subprocess rows (built CLI) — parity with generate's config-not-a-file", () => {
+		beforeAll(assertBuiltCli);
+
+		it("matches generate's first sentence for a directory at the default configuration path", async () => {
+			await mkdir(join(cwd, "hejbro.config.ts"), { recursive: true });
+
+			const initRun = await runCli(cwd, ["init"]);
+			const generateRun = await runCli(cwd, ["generate"]);
+
+			expect(initRun.exitCode).toBe(1);
+			expect(generateRun.exitCode).toBe(1);
+			expect(initRun.stderr).toContain("error[init-path-conflict]");
+			expect(generateRun.stderr).toContain("error[config-not-a-file]");
+			const firstSentence =
+				'"hejbro.config.ts" is the configuration path, but a directory is there — the configuration is a file hejbro reads.';
+			expect(initRun.stderr).toContain(firstSentence);
+			expect(generateRun.stderr).toContain(firstSentence);
+		});
+
+		it("matches generate's first sentence for a dangling link at --config", async () => {
+			await symlink("nowhere", join(cwd, "h.ts"));
+
+			const initRun = await runCli(cwd, ["init", "--config", "h.ts"]);
+			const generateRun = await runCli(cwd, ["generate", "--config", "h.ts"]);
+
+			expect(initRun.exitCode).toBe(1);
+			expect(generateRun.exitCode).toBe(1);
+			const firstSentence =
+				'"h.ts" is the configuration path, but a dangling symbolic link is there, pointing at "nowhere".';
+			expect(initRun.stderr).toContain(firstSentence);
+			expect(generateRun.stderr).toContain(firstSentence);
+		});
+
+		it("names the same ancestor file ('f') in both message and Next: for --config f/h.ts", async () => {
+			await writeFile(join(cwd, "f"), "not a directory");
+
+			const initRun = await runCli(cwd, ["init", "--config", "f/h.ts"]);
+			const generateRun = await runCli(cwd, ["generate", "--config", "f/h.ts"]);
+
+			expect(initRun.exitCode).toBe(1);
+			expect(generateRun.exitCode).toBe(1);
+			expect(initRun.stderr).toContain('"f"');
+			expect(initRun.stderr).toContain("Next:");
+			expect(initRun.stderr.split('"f"').length - 1).toBeGreaterThanOrEqual(2);
+			expect(generateRun.stderr).toContain('"f" is a file');
+			expect(generateRun.stderr).toContain(
+				'Next: move or remove the file at "f"',
+			);
+		});
 	});
 });
 
@@ -1923,7 +2054,7 @@ describe.skipIf(process.getuid?.() === 0)(
 				assert: (result) => {
 					expect(result.exitCode).toBe(1);
 					expect(result.stderr).toBe(
-						'error[init-path-conflict]: f\n  "f" was expected to be a directory to hold hejbro.config.ts, but a file is there. Next: move or remove the existing file at "f", then rerun `hejbro init`.',
+						'error[init-path-conflict]: f\n  "f" was expected to be a directory to hold the configuration file, but a file is there. Next: move or remove the existing file at "f", then rerun `hejbro init`.',
 					);
 					expect(existsSync(join(cwd, "f", "h.ts"))).toBe(false);
 				},
@@ -1937,7 +2068,7 @@ describe.skipIf(process.getuid?.() === 0)(
 				assert: (result) => {
 					expect(result.exitCode).toBe(1);
 					expect(result.stderr).toBe(
-						'error[init-path-conflict]: lnk\n  "lnk" was expected to be a directory to hold hejbro.config.ts, but a dangling symbolic link is there, pointing at "nowhere". Next: remove the link or create its target, then rerun `hejbro init`.',
+						'error[init-path-conflict]: lnk\n  "lnk" was expected to be a directory to hold the configuration file, but a dangling symbolic link is there, pointing at "nowhere". Next: remove the link or create its target, then rerun `hejbro init`.',
 					);
 				},
 			},
@@ -1951,7 +2082,7 @@ describe.skipIf(process.getuid?.() === 0)(
 				assert: (result) => {
 					expect(result.exitCode).toBe(1);
 					expect(result.stderr).toBe(
-						'error[init-path-conflict]: nx/h.ts\n  "nx/h.ts" could not be checked for hejbro.config.ts (EACCES): "nx" does not let this process look inside it. Next: check permissions on "nx", then rerun `hejbro init`.',
+						'error[init-path-conflict]: nx/h.ts\n  "nx/h.ts" could not be checked for the configuration file (EACCES): "nx" does not let this process look inside it. Next: check permissions on "nx", then rerun `hejbro init`.',
 					);
 				},
 			},
@@ -1965,7 +2096,7 @@ describe.skipIf(process.getuid?.() === 0)(
 				assert: (result) => {
 					expect(result.exitCode).toBe(1);
 					expect(result.stderr).toBe(
-						'error[init-path-conflict]: nx/a/h.ts\n  "nx/a/h.ts" could not be checked for hejbro.config.ts (EACCES): "nx" does not let this process look inside it. Next: check permissions on "nx", then rerun `hejbro init`.',
+						'error[init-path-conflict]: nx/a/h.ts\n  "nx/a/h.ts" could not be checked for the configuration file (EACCES): "nx" does not let this process look inside it. Next: check permissions on "nx", then rerun `hejbro init`.',
 					);
 				},
 			},
@@ -1982,7 +2113,7 @@ describe.skipIf(process.getuid?.() === 0)(
 			},
 			{
 				label:
-					"--config h.ts, h.ts -> nowhere (control: leaf dangling link as today)",
+					"--config h.ts, h.ts -> nowhere (leaf dangling link, #846 D5 phrasing)",
 				configFlag: ["--config", "h.ts"],
 				setup: async (fixtureCwd) => {
 					await symlink("nowhere", join(fixtureCwd, "h.ts"));
@@ -1990,7 +2121,7 @@ describe.skipIf(process.getuid?.() === 0)(
 				assert: (result) => {
 					expect(result.exitCode).toBe(1);
 					expect(result.stderr).toBe(
-						'error[init-path-conflict]: h.ts\n  "h.ts" was expected to be a file for hejbro.config.ts, but a dangling symbolic link is there, pointing at "nowhere". Next: remove the link or create its target, then rerun `hejbro init`.',
+						'error[init-path-conflict]: h.ts\n  "h.ts" is the configuration path, but a dangling symbolic link is there, pointing at "nowhere". Next: remove the link or create its target, or name another file with --config, then rerun `hejbro init`.',
 					);
 				},
 			},

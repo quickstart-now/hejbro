@@ -13,7 +13,12 @@ import type { HejbroConfig } from "../config";
 import { fromHejbroError, renderDiagnostics } from "../diagnostics";
 import { asHejbroError } from "../errors";
 import { identityFromMessage } from "../identity";
-import { configFlagFrom, loadConfig, resolveConfigPath } from "../loader";
+import {
+	configFlagFrom,
+	configNotAFileMessage,
+	loadConfig,
+	resolveConfigPath,
+} from "../loader";
 import {
 	errorCode,
 	type NodeKind,
@@ -75,6 +80,28 @@ const expectedKindOf = (artifact: Artifact): NodeKind => {
 		return "directory";
 	}
 	return "file";
+};
+
+/** Whether `artifact` is the configuration file itself, never a planned
+ * `migrationsDir`/`snapshotPath` (#846 D5 phrasing): the configuration
+ * artifact's messages open with `"<path>" is the configuration path`
+ * (the same sentence `loadConfig` throws, shared via `loader.ts`'s
+ * exported builders) instead of `"<path>" was expected to be a file for
+ * hejbro.config.ts` — the field's own name no longer appears twice. */
+const isConfigArtifact = (artifact: Artifact): boolean =>
+	artifact.fieldName === CONFIG_FILE_NAME;
+
+/** The subject an ancestor-conflict sentence names (#846 D5 phrasing):
+ * `"the configuration file"` for the configuration artifact, the field
+ * name unchanged for every other one -- ancestor sentences keep their
+ * existing `to hold ${subject}`/`for ${subject}` shape (lead ruling:
+ * parity across `init` and the read side is the same node and the same
+ * code, not the same sentence). */
+const ancestorSubjectFor = (artifact: Artifact): string => {
+	if (isConfigArtifact(artifact)) {
+		return "the configuration file";
+	}
+	return artifact.fieldName;
 };
 
 /** Builds and throws the `init-path-conflict`-coded, enriched plain
@@ -140,22 +167,51 @@ function throwDuplicatePath(
 	);
 }
 
+/** The nesting refusal's own verb clause, naming the held artifact's
+ * actual kind (#846 D6, NB5): a file holding a file is stated as such,
+ * not always as "a file cannot hold a directory" regardless of what the
+ * held artifact really is. */
+const holdVerbFor = (heldKind: NodeKind): string => {
+	if (heldKind === "file") {
+		return "a file cannot hold a file";
+	}
+	return "a file cannot hold a directory";
+};
+
 /** Builds and throws the `init-path-conflict`-coded, enriched plain
  * `HejbroError` for a planned file whose own path would have to hold
- * another planned artifact (#766, D3): a planned file cannot hold a
- * planned node, and `checkNoDuplicatePaths`'s equality check does not
- * see containment. Both labels via {@link fileLabel} -- the directory
- * field's usual trailing-slash label would misstate a path that is
- * being refused, not created. */
+ * another planned artifact (#766, D3; kind and configuration-artifact
+ * roles generalized #846 D6, NB5): a planned file cannot hold a planned
+ * node, and `checkNoDuplicatePaths`'s equality check does not see
+ * containment. States which kind the held artifact actually is (a file
+ * cannot hold a file, either) and, when the configuration artifact is
+ * one of the two, tells the user the one thing they can actually change
+ * about it: the other field's own value, or `--config`. Labelled with
+ * {@link fileLabel} -- the directory field's usual trailing-slash label
+ * would misstate a path that is being refused, not created. */
 function throwNestedPathConflict(
-	fileNodeLabel: string,
-	fileFieldName: string,
-	otherLabel: string,
-	otherFieldName: string,
+	cwd: string,
+	file: Artifact,
+	other: Artifact,
 ): never {
+	const fileNodeLabel = fileLabel(cwd, file.path);
+	const otherLabel = fileLabel(cwd, other.path);
+	const holdVerb = holdVerbFor(expectedKindOf(other));
+	if (isConfigArtifact(file)) {
+		return throwHejbroError(
+			"init-path-conflict",
+			`"${fileNodeLabel}" is the configuration path, and ${other.fieldName} ("${otherLabel}") would have to be created inside it — ${holdVerb}. Next: point ${other.fieldName} outside "${fileNodeLabel}", then rerun \`hejbro init\`.`,
+		);
+	}
+	if (isConfigArtifact(other)) {
+		return throwHejbroError(
+			"init-path-conflict",
+			`"${fileNodeLabel}" is named by ${file.fieldName}, and the configuration path ("${otherLabel}") would have to be created inside it — ${holdVerb}. Next: name a configuration file outside ${file.fieldName} with --config, or point ${file.fieldName} elsewhere, then rerun \`hejbro init\`.`,
+		);
+	}
 	return throwHejbroError(
 		"init-path-conflict",
-		`"${fileNodeLabel}" is named by ${fileFieldName}, and ${otherFieldName} ("${otherLabel}") would have to be created inside it — a file cannot hold a directory. Next: point ${fileFieldName} at a file outside ${otherFieldName}, then rerun \`hejbro init\`.`,
+		`"${fileNodeLabel}" is named by ${file.fieldName}, and ${other.fieldName} ("${otherLabel}") would have to be created inside it — ${holdVerb}. Next: point ${file.fieldName} at a file outside ${other.fieldName}, then rerun \`hejbro init\`.`,
 	);
 }
 
@@ -354,12 +410,7 @@ const checkNoNestedPaths = (
 	if (conflict === undefined) {
 		return;
 	}
-	throwNestedPathConflict(
-		fileLabel(cwd, conflict.file.path),
-		conflict.file.fieldName,
-		fileLabel(cwd, conflict.other.path),
-		conflict.other.fieldName,
-	);
+	throwNestedPathConflict(cwd, conflict.file, conflict.other);
 };
 
 /** Refuses before creating anything (checked for every planned artifact,
@@ -386,8 +437,23 @@ const checkArtifactPath = (cwd: string, artifact: Artifact): void => {
 	if (outcome.kind === "absent") {
 		return;
 	}
+	// The configuration artifact's own leaf (present-wrong-kind, dangling)
+	// throws the same sentence `loadConfig` throws (#846 D5 phrasing,
+	// D5's exported builders) under this command's own code and tail --
+	// naming the path once, as the configuration path, instead of naming
+	// the field a second time.
 	if (outcome.kind === "present") {
 		if (outcome.actualKind !== expectedKind) {
+			if (isConfigArtifact(artifact)) {
+				throwHejbroError(
+					"init-path-conflict",
+					configNotAFileMessage(
+						artifact.label,
+						{ kind: "directory" },
+						"then rerun `hejbro init`.",
+					),
+				);
+			}
 			throwPathConflict(
 				artifact.label,
 				artifact.fieldName,
@@ -398,6 +464,16 @@ const checkArtifactPath = (cwd: string, artifact: Artifact): void => {
 		return;
 	}
 	if (outcome.kind === "dangling") {
+		if (isConfigArtifact(artifact)) {
+			throwHejbroError(
+				"init-path-conflict",
+				configNotAFileMessage(
+					artifact.label,
+					{ kind: "dangling", target: outcome.target },
+					"then rerun `hejbro init`.",
+				),
+			);
+		}
 		throwDanglingLink(
 			artifact.label,
 			artifact.fieldName,
@@ -405,24 +481,25 @@ const checkArtifactPath = (cwd: string, artifact: Artifact): void => {
 			outcome.target,
 		);
 	}
+	// Every ancestor-level refusal below keeps its own existing sentence
+	// shape -- only the subject changes, to "the configuration file" for
+	// the configuration artifact (#846 D5 phrasing: parity with the read
+	// side is the same node and the same code, not the same sentence).
+	const subject = ancestorSubjectFor(artifact);
 	if (outcome.kind === "ancestor-file") {
-		throwAncestorConflict(
-			fileLabel(cwd, outcome.path),
-			artifact.fieldName,
-			"file",
-		);
+		throwAncestorConflict(fileLabel(cwd, outcome.path), subject, "file");
 	}
 	if (outcome.kind === "ancestor-dangling") {
 		throwAncestorDanglingLink(
 			fileLabel(cwd, outcome.path),
-			artifact.fieldName,
+			subject,
 			outcome.target,
 		);
 	}
 	if (outcome.kind === "blocked") {
 		throwStatFailed(
 			artifact.label,
-			artifact.fieldName,
+			subject,
 			outcome.code,
 			fileLabel(cwd, outcome.culprit),
 		);
@@ -435,15 +512,10 @@ const checkArtifactPath = (cwd: string, artifact: Artifact): void => {
 	// rest) -- its culprit is always the same node the message names,
 	// never a walked one.
 	if (outcome.path === strippedPath) {
-		throwStatFailed(
-			artifact.label,
-			artifact.fieldName,
-			outcome.code,
-			artifact.label,
-		);
+		throwStatFailed(artifact.label, subject, outcome.code, artifact.label);
 	}
 	const label = fileLabel(cwd, outcome.path);
-	throwStatFailed(label, artifact.fieldName, outcome.code, label);
+	throwStatFailed(label, subject, outcome.code, label);
 };
 
 /** Refuses before creating anything (#767 review, D6 check side; runs
