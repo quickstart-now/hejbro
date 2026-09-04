@@ -109,7 +109,12 @@ const buildEntry = (
 			`declaration at index ${declarationIndex} matched no kind — this indicates an internal hejbro bug.`,
 		);
 	}
-	const node = kind.serialize(declaration, context);
+	const rawNode = kind.serialize(declaration, context);
+	// #701/D3: canonicalize before identify, so every downstream reader
+	// (identify, diff, snapshot-moved, verify's check 2) sees the same
+	// byte form a declaration's set-shaped arrays produce, whatever order
+	// they were declared in.
+	const node = kind.canonicalize?.(rawNode) ?? rawNode;
 	const identity = kind.identify(node);
 	return { key: `${kind.kind}:${identity}`, node, declarationIndex };
 };

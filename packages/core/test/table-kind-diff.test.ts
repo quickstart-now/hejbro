@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import { check } from "../src/dsl/check";
 import { desc, index, op } from "../src/dsl/index-builder";
 import { schema } from "../src/dsl/schema";
+import type { TableDeclaration } from "../src/dsl/table";
 import { getTableMeta, table } from "../src/dsl/table";
 import { generateMigration } from "../src/engine/generate";
 import type { ColumnRef, Expr } from "../src/expr/ast";
@@ -40,6 +41,7 @@ import {
 	renderSnapshot,
 } from "../src/snapshot/snapshot";
 import type { JsonValue } from "../src/snapshot/stable-json";
+import { stableJson } from "../src/snapshot/stable-json";
 import {
 	bigint,
 	bigserial,
@@ -662,6 +664,242 @@ describe("tableKind.diff — checks", () => {
 		);
 		expect(change.operation).toBe("alter");
 		expect(change.notes).toEqual(['check "posts_status_check" changed']);
+	});
+});
+
+// #701/D3: indexes and checks are set-shaped arrays -- the database never
+// reads their own order, so two declarations listing the same members in a
+// different order must serialize to byte-identical snapshot nodes and
+// produce no diff. The control rows pin what stays untouched: an index's
+// own column order (semantically real), foreign keys (already canonical
+// pre-#701, via the DSL's own compareForeignKeys), and columns (physical
+// order, D81) -- so this canonicalization is scoped to exactly `indexes`
+// and `checks`, not accidentally widened to everything array-shaped.
+describe("tableKind — canonical order of set-shaped arrays (#701)", () => {
+	const authors = table(app, "authors", { id: uuid().primaryKey() });
+	const categories = table(app, "categories", { id: uuid().primaryKey() });
+
+	const snapshotFor = (declaration: TableDeclaration): JsonValue => {
+		const built = buildSnapshot(
+			[app, declaration],
+			createDefaultRegistry(),
+			emptySnapshot,
+		);
+		const node = built.objects["table:app.docs"];
+		if (node === undefined) {
+			throw new Error("expected table:app.docs in the built snapshot");
+		}
+		return node;
+	};
+
+	const indexesTableA = table(
+		app,
+		"docs",
+		{ ownerId: uuid(), title: text() },
+		(t) => ({
+			indexes: [
+				index("docs_owner_id_idx").on(t.ownerId),
+				index("docs_title_idx").on(t.title),
+			],
+		}),
+	);
+	const indexesTableB = table(
+		app,
+		"docs",
+		{ ownerId: uuid(), title: text() },
+		(t) => ({
+			indexes: [
+				index("docs_title_idx").on(t.title),
+				index("docs_owner_id_idx").on(t.ownerId),
+			],
+		}),
+	);
+
+	const checksTableA = table(
+		app,
+		"docs",
+		{ status: text().notNull(), title: text().notNull() },
+		(t) => ({
+			checks: [
+				check("a_check", isNotNull(t.status)),
+				check("b_check", isNotNull(t.title)),
+			],
+		}),
+	);
+	const checksTableB = table(
+		app,
+		"docs",
+		{ status: text().notNull(), title: text().notNull() },
+		(t) => ({
+			checks: [
+				check("b_check", isNotNull(t.title)),
+				check("a_check", isNotNull(t.status)),
+			],
+		}),
+	);
+
+	const bothTableA = table(
+		app,
+		"docs",
+		{ ownerId: uuid(), title: text().notNull() },
+		(t) => ({
+			indexes: [
+				index("docs_owner_id_idx").on(t.ownerId),
+				index("docs_title_idx").on(t.title),
+			],
+			checks: [
+				check("a_check", isNotNull(t.ownerId)),
+				check("b_check", isNotNull(t.title)),
+			],
+		}),
+	);
+	const bothTableB = table(
+		app,
+		"docs",
+		{ ownerId: uuid(), title: text().notNull() },
+		(t) => ({
+			indexes: [
+				index("docs_title_idx").on(t.title),
+				index("docs_owner_id_idx").on(t.ownerId),
+			],
+			checks: [
+				check("b_check", isNotNull(t.title)),
+				check("a_check", isNotNull(t.ownerId)),
+			],
+		}),
+	);
+
+	// control: an index's own column order is a real semantic difference --
+	// same index name, different columns array -- so this must stay a
+	// reported change, not folded into the set-shaped canonicalization above.
+	const compositeIndexTableA = table(
+		app,
+		"docs",
+		{ ownerId: uuid(), title: text() },
+		(t) => ({
+			indexes: [index("docs_owner_title_idx").on(t.ownerId, t.title)],
+		}),
+	);
+	const compositeIndexTableB = table(
+		app,
+		"docs",
+		{ ownerId: uuid(), title: text() },
+		(t) => ({
+			indexes: [index("docs_owner_title_idx").on(t.title, t.ownerId)],
+		}),
+	);
+
+	// control: table()'s own foreignKeys getter already sorts by
+	// compareForeignKeys (local columns, then target identity) independent of
+	// declaration order -- already canonical before #701, unaffected by it.
+	const foreignKeysTableA = table(
+		app,
+		"docs",
+		{ authorId: uuid(), categoryId: uuid() },
+		(t) => ({
+			foreignKeys: [
+				{
+					columns: [t.authorId],
+					references: { table: authors, columns: [authors.id] },
+				},
+				{
+					columns: [t.categoryId],
+					references: { table: categories, columns: [categories.id] },
+				},
+			],
+		}),
+	);
+	const foreignKeysTableB = table(
+		app,
+		"docs",
+		{ authorId: uuid(), categoryId: uuid() },
+		(t) => ({
+			foreignKeys: [
+				{
+					columns: [t.categoryId],
+					references: { table: categories, columns: [categories.id] },
+				},
+				{
+					columns: [t.authorId],
+					references: { table: authors, columns: [authors.id] },
+				},
+			],
+		}),
+	);
+
+	// control: columns stay in physical/declaration order (D81) -- #701 does
+	// not widen to columns, so a reordered declaration still moves the bytes;
+	// the diff itself stays empty, as it already did (name-keyed columnDiff).
+	const columnsTableA = table(app, "docs", { ownerId: uuid(), title: text() });
+	const columnsTableB = table(app, "docs", { title: text(), ownerId: uuid() });
+
+	type CanonicalOrderCase = {
+		readonly name: string;
+		readonly variantA: TableDeclaration;
+		readonly variantB: TableDeclaration;
+		readonly sameBytes: boolean;
+		readonly emptyDiff: boolean;
+	};
+
+	const cases: ReadonlyArray<CanonicalOrderCase> = [
+		{
+			name: "indexes reversed: byte-identical, no diff",
+			variantA: getTableMeta(indexesTableA),
+			variantB: getTableMeta(indexesTableB),
+			sameBytes: true,
+			emptyDiff: true,
+		},
+		{
+			name: "checks reversed: byte-identical, no diff",
+			variantA: getTableMeta(checksTableA),
+			variantB: getTableMeta(checksTableB),
+			sameBytes: true,
+			emptyDiff: true,
+		},
+		{
+			name: "both indexes and checks reversed: byte-identical, no diff",
+			variantA: getTableMeta(bothTableA),
+			variantB: getTableMeta(bothTableB),
+			sameBytes: true,
+			emptyDiff: true,
+		},
+		{
+			name: "control: an index's own column order reversed is still a real change",
+			variantA: getTableMeta(compositeIndexTableA),
+			variantB: getTableMeta(compositeIndexTableB),
+			sameBytes: false,
+			emptyDiff: false,
+		},
+		{
+			name: "control: foreign keys in another literal order are already canonical",
+			variantA: getTableMeta(foreignKeysTableA),
+			variantB: getTableMeta(foreignKeysTableB),
+			sameBytes: true,
+			emptyDiff: true,
+		},
+		{
+			name: "control: columns in another order keep physical order (not canonicalized), diff still empty",
+			variantA: getTableMeta(columnsTableA),
+			variantB: getTableMeta(columnsTableB),
+			sameBytes: false,
+			emptyDiff: true,
+		},
+	];
+
+	it.each(cases)("$name", ({ variantA, variantB, sameBytes, emptyDiff }) => {
+		const nodeA = snapshotFor(variantA);
+		const nodeB = snapshotFor(variantB);
+		if (sameBytes) {
+			expect(stableJson(nodeA)).toBe(stableJson(nodeB));
+		} else {
+			expect(stableJson(nodeA)).not.toBe(stableJson(nodeB));
+		}
+		const diff = tableKind.diff(nodeA, nodeB, "app.docs");
+		if (emptyDiff) {
+			expect(diff).toEqual([]);
+		} else {
+			expect(diff).not.toEqual([]);
+		}
 	});
 });
 

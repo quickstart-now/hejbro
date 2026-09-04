@@ -13,6 +13,7 @@ import type { KeyedDiff } from "../kind/diff-helpers";
 import { createOrDropDiff, diffByKey } from "../kind/diff-helpers";
 import type { ObjectKind, SerializeContext } from "../kind/object-kind";
 import type { JsonValue } from "../snapshot/stable-json";
+import { compareKeys } from "../sort";
 import type {
 	ColumnState,
 	IdentityKind,
@@ -589,6 +590,26 @@ const tableFieldDiffNotes = (diffs: TableFieldDiffs): ReadonlyArray<string> => [
 ];
 
 /**
+ * Sorts `indexes` and `checks` by name (#701, D3) — an order the database
+ * never reads, so two declarations that list the same members in a
+ * different order serialize to byte-identical nodes. `checks` stays
+ * absent when it already was (compact snapshot, D33): sorting an empty
+ * array still produces an empty array, and `checksField` keeps that
+ * omitted. Every other field — `columns` (physical order, D81),
+ * `foreignKeys` (already canonical, D1) — passes through untouched.
+ */
+const canonicalizeTable = (node: JsonValue): JsonValue => {
+	const snapshot = asTableSnapshot(node);
+	return {
+		...snapshot,
+		indexes: [...snapshot.indexes].sort((a, b) => compareKeys(a.name, b.name)),
+		...checksField(
+			[...tableChecks(snapshot)].sort((a, b) => compareKeys(a.name, b.name)),
+		),
+	};
+};
+
+/**
  * The built-in object kind for Postgres tables. Identity is
  * `"<schema>.<tableName>"`. `diff` reports one `create`/`drop` change for
  * whole tables, and a single `alter` change (notes listing every column,
@@ -674,6 +695,7 @@ export const tableKind: ObjectKind<TableDeclaration> = {
 	},
 	emit: (change, siblingChanges, nextSnapshot) =>
 		emitTableSql(change, siblingChanges, nextSnapshot),
+	canonicalize: canonicalizeTable,
 	dependsOnIdentities: (node) => {
 		const snapshot = asTableSnapshot(node);
 		const selfIdentity = tableIdentity(snapshot.schema, snapshot.name);
