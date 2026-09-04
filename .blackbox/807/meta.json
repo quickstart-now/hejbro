@@ -4,9 +4,9 @@
   "ref": "quickstart-now/hejbro#807",
   "title": "ci: a dev → main PR runs every check twice (push + pull_request on the same sha)",
   "parent": "quickstart-now/hejbro#412",
-  "status": "open",
+  "status": "closed",
   "opened": "2026-09-04",
-  "closed": null,
+  "closed": "2026-09-04",
   "decisions": [
     {
       "id": "D1",
@@ -30,7 +30,24 @@
     }
   ],
   "work": [],
-  "prs": [],
+  "prs": [
+    {
+      "number": 808,
+      "ref": "quickstart-now/hejbro#808",
+      "title": "ci: run pull_request checks only for prs into dev (#807)",
+      "head": "48397f0f90a4a79bb72951bc27f276d11ac4c5c0",
+      "headRef": "fix-ci-duplicate-runs",
+      "base": "dev",
+      "merged": null,
+      "pinnedAt": "2026-09-04T08:48Z",
+      "refs": [
+        {
+          "path": ".github/workflows/ci.yml",
+          "blob": "c323e72688972c9902ad6c16224a60d32d00e3f4"
+        }
+      ]
+    }
+  ],
   "origin": null,
   "followUps": []
 }

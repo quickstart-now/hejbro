@@ -446,6 +446,22 @@
           "blob": "ac06240b67e82b06b92df55cda0985017b1e57c9"
         }
       ]
+    },
+    {
+      "number": 808,
+      "ref": "quickstart-now/hejbro#808",
+      "title": "ci: run pull_request checks only for prs into dev (#807)",
+      "head": "48397f0f90a4a79bb72951bc27f276d11ac4c5c0",
+      "headRef": "fix-ci-duplicate-runs",
+      "base": "dev",
+      "merged": null,
+      "pinnedAt": "2026-09-04T08:48Z",
+      "refs": [
+        {
+          "path": ".github/workflows/ci.yml",
+          "blob": "c323e72688972c9902ad6c16224a60d32d00e3f4"
+        }
+      ]
     }
   ],
   "origin": null,
