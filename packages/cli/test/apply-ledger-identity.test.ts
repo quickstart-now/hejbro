@@ -6,9 +6,10 @@ import {
 	probeLedgerIdentity,
 } from "../src/apply/ledger-identity";
 
-/** One `pg_class`/`pg_attribute` row shape, as `probeLedgerIdentity`'s own statement returns it -- the fake driver's whole answer is a list of these. */
+/** One `pg_class`/`pg_attribute` row shape, as `probeLedgerIdentity`'s own statement returns it -- the fake driver's whole answer is a list of these. `persistence` (2.2, 783/R5) is `c.relpersistence`, repeated on every row the same way `relkind` is. */
 type CatalogRow = {
 	readonly relkind: string;
+	readonly persistence: string;
 	readonly name: string | null;
 	readonly type: string | null;
 };
@@ -38,36 +39,46 @@ const makeFakeCatalogDriver = (
 };
 
 const LEDGER_ROWS: ReadonlyArray<CatalogRow> = [
-	{ relkind: "r", name: "id", type: "bigint" },
-	{ relkind: "r", name: "filename", type: "text" },
-	{ relkind: "r", name: "origin", type: "text" },
-	{ relkind: "r", name: "applied_at", type: "timestamp with time zone" },
+	{ relkind: "r", persistence: "p", name: "id", type: "bigint" },
+	{ relkind: "r", persistence: "p", name: "filename", type: "text" },
+	{ relkind: "r", persistence: "p", name: "origin", type: "text" },
+	{
+		relkind: "r",
+		persistence: "p",
+		name: "applied_at",
+		type: "timestamp with time zone",
+	},
 ];
 
 const LEDGER_WITH_NOTE_ROWS: ReadonlyArray<CatalogRow> = [
 	...LEDGER_ROWS,
-	{ relkind: "r", name: "note", type: "text" },
+	{ relkind: "r", persistence: "p", name: "note", type: "text" },
 ];
 
 const PARTIAL_ROWS: ReadonlyArray<CatalogRow> = [
-	{ relkind: "r", name: "id", type: "bigint" },
-	{ relkind: "r", name: "filename", type: "text" },
+	{ relkind: "r", persistence: "p", name: "id", type: "bigint" },
+	{ relkind: "r", persistence: "p", name: "filename", type: "text" },
 ];
 
 const WRONG_TYPE_ROWS: ReadonlyArray<CatalogRow> = [
-	{ relkind: "r", name: "id", type: "bigint" },
-	{ relkind: "r", name: "filename", type: "integer" },
-	{ relkind: "r", name: "origin", type: "text" },
-	{ relkind: "r", name: "applied_at", type: "timestamp with time zone" },
+	{ relkind: "r", persistence: "p", name: "id", type: "bigint" },
+	{ relkind: "r", persistence: "p", name: "filename", type: "integer" },
+	{ relkind: "r", persistence: "p", name: "origin", type: "text" },
+	{
+		relkind: "r",
+		persistence: "p",
+		name: "applied_at",
+		type: "timestamp with time zone",
+	},
 ];
 
 const UNRELATED_ROWS: ReadonlyArray<CatalogRow> = [
-	{ relkind: "r", name: "name", type: "text" },
-	{ relkind: "r", name: "payload", type: "jsonb" },
+	{ relkind: "r", persistence: "p", name: "name", type: "text" },
+	{ relkind: "r", persistence: "p", name: "payload", type: "jsonb" },
 ];
 
 const VIEW_ROWS: ReadonlyArray<CatalogRow> = [
-	{ relkind: "v", name: "x", type: "integer" },
+	{ relkind: "v", persistence: "p", name: "x", type: "integer" },
 ];
 
 const VIEW_MATCHING_COLUMNS_ROWS: ReadonlyArray<CatalogRow> = LEDGER_ROWS.map(
@@ -75,22 +86,23 @@ const VIEW_MATCHING_COLUMNS_ROWS: ReadonlyArray<CatalogRow> = LEDGER_ROWS.map(
 );
 
 const MATVIEW_ROWS: ReadonlyArray<CatalogRow> = [
-	{ relkind: "m", name: "x", type: "integer" },
+	{ relkind: "m", persistence: "p", name: "x", type: "integer" },
 ];
 
 const FOREIGN_TABLE_ROWS: ReadonlyArray<CatalogRow> = [
-	{ relkind: "f", name: "x", type: "integer" },
+	{ relkind: "f", persistence: "p", name: "x", type: "integer" },
 ];
 
 const SEQUENCE_ROWS: ReadonlyArray<CatalogRow> = [
-	{ relkind: "S", name: "last_value", type: "bigint" },
-	{ relkind: "S", name: "log_cnt", type: "bigint" },
-	{ relkind: "S", name: "is_called", type: "boolean" },
+	{ relkind: "S", persistence: "p", name: "last_value", type: "bigint" },
+	{ relkind: "S", persistence: "p", name: "log_cnt", type: "bigint" },
+	{ relkind: "S", persistence: "p", name: "is_called", type: "boolean" },
 ];
 
 const PARTITIONED_ROWS: ReadonlyArray<CatalogRow> = LEDGER_ROWS.map((row) => ({
 	...row,
 	relkind: "p",
+	persistence: "p",
 }));
 
 /** [2.1, review repair] A composite type carrying the ledger's own four columns -- `relkind` decides, not columns, same as the view/partitioned-table rows above. */
@@ -100,19 +112,33 @@ const COMPOSITE_TYPE_ROWS: ReadonlyArray<CatalogRow> = LEDGER_ROWS.map(
 
 /** [2.1, review repair] An index -- `pg_attribute` lists an index's own indexed columns, one row per key column. */
 const INDEX_ROWS: ReadonlyArray<CatalogRow> = [
-	{ relkind: "i", name: "id", type: "bigint" },
+	{ relkind: "i", persistence: "p", name: "id", type: "bigint" },
 ];
 
 /** [2.1, review repair] A partitioned index -- same shape as an ordinary index, `relkind` "I". */
 const PARTITIONED_INDEX_ROWS: ReadonlyArray<CatalogRow> = [
-	{ relkind: "I", name: "id", type: "bigint" },
+	{ relkind: "I", persistence: "p", name: "id", type: "bigint" },
 ];
 
 /** [2.1, review repair] A TOAST table -- Postgres's own fixed three-column shape for any TOAST relation. */
 const TOAST_TABLE_ROWS: ReadonlyArray<CatalogRow> = [
-	{ relkind: "t", name: "chunk_id", type: "oid" },
-	{ relkind: "t", name: "chunk_seq", type: "integer" },
-	{ relkind: "t", name: "chunk_data", type: "bytea" },
+	{ relkind: "t", persistence: "p", name: "chunk_id", type: "oid" },
+	{ relkind: "t", persistence: "p", name: "chunk_seq", type: "integer" },
+	{ relkind: "t", persistence: "p", name: "chunk_data", type: "bytea" },
+];
+
+/** [2.2, 783/R5] `relkind = 'r'` but `relpersistence = 'u'` -- the exact four bootstrap columns, but unlogged: rows vanish on a crash, so hejbro never creates one and it is not the ledger. */
+const UNLOGGED_LEDGER_SHAPE_ROWS: ReadonlyArray<CatalogRow> = LEDGER_ROWS.map(
+	(row) => ({ ...row, persistence: "u" }),
+);
+
+/** [2.2, 783/R5] A partitioned table that is also unlogged -- the prefix and the base word are independent facts; neither may swallow the other. */
+const UNLOGGED_PARTITIONED_ROWS: ReadonlyArray<CatalogRow> =
+	PARTITIONED_ROWS.map((row) => ({ ...row, persistence: "u" }));
+
+/** [2.2, 783/R5] An ordinary table (`relkind = 'r'`, logged) with every column dropped -- `create table x ()`, or every column since dropped. `pg_attribute` returns no attribute rows at all; the one `pg_class` row survives the left join with a null `name`, filtered out by {@link isColumnRow}'s own counterpart in `ledger-identity.ts`. */
+const ZERO_COLUMN_TABLE_ROWS: ReadonlyArray<CatalogRow> = [
+	{ relkind: "r", persistence: "p", name: null, type: null },
 ];
 
 describe("probeLedgerIdentity / 1.1", () => {
@@ -249,6 +275,33 @@ describe("probeLedgerIdentity / 1.1", () => {
 				columns: ["chunk_id", "chunk_seq", "chunk_data"],
 			},
 		],
+		[
+			"an unlogged table with the exact four bootstrap columns",
+			UNLOGGED_LEDGER_SHAPE_ROWS,
+			{
+				kind: "occupied",
+				relation: "unlogged table",
+				columns: ["id", "filename", "origin", "applied_at"],
+			},
+		],
+		[
+			"an unlogged partitioned table",
+			UNLOGGED_PARTITIONED_ROWS,
+			{
+				kind: "occupied",
+				relation: "unlogged partitioned table",
+				columns: ["id", "filename", "origin", "applied_at"],
+			},
+		],
+		[
+			"an ordinary table with every column dropped",
+			ZERO_COLUMN_TABLE_ROWS,
+			{
+				kind: "occupied",
+				relation: "table",
+				columns: [],
+			},
+		],
 	])(
 		"judges what sits at the ledger's name -- %s",
 		async (_label, rows, expected) => {
@@ -319,5 +372,25 @@ describe("assertLedgerNotOccupied / 2.1, 783/R5 -- the (columns: ...) clause", (
 		});
 
 		expect(message).not.toContain("(columns:");
+	});
+
+	it("names columns for an unlogged table, the prefix does not hide the clause", () => {
+		const message = messageFor({
+			kind: "occupied",
+			relation: "unlogged table",
+			columns: ["id", "filename", "origin", "applied_at"],
+		});
+
+		expect(message).toContain("(columns: id, filename, origin, applied_at)");
+	});
+
+	it('says "(no columns)" for a column-bearing kind with none found', () => {
+		const message = messageFor({
+			kind: "occupied",
+			relation: "table",
+			columns: [],
+		});
+
+		expect(message).toContain("(no columns)");
 	});
 });

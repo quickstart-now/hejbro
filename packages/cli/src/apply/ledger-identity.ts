@@ -49,7 +49,7 @@ const RELATION_WORDS: Readonly<Record<string, string>> = {
 	S: "sequence",
 };
 
-/** [2.1, 783/R5] Relation kinds whose `(columns: …)` clause says something a user can act on -- a sequence's or an index's own catalog columns are internal machinery, not a schema. */
+/** [2.1, 783/R5] Relation kinds whose `(columns: …)` clause says something a user can act on -- a sequence's or an index's own catalog columns are internal machinery, not a schema. Matched against {@link relationWord}'s output after stripping any `"unlogged "` prefix (783/R5 2.2) -- an unlogged table is still a table for this purpose. */
 const COLUMN_BEARING_WORDS = new Set([
 	"table",
 	"partitioned table",
@@ -59,16 +59,37 @@ const COLUMN_BEARING_WORDS = new Set([
 	"composite type",
 ]);
 
-const relationWord = (relkind: string): string =>
-	RELATION_WORDS[relkind] ?? `relation (${relkind})`;
+/** [783/R5, 2.2] `"unlogged "` when `relpersistence = 'u'`, `""` otherwise -- prefixed onto whatever the relkind's own word is, never special-cased to `relkind = 'r'` alone: a partitioned table, a sequence (PG15+) and an index (inheriting its table's persistence) can all be unlogged too. */
+const persistencePrefix = (persistence: string): string => {
+	if (persistence === "u") {
+		return "unlogged ";
+	}
+	return "";
+};
+
+const relationWord = (relkind: string, persistence: string): string =>
+	`${persistencePrefix(persistence)}${RELATION_WORDS[relkind] ?? `relation (${relkind})`}`;
+
+const UNLOGGED_PREFIX = "unlogged ";
+
+/** Strips {@link UNLOGGED_PREFIX} before a {@link COLUMN_BEARING_WORDS} lookup -- "unlogged table" carries columns exactly as "table" does; the prefix names persistence, never a different kind. */
+const withoutPersistencePrefix = (relation: string): string => {
+	if (relation.startsWith(UNLOGGED_PREFIX)) {
+		return relation.slice(UNLOGGED_PREFIX.length);
+	}
+	return relation;
+};
 
 /**
  * [design.md, 783/R2] Never `information_schema` (role-dependent) and
  * never `to_regclass` (answers non-null for every relation kind,
  * measured) -- one statement over the catalog itself, no transaction,
  * schema/table spelled once through `ledger.ts`'s own exported constants.
+ * `relpersistence` (783/R5) travels beside `relkind` -- both are
+ * properties of the relation itself, so every attribute row carries the
+ * identical pair.
  */
-const PROBE_SQL = `select c.relkind as "relkind", a.attname as "name", format_type(a.atttypid, a.atttypmod) as "type" from pg_class c join pg_namespace n on n.oid = c.relnamespace left join pg_attribute a on a.attrelid = c.oid and a.attnum > 0 and not a.attisdropped where n.nspname = '${LEDGER_SCHEMA}' and c.relname = '${LEDGER_TABLE}' order by a.attnum`;
+const PROBE_SQL = `select c.relkind as "relkind", c.relpersistence as "persistence", a.attname as "name", format_type(a.atttypid, a.atttypmod) as "type" from pg_class c join pg_namespace n on n.oid = c.relnamespace left join pg_attribute a on a.attrelid = c.oid and a.attnum > 0 and not a.attisdropped where n.nspname = '${LEDGER_SCHEMA}' and c.relname = '${LEDGER_TABLE}' order by a.attnum`;
 
 /** A relation with zero columns still comes back as one `pg_class` row, its attribute columns null from the left join -- filtered out here rather than counted as a found column. */
 const isColumnRow = (
@@ -76,11 +97,14 @@ const isColumnRow = (
 ): row is DriverRow & { readonly name: string; readonly type: string } =>
 	row.name !== null && row.name !== undefined;
 
+/** [783/R5] `ledger` requires `relkind = 'r'` **and** `relpersistence = 'p'` (logged) -- an unlogged table's rows vanish on a crash, so it can never hold the record of what was applied. */
 const isLedgerShape = (
 	relkind: string,
+	persistence: string,
 	columnTypes: ReadonlyMap<string, string>,
 ): boolean =>
 	relkind === "r" &&
+	persistence === "p" &&
 	Object.entries(BOOTSTRAP_COLUMNS).every(
 		([name, type]) => columnTypes.get(name) === type,
 	);
@@ -103,15 +127,20 @@ export const probeLedgerIdentity = async (
 		return { kind: "absent" };
 	}
 	const relkind = String(rows[0]?.relkind);
+	const persistence = String(rows[0]?.persistence);
 	const columnRows = rows.filter(isColumnRow);
 	const columns = columnRows.map((row) => String(row.name));
 	const columnTypes = new Map(
 		columnRows.map((row) => [String(row.name), String(row.type)]),
 	);
-	if (isLedgerShape(relkind, columnTypes)) {
+	if (isLedgerShape(relkind, persistence, columnTypes)) {
 		return { kind: "ledger" };
 	}
-	return { kind: "occupied", relation: relationWord(relkind), columns };
+	return {
+		kind: "occupied",
+		relation: relationWord(relkind, persistence),
+		columns,
+	};
 };
 
 /** [2.1, 783/R5] `null` when `relation`'s kind carries no columns worth naming (a sequence, an index, a partitioned index, a TOAST table) -- the clause is omitted entirely, never rendered empty. `"no columns"` is reserved for a column-bearing kind that happens to have none (a zero-column table). */
@@ -119,7 +148,7 @@ const columnsClause = (
 	relation: string,
 	columns: ReadonlyArray<string>,
 ): string | null => {
-	if (!COLUMN_BEARING_WORDS.has(relation)) {
+	if (!COLUMN_BEARING_WORDS.has(withoutPersistencePrefix(relation))) {
 		return null;
 	}
 	if (columns.length === 0) {

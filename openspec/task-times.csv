@@ -829,3 +829,4 @@ date,change-id,task-id,group,est_min,actual_min,waited_user_min,notes
 2026-09-04,harden-ledger-identity,1.8,1,6,12,0,live witness three-table cycle; same container as 1.7
 2026-09-04,harden-ledger-identity,1.9,1,6,10,0,skill doc identity paragraph and widened cycle sentence
 2026-09-04,harden-ledger-identity,2.1,2,9,25,0,relkind word map c/i/I/t; columns clause only for column-bearing kinds
+2026-09-04,harden-ledger-identity,2.2,2,7,30,0,relpersistence probed; unlogged prefix generic across relkinds; zero-column row

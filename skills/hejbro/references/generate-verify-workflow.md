@@ -166,12 +166,13 @@ that order can't satisfy.
 Before it touches anything, `reset` (like `hejbro status`, `hejbro
 migrate` and `hejbro raise`) checks who the relation at
 `"hejbro"."migration_ledger"` actually is — not merely whether one
-exists. It is hejbro's own ledger only when it is an ordinary table
-carrying the four columns the bootstrap creates, each under its
+exists. It is hejbro's own ledger only when it is an ordinary, logged
+table carrying the four columns the bootstrap creates, each under its
 bootstrap type (a further column doesn't disqualify it); anything else
-at that name — a table of another shape, a view, a materialized view, a
-foreign table, a sequence, a partitioned table — is refused with the
-coded `apply-ledger-occupied` error, naming what was found. `reset`
+at that name — a table of another shape, an unlogged table, a view, a
+materialized view, a foreign table, a sequence, a partitioned table —
+is refused with the coded `apply-ledger-occupied` error, naming what
+was found. `reset`
 refuses this way *before* it ever asks for `--confirm-drop`'s
 confirmation. None of the four commands reads, writes or clears that
 object: it's left exactly as it was, and the error says to move or drop

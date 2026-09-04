@@ -204,7 +204,7 @@ marks the tasks that carry them into code, not open questions.
       `packages/cli/src/apply/ledger-identity.ts`,
       `packages/cli/test/apply-ledger-identity.test.ts`.
 
-- [ ] 2.2 (~7m) An unlogged table is not the ledger. The probe reads
+- [x] 2.2 (~7m) An unlogged table is not the ledger. The probe reads
       `relpersistence` beside `relkind`; the judgement admits `ledger`
       only for `relkind = 'r'` with `relpersistence = 'p'`; an unlogged
       table (`u`) is `occupied` with the word "unlogged table" (a

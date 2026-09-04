@@ -193,16 +193,23 @@ export default defineConfig({
 /** One `pg_class`/`pg_attribute` row shape, as `probeLedgerIdentity`'s own statement returns it. */
 type ProbeRow = {
 	readonly relkind: string;
+	/** [2.2, 783/R5] `c.relpersistence` -- optional because only the real-ledger fixture below needs `"p"` (logged) to be judged `ledger`. */
+	readonly persistence?: string;
 	readonly name: string | null;
 	readonly type: string | null;
 };
 
 /** The four bootstrap columns, exactly as `bootstrapLedger` creates them -- the probe answer that makes `readLedger`'s own mocked rows below internally consistent (a real ledger, not merely an absent one). */
 const LEDGER_PROBE_ROWS: ReadonlyArray<ProbeRow> = [
-	{ relkind: "r", name: "id", type: "bigint" },
-	{ relkind: "r", name: "filename", type: "text" },
-	{ relkind: "r", name: "origin", type: "text" },
-	{ relkind: "r", name: "applied_at", type: "timestamp with time zone" },
+	{ relkind: "r", persistence: "p", name: "id", type: "bigint" },
+	{ relkind: "r", persistence: "p", name: "filename", type: "text" },
+	{ relkind: "r", persistence: "p", name: "origin", type: "text" },
+	{
+		relkind: "r",
+		persistence: "p",
+		name: "applied_at",
+		type: "timestamp with time zone",
+	},
 ];
 
 /** A fake importer whose driver answers the identity probe with `probeRows` and `readLedger`'s own statement with no rows -- every other statement (including a write) is recorded so a test can assert none was ever sent. */

@@ -139,16 +139,23 @@ const buildCyclePlusDanglingSnapshot = (
 /** One `pg_class`/`pg_attribute` row shape, as `probeLedgerIdentity`'s own statement returns it. */
 type ProbeRow = {
 	readonly relkind: string;
+	/** [2.2, 783/R5] `c.relpersistence` -- optional because only the real-ledger fixture below needs `"p"` (logged) to be judged `ledger`; every occupied-only row's own word/judgement is persistence-independent. */
+	readonly persistence?: string;
 	readonly name: string | null;
 	readonly type: string | null;
 };
 
 /** The four bootstrap columns, exactly as `bootstrapLedger` creates them -- the fake's default "ledger" answer when a caller does not override the probe. */
 const LEDGER_PROBE_ROWS: ReadonlyArray<ProbeRow> = [
-	{ relkind: "r", name: "id", type: "bigint" },
-	{ relkind: "r", name: "filename", type: "text" },
-	{ relkind: "r", name: "origin", type: "text" },
-	{ relkind: "r", name: "applied_at", type: "timestamp with time zone" },
+	{ relkind: "r", persistence: "p", name: "id", type: "bigint" },
+	{ relkind: "r", persistence: "p", name: "filename", type: "text" },
+	{ relkind: "r", persistence: "p", name: "origin", type: "text" },
+	{
+		relkind: "r",
+		persistence: "p",
+		name: "applied_at",
+		type: "timestamp with time zone",
+	},
 ];
 
 /**
