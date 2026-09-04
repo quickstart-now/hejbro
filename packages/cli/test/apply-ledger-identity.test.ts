@@ -12,6 +12,9 @@ type CatalogRow = {
 	readonly persistence: string;
 	readonly name: string | null;
 	readonly type: string | null;
+	/** D106 round 1 NB1: `c.relispartition` and an existence check on `pg_inherits` -- a leaf partition and an inheritance child are `relkind = 'r'` yet never a table hejbro created; absent means false. */
+	readonly partition?: boolean;
+	readonly inherited?: boolean;
 };
 
 /**
@@ -290,6 +293,55 @@ describe("probeLedgerIdentity / 1.1", () => {
 			{
 				kind: "occupied",
 				relation: "unlogged partitioned table",
+				columns: ["id", "filename", "origin", "applied_at"],
+			},
+		],
+		[
+			"a leaf partition carrying the four bootstrap columns (D106 round 1 NB1)",
+			LEDGER_ROWS.map((row) => ({ ...row, partition: true })),
+			{
+				kind: "occupied",
+				relation: "leaf partition",
+				columns: ["id", "filename", "origin", "applied_at"],
+			},
+		],
+		[
+			"an inheritance child carrying the four bootstrap columns (D106 round 1 NB1)",
+			LEDGER_ROWS.map((row) => ({ ...row, inherited: true })),
+			{
+				kind: "occupied",
+				relation: "inheritance child",
+				columns: ["id", "filename", "origin", "applied_at"],
+			},
+		],
+		[
+			"an unlogged inheritance child",
+			LEDGER_ROWS.map((row) => ({
+				...row,
+				persistence: "u",
+				inherited: true,
+			})),
+			{
+				kind: "occupied",
+				relation: "unlogged inheritance child",
+				columns: ["id", "filename", "origin", "applied_at"],
+			},
+		],
+		[
+			"a partitioned table that is itself a partition (a middle level) keeps its own word",
+			PARTITIONED_ROWS.map((row) => ({ ...row, partition: true })),
+			{
+				kind: "occupied",
+				relation: "partitioned table",
+				columns: ["id", "filename", "origin", "applied_at"],
+			},
+		],
+		[
+			"a relation kind this version does not name (D106 round 1 NB2): no catalog letter in the word",
+			LEDGER_ROWS.map((row) => ({ ...row, relkind: "z" })),
+			{
+				kind: "occupied",
+				relation: "relation of a kind this version does not name",
 				columns: ["id", "filename", "origin", "applied_at"],
 			},
 		],

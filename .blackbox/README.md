@@ -65,14 +65,14 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#754](754/) | Nile rejects the schema-qualified column references rendered inside CHECK and partial-index predicates (42622) | closed | #780 #795 #802 | 0 | 4 (0 pending) |
 | ↳ [#755](755/) | check cannot compare CHECK constraints on Nile because Nile has no EXPLAIN | closed | #780 #795 | 0 | 6 (0 pending) |
 | ↳ [#774](774/) | core: diff-engine byIdentity reassembly drops a second same-identity, same-direction change from one kind | closed | #824 #833 | 0 | 1 (1 pending) |
-| ↳ [#783](783/) | reset: a table that merely shares the ledger's name has all its rows deleted and is reported as the cleared ledger | closed | #835 | 0 | 5 (2 pending) |
+| ↳ [#783](783/) | reset: a table that merely shares the ledger's name has all its rows deleted and is reported as the cleared ledger | closed | #835 #838 | 0 | 6 (2 pending) |
 | ↳ [#785](785/) | blackbox v2: per-issue folders under .blackbox, hooks + CI-first gate, shipped by the dd-blackbox script | closed | #786 | 5 | 2 (0 pending) |
 | ↳ [#787](787/) | blackbox: migrate the lead ruling ledger R1–R90 into issue folders (first ratification queue of 0.2.1) | closed | #789 | 0 | 0 (0 pending) |
 | ↳ [#788](788/) | blackbox: migrate the 78 legacy single-file entries into issue folders | closed | #790 | 0 | 0 (0 pending) |
 | ↳ [#791](791/) | blackbox: vendor the tool with the harness wake-up fix (agent-skills #18) | closed | #792 | 0 | 0 (0 pending) |
 | ↳ [#793](793/) | blackbox: first PR pinned by CI over the owner's BLACKBOX_TOKEN | closed | #794 | 2 | 0 (0 pending) |
-| ↳ [#796](796/) | status crashes with a raw stack when a foreign object occupies the ledger's name | closed | #835 | 0 | 0 (0 pending) |
-| ↳ [#797](797/) | reset: a cycle longer than two tables gets the outside-dependent advice | closed | #835 | 0 | 1 (0 pending) |
+| ↳ [#796](796/) | status crashes with a raw stack when a foreign object occupies the ledger's name | closed | #835 #838 | 0 | 0 (0 pending) |
+| ↳ [#797](797/) | reset: a cycle longer than two tables gets the outside-dependent advice | closed | #835 #838 | 0 | 1 (0 pending) |
 | ↳ [#800](800/) | amend D99: notNullElements check renders its column by table, not fully qualified | closed | #822 | 0 | 1 (1 pending) |
 | ↳ [#801](801/) | make the README metric-block stamp merge-safe instead of freezing dev merges | closed | #802 | 0 | 0 (0 pending) |
 | ↳ [#804](804/) | blackbox CI: release PRs run only the release conditions, bot PRs skip the job | closed | #806 | 1 | 0 (0 pending) |
@@ -98,10 +98,12 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | [#603](603/) | Apply engine (D12 revised): hejbro owns migrate and reset, production included | closed | #628 | 0 | 0 (0 pending) |
 | [#823](823/) | migrate: a failed ledger insert is reported as the migration's failure | open | #835 | 0 | 0 (0 pending) |
 | [#832](832/) | core: category-C keywords fail as argument names but are not refused; the stated class does not match the list | open | #833 | 0 | 0 (0 pending) |
+| [#836](836/) | status: a permission error on a real ledger reaches the user as a raw node-postgres object | open | #838 | 0 | 0 (0 pending) |
+| [#837](837/) | raise --file with an absolute path is joined onto the cwd and dies with a raw ENOENT | open | #838 | 0 | 0 (0 pending) |
 
 ## Totals
 
-Owner decisions 77 · rulings 118 (interpretation 72, extension 44, stop 2) · pending extensions 6 · rejected 2
+Owner decisions 77 · rulings 119 (interpretation 73, extension 44, stop 2) · pending extensions 6 · rejected 2
 
 ## Conventions
 

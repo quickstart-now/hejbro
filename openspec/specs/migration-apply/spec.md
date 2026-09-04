@@ -24,6 +24,36 @@ question and is not part of this capability. A row's columns are a
 database-assigned identity, the migration's full filename, the origin
 recorded below, and the timestamp the database assigned it.
 
+The ledger is recognized by identity, never by existence alone. The
+relation at that name is hejbro's ledger only when it is an ordinary,
+logged table whose columns include the four the bootstrap creates —
+`id`, `filename`, `origin` and `applied_at` — each carrying the type the
+bootstrap gave it; a column beyond those four does not disqualify it.
+Anything else at that name — a table missing one of them or carrying one
+under another type, an unlogged table (hejbro never creates one, and a
+table whose rows vanish on a crash cannot hold the record of what was
+applied), a leaf partition or an inheritance child (both are tables in
+the catalog, neither is a table hejbro created), a view, a materialized
+view, a foreign table, a sequence, a partitioned table, a composite
+type, an index — is not the ledger, and
+SHALL be treated as an object hejbro did not create: never read as a
+ledger, never written, never cleared. The refusal names the kind of
+object in words — every relation kind the catalog can hold at that name
+has its own — never the catalog's own one-letter code, and, for a
+relation that carries columns, the columns found. The judgement is one catalog read that opens no
+transaction and needs no privilege beyond reading the catalog, and it is
+one judgement: every command that touches the ledger — `migrate`,
+`status`, `reset` and `raise` — makes it once, before reading or writing
+anything there, and refuses with the one shared code
+`apply-ledger-occupied`, naming the kind of object found and, where it
+carries columns, the columns found, ending with a `Next:` line. `migrate` SHALL make it
+before its bootstrap runs — the bootstrap's own `create table if not
+exists` skips over any relation at that name with a notice, and the run
+would otherwise write hejbro's rows into a table it never created — and
+SHALL exit two, the answer for a run that could not act at all. What
+`status`, `reset` and `raise` do with the judgement is stated in their
+own requirements below.
+
 Each row's **origin** column SHALL record how it entered the ledger, as
 `origin text not null check (origin in ('applied', 'registered',
 'raised'))`, with no default — every writer states its own origin,
@@ -87,6 +117,31 @@ connection string carries a secret.
   exists with no rows
 - **THEN** the two are reported as different states, and neither is
   reported as the other
+
+#### Scenario: The ledger is told from another relation at its name
+- **WHEN** the relation at `"hejbro"."migration_ledger"` is an ordinary
+  table carrying the four bootstrap columns with their types — with or
+  without further columns — and separately when it is a table missing
+  one of them or carrying one under another type, a view (even one
+  whose columns match the four), a materialized view, a foreign table,
+  a sequence, a partitioned table carrying the same four columns, an
+  unlogged table carrying the same four columns, a leaf partition or an
+  inheritance child carrying the same four columns, a composite type,
+  an index, or a partitioned index
+- **THEN** the first is judged the ledger and every one of the others is
+  judged not to be, by the one judgement `migrate`, `status`, `reset`
+  and `raise` share, none of the others is read, written or cleared as
+  a ledger, and each refusal names that kind of object in words — with
+  the columns found where the relation carries columns, and no column
+  list for a sequence or an index
+
+#### Scenario: migrate refuses a relation that is not the ledger before bootstrapping
+- **WHEN** a table of another shape — even one carrying the ledger's
+  four column names — or a view sits at `"hejbro"."migration_ledger"`,
+  and `migrate` runs with migrations pending
+- **THEN** it exits two with `apply-ledger-occupied`, no migration
+  statement is sent, nothing is written into that relation, and it is
+  left exactly as it was
 
 ### Requirement: A migration is applied atomically with its own ledger row
 Each migration SHALL be applied inside one transaction that also writes
@@ -263,6 +318,16 @@ makes is not one this command needs to make. Its exit code SHALL
 distinguish a clean answer from one that found a disagreement, so a
 caller automating it can tell them apart without parsing the report.
 
+When the relation at the ledger's name is not the ledger — by the
+identity the first requirement of this capability states — `status`
+SHALL refuse with `apply-ledger-occupied`, the code every ledger-touching
+command uses for the same finding, naming the kind of object found and,
+where it carries columns, the columns found, ending with a `Next:` line,
+and SHALL exit non-zero. No
+error the database raised on that object SHALL reach the user raw: the
+finding is what sits at the name, not the failure of a read hejbro
+should never have attempted.
+
 #### Scenario: Pending migrations are reported without being applied
 - **WHEN** `status` runs against a database whose ledger records the
   first two migrations of a chain of four
@@ -274,6 +339,14 @@ caller automating it can tell them apart without parsing the report.
   contain and `status` runs
 - **THEN** it reports that disagreement with the same code the apply
   path uses for it, and exits non-zero
+
+#### Scenario: status refuses a relation that is not the ledger at the ledger's name
+- **WHEN** a view, or any other relation that is not the ledger, sits at
+  `"hejbro"."migration_ledger"` and `status` runs
+- **THEN** it exits non-zero with `apply-ledger-occupied`, names the
+  kind of object it found and, where it carries columns, the columns
+  found, gives a `Next:` line, and prints no raw database error and no
+  stack trace
 
 ### Requirement: A failure names the file, the database's own reason, and the next command
 When applying fails, the report SHALL name the migration that failed,
@@ -317,6 +390,23 @@ that describes no objects, with its own coded error, before any
 statement reaches the database — the same misconfiguration `check` and
 `baseline` already refuse, naming the entry point as what to check.
 
+Next, and before asking for any confirmation, reset SHALL judge the
+relation at the ledger's name by the identity the first requirement of
+this capability states. When it is not the ledger, reset SHALL refuse
+with `apply-ledger-occupied` — the code every ledger-touching command
+uses for the same finding — and SHALL send no drop and no delete: an
+object hejbro did not create, sitting at hejbro's own bookkeeping name,
+says this database is not the one the declarations describe, and
+clearing it would destroy what the first paragraph promises to leave
+alone. This refusal is a precondition of the same rank as the empty
+declaration set's, and it comes before the confirmation for the same
+reason: asking for a `<database>:<count>` token — naming the objects
+that would be dropped — for a run that is refused anyway would be both
+wasted and misleading. The judgement is one catalog read outside any
+transaction, so nothing the confirmation protects is touched by making
+it first. The ledger is cleared only when that judgement says it is
+one; an absent relation is the no-ledger case stated further below.
+
 Reset SHALL refuse unless the destruction is confirmed explicitly, and
 the refusal SHALL name what would be dropped. The confirmation SHALL be
 an exact `<database>:<count>` token, supplied via `--confirm-drop` and
@@ -345,11 +435,18 @@ before its own schema) and within a kind,
 for a foreign key from one declared table to another: a table that
 references another declared table SHALL drop before the table it
 references, so a declared object is never dropped while another object
-this same run is also dropping still depends on it existing. Where two
-declared tables reference each other, no order satisfies both, so they
-SHALL drop in their existing identity order instead, and a resulting
-refusal from the database is reported through the coded failure the next
-paragraph states.
+this same run is also dropping still depends on it existing. Where
+declared tables reference each other in a cycle — two of them directly,
+or any number of them around one longer loop — no order satisfies every
+edge, so the cycle's members SHALL drop in their existing identity order
+instead, and a resulting refusal from the database is reported through
+the coded failure the next paragraph states. That failure's `Next:` line
+SHALL state that the declared tables themselves contain such a cycle
+whenever they do, whatever its length, beside — never instead of — the
+possibility that an object outside the declarations depends on one being
+dropped, since the database names an object and not an edge. A table
+that references only itself is not a cycle: dropping it drops its own
+constraint with it.
 
 This is the same dependency graph generation computes (cli-commands),
 read in the opposite direction — a dependent before what it depends on —
@@ -417,6 +514,23 @@ that cleared no ledger SHALL NOT say it cleared one.
 - **THEN** the declared objects are gone afterward, the run exits zero,
   and the report does not claim a ledger was cleared
 
+#### Scenario: A reset refuses when the ledger's name is held by something else
+- **WHEN** a database holds the declared objects, a table of another
+  shape holding rows — or a view — sits at `"hejbro"."migration_ledger"`,
+  and `reset` runs, with or without a confirmation
+- **THEN** it exits non-zero with `apply-ledger-occupied` naming what it
+  found, never asks for a confirmation token, every declared object is
+  still standing, and the object at the ledger's name and every row it
+  holds are untouched
+
+#### Scenario: The cycle advice covers a cycle of any length
+- **WHEN** three or more declared tables reference each other around one
+  loop, and the database refuses the drop `reset` sends
+- **THEN** the coded failure's `Next:` line states that the declared
+  tables themselves form a cycle, exactly as it does for two tables
+  referencing each other, and still names the outside-the-declarations
+  possibility beside it
+
 ### Requirement: A database can be raised from a snapshot SQL file
 The CLI SHALL provide a command that takes a snapshot SQL file and an
 empty database and produces the schema that file describes. The file is
@@ -429,6 +543,14 @@ Raising over a database this tool has already recorded history for
 SHALL be refused before anything runs, by that history alone, and this
 layer leaves nothing behind: no statement is sent, and no object of
 hejbro's own is created.
+
+Before that history is even read, raise SHALL judge the relation at the
+ledger's name by the identity the first requirement of this capability
+states, and when it is not the ledger SHALL refuse with
+`apply-ledger-occupied` — the code every ledger-touching command uses
+for the same finding — leaving nothing behind the same way the history
+refusal does: no statement from the file is sent, the bootstrap does not
+run, and the object found is untouched.
 
 Raising over a database holding an object this tool did not create but
 has no record of is a collision this command cannot see in advance
@@ -461,3 +583,10 @@ for one no migration has ever reached.
   objects
 - **THEN** it refuses with a coded error, and the file's own objects are
   absent afterward
+
+#### Scenario: raise refuses a relation that is not the ledger before anything runs
+- **WHEN** a view, or a table of another shape, sits at
+  `"hejbro"."migration_ledger"` and `raise` runs with a snapshot SQL file
+- **THEN** it exits non-zero with `apply-ledger-occupied`, no statement
+  from the file is sent, no bootstrap runs, and that relation is left
+  exactly as it was

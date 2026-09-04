@@ -52,6 +52,9 @@ const RELATION_WORDS: Readonly<Record<string, string>> = {
 /** [2.1, 783/R5] Relation kinds whose `(columns: …)` clause says something a user can act on -- a sequence's or an index's own catalog columns are internal machinery, not a schema. Matched against {@link relationWord}'s output after stripping any `"unlogged "` prefix (783/R5 2.2) -- an unlogged table is still a table for this purpose. */
 const COLUMN_BEARING_WORDS = new Set([
 	"table",
+	"leaf partition",
+	"inheritance child",
+	"relation of a kind this version does not name",
 	"partitioned table",
 	"view",
 	"materialized view",
@@ -67,8 +70,34 @@ const persistencePrefix = (persistence: string): string => {
 	return "";
 };
 
-const relationWord = (relkind: string, persistence: string): string =>
-	`${persistencePrefix(persistence)}${RELATION_WORDS[relkind] ?? `relation (${relkind})`}`;
+/** D106 round 1 NB2: the requirement says "never the catalog's own one-letter code" without exception, so even the fallback for a relkind this version does not map carries no letter. */
+const UNMAPPED_KIND_WORD = "relation of a kind this version does not name";
+
+/** D106 round 1 NB1: a leaf partition and an inheritance child are `relkind = 'r'` in the catalog, yet hejbro never creates either -- their own word wins over the relkind's so the refusal says what actually sits there. Only for `relkind = 'r'`: a partitioned table that is itself a partition (a middle level of a partition tree) keeps its own word, it is no leaf. */
+const lineageWord = (
+	relkind: string,
+	partition: boolean,
+	inherited: boolean,
+): string | null => {
+	if (relkind !== "r") {
+		return null;
+	}
+	if (partition) {
+		return "leaf partition";
+	}
+	if (inherited) {
+		return "inheritance child";
+	}
+	return null;
+};
+
+const relationWord = (
+	relkind: string,
+	persistence: string,
+	partition: boolean,
+	inherited: boolean,
+): string =>
+	`${persistencePrefix(persistence)}${lineageWord(relkind, partition, inherited) ?? RELATION_WORDS[relkind] ?? UNMAPPED_KIND_WORD}`;
 
 const UNLOGGED_PREFIX = "unlogged ";
 
@@ -89,7 +118,10 @@ const withoutPersistencePrefix = (relation: string): string => {
  * properties of the relation itself, so every attribute row carries the
  * identical pair.
  */
-const PROBE_SQL = `select c.relkind as "relkind", c.relpersistence as "persistence", a.attname as "name", format_type(a.atttypid, a.atttypmod) as "type" from pg_class c join pg_namespace n on n.oid = c.relnamespace left join pg_attribute a on a.attrelid = c.oid and a.attnum > 0 and not a.attisdropped where n.nspname = '${LEDGER_SCHEMA}' and c.relname = '${LEDGER_TABLE}' order by a.attnum`;
+const PROBE_SQL = `select c.relkind as "relkind", c.relpersistence as "persistence", c.relispartition as "partition", exists (select 1 from pg_inherits i where i.inhrelid = c.oid) as "inherited", a.attname as "name", format_type(a.atttypid, a.atttypmod) as "type" from pg_class c join pg_namespace n on n.oid = c.relnamespace left join pg_attribute a on a.attrelid = c.oid and a.attnum > 0 and not a.attisdropped where n.nspname = '${LEDGER_SCHEMA}' and c.relname = '${LEDGER_TABLE}' order by a.attnum`;
+
+/** A boolean column as node-postgres hands it back (`true`) and as a text-mode driver might (`"t"`); anything else, including an absent column, reads false. */
+const isTrue = (value: unknown): boolean => value === true || value === "t";
 
 /** A relation with zero columns still comes back as one `pg_class` row, its attribute columns null from the left join -- filtered out here rather than counted as a found column. */
 const isColumnRow = (
@@ -97,14 +129,18 @@ const isColumnRow = (
 ): row is DriverRow & { readonly name: string; readonly type: string } =>
 	row.name !== null && row.name !== undefined;
 
-/** [783/R5] `ledger` requires `relkind = 'r'` **and** `relpersistence = 'p'` (logged) -- an unlogged table's rows vanish on a crash, so it can never hold the record of what was applied. */
+/** [783/R5, D106 round 1 NB1] `ledger` requires `relkind = 'r'`, `relpersistence = 'p'` (logged), no `relispartition` and no `pg_inherits` parent -- an unlogged table's rows vanish on a crash, and a partition or an inheritance child is a table hejbro never created, so none of them can hold the record of what was applied. */
 const isLedgerShape = (
 	relkind: string,
 	persistence: string,
+	partition: boolean,
+	inherited: boolean,
 	columnTypes: ReadonlyMap<string, string>,
 ): boolean =>
 	relkind === "r" &&
 	persistence === "p" &&
+	!partition &&
+	!inherited &&
 	Object.entries(BOOTSTRAP_COLUMNS).every(
 		([name, type]) => columnTypes.get(name) === type,
 	);
@@ -128,17 +164,19 @@ export const probeLedgerIdentity = async (
 	}
 	const relkind = String(rows[0]?.relkind);
 	const persistence = String(rows[0]?.persistence);
+	const partition = isTrue(rows[0]?.partition);
+	const inherited = isTrue(rows[0]?.inherited);
 	const columnRows = rows.filter(isColumnRow);
 	const columns = columnRows.map((row) => String(row.name));
 	const columnTypes = new Map(
 		columnRows.map((row) => [String(row.name), String(row.type)]),
 	);
-	if (isLedgerShape(relkind, persistence, columnTypes)) {
+	if (isLedgerShape(relkind, persistence, partition, inherited, columnTypes)) {
 		return { kind: "ledger" };
 	}
 	return {
 		kind: "occupied",
-		relation: relationWord(relkind, persistence),
+		relation: relationWord(relkind, persistence, partition, inherited),
 		columns,
 	};
 };

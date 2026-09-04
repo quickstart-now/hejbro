@@ -22,8 +22,10 @@ bootstrap gave it; a column beyond those four does not disqualify it.
 Anything else at that name — a table missing one of them or carrying one
 under another type, an unlogged table (hejbro never creates one, and a
 table whose rows vanish on a crash cannot hold the record of what was
-applied), a view, a materialized view, a foreign table, a sequence, a
-partitioned table, a composite type, an index — is not the ledger, and
+applied), a leaf partition or an inheritance child (both are tables in
+the catalog, neither is a table hejbro created), a view, a materialized
+view, a foreign table, a sequence, a partitioned table, a composite
+type, an index — is not the ledger, and
 SHALL be treated as an object hejbro did not create: never read as a
 ledger, never written, never cleared. The refusal names the kind of
 object in words — every relation kind the catalog can hold at that name
@@ -113,8 +115,9 @@ connection string carries a secret.
   one of them or carrying one under another type, a view (even one
   whose columns match the four), a materialized view, a foreign table,
   a sequence, a partitioned table carrying the same four columns, an
-  unlogged table carrying the same four columns, a composite type, an
-  index, or a partitioned index
+  unlogged table carrying the same four columns, a leaf partition or an
+  inheritance child carrying the same four columns, a composite type,
+  an index, or a partitioned index
 - **THEN** the first is judged the ledger and every one of the others is
   judged not to be, by the one judgement `migrate`, `status`, `reset`
   and `raise` share, none of the others is read, written or cleared as
