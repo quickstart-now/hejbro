@@ -28,9 +28,9 @@ import { createFnApi } from "./fn";
 import type { FunctionsOf, TypedFnApi } from "./fn-types";
 import type { Tx } from "./transaction";
 import {
-	buildTx,
 	createTransactionApi,
 	guardedProviderTransactionOpener,
+	runCallbackWithTx,
 } from "./transaction";
 
 /**
@@ -429,16 +429,18 @@ const executeWithProvider = (
  * registered, `providerRun` resolves and applies the context exactly
  * *once* for the whole callback (task 1.4 -- the context applies to the
  * transaction, not to each statement inside it), then hands the callback
- * the same {@link buildTx} every other transactional surface in this
- * package builds against -- wrapped in
- * `transaction.ts`'s own {@link guardedProviderTransactionOpener}, so a
- * provider handle's `db.transaction` keeps the exact same
- * `nested-transaction-unsupported` reentrant guard the unprovided path
- * has always had (query-execution's own nested-transaction requirement
- * names "the db handle", not any particular opener -- a registered
- * provider does not change which handle this member belongs to, and the
- * guard exists because reentry opens a second connection out of the
- * pool regardless of how the first one was opened).
+ * the same {@link runCallbackWithTx} every other transactional surface in
+ * this package builds its root `tx` through (task 1.4c: the one site a
+ * settled root token is marked, so a kept handle refuses afterward
+ * exactly like the unprovided path's) -- wrapped in `transaction.ts`'s
+ * own {@link guardedProviderTransactionOpener}, so a provider handle's
+ * `db.transaction` keeps the exact same `nested-transaction-unsupported`
+ * reentrant guard the unprovided path has always had (query-execution's
+ * own nested-transaction requirement names "the db handle", not any
+ * particular opener -- a registered provider does not change which
+ * handle this member belongs to, and the guard exists because reentry
+ * opens a second connection out of the pool regardless of how the first
+ * one was opened).
  */
 const transactionWithProvider = (
 	driver: Driver,
@@ -450,7 +452,7 @@ const transactionWithProvider = (
 	}
 	const guardedOpen = guardedProviderTransactionOpener(providerRun);
 	return async <T>(callback: (tx: Tx) => Promise<T>): Promise<T> =>
-		guardedOpen((session) => callback(buildTx(session, tables)));
+		guardedOpen((session) => runCallbackWithTx(session, tables, callback));
 };
 
 /**

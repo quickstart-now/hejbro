@@ -108,9 +108,8 @@ const assertFalseTierConformance = (
 };
 
 /**
- * SQL's own transaction-control vocabulary, recognized by the keyword a
- * normalized statement (trimmed, lower-cased, one or more trailing
- * semicolons dropped) leads with — never a substring, so a function
+ * SQL's own transaction-control vocabulary, recognized by the leading
+ * word a statement's text leads with — never a substring, so a function
  * body's own `do $$ begin … end $$` or a caller statement carrying one
  * of these words inside a string literal reads as an ordinary
  * statement. The kit still reads no driver's own settings text; this is
@@ -120,19 +119,61 @@ const assertFalseTierConformance = (
  * the bare `rollback` closer by name, so a savepoint rollback is never
  * mistaken for ending the enclosing transaction. Observation limit:
  * this still can't see a driver-decorated opener or closer whose own
- * leading word isn't in this vocabulary. A statement is classified by
- * the word its text leads with once that text is trimmed, lower-cased,
- * and stripped of any trailing semicolons; a string is never split on
- * an interior `;`.
+ * leading word isn't in this vocabulary.
+ *
+ * A statement is classified by its leading word: the text is trimmed
+ * and lower-cased, and the leading word is the first run of characters
+ * that are neither whitespace nor `;`, so a semicolon glued to the
+ * word, and any semicolons around it, never become part of it. Where a
+ * control word is read together with the word after it (`start
+ * transaction`; `rollback`, which rolls back to a savepoint -- and so
+ * stays ordinary -- when `to` follows it directly or after one optional
+ * `work` or `transaction`, and ends the transaction otherwise), each
+ * following word counts only when whitespace alone separates it from
+ * the one before; a `;` between them ends the leading statement, and
+ * nothing past it is read. A string is never split on an interior `;`
+ * into several statements: a string carrying several is classified by
+ * its first alone, and what a later statement in it does is not seen.
+ * Text that leads with a comment leads with the comment's own
+ * characters and is classified as an ordinary statement; the check
+ * reads no SQL lexical structure beyond the leading word.
  */
 type TransactionControlKind = "open" | "end" | undefined;
 
-const normalizeStatement = (sql: string): string =>
-	sql
-		.trim()
-		.toLowerCase()
-		.replace(/;+\s*$/, "")
-		.trim();
+/**
+ * The leading word and, for each word after it, whether whitespace
+ * alone separates it from the one before -- never when a `;` sits
+ * between them, which ends the leading statement before that word is
+ * reached (#761: the previous reader stripped only the final run of
+ * `;`, so a semicolon glued to the word, as in `commit;` or `begin; set
+ * local x`, stayed part of the token and matched neither word list). A
+ * third word is read the same way past the second (#761 review repair,
+ * 1.2b): `rollback transaction to savepoint x` needs it to see the `to`
+ * that keeps the statement a savepoint rollback.
+ */
+const leadingWords = (
+	sql: string,
+): {
+	readonly first: string | undefined;
+	readonly second: string | undefined;
+	readonly third: string | undefined;
+} => {
+	const normalized = sql.trim().toLowerCase();
+	const match = /^[\s;]*([^\s;]+)(\s+)?([^\s;]+)?(\s+)?([^\s;]+)?/.exec(
+		normalized,
+	);
+	if (match === null) {
+		return { first: undefined, second: undefined, third: undefined };
+	}
+	const [, first, firstGap, second, secondGap, third] = match;
+	if (firstGap === undefined) {
+		return { first, second: undefined, third: undefined };
+	}
+	if (secondGap === undefined) {
+		return { first, second, third: undefined };
+	}
+	return { first, second, third };
+};
 
 /** Bare closers -- a single-word statement leading with one of these always ends the transaction; `rollback` is handled separately in {@link isTransactionEnd} since `rollback to …` (a savepoint rollback) does not. */
 const BARE_END_WORDS = new Set(["commit", "abort", "end"]);
@@ -144,19 +185,29 @@ const isTransactionOpen = (
 	leadingWord === "begin" ||
 	(leadingWord === "start" && secondWord === "transaction");
 
+/** A savepoint rollback keeps its optional `work`/`transaction` word (#761 review repair, 1.2b): `to` follows `rollback` directly, or follows one of those two words -- either way the statement targets a savepoint, not the enclosing transaction. */
+const isSavepointRollback = (
+	secondWord: string | undefined,
+	thirdWord: string | undefined,
+): boolean =>
+	secondWord === "to" ||
+	((secondWord === "work" || secondWord === "transaction") &&
+		thirdWord === "to");
+
 const isTransactionEnd = (
 	leadingWord: string | undefined,
 	secondWord: string | undefined,
+	thirdWord: string | undefined,
 ): boolean =>
 	(leadingWord !== undefined && BARE_END_WORDS.has(leadingWord)) ||
-	(leadingWord === "rollback" && secondWord !== "to");
+	(leadingWord === "rollback" && !isSavepointRollback(secondWord, thirdWord));
 
 const transactionControlKind = (sql: string): TransactionControlKind => {
-	const [leadingWord, secondWord] = normalizeStatement(sql).split(/\s+/);
-	if (isTransactionOpen(leadingWord, secondWord)) {
+	const { first, second, third } = leadingWords(sql);
+	if (isTransactionOpen(first, second)) {
 		return "open";
 	}
-	if (isTransactionEnd(leadingWord, secondWord)) {
+	if (isTransactionEnd(first, second, third)) {
 		return "end";
 	}
 	return undefined;

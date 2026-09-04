@@ -15,7 +15,7 @@ import { executeOn, sendCompiled } from "./execute";
 import { createFnApi } from "./fn";
 import type { TypedFnApi } from "./fn-types";
 import type { Tx } from "./transaction";
-import { buildTx } from "./transaction";
+import { runCallbackWithTx } from "./transaction";
 
 /**
  * `db.as(context)`'s own argument (task 2.10, #554/#555): re-exported
@@ -329,8 +329,8 @@ export const createAsApi = <
 		const scopedTransaction = <T>(
 			callback: (tx: Tx) => Promise<T>,
 		): Promise<T> =>
-			scopedRun("transaction", async (session) =>
-				callback(buildTx(session, tables)),
+			scopedRun("transaction", (session) =>
+				runCallbackWithTx(session, tables, callback),
 			);
 		return {
 			// spread first (same reasoning as `db.ts`'s own handle literal,

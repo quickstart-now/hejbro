@@ -1,0 +1,131 @@
+{
+  "version": 1,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#761",
+  "title": "driver-conformance kit: leading-token normalizer keeps a glued semicolon (spec says the leading word)",
+  "parent": "quickstart-now/hejbro#412",
+  "status": "closed",
+  "opened": "2026-09-04",
+  "closed": "2026-09-04",
+  "decisions": [
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "D1"
+      ],
+      "at": "2026-09-04T15:17Z",
+      "title": "Q2: leading word = first non-space non-semicolon run; second word only across whitespace; comments stated as a limit",
+      "ratified": null
+    }
+  ],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-04T16:00Z",
+      "title": "Conformance kit classifies by the leading word past a glued semicolon",
+      "pr": null,
+      "decisions": []
+    },
+    {
+      "id": "W2",
+      "at": "2026-09-04T16:34Z",
+      "title": "Savepoint rollback keeps its optional work/transaction word",
+      "pr": null,
+      "decisions": []
+    }
+  ],
+  "prs": [
+    {
+      "number": 849,
+      "ref": "quickstart-now/hejbro#849",
+      "title": "fix(query): scoped-handle guard, kit leading word, transaction-tree guards (#769 #761 #449)",
+      "head": "b27203900329088746d9cb3c0475817a3a964f73",
+      "headRef": "fix-query-guards",
+      "base": "dev",
+      "merged": null,
+      "pinnedAt": "2026-09-04T16:57Z",
+      "refs": [
+        {
+          "path": ".changeset/harden-query-guards.md",
+          "blob": "c60cd4accc377063bb1b0cbbc34c35bcb62ff893"
+        },
+        {
+          "path": "README.md",
+          "blob": "e2dc8f69509b334519c1aa9334131190a79e28be"
+        },
+        {
+          "path": "openspec/changes/harden-query-guards/design.md",
+          "blob": "3d1910cf6db1f363f677a14fa73517a11a1cf128"
+        },
+        {
+          "path": "openspec/changes/harden-query-guards/proposal.md",
+          "blob": "cc53640daac0d477a445e060157cdd7c1faef85f"
+        },
+        {
+          "path": "openspec/changes/harden-query-guards/specs/driver-contract/spec.md",
+          "blob": "5da52b7859d6a33e3746558de5b06ae846dd4276"
+        },
+        {
+          "path": "openspec/changes/harden-query-guards/specs/query-execution/spec.md",
+          "blob": "9d437cc4dcb2bdcf69aafd9e0008eeed1310968a"
+        },
+        {
+          "path": "openspec/changes/harden-query-guards/specs/schema-vendoring/spec.md",
+          "blob": "0dd03b47474498751d579caa0676619457d9a1b2"
+        },
+        {
+          "path": "openspec/changes/harden-query-guards/tasks.md",
+          "blob": "1c0f8b08fd75c6ef2874735a7a711f372ca00993"
+        },
+        {
+          "path": "openspec/task-times.csv",
+          "blob": "6840b589a9183b9bf4c59157c509f30f9461d526"
+        },
+        {
+          "path": "packages/pg/test/integration.test.ts",
+          "blob": "f6264f8e303c166611948b2bb072ec84584c6ff7"
+        },
+        {
+          "path": "packages/query/src/client/name-keyed-db.ts",
+          "blob": "6642f18e854745a1f92de58132babd4b45664c48"
+        },
+        {
+          "path": "packages/query/src/db/context.ts",
+          "blob": "f7d0a3e88bcac1b4ce827bac35b4a469ca6ad9fd"
+        },
+        {
+          "path": "packages/query/src/db/db.ts",
+          "blob": "277d6930944ed993e6cbd97a3176c0295a556f02"
+        },
+        {
+          "path": "packages/query/src/db/transaction.ts",
+          "blob": "f640f2d77572eef7e2b9950067ede3f4af04462d"
+        },
+        {
+          "path": "packages/query/src/testing/driver-conformance.ts",
+          "blob": "18b91dbd3d7783133eed5e4e499f73c6f7a6fa64"
+        },
+        {
+          "path": "packages/query/test/client/errors.test.ts",
+          "blob": "81538ec33fa758196be1964d1c8e335663c9c65b"
+        },
+        {
+          "path": "packages/query/test/db/transaction.test.ts",
+          "blob": "e5b51e5025d226ffa27dad2ef415f018f5ea045a"
+        },
+        {
+          "path": "packages/query/test/driver/conformance.test.ts",
+          "blob": "14e1752f4c2024ba72601bed519effed03f35951"
+        },
+        {
+          "path": "skills/hejbro/references/query-layer.md",
+          "blob": "aa83b674a90c02bac22aca654c9cd7c9af035ebe"
+        }
+      ]
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

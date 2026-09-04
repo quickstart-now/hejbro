@@ -674,4 +674,94 @@ describe("assertSessionStateConformance (task 1.4/1.5, #481)", () => {
 		});
 		expect(trueCapabilities["session-state"]).toBe(true);
 	});
+
+	/**
+	 * The classifier strips only the final run of `;`, so a semicolon glued
+	 * to the leading word survives inside the token (#761): `commit;` stays
+	 * a single token `commit;`, never matching `BARE_END_WORDS`' bare
+	 * `commit`. Each row is observed through the envelope obligation, since
+	 * that is the one check whose fold actually reads a statement's class
+	 * -- an `open` row stands in for the transaction's own opener
+	 * (`[row, settings, caller]`, conforms when correctly read), an `end`
+	 * row is spliced between the settings and the caller
+	 * (`[begin, settings, row, caller]`, the caller then sent outside any
+	 * open transaction when correctly read), and an `ordinary` row stands
+	 * in for the settings themselves (`[begin, row, caller]`, conforms
+	 * either way -- these rows exist to show the rule does *not* open or
+	 * close on them).
+	 */
+	const SettingsStatement = {
+		sql: "set intervalstyle to 'postgres'",
+		params: [],
+	} as const;
+	const CallerStatement = { sql: "select 1", params: [] } as const;
+	const BeginStatement = { sql: "begin", params: [] } as const;
+
+	type LeadingWordRow = {
+		readonly text: string;
+		readonly kind: "open" | "end" | "ordinary";
+	};
+
+	const LeadingWordRows: ReadonlyArray<LeadingWordRow> = [
+		{ text: "commit;", kind: "end" },
+		{ text: "commit; ;", kind: "end" },
+		{ text: "COMMIT;;", kind: "end" },
+		{ text: ";commit", kind: "end" },
+		{ text: "rollback; to savepoint x", kind: "end" },
+		{ text: "  BEGIN ;", kind: "open" },
+		{ text: "begin; set local x", kind: "open" },
+		{ text: "start; transaction", kind: "ordinary" },
+		{ text: "savepoint x;", kind: "ordinary" },
+		{ text: "select 'begin; commit'", kind: "ordinary" },
+		{ text: "select ';'", kind: "ordinary" },
+		{ text: "-- opens\nbegin", kind: "ordinary" },
+		{ text: "/* trace */ commit", kind: "ordinary" },
+		// 1.2b (review repair): a savepoint rollback keeps its optional
+		// words -- these three must stay ordinary, exactly like the bare
+		// `rollback to savepoint x` form already does.
+		{ text: "rollback transaction to savepoint x", kind: "ordinary" },
+		{ text: "rollback work to savepoint x", kind: "ordinary" },
+		{ text: "ROLLBACK TRANSACTION TO SAVEPOINT s", kind: "ordinary" },
+		// controls: the same optional word alone, with no savepoint
+		// target, still ends the transaction.
+		{ text: "rollback work", kind: "end" },
+		{ text: "rollback transaction", kind: "end" },
+	];
+
+	const buildRecordedOnConnection = (
+		row: LeadingWordRow,
+	): ReadonlyArray<{
+		readonly sql: string;
+		readonly params: ReadonlyArray<unknown>;
+	}> => {
+		const rowStatement = { sql: row.text, params: [] };
+		if (row.kind === "open") {
+			return [rowStatement, SettingsStatement, CallerStatement];
+		}
+		if (row.kind === "end") {
+			return [BeginStatement, SettingsStatement, rowStatement, CallerStatement];
+		}
+		return [BeginStatement, rowStatement, CallerStatement];
+	};
+
+	describe.each(LeadingWordRows)(
+		"the leading word is read past a glued semicolon, and nothing past the leading statement -- $text ($kind)",
+		(row) => {
+			it(`classifies as ${row.kind}`, () => {
+				const run = () =>
+					assertSessionStateConformance(
+						capabilitiesWithSessionState(false, true),
+						{
+							recordedOnConnection: buildRecordedOnConnection(row),
+							callerStatement: CallerStatement,
+						},
+					);
+				if (row.kind === "end") {
+					expect(run).toThrowError(/was not sent inside an open transaction/);
+					return;
+				}
+				expect(run).not.toThrow();
+			});
+		},
+	);
 });

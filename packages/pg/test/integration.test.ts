@@ -1507,6 +1507,63 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 		expect(committed.map((row) => row.id)).toContain(survivedId);
 	});
 
+	it("a statement beside a nested transaction is refused, so a nested rollback never takes it along, live against a real postgres:17 (#449)", async () => {
+		const activePool = pool.current;
+		if (activePool === undefined) {
+			throw new Error("beforeAll did not set up the pool");
+		}
+		const driver = pgDriver(activePool);
+		const spRows = table(testSchema, "sp_rows", {
+			id: uuid().primaryKey(),
+			label: text().notNull(),
+		});
+		const handle = db({ spRows }, driver);
+		const boom = new Error("nested failed");
+		const rowAId = "01010101-0101-0101-0101-010101010101";
+		const rowBId = "02020202-0202-0202-0202-020202020202";
+
+		// The claim a fixture driver cannot make: on a real connection, an
+		// "independent" statement issued concurrently with a nested
+		// transaction would otherwise interleave into the nested
+		// transaction's own SAVEPOINT bracket and be rolled back with it
+		// when that nested callback throws -- silently, before #449's fix.
+		// The guard refuses it before it is ever sent, so the nested
+		// rollback has nothing of the outer statement's to take along.
+		await handle.transaction(async (tx) => {
+			const [nestedOutcome, executeOutcome] = await Promise.all([
+				tx
+					.transaction(async (nested) => {
+						await nested
+							.insert(spRows)
+							.values({ id: rowAId, label: "nested-discarded" });
+						throw boom;
+					})
+					.catch((error: unknown) => error),
+				tx
+					.execute(insert(spRows).values({ id: rowBId, label: "independent" }))
+					.catch((error: unknown) => error),
+			]);
+
+			expect(nestedOutcome).toBe(boom);
+			expect(executeOutcome).toHaveProperty(
+				"code",
+				"statement-during-nested-transaction",
+			);
+
+			// sequential, inside the same still-open outer transaction: once
+			// the nested transaction has settled, the outer tx accepts
+			// statements again, and this one commits for real.
+			await tx.execute(
+				insert(spRows).values({ id: rowBId, label: "independent" }),
+			);
+		});
+
+		const committed = await handle.select(spRows);
+		const ids = committed.map((row) => row.id);
+		expect(ids).toContain(rowBId);
+		expect(ids).not.toContain(rowAId);
+	});
+
 	it("a swallowed statement error is recovered by ROLLBACK TO and leaves the enclosing transaction usable, live against a real postgres:17 (#445/R2)", async () => {
 		const activePool = pool.current;
 		if (activePool === undefined) {

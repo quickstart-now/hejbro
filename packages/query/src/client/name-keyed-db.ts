@@ -142,7 +142,11 @@ export type NameKeyedFn<TDatabase extends DatabaseShape> = {
  * the consumer opts in" — R2-G5 5.8's own metadata-only half is closed
  * here, the runtime accept/reject half). `.as` never needs a `Table`/
  * column-ref parameter (`DbContext` is a plain `{role, settings?}`
- * value), so it was in scope from 6.2's own first draft.
+ * value), so it was in scope from 6.2's own first draft. The handle it
+ * returns carries the same unknown-member guard as the unscoped client
+ * (#769): a lookup of a name the contract does not vendor refuses with
+ * `unknown-contract-table` there too, `as` itself included -- it is a
+ * member of the client, not of the scoped handle.
  */
 export type NameKeyedDb<TDatabase extends DatabaseShape> =
 	NameKeyedTables<TDatabase> & {
@@ -278,18 +282,16 @@ const wrapWithTableGuard = <T extends object>(target: T): T =>
 		},
 	});
 
-const buildTables = <TDatabase extends DatabaseShape>(
+const buildRawTables = (
 	chainSource: Pick<ChainApi, "select" | "insert" | "update" | "deleteFrom">,
 	tables: Readonly<Record<string, SynthesizedTable>>,
-): NameKeyedTables<TDatabase> => {
-	const plain = Object.fromEntries(
+): Readonly<Record<string, unknown>> =>
+	Object.fromEntries(
 		Object.entries(tables).map(([name, table]) => [
 			name,
 			buildTableClient(chainSource, table),
 		]),
 	);
-	return wrapWithTableGuard(plain) as unknown as NameKeyedTables<TDatabase>;
-};
 
 /**
  * Refuses an unknown function by name, the `fn` sibling of
@@ -430,6 +432,30 @@ const buildFn = <TDatabase extends DatabaseShape>(
 };
 
 /**
+ * One table surface -- every table client plus `fn` -- guarded exactly
+ * once (#769): the unscoped client and the handle `.as(context)` returns
+ * are each built by this one function, so an unvendored lookup refuses
+ * on both alike, under the same code, the same vendored-list message and
+ * the same pass-through list. `as` is never one of these surfaces' own
+ * keys, so a lookup of `as` on the scoped handle refuses like any other
+ * name it does not carry.
+ */
+const buildTableSurface = <TDatabase extends DatabaseShape>(
+	chainSource: Pick<ChainApi, "select" | "insert" | "update" | "deleteFrom">,
+	fnApi: FnApi,
+	tables: Readonly<Record<string, SynthesizedTable>>,
+	keyMap: ReadonlyMap<string, string>,
+): NameKeyedTables<TDatabase> & { readonly fn: NameKeyedFn<TDatabase> } => {
+	const plain = {
+		...buildRawTables(chainSource, tables),
+		fn: buildFn<TDatabase>(fnApi, keyMap),
+	};
+	return wrapWithTableGuard(plain) as unknown as NameKeyedTables<TDatabase> & {
+		readonly fn: NameKeyedFn<TDatabase>;
+	};
+};
+
+/**
  * The name-keyed client (R2-G6): `createDb`'s own real body (R2-G5
  * 6.12). Reconstructs a real `Table` per vendored table
  * (`synthesizeTable`), feeds them all into one `db()` handle so
@@ -473,14 +499,15 @@ export const createNameKeyedDb = <TDatabase extends DatabaseShape>(
 	});
 	const internalFn = internalDb.fn as unknown as FnApi;
 	const plain = {
-		...buildTables<TDatabase>(internalDb, tables),
-		fn: buildFn<TDatabase>(internalFn, keyMap),
+		...buildTableSurface<TDatabase>(internalDb, internalFn, tables, keyMap),
 		as: (context: DbContext) => {
 			const scoped = internalDb.as(context);
-			return {
-				...buildTables<TDatabase>(scoped, tables),
-				fn: buildFn<TDatabase>(scoped.fn as unknown as FnApi, keyMap),
-			};
+			return buildTableSurface<TDatabase>(
+				scoped,
+				scoped.fn as unknown as FnApi,
+				tables,
+				keyMap,
+			);
 		},
 	};
 	return wrapWithTableGuard(plain);
