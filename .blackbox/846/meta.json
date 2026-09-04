@@ -32,7 +32,15 @@
       "ratified": null
     }
   ],
-  "work": [],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-04T22:28Z",
+      "title": "Read side judges paths as init does; config artifact ancestors first; nesting wording; empty --config refused",
+      "pr": null,
+      "decisions": []
+    }
+  ],
   "prs": [
     {
       "number": 847,

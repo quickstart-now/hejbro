@@ -20,7 +20,15 @@
       "ratified": null
     }
   ],
-  "work": [],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-04T22:28Z",
+      "title": "config-not-found names the path looked up and init --config; config path judged before loading",
+      "pr": null,
+      "decisions": []
+    }
+  ],
   "prs": [
     {
       "number": 840,

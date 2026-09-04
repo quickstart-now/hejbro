@@ -20,7 +20,15 @@
       "ratified": null
     }
   ],
-  "work": [],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-04T22:28Z",
+      "title": "listMigrationFiles refuses a non-directory by name across seven commands",
+      "pr": null,
+      "decisions": []
+    }
+  ],
   "prs": [
     {
       "number": 840,
