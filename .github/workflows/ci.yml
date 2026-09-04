@@ -39,6 +39,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: read
+      issues: read
     env:
       HAS_APP: ${{ secrets.BLACKBOX_APP_ID != '' }}
     steps:
@@ -64,7 +65,8 @@ jobs:
       - if: github.event_name == 'pull_request'
         run: node .blackbox/bin/blackbox.mjs ci --pr ${{ github.event.pull_request.number }}
         env:
-          GH_TOKEN: ${{ steps.app.outputs.token || github.token }}
+          GH_TOKEN: ${{ github.token }}
+          BLACKBOX_APP_TOKEN: ${{ steps.app.outputs.token }}
           BLACKBOX_PUSH: ${{ steps.app.outputs.token && 'api' || (secrets.BLACKBOX_TOKEN && 'git' || '') }}
       - if: github.event_name != 'pull_request'
         run: node .blackbox/bin/blackbox.mjs check

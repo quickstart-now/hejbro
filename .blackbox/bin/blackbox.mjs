@@ -92,11 +92,30 @@ const ghPaginated = (path) =>
 const ghSend = (method, path, body) => {
 	const file = join(tmpdir(), `blackbox-${process.pid}-${Date.now()}.json`);
 	writeFileSync(file, JSON.stringify(body));
-	try {
-		return JSON.parse(gh(["api", "-X", method, "--input", file, path]));
-	} finally {
-		rmSync(file, { force: true });
+	// Writes go out with the App's token when CI provides one; reads keep
+	// the workflow token, so the App needs no permission beyond contents.
+	// biome-ignore lint/suspicious/noUndeclaredEnvVars: CI configuration, not a turbo task input
+	const appToken = String(process.env.BLACKBOX_APP_TOKEN ?? "");
+	const env = (() => {
+		if (appToken === "") {
+			return process.env;
+		}
+		return {
+			...process.env,
+			// biome-ignore lint/style/useNamingConvention: environment variable
+			GH_TOKEN: appToken,
+			// biome-ignore lint/style/useNamingConvention: environment variable
+			GITHUB_TOKEN: appToken,
+		};
+	})();
+	const result = run("gh", ["api", "-X", method, "--input", file, path], {
+		env,
+	});
+	rmSync(file, { force: true });
+	if (!result.ok) {
+		fail(`gh api ${method} ${path}: ${result.err || result.out}`);
 	}
+	return JSON.parse(result.out);
 };
 
 // ------------------------------------------------------------------- git
@@ -2157,6 +2176,7 @@ Git Data API — signed by GitHub, attributed to the App — and the ref update 
     permissions:
       contents: write
       pull-requests: read
+      issues: read
     env:
       HAS_APP: \${{ secrets.BLACKBOX_APP_ID != '' }}
     steps:
@@ -2176,7 +2196,8 @@ Git Data API — signed by GitHub, attributed to the App — and the ref update 
       - if: github.event_name == 'pull_request'
         run: node ${script} ci --pr \${{ github.event.pull_request.number }}
         env:
-          GH_TOKEN: \${{ steps.app.outputs.token || github.token }}
+          GH_TOKEN: \${{ github.token }}
+          BLACKBOX_APP_TOKEN: \${{ steps.app.outputs.token }}
           BLACKBOX_PUSH: \${{ steps.app.outputs.token && 'api' || (secrets.BLACKBOX_TOKEN && 'git' || '') }}
       - if: github.event_name != 'pull_request'
         run: node ${script} check
