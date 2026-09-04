@@ -672,6 +672,37 @@ describe("two argument keys deriving to one SQL name are refused (#751)", () => 
 		).toBe("reserved-local-name");
 	});
 
+	it.each([
+		{
+			label: "reserved key last",
+			// biome-ignore lint/style/useNamingConvention: adversarial snake_case key under test.
+			args: { userId: uuid(), user_id: uuid(), order: uuid() },
+			code: "reserved-local-name",
+		},
+		{
+			label: "invalid key last",
+			// biome-ignore lint/style/useNamingConvention: adversarial snake_case key under test.
+			args: { userId: uuid(), user_id: uuid(), "my-arg": uuid() },
+			code: "invalid-sql-name",
+		},
+	])(
+		"a key's own refusal wins even after the colliding pair ($label) — D106 round 1 N4",
+		({ args, code }) => {
+			expect(
+				codeOf(() =>
+					defineFunction(
+						app,
+						"echo_precedence_last",
+						{ args, returns: { typeName: "uuid" } },
+						(ctx) => {
+							ctx.return(sql`null`);
+						},
+					),
+				),
+			).toBe(code);
+		},
+	);
+
 	it("an invalid-sql-name refusal precedes the duplicate-argument refusal", () => {
 		expect(
 			codeOf(() =>

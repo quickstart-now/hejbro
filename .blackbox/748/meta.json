@@ -67,6 +67,18 @@
       "at": "2026-09-04T14:08Z",
       "title": "Review, final: all 23 type_func_name keywords refused, class defined by source; current_schema is the silent-shadow case",
       "ratified": null
+    },
+    {
+      "id": "R6",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "D1",
+        "R5"
+      ],
+      "at": "2026-09-04T14:42Z",
+      "title": "D106 round 1 disposition: N3/N4 repaired at archive, N1/N2 to #832, archived",
+      "ratified": null
     }
   ],
   "work": [

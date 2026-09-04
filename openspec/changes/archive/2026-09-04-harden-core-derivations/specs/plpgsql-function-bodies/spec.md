@@ -21,9 +21,11 @@ changes what the name means, so hejbro refuses it before the body
 reaches the server. Where the failure lands varies by name: a reserved
 keyword breaks at creation — at the declaration, at an assignment, or
 at a read of the name, depending on its category — while a variable
-plpgsql declares is created without complaint and read as the user's
-local instead of plpgsql's own, so a body that tests `found` after a
-statement reads a variable the statement never set. `current_schema`,
+plpgsql declares is created without complaint and then plpgsql's own
+wins: an argument named `found` is unreachable — `return found` yields
+plpgsql's `FOUND`, not the caller's value — and only a `declare`d local
+by that name hides plpgsql's, so a body that tests it after a statement
+reads a variable the statement never set. `current_schema`,
 alone among the keywords, is created without complaint too and then
 resolves to the builtin in every expression position, and to the local
 only where plpgsql binds it directly — a `select … into` target or

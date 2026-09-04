@@ -58,8 +58,9 @@ lower-case snake_case).
 The reserved-name check (`reserved-local-name`) refuses a keyword *and* a
 variable plpgsql declares on its own — `found`, `sqlstate`, `sqlerrm`,
 and the twelve `tg_*` trigger variables — case-insensitively, since an
-unquoted name shadowing one of those resolves to the argument instead of
-plpgsql's own value with no error at all, and the keywords Postgres
+argument by one of those names is unreachable behind plpgsql's own
+variable (`return found` yields plpgsql's `FOUND`, not the caller's
+value) and a declared local hides it, with no error at all, and the keywords Postgres
 reserves for function and type names (`left`, `is`, `join`,
 `current_schema`, …). Two
 argument keys that derive to the same SQL name (`userId` beside
