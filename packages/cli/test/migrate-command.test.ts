@@ -749,3 +749,179 @@ describe("runMigrate — a relation that is not the ledger at the ledger's name 
 		expect(lowered.some((sql) => sql.includes("create schema"))).toBe(true);
 	});
 });
+
+describe("applyFrom — a ledger failure is not the migration's failure / 1.5 (harden-ledger-diagnostics)", () => {
+	it("ledger insert refused with 23502 on the first pending migration -> exit 2, apply-ledger-unwritable, header names the ledger, no migration file in the header", async () => {
+		const { driver } = makeFakeDriver({
+			failWhen: (call) => call.sql.toLowerCase().includes("insert into"),
+			failError: Object.assign(
+				new Error(
+					'null value in column "id" of relation "migration_ledger" violates not-null constraint',
+				),
+				{ code: "23502", column: "id" },
+			),
+		});
+
+		const result = await applyFrom(driver, [migrationA], []);
+
+		expect(result.exitCode).toBe(2);
+		// The header line (`error[code]: <identity>`) names the ledger, never
+		// the migration file -- the file still appears further down, inside
+		// the write site's own "the row recording ..." sentence (D3), which
+		// is a different fact (what was being written) from "what failed".
+		const headerLine = (result.stderr ?? "").split("\n")[0] ?? "";
+		expect(headerLine).toContain("error[apply-ledger-unwritable]");
+		expect(headerLine).not.toContain(migrationA.fileName);
+		expect(result.stdout).toEqual([]);
+	});
+
+	it("the same failure with one migration already applied before it -> the applied bucket still printed", async () => {
+		const { driver } = makeFakeDriver({
+			failWhen: (call) =>
+				call.sql.toLowerCase().includes("insert into") &&
+				call.params.includes(migrationB.fileName),
+			failError: Object.assign(
+				new Error(
+					'null value in column "id" of relation "migration_ledger" violates not-null constraint',
+				),
+				{ code: "23502", column: "id" },
+			),
+		});
+
+		const result = await applyFrom(driver, [migrationA, migrationB], []);
+
+		expect(result.exitCode).toBe(2);
+		expect(result.stdout).toEqual([
+			"migrate: applied 1 migration(s):",
+			" - 0001_a.sql",
+		]);
+		const headerLine = (result.stderr ?? "").split("\n")[0] ?? "";
+		expect(headerLine).toContain("error[apply-ledger-unwritable]");
+		expect(headerLine).not.toContain(migrationB.fileName);
+	});
+
+	it("regression: a migration's own failure still exits one with apply-failed naming the file", async () => {
+		const { driver } = makeFakeDriver({
+			failWhen: (call) => call.sql === migrationA.sql,
+			failError: Object.assign(new Error("syntax error"), { code: "42601" }),
+		});
+
+		const result = await applyFrom(driver, [migrationA], []);
+
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain("error[apply-failed]");
+		expect(result.stderr).toContain(migrationA.fileName);
+	});
+});
+
+describe("runMigrate — a ledger failure is not the migration's failure / 1.5 (harden-ledger-diagnostics)", () => {
+	let cwd: string;
+
+	beforeEach(async () => {
+		cwd = await createCliFixtureDir();
+		await writeFixtureFile(cwd, "hejbro.config.ts", CONFIG_SOURCE);
+		await writeFixtureFile(
+			cwd,
+			"migrations/0001_a.sql",
+			[
+				"-- hejbro migration",
+				"-- parent-snapshot: sha256:aaaa",
+				"-- snapshot: sha256:bbbb",
+				'create table "app"."a" (id integer);',
+			].join("\n"),
+		);
+	});
+
+	afterEach(async () => {
+		await removeCliFixtureDir(cwd);
+	});
+
+	/** The four bootstrap columns, exactly as `bootstrapLedger` creates them -- makes the identity probe answer `ledger`, so the run reaches `bootstrapLedger`/`readLedger` instead of refusing on `apply-ledger-occupied` first. */
+	const LedgerProbeRows = [
+		{ relkind: "r", persistence: "p", name: "id", type: "bigint" },
+		{ relkind: "r", persistence: "p", name: "filename", type: "text" },
+		{ relkind: "r", persistence: "p", name: "origin", type: "text" },
+		{
+			relkind: "r",
+			persistence: "p",
+			name: "applied_at",
+			type: "timestamp with time zone",
+		},
+	];
+
+	/** A full pgDriver fake that answers the identity probe with a genuine ledger shape, `select current_user` with a fixed role, and fails exactly one statement -- `failWhen` matches on the lower-cased SQL text, the fixture's own choice, never production code's (D4). */
+	const makeFailingLedgerImporter = (
+		failWhen: (sql: string) => boolean,
+		failError: unknown,
+	): { readonly importer: CheckDriverImporter; readonly calls: string[] } => {
+		const calls: string[] = [];
+		const session: DriverSession = {
+			execute: async (compiled) => {
+				calls.push(compiled.sql);
+				const sql = compiled.sql.trim().toLowerCase();
+				if (sql.startsWith("select c.relkind")) {
+					return LedgerProbeRows as unknown as ReadonlyArray<DriverRow>;
+				}
+				if (failWhen(sql)) {
+					throw failError;
+				}
+				if (sql.startsWith("select current_user")) {
+					return [
+						{ currentUser: "ld_role" },
+					] as unknown as ReadonlyArray<DriverRow>;
+				}
+				return [];
+			},
+		};
+		const driver: CheckDriverConnection = {
+			capabilities: { "interactive-transactions": true, "session-state": true },
+			execute: session.execute,
+			transaction: async (callback) => callback(session),
+			setupSession: async () => {},
+			client: { end: async () => {} },
+		};
+		const importer: CheckDriverImporter = async () => ({
+			pgDriver: () => driver,
+		});
+		return { importer, calls };
+	};
+
+	it("readLedger refused with 42501 before any apply -> exit 2, apply-ledger-unreadable", async () => {
+		const { importer } = makeFailingLedgerImporter(
+			(sql) => sql.startsWith('select "filename"'),
+			Object.assign(new Error("permission denied for table migration_ledger"), {
+				code: "42501",
+			}),
+		);
+
+		const result = await runMigrate(
+			cwd,
+			["--url", "postgres://fake"],
+			importer,
+		);
+
+		expect(result.exitCode).toBe(2);
+		expect(result.stderr).toContain("error[apply-ledger-unreadable]");
+		expect(result.stdout).toEqual([]);
+	});
+
+	it("bootstrap's create schema refused with 42501 -> exit 2, apply-ledger-unwritable naming the bootstrap (836/R2)", async () => {
+		const { importer } = makeFailingLedgerImporter(
+			(sql) => sql.startsWith("create schema"),
+			Object.assign(new Error("permission denied for database ldtest"), {
+				code: "42501",
+			}),
+		);
+
+		const result = await runMigrate(
+			cwd,
+			["--url", "postgres://fake"],
+			importer,
+		);
+
+		expect(result.exitCode).toBe(2);
+		expect(result.stderr).toContain("error[apply-ledger-unwritable]");
+		expect(result.stderr).toContain("bootstrap");
+		expect(result.stdout).toEqual([]);
+	});
+});
