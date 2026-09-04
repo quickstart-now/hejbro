@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { mkdir, readdir, readFile, rm } from "node:fs/promises";
+import { chmod, mkdir, readdir, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { CLI_VERSION } from "../src/version";
@@ -1144,3 +1144,141 @@ describe("hejbro baseline — report strings (task 4.8)", () => {
 		expect(result.stdout).not.toContain("pg_dump");
 	});
 });
+
+// #767 review round 1, D7: readSnapshotFileText's own directory guard
+// (#766 second ask, 1.3b) left every *other* stat/read failure to
+// rethrow raw -- a mode-000 snapshot file died with a raw
+// `EACCES: permission denied, open` Node stack, and a blocked ancestor
+// on the way to the snapshot path died with a raw `EACCES ... stat`.
+// Both now surface as the same coded `snapshot-unreadable`, shared by
+// every command that reads the snapshot (one reader).
+describe.skipIf(process.getuid?.() === 0)(
+	"refuses an unreadable snapshot file with snapshot-unreadable, never a raw EACCES (#767, D7)",
+	() => {
+		afterEach(async () => {
+			await Promise.all(
+				["hejbro.snapshot.json", "unreadable.json", "parent", "nx"].map(
+					async (name) => {
+						const candidate = join(cwd, name);
+						if (!existsSync(candidate)) {
+							return;
+						}
+						await chmod(candidate, 0o755);
+					},
+				),
+			);
+		});
+
+		const envWithoutDatabaseUrl = (): NodeJS.ProcessEnv => {
+			const { DATABASE_URL, ...rest } = process.env;
+			return rest;
+		};
+
+		const commands: ReadonlyArray<string> = [
+			"generate",
+			"verify",
+			"check",
+			"baseline",
+		];
+
+		it.each(commands)(
+			"refuses a mode-000 snapshot file with snapshot-unreadable (%s)",
+			async (command) => {
+				await runCli(cwd, ["init"]);
+				await writeSchema(SCHEMA_SOURCE);
+				await chmod(join(cwd, "hejbro.snapshot.json"), 0o000);
+
+				const result = await runCli(cwd, [command], {
+					env: envWithoutDatabaseUrl(),
+				});
+
+				expect(result.exitCode).toBe(1);
+				expect(result.stderr).toContain("error[snapshot-unreadable]");
+				expect(result.stderr).toContain("hejbro.snapshot.json");
+				expect(result.stderr).toContain("(EACCES)");
+				expect(result.stderr).toContain("Next:");
+				expect(result.stderr).not.toContain("permission denied, open");
+				expect(result.stderr).not.toContain(cwd);
+			},
+		);
+
+		it("reads a mode-444 snapshot file as today (control)", async () => {
+			await runCli(cwd, ["init"]);
+			await writeSchema(SCHEMA_SOURCE);
+			const first = await runCli(cwd, ["generate"]);
+			expect(first.exitCode).toBe(0);
+			await chmod(join(cwd, "hejbro.snapshot.json"), 0o444);
+
+			const second = await runCli(cwd, ["generate"]);
+
+			expect(second.exitCode).toBe(0);
+			expect(second.stderr).not.toContain("error[");
+		});
+
+		it("refuses a mode-000 directory at the snapshot path with snapshot-not-a-file, kind checked before readability (control)", async () => {
+			await runCli(cwd, ["init"]);
+			await writeSchema(SCHEMA_SOURCE);
+			await rm(join(cwd, "hejbro.snapshot.json"));
+			await mkdir(join(cwd, "hejbro.snapshot.json"));
+			await chmod(join(cwd, "hejbro.snapshot.json"), 0o000);
+
+			const result = await runCli(cwd, ["generate"]);
+
+			expect(result.exitCode).toBe(1);
+			expect(result.stderr).toContain("error[snapshot-not-a-file]");
+			expect(result.stderr).not.toContain("snapshot-unreadable");
+		});
+
+		it('names the blocking ancestor for snapshotPath: "parent/state.json", parent mode 000', async () => {
+			await writeFixtureFile(
+				cwd,
+				"hejbro.config.ts",
+				`import { defineConfig } from "hejbro";
+
+export default defineConfig({
+	entry: ["src/**/*.schema.ts"],
+	migrationsDir: "migrations",
+	snapshotPath: "parent/state.json",
+	prefixStrategy: "timestamp",
+});
+`,
+			);
+			await writeSchema(SCHEMA_SOURCE);
+			await mkdir(join(cwd, "parent"), { recursive: true });
+			await chmod(join(cwd, "parent"), 0o000);
+
+			const result = await runCli(cwd, ["generate"]);
+
+			expect(result.exitCode).toBe(1);
+			expect(result.stderr).toContain("error[snapshot-unreadable]");
+			expect(result.stderr).toContain("(EACCES)");
+			expect(result.stderr).toContain('Next: check permissions on "parent"');
+			expect(result.stderr).not.toContain(cwd);
+		});
+
+		it('names the deepest blocking ancestor for snapshotPath: "nx/a/state.json", nx mode 000 (not nx/a)', async () => {
+			await writeFixtureFile(
+				cwd,
+				"hejbro.config.ts",
+				`import { defineConfig } from "hejbro";
+
+export default defineConfig({
+	entry: ["src/**/*.schema.ts"],
+	migrationsDir: "migrations",
+	snapshotPath: "nx/a/state.json",
+	prefixStrategy: "timestamp",
+});
+`,
+			);
+			await writeSchema(SCHEMA_SOURCE);
+			await mkdir(join(cwd, "nx", "a"), { recursive: true });
+			await chmod(join(cwd, "nx"), 0o000);
+
+			const result = await runCli(cwd, ["generate"]);
+
+			expect(result.exitCode).toBe(1);
+			expect(result.stderr).toContain("error[snapshot-unreadable]");
+			expect(result.stderr).toContain('Next: check permissions on "nx"');
+		});
+	},
+);

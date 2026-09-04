@@ -15,6 +15,21 @@ directory) → declare or edit schema files → `hejbro generate` →
 read the banner → commit the migration file and the updated snapshot →
 `hejbro verify` (locally or in CI).
 
+## A configured path can refuse the run
+
+A `migrationsDir` or `snapshotPath` spelled as an absolute path
+(`"/db/migrations"`) is refused with `error[invalid-config]` naming the
+field — both fields are relative to the working directory, and every
+command used to silently re-root the leading `/` under it instead (a
+behaviour change for a configuration that used to be honoured). A
+directory sitting at the configured `snapshotPath` is refused with
+`error[snapshot-not-a-file]` — the snapshot is a file hejbro writes,
+never a directory it reads into. A snapshot file this process cannot
+read (permissions, or a directory on the way that blocks the look-up) is
+refused with `error[snapshot-unreadable]`, naming the path and the
+operating system's own code. All three name a `Next:` step; none ever
+print an absolute path.
+
 ## Reading the banner
 
 Every migration file opens with a comment banner listing every object
