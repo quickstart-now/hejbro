@@ -46,7 +46,7 @@ definition of done, never a task.
       lead: the code name and the message sentence.
       Files: `packages/core/src/dsl/define-function.ts`,
       `packages/core/test/define-function.test.ts`.
-- [ ] 1.3 (~9m) `[design]` Every change a kind reports survives the
+- [x] 1.3 (~9m) `[design]` Every change a kind reports survives the
       same-kind refinement. Red: `packages/core/test/diff-engine.test.ts`
       — "every change a kind reports for one identity survives the
       same-kind refinement", built on a standalone registry with a test

@@ -55,6 +55,15 @@ uuid()`) does declare an argument under that name, and is refused the
 ordinary way instead, with `invalid-sql-name` (`__proto__` isn't
 lower-case snake_case).
 
+The reserved-name check (`reserved-local-name`) refuses a keyword *and* a
+variable plpgsql declares on its own — `found`, `sqlstate`, `sqlerrm`,
+and the twelve `tg_*` trigger variables — case-insensitively, since an
+unquoted name shadowing one of those resolves to the argument instead of
+plpgsql's own value with no error at all. Two argument keys that derive
+to the same SQL name (`userId` beside `user_id`) are refused too, with
+`duplicate-argument`, naming both keys and the shared name — the same
+check a table's colliding column keys already get.
+
 ## The body context API
 
 - `ctx.if(condition, then).elseIf(condition, then).else(then)` — an
