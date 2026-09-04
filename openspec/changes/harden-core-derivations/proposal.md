@@ -66,8 +66,8 @@ meaning:
 - `function-declaration` — ADDED: two argument keys never share one SQL
   name.
 - `snapshot-diff` — new capability, ADDED: every change a kind reports
-  reaches the change list. Its Purpose is written in the same commit
-  that creates the capability.
+  reaches the change list. Its Purpose (drafted in design.md) is
+  written in the archive commit that first creates the spec file.
 
 ## Impact
 

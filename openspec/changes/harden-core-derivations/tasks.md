@@ -8,7 +8,7 @@ definition of done, never a task.
 
 ## 1. Core derivations refuse what the database would misread (#748, #751, #774)
 
-- [ ] 1.1 (~8m) `[design]` A name plpgsql declares itself is refused as
+- [x] 1.1 (~8m) `[design]` A name plpgsql declares itself is refused as
       a local. Red: `packages/core/test/define-function.test.ts` —
       "a name plpgsql declares itself is refused as an argument name",
       an input table over the derived name: `found`, `sqlstate`,
