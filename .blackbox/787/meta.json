@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#787",
+  "title": "blackbox: migrate the lead ruling ledger R1–R90 into issue folders (first ratification queue of 0.2.1)",
+  "parent": "quickstart-now/hejbro#412",
+  "status": "open",
+  "opened": "2026-09-04",
+  "closed": null,
+  "decisions": [],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-04T04:46Z",
+      "title": "Ledger R1–R91 migrated into nineteen issue folders",
+      "pr": null,
+      "decisions": []
+    }
+  ],
+  "prs": [],
+  "origin": null,
+  "followUps": []
+}

@@ -1288,7 +1288,16 @@ const cmdAdd = (positional, opts) => {
 	if (body.trim() === "") {
 		fail("entry body is empty (pipe markdown on stdin or pass --body-file)");
 	}
-	const id = adders[what](root, folder, opts, body, nowIso());
+	const at = (() => {
+		if (!opts.at) {
+			return nowIso();
+		}
+		if (!/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}Z)?$/.test(String(opts.at))) {
+			fail("--at must be YYYY-MM-DD or YYYY-MM-DDTHH:MMZ");
+		}
+		return String(opts.at);
+	})();
+	const id = adders[what](root, folder, opts, body, at);
 	writeMeta(root, folder);
 	writeIndex(root, repo);
 	process.stdout.write(`${folder.meta.ref}/${id} recorded\n`);
@@ -1352,20 +1361,30 @@ const cmdRatify = (positional, opts) => {
 };
 
 /** Pin a PR into a folder from the local HEAD; returns whether the block changed. */
-const pinFolder = ({ root, repo, state, folder, number, pr, changed, at }) => {
+const pinFolder = ({
+	root,
+	repo,
+	state,
+	folder,
+	number,
+	pr,
+	changed,
+	at,
+	head,
+}) => {
 	const itemRels = state.items.map((item) => item.rel);
 	const refs = changed.filter((file) =>
 		ownedBy(file.path, folder.item, itemRels),
 	);
 	const existing = folder.meta.prs.find((entry) => entry.number === number);
 	if (existing && JSON.stringify(existing.refs) === JSON.stringify(refs)) {
-		return { changed: false, refs };
+		return { changed: false, refs, head: existing.head };
 	}
 	const block = {
 		number,
 		ref: `${repo}#${number}`,
 		title: pr.title,
-		head: git(["rev-parse", "HEAD"], root),
+		head: head ?? git(["rev-parse", "HEAD"], root),
 		headRef: pr.headRef,
 		base: pr.base,
 		merged: pr.merged,
@@ -1406,7 +1425,14 @@ const cmdPin = (positional, opts) => {
 	const state = loadState(fsReader(root));
 	const folder = findFolder(state, key, { root, cwd: process.cwd() });
 	const pr = prInfo(repo, number);
-	const changed = localChangedFiles(root, pr.baseSha);
+	// A merged PR is history: its file list and blob SHAs come from the API
+	// at its own head, not from a diff against whatever is checked out now.
+	const changed = (() => {
+		if (pr.merged) {
+			return prFiles(repo, number);
+		}
+		return localChangedFiles(root, pr.baseSha);
+	})();
 	const result = pinFolder({
 		root,
 		repo,
@@ -1416,11 +1442,16 @@ const cmdPin = (positional, opts) => {
 		pr,
 		changed,
 		at: nowIso(),
+		head: (() => {
+			if (pr.merged) {
+				return pr.head;
+			}
+			return git(["rev-parse", "HEAD"], root);
+		})(),
 	});
 	writeIndex(root, repo);
-	const head = git(["rev-parse", "HEAD"], root).slice(0, 8);
 	process.stdout.write(
-		`${folder.meta.ref}: pinned PR #${number} at local HEAD ${head} — ${result.refs.length} file(s)${iff(!result.changed, " (unchanged)")}\n`,
+		`${folder.meta.ref}: pinned PR #${number} at ${iff(!pr.merged, "local HEAD ")}${String(result.head).slice(0, 8)} — ${result.refs.length} file(s)${iff(!result.changed, " (unchanged)")}\n`,
 	);
 };
 
@@ -2013,6 +2044,7 @@ const HELP = `blackbox ${VERSION} — flight recorder for AI-built work
   add decision <folder> --title T [--raw SESSION#3,4] < body.md
   add ruling   <folder> --title T --kind interpretation|extension|stop [--basis D1,R2] [--by lead] < body.md
   add work     <folder> --title T [--pr N] [--decisions D1,R2] < body.md
+                                        every add accepts --at YYYY-MM-DD[THH:MMZ] for migrated history
   ack <SESSION#3,4> --why W             mark owner inputs as non-decisions
   ratify <folder> R# [--reject] [--why W] [--by owner|evaluator] [--decision D#]
   pin <folder> --pr N                   pin the PR's changed files (blob SHAs) into meta.json, from the local HEAD

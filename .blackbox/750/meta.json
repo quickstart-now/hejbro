@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#750",
+  "title": "0.2.0-pre.0: five findings from applying one declaration to Postgres 18, Neon, Nile and Supabase",
+  "parent": "quickstart-now/hejbro#412",
+  "status": "open",
+  "opened": "2026-09-04",
+  "closed": null,
+  "decisions": [
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "D110"
+      ],
+      "at": "2026-09-03T15:10Z",
+      "title": "The first external report is split into six sub-issues under #412",
+      "ratified": null
+    }
+  ],
+  "work": [],
+  "prs": [],
+  "origin": null,
+  "followUps": []
+}

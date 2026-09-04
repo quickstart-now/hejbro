@@ -6,11 +6,29 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 
 | Item | Title | Status | PRs | Owner decisions | Rulings |
 |---|---|---|---|---|---|
-| [#785](785/) | blackbox v2: per-issue folders under .blackbox, hooks + CI-first gate, shipped by the dd-blackbox script | closed | #786 | 4 | 2 (0 pending) |
+| [#412](412/) | 0.2.x: post-release commitments | open |  | 0 | 26 (17 pending) |
+| ↳ [#528](528/) | driver-conformance kit mis-observes transaction-wrapping session-state:false drivers | closed | #737 #760 | 0 | 6 (5 pending) |
+| ↳ [#531](531/) | pg checkout reads its own setupSession; the spec's late-binding scenario fails for spread decorators | closed | #737 | 0 | 3 (2 pending) |
+| ↳ [#533](533/) | cli restore-command test flakes on first heavy parallel run after install | merged-pending | #773 | 0 | 0 (0 pending) |
+| ↳ [#551](551/) | execute() of a core-built set operation loses per-key result typing | closed | #737 | 0 | 2 (1 pending) |
+| ↳ [#552](552/) | whole-table projection renders unqualified columns under a join | closed | #737 | 0 | 3 (0 pending) |
+| ↳ [#673](673/) | test: subprocess-spawning suites time out under a full parallel pnpm test and pass in isolation | closed | #773 | 0 | 7 (0 pending) |
+| ↳ [#679](679/) | core: function argument names bypass D36 and are emitted unquoted in DDL | closed | #733 #758 | 0 | 3 (1 pending) |
+| ↳ [#686](686/) | ctx.return accepts a mutation with no returning() and renders invalid plpgsql | closed | #733 | 0 | 3 (1 pending) |
+| ↳ [#687](687/) | init ignores the configured migrationsDir and snapshotPath | closed | #739 #759 #770 | 0 | 8 (1 pending) |
+| ↳ [#697](697/) | vendored fn guard is count-only and a __proto__ column key loses its column | closed | #739 | 0 | 4 (1 pending) |
+| ↳ [#744](744/) | `docker-rm-hygiene` can fail on a temporary file another test is deleting | closed | #773 | 0 | 1 (0 pending) |
+| ↳ [#750](750/) | 0.2.0-pre.0: five findings from applying one declaration to Postgres 18, Neon, Nile and Supabase | open |  | 0 | 1 (0 pending) |
+| ↳ [#752](752/) | verify does not run preset validators, so it passes a declaration generate refuses | closed | #775 #784 | 0 | 2 (1 pending) |
+| ↳ [#753](753/) | reset drops a referenced table before the table that references it, and the ledger hides the half-reset state | closed | #775 #784 | 0 | 14 (3 pending) |
+| ↳ [#754](754/) | Nile rejects the schema-qualified column references rendered inside CHECK and partial-index predicates (42622) | closed | #780 | 0 | 4 (2 pending) |
+| ↳ [#755](755/) | check cannot compare CHECK constraints on Nile because Nile has no EXPLAIN | closed | #780 | 0 | 5 (2 pending) |
+| ↳ [#785](785/) | blackbox v2: per-issue folders under .blackbox, hooks + CI-first gate, shipped by the dd-blackbox script | closed | #786 | 4 | 2 (0 pending) |
+| ↳ [#787](787/) | blackbox: migrate the lead ruling ledger R1–R90 into issue folders (first ratification queue of 0.2.1) | open |  | 0 | 0 (0 pending) |
 
 ## Totals
 
-Owner decisions 4 · rulings 2 (interpretation 2, extension 0, stop 0) · pending extensions 0 · rejected 0
+Owner decisions 4 · rulings 94 (interpretation 55, extension 37, stop 2) · pending extensions 37 · rejected 0
 
 ## Conventions
 
@@ -18,6 +36,8 @@ Owner decisions 4 · rulings 2 (interpretation 2, extension 0, stop 0) · pendin
 - `decisions.md` records every decision as it is made: owner decisions (`D#`) as faithful English rewrites of the owner's words, AI rulings (`R#`) with kind (interpretation, extension, stop), basis and ratification. `work.md` (`W#`) records what was built, measured and reversed. Both are append-only; a correction is a new entry.
 - Every PR is pinned before merge: each changed file's blob SHA, checked both ways (every pin matches the PR head, every changed file is pinned) by the pre-merge hook and by CI.
 - Never read this directory during normal work. It answers provenance questions only.
+
+Merged but not closed: #533
 
 ## Legacy entries
 
