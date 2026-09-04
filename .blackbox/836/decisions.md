@@ -52,3 +52,10 @@ _lead · interpretation · basis R4, 412/D13 · 2026-09-04T23:16Z · ratified: p
 
 On the planner's B3 options: A stands (836/R4), not C. The delta's sentence — no failure the ledger owns reaches the user raw, a failure carrying no server code included — is right, and the reviewer constructed exactly that input; under C the archive review would find the same contradiction again, and a spec sentence a known input contradicts is not a spec. A is not the ledger piece shrinking the problem: the defect's real size (every command, every query through the pg driver) is recorded as #864 under #815, fixed at its own location (`packages/pg/src/driver.ts`, pool error listener + a pg unit test), and that issue closes with this PR. B is refused for the reason the planner gave. 2.5's wording (the file's statements ran in the same transaction and rolled back with it; no file kind named) is accepted as removing a false statement, not a new decision. NB3 (forced RLS makes the ledger lie) filed as #865 under #815. The corpus list (16 items) goes to #714 by the lead once the planner forwards the reviewer's text in (c).
 
+<a id="r6"></a>
+## R6 — B2 clarification: the statement decides — a ledger that vanished at the in-transaction recheck is apply-ledger-unreadable, at the insert apply-ledger-unwritable; exit 2 and rollback either way
+
+_lead · interpretation · basis R4, R1 · 2026-09-04T23:17Z · ratified: pending_
+
+R4's sentence named the write code for a ledger that vanished mid-transaction; the statement that fails first is the recheck select (direction read, site recheck). The rule this change keeps everywhere (D4/D6: which statement failed decides, never the SQLSTATE or the surrounding activity) applies unchanged: vanished at the recheck → `apply-ledger-unreadable`; vanished at the insert → `apply-ledger-unwritable`. Exit 2, rollback and the ledger as identity are the same in both. No delta change; B1 was exactly a same-situation-different-code defect and an activity-based exception here would reintroduce it on another axis.
+
