@@ -86,6 +86,48 @@ jobs:
         run: node .blackbox/bin/blackbox.mjs check
         env:
           GH_TOKEN: ${{ github.token }}
+  # #810: the ci-approval review lives on the workflow run page, not on
+  # the PR, and the owner could not find it from "Approve and run". On a
+  # gated PR this job keeps one comment (edited in place on every new
+  # head) pointing at the waiting run's review banner and carrying the
+  # gh one-liner that approves from a terminal.
+  approval-notice:
+    if: ${{ github.event_name == 'pull_request' && (github.head_ref == 'dev' || startsWith(github.head_ref, 'changeset-release/')) }}
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      PR: ${{ github.event.pull_request.number }}
+      RUN_ID: ${{ github.run_id }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      HEAD: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - run: |
+          env_id=$(gh api "repos/$REPO/environments/ci-approval" --jq .id)
+          body=$(cat <<EOF2
+          <!-- ci-approval-notice -->
+          **\`verify\` is waiting for the owner's approval** (\`ci-approval\` environment, #809) at head \`${HEAD:0:8}\`.
+
+          1. Open the run: $RUN_URL
+          2. In the yellow banner press **Review pending deployments**, tick **ci-approval**, then **Approve and deploy**.
+
+          Or from a terminal:
+
+          \`\`\`bash
+          gh api -X POST repos/$REPO/actions/runs/$RUN_ID/pending_deployments -f state=approved -F "environment_ids[]=$env_id"
+          \`\`\`
+
+          A new merge into \`dev\` moves this PR's head, cancels the waiting run and refreshes this comment; approve only the run you mean to release.
+          EOF2
+          )
+          existing=$(gh api "repos/$REPO/issues/$PR/comments" --paginate --jq '.[] | select(.body | startswith("<!-- ci-approval-notice -->")) | .id' | head -n 1)
+          if [ -n "$existing" ]; then
+            gh api -X PATCH "repos/$REPO/issues/comments/$existing" -f body="$body" --jq .id
+          else
+            gh api -X POST "repos/$REPO/issues/$PR/comments" -f body="$body" --jq .id
+          fi
   verify:
     needs: blackbox
     # Runs past a skipped blackbox job (bot PR), never past a failed one
