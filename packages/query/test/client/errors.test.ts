@@ -1,3 +1,4 @@
+import { roleName } from "@hejbro/core";
 import { describe, expect, it } from "vitest";
 import type { ContractMetadata } from "../../src/client/contract-types";
 import { createNameKeyedDb } from "../../src/client/name-keyed-db";
@@ -263,5 +264,250 @@ describe("the guard refuses an inherited name the contract does not vendor (D106
 		await expect(Promise.resolve(client)).resolves.toBe(client);
 		expect(() => String(client)).not.toThrow();
 		expect(() => JSON.stringify(client)).not.toThrow();
+	});
+});
+
+type ScopedContractDatabase = {
+	readonly Tables: {
+		readonly posts: {
+			readonly Row: { readonly id: string };
+			readonly Insert: { readonly id?: string };
+			readonly Update: { readonly id?: string };
+		};
+	};
+	readonly Functions: {
+		readonly add: {
+			readonly Args: Record<string, never>;
+			readonly Returns: bigint;
+		};
+	};
+};
+
+const SCOPED_METADATA: ContractMetadata = {
+	commit: "abc123",
+	exportHash: "sha256:x",
+	roles: ["app_reader"],
+	tables: {
+		posts: {
+			schema: "app",
+			name: "posts",
+			columns: {
+				id: {
+					sqlName: "id",
+					typeNode: { typeName: "uuid" },
+					mode: null,
+					notNullElements: false,
+				},
+			},
+			foreignKeys: [],
+		},
+	},
+	functions: {
+		add: {
+			schema: "app",
+			name: "add",
+			args: [],
+			returns: {
+				kind: "scalar",
+				typeNode: { typeName: "bigint" },
+				mode: "bigint",
+			},
+		},
+	},
+};
+
+/**
+ * The scoped handle `client.as(context)` returns was a plain spread
+ * object, never passed through `wrapWithTableGuard` -- an unvendored
+ * lookup silently resolved `undefined` there while the same lookup on
+ * the unscoped client already refused with a coded error (#769). Every
+ * row below runs against both surfaces so the unscoped rows stand as
+ * the control: whatever the client already does correctly, the scoped
+ * handle must do too.
+ */
+describe("the scoped handle refuses exactly what the unscoped handle refuses (#769)", () => {
+	const buildSurfaces = (): {
+		readonly client: Record<string, unknown>;
+		readonly scoped: Record<string, unknown>;
+	} => {
+		const { driver } = recordingTransactionalDriver();
+		const client = createNameKeyedDb<ScopedContractDatabase>(
+			driver,
+			SCOPED_METADATA,
+		);
+		const scoped = client.as({ role: roleName("app_reader") });
+		return {
+			client: client as unknown as Record<string, unknown>,
+			scoped: scoped as unknown as Record<string, unknown>,
+		};
+	};
+
+	type Expectation =
+		| { readonly refuse: string; readonly names?: string }
+		| { readonly readable: true };
+
+	type Row = {
+		readonly label: string;
+		readonly onFn: boolean;
+		readonly prop: string;
+		readonly onClient: Expectation;
+		readonly onScoped: Expectation;
+	};
+
+	const ROWS: ReadonlyArray<Row> = [
+		{
+			label: "nope",
+			onFn: false,
+			prop: "nope",
+			onClient: { refuse: "unknown-contract-table", names: "posts" },
+			onScoped: { refuse: "unknown-contract-table", names: "posts" },
+		},
+		{
+			label: "__proto__",
+			onFn: false,
+			prop: "__proto__",
+			onClient: { refuse: "unknown-contract-table" },
+			onScoped: { refuse: "unknown-contract-table" },
+		},
+		{
+			label: "hasOwnProperty",
+			onFn: false,
+			prop: "hasOwnProperty",
+			onClient: { refuse: "unknown-contract-table" },
+			onScoped: { refuse: "unknown-contract-table" },
+		},
+		{
+			label: "fn.__proto__",
+			onFn: true,
+			prop: "__proto__",
+			onClient: { refuse: "unknown-contract-function" },
+			onScoped: { refuse: "unknown-contract-function" },
+		},
+		{
+			label: "constructor",
+			onFn: false,
+			prop: "constructor",
+			onClient: { readable: true },
+			onScoped: { readable: true },
+		},
+		{
+			label: "then",
+			onFn: false,
+			prop: "then",
+			onClient: { readable: true },
+			onScoped: { readable: true },
+		},
+		{
+			label: "toJSON",
+			onFn: false,
+			prop: "toJSON",
+			onClient: { readable: true },
+			onScoped: { readable: true },
+		},
+		{
+			label: "posts",
+			onFn: false,
+			prop: "posts",
+			onClient: { readable: true },
+			onScoped: { readable: true },
+		},
+		{
+			label: "fn.add",
+			onFn: true,
+			prop: "add",
+			onClient: { readable: true },
+			onScoped: { readable: true },
+		},
+		{
+			label: "as",
+			onFn: false,
+			prop: "as",
+			onClient: { readable: true },
+			onScoped: { refuse: "unknown-contract-table" },
+		},
+	];
+
+	const SURFACES = ["client", "scoped"] as const;
+
+	const pickHolder = (
+		target: Record<string, unknown>,
+		onFn: boolean,
+	): Record<string, unknown> => {
+		if (onFn) {
+			return target.fn as Record<string, unknown>;
+		}
+		return target;
+	};
+
+	const pickExpectation = (
+		row: Row,
+		surface: (typeof SURFACES)[number],
+	): Expectation => {
+		if (surface === "client") {
+			return row.onClient;
+		}
+		return row.onScoped;
+	};
+
+	const expectedAssertionCount = (expectation: Expectation): number => {
+		if ("readable" in expectation) {
+			return 0;
+		}
+		if (expectation.names !== undefined) {
+			return 2;
+		}
+		return 1;
+	};
+
+	type CaseTuple = readonly [(typeof SURFACES)[number], string, Row];
+
+	const CASES: ReadonlyArray<CaseTuple> = SURFACES.flatMap((surface) =>
+		ROWS.map((row) => [surface, row.label, row] as const),
+	);
+
+	it.each(CASES)("%s: %s", (surface, _label, row) => {
+		const surfaces = buildSurfaces();
+		const target = surfaces[surface];
+		const holder = pickHolder(target, row.onFn);
+		const expectation = pickExpectation(row, surface);
+
+		if ("readable" in expectation) {
+			expect(() => Reflect.get(holder, row.prop)).not.toThrow();
+			return;
+		}
+
+		expect.assertions(expectedAssertionCount(expectation));
+		try {
+			Reflect.get(holder, row.prop);
+			expect.unreachable(`should have refused ${row.label} on ${surface}`);
+		} catch (error) {
+			expect(error).toHaveProperty("code", expectation.refuse);
+			if (expectation.names !== undefined) {
+				expect((error as Error).message).toContain(expectation.names);
+			}
+		}
+	});
+
+	it("scoped.nope.select() throws the coded error at the lookup, never a TypeError", () => {
+		const { scoped } = buildSurfaces();
+		const looseScoped = scoped as unknown as {
+			readonly nope: { select: () => void };
+		};
+
+		expect.assertions(1);
+		try {
+			looseScoped.nope.select();
+			expect.unreachable("should have refused nope before .select()");
+		} catch (error) {
+			expect(error).toHaveProperty("code", "unknown-contract-table");
+		}
+	});
+
+	it("the names the language reads stay readable on the scoped handle (control)", async () => {
+		const { scoped } = buildSurfaces();
+
+		await expect(Promise.resolve(scoped)).resolves.toBe(scoped);
+		expect(() => String(scoped)).not.toThrow();
+		expect(() => JSON.stringify(scoped)).not.toThrow();
 	});
 });
