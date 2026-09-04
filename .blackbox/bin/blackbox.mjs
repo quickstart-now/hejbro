@@ -85,6 +85,15 @@ const gh = (args) => {
 
 const ghJson = (path, extra = []) => JSON.parse(gh(["api", path, ...extra]));
 
+/** A read that may legitimately miss (a body quoting `Closes #N` from another repository): the error text, or null on success. */
+const ghMiss = (path) => {
+	const result = run("gh", ["api", path]);
+	if (result.ok) {
+		return null;
+	}
+	return (result.err || result.out).trim();
+};
+
 const ghPaginated = (path) =>
 	JSON.parse(gh(["api", "--paginate", "--slurp", path])).flat();
 
@@ -680,16 +689,23 @@ const prInfo = (repo, number) => {
 	};
 };
 
-const PR_KEYWORDS =
-	/\b(closes?|closed|fix(?:es|ed)?|resolves?|resolved|refs?)\s*:?\s*(?:#|https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/(?:issues|pull)\/)(\d+)/gi;
+const ISSUE_REF = String.raw`(?:#|https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/(?:issues|pull)\/)(\d+)`;
+// One keyword may carry a list -- `Closes #807, #809 and #810` -- exactly as
+// GitHub reads it (agent-skills #28: the second number used to be dropped).
+const PR_KEYWORDS = new RegExp(
+	String.raw`\b(closes?|closed|fix(?:es|ed)?|resolves?|resolved|refs?)\s*:?\s*(${ISSUE_REF}(?:\s*(?:,|and|,\s*and)\s*${ISSUE_REF})*)`,
+	"gi",
+);
 
 /** Issue numbers a PR body links, and whether the keyword closes them (Closes/Fixes/Resolves) or only refers (Refs). */
 const referencedIssues = (body) => {
 	const seen = new Map();
 	[...body.matchAll(PR_KEYWORDS)].forEach((match) => {
-		const number = Number(match[2]);
 		const closes = !/^refs?$/i.test(match[1]);
-		seen.set(number, Boolean(seen.get(number)) || closes);
+		[...match[2].matchAll(new RegExp(ISSUE_REF, "g"))].forEach((ref) => {
+			const number = Number(ref[1]);
+			seen.set(number, Boolean(seen.get(number)) || closes);
+		});
 	});
 	return [...seen.entries()].map(([number, closes]) => ({ number, closes }));
 };
@@ -1622,7 +1638,17 @@ const cmdCi = (_positional, opts) => {
 	const opened = (() => {
 		const before = loadState(fsReader(root));
 		const rels = before.items.map((item) => item.rel);
-		const linked = referencedIssues(pr.body).map((entry) => entry.number);
+		const linked = referencedIssues(pr.body)
+			.map((entry) => entry.number)
+			.filter((issueNumber) => {
+				const miss = ghMiss(`repos/${repo}/issues/${issueNumber}`);
+				if (miss !== null) {
+					process.stdout.write(
+						`blackbox: linked #${issueNumber} is not an issue of ${repo} (${miss.split("\n")[0]}): skipped\n`,
+					);
+				}
+				return miss === null;
+			});
 		const touched = [
 			...new Set(
 				changed
