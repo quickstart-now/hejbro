@@ -5,6 +5,7 @@ import {
 	lstatSync,
 	mkdirSync,
 	readlinkSync,
+	rmSync,
 	type Stats,
 	statSync,
 	writeFileSync,
@@ -256,6 +257,23 @@ function throwNotWritable(
 }
 
 /** Builds and throws the `init-path-conflict`-coded, enriched plain
+ * `HejbroError` for a creation that fails for a reason other than
+ * permissions (#767 review, D6 create side) -- `ENOSPC`, `EDQUOT`, etc.
+ * Names the node the operating system itself named, since there is no
+ * ancestor to blame the way {@link throwNotWritable} does. */
+function throwCreateDiskFailed(
+	label: string,
+	fieldName: string,
+	code: string,
+	path: string,
+): never {
+	return throwHejbroError(
+		"init-path-conflict",
+		`"${label}" cannot be created for ${fieldName} (${code}): "${path}" refused it. Next: check the disk and permissions at "${path}", then rerun \`hejbro init\`.`,
+	);
+}
+
+/** Builds and throws the `init-path-conflict`-coded, enriched plain
  * `HejbroError` for a dangling symbolic link at an artifact's own leaf
  * (#767 review, D8): `statSync` follows a link, so a dangling one reads
  * as absent and a write would go straight through it to a target the
@@ -297,6 +315,19 @@ const errorCode = (error: unknown): string => {
 		return String((error as NodeJS.ErrnoException).code);
 	}
 	return "unknown";
+};
+
+/** The operating system's own `path` off a caught `fs` failure, or
+ * `fallback` when the thrown value carries none (#767 review, D6 create
+ * side) -- never the raw error object (D57). */
+const errorPath = (error: unknown, fallback: string): string => {
+	if (error !== null && typeof error === "object" && "path" in error) {
+		const path = (error as NodeJS.ErrnoException).path;
+		if (typeof path === "string") {
+			return path;
+		}
+	}
+	return fallback;
 };
 
 /** `readlinkSync(path)`'s own target, printed relative to `cwd` when the
@@ -695,12 +726,123 @@ const createArtifact = (artifact: Artifact): void => {
 	writeFileSync(artifact.path, artifact.content);
 };
 
-const applyArtifact = (artifact: Artifact): string => {
-	if (existsSync(artifact.path)) {
-		return `skipped ${artifact.label} (exists)`;
+/** The first node this run's own creation of `artifact` would add
+ * (#767 review, D6 create side): the deepest existing ancestor (from
+ * {@link walkAncestors}'s own "ok" outcome, already proven writable by
+ * {@link checkWritable}) joined with the next path segment on the way
+ * to `artifact.path` -- computed before creating anything, since a
+ * `mkdirSync(recursive)` that fails part-way reports nothing about
+ * which segments it made. That single node is what a rollback removes:
+ * `rmSync(..., { recursive: true })` clears everything under it. */
+const firstNodeToCreate = (cwd: string, artifact: Artifact): string => {
+	const outcome = walkAncestors(cwd, dirname(artifact.path));
+	if (outcome.kind !== "ok") {
+		// Already refused by checkAncestors/checkWritable -- unreachable.
+		return artifact.path;
 	}
-	createArtifact(artifact);
-	return `created ${artifact.label}`;
+	const remainder = relative(outcome.path, artifact.path);
+	const firstSegment = remainder.split("/")[0] ?? remainder;
+	return join(outcome.path, firstSegment);
+};
+
+/** Builds and throws the coded failure for a creation that still fails
+ * after every check (#767 review, D6 create side): `access` can be
+ * wrong (ACLs, immutable flags, a disk that fills, a race), so the
+ * create step is the one place a failure can still surface raw. For
+ * `EACCES`/`EPERM` the culprit is the directory that refused the write
+ * -- `dirname(error.path)` -- in {@link throwNotWritable}'s own
+ * sentence; any other code names `error.path` itself through
+ * {@link throwCreateDiskFailed}. */
+const throwCreateFailed = (
+	cwd: string,
+	artifact: Artifact,
+	error: unknown,
+): never => {
+	const code = errorCode(error);
+	const rawPath = errorPath(error, artifact.path);
+	if (code === "EACCES" || code === "EPERM") {
+		throwNotWritable(
+			artifact.label,
+			artifact.fieldName,
+			code,
+			fileLabel(cwd, dirname(rawPath)),
+		);
+	}
+	throwCreateDiskFailed(
+		artifact.label,
+		artifact.fieldName,
+		code,
+		fileLabel(cwd, rawPath),
+	);
+};
+
+/** Removes every node this run created, deepest (most recently created)
+ * first (#767 review, D6 create side) -- `force: true` makes removing a
+ * node that was never actually created (the check-side `access` proved
+ * wrong before anything reached disk) a silent no-op rather than a
+ * second error hiding the first. */
+const rollbackCreated = (created: ReadonlyArray<string>): void => {
+	[...created].reverse().forEach((path) => {
+		rmSync(path, { recursive: true, force: true });
+	});
+};
+
+/** One line of `runInit`'s report: either a fixed line (a field the
+ * configuration was silent about) or a planned artifact to apply. */
+type ReportStep =
+	| { readonly kind: "fixed"; readonly line: string }
+	| { readonly kind: "artifact"; readonly artifact: Artifact };
+
+const reportStepFor = (
+	artifact: Artifact | null,
+	notConfiguredLine: string,
+): ReportStep => {
+	if (artifact === null) {
+		return { kind: "fixed", line: notConfiguredLine };
+	}
+	return { kind: "artifact", artifact };
+};
+
+/** The apply pass's own running state: the report built so far, and
+ * every node *this run* has created (#767 review, D6 create side) -- an
+ * artifact found already present never joins `created`, so a rollback
+ * never removes something the run didn't make. */
+type ApplyState = {
+	readonly report: ReadonlyArray<string>;
+	readonly created: ReadonlyArray<string>;
+};
+
+/** Applies one `ReportStep` against `state`, returning the next state --
+ * `runInit`'s own `reduce` step (#767 review, D6 create side; never a
+ * loop, `check:bans`). On a creation that still fails, rolls back every
+ * node accumulated in `state.created` *and* this step's own first node
+ * (a partially-made `mkdirSync(recursive)` tree included) before
+ * throwing the coded failure -- a refused run leaves the project as it
+ * found it. */
+const applyStep = (
+	cwd: string,
+	state: ApplyState,
+	step: ReportStep,
+): ApplyState => {
+	if (step.kind === "fixed") {
+		return { report: [...state.report, step.line], created: state.created };
+	}
+	const { artifact } = step;
+	if (existsSync(artifact.path)) {
+		return {
+			report: [...state.report, `skipped ${artifact.label} (exists)`],
+			created: state.created,
+		};
+	}
+	const firstNode = firstNodeToCreate(cwd, artifact);
+	const created = [...state.created, firstNode];
+	try {
+		createArtifact(artifact);
+	} catch (error) {
+		rollbackCreated(created);
+		throwCreateFailed(cwd, artifact, error);
+	}
+	return { report: [...state.report, `created ${artifact.label}`], created };
 };
 
 /** A directory's report label carries exactly one trailing slash (D1),
@@ -803,19 +945,6 @@ const buildSnapshotArtifact = (
 	};
 };
 
-/** `applyArtifact`'s report line for a field's own artifact, or the
- * "not configured" line when the configuration was silent about it
- * (there is no artifact to apply in that case). */
-const reportLineFor = (
-	artifact: Artifact | null,
-	notConfiguredLine: string,
-): string => {
-	if (artifact === null) {
-		return notConfiguredLine;
-	}
-	return applyArtifact(artifact);
-};
-
 /**
  * `hejbro init` (decision U7, extended #687): scaffolds `hejbro.config.ts`
  * (via `defineConfig`, with the documented defaults), the migrations
@@ -894,11 +1023,15 @@ export const runInit = async (
 		});
 		checkWritable(cwd, plannedArtifacts);
 
-		const report = [
-			applyArtifact(configArtifact),
-			reportLineFor(migrationsArtifact, "migrationsDir not configured"),
-			reportLineFor(snapshotArtifact, "snapshotPath not configured"),
+		const reportSteps: ReadonlyArray<ReportStep> = [
+			{ kind: "artifact", artifact: configArtifact },
+			reportStepFor(migrationsArtifact, "migrationsDir not configured"),
+			reportStepFor(snapshotArtifact, "snapshotPath not configured"),
 		];
+		const { report } = reportSteps.reduce<ApplyState>(
+			(state, step) => applyStep(cwd, state, step),
+			{ report: [], created: [] },
+		);
 		return { report, exitCode: 0, stderr: null };
 	} catch (error) {
 		const hejbroError = asHejbroError(error);

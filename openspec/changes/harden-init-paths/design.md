@@ -123,8 +123,12 @@ takes. Measured facts come from reading `packages/cli/src` at `eb340e73`.
   first node it will create (`join(existingAncestor, firstMissingSegment)`
   — computed before creating, since a failed recursive `mkdir` reports
   nothing) and, on any throw, removes those nodes deepest-first with
-  `rmSync(recursive)` before rethrowing as the same coded failure naming
-  the node the OS refused (`error.path`, relative) and its code. An
+  `rmSync(recursive)` before rethrowing as the same coded failure. For
+  `EACCES`/`EPERM` the culprit is the directory that refused the write —
+  `dirname(error.path)`, relative — in the check side's own sentence
+  ("does not let this process write into it"); for any other code
+  (`ENOSPC`, `EDQUOT`, …) the sentence names `error.path` itself with the
+  code and a `Next:` to check the disk and permissions there. An
   artifact found present is never in that list. Sequential apply via
   `reduce` over the artifacts; no loop.
 - **Deterministic red for the rollback.** `process.umask(0o277)` makes

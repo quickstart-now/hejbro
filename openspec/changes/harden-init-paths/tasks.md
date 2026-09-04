@@ -229,7 +229,7 @@ inner `afterEach` before the fixture is removed.
       | `migrationsDir: "x/mig"` (nothing exists) | `x` is created then `x/mig` fails → `init-path-conflict` naming `x` with `(EACCES)`, exit 1, **`x` no longer exists** |
       | `migrationsDir: "mig"`, `snapshotPath: "y/state.json"` | `mig/` created fine, `y` created, `y/state.json` fails → refusal, **neither `mig` nor `y` remains** |
       | `migrationsDir: "mig"` already present **holding `0001_x.sql`**, `snapshotPath: "y/state.json"` | refusal; `mig/` and `mig/0001_x.sql` are byte-untouched (reported `skipped`, never in this run's record), `y` removed |
-      | `migrationsDir: "db/mig"`, `snapshotPath: "db/state.json"`, `db` already present | `db/mig` created then the snapshot write fails → `db/mig` removed, **`db` stays** (found present) |
+      | `migrationsDir: "db/mig/inner"`, `db` already present | `db/mig` is created (unwritable under the umask), `inner` fails → `db/mig` removed, **`db` stays** (found present) |
       | umask 0o022, `migrationsDir: "x/mig"` | created (control) |
 
       Green: the apply pass computes each absent artifact's first node

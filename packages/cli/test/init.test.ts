@@ -1186,6 +1186,135 @@ describe.skipIf(process.getuid?.() === 0)(
 	},
 );
 
+// #767 review round 1, D6 (create side): `access` can be wrong (ACLs,
+// immutable flags, a disk that fills, a race) -- the check pass above
+// cannot prove a node that doesn't exist yet will stay writable once
+// this run creates it. `process.umask(0o277)` makes a directory
+// `mkdirSync` creates unwritable by its own owner, deterministically
+// reproducing exactly that gap.
+describe.skipIf(process.getuid?.() === 0)(
+	"runInit / undoes what it created when a creation fails part-way, and reports it coded (#767, D6)",
+	() => {
+		// A fixed restore, not "whatever it was before": every row sets
+		// its own umask explicitly, so there is nothing to remember.
+		afterEach(() => {
+			process.umask(0o022);
+		});
+
+		type RollbackRow = {
+			readonly label: string;
+			readonly configContent: string;
+			readonly setup: (fixtureCwd: string) => Promise<void>;
+			readonly umask: number;
+			readonly assert: (
+				result: Awaited<ReturnType<typeof runInit>>,
+				fixtureCwd: string,
+			) => Promise<void> | void;
+		};
+
+		const rows: ReadonlyArray<RollbackRow> = [
+			{
+				label: 'migrationsDir: "x/mig" (nothing exists)',
+				configContent:
+					'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "x/mig" };\n',
+				setup: async () => {},
+				umask: 0o277,
+				assert: (result, fixtureCwd) => {
+					expect(result.exitCode).toBe(1);
+					expect(result.stderr).toContain("error[init-path-conflict]");
+					expect(result.stderr).toContain("(EACCES)");
+					expect(result.stderr).toContain(
+						'"x" does not let this process write into it',
+					);
+					expect(result.stderr).toContain('Next: check permissions on "x"');
+					expect(result.stderr).not.toContain(fixtureCwd);
+					expect(existsSync(join(fixtureCwd, "x"))).toBe(false);
+				},
+			},
+			{
+				label:
+					'migrationsDir: "mig", snapshotPath: "y/state.json" (mig/ created fine, y fails)',
+				configContent:
+					'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "mig", snapshotPath: "y/state.json" };\n',
+				setup: async () => {},
+				umask: 0o277,
+				assert: (result, fixtureCwd) => {
+					expect(result.exitCode).toBe(1);
+					expect(result.stderr).toContain("error[init-path-conflict]");
+					expect(result.stderr).toContain("(EACCES)");
+					expect(existsSync(join(fixtureCwd, "mig"))).toBe(false);
+					expect(existsSync(join(fixtureCwd, "y"))).toBe(false);
+				},
+			},
+			{
+				label:
+					'migrationsDir: "mig" already present holding 0001_x.sql, snapshotPath: "y/state.json"',
+				configContent:
+					'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "mig", snapshotPath: "y/state.json" };\n',
+				setup: async (fixtureCwd) => {
+					await mkdir(join(fixtureCwd, "mig"), { recursive: true });
+					await writeFile(
+						join(fixtureCwd, "mig", "0001_x.sql"),
+						"-- hejbro migration\n",
+					);
+				},
+				umask: 0o277,
+				assert: async (result, fixtureCwd) => {
+					expect(result.exitCode).toBe(1);
+					expect(result.stderr).toContain("error[init-path-conflict]");
+					expect(existsSync(join(fixtureCwd, "y"))).toBe(false);
+					expect(existsSync(join(fixtureCwd, "mig"))).toBe(true);
+					expect(
+						await readFile(join(fixtureCwd, "mig", "0001_x.sql"), "utf8"),
+					).toBe("-- hejbro migration\n");
+				},
+			},
+			{
+				label:
+					'migrationsDir: "db/mig/inner", db already present (db/mig created then inner fails, db stays)',
+				configContent:
+					'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "db/mig/inner" };\n',
+				setup: async (fixtureCwd) => {
+					await mkdir(join(fixtureCwd, "db"), { recursive: true });
+				},
+				umask: 0o277,
+				assert: (result, fixtureCwd) => {
+					expect(result.exitCode).toBe(1);
+					expect(result.stderr).toContain("error[init-path-conflict]");
+					expect(result.stderr).toContain("(EACCES)");
+					expect(existsSync(join(fixtureCwd, "db", "mig"))).toBe(false);
+					expect(existsSync(join(fixtureCwd, "db"))).toBe(true);
+				},
+			},
+			{
+				label: 'umask 0o022, migrationsDir: "x/mig" (control)',
+				configContent:
+					'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "x/mig" };\n',
+				setup: async () => {},
+				umask: 0o022,
+				assert: (result, fixtureCwd) => {
+					expect(result.exitCode).toBe(0);
+					expect(result.report).toContain("created x/mig/");
+					expect(existsSync(join(fixtureCwd, "x", "mig"))).toBe(true);
+				},
+			},
+		];
+
+		it.each(rows)(
+			"undoes what it created when a creation fails part-way, and reports it coded ($label)",
+			async ({ configContent, setup, umask, assert }) => {
+				await writeFile(configPath(), configContent);
+				await setup(cwd);
+				process.umask(umask);
+
+				const result = await runInit(cwd);
+
+				await assert(result, cwd);
+			},
+		);
+	},
+);
+
 // D106 R1 N2: two configured fields resolving to the same path let the
 // run create one artifact and then report the other as already present
 // -- a repair run reading a broken project as whole. Resolved paths are
