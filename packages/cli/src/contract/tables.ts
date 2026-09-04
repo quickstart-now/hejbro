@@ -298,6 +298,19 @@ export type ContractColumnMeta = {
 	readonly notNullElements: boolean;
 };
 
+/**
+ * One column's runtime facts in the snapshot's physical order (#740/D4) —
+ * {@link ContractColumnMeta} plus the TS key, carried as a plain string
+ * value rather than an object-literal key: a JavaScript object's own key
+ * enumeration always lists an integer-like name ahead of insertion order
+ * (`Object.keys({ b: 1, "2": 1 })` → `["2", "b"]`), so the physical order
+ * a table declares its columns in could never survive that shape — the
+ * whole reason this is a list now, not a map. See
+ * `packages/query/src/client/contract-types.ts`'s own `ContractColumnEntry`
+ * (the reading side of this same shape).
+ */
+export type ContractColumnEntry = ContractColumnMeta & { readonly key: string };
+
 /** The runtime fact `contractMetadata.tables[name].foreignKeys` carries — enough to reconstruct a real `ForeignKeyDeclaration` for relation-following (`@hejbro/query`'s `db/related.ts`), and nothing DDL-only (`onDelete`/`onUpdate` never affect a read). */
 export type ContractForeignKeyMeta = {
 	readonly name: string;
@@ -308,8 +321,8 @@ export type ContractForeignKeyMeta = {
 };
 
 /**
- * A table's schema-qualified SQL identity, its own TS-key→column-fact
- * map, and its foreign keys — the runtime name mapping
+ * A table's schema-qualified SQL identity, its own physical-order column
+ * list, and its foreign keys — the runtime name mapping
  * `contractMetadata.tables` carries (planner-confirmed, extended for
  * R2-G6): without it, a client would have to read `schema.json` at
  * runtime to build SQL at all, breaking the "import one file" surface
@@ -324,11 +337,20 @@ export type ContractForeignKeyMeta = {
  * (managed) case carries no noise (D57). No code reads this mark today;
  * it is carried for the reader of the generated file and for tooling
  * built on it.
+ *
+ * `columns` is a list, in the snapshot's own physical order (#740/D4) —
+ * `entries` (`buildColumnEntries`) already reads `table.columns` in that
+ * order, so this only ever has to stop losing it downstream, never
+ * recover it. The name-keyed client reads this list to build its own
+ * statements in the same order the owning repository's own client would
+ * (`packages/query/src/client/synthesize.ts`'s own `columnEntries`,
+ * which also still accepts the pre-#740 object-keyed map a contract
+ * vendored before this shape existed carries).
  */
 export type TableClientMeta = {
 	readonly schema: string;
 	readonly name: string;
-	readonly columns: { readonly [tsKey: string]: ContractColumnMeta };
+	readonly columns: ReadonlyArray<ContractColumnEntry>;
 	readonly foreignKeys: ReadonlyArray<ContractForeignKeyMeta>;
 	readonly existing?: true;
 };
@@ -348,16 +370,14 @@ export const buildTableClientMeta = (
 ): TableClientMeta => ({
 	schema: computation.table.schema,
 	name: computation.table.name,
-	columns: Object.fromEntries(
-		computation.entries.map((entry) => [
-			entry.tsKey,
-			{
-				sqlName: entry.sqlName,
-				typeNode: entry.typeNode,
-				mode: entry.mode,
-				notNullElements: entry.notNullElements,
-			} satisfies ContractColumnMeta,
-		]),
+	columns: computation.entries.map(
+		(entry): ContractColumnEntry => ({
+			key: entry.tsKey,
+			sqlName: entry.sqlName,
+			typeNode: entry.typeNode,
+			mode: entry.mode,
+			notNullElements: entry.notNullElements,
+		}),
 	),
 	foreignKeys: computation.relationships.map((relationship) => ({
 		name: relationship.foreignKeyName,

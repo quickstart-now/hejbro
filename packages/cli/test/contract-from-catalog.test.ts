@@ -77,8 +77,8 @@ describe("exportPayloadFromCatalog / CI-G4-R1-03", () => {
 		expect(source).toContain('"widgets": {');
 		expect(source).toContain("readonly id: string;");
 		expect(source).toContain("readonly label: string;");
-		expect(source).toContain('"id": { sqlName: "id"');
-		expect(source).toContain('"label": { sqlName: "label"');
+		expect(source).toContain('{ key: "id", sqlName: "id"');
+		expect(source).toContain('{ key: "label", sqlName: "label"');
 		expect(source).toContain('database: "widgets_db"');
 	});
 

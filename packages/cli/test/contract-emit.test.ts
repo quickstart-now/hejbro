@@ -28,6 +28,7 @@ import type {
 } from "../src/vendor/validate-export";
 import { validateExport } from "../src/vendor/validate-export";
 import { buildFixturePayload } from "./support/contract-fixture";
+import { loadEmittedContract } from "./support/load-emitted-contract";
 
 const app = schema("app");
 
@@ -54,7 +55,7 @@ describe("the metadata's runtime name map (5.1 follow-up, planner-confirmed)", (
 			source.split("export const contractMetadata")[1] ?? "";
 		expect(metadataBlock).toContain('schema: "app"');
 		expect(metadataBlock).toContain('name: "posts"');
-		expect(metadataBlock).toContain('"postId": { sqlName: "post_id"');
+		expect(metadataBlock).toContain('{ key: "postId", sqlName: "post_id"');
 		// The three facts `@hejbro/query`'s row conversion reads at runtime
 		// (typeNode, mode, notNullElements) -- and only those (planner
 		// condition ④: no primaryKey/unique/defaultValue, which never affect
@@ -88,6 +89,82 @@ describe("the metadata's runtime name map (5.1 follow-up, planner-confirmed)", (
 		expect(metadataBlock).toContain('referencesSchema: "app"');
 		expect(metadataBlock).toContain('referencesTable: "authors"');
 		expect(metadataBlock).toContain('columns: ["author_id"]');
+	});
+});
+
+/**
+ * #740/D4: a hand-built export/snapshot pair, never `table()` -- an
+ * export is foreign input, so a column name that `assertSqlName` (D36)
+ * would refuse a live declaration for (an integer-like name, `__proto__`,
+ * `user-id`) needs no declaration to produce it here, only a snapshot
+ * `columns` array (physical order) and an empty export column-fact map
+ * (so `buildColumnEntries`'s own `columnFact?.key ?? column.name`
+ * fallback makes each column's TS key its SQL name unchanged).
+ */
+const buildPhysicalOrderPayload = (
+	order: ReadonlyArray<string>,
+): ValidatedExportPayload => {
+	const snapshot: Snapshot = {
+		formatVersion: 8,
+		dialect: "postgres",
+		objects: {
+			"table:app.docs": {
+				schema: "app",
+				name: "docs",
+				columns: order.map((name) => ({
+					name,
+					typeNode: { typeName: "text" },
+				})),
+				indexes: [],
+				foreignKeys: [],
+			},
+		},
+	};
+	const tableFact: ExportTableFact = {
+		schemaName: "app",
+		tableName: "docs",
+		exportName: null,
+		columns: {},
+		existing: false,
+	};
+	return { tables: [tableFact], functions: [], roles: [], snapshot };
+};
+
+describe("client metadata lists columns in physical order (#740/D4)", () => {
+	const PhysicalOrder = [
+		"id",
+		"0",
+		"label",
+		"2",
+		"__proto__",
+		"constructor",
+		"Zeta",
+		"user-id",
+	];
+
+	it("carries every column-name class in the snapshot's own physical order", async () => {
+		const payload = buildPhysicalOrderPayload(PhysicalOrder);
+		const source = emitContract(payload, ORIGIN);
+
+		const loaded = await loadEmittedContract(source);
+		const docsMeta = loaded.contractMetadata.tables.docs;
+		if (docsMeta === undefined || !Array.isArray(docsMeta.columns)) {
+			throw new Error("expected docs.columns to be a list");
+		}
+		expect(docsMeta.columns.map((column) => column.key)).toEqual(PhysicalOrder);
+	});
+
+	it("reverses when the snapshot's own physical order is reversed", async () => {
+		const reversed = [...PhysicalOrder].reverse();
+		const payload = buildPhysicalOrderPayload(reversed);
+		const source = emitContract(payload, ORIGIN);
+
+		const loaded = await loadEmittedContract(source);
+		const docsMeta = loaded.contractMetadata.tables.docs;
+		if (docsMeta === undefined || !Array.isArray(docsMeta.columns)) {
+			throw new Error("expected docs.columns to be a list");
+		}
+		expect(docsMeta.columns.map((column) => column.key)).toEqual(reversed);
 	});
 });
 
@@ -822,13 +899,18 @@ describe("contractMetadata's emitted keys survive as own properties (#697, R2-N2
 
 			const tables = contractMetadata.tables as Record<
 				string,
-				{ readonly columns: Record<string, unknown> }
+				{ readonly columns: ReadonlyArray<{ readonly key: string }> }
 			>;
 			expect(Object.hasOwn(tables, key)).toBe(true);
 			expect(Object.keys(tables)).toContain(key);
 
-			expect(Object.hasOwn(tables[key]?.columns ?? {}, key)).toBe(true);
-			expect(Object.keys(tables[key]?.columns ?? {})).toContain(key);
+			// #740/D4: a column's key is a plain string value in a list now,
+			// never an object-literal key -- so unlike the table/function
+			// case above, there is no __proto__-as-key hazard left to prove
+			// survival against here; this instead pins that the list-shaped
+			// carrier keeps every column-name class as an ordinary list
+			// member.
+			expect(tables[key]?.columns.map((column) => column.key)).toContain(key);
 
 			const functions = contractMetadata.functions as Record<string, unknown>;
 			expect(Object.hasOwn(functions, key)).toBe(true);
@@ -918,10 +1000,18 @@ describe("a description's column fact reaches the contract under any column key 
 
 			const tables = contractMetadata.tables as Record<
 				string,
-				{ readonly columns: Record<string, { readonly mode: unknown }> }
+				{
+					readonly columns: ReadonlyArray<{
+						readonly key: string;
+						readonly mode: unknown;
+					}>;
+				}
 			>;
-			expect(Object.hasOwn(tables.posts?.columns ?? {}, "protoKey")).toBe(true);
-			expect(tables.posts?.columns.protoKey?.mode).toBe("string");
+			const protoKeyColumn = tables.posts?.columns.find(
+				(column) => column.key === "protoKey",
+			);
+			expect(protoKeyColumn).toBeDefined();
+			expect(protoKeyColumn?.mode).toBe("string");
 		},
 	);
 });
