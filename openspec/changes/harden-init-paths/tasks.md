@@ -18,7 +18,7 @@ no behaviour change), `packages/cli/src/snapshot-file.ts`,
 `skills/hejbro/references/generate-verify-workflow.md`,
 `.changeset/harden-init-paths.md`.
 
-- [ ] 1.1 (~10m) `[design]` `init` reads — or writes — the configuration
+- [x] 1.1 (~10m) `[design]` `init` reads — or writes — the configuration
       `--config` names, and scaffolds where its fields say (#741, D1).
       Red: `packages/cli/test/init.test.ts` — "honours --config: reads
       the configuration it names and scaffolds where its fields say".
@@ -48,7 +48,7 @@ no behaviour change), `packages/cli/src/snapshot-file.ts`,
       The config artifact's label is `fileLabel(cwd, configPath)`.
       Files: `init.ts`, `loader.ts`, `init.test.ts`.
 
-- [ ] 1.2 (~8m) `[design]` An absolute-looking `migrationsDir` or
+- [x] 1.2 (~8m) `[design]` An absolute-looking `migrationsDir` or
       `snapshotPath` is refused when the configuration is read (#743,
       D2). Red: `packages/cli/test/config.test.ts` — "refuses an
       artifact path spelled as absolute, naming the field". Input table:
@@ -76,7 +76,7 @@ no behaviour change), `packages/cli/src/snapshot-file.ts`,
       Files: `config.ts`, `config.test.ts`, `init.test.ts`,
       `generate-command.test.ts`.
 
-- [ ] 1.3 (~8m) `[design]` A planned snapshot file that would have to
+- [x] 1.3 (~8m) `[design]` A planned snapshot file that would have to
       hold the migrations directory is refused before anything is
       created (#766, D3). Red: `packages/cli/test/init.test.ts` —
       "refuses a configuration whose snapshot path would have to hold
@@ -104,7 +104,7 @@ no behaviour change), `packages/cli/src/snapshot-file.ts`,
       never the node that happens to sit where it points. Files:
       `init.ts`, `init.test.ts`.
 
-- [ ] 1.3b (~6m) `[design]` A directory at the snapshot path is refused
+- [x] 1.3b (~6m) `[design]` A directory at the snapshot path is refused
       before it is read (#766 second ask, D3b). Red:
       `packages/cli/test/generate-command.test.ts` — "refuses a directory
       at the snapshot path with snapshot-not-a-file, never EISDIR"
@@ -125,7 +125,7 @@ no behaviour change), `packages/cli/src/snapshot-file.ts`,
       behaviour (#767's class). Files: `snapshot-file.ts`,
       `generate-command.test.ts`.
 
-- [ ] 1.4 (~9m) `[design]` A permission-blocked check names the
+- [x] 1.4 (~9m) `[design]` A permission-blocked check names the
       directory that blocks it (#768, D4). Red:
       `packages/cli/test/init.test.ts` — "names the ancestor whose
       permissions block the check, never the missing leaf". Input table
@@ -151,7 +151,7 @@ no behaviour change), `packages/cli/src/snapshot-file.ts`,
       `stat`'s `EACCES` is always a directory on the way, never the leaf.
       Files: `init.ts`, `init.test.ts`.
 
-- [ ] 1.5 (~6m) The surface is documented and the release note written.
+- [x] 1.5 (~6m) The surface is documented and the release note written.
       Red: `packages/cli/test/help.test.ts` — "init --help lists
       --config" (subprocess, same shape as the `baseline --help` case).
       Then: the `hejbro init` sentence in

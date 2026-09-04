@@ -20,7 +20,15 @@
       "ratified": null
     }
   ],
-  "work": [],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-04T14:11Z",
+      "title": "nested planned paths refused; directory at snapshot path coded",
+      "pr": null,
+      "decisions": []
+    }
+  ],
   "prs": [],
   "origin": null,
   "followUps": []
