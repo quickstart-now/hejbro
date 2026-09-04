@@ -28,3 +28,16 @@ Two delta sentences were tightened in the same round, no code behind them: the r
 
 Measured: red first — 22 refused derived names as an input table plus the `current_schema` control, the two row-name control rows, the four-key pair row; green after the 22 list entries. Pure work minutes in the ledger (implementer-stamped).
 
+<a id="w3"></a>
+## W3 — harden-core-derivations 2.1: category-T keywords refused after the review measurement
+
+_2026-09-04T14:03Z_
+
+Change `harden-core-derivations`, piece-review round, task 2.1 (branch `fix-core-derivations`).
+
+The spec-bound reviewer measured every `pg_get_keywords()` category-T keyword on PostgreSQL 17.11 as a rendered plpgsql local, in four positions (declare, `into` target, assignment, read): all 23 declare and take `into`; all 23 fail on assignment; 22 fail on read (`raise exception 'value %', left;` → `syntax error at end of input`); `current_schema` reads — as the user's local, silently, where the body meant the builtin (`declare current_schema text := 'SHADOWED'` → the body returns `SHADOWED`, `current_schema()` says `public`). Under R5 the 23 are added to `reservedPlpgsqlNames`, the requirement's class is defined by source (categories `R` and `T`; the variables plpgsql declares itself) rather than by how a name fails, and the `reserved-local-name` message follows that definition ("collides with a name Postgres reserves or plpgsql declares itself").
+
+Two delta sentences were tightened in the same round, no code behind them: the row-name control now states the projection condition (`tg` over `{ id }` accepted, over `{ op }` refused for the local `tg_op`), and the reported duplicate pair is defined as the first key whose derived name repeats an earlier key's, reported with that earlier key (`{ aB, xY, x_y, a_b }` → `xY`/`x_y`).
+
+Measured: red first — 23 refused derived names as an input table, the two row-name control rows, the four-key pair row; green after the 23 list entries and the message. The reviewer's dry run of the 23 entries at 6f10e810 passed every suite (core 1601, hejbro 937, query 910, supabase 141, the rest green) — no existing declaration refused. Pure work minutes in the ledger (implementer-stamped).
+

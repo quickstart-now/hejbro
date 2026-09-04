@@ -25,9 +25,10 @@ plpgsql declares is created without complaint and read as the user's
 local instead of plpgsql's own, so a body that tests `found` after a
 statement reads a variable the statement never set. `current_schema`,
 alone among the keywords, is created without complaint too and then
-resolves to the builtin in every expression position and to the local
-only in `return` — an argument by that name is silently replaced by
-the schema name inside a `where`. The declaration is the only place
+resolves to the builtin in every expression position, and to the local
+only where plpgsql binds it directly — a `select … into` target or
+`return` — so an argument by that name is silently replaced by the
+schema name inside a `where`. The declaration is the only place
 every one of these is visible.
 
 The refusal is uniform. A name is refused wherever a body would render
