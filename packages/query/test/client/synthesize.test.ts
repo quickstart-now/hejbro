@@ -7,7 +7,10 @@ import {
 	isTable,
 } from "@hejbro/core";
 import { describe, expect, it } from "vitest";
-import type { ContractTableMeta } from "../../src/client/contract-types";
+import type {
+	ContractColumnEntry,
+	ContractTableMeta,
+} from "../../src/client/contract-types";
 import { synthesizeTable } from "../../src/client/synthesize";
 
 const POSTS_META: ContractTableMeta = {
@@ -103,5 +106,93 @@ describe("synthesizeTable (R2-G6 6.1)", () => {
 				"declare it with table() (if this repository owns its DDL) or existingTable() (if it only owns the table's shape)",
 			);
 		}
+	});
+
+	// #740/D4: every column-name class (an integer-like name, __proto__,
+	// constructor, an upper-case name, a name needing quoting) keeps its
+	// physical position from a list-shaped columns metadata.
+	describe("physical column order (#740)", () => {
+		const columnEntry = (
+			key: string,
+			sqlName: string,
+		): ContractColumnEntry => ({
+			key,
+			sqlName,
+			typeNode: { typeName: "text" },
+			mode: null,
+			notNullElements: false,
+		});
+		const PhysicalOrder = [
+			"id",
+			"0",
+			"label",
+			"2",
+			"__proto__",
+			"constructor",
+			"Zeta",
+			"user-id",
+		];
+		const DocsMeta: ContractTableMeta = {
+			schema: "app",
+			name: "docs",
+			columns: PhysicalOrder.map((key) => columnEntry(key, key)),
+			foreignKeys: [],
+		};
+
+		it("a list-shaped columns metadata yields the table's columns in list order, integer-like keys included", () => {
+			const docs = synthesizeTable(DocsMeta);
+			const meta = getTableMeta(docs);
+			expect(meta.columns.map((column) => column.columnKey)).toEqual(
+				PhysicalOrder,
+			);
+			expect(meta.columns.map((column) => column.columnName)).toEqual(
+				PhysicalOrder,
+			);
+			// The ref object's own keys -- checked as a set, not by
+			// Object.keys() enumeration order: JavaScript itself always lists
+			// an integer-like own key ahead of any insertion order, for any
+			// object literal or Object.fromEntries result alike (the very
+			// constraint #740 exists to route around at the rendered-SQL
+			// layer, not something this reconstruction can undo at the JS
+			// object level). Physical order is asserted on the declaration's
+			// own array above, and again on the rendered statement in
+			// select.test.ts.
+			const refKeys = Object.keys(docs).filter((key) =>
+				PhysicalOrder.includes(key),
+			);
+			expect(refKeys.sort()).toEqual([...PhysicalOrder].sort());
+			PhysicalOrder.forEach((key) => {
+				expect((docs as unknown as Record<string, unknown>)[key]).toBeDefined();
+			});
+		});
+
+		it("the object-keyed map still builds a table, its own JS key order", () => {
+			const meta: ContractTableMeta = {
+				schema: "app",
+				name: "docs",
+				columns: {
+					title: {
+						sqlName: "title",
+						typeNode: { typeName: "text" },
+						mode: null,
+						notNullElements: false,
+					},
+					id: {
+						sqlName: "id",
+						typeNode: { typeName: "uuid" },
+						mode: null,
+						notNullElements: false,
+					},
+				},
+				foreignKeys: [],
+			};
+			const docs = synthesizeTable(meta);
+			const declarationMeta = getTableMeta(docs);
+			expect(declarationMeta.columns.map((column) => column.columnKey)).toEqual(
+				["title", "id"],
+			);
+			expect((docs as unknown as { id: unknown }).id).toBeDefined();
+			expect((docs as unknown as { title: unknown }).title).toBeDefined();
+		});
 	});
 });

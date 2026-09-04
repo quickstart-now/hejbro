@@ -1,16 +1,20 @@
 import { describe, expect, it } from "vitest";
+import { check } from "../src/dsl/check";
 import { defineFunction } from "../src/dsl/define-function";
+import { defineTrigger } from "../src/dsl/define-trigger";
 import { existingTable } from "../src/dsl/existing-table";
+import { index } from "../src/dsl/index-builder";
 import { pgEnum } from "../src/dsl/pg-enum";
 import { rls } from "../src/dsl/rls";
 import { schema } from "../src/dsl/schema";
 import { getTableMeta, table } from "../src/dsl/table";
 import { generateMigration, generateMigrations } from "../src/engine/generate";
-import { eq, literal, now } from "../src/expr/operators";
+import { eq, isNotNull, literal, now } from "../src/expr/operators";
 import { sql } from "../src/expr/sql-template";
 import { createDefaultRegistry } from "../src/kind/registry";
 import type { TableSnapshot } from "../src/kinds/table-snapshot";
 import { update } from "../src/query/mutate";
+import type { Snapshot } from "../src/snapshot/snapshot";
 import { buildSnapshot, emptySnapshot } from "../src/snapshot/snapshot";
 import {
 	bigserial,
@@ -1489,5 +1493,200 @@ describe("an existing declaration emits nothing (add-unmanaged-objects, #605)", 
 		// rename to "legacy"`, the collision R2-B1's own repro D named,
 		// reached through the adoption door instead of the handover one.
 		expect(secondResult.sql).not.toContain('rename to "legacy"');
+	});
+});
+
+// #701/D3: a previous snapshot's set-shaped arrays (a table's indexes and
+// checks, a policy's roles, a trigger's events) reach `generateMigrations`
+// in a non-canonical order two ways -- a hand-written or on-disk previous
+// written before this order was canonical, and declarations that simply
+// list the same members in another order -- and neither must ever produce
+// a migration on its own.
+describe("generateMigrations — a non-canonical previous generates nothing (#701)", () => {
+	const setApp = schema("set_order_app");
+	/** `{ note: text() }` when requested, else `{}` (no ternary, this codebase's own compact-field convention). */
+	const noteColumnField = (
+		withNote: boolean,
+	): { readonly note?: ReturnType<typeof text> } => {
+		if (!withNote) {
+			return {};
+		}
+		return { note: text() };
+	};
+	const buildDocs = (options?: { readonly note?: true }) =>
+		table(
+			setApp,
+			"docs",
+			{
+				id: uuid().primaryKey(),
+				ownerId: uuid(),
+				title: text().notNull(),
+				...noteColumnField(options?.note === true),
+			},
+			(t) => ({
+				indexes: [
+					index("docs_owner_id_idx").on(t.ownerId),
+					index("docs_title_idx").on(t.title),
+				],
+				checks: [
+					check("a_check", isNotNull(t.ownerId)),
+					check("b_check", isNotNull(t.title)),
+				],
+				rls: rls.enabled({
+					read: rls
+						.policy("docs_read")
+						.for("select")
+						.to("admin", "reader")
+						.using(literal(true)),
+				}),
+			}),
+		);
+	const docs = buildDocs();
+	const docsTrigger = defineTrigger(
+		docs,
+		{
+			name: "docs_audit",
+			timing: "after",
+			events: ["insert", "update"],
+			forEach: "row",
+		},
+		(ctx, { new: row }) => {
+			ctx.return(row);
+		},
+	);
+	const declarations = [setApp, docs, docsTrigger];
+
+	const canonicalSnapshot = generateMigrations({
+		declarations,
+		previousSnapshot: emptySnapshot,
+	}).snapshot;
+
+	/** Deep-clones `snapshot` and reverses every set-shaped array this scenario's own kinds carry -- simulating a file on disk written before #701's canonical order existed, never `buildSnapshot`'s own output as-is. */
+	const asNonCanonical = (snapshot: Snapshot): Snapshot =>
+		({
+			...snapshot,
+			objects: Object.fromEntries(
+				Object.entries(snapshot.objects).map(([key, node]) => {
+					const clone = structuredClone(node) as Record<string, unknown>;
+					if (key.startsWith("policy:")) {
+						clone.roles = [...(clone.roles as ReadonlyArray<string>)].reverse();
+					}
+					if (key.startsWith("trigger:")) {
+						clone.events = [
+							...(clone.events as ReadonlyArray<unknown>),
+						].reverse();
+					}
+					if (key.startsWith("table:")) {
+						clone.indexes = [
+							...(clone.indexes as ReadonlyArray<unknown>),
+						].reverse();
+						if (clone.checks !== undefined) {
+							clone.checks = [
+								...(clone.checks as ReadonlyArray<unknown>),
+							].reverse();
+						}
+					}
+					return [key, clone];
+				}),
+			),
+		}) as Snapshot;
+
+	it("a hand-written, non-canonical previous against the same declarations generates nothing", () => {
+		const previousSnapshot = asNonCanonical(canonicalSnapshot);
+		const result = generateMigrations({ declarations, previousSnapshot });
+		expect(result.migrations).toEqual([]);
+		expect(result.hasChanges).toBe(false);
+		expect(result.snapshotChanged).toBe(false);
+	});
+
+	it("declarations reordered against a canonical previous generates nothing", () => {
+		const reorderedDocs = table(
+			setApp,
+			"docs",
+			{
+				id: uuid().primaryKey(),
+				ownerId: uuid(),
+				title: text().notNull(),
+			},
+			(t) => ({
+				indexes: [
+					index("docs_title_idx").on(t.title),
+					index("docs_owner_id_idx").on(t.ownerId),
+				],
+				checks: [
+					check("b_check", isNotNull(t.title)),
+					check("a_check", isNotNull(t.ownerId)),
+				],
+				rls: rls.enabled({
+					read: rls
+						.policy("docs_read")
+						.for("select")
+						.to("reader", "admin")
+						.using(literal(true)),
+				}),
+			}),
+		);
+		const reorderedTrigger = defineTrigger(
+			reorderedDocs,
+			{
+				name: "docs_audit",
+				timing: "after",
+				events: ["update", "insert"],
+				forEach: "row",
+			},
+			(ctx, { new: row }) => {
+				ctx.return(row);
+			},
+		);
+		const result = generateMigrations({
+			declarations: [setApp, reorderedDocs, reorderedTrigger],
+			previousSnapshot: canonicalSnapshot,
+		});
+		expect(result.migrations).toEqual([]);
+	});
+
+	it("control: a non-canonical previous plus one added column generates only that column's statement, canonically", () => {
+		const previousSnapshot = asNonCanonical(canonicalSnapshot);
+		const withNote = buildDocs({ note: true });
+		const withNoteTrigger = defineTrigger(
+			withNote,
+			{
+				name: "docs_audit",
+				timing: "after",
+				events: ["insert", "update"],
+				forEach: "row",
+			},
+			(ctx, { new: row }) => {
+				ctx.return(row);
+			},
+		);
+		const result = generateMigrations({
+			declarations: [setApp, withNote, withNoteTrigger],
+			previousSnapshot,
+		});
+		expect(result.migrations).toHaveLength(1);
+		const [migration] = result.migrations;
+		if (migration === undefined) {
+			throw new Error("expected one migration");
+		}
+		expect(migration.sql).toContain(
+			'alter table "set_order_app"."docs" add column "note" text;',
+		);
+		expect(migration.sql).not.toContain("restate");
+		expect(migration.sql).not.toContain("create policy");
+		expect(migration.sql).not.toContain("create trigger");
+		expect(migration.sql).not.toContain("create index");
+
+		const tableNode = result.snapshot.objects[
+			"table:set_order_app.docs"
+		] as TableSnapshot;
+		expect(tableNode.indexes.map((i) => i.name)).toEqual([
+			"docs_owner_id_idx",
+			"docs_title_idx",
+		]);
+		expect((tableNode.checks ?? []).map((c) => c.name)).toEqual([
+			"a_check",
+			"b_check",
+		]);
 	});
 });

@@ -10,6 +10,7 @@ import {
 } from "../kind/emit-helpers";
 import type { KindChange, ObjectKind } from "../kind/object-kind";
 import type { JsonValue } from "../snapshot/stable-json";
+import { compareKeys } from "../sort";
 import {
 	qualifyName,
 	quoteIdentifier,
@@ -187,6 +188,21 @@ const withCheckField = (
 };
 
 /**
+ * Sorts `roles` by name (#701, D3) — an order the database never reads, so
+ * two declarations listing the same roles in a different order serialize
+ * to byte-identical nodes; `createPolicySql`'s own `rolesSql` renders
+ * straight from this array, so a `create policy … to …` list also follows
+ * this order for any policy created or recreated from now on.
+ */
+const canonicalizePolicy = (node: JsonValue): JsonValue => {
+	const snapshot = asPolicySnapshot(node);
+	return {
+		...snapshot,
+		roles: [...snapshot.roles].sort(compareKeys),
+	};
+};
+
+/**
  * The built-in object kind for Postgres row-level-security policies.
  * Identity is `"<schema>.<table>.<name>"`. Postgres has no `alter policy`
  * for clause/role/command changes, so `diff` treats any field difference
@@ -288,6 +304,7 @@ export const policyKind: ObjectKind<PolicyDeclaration> = {
 			},
 			change,
 		),
+	canonicalize: canonicalizePolicy,
 	ownerTableIdentity: (node) => {
 		const snapshot = asPolicySnapshot(node);
 		return tableIdentity(snapshot.schema, snapshot.table);

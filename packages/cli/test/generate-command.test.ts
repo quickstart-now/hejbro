@@ -1,5 +1,13 @@
+import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { chmod, mkdir, readdir, readFile, rm } from "node:fs/promises";
+import {
+	chmod,
+	mkdir,
+	readdir,
+	readFile,
+	rm,
+	writeFile,
+} from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { CLI_VERSION } from "../src/version";
@@ -166,11 +174,13 @@ export const posts = table(app, "posts", {
 export const authUsers = existingTable("auth", "users", { id: uuid(), email: text() });
 `;
 
-// D106 R5, R5-B1: the evaluator's own flagship reproduction, repro ① --
-// a plain managed table, no existingTable() anywhere in the project.
-// serializeIndexes doesn't sort, so swapping the two index() calls below
-// moves the snapshot with no KindChange to emit (managed:managed,
-// diffByKey is name-keyed).
+// #701/D3 (supersedes D106 R5, R5-B1's own restate fallback, J17: the
+// owner's own comment on #701 asked for canonical comparison over restate
+// once the census landed): a plain managed table, no existingTable()
+// anywhere in the project, two indexes -- reordering them is a
+// set-shaped-array reorder, and `generate`'s snapshot-moved check now
+// reads both sides through the canonical form, so it is never a movement
+// at all, not even a zero-statement one.
 const SCHEMA_WITH_TWO_INDEXES_SOURCE = `import { index, schema, table, text, uuid } from "hejbro";
 
 export const app = schema("app");
@@ -182,19 +192,7 @@ export const posts = table(app, "posts", {
 }, (t) => ({ indexes: [index().on(t.title), index().on(t.body)] }));
 `;
 
-const SCHEMA_WITH_TWO_INDEXES_REORDERED_SOURCE = `import { index, schema, table, text, uuid } from "hejbro";
-
-export const app = schema("app");
-
-export const posts = table(app, "posts", {
-	id: uuid().primaryKey().defaultRandom(),
-	title: text().notNull(),
-	body: text().notNull(),
-}, (t) => ({ indexes: [index().on(t.body), index().on(t.title)] }));
-`;
-
-// D106 R5, R5-B1: repro ② -- the same shape, on `checks` instead of
-// `indexes` (serializeChecks doesn't sort either).
+// The same shape, on `checks` instead of `indexes`.
 const SCHEMA_WITH_TWO_CHECKS_SOURCE = `import { check, gt, schema, table, integer, uuid } from "hejbro";
 
 export const app = schema("app");
@@ -206,22 +204,10 @@ export const posts = table(app, "posts", {
 }, (t) => ({ checks: [check("a_pos", gt(t.a, 0)), check("b_pos", gt(t.b, 0))] }));
 `;
 
-const SCHEMA_WITH_TWO_CHECKS_REORDERED_SOURCE = `import { check, gt, schema, table, integer, uuid } from "hejbro";
-
-export const app = schema("app");
-
-export const posts = table(app, "posts", {
-	id: uuid().primaryKey().defaultRandom(),
-	a: integer().notNull(),
-	b: integer().notNull(),
-}, (t) => ({ checks: [check("b_pos", gt(t.b, 0)), check("a_pos", gt(t.a, 0))] }));
-`;
-
-// D106 R5, R5-B1: repro ③ -- inside this change's own feature surface,
-// the same index reorder alongside a real existingTable() and a managed
-// FK onto it, so the scan crosses an existing:existing (unchanged,
-// reshapedOrNull -> null) table before reaching the managed one.
-const SCHEMA_WITH_EXISTING_AND_REORDERED_INDEXES_SOURCE = `import { existingTable, index, schema, table, text, uuid } from "hejbro";
+// A real existingTable() and a managed FK onto it alongside the reordered
+// table, so the scan crosses an existing:existing (unchanged) table
+// before reaching the managed one whose committed indexes are reordered.
+const SCHEMA_WITH_EXISTING_AND_INDEXES_SOURCE = `import { existingTable, index, schema, table, text, uuid } from "hejbro";
 
 export const app = schema("app");
 
@@ -233,20 +219,6 @@ export const posts = table(app, "posts", {
 	body: text().notNull(),
 	authorId: uuid().references(() => authUsers.id),
 }, (t) => ({ indexes: [index().on(t.title), index().on(t.body)] }));
-`;
-
-const SCHEMA_WITH_EXISTING_AND_REORDERED_INDEXES_SWAPPED_SOURCE = `import { existingTable, index, schema, table, text, uuid } from "hejbro";
-
-export const app = schema("app");
-
-export const authUsers = existingTable("auth", "users", { id: uuid() });
-
-export const posts = table(app, "posts", {
-	id: uuid().primaryKey().defaultRandom(),
-	title: text().notNull(),
-	body: text().notNull(),
-	authorId: uuid().references(() => authUsers.id),
-}, (t) => ({ indexes: [index().on(t.body), index().on(t.title)] }));
 `;
 
 // #703: a managed table, then the same edit's own handover+rename
@@ -296,6 +268,44 @@ const writeSchema = (source: string): Promise<void> =>
 const sqlFileNames = async (): Promise<ReadonlyArray<string>> => {
 	const entries = await readdir(join(cwd, "migrations"));
 	return entries.filter((name) => name.endsWith(".sql")).sort();
+};
+
+const SNAPSHOT_PREFIX = "-- snapshot: ";
+
+/**
+ * #701/D3: simulates a project's committed snapshot as it would read
+ * before this order was canonical -- `reorder` rewrites one set-shaped
+ * array on the on-disk file (never `hejbro generate`'s own output, which
+ * always writes the canonical form now), and the tip migration's own
+ * "snapshot:" hash is recomputed to match those exact bytes, so check 1
+ * (tip hash vs. file) still passes and only the canonical-form comparison
+ * this scenario means to exercise is under test.
+ */
+const writeNonCanonicalSnapshot = async (
+	reorder: (parsed: {
+		readonly objects: Record<string, Record<string, unknown>>;
+	}) => void,
+): Promise<void> => {
+	const snapshotPath = join(cwd, "hejbro.snapshot.json");
+	const parsed = JSON.parse(await readFile(snapshotPath, "utf8"));
+	reorder(parsed);
+	const rewritten = `${JSON.stringify(parsed, null, "\t")}\n`;
+	await writeFile(snapshotPath, rewritten);
+
+	const [fileName] = await sqlFileNames();
+	const filePath = join(cwd, "migrations", fileName as string);
+	const original = await readFile(filePath, "utf8");
+	const newHash = `sha256:${createHash("sha256").update(rewritten).digest("hex")}`;
+	const patched = original
+		.split("\n")
+		.map((line) => {
+			if (!line.startsWith(SNAPSHOT_PREFIX)) {
+				return line;
+			}
+			return `${SNAPSHOT_PREFIX}${newHash}`;
+		})
+		.join("\n");
+	await writeFile(filePath, patched);
 };
 
 describe("hejbro generate (built CLI, tmp-dir)", () => {
@@ -901,123 +911,126 @@ export default defineConfig({
 		}
 	});
 
-	// D106 R5, R5-B1 repro ①: the evaluator's own flagship reproduction --
-	// reordering two index() declarations on a plain managed table (no
-	// existingTable() anywhere in the project) used to crash generate with
-	// `existing-transition-not-found`. Fixed by the restate fallback
-	// (D106 R5, J17).
-	it("reordering two index() declarations on a managed table writes a restate migration instead of crashing (D106 R5, R5-B1 repro ①)", async () => {
+	// #701/D3 (supersedes D106 R5, R5-B1 repro ①): a committed snapshot
+	// whose indexes are non-canonical (as a pre-#701 project's would read)
+	// against declarations listing the same two indexes -- `generate` now
+	// reads both sides through the canonical form, so this is never a
+	// movement: no new migration file, the snapshot's own bytes untouched,
+	// and `verify` passes reading the same canonical form.
+	it("a committed snapshot with reordered indexes generates nothing against unchanged declarations", async () => {
 		await runCli(cwd, ["init"]);
 		await writeSchema(SCHEMA_WITH_TWO_INDEXES_SOURCE);
 		await runCli(cwd, ["generate"]);
 		const firstVerify = await runCli(cwd, ["verify"]);
 		expect(firstVerify.exitCode).toBe(0);
 
-		await writeSchema(SCHEMA_WITH_TWO_INDEXES_REORDERED_SOURCE);
+		await writeNonCanonicalSnapshot((parsed) => {
+			const table = parsed.objects["table:app.posts"];
+			if (table === undefined) {
+				throw new Error("expected table:app.posts in the snapshot");
+			}
+			table.indexes = [...(table.indexes as ReadonlyArray<unknown>)].reverse();
+		});
+		const beforeText = await readFile(
+			join(cwd, "hejbro.snapshot.json"),
+			"utf8",
+		);
+		const namesBefore = await sqlFileNames();
+
 		const result = await runCli(cwd, ["generate"]);
 		expect(result.exitCode).toBe(0);
-		expect(result.stdout).toContain("wrote migrations/");
-		expect(result.stdout).toContain("carries no statements.");
-
-		const names = await sqlFileNames();
-		expect(names.some((name) => name.endsWith("_restate_posts.sql"))).toBe(
-			true,
+		expect(result.stdout).toContain(
+			"no changes — snapshot already matches your declarations.",
+		);
+		expect(await sqlFileNames()).toEqual(namesBefore);
+		expect(await readFile(join(cwd, "hejbro.snapshot.json"), "utf8")).toBe(
+			beforeText,
 		);
 
 		const verify = await runCli(cwd, ["verify"]);
 		expect(verify.exitCode).toBe(0);
 	});
 
-	// D106 R5, R5-B1 repro ②: the same shape on `checks` instead of
-	// `indexes`.
-	it("reordering two check() declarations on a managed table writes a restate migration instead of crashing (D106 R5, R5-B1 repro ②)", async () => {
+	// The same shape on `checks` instead of `indexes`.
+	it("a committed snapshot with reordered checks generates nothing against unchanged declarations", async () => {
 		await runCli(cwd, ["init"]);
 		await writeSchema(SCHEMA_WITH_TWO_CHECKS_SOURCE);
 		await runCli(cwd, ["generate"]);
 		const firstVerify = await runCli(cwd, ["verify"]);
 		expect(firstVerify.exitCode).toBe(0);
 
-		await writeSchema(SCHEMA_WITH_TWO_CHECKS_REORDERED_SOURCE);
+		await writeNonCanonicalSnapshot((parsed) => {
+			const table = parsed.objects["table:app.posts"];
+			if (table === undefined) {
+				throw new Error("expected table:app.posts in the snapshot");
+			}
+			table.checks = [...(table.checks as ReadonlyArray<unknown>)].reverse();
+		});
+		const beforeText = await readFile(
+			join(cwd, "hejbro.snapshot.json"),
+			"utf8",
+		);
+		const namesBefore = await sqlFileNames();
+
 		const result = await runCli(cwd, ["generate"]);
 		expect(result.exitCode).toBe(0);
-		expect(result.stdout).toContain("wrote migrations/");
-		expect(result.stdout).toContain("carries no statements.");
-
-		const names = await sqlFileNames();
-		expect(names.some((name) => name.endsWith("_restate_posts.sql"))).toBe(
-			true,
+		expect(result.stdout).toContain(
+			"no changes — snapshot already matches your declarations.",
+		);
+		expect(await sqlFileNames()).toEqual(namesBefore);
+		expect(await readFile(join(cwd, "hejbro.snapshot.json"), "utf8")).toBe(
+			beforeText,
 		);
 
 		const verify = await runCli(cwd, ["verify"]);
 		expect(verify.exitCode).toBe(0);
 	});
 
-	// D106 R5, R5-B1 repro ③: inside this change's own feature surface --
-	// the same index reorder alongside a real existingTable() and a
-	// managed FK onto it, so the scan crosses an unchanged existing:existing
-	// table before reaching the managed one that actually moved.
-	it("an index reorder in a project that also declares an existingTable() still restates the managed table, not the existing one (D106 R5, R5-B1 repro ③)", async () => {
+	// A real existingTable() alongside the reordered table, so the scan
+	// crosses an unchanged existing:existing table before reaching the
+	// managed one whose committed indexes are non-canonical.
+	it("a committed snapshot with reordered indexes generates nothing alongside an unrelated existingTable()", async () => {
 		await runCli(cwd, ["init"]);
-		await writeSchema(SCHEMA_WITH_EXISTING_AND_REORDERED_INDEXES_SOURCE);
+		await writeSchema(SCHEMA_WITH_EXISTING_AND_INDEXES_SOURCE);
 		await runCli(cwd, ["generate"]);
 		const firstVerify = await runCli(cwd, ["verify"]);
 		expect(firstVerify.exitCode).toBe(0);
 
-		await writeSchema(
-			SCHEMA_WITH_EXISTING_AND_REORDERED_INDEXES_SWAPPED_SOURCE,
+		await writeNonCanonicalSnapshot((parsed) => {
+			const table = parsed.objects["table:app.posts"];
+			if (table === undefined) {
+				throw new Error("expected table:app.posts in the snapshot");
+			}
+			table.indexes = [...(table.indexes as ReadonlyArray<unknown>)].reverse();
+		});
+		const beforeText = await readFile(
+			join(cwd, "hejbro.snapshot.json"),
+			"utf8",
 		);
+		const namesBefore = await sqlFileNames();
+
 		const result = await runCli(cwd, ["generate"]);
 		expect(result.exitCode).toBe(0);
-		expect(result.stdout).toContain("wrote migrations/");
-		expect(result.stdout).toContain("carries no statements.");
-
-		const names = await sqlFileNames();
-		expect(names.some((name) => name.endsWith("_restate_posts.sql"))).toBe(
-			true,
+		expect(result.stdout).toContain(
+			"no changes — snapshot already matches your declarations.",
+		);
+		expect(await sqlFileNames()).toEqual(namesBefore);
+		expect(await readFile(join(cwd, "hejbro.snapshot.json"), "utf8")).toBe(
+			beforeText,
 		);
 
 		const verify = await runCli(cwd, ["verify"]);
 		expect(verify.exitCode).toBe(0);
 	});
 
-	// D106 R5, R5-B1: the restate slug is deterministic across two
-	// entirely independent projects, the same way R3-B1/R4-B1 measurement
-	// already proved for the other verbs.
-	it("the restate migration's own slug is deterministic across two independent runs (D106 R5, R5-B1)", async () => {
-		const stripPrefix = (fileName: string): string =>
-			fileName.replace(/^\d+_/, "");
-
-		const cwdA = await createCliFixtureDir();
-		const cwdB = await createCliFixtureDir();
-		try {
-			for (const target of [cwdA, cwdB]) {
-				await runCli(target, ["init"]);
-				await writeFixtureFile(
-					target,
-					"src/app.schema.ts",
-					SCHEMA_WITH_TWO_INDEXES_SOURCE,
-				);
-				await runCli(target, ["generate"]);
-				await writeFixtureFile(
-					target,
-					"src/app.schema.ts",
-					SCHEMA_WITH_TWO_INDEXES_REORDERED_SOURCE,
-				);
-				await runCli(target, ["generate"]);
-			}
-			const namesA = (await readdir(join(cwdA, "migrations")))
-				.filter((name) => name.endsWith(".sql"))
-				.sort();
-			const namesB = (await readdir(join(cwdB, "migrations")))
-				.filter((name) => name.endsWith(".sql"))
-				.sort();
-			expect(namesA.map(stripPrefix)).toEqual(namesB.map(stripPrefix));
-			expect(stripPrefix(namesA[1] as string)).toBe("restate_posts.sql");
-		} finally {
-			await removeCliFixtureDir(cwdA);
-			await removeCliFixtureDir(cwdB);
-		}
-	});
+	// The restate migration's own deterministic-slug pin (D106 R5, R5-B1)
+	// no longer has a subject to test here -- #701 removed the restate
+	// fallback path itself for this scenario class (a reorder is no longer
+	// a movement at all). The restate mechanism's own determinism is still
+	// pinned directly at `packages/core/test/migration-file.test.ts`'s
+	// `describe("restate fallback (D106 R5, R5-B1, J17)", ...)`, which
+	// exercises `deriveExistingTransitionSlug`'s "restate_<table>" case
+	// without depending on a reorder ever reaching it.
 
 	// #703: a managed table's own removal, paired with a same-shaped
 	// existingTable() appearing under a different name in the same run,

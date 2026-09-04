@@ -5,7 +5,7 @@ import { expr } from "../expr/ast";
 import type { SqlTypeFamily } from "../expr/type-family";
 import { familyOfTypeNode } from "../expr/type-family";
 import type { FunctionBody } from "../plpgsql/body-ast";
-import type { BodyContext } from "../plpgsql/body-context";
+import type { BodyContext, SetofTableIdentity } from "../plpgsql/body-context";
 import { recordBodyWithGuard } from "../plpgsql/body-context";
 import { assertValidLocalName } from "../plpgsql/reserved";
 import { assertSqlName } from "../sql/identifier-rules";
@@ -332,6 +332,16 @@ const scalarReturnFamilyOf = (
 	return null;
 };
 
+/** The table `ctx.return()`'s query must produce the whole row of, for a `returns setof <table>` declaration (#749/D7) — `null` for a scalar or trigger declaration, which has no such shape to check against. */
+const declaredTableOf = (
+	returns: FunctionDeclaration["returns"],
+): SetofTableIdentity => {
+	if (returns.returnsKind !== "setofTable") {
+		return null;
+	}
+	return { schemaName: returns.schemaName, tableName: returns.tableName };
+};
+
 /** The schema name a `defineFunction` owner argument resolves to, whichever form it was given. */
 const schemaNameOf = (owner: SchemaDeclaration | string): string => {
 	if (typeof owner === "string") {
@@ -384,6 +394,7 @@ export const defineFunction = <
 		declaredAt,
 		returns.returnsKind,
 		scalarReturnFamilyOf(returns),
+		declaredTableOf(returns),
 		(ctx) => body(ctx, refs),
 	);
 

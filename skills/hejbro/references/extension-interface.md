@@ -20,3 +20,11 @@ carries these narrower members:
   kind's own `serialize` always produces, checked at parse time.
 - `noCatalogObjectReason?: string` — states that no catalog object ever
   backs this kind's declared objects, and why.
+- `canonicalize?(node: JsonValue): JsonValue` — reorders a serialized
+  node's set-shaped arrays into their canonical order (#701); implement
+  it when a kind's snapshot carries an array whose element order isn't
+  semantically meaningful (`policy.roles`, `trigger.events`, `table.
+  indexes`/`checks` are the built-in cases). `buildSnapshot` applies it
+  right after `serialize`, and `diffSnapshots`/`snapshotChangedFrom`/
+  `verify`'s check 2 apply it again before every comparison, so a kind
+  that skips it is compared exactly as it always was.

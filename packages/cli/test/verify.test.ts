@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -191,6 +192,38 @@ export const authSchema = schema("auth");
 export const sessions = table(authSchema, "sessions", {
 	id: uuid().primaryKey().defaultRandom(),
 });
+`;
+
+// #701/D3: a table with two indexes, two checks, and a policy with two
+// roles -- one declaration carrying every set-shaped array this change
+// canonicalizes, so a single hand-edited fixture covers all three kinds.
+const SET_ORDER_SCHEMA = `import { check, index, isNotNull, literal, rls, schema, table, text, uuid } from "hejbro";
+
+export const app = schema("app");
+
+export const docs = table(
+	app,
+	"docs",
+	{
+		id: uuid().primaryKey().defaultRandom(),
+		ownerId: uuid(),
+		title: text().notNull(),
+	},
+	(t) => ({
+		indexes: [index().on(t.ownerId), index().on(t.title)],
+		checks: [
+			check("a_check", isNotNull(t.ownerId)),
+			check("b_check", isNotNull(t.title)),
+		],
+		rls: rls.enabled({
+			read: rls
+				.policy("docs_read")
+				.for("select")
+				.to("admin", "reader")
+				.using(literal(true)),
+		}),
+	}),
+);
 `;
 
 const PARENT_PREFIX = "-- parent-snapshot: ";
@@ -420,6 +453,73 @@ export const projects = table(app, "projects", {
 		const result = await runCli(cwd, ["verify"]);
 		expect(result.exitCode).toBe(0);
 		expect(result.stdout).toContain("5 checks passed");
+	});
+
+	// #701/D3: a checked-in snapshot that differs from the declarations only
+	// by a set-shaped array's order -- simulating a file written before this
+	// order was canonical, with its tip migration's own hash recomputed to
+	// match it (never hejbro's own output as-is: `generate` always writes
+	// the canonical form now, so this state can only be reached by editing
+	// the file directly, exactly what a pre-#701 project's committed
+	// snapshot looks like) -- passes check 2 through the canonical form.
+	it("a checked-in snapshot differing from the declarations only by a set's order passes (#701)", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(SET_ORDER_SCHEMA);
+		await runCli(cwd, ["generate"]);
+
+		const snapshotPath = join(cwd, "hejbro.snapshot.json");
+		const parsed = JSON.parse(await readFile(snapshotPath, "utf8"));
+		const table = parsed.objects["table:app.docs"];
+		table.indexes = [...table.indexes].reverse();
+		table.checks = [...table.checks].reverse();
+		const policy = parsed.objects["policy:app.docs.docs_read"];
+		policy.roles = [...policy.roles].reverse();
+		const reordered = `${JSON.stringify(parsed, null, "\t")}\n`;
+		await writeFile(snapshotPath, reordered);
+
+		// The tip migration's own "snapshot:" hash must match this
+		// (semantically unchanged, byte-reordered) file for check 1 to keep
+		// passing -- otherwise this would only ever measure check 1's own
+		// tip-mismatch path, never check 2's canonical-form tolerance.
+		const [fileName] = await migrationFileNames();
+		const filePath = join(cwd, "migrations", fileName as string);
+		const original = await readFile(filePath, "utf8");
+		const newHash = `sha256:${createHash("sha256").update(reordered).digest("hex")}`;
+		await writeFile(
+			filePath,
+			replaceLinePrefixedWith(original, SNAPSHOT_PREFIX, newHash),
+		);
+
+		const result = await runCli(cwd, ["verify"]);
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("checks passed");
+	});
+
+	it("a hand-reordered snapshot is still a tip mismatch (#701)", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(SET_ORDER_SCHEMA);
+		await runCli(cwd, ["generate"]);
+
+		// The file's own roles array is reordered by hand, after the tip
+		// migration already recorded a hash for the canonical bytes -- the
+		// file's bytes no longer hash to that "snapshot:" line, so this is
+		// still a tip mismatch even though the declarations agree with it.
+		const snapshotPath = join(cwd, "hejbro.snapshot.json");
+		const parsed = JSON.parse(await readFile(snapshotPath, "utf8"));
+		const policy = parsed.objects["policy:app.docs.docs_read"];
+		policy.roles = [...policy.roles].reverse();
+		await writeFile(snapshotPath, `${JSON.stringify(parsed, null, "\t")}\n`);
+
+		const [fileName] = await migrationFileNames();
+
+		const result = await runCli(cwd, ["verify"]);
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain(
+			`error[chain-tip-mismatch]: migrations/${fileName}`,
+		);
+		expect(result.stderr).toContain(
+			`the migration chain's tip hash doesn't match the current snapshot — "migrations/${fileName}"'s "snapshot:" hash and the snapshot at "hejbro.snapshot.json" disagree.`,
+		);
 	});
 
 	it("check 3 (chain linearity): exits 1 with diverged-migrations when two files share a parent", async () => {

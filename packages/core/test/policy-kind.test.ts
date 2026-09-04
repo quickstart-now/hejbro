@@ -4,11 +4,12 @@ import { schema } from "../src/dsl/schema";
 import { getTableMeta, table } from "../src/dsl/table";
 import { generateMigration } from "../src/engine/generate";
 import { encodeExprNode } from "../src/expr/codec";
-import { eq } from "../src/expr/operators";
+import { eq, literal } from "../src/expr/operators";
 import { createDefaultRegistry } from "../src/kind/registry";
 import { policyKind, policyUsing } from "../src/kinds/policy-kind";
 import { exists, select } from "../src/query/select";
 import { buildSnapshot, emptySnapshot } from "../src/snapshot/snapshot";
+import { stableJson } from "../src/snapshot/stable-json";
 import { text, timestamptz, uuid } from "../src/types/column-builder-factories";
 
 // #110: using/withCheck are now structured expression nodes (D67/D70), not
@@ -363,6 +364,115 @@ describe("policy recreate ordering through generateMigration", () => {
 		expect(dropIndex).toBeGreaterThanOrEqual(0);
 		expect(createIndex).toBeGreaterThan(dropIndex);
 		expect(result.sql).not.toContain("drop policy if exists");
+	});
+});
+
+// #701/D3: roles are a set-shaped array -- the database never reads their
+// own order, so two declarations listing the same roles in a different
+// order must serialize to byte-identical nodes, produce no diff, and
+// render `create policy … to …` in the one canonical (sorted) order. The
+// control row pins that a real membership change still reports the
+// existing alter.
+describe("policyKind — canonical order of roles (#701)", () => {
+	const buildPolicy = (roles: ReadonlyArray<string>) =>
+		policyKind.serialize({
+			declarationKind: "policy",
+			schemaName: "app",
+			tableName: "posts",
+			policyName: "posts_read_published",
+			command: "select",
+			permissive: true,
+			roles,
+			using: null,
+			withCheck: null,
+			declaredAt: null,
+		});
+
+	it.each([
+		{ name: "two roles swapped", rolesA: ["b", "a"], rolesB: ["a", "b"] },
+		{
+			name: "three roles rotated",
+			rolesA: ["b", "c", "a"],
+			rolesB: ["a", "b", "c"],
+		},
+	])("$name: byte-identical, no diff", ({ rolesA, rolesB }) => {
+		const previous = buildPolicy(rolesA);
+		const next = buildPolicy(rolesB);
+		const identity = "app.posts.posts_read_published";
+		expect(policyKind.canonicalize?.(previous)).toEqual(
+			policyKind.canonicalize?.(next),
+		);
+		expect(
+			policyKind.diff(
+				policyKind.canonicalize?.(previous) ?? previous,
+				policyKind.canonicalize?.(next) ?? next,
+				identity,
+			),
+		).toEqual([]);
+	});
+
+	it("control: a role added is still a reported alter", () => {
+		const previous = policyKind.canonicalize?.(buildPolicy(["anon"])) ?? null;
+		const next =
+			policyKind.canonicalize?.(buildPolicy(["anon", "authenticated"])) ?? null;
+		const identity = "app.posts.posts_read_published";
+		expect(policyKind.diff(previous, next, identity)).toEqual([
+			{
+				kind: "policy",
+				operation: "alter",
+				identity,
+				previous,
+				next,
+				notes: ["policy changed; recreating"],
+			},
+		]);
+	});
+
+	it("renders create policy … to … with roles in canonical (sorted) order", () => {
+		const next = policyKind.canonicalize?.(
+			buildPolicy(["writer", "admin", "reader"]),
+		);
+		const statements = policyKind.emit({
+			kind: "policy",
+			operation: "create",
+			identity: "app.posts.posts_read_published",
+			previous: null,
+			next: next ?? null,
+			notes: [],
+		});
+		expect(statements[1]?.sql).toContain('to "admin", "reader", "writer"');
+	});
+
+	// snapshot-format's own delta scenario ("Declarations differing only in
+	// a set's order serialize identically") is stated over *declarations*,
+	// not a hand-built node -- proven end to end through the declaration ->
+	// buildSnapshot path (generateMigration, since resolveDeclarations is
+	// private), not just canonicalizePolicy called directly.
+	it("a declaration whose roles are listed in another order serializes identically through the declaration path (snapshot-format)", () => {
+		const buildPostsWithRoles = (roles: ReadonlyArray<string>) =>
+			table(app, "posts", { id: uuid().primaryKey() }, () => ({
+				rls: rls.enabled({
+					read: rls
+						.policy("posts_read")
+						.for("select")
+						.to(...roles)
+						.using(literal(true)),
+				}),
+			}));
+		const before = generateMigration({
+			declarations: [app, buildPostsWithRoles(["writer", "reader"])],
+			previousSnapshot: emptySnapshot,
+		}).snapshot;
+		const after = generateMigration({
+			declarations: [app, buildPostsWithRoles(["reader", "writer"])],
+			previousSnapshot: emptySnapshot,
+		}).snapshot;
+		const beforeNode = before.objects["policy:app.posts.posts_read"];
+		const afterNode = after.objects["policy:app.posts.posts_read"];
+		if (beforeNode === undefined || afterNode === undefined) {
+			throw new Error("expected policy:app.posts.posts_read in both snapshots");
+		}
+		expect(stableJson(beforeNode)).toBe(stableJson(afterNode));
 	});
 });
 

@@ -296,26 +296,6 @@
 			"checks": [
 				{
 					"expression": {
-						"left": {
-							"column": "size_bytes",
-							"nodeKind": "column-ref",
-							"schema": "app",
-							"table": "attachments"
-						},
-						"nodeKind": "comparison",
-						"operator": ">",
-						"right": {
-							"literal": {
-								"literalKind": "number",
-								"value": 0
-							},
-							"nodeKind": "literal"
-						}
-					},
-					"name": "attachments_size_bytes_positive"
-				},
-				{
-					"expression": {
 						"negated": false,
 						"nodeKind": "in-list",
 						"operand": {
@@ -342,6 +322,26 @@
 						]
 					},
 					"name": "attachments_content_type_allowed"
+				},
+				{
+					"expression": {
+						"left": {
+							"column": "size_bytes",
+							"nodeKind": "column-ref",
+							"schema": "app",
+							"table": "attachments"
+						},
+						"nodeKind": "comparison",
+						"operator": ">",
+						"right": {
+							"literal": {
+								"literalKind": "number",
+								"value": 0
+							},
+							"nodeKind": "literal"
+						}
+					},
+					"name": "attachments_size_bytes_positive"
 				}
 			],
 			"columns": [

@@ -139,31 +139,31 @@ describe("renderFunctionSql", () => {
 		expect(sql).toMatch(/\treturn query insert into .*returning .*;/);
 	});
 
-	// #634: `ctx.return` used to accept only the bare `.returning()` form
-	// (`ReturnableQuery`'s three mutation members defaulted `TReturning` to
-	// `undefined`) -- a projected `.returning({...})`, the canonical form
-	// per the body requirement, failed to compile. `ReturnableQuery` now
-	// accepts `ReturningProjection | undefined`; this measures the
-	// rendered body, not just that it compiles, so a fix that widens the
-	// type but drops the projection at render time still fails here.
-	it("renders a definer function with a projected returning, and the RETURNING list stays the projection", () => {
-		const declaration = defineFunction(
-			"app",
-			"create_post_returning_id",
-			{ args: {}, returns: posts, security: "definer" },
-			(ctx) => {
-				ctx.return(
-					insert(posts)
+	// #749/D6 (supersedes #634's own widening): a projected `.returning({...})`
+	// is never the row shape a `returns setof <table>` function's caller
+	// sees -- Postgres matches `return query`'s columns positionally, names
+	// ignored, so a narrower projection fails only on the first call
+	// ("structure of query does not match function result type"). #634 once
+	// widened `ReturnableQuery` to accept this form and this same test
+	// measured its rendered body; #749 narrows it back and this is now the
+	// refusal that form gets instead, at declaration time.
+	it("refuses a projected returning under returns setof <table>", () => {
+		expect(() =>
+			defineFunction(
+				"app",
+				"create_post_returning_id",
+				{ args: {}, returns: posts, security: "definer" },
+				(ctx) => {
+					const projected = insert(posts)
 						.values({ publishedAt: now() })
-						.returning({ id: posts.id }),
-				);
-			},
+						.returning({ id: posts.id });
+					// @ts-expect-error a projected returning is not "posts"'s whole row (#749/D6)
+					ctx.return(projected);
+				},
+			),
+		).toThrowError(
+			expect.objectContaining({ code: "return-expects-whole-row" }),
 		);
-
-		const sql = renderFunctionSql(declaration);
-		expect(sql).toMatch(/\treturn query insert into .*;/);
-		expect(sql).toContain('returning "app"."posts"."id" as "id"');
-		expect(sql).not.toContain('"published_at" as "published_at"');
 	});
 
 	it("renders a definer function with a delete-returning-query statement", () => {

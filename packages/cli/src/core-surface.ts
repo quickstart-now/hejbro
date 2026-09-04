@@ -157,6 +157,7 @@ export const ENGINE = [
 	// Codecs, snapshot and banner machinery
 	"HEJBRO_SNAPSHOT_VERSION",
 	"buildSnapshot",
+	"canonicalizeSnapshot",
 	"computeColumnOrder",
 	"decodeExprNode",
 	"decodeQueryNode",

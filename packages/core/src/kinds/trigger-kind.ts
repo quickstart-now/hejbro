@@ -16,6 +16,7 @@ import {
 	renderTriggerSql,
 } from "../plpgsql/render-body";
 import type { JsonValue } from "../snapshot/stable-json";
+import { compareKeys } from "../sort";
 import type { SqlStatement } from "../sql/statement";
 import { predropStatement, statement } from "../sql/statement";
 
@@ -88,6 +89,38 @@ const emitHandlers: EmitHandlers = {
 	create: emitCreate,
 	alter: emitAlter,
 	drop: emitDrop,
+};
+
+/** `events`' fixed rank (#701, D3) — insert, update, delete, an order the database never reads (Postgres accepts any `or`-joined order in `create trigger`), so two declarations listing the same events in a different order serialize to byte-identical nodes. */
+const EVENT_RANK: Readonly<Record<TriggerEventShape["event"], number>> = {
+	insert: 0,
+	update: 1,
+	delete: 2,
+};
+
+/** Sorts an `update` event's own `columns` by name (#701, D3) — `null` (no column list, a bare `update`) passes through unchanged; every other event carries no array of its own to sort. */
+const canonicalizeEvent = (event: TriggerEventShape): TriggerEventShape => {
+	if (event.event !== "update" || event.columns === null) {
+		return event;
+	}
+	return { ...event, columns: [...event.columns].sort(compareKeys) };
+};
+
+/**
+ * Orders `events` by {@link EVENT_RANK} and sorts an `update` event's own
+ * column list (#701, D3) — `renderTriggerCreateSql`'s own `eventsSql`
+ * joins straight from this array, so a `create trigger … after …` clause
+ * also follows this order for any trigger created or recreated from now
+ * on.
+ */
+const canonicalizeTrigger = (node: JsonValue): JsonValue => {
+	const snapshot = asTriggerSnapshot(node);
+	return {
+		...snapshot,
+		events: [...snapshot.events]
+			.map(canonicalizeEvent)
+			.sort((a, b) => EVENT_RANK[a.event] - EVENT_RANK[b.event]),
+	};
 };
 
 /**
@@ -164,4 +197,5 @@ export const triggerKind: ObjectKind<TriggerDeclaration> = {
 		];
 	},
 	emit: (change) => emitHandlers[change.operation](change),
+	canonicalize: canonicalizeTrigger,
 };

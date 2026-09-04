@@ -3,8 +3,8 @@
 -- + table app.attachment_blobs [new]
 -- + rls app.attachment_blobs [new]
 -- + policy app.attachment_blobs.attachment_blobs_read_own [new]
--- parent-snapshot: sha256:318b8e47983030f4d832cbfad27d66db00b8254a1fd8d3cac049da5ce135ec1e
--- snapshot: sha256:e0d46be6cff9daf7c7072fb23f95d814f42bf5373f1f65c85c857bd340589a7a
+-- parent-snapshot: sha256:e5728863ddd181a548983be51af974daa0fd8051f26f97bdf3dd75aa7af60c8b
+-- snapshot: sha256:8ddd39752cdac52e58122e3ea13dad1fae101e67512895a36c330a939876bc6c
 
 alter table "app"."attachments" drop column "storage_path";
 

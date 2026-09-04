@@ -35,6 +35,17 @@ const lookupNode = (
 	return null;
 };
 
+/** `kind.canonicalize?.(node) ?? node` (#701, D3), `null` passing straight through -- a side a change's operation never carries (a create's `previous`, a drop's `next`) has nothing to canonicalize. */
+const canonicalizeNode = (
+	node: JsonValue | null,
+	kind: RegisteredObjectKind,
+): JsonValue | null => {
+	if (node === null) {
+		return null;
+	}
+	return kind.canonicalize?.(node) ?? node;
+};
+
 /**
  * Topologically sorts every registered kind name by `dependsOn`
  * (dependencies before dependents), via `reduce` over each kind's
@@ -393,8 +404,19 @@ export const diffSnapshots = (
 		guardSnapshotRead(`reading snapshot entry "${key}"`, () => {
 			const { kind: kindName, identity } = splitObjectKey(key);
 			const kind = registry.get(kindName);
-			const previousNode = lookupNode(previous.objects, key);
-			const nextNode = lookupNode(next.objects, key);
+			// #701/D3: canonicalize each side's node before anything reads it,
+			// so a set-shaped array's order (whichever side carries it -- a
+			// hand-written previous, or a file on disk written before this
+			// order was canonical) never reaches a kind's own sameJson gate, or
+			// the create/drop guard below, as a difference. Inside this guard
+			// (not a whole-snapshot pass ahead of it), so a malformed node still
+			// crashes into `malformed-snapshot-node` here, not a raw TypeError
+			// from inside `canonicalize` itself.
+			const previousNode = canonicalizeNode(
+				lookupNode(previous.objects, key),
+				kind,
+			);
+			const nextNode = canonicalizeNode(lookupNode(next.objects, key), kind);
 			if (ownerIsExisting(kind, previous, next, previousNode, nextNode)) {
 				return [];
 			}

@@ -94,14 +94,20 @@ already get.
   return forms apart and rejects the wrong one (#424):
   | `returns` | `ctx.return(...)` takes | renders |
   |---|---|---|
-  | a table (`returns setof …`) | a `.returning()`-final query or a select | `return query …;` |
+  | a table (`returns setof …`) | the whole row of that table — `select(<table>)…` or a mutation on it ending in a bare `.returning()` | `return query …;` |
   | the trigger sentinel (`defineTrigger`) | a trigger row (`new`/`old`) | `return new;` |
   | a scalar `TypeNode` | an expression — a column ref, an argument ref, a `` sql`…` `` fragment | `return <expr>;` |
 
-  A `.returning({...})`-final mutation — a projected `RETURNING`, not
-  just the bare no-arg form — is accepted the same way (#634); the
-  rendered `return query ...` carries exactly that projection's
-  `RETURNING` list, never the full row.
+  A projected `RETURNING` — even one naming every column of the declared
+  table, in any order — is refused with `return-expects-whole-row`
+  (#749): plpgsql's `return query` matches columns by position and
+  count, never by name, so a complete-but-reordered projection is the
+  silently wrong case a partial one at least fails loudly on. Postgres
+  accepts the `CREATE` either way and every call then fails with
+  "structure of query does not match function result type". Use
+  `select(<table>)` or a mutation ending in a bare `.returning()`
+  instead — both render `return query …` in the table's physical column
+  order.
 
   `ctx.return` takes a mutation only *after* `.returning()` — a missing
   stage is a type error, and `tsc`'s own message on that line won't

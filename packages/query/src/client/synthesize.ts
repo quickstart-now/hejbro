@@ -6,7 +6,33 @@ import type {
 	TableDeclaration,
 } from "@hejbro/core";
 import { columnRef, tableMeta } from "@hejbro/core";
-import type { ContractTableMeta } from "./contract-types";
+import type { ContractColumnMeta, ContractTableMeta } from "./contract-types";
+
+/** One column's TS key paired with its facts, whichever shape {@link ContractTableMeta.columns} carries this table's own contract in. */
+type ColumnEntry = {
+	readonly key: string;
+	readonly column: ContractColumnMeta;
+};
+
+/**
+ * Reads {@link ContractTableMeta.columns} through one shape-agnostic list
+ * (#740/D4) — the physical-order array a contract vendored from now on
+ * carries, in its own order, or the pre-#740 object-keyed map's
+ * `Object.entries` order (a JavaScript object's own key enumeration,
+ * unchanged from before this shape existed). Every reader of a table's
+ * columns (`synthesizeTable`'s own declaration and ref object) goes
+ * through this once, so neither has its own shape check to keep in sync
+ * with the other.
+ */
+const columnEntries = (meta: ContractTableMeta): ReadonlyArray<ColumnEntry> => {
+	if (Array.isArray(meta.columns)) {
+		return meta.columns.map((entry) => ({ key: entry.key, column: entry }));
+	}
+	return Object.entries(meta.columns).map(([key, column]) => ({
+		key,
+		column,
+	}));
+};
 
 /** `{ notNullElements: true }` when the column is one, else `{}` (`ColumnState`'s own compact convention: absent means `false`). */
 const notNullElementsField = (
@@ -31,9 +57,7 @@ const notNullElementsField = (
  * already answer that at the caller's own call site, from the emitted
  * source text, not from this runtime reconstruction.
  */
-const synthesizeColumnState = (
-	column: ContractTableMeta["columns"][string],
-): ColumnState => ({
+const synthesizeColumnState = (column: ContractColumnMeta): ColumnState => ({
 	typeNode: column.typeNode,
 	mode: column.mode,
 	// Never read at runtime by this package (see this function's own
@@ -95,12 +119,13 @@ const synthesizeForeignKey = (
 export const synthesizeTable = (
 	meta: ContractTableMeta,
 ): Table<Record<string, ColumnBuilder>, "usage"> => {
+	const entries = columnEntries(meta);
 	const declaration: TableDeclaration = {
 		declarationKind: "table",
 		schema: { declarationKind: "schema", schemaName: meta.schema },
 		tableName: meta.name,
-		columns: Object.entries(meta.columns).map(([tsKey, column]) => ({
-			columnKey: tsKey,
+		columns: entries.map(({ key, column }) => ({
+			columnKey: key,
 			columnName: column.sqlName,
 			columnState: synthesizeColumnState(column),
 		})),
@@ -113,8 +138,8 @@ export const synthesizeTable = (
 		declaredAt: null,
 	};
 	const refsObject = Object.fromEntries(
-		Object.entries(meta.columns).map(([tsKey, column]) => [
-			tsKey,
+		entries.map(({ key, column }) => [
+			key,
 			columnRef(meta.schema, meta.name, column.sqlName, column.typeNode),
 		]),
 	);

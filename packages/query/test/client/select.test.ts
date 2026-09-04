@@ -44,6 +44,71 @@ const METADATA: ContractMetadata = {
 	functions: {},
 };
 
+// #740/D4: a list-shaped columns metadata's physical order reaches the
+// rendered statement -- the explicit column list a consumer sends is the
+// one the owning repository's own client would send, whatever the columns
+// are named.
+type DocsDatabase = {
+	readonly Tables: {
+		readonly docs: {
+			readonly Row: {
+				readonly id: string;
+				readonly "0": string;
+				readonly label: string;
+				readonly "2": string;
+			};
+			readonly Insert: Record<string, never>;
+			readonly Update: Record<string, never>;
+		};
+	};
+	readonly Functions: Record<string, never>;
+};
+
+const PHYSICAL_ORDER_METADATA: ContractMetadata = {
+	source: "git",
+	commit: "abc123",
+	exportHash: "sha256:x",
+	roles: [],
+	tables: {
+		docs: {
+			schema: "app",
+			name: "docs",
+			columns: [
+				{
+					key: "id",
+					sqlName: "id",
+					typeNode: { typeName: "uuid" },
+					mode: null,
+					notNullElements: false,
+				},
+				{
+					key: "0",
+					sqlName: "0",
+					typeNode: { typeName: "text" },
+					mode: null,
+					notNullElements: false,
+				},
+				{
+					key: "label",
+					sqlName: "label",
+					typeNode: { typeName: "text" },
+					mode: null,
+					notNullElements: false,
+				},
+				{
+					key: "2",
+					sqlName: "2",
+					typeNode: { typeName: "text" },
+					mode: null,
+					notNullElements: false,
+				},
+			],
+			foreignKeys: [],
+		},
+	},
+	functions: {},
+};
+
 describe("selects and types rows from the contract (R2-G6 6.3)", () => {
 	it("selects every row, keyed by the contract's own TS keys", async () => {
 		const { driver, topLevelSent } = recordingTransactionalDriver({
@@ -71,5 +136,25 @@ describe("selects and types rows from the contract (R2-G6 6.3)", () => {
 		expect(rows).toEqual([{ id: "p1", title: "hello" }]);
 		expect(topLevelSent[0]?.sql).toContain("where");
 		expect(topLevelSent[0]?.params).toEqual(["p1"]);
+	});
+
+	// #740/D4: a list-shaped columns metadata's physical order reaches the
+	// rendered statement -- the explicit column list a consumer sends is
+	// the one the owning repository's own client would send, whatever the
+	// columns are named.
+	it("a select over a vendored table lists columns in physical order", async () => {
+		const { driver, topLevelSent } = recordingTransactionalDriver({
+			rows: [{ id: "d1", "0": "a", label: "b", "2": "c" }],
+		});
+
+		const client = createNameKeyedDb<DocsDatabase>(
+			driver,
+			PHYSICAL_ORDER_METADATA,
+		);
+		await client.docs.select();
+
+		expect(topLevelSent[0]?.sql).toContain(
+			'"id", "0", "label", "2" from "app"."docs"',
+		);
 	});
 });

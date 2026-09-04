@@ -51,11 +51,12 @@
 				{
 					"columns": [
 						{
-							"name": "data"
+							"name": "body",
+							"opclass": "gin_trgm_ops"
 						}
 					],
 					"method": "gin",
-					"name": "docs_data_idx"
+					"name": "docs_body_trgm_idx"
 				},
 				{
 					"columns": [
@@ -69,21 +70,20 @@
 				{
 					"columns": [
 						{
+							"name": "data"
+						}
+					],
+					"method": "gin",
+					"name": "docs_data_idx"
+				},
+				{
+					"columns": [
+						{
 							"name": "owner_id"
 						}
 					],
 					"method": "hash",
 					"name": "docs_owner_id_idx"
-				},
-				{
-					"columns": [
-						{
-							"name": "body",
-							"opclass": "gin_trgm_ops"
-						}
-					],
-					"method": "gin",
-					"name": "docs_body_trgm_idx"
 				}
 			],
 			"name": "docs",

@@ -171,4 +171,20 @@ export interface ObjectKind<TDeclaration extends HejbroDeclaration> {
 	 * two edges to the same target collapse to one identity.
 	 */
 	dependsOnIdentities?(node: JsonValue): ReadonlyArray<string>;
+	/**
+	 * `canonicalize` (#701, D3) — rewrites one serialized node into the one
+	 * byte form every declaration order that means the same thing produces,
+	 * for the set-shaped arrays this kind's own snapshot carries (a member
+	 * order the database itself never reads, e.g. a policy's `roles`). Run
+	 * by `buildSnapshot` on every node right after `serialize`, before
+	 * `identify` ever sees it — so every reader downstream (a kind's own
+	 * `diff`, `generate`'s snapshot-moved check, `verify`'s check 2) works
+	 * from the canonical bytes without its own comparison changing at all.
+	 * Optional and additive, the same way `requiredKeys` (D79),
+	 * `ownerTableIdentity` (D106 R1, B2), and `dependsOnIdentities` (#753)
+	 * widened this interface: a kind that does not set it is serialized
+	 * exactly as it always was — most kinds have no set-shaped array to
+	 * canonicalize at all.
+	 */
+	canonicalize?(node: JsonValue): JsonValue;
 }

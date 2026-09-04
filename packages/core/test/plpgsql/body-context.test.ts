@@ -1,5 +1,5 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
-import type { BodyContext } from "../../src/index";
+import type { BodyContext, ReturnableQuery } from "../../src/index";
 import {
 	defineFunction,
 	defineTrigger,
@@ -12,6 +12,7 @@ import {
 	select,
 	sql,
 	table,
+	text,
 	update,
 	uuid,
 } from "../../src/index";
@@ -660,21 +661,343 @@ describe("ctx.return demands a returning clause (#686)", () => {
 			returnCtx.return(
 				insert(comments).values({ postId: MOCK_ID }).returning(),
 			);
-		const acceptedProjectedReturning = () =>
-			returnCtx.return(
-				update(comments)
-					.set({ postId: MOCK_ID })
-					.returning({ id: comments.id }),
-			);
 		const acceptedDeleteReturning = () =>
 			returnCtx.return(deleteFrom(comments).returning());
 		const acceptedSelect = () => returnCtx.return(select(comments));
 		const acceptedExecute = () =>
 			returnCtx.execute(insert(comments).values({ postId: MOCK_ID }));
 		expectTypeOf(acceptedBareReturning).toBeFunction();
-		expectTypeOf(acceptedProjectedReturning).toBeFunction();
 		expectTypeOf(acceptedDeleteReturning).toBeFunction();
 		expectTypeOf(acceptedSelect).toBeFunction();
 		expectTypeOf(acceptedExecute).toBeFunction();
+	});
+
+	// #749/D8: `ReturnableQuery`'s mutation members narrow back to a bare
+	// `.returning()` (`TReturning = undefined`) -- a projected one no
+	// longer type-checks here, the compile-time half of the runtime
+	// refusal `assertReturnIsWholeRow` throws (`return-expects-whole-row`,
+	// `body-context.test.ts`'s own "a setof body accepts only the declared
+	// table's whole row" describe block covers the runtime side).
+	it("a projected returning no longer type-checks (#749/D8)", () => {
+		const projected = update(comments)
+			.set({ postId: MOCK_ID })
+			.returning({ id: comments.id });
+		const rejectedProjectedReturning = () =>
+			// @ts-expect-error a projected returning is not the declared table's whole row
+			returnCtx.return(projected);
+		expectTypeOf(rejectedProjectedReturning).toBeFunction();
+	});
+});
+
+// #749/D6: under `returns setof <table>`, `ctx.return()` accepts only a
+// query whose rows are that table's whole row -- a select of the table,
+// or a mutation on the table ending in a bare `.returning()`. Every other
+// shape is refused at declaration time, even a projection that lists
+// every column (Postgres matches `return query`'s columns positionally,
+// names ignored, so a complete-but-reordered projection is the silently
+// wrong case a partial one at least fails loudly on).
+describe("a setof body accepts only the declared table's whole row (#749/D6)", () => {
+	const wholeRowPosts = table(app, "posts", {
+		id: uuid().primaryKey(),
+		title: text().notNull(),
+		body: text().notNull(),
+	});
+	const others = table(app, "others", {
+		id: uuid().primaryKey(),
+	});
+
+	/** Bypasses `ReturnableQuery`'s own type-level narrowing (#749/D8) -- these rows exist to prove the runtime chokepoint a caller who reaches it with the type bypassed still gets, the same convention `assertReturnHasReturning`'s own tests already use elsewhere in this file. */
+	const asReturnable = (value: unknown): ReturnableQuery =>
+		value as ReturnableQuery;
+
+	type RefusedRow = {
+		readonly label: string;
+		readonly query: () => ReturnableQuery;
+	};
+
+	const insertValues = { title: "t", body: "b" };
+
+	const refusedRows: ReadonlyArray<RefusedRow> = [
+		{
+			label: "insert returning one column",
+			query: () =>
+				asReturnable(
+					insert(wholeRowPosts).values(insertValues).returning({
+						id: wholeRowPosts.id,
+					}),
+				),
+		},
+		{
+			label: "insert returning two columns",
+			query: () =>
+				asReturnable(
+					insert(wholeRowPosts).values(insertValues).returning({
+						id: wholeRowPosts.id,
+						title: wholeRowPosts.title,
+					}),
+				),
+		},
+		{
+			label: "insert returning every column, declared order",
+			query: () =>
+				asReturnable(
+					insert(wholeRowPosts).values(insertValues).returning({
+						id: wholeRowPosts.id,
+						title: wholeRowPosts.title,
+						body: wholeRowPosts.body,
+					}),
+				),
+		},
+		{
+			label: "insert returning every column, another order",
+			query: () =>
+				asReturnable(
+					insert(wholeRowPosts).values(insertValues).returning({
+						body: wholeRowPosts.body,
+						title: wholeRowPosts.title,
+						id: wholeRowPosts.id,
+					}),
+				),
+		},
+		{
+			label: "insert returning an aliased column",
+			query: () =>
+				asReturnable(
+					insert(wholeRowPosts).values(insertValues).returning({
+						postId: wholeRowPosts.id,
+					}),
+				),
+		},
+		{
+			label: "update returning one column",
+			query: () =>
+				asReturnable(
+					update(wholeRowPosts).set({ title: "t" }).returning({
+						id: wholeRowPosts.id,
+					}),
+				),
+		},
+		{
+			label: "update returning two columns",
+			query: () =>
+				asReturnable(
+					update(wholeRowPosts).set({ title: "t" }).returning({
+						id: wholeRowPosts.id,
+						title: wholeRowPosts.title,
+					}),
+				),
+		},
+		{
+			label: "update returning every column, declared order",
+			query: () =>
+				asReturnable(
+					update(wholeRowPosts).set({ title: "t" }).returning({
+						id: wholeRowPosts.id,
+						title: wholeRowPosts.title,
+						body: wholeRowPosts.body,
+					}),
+				),
+		},
+		{
+			label: "update returning every column, another order",
+			query: () =>
+				asReturnable(
+					update(wholeRowPosts).set({ title: "t" }).returning({
+						body: wholeRowPosts.body,
+						title: wholeRowPosts.title,
+						id: wholeRowPosts.id,
+					}),
+				),
+		},
+		{
+			label: "update returning an aliased column",
+			query: () =>
+				asReturnable(
+					update(wholeRowPosts).set({ title: "t" }).returning({
+						postId: wholeRowPosts.id,
+					}),
+				),
+		},
+		{
+			label: "delete returning one column",
+			query: () =>
+				asReturnable(
+					deleteFrom(wholeRowPosts).returning({ id: wholeRowPosts.id }),
+				),
+		},
+		{
+			label: "delete returning two columns",
+			query: () =>
+				asReturnable(
+					deleteFrom(wholeRowPosts).returning({
+						id: wholeRowPosts.id,
+						title: wholeRowPosts.title,
+					}),
+				),
+		},
+		{
+			label: "delete returning every column, declared order",
+			query: () =>
+				asReturnable(
+					deleteFrom(wholeRowPosts).returning({
+						id: wholeRowPosts.id,
+						title: wholeRowPosts.title,
+						body: wholeRowPosts.body,
+					}),
+				),
+		},
+		{
+			label: "delete returning every column, another order",
+			query: () =>
+				asReturnable(
+					deleteFrom(wholeRowPosts).returning({
+						body: wholeRowPosts.body,
+						title: wholeRowPosts.title,
+						id: wholeRowPosts.id,
+					}),
+				),
+		},
+		{
+			label: "delete returning an aliased column",
+			query: () =>
+				asReturnable(
+					deleteFrom(wholeRowPosts).returning({ postId: wholeRowPosts.id }),
+				),
+		},
+		{
+			label: "select with a column projection over the declared table",
+			query: () =>
+				asReturnable(select({ id: wholeRowPosts.id }, wholeRowPosts)),
+		},
+		{
+			label: "select over another table",
+			query: () => asReturnable(select(others)),
+		},
+		{
+			label: "insert on another table, whole row",
+			query: () =>
+				asReturnable(insert(others).values({ id: MOCK_ID }).returning()),
+		},
+	];
+
+	it.each(refusedRows)("refuses: $label", ({ query }) => {
+		expect.assertions(2);
+		try {
+			defineFunction(
+				app,
+				"posts_setof_fn",
+				{ returns: wholeRowPosts },
+				(ctx) => {
+					ctx.return(query());
+				},
+			);
+		} catch (error) {
+			expect(
+				(error as InstanceType<typeof Error> & { code: string }).code,
+			).toBe("return-expects-whole-row");
+			expect((error as Error).message).toContain('whole row of "app"."posts"');
+		}
+	});
+
+	type AcceptedRow = {
+		readonly label: string;
+		readonly query: () => ReturnableQuery;
+	};
+
+	const acceptedRows: ReadonlyArray<AcceptedRow> = [
+		{ label: "select(posts)", query: () => select(wholeRowPosts) },
+		{
+			label: "select(posts).where(...)",
+			query: () =>
+				select(wholeRowPosts).where(eq(wholeRowPosts.id, wholeRowPosts.id)),
+		},
+		{
+			label: "select(posts) with a join to others",
+			query: () =>
+				select(wholeRowPosts).innerJoin(
+					others,
+					eq(others.id, wholeRowPosts.id),
+				),
+		},
+		{
+			label: "insert(posts)...returning()",
+			query: () => insert(wholeRowPosts).values(insertValues).returning(),
+		},
+		{
+			label: "update(posts)...returning()",
+			query: () => update(wholeRowPosts).set({ title: "t" }).returning(),
+		},
+		{
+			label: "deleteFrom(posts)...returning()",
+			query: () => deleteFrom(wholeRowPosts).returning(),
+		},
+	];
+
+	it.each(acceptedRows)(
+		"accepts and renders physical order: $label",
+		({ query }) => {
+			const declaration = defineFunction(
+				app,
+				"posts_setof_fn",
+				{ returns: wholeRowPosts },
+				(ctx) => {
+					ctx.return(query());
+				},
+			);
+			const [statement] = declaration.body.statements;
+			expect(statement?.stmtKind).toBe("returnQuery");
+		},
+	);
+
+	it("precedence: a no-returning mutation with the type bypassed still fails with return-expects-returning first", () => {
+		expect(() =>
+			defineFunction(
+				app,
+				"posts_setof_fn",
+				{ returns: wholeRowPosts },
+				(ctx) => {
+					ctx.return(asReturnable(insert(wholeRowPosts).values(insertValues)));
+				},
+			),
+		).toThrowError(
+			expect.objectContaining({ code: "return-expects-returning" }),
+		);
+	});
+
+	it("precedence: a scalar body with a projected returning still fails with scalar-return-expects-expression", () => {
+		expect(() =>
+			defineFunction(
+				app,
+				"scalar_fn",
+				{ returns: { typeName: "uuid" } },
+				(ctx) => {
+					ctx.return(
+						asReturnable(
+							insert(wholeRowPosts).values(insertValues).returning({
+								id: wholeRowPosts.id,
+							}),
+						),
+					);
+				},
+			),
+		).toThrowError(
+			expect.objectContaining({ code: "scalar-return-expects-expression" }),
+		);
+	});
+
+	it("precedence: a trigger body with a projected returning still fails with trigger-return-expects-row", () => {
+		expect(() =>
+			defineTrigger(comments, triggerConfig, (ctx) => {
+				ctx.return(
+					asReturnable(
+						update(comments).set({ postId: MOCK_ID }).returning({
+							id: comments.id,
+						}),
+					),
+				);
+			}),
+		).toThrowError(
+			expect.objectContaining({ code: "trigger-return-expects-row" }),
+		);
 	});
 });
