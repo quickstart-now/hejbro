@@ -255,6 +255,43 @@ describe("parseConfig", () => {
 				}
 			},
 		);
+
+		// Regression pin (reviewer-observed on 1bc19b32): an empty value
+		// must never echo a bare "" back into the message.
+		it('never echoes a bare empty string for snapshotPath: ""', () => {
+			const value = {
+				entry: ["src/**/*.schema.ts"],
+				presets: [],
+				snapshotPath: "",
+			};
+			try {
+				parseConfig(value, "/repo/hejbro.config.ts");
+				throw new Error("expected parseConfig to throw");
+			} catch (error) {
+				expect(error).toMatchObject({ code: "invalid-config" });
+				const message = (error as { message: string }).message;
+				expect(message).toContain("snapshotPath");
+				expect(message).not.toContain('""');
+			}
+		});
+
+		// D1 (lead-approved): a last segment of "." is echoed -- unlike the
+		// empty case, there is a real, non-empty value to show the user.
+		it('echoes the value for snapshotPath: "."', () => {
+			const value = {
+				entry: ["src/**/*.schema.ts"],
+				presets: [],
+				snapshotPath: ".",
+			};
+			try {
+				parseConfig(value, "/repo/hejbro.config.ts");
+				throw new Error("expected parseConfig to throw");
+			} catch (error) {
+				expect(error).toMatchObject({ code: "invalid-config" });
+				const message = (error as { message: string }).message;
+				expect(message).toContain('(".")');
+			}
+		});
 	});
 
 	it("reports an invalid prefixStrategy value, listing the three valid strategies", () => {

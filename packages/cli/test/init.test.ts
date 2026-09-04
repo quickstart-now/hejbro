@@ -378,9 +378,11 @@ describe("runInit / path-kind conflicts and unconfigured fields (#687)", () => {
 
 	// Regression pin (reviewer-observed on 1bc19b32): an empty relative
 	// label used to render as a bare "" in the refusal, leaving an
-	// unfollowable "move or remove ... at """ line. #846 D1 moved both
-	// values to the config-read refusal (invalid-config); the message
-	// never echoes a bare "" and still names an action to take.
+	// unfollowable "move or remove ... at """ line. #846 D1 moves both
+	// values to the config-read refusal (invalid-config) before runInit
+	// ever builds a label from them, so that code path is unreachable for
+	// these two inputs now -- the pin stays here as the same regression's
+	// guard, just aimed at config.ts's own message instead.
 	it.each(["", "."])(
 		"refuses at config read without ever printing a bare empty string (snapshotPath: %j)",
 		async (emptyValue) => {

@@ -155,13 +155,20 @@ const isSpelledAsDirectory = (value: string): boolean => {
  * commands that read the snapshot from answering the same value two
  * ways — one refusing the spelling, the other stripping it, stat'ing the
  * file underneath, and reporting a permissions failure that was never
- * about permissions. An empty value never echoes a bare `""` back
- * (regression, `1bc19b32`) -- it names the field as empty instead. */
+ * about permissions. Three shapes, three sentences (lead-approved,
+ * design D1): an empty value never echoes a bare `""` back (regression,
+ * `1bc19b32`) -- it names the field as empty instead; a trailing
+ * separator suggests dropping it; a last segment of "." or ".."
+ * (non-empty, no trailing separator) echoes the value but has no
+ * separator to drop, so it only suggests the default file name. */
 const describeSnapshotPathAsDirectory = (value: string): string => {
 	if (value === "") {
-		return `config field "snapshotPath" is empty, but the snapshot is a file. Next: point snapshotPath at a file path (e.g. "state.json"), or remove the field to use the default.`;
+		return `config field "snapshotPath" is empty, but the snapshot is a file. Next: point snapshotPath at a file path (e.g. "hejbro.snapshot.json"), or remove the field.`;
 	}
-	return `config field "snapshotPath" names a directory ("${value}"), but the snapshot is a file. Next: point snapshotPath at a file path (e.g. "state.json") — drop the trailing "/" or name a file inside the directory.`;
+	if (value.endsWith("/")) {
+		return `config field "snapshotPath" names a directory ("${value}"), but the snapshot is a file. Next: point snapshotPath at a file path (e.g. "state.json") — drop the trailing "/" or name a file inside the directory.`;
+	}
+	return `config field "snapshotPath" names a directory ("${value}"), but the snapshot is a file. Next: point snapshotPath at a file path (e.g. "hejbro.snapshot.json").`;
 };
 
 /** `join(cwd, value)` silently swallows a leading "/", so an absolute-
