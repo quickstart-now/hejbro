@@ -8,7 +8,10 @@ apply tool (e.g. `supabase db push`) failed partway through a migration.
 
 `hejbro init` (once, scaffolds config + empty snapshot, honouring an
 existing `hejbro.config.ts`'s `migrationsDir`/`snapshotPath` and creating
-only what's missing) → declare or edit schema files → `hejbro generate` →
+only what's missing; `--config <path>` names the configuration file
+exactly as it does for `generate` — `migrationsDir`/`snapshotPath` stay
+relative to the working directory, never to the configuration file's own
+directory) → declare or edit schema files → `hejbro generate` →
 read the banner → commit the migration file and the updated snapshot →
 `hejbro verify` (locally or in CI).
 
