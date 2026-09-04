@@ -56,6 +56,18 @@
       "at": "2026-09-04T22:59Z",
       "title": "cp review round 1: B1/B3/B4 code repairs, B2 scenario sentence moves (OS code only when the OS refused); narrow re-review",
       "ratified": null
+    },
+    {
+      "id": "R5",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R4",
+        "412/D13"
+      ],
+      "at": "2026-09-04T23:04Z",
+      "title": "B3: the delta names the verbatim user-value echo as a Next:-only exception to D57; B2 third site (config-unreadable) moves too",
+      "ratified": null
     }
   ],
   "work": [
