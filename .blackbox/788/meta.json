@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#788",
+  "title": "blackbox: migrate the 78 legacy single-file entries into issue folders",
+  "parent": "quickstart-now/hejbro#412",
+  "status": "closed",
+  "opened": "2026-09-04",
+  "closed": "2026-09-04",
+  "decisions": [],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-04T04:55Z",
+      "title": "Sixty-four legacy entries migrated into fifty-six issue folders",
+      "pr": null,
+      "decisions": []
+    }
+  ],
+  "prs": [
+    {
+      "number": 790,
+      "ref": "quickstart-now/hejbro#790",
+      "title": "chore(blackbox): migrate the legacy single-file entries into issue folders",
+      "head": "9f7fcd6b35a496dac7f6b2c016e23f5da921eb89",
+      "headRef": "migrate-legacy",
+      "base": "dev",
+      "merged": null,
+      "pinnedAt": "2026-09-04T05:02Z",
+      "refs": []
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

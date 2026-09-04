@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#361",
+  "title": "diagnostic gates skip packages/query and packages/pg sources",
+  "parent": "quickstart-now/hejbro#282",
+  "status": "closed",
+  "opened": "2026-09-04",
+  "closed": "2026-08-27",
+  "decisions": [
+    {
+      "id": "D1",
+      "by": "owner",
+      "at": "2026-08-28T00:00Z",
+      "title": "s (English rewrites)",
+      "raw": []
+    }
+  ],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-08-28T00:00Z",
+      "title": "fix-gate-roots \u2014 the diagnostic gates learn to see query and pg (#361)",
+      "pr": null,
+      "decisions": []
+    }
+  ],
+  "prs": [
+    {
+      "number": 366,
+      "ref": "quickstart-now/hejbro#366",
+      "title": "fix(ci): diagnostic gates scan packages/query and packages/pg",
+      "head": "b91b5c5e6ad3dabb4baebbd8745c6dbf1cfd93b4",
+      "headRef": "fix-gate-roots",
+      "base": "dev",
+      "merged": "2026-08-27T23:25:19Z",
+      "pinnedAt": "2026-08-28T00:00Z",
+      "migrated": true,
+      "refs": [
+        {
+          "path": "scripts/check-next-marker.mjs",
+          "blob": "c8bddc39f64c77141191154cb90dc60dc0faac4f"
+        },
+        {
+          "path": "scripts/check-diagnostic-xref.mjs",
+          "blob": "bae29e4491cb0e8f25a3665df89ac96a27527b9d"
+        }
+      ]
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

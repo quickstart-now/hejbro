@@ -1,0 +1,189 @@
+{
+  "version": 1,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#470",
+  "title": "query orderBy rejects the asc/desc vocabulary the barrel exports",
+  "parent": "quickstart-now/hejbro#282",
+  "status": "closed",
+  "opened": "2026-09-04",
+  "closed": "2026-08-29",
+  "decisions": [],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-08-29T00:00Z",
+      "title": "harden-query-surface \u2014 five query/declaration-surface hardening defects",
+      "pr": null,
+      "decisions": []
+    }
+  ],
+  "prs": [
+    {
+      "number": 504,
+      "ref": "quickstart-now/hejbro#504",
+      "title": "fix(core,query): harden the query surface across five declared defects",
+      "head": "9080681aa7612b776da68bf3d4dd2be89a899b8f",
+      "headRef": "feat-harden-query-surface",
+      "base": "dev",
+      "merged": "2026-08-29T18:19:59Z",
+      "pinnedAt": "2026-08-29T00:00Z",
+      "migrated": true,
+      "refs": [
+        {
+          "path": ".changeset/harden-query-surface.md",
+          "blob": "07e574552c79dd679ec0a0b39ab8c37c597c759e"
+        },
+        {
+          "path": "docs/specs/2026-08-19-hejbro-design.md",
+          "blob": "00c1f08bdfb38b96d11761f8687362300ab3731d"
+        },
+        {
+          "path": "openspec/changes/harden-query-surface/design.md",
+          "blob": "b09d146e16de04c221fc9c7065a8c1568e287a06"
+        },
+        {
+          "path": "openspec/changes/harden-query-surface/measurements.md",
+          "blob": "52d9df5fd1c625e58f74f6fb7c37a33acbf8bfd9"
+        },
+        {
+          "path": "openspec/changes/harden-query-surface/proposal.md",
+          "blob": "0ed80ac2c9142b120aac085ae21389e8153a0277"
+        },
+        {
+          "path": "openspec/changes/harden-query-surface/specs/query-builder/spec.md",
+          "blob": "24a569f631e3c982ac279ba2226682b3a7b48cfe"
+        },
+        {
+          "path": "openspec/changes/harden-query-surface/specs/query-type-inference/spec.md",
+          "blob": "bcc62be0443090814339b8c8acd61c011a5ef661"
+        },
+        {
+          "path": "openspec/changes/harden-query-surface/specs/snapshot-format/spec.md",
+          "blob": "c571644618d030e36f593c8c816afa3718ff1ac6"
+        },
+        {
+          "path": "openspec/changes/harden-query-surface/specs/table-declaration/spec.md",
+          "blob": "9e81a1cc983ff904f81b7f42b305e9d346e8b245"
+        },
+        {
+          "path": "openspec/changes/harden-query-surface/tasks.md",
+          "blob": "1cc26fd0a505e3707fd48b1dd18a807eaafc07a5"
+        },
+        {
+          "path": "packages/core/src/dsl/index-builder.ts",
+          "blob": "743b25d4312ffb3cb5d637ca870f70cede870d8c"
+        },
+        {
+          "path": "packages/core/src/dsl/table.ts",
+          "blob": "531739f13d742ad2b0d5b2a55b376963f89710bc"
+        },
+        {
+          "path": "packages/core/src/expr/aggregate.ts",
+          "blob": "74b751136d97a5337000699b5052a2a20966daee"
+        },
+        {
+          "path": "packages/core/src/expr/ast.ts",
+          "blob": "3510d4ab57a0eb2a8f792b81f896814525bd3b0d"
+        },
+        {
+          "path": "packages/core/src/expr/codec.ts",
+          "blob": "9113ba6f8317aa6b027de8038650a2eb663d9181"
+        },
+        {
+          "path": "packages/core/src/expr/render-sql.ts",
+          "blob": "32d6531ed01ead2995f0a7d8f98d159d44dd6aa9"
+        },
+        {
+          "path": "packages/core/src/index.ts",
+          "blob": "df9a0355d1e155b99454ab10971d02ccb60bd4a2"
+        },
+        {
+          "path": "packages/core/src/query/select.ts",
+          "blob": "4d78c09a21717fbd9874400b4e4937c1fe0304f6"
+        },
+        {
+          "path": "packages/core/src/query/set-op-key-order.ts",
+          "blob": "f8fbc1694d72911d45aca2cc1b3074d7244373f7"
+        },
+        {
+          "path": "packages/core/src/query/with-recursive.ts",
+          "blob": "7b7ba0672555e28778d66024a2b32a7da2b923c2"
+        },
+        {
+          "path": "packages/core/src/query/with.ts",
+          "blob": "7f7e496136df946a774523b2307a6c10604780b1"
+        },
+        {
+          "path": "packages/core/test/dsl.test.ts",
+          "blob": "3dae247960854c2fbfc29d16a61b5eac2ad3a926"
+        },
+        {
+          "path": "packages/core/test/dsl/index-builder.test.ts",
+          "blob": "0d58c967da27c0a83832685dfa64128045d5c3f6"
+        },
+        {
+          "path": "packages/core/test/expr/codec.test.ts",
+          "blob": "fed4ba7fe05f0f118fc3633a25994a7347e6e22a"
+        },
+        {
+          "path": "packages/core/test/expr/render-sql.test.ts",
+          "blob": "f8faeffc7ff71cd2bf8518986c2b52ceadc19f1e"
+        },
+        {
+          "path": "packages/core/test/query/select.test.ts",
+          "blob": "a140e814f60af86ad1fdfcf28a051a0297db1c39"
+        },
+        {
+          "path": "packages/core/test/query/window.test.ts",
+          "blob": "f54d16fbef503827411315d50afbdf8668192151"
+        },
+        {
+          "path": "packages/core/test/query/with-recursive.test.ts",
+          "blob": "b3ceab1839fe9f81e69e88d91faf1707db29ca07"
+        },
+        {
+          "path": "packages/core/test/table-kind-diff.test.ts",
+          "blob": "7dc3795c0ceac4d85f61f816a62235a0c9f3ed67"
+        },
+        {
+          "path": "packages/core/test/table-kind-emit.test.ts",
+          "blob": "55c5b3ad0b548c1889f5ed6f8ca1cef8763e56de"
+        },
+        {
+          "path": "packages/core/test/table-surface.test.ts",
+          "blob": "47354f5ab7a358df714bb7d4f29be8f4a61ca54e"
+        },
+        {
+          "path": "packages/core/test/view-kind.test.ts",
+          "blob": "d493ccb92c8aba58c72c2edb421ad95848232476"
+        },
+        {
+          "path": "packages/pg/test/integration.test.ts",
+          "blob": "3467b177abc65b18a9b27b2ae7b6a441b835c556"
+        },
+        {
+          "path": "packages/query/src/db/chain.ts",
+          "blob": "0d4242cbcdeb3658989897393107009c81e9763f"
+        },
+        {
+          "path": "packages/query/test/db/set-op.test.ts",
+          "blob": "d859c563d678e2c6a9bad3246db2aca7e56a42d0"
+        },
+        {
+          "path": "README.md",
+          "blob": "a010ddf8f1fdca415721f3cd05b3e0517f86fe62"
+        },
+        {
+          "path": "skills/hejbro/references/dsl-cheatsheet.md",
+          "blob": "74ce210fb1fff705cbcd1c587861faed547da14c"
+        },
+        {
+          "path": "skills/hejbro/references/query-layer.md",
+          "blob": "155bc6f6bbee83784f3a222f9b135daf3105a47e"
+        }
+      ]
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#338",
+  "title": "bare inline bigint()/numeric() infers the full union instead of the default mode",
+  "parent": "quickstart-now/hejbro#282",
+  "status": "closed",
+  "opened": "2026-09-04",
+  "closed": "2026-08-27",
+  "decisions": [],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-08-27T00:00Z",
+      "title": "fix-inline-inference \u2014 bare inline factories stop widening their mode (#338)",
+      "pr": null,
+      "decisions": []
+    }
+  ],
+  "prs": [
+    {
+      "number": 344,
+      "ref": "quickstart-now/hejbro#344",
+      "title": "fix(core): bare inline bigint/numeric keep their default mode",
+      "head": "924195fc2c0ae4dc6c94f912efe9931b25341d86",
+      "headRef": "fix-inline-inference",
+      "base": "dev",
+      "merged": "2026-08-27T11:17:30Z",
+      "pinnedAt": "2026-08-27T00:00Z",
+      "migrated": true,
+      "refs": [
+        {
+          "path": "packages/core/src/types/column-builder-factories.ts",
+          "blob": "2836f18b655e6c7b3d54c614df04006c2797a152"
+        },
+        {
+          "path": "packages/core/test/inline-inference.test.ts",
+          "blob": "2e42312c88d8838bba522825f806a2519a8cecb8"
+        },
+        {
+          "path": "packages/query/test/types/inline-inference.test.ts",
+          "blob": "729bfff9af5e801ecb9606b1276ba88e1f249fd6"
+        }
+      ]
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

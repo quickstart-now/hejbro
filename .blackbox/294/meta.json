@@ -1,0 +1,131 @@
+{
+  "version": 1,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#294",
+  "title": "Adopt blackbox provenance records at the repository root",
+  "parent": "quickstart-now/hejbro#282",
+  "status": "closed",
+  "opened": "2026-09-04",
+  "closed": "2026-08-26",
+  "decisions": [
+    {
+      "id": "D1",
+      "by": "owner",
+      "at": "2026-08-26T00:00Z",
+      "title": "adopt the convention",
+      "raw": []
+    },
+    {
+      "id": "D2",
+      "by": "owner",
+      "at": "2026-08-26T00:00Z",
+      "title": "start E3",
+      "raw": []
+    }
+  ],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-08-26T00:00Z",
+      "title": "2026-08-26 \u2014 Blackbox adopted for this repository",
+      "pr": null,
+      "decisions": []
+    },
+    {
+      "id": "W2",
+      "at": "2026-08-26T00:00Z",
+      "title": "2026-08-26 \u2014 OpenSpec adopted as the spec layer (E3)",
+      "pr": null,
+      "decisions": []
+    }
+  ],
+  "prs": [
+    {
+      "number": 295,
+      "ref": "quickstart-now/hejbro#295",
+      "title": "chore(process): adopt openspec + blackbox provenance (d87-d89)",
+      "head": "f80e0c99ee00c768781687d89b2f9d27ad808bcc",
+      "headRef": "phase10-openspec",
+      "base": "dev",
+      "merged": "2026-08-26T08:23:59Z",
+      "pinnedAt": "2026-08-26T00:00Z",
+      "migrated": true,
+      "refs": [
+        {
+          "path": "openspec/config.yaml",
+          "blob": "c07b411c444866ac68a6601291a571b9afb0337d"
+        },
+        {
+          "path": "openspec/task-times.csv",
+          "blob": "28b6c9091d7c0d286d1d6640a7840dbdcf2f6a95"
+        },
+        {
+          "path": "AGENTS.md",
+          "blob": "f9dcb31547d2580be76435941c557e13a80239a9"
+        },
+        {
+          "path": "CLAUDE.md",
+          "blob": "f99a63f4fc08992fbb6f1841c325d59ae1fbee8e"
+        },
+        {
+          "path": "docs/specs/2026-08-19-hejbro-design.md",
+          "blob": "41e666f9454a824c93324ed4a957f5805db6d7a1"
+        },
+        {
+          "path": "docs/plans/2026-08-19-roadmap.md",
+          "blob": "ecfca4ebf1482f238eaf7ac0d2195ef017e49fd2"
+        },
+        {
+          "path": ".claude/commands/opsx/apply.md",
+          "blob": "731c78958013867395fa8dd41491dc761e100eef"
+        },
+        {
+          "path": ".claude/commands/opsx/archive.md",
+          "blob": "d93bacad091ca08a6e7e0d54ed94a754173a4ffb"
+        },
+        {
+          "path": ".claude/commands/opsx/explore.md",
+          "blob": "9fbafac77e1d05546378ee1f6c19e74e2d238ab5"
+        },
+        {
+          "path": ".claude/commands/opsx/propose.md",
+          "blob": "97a73693b004ee4ad3d58a3736f566982e66a522"
+        },
+        {
+          "path": ".claude/commands/opsx/sync.md",
+          "blob": "2dd4cc3baab9e3e4e944083bed57f3ae83aaf6f2"
+        },
+        {
+          "path": ".claude/commands/opsx/update.md",
+          "blob": "7992927750edc71e00202856fd4744a6adc65ad7"
+        },
+        {
+          "path": ".claude/skills/openspec-apply-change/SKILL.md",
+          "blob": "c8ada3895366d39729802b1c40389bebdf90ee89"
+        },
+        {
+          "path": ".claude/skills/openspec-archive-change/SKILL.md",
+          "blob": "3d0f711dbf7a1dbef88344bef0971cb84393f11f"
+        },
+        {
+          "path": ".claude/skills/openspec-explore/SKILL.md",
+          "blob": "2ff2f1d25cec2ab4e0fae36f6e33ef631d628f85"
+        },
+        {
+          "path": ".claude/skills/openspec-propose/SKILL.md",
+          "blob": "b1fe02f348e78cb5c50bf9bd375d98c9ec68fc75"
+        },
+        {
+          "path": ".claude/skills/openspec-sync-specs/SKILL.md",
+          "blob": "90436fa8801c4d27c97430f62910b046c57d1a2f"
+        },
+        {
+          "path": ".claude/skills/openspec-update-change/SKILL.md",
+          "blob": "3cdef006492c7a5bd059c50399988d8583c109b9"
+        }
+      ]
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

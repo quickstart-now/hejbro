@@ -236,3 +236,52 @@ Ledger R91.
 
 Claude Code 2.1.260's changelog reverts 2.1.259's application of Read deny rules to Bash arguments. Measured in the lead session and in a separate teammate process (perm-probe): `cd <worktree> && rg/grep relative-path`, a worktree Read and a /private/tmp Write all ran with zero prompts and zero hook-log entries. The workaround settings are removed: the three `Bash(cd …)` allow rules and `additionalDirectories` in settings.local.json, and `crossSessionInbound` in the user settings. R67's "no cd, absolute paths only" becomes a recommendation (absolute paths still read better); R85's cleanup rule stays. This ledger is migrated in full into the `.blackbox/` issue folders (#787).
 
+<a id="d1"></a>
+## D1 — Owner input 1
+
+_owner · 2026-09-03T00:00Z_
+
+"The more we process, the more bugs turn up. Were all the ones handled so far legitimate bugs?"
+
+<a id="d2"></a>
+## D2 — Owner input 2
+
+_owner · 2026-09-03T00:00Z_
+
+"What made those bugs get found?"
+
+<a id="d3"></a>
+## D3 — Owner input 3
+
+_owner · 2026-09-03T00:00Z_
+
+"Why were those bugs not handled during the work that built the ORM?"
+
+<a id="d4"></a>
+## D4 — Owner input 4
+
+_owner · 2026-09-03T00:00Z_
+
+"Then how will you change the process so these bugs stop appearing?"
+
+<a id="d5"></a>
+## D5 — Owner input 5
+
+_owner · 2026-09-03T00:00Z_
+
+"Are all of those changes legitimate — not for hejbro specifically, but by general agent-workflow standards?"
+
+<a id="d6"></a>
+## D6 — Owner input 6
+
+_owner · 2026-09-03T00:00Z_
+
+"Where do those three get applied? Skills? Memory?"
+
+<a id="d7"></a>
+## D7 — Owner input 7
+
+_owner · 2026-09-03T00:00Z_
+
+"Do the work and merge it. Also: is there context that a Claude update has made unnecessary? For example, suppose Claude did not support addition and subtraction, so I built a skill for it or put it in context; then an official update added addition and subtraction — there would no longer be a reason to load that skill or context. Do I have anything like that?"
+

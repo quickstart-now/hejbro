@@ -258,10 +258,93 @@
       "at": "2026-09-04T04:30Z",
       "title": "2.1.260 reverts the regression: the workarounds are removed and R67 becomes a recommendation",
       "ratified": null
+    },
+    {
+      "id": "D1",
+      "by": "owner",
+      "at": "2026-09-03T00:00Z",
+      "title": "Owner input 1",
+      "raw": []
+    },
+    {
+      "id": "D2",
+      "by": "owner",
+      "at": "2026-09-03T00:00Z",
+      "title": "Owner input 2",
+      "raw": []
+    },
+    {
+      "id": "D3",
+      "by": "owner",
+      "at": "2026-09-03T00:00Z",
+      "title": "Owner input 3",
+      "raw": []
+    },
+    {
+      "id": "D4",
+      "by": "owner",
+      "at": "2026-09-03T00:00Z",
+      "title": "Owner input 4",
+      "raw": []
+    },
+    {
+      "id": "D5",
+      "by": "owner",
+      "at": "2026-09-03T00:00Z",
+      "title": "Owner input 5",
+      "raw": []
+    },
+    {
+      "id": "D6",
+      "by": "owner",
+      "at": "2026-09-03T00:00Z",
+      "title": "Owner input 6",
+      "raw": []
+    },
+    {
+      "id": "D7",
+      "by": "owner",
+      "at": "2026-09-03T00:00Z",
+      "title": "Owner input 7",
+      "raw": []
     }
   ],
-  "work": [],
-  "prs": [],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-03T00:00Z",
+      "title": "2026-09-03 — Three process amendments after the round-5 review (D110)",
+      "pr": null,
+      "decisions": []
+    }
+  ],
+  "prs": [
+    {
+      "number": 715,
+      "ref": "quickstart-now/hejbro#715",
+      "title": "docs(process): adopt three amendments after the round-5 review (D110)",
+      "head": "3d376c6c7daa646c1d98aee245174bb0ca9e9c73",
+      "headRef": "docs-process-three-rules",
+      "base": "dev",
+      "merged": "2026-09-02T23:28:38Z",
+      "pinnedAt": "2026-09-03T00:00Z",
+      "migrated": true,
+      "refs": [
+        {
+          "path": "docs/specs/2026-08-19-hejbro-design.md",
+          "blob": "7e734d5a86c8b44e0fee0fd1a4cfc9f50bf85ceb"
+        },
+        {
+          "path": "AGENTS.md",
+          "blob": "fe0b0ce6e9d27939ae9d2119a474a489a1330bfa"
+        },
+        {
+          "path": "openspec/config.yaml",
+          "blob": "ac06240b67e82b06b92df55cda0985017b1e57c9"
+        }
+      ]
+    }
+  ],
   "origin": null,
   "followUps": []
 }

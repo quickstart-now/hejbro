@@ -6,7 +6,46 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 
 | Item | Title | Status | PRs | Owner decisions | Rulings |
 |---|---|---|---|---|---|
-| [#412](412/) | 0.2.x: post-release commitments | open |  | 0 | 26 (17 pending) |
+| [#293](293/) | Design spec: PostgreSQL/serverless ORM direction (query layer, drivers, RLS context) | closed | #304 #306 #309 #312 #316 #319 #321 #324 | 8 | 0 (0 pending) |
+| ↳ [#325](325/) | add-query-layer group 7: public surface, docs, release wiring | closed | #327 | 0 | 0 (0 pending) |
+| [#294](294/) | Adopt blackbox provenance records at the repository root | closed | #295 | 2 | 0 (0 pending) |
+| [#296](296/) | Adopt Claude Code large-codebases guide settings (fit-tested) | closed | #297 | 1 | 0 (0 pending) |
+| [#298](298/) | Relational query layer on top of the query builder | closed | #399 | 1 | 0 (0 pending) |
+| [#300](300/) | @hejbro/neon preset with driver | closed |  | 1 | 0 (0 pending) |
+| [#301](301/) | @hejbro/nile preset with driver and tenant context | closed | #572 | 1 | 0 (0 pending) |
+| ↳ [#561](561/) | context-required boundary: vacuous contexts and operation naming (D106 gca F6/F7) | open | #592 | 1 | 0 (0 pending) |
+| [#302](302/) | Startup verify assertion on the db handle | closed | #535 | 0 | 0 (0 pending) |
+| [#307](307/) | Left-join nullability widening in query type inference | closed | #550 | 1 | 0 (0 pending) |
+| [#308](308/) | Generated and identity column declarations | closed | #367 | 1 | 0 (0 pending) |
+| ↳ [#368](368/) | add-generated-columns group 1: declaration surface | closed | #369 | 0 | 0 (0 pending) |
+| ↳ [#370](370/) | add-generated-columns group 2: snapshot v6, emit, diff | closed | #387 | 0 | 0 (0 pending) |
+| ↳ [#371](371/) | add-generated-columns group 3: write-side typing | closed | #381 | 0 | 0 (0 pending) |
+| ↳ [#388](388/) | add-generated-columns group 4: real-server witness | closed | #392 | 0 | 0 (0 pending) |
+| [#314](314/) | Polyrepo schema distribution: git channel (link/vendor), IR export, flat contract emit | closed | #617 | 0 | 0 (0 pending) |
+| [#317](317/) | supabase driver: transaction-mode pooler (6543) capability story | closed | #532 | 0 | 0 (0 pending) |
+| [#318](318/) | query layer: generic execution-context provider (+ supabase adapter) | closed | #543 | 1 | 0 (0 pending) |
+| [#320](320/) | array columns have no result-conversion path (moded numeric/bigint, interval[]) | closed | #343 | 0 | 0 (0 pending) |
+| [#322](322/) | insert() value types reject the very types the column DSL declares | closed | #345 | 1 | 0 (0 pending) |
+| [#326](326/) | Tx.execute resolves untyped DriverRow rows instead of ExecuteResult | closed | #340 | 0 | 0 (0 pending) |
+| [#336](336/) | check:crap cannot run uncached: the root script does not forward --force | closed | #347 | 1 | 0 (0 pending) |
+| [#337](337/) | insert/update chains bypass InsertInput: required keys are not enforced at .values() | closed | #351 | 1 | 0 (0 pending) |
+| [#338](338/) | bare inline bigint()/numeric() infers the full union instead of the default mode | closed | #344 | 0 | 0 (0 pending) |
+| [#339](339/) | whole-table select rows are keyed by SQL names while the row type promises declared keys | closed | #352 | 0 | 0 (0 pending) |
+| [#341](341/) | integration seed still bypasses the typed insert() it now could use | closed | #348 | 1 | 0 (0 pending) |
+| [#342](342/) | array literal writer and parser lack a shared inverse property test | closed | #350 | 1 | 0 (0 pending) |
+| [#349](349/) | array element types deny the null elements the grammar round-trips | closed | #353 | 1 | 0 (0 pending) |
+| [#354](354/) | constraint-backed non-null array elements and an honest narrowing utility | closed | #355 | 1 | 0 (0 pending) |
+| ↳ [#356](356/) | add-array-ergonomics group 1: declaration surface and type narrowing | closed | #359 | 0 | 0 (0 pending) |
+| ↳ [#357](357/) | add-array-ergonomics group 2: assertNoNulls utility and exports | closed | #358 | 1 | 0 (0 pending) |
+| ↳ [#360](360/) | add-array-ergonomics group 3: NULL-element conversion guard | closed | #362 | 0 | 0 (0 pending) |
+| ↳ [#363](363/) | add-array-ergonomics group 4: real-server witness for notNullElements | closed | #364 | 0 | 0 (0 pending) |
+| [#361](361/) | diagnostic gates skip packages/query and packages/pg sources | closed | #366 | 1 | 0 (0 pending) |
+| [#372](372/) | policy hardening: done-checklist skills line, comment budget, query/pg rules | closed | #380 | 1 | 0 (0 pending) |
+| [#373](373/) | skills/hejbro: query-layer coverage, snippet-compile test, brownfield and apply-failure guides | closed | #391 | 1 | 0 (0 pending) |
+| [#374](374/) | adversarial spec-only review stage in the opsx cycle | closed | #539 | 1 | 0 (0 pending) |
+| [#377](377/) | snapshot format stability policy for 1.0 | closed | #383 | 1 | 0 (0 pending) |
+| [#378](378/) | defect-leakage metric over escaped defects | closed | #384 | 1 | 0 (0 pending) |
+| [#412](412/) | 0.2.x: post-release commitments | open | #715 | 7 | 26 (17 pending) |
 | ↳ [#528](528/) | driver-conformance kit mis-observes transaction-wrapping session-state:false drivers | closed | #737 #760 | 0 | 6 (5 pending) |
 | ↳ [#531](531/) | pg checkout reads its own setupSession; the spec's late-binding scenario fails for spread decorators | closed | #737 | 0 | 3 (2 pending) |
 | ↳ [#533](533/) | cli restore-command test flakes on first heavy parallel run after install | merged-pending | #773 | 0 | 0 (0 pending) |
@@ -18,17 +57,33 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#687](687/) | init ignores the configured migrationsDir and snapshotPath | closed | #739 #759 #770 | 0 | 8 (1 pending) |
 | ↳ [#697](697/) | vendored fn guard is count-only and a __proto__ column key loses its column | closed | #739 | 0 | 4 (1 pending) |
 | ↳ [#744](744/) | `docker-rm-hygiene` can fail on a temporary file another test is deleting | closed | #773 | 0 | 1 (0 pending) |
-| ↳ [#750](750/) | 0.2.0-pre.0: five findings from applying one declaration to Postgres 18, Neon, Nile and Supabase | open |  | 0 | 1 (0 pending) |
+| ↳ [#750](750/) | 0.2.0-pre.0: five findings from applying one declaration to Postgres 18, Neon, Nile and Supabase | open | #784 | 5 | 1 (0 pending) |
 | ↳ [#752](752/) | verify does not run preset validators, so it passes a declaration generate refuses | closed | #775 #784 | 0 | 2 (1 pending) |
 | ↳ [#753](753/) | reset drops a referenced table before the table that references it, and the ledger hides the half-reset state | closed | #775 #784 | 0 | 14 (3 pending) |
 | ↳ [#754](754/) | Nile rejects the schema-qualified column references rendered inside CHECK and partial-index predicates (42622) | closed | #780 | 0 | 4 (2 pending) |
 | ↳ [#755](755/) | check cannot compare CHECK constraints on Nile because Nile has no EXPLAIN | closed | #780 | 0 | 5 (2 pending) |
 | ↳ [#785](785/) | blackbox v2: per-issue folders under .blackbox, hooks + CI-first gate, shipped by the dd-blackbox script | closed | #786 | 5 | 2 (0 pending) |
 | ↳ [#787](787/) | blackbox: migrate the lead ruling ledger R1–R90 into issue folders (first ratification queue of 0.2.1) | closed | #789 | 0 | 0 (0 pending) |
+| ↳ [#788](788/) | blackbox: migrate the 78 legacy single-file entries into issue folders | closed | #790 | 0 | 0 (0 pending) |
+| [#415](415/) | add-set-operations: union/intersect/except | closed | #418 | 1 | 0 (0 pending) |
+| [#416](416/) | add-window-and-aggregates: over(), aggregate functions, group by | closed | #462 | 1 | 0 (0 pending) |
+| [#417](417/) | add-ctes: with, named row sources, recursive | closed | #492 | 0 | 0 (0 pending) |
+| [#423](423/) | plpgsql bodies silently discard statement builders that were never returned | closed | #479 | 1 | 0 (0 pending) |
+| [#442](442/) | introspection-assisted adoption: seed or verify declarations from a live schema | closed | #466 | 1 | 0 (0 pending) |
+| [#444](444/) | select-node traversal misses its new clause fields at every site | closed | #451 | 0 | 0 (0 pending) |
+| [#445](445/) | lifecycle review fixes: concurrent savepoints, baseline no-op, cache inputs | closed | #453 | 1 | 0 (0 pending) |
+| [#470](470/) | query orderBy rejects the asc/desc vocabulary the barrel exports | closed | #504 | 0 | 0 (0 pending) |
+| [#482](482/) | check hardcodes the supabase bucket kind and misreports unregistered kinds | closed | #512 | 0 | 0 (0 pending) |
+| [#518](518/) | codify opsx layer boundaries and divergence tripwires | closed | #519 | 1 | 0 (0 pending) |
+| [#522](522/) | align spec corpus with external evaluation adoptions (P1-P18) | closed | #526 | 1 | 0 (0 pending) |
+| [#553](553/) | query: driver-owned context application (generalize the execution-context contract) | closed | #560 | 1 | 0 (0 pending) |
+| [#570](570/) | relicense from MIT to Apache License 2.0 (owner decision 2026-08-31) | closed | #571 | 1 | 0 (0 pending) |
+| [#573](573/) | nile preset: measure identity columns and keyless tables on tenant-aware tables (D106 F9) | closed | #578 | 1 | 0 (0 pending) |
+| [#603](603/) | Apply engine (D12 revised): hejbro owns migrate and reset, production included | closed | #628 | 0 | 0 (0 pending) |
 
 ## Totals
 
-Owner decisions 5 · rulings 94 (interpretation 55, extension 37, stop 2) · pending extensions 37 · rejected 0
+Owner decisions 59 · rulings 94 (interpretation 55, extension 37, stop 2) · pending extensions 37 · rejected 0
 
 ## Conventions
 
@@ -37,73 +92,4 @@ Owner decisions 5 · rulings 94 (interpretation 55, extension 37, stop 2) · pen
 - Every PR is pinned before merge: each changed file's blob SHA, checked both ways (every pin matches the PR head, every changed file is pinned) by the pre-merge hook and by CI.
 - Never read this directory during normal work. It answers provenance questions only.
 
-Merged but not closed: #533
-
-## Legacy entries
-
-Single-file records from before the folder form. Kept as written.
-
-- [2026-08-26-blackbox-adoption.md](2026-08-26-blackbox-adoption.md)
-- [2026-08-26-large-codebases-guide.md](2026-08-26-large-codebases-guide.md)
-- [2026-08-26-openspec-adoption.md](2026-08-26-openspec-adoption.md)
-- [2026-08-26-orm-query-layer-proposal.md](2026-08-26-orm-query-layer-proposal.md)
-- [2026-08-26-query-layer-group1.md](2026-08-26-query-layer-group1.md)
-- [2026-08-26-query-layer-group2.md](2026-08-26-query-layer-group2.md)
-- [2026-08-26-query-layer-group3.md](2026-08-26-query-layer-group3.md)
-- [2026-08-26-query-layer-group4.md](2026-08-26-query-layer-group4.md)
-- [2026-08-27-fix-array-roundtrip.md](2026-08-27-fix-array-roundtrip.md)
-- [2026-08-27-fix-chain-mutation-input.md](2026-08-27-fix-chain-mutation-input.md)
-- [2026-08-27-fix-crap-gate.md](2026-08-27-fix-crap-gate.md)
-- [2026-08-27-fix-inline-inference.md](2026-08-27-fix-inline-inference.md)
-- [2026-08-27-fix-integration-seed.md](2026-08-27-fix-integration-seed.md)
-- [2026-08-27-fix-row-keys.md](2026-08-27-fix-row-keys.md)
-- [2026-08-27-harden-query-layer-group1.md](2026-08-27-harden-query-layer-group1.md)
-- [2026-08-27-harden-query-layer-group2.md](2026-08-27-harden-query-layer-group2.md)
-- [2026-08-27-harden-query-layer-group3.md](2026-08-27-harden-query-layer-group3.md)
-- [2026-08-27-query-layer-g5g6-replan.md](2026-08-27-query-layer-g5g6-replan.md)
-- [2026-08-27-query-layer-group5.md](2026-08-27-query-layer-group5.md)
-- [2026-08-27-query-layer-group6.md](2026-08-27-query-layer-group6.md)
-- [2026-08-27-query-layer-group7.md](2026-08-27-query-layer-group7.md)
-- [2026-08-28-array-ergonomics-group1.md](2026-08-28-array-ergonomics-group1.md)
-- [2026-08-28-array-ergonomics-group2.md](2026-08-28-array-ergonomics-group2.md)
-- [2026-08-28-array-ergonomics-group3.md](2026-08-28-array-ergonomics-group3.md)
-- [2026-08-28-array-ergonomics-group4.md](2026-08-28-array-ergonomics-group4.md)
-- [2026-08-28-array-ergonomics-proposal.md](2026-08-28-array-ergonomics-proposal.md)
-- [2026-08-28-fix-array-null-elements.md](2026-08-28-fix-array-null-elements.md)
-- [2026-08-28-fix-defect-metric.md](2026-08-28-fix-defect-metric.md)
-- [2026-08-28-fix-format-policy.md](2026-08-28-fix-format-policy.md)
-- [2026-08-28-fix-gate-roots.md](2026-08-28-fix-gate-roots.md)
-- [2026-08-28-fix-policy-roots.md](2026-08-28-fix-policy-roots.md)
-- [2026-08-28-generated-columns-group1.md](2026-08-28-generated-columns-group1.md)
-- [2026-08-28-generated-columns-group2.md](2026-08-28-generated-columns-group2.md)
-- [2026-08-28-generated-columns-group3.md](2026-08-28-generated-columns-group3.md)
-- [2026-08-28-generated-columns-group4.md](2026-08-28-generated-columns-group4.md)
-- [2026-08-28-generated-columns-proposal.md](2026-08-28-generated-columns-proposal.md)
-- [2026-08-28-relational-reads-proposal.md](2026-08-28-relational-reads-proposal.md)
-- [2026-08-28-set-operations-proposal.md](2026-08-28-set-operations-proposal.md)
-- [2026-08-28-skills-overhaul.md](2026-08-28-skills-overhaul.md)
-- [2026-08-29-add-body-statements.md](2026-08-29-add-body-statements.md)
-- [2026-08-29-add-check-schema.md](2026-08-29-add-check-schema.md)
-- [2026-08-29-add-ctes.md](2026-08-29-add-ctes.md)
-- [2026-08-29-add-neon-preset.md](2026-08-29-add-neon-preset.md)
-- [2026-08-29-add-window-functions.md](2026-08-29-add-window-functions.md)
-- [2026-08-29-fix-lifecycle-review.md](2026-08-29-fix-lifecycle-review.md)
-- [2026-08-29-fix-select-traversal.md](2026-08-29-fix-select-traversal.md)
-- [2026-08-29-harden-query-surface.md](2026-08-29-harden-query-surface.md)
-- [2026-08-30-align-spec-corpus.md](2026-08-30-align-spec-corpus.md)
-- [2026-08-30-codify-opsx-boundaries.md](2026-08-30-codify-opsx-boundaries.md)
-- [2026-08-30-enforce-driver-contract.md](2026-08-30-enforce-driver-contract.md)
-- [2026-08-30-extend-query-runtime.md](2026-08-30-extend-query-runtime.md)
-- [2026-08-31-add-context-provider.md](2026-08-31-add-context-provider.md)
-- [2026-08-31-add-nile-preset.md](2026-08-31-add-nile-preset.md)
-- [2026-08-31-adversarial-review-stage.md](2026-08-31-adversarial-review-stage.md)
-- [2026-08-31-extend-supabase-driver.md](2026-08-31-extend-supabase-driver.md)
-- [2026-08-31-generalize-context-application.md](2026-08-31-generalize-context-application.md)
-- [2026-08-31-narrow-join-nullability.md](2026-08-31-narrow-join-nullability.md)
-- [2026-08-31-refuse-nile-identity-columns.md](2026-08-31-refuse-nile-identity-columns.md)
-- [2026-08-31-relicense-apache-2.md](2026-08-31-relicense-apache-2.md)
-- [2026-09-01-d106-polyrepo-sync-correction.md](2026-09-01-d106-polyrepo-sync-correction.md)
-- [2026-09-01-harden-context-boundary.md](2026-09-01-harden-context-boundary.md)
-- [2026-09-02-add-apply-engine.md](2026-09-02-add-apply-engine.md)
-- [2026-09-03-process-three-rules.md](2026-09-03-process-three-rules.md)
-- [2026-09-04-delegated-external-findings.md](2026-09-04-delegated-external-findings.md)
+Merged but not closed: #412, #533, #561, #750
