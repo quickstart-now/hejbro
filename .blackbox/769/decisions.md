@@ -24,3 +24,10 @@ _lead · interpretation · basis D1, R1, R2 · 2026-09-04T16:50Z · ratified: pe
 
 Spec-bound review with live PG 17, two rounds (6dde3b13 → c8910936): passed with no blocker in round 1; the two non-blocking items inside this change's purpose were taken (1.2b: `rollback [work|transaction] to savepoint` is a savepoint operation, matching the requirement's own sentence; 1.4c: a settled root `tx` handle is refused with `statement-after-transaction` at every root site and surface — the last door of the #449 invariant), a vendored table named `fn`/`as` masked by the client's members filed as #845; round 2 confirmed both repairs on the wire and found only a tasks.md numbering warning, repaired. Observation O1 (a nested transaction the callback never awaited outlives the root commit and commits its rows alone) is the remaining shape of the same class and is filed for the next query batch. Basis: D13 on dev — what the user wrote must not run silently somewhere else.
 
+<a id="r4"></a>
+## R4 — D106 round 1 disposition: kit trailing comment and innermost restoration repaired at archive; NB2 wording; #845/#848 stand; archived
+
+_lead · interpretation · basis D1, R3 · 2026-09-04T20:31Z · ratified: pending_
+
+D106 round 1 (context-free, opus, dev 98e99652, live PG 17 with the real driver, 13 names × 4 surfaces, 56 statement texts, 10 transaction cases × 4 root sites): BLOCKING 0 / NON-BLOCKING 4 / OK 11. Disposition under the delegation: NB1 (a comment glued to the control word hid it from the kit) and NB4 (innermost restoration was last-writer-wins, so a nested transaction the callback never awaited left the tree on a settled token and refused the parent with a false message) are repaired at the archive as group 2 — identifier-run words; a parent link on the token and restoration to the nearest live ancestor — both inside hejbro's purpose (the kit says what the spec says; a refusal is never false). NB2 wording repaired; NB3 is #845; the never-awaited transaction committing alone stays #848. Archived.
+

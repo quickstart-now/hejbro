@@ -159,9 +159,14 @@ const leadingWords = (
 	readonly third: string | undefined;
 } => {
 	const normalized = sql.trim().toLowerCase();
-	const match = /^[\s;]*([^\s;]+)(\s+)?([^\s;]+)?(\s+)?([^\s;]+)?/.exec(
-		normalized,
-	);
+	// A word is an identifier run: a comment opener glued to the word
+	// (`commit-- x`, `COMMIT/**/`) ends it, so the comment never becomes
+	// part of the word and the control statement is still recognized
+	// (D106 round 1, NB1).
+	const match =
+		/^[\s;]*([a-z_][a-z0-9_]*)(\s+)?([a-z_][a-z0-9_]*)?(\s+)?([a-z_][a-z0-9_]*)?/.exec(
+			normalized,
+		);
 	if (match === null) {
 		return { first: undefined, second: undefined, third: undefined };
 	}

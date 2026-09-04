@@ -705,6 +705,10 @@ describe("assertSessionStateConformance (task 1.4/1.5, #481)", () => {
 	const LeadingWordRows: ReadonlyArray<LeadingWordRow> = [
 		{ text: "commit;", kind: "end" },
 		{ text: "commit; ;", kind: "end" },
+		{ text: "commit-- pin", kind: "end" },
+		{ text: "COMMIT/**/", kind: "end" },
+		{ text: "begin--c", kind: "open" },
+		{ text: "rollback-- x to savepoint s", kind: "end" },
 		{ text: "COMMIT;;", kind: "end" },
 		{ text: ";commit", kind: "end" },
 		{ text: "rollback; to savepoint x", kind: "end" },

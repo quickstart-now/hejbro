@@ -221,3 +221,19 @@ paragraph in user-facing terms), `openspec/task-times.csv` rows (one per
 task), README stamps (`pnpm check:tasktime`, `pnpm check:crap`), and the
 three `W#` entries (`pnpm blackbox add work 769|761|449`) land in one
 close-out commit before the review is requested.
+
+## 2. D106 round-1 correction (NB1 · NB4 · NB2 wording)
+
+- [x] 2.1 ~8m — Red: `packages/query/test/driver/conformance.test.ts` rows
+  `commit-- pin`, `COMMIT/**/`, `begin--c`, `rollback-- x to savepoint s`
+  (a comment opener glued to the control word ends the word); and
+  `packages/query/test/db/transaction.test.ts` "a nested transaction the
+  callback never awaited keeps the starting tx refused until it settles,
+  then restores it". Green: the kit's words are identifier runs; a token
+  carries its parent and a settling nested transaction restores the
+  nearest ancestor still in flight, never a settled one. Delta wording:
+  the own-property sentence states what the five language names resolve
+  to; the sequential-use sentence covers a never-awaited nested
+  transaction. Files: `driver-conformance.ts`, `db/transaction.ts`, the
+  two tests, the schema-vendoring and query-execution deltas.
+

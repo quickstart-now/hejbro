@@ -43,6 +43,18 @@
       "at": "2026-09-04T16:50Z",
       "title": "Review disposition: passed; 1.2b and 1.4c taken; #845 filed; O1 filed",
       "ratified": null
+    },
+    {
+      "id": "R4",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "D1",
+        "R3"
+      ],
+      "at": "2026-09-04T20:31Z",
+      "title": "D106 round 1 disposition: kit trailing comment and innermost restoration repaired at archive; NB2 wording; #845/#848 stand; archived",
+      "ratified": null
     }
   ],
   "work": [
@@ -140,6 +152,110 @@
         {
           "path": "skills/hejbro/references/query-layer.md",
           "blob": "aa83b674a90c02bac22aca654c9cd7c9af035ebe"
+        }
+      ]
+    },
+    {
+      "number": 850,
+      "ref": "quickstart-now/hejbro#850",
+      "title": "chore(openspec): archive harden-query-guards after d106 round 1",
+      "head": "e006350aec49685947539ecc68265bff60e7da2a",
+      "headRef": "archive-query-guards",
+      "base": "dev",
+      "merged": null,
+      "pinnedAt": "2026-09-04T20:35Z",
+      "refs": [
+        {
+          "path": ".changeset/harden-query-guards.md",
+          "blob": "8f4cf3158099b3688eecc6cb5624302c7a27d135"
+        },
+        {
+          "path": "README.md",
+          "blob": "053e49d1bae0dba15a8212e782e591caa5042af2"
+        },
+        {
+          "path": "openspec/changes/archive/2026-09-05-harden-query-guards/design.md",
+          "blob": "3d1910cf6db1f363f677a14fa73517a11a1cf128"
+        },
+        {
+          "path": "openspec/changes/harden-query-guards/design.md",
+          "blob": null
+        },
+        {
+          "path": "openspec/changes/archive/2026-09-05-harden-query-guards/evaluation.md",
+          "blob": "5be6ef25a4b042889cf4e1786f2649d8ca48bdcc"
+        },
+        {
+          "path": "openspec/changes/archive/2026-09-05-harden-query-guards/proposal.md",
+          "blob": "cc53640daac0d477a445e060157cdd7c1faef85f"
+        },
+        {
+          "path": "openspec/changes/harden-query-guards/proposal.md",
+          "blob": null
+        },
+        {
+          "path": "openspec/changes/archive/2026-09-05-harden-query-guards/specs/driver-contract/spec.md",
+          "blob": "5da52b7859d6a33e3746558de5b06ae846dd4276"
+        },
+        {
+          "path": "openspec/changes/harden-query-guards/specs/driver-contract/spec.md",
+          "blob": null
+        },
+        {
+          "path": "openspec/changes/archive/2026-09-05-harden-query-guards/specs/query-execution/spec.md",
+          "blob": "25c64bee8cb38430b21bfaf13a0c5a25bbcb3ab1"
+        },
+        {
+          "path": "openspec/changes/harden-query-guards/specs/query-execution/spec.md",
+          "blob": null
+        },
+        {
+          "path": "openspec/changes/archive/2026-09-05-harden-query-guards/specs/schema-vendoring/spec.md",
+          "blob": "994062196829709d129a663207409c6cd8937ace"
+        },
+        {
+          "path": "openspec/changes/harden-query-guards/specs/schema-vendoring/spec.md",
+          "blob": null
+        },
+        {
+          "path": "openspec/changes/archive/2026-09-05-harden-query-guards/tasks.md",
+          "blob": "c69ea835df60978bdb21a7b0297184816ce46234"
+        },
+        {
+          "path": "openspec/changes/harden-query-guards/tasks.md",
+          "blob": null
+        },
+        {
+          "path": "openspec/specs/driver-contract/spec.md",
+          "blob": "019e8ab294d741f568c591f43f6868e18525ac04"
+        },
+        {
+          "path": "openspec/specs/query-execution/spec.md",
+          "blob": "f4d704c4da1966089819a92bf0a45df0d49ad215"
+        },
+        {
+          "path": "openspec/specs/schema-vendoring/spec.md",
+          "blob": "6ced1ff115ece7b424f6c90e5da3fca8d3b10ac2"
+        },
+        {
+          "path": "openspec/task-times.csv",
+          "blob": "c16f5f0e5de99b438fda35edd5cf981550d3db31"
+        },
+        {
+          "path": "packages/query/src/db/transaction.ts",
+          "blob": "a8de4a8d57de8cb6a47fcb51fcd3ca9219abfa72"
+        },
+        {
+          "path": "packages/query/src/testing/driver-conformance.ts",
+          "blob": "d253c33a97ed58e92810307ac1a39e1ccc6a8438"
+        },
+        {
+          "path": "packages/query/test/db/transaction.test.ts",
+          "blob": "2966ceb74f35e1af8184ee7b19f3acce8905c778"
+        },
+        {
+          "path": "packages/query/test/driver/conformance.test.ts",
+          "blob": "f6eada4b951fd4c20b3901addac24c23bcc5f5f2"
         }
       ]
     }

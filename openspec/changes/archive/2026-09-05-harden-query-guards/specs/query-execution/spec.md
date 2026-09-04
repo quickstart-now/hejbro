@@ -37,7 +37,10 @@ naming a new `transaction()` call as the way to run more work.
 
 Sequential use stays unaffected: once a nested transaction has settled —
 released or rolled back — the `tx` that started it accepts statements
-again. Starting a second nested transaction beside one in flight keeps
+again. A nested transaction the callback never awaited is still in
+flight after the callback returns: the starting `tx` stays refused until
+it settles, and its settling restores the starting `tx`, never a stale
+one. Starting a second nested transaction beside one in flight keeps
 its own refusal, `concurrent-nested-transaction`.
 
 #### Scenario: A statement beside a nested transaction is refused and the nested work survives
