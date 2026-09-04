@@ -14,6 +14,7 @@ import type {
 	Validator,
 } from "@hejbro/core";
 import {
+	canonicalizeSnapshot,
 	checkChain,
 	duplicateVersionFallbackOptions,
 	findDuplicateVersionGroups,
@@ -473,13 +474,35 @@ type Check2AndPresetResult = {
 	readonly preset: PresetCheckOutcome;
 };
 
-/** Check 2's own pass/fail rule, factored out of {@link runCheck2AndPreset} so that function stays a straight-line read of "one generateMigration call, two independent outcomes". Rebuilds against the *real* committed snapshot as its parent (D81) — an empty parent would rebuild every table's `allColumns` lists in declaration order, disagreeing with the committed snapshot's physical order the moment a column was ever inserted mid-declaration. */
+/**
+ * Check 2's own pass/fail rule, factored out of {@link runCheck2AndPreset}
+ * so that function stays a straight-line read of "one generateMigration
+ * call, two independent outcomes". Rebuilds against the *real* committed
+ * snapshot as its parent (D81) — an empty parent would rebuild every
+ * table's `allColumns` lists in declaration order, disagreeing with the
+ * committed snapshot's physical order the moment a column was ever
+ * inserted mid-declaration.
+ *
+ * #701/D3: compares through the canonical form, not the disk file's raw
+ * bytes — `diskSnapshot` (already parsed, never re-rendered as-is) goes
+ * through {@link canonicalizeSnapshot} before the comparison, so a
+ * checked-in snapshot whose only difference from the declarations is a
+ * set-shaped array's order (a policy's roles, a trigger's events, a
+ * table's indexes or checks) still passes; `currentSnapshot` is already
+ * canonical (`buildSnapshot` canonicalizes on write). Check 1's own tip-hash
+ * comparison, above, stays byte-exact against the file as stored — a hand
+ * edit of any kind, a set's order included, is still a tip mismatch there.
+ */
 const buildCheck2Outcome = (
 	currentSnapshot: Snapshot,
-	diskText: string,
+	diskSnapshot: Snapshot,
+	registry: KindRegistry,
 	snapshotPath: string,
 ): CheckOutcome => {
-	if (renderSnapshot(currentSnapshot) === diskText) {
+	if (
+		renderSnapshot(currentSnapshot) ===
+		renderSnapshot(canonicalizeSnapshot(diskSnapshot, registry))
+	) {
 		return { ok: true };
 	}
 	return {
@@ -490,8 +513,8 @@ const buildCheck2Outcome = (
 
 /**
  * Check 2 (runs only when check 1 passed): the rebuilt-from-declarations
- * snapshot text equals the on-disk text, byte for byte ({@link
- * buildCheck2Outcome}).
+ * snapshot compares equal to the on-disk snapshot through the canonical
+ * form ({@link buildCheck2Outcome}, #701/D3).
  *
  * #752/task 2.1: also runs the sixth check, from the *same*
  * `generateMigration({ validators })` call — never a second call
@@ -511,13 +534,19 @@ const runCheck2AndPreset = (
 	registry: KindRegistry,
 	validators: ReadonlyArray<Validator>,
 ): Check2AndPresetResult => {
+	const diskSnapshot = parseSnapshot(diskText, requiredKeysByKind(registry));
 	const result = generateMigration({
 		declarations,
-		previousSnapshot: parseSnapshot(diskText, requiredKeysByKind(registry)),
+		previousSnapshot: diskSnapshot,
 		registry,
 		validators,
 	});
-	const check2 = buildCheck2Outcome(result.snapshot, diskText, snapshotPath);
+	const check2 = buildCheck2Outcome(
+		result.snapshot,
+		diskSnapshot,
+		registry,
+		snapshotPath,
+	);
 	if (result.errors.length === 0) {
 		return { check2, preset: { ok: true } };
 	}
