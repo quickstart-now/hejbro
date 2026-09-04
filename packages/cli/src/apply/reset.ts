@@ -253,9 +253,19 @@ const detailSuffix = (detail: string | null): string => {
 const OUTSIDE_DECLARATIONS_ADVICE =
 	"resolve what the error above describes (an object outside your declarations may still depend on one you're dropping)";
 
-/** [D106 R1, N3, #753 reopened] The dependent the server refused over is one of the run's own declared objects (a cycle, task 1.2's own "never throws" case) -- naming an object "outside your declarations" here would misdirect the very case the requirement's cycle sentence describes. */
+/**
+ * [D106 R1, N3, C5, #753 reopened] Additive, never a replacement for
+ * {@link OUTSIDE_DECLARATIONS_ADVICE} -- `dropsContainCycle` only knows
+ * this run's own plan contains a cycle (task 1.2's own "never throws"
+ * case), never that the cycle is what the server actually refused over:
+ * the driver names an object, not an edge, so a plan with a cycle can
+ * still fail its drop because of a genuine outside dependent instead (or
+ * as well). Stating the cycle fact while dropping the outside-declarations
+ * clause would assert a cause this module cannot actually establish --
+ * exactly the false certainty the plain N3 fix first shipped with.
+ */
 const DECLARED_CYCLE_ADVICE =
-	"resolve what the error above describes (another one of your own declared objects still depends on the one that failed to drop -- two objects referencing each other can't both be dropped first, so this run left them in identity order rather than refusing to plan at all)";
+	"resolve what the error above describes (your own declared objects include a pair that reference each other, and no order satisfies both, so they were left in identity order rather than refused outright; separately, an object outside your declarations may also still depend on one you're dropping)";
 
 const resetDropFailedAdvice = (dropsContainCycle: boolean): string => {
 	if (dropsContainCycle) {

@@ -68,6 +68,12 @@ After a reset, the ledger SHALL hold no row for a migration whose
 objects were dropped, so the next run applies the chain from its
 beginning.
 
+A database whose declared objects were applied outside hejbro — `psql
+-f`, an external pipeline, both apply paths this product documents —
+has no ledger table at all, and a reset there SHALL still drop every
+object the declarations manage. A reset SHALL report what it did: one
+that cleared no ledger SHALL NOT say it cleared one.
+
 #### Scenario: An unmanaged table survives a reset
 - **WHEN** a database holds a declared table and a table no declaration
   covers, and reset runs
@@ -104,3 +110,10 @@ beginning.
   database's own reason, the database is unchanged, and `hejbro status`
   run afterward still reports every previously-applied migration as
   applied
+
+#### Scenario: A reset drops the declared objects on a database with no ledger table
+- **WHEN** a database holds the declared objects, they were applied
+  without hejbro so the ledger table was never created, and `reset`
+  runs with the confirmation it requires
+- **THEN** the declared objects are gone afterward, the run exits zero,
+  and the report does not claim a ledger was cleared

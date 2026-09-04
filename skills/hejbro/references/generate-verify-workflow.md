@@ -170,6 +170,12 @@ clear) rolls back: the database and the ledger are exactly as they were,
 `hejbro status` run afterward still reports every previously-applied
 migration as applied, and nothing is left half-dropped.
 
+A database whose declared objects were applied outside hejbro (`psql -f`,
+an external pipeline) has no ledger table at all — `reset` still drops
+every object the declarations manage, but its report says so: "There was
+no hejbro ledger to clear" rather than claiming a clear that never
+happened.
+
 ## When an apply step fails partway through
 
 `hejbro migrate` (D12, amended — applying is now hejbro's own command

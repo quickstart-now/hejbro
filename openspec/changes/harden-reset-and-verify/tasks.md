@@ -486,6 +486,12 @@ scenarios of `openspec show harden-reset-and-verify --diff` hold.
   ledger untouched, `status` truthful), and that a declared cycle is
   refused by the server and reported the same way. Files: the delta spec,
   the reference.
+  Lead-approved (R83) addition during correction review: the same
+  `migration-apply/spec.md` requirement also gains a paragraph and a new
+  scenario stating a reset on a database with no ledger table still
+  drops the declared objects and never claims a ledger was cleared —
+  4.1's own live case (c) is that scenario's witness, no new witness
+  added.
 - [x] 4.4 ~5m — Red: none runnable. Green: `## Round 1 disposition` appended
   to `openspec/changes/harden-reset-and-verify/evaluation.md` (B1 fixed in
   4.1; N1 in 4.3; N2/N3 in 4.2; N4 → #776; N5 in 4.3), and

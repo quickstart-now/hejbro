@@ -598,13 +598,15 @@ describe("applyReset — reset-drop-failed carries the server's detail and picks
 		expect(message).not.toContain("()");
 	});
 
-	it("(iii) the failed object is referenced by another declared object -- Next: names the declarations, never 'outside your declarations'", async () => {
-		// A genuine mutual foreign-key cycle can't be built through table()
-		// itself (its `extras` callback resolves `references: { table }`
-		// eagerly, each side needing the other to already exist) -- spliced
-		// directly at the snapshot level instead, mirroring
-		// `diff-engine.test.ts`'s own "never throws on a genuine two-table
-		// cycle" fixture.
+	// A genuine mutual foreign-key cycle can't be built through table()
+	// itself (its `extras` callback resolves `references: { table }`
+	// eagerly, each side needing the other to already exist) -- spliced
+	// directly at the snapshot level instead, mirroring
+	// `diff-engine.test.ts`'s own "never throws on a genuine two-table
+	// cycle" fixture. Shared by (iii) and (v): `dropsContainCycle` reads
+	// this run's own plan, not the driver error, so both rows need the
+	// identical structurally-cyclic snapshot.
+	const buildCycleSnapshot = (): Snapshot => {
 		const cycleColumns: ReadonlyArray<ColumnSnapshot> = [
 			{ name: "id", typeNode: { typeName: "uuid" }, primaryKey: true },
 		];
@@ -642,7 +644,7 @@ describe("applyReset — reset-drop-failed carries the server's detail and picks
 				},
 			],
 		};
-		const cycleSnapshot: Snapshot = {
+		return {
 			...emptySnapshot,
 			objects: {
 				"schema:cyc": { name: "cyc" },
@@ -650,6 +652,10 @@ describe("applyReset — reset-drop-failed carries the server's detail and picks
 				"table:cyc.right_t": rightT,
 			},
 		};
+	};
+
+	it("(iii) the run's own plan contains a cycle -- Next: states the cycle fact, additive to the outside-declarations possibility, never a replacement for it", async () => {
+		const cycleSnapshot = buildCycleSnapshot();
 		const changes = planReset(cycleSnapshot, registry);
 		const confirmation = requiredConfirmation("testdb", changes);
 		const { driver } = makeFakeDriver("testdb", {
@@ -672,9 +678,15 @@ describe("applyReset — reset-drop-failed carries the server's detail and picks
 			confirmation,
 		).catch((caught: unknown) => caught);
 
+		// [C5] `dropsContainCycle` only knows the plan itself contains a
+		// cycle, never that the cycle is what the server actually refused
+		// over (the driver names an object, not an edge) -- a real outside
+		// dependent is just as possible for this same plan (the next row),
+		// so the message states the cycle fact and keeps the
+		// outside-declarations clause too, asserting neither exclusively.
 		const message = (error as HejbroError).message;
-		expect(message).not.toContain("an object outside your declarations");
 		expect(message).toContain("your own declared objects");
+		expect(message).toContain("an object outside your declarations");
 	});
 
 	it("(iv) the outside-dependent case keeps today's Next: advice", async () => {
@@ -698,5 +710,38 @@ describe("applyReset — reset-drop-failed carries the server's detail and picks
 		expect((error as HejbroError).message).toContain(
 			"an object outside your declarations may still depend on one you're dropping",
 		);
+	});
+
+	it("(v) the run's own plan contains a cycle AND the actual failure names an outside dependent -- Next: still carries both, asserting neither as the sole cause", async () => {
+		const cycleSnapshot = buildCycleSnapshot();
+		const changes = planReset(cycleSnapshot, registry);
+		const confirmation = requiredConfirmation("testdb", changes);
+		const { driver } = makeFakeDriver("testdb", {
+			thrown: Object.assign(
+				new Error(
+					"cannot drop table cyc.left_t because other objects depend on it",
+				),
+				{
+					code: "2BP01",
+					detail: "view outside_view depends on table cyc.left_t",
+				},
+			),
+		});
+		await driver.transaction(async (session) => {
+			await bootstrapLedger(session);
+			await recordAppliedMigration(session, "0001_add_cycle.sql", "applied");
+		});
+
+		const error: unknown = await applyReset(
+			driver,
+			cycleSnapshot,
+			registry,
+			confirmation,
+		).catch((caught: unknown) => caught);
+
+		const message = (error as HejbroError).message;
+		expect(message).toContain("view outside_view depends on table cyc.left_t");
+		expect(message).toContain("your own declared objects");
+		expect(message).toContain("an object outside your declarations");
 	});
 });
