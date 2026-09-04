@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#812",
+  "title": "ci: drop the push run on dev; the pr merge-ref run and the approved release run cover it",
+  "parent": "quickstart-now/hejbro#412",
+  "status": "open",
+  "opened": "2026-09-04",
+  "closed": null,
+  "decisions": [
+    {
+      "id": "D1",
+      "by": "owner",
+      "at": "2026-09-04T10:31Z",
+      "title": "A release PR must not see a working run per dev merge",
+      "raw": [
+        "ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#103"
+      ]
+    },
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "D1"
+      ],
+      "at": "2026-09-04T10:31Z",
+      "title": "Push runs only on main; PR merge-ref runs and the approved release run cover dev",
+      "ratified": null
+    }
+  ],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-04T10:31Z",
+      "title": "Trigger change, tool re-vendor, 809 record closed",
+      "pr": null,
+      "decisions": []
+    }
+  ],
+  "prs": [],
+  "origin": null,
+  "followUps": []
+}

@@ -4,9 +4,9 @@
   "ref": "quickstart-now/hejbro#809",
   "title": "ci: verify on a pr waits for the owner's environment approval",
   "parent": "quickstart-now/hejbro#412",
-  "status": "open",
+  "status": "closed",
   "opened": "2026-09-04",
-  "closed": null,
+  "closed": "2026-09-04",
   "decisions": [
     {
       "id": "D1",

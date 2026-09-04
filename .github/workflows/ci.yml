@@ -1,7 +1,11 @@
 name: ci
 on:
+  # No push run on dev (#812): a feature PR's verify checks out the merge
+  # ref (dev + branch), so the squash commit's tree was already tested,
+  # and the approved release-PR run checks the dev tip right before a
+  # release. The push run on main validates the merge commit that ships.
   push:
-    branches: [dev, main]
+    branches: [main]
   pull_request:
   # #180 added this trigger so release-version.yml could
   # `gh workflow run ci.yml --ref changeset-release/dev` after pushing
