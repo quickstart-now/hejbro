@@ -99,7 +99,7 @@ marks the tasks that carry them into code, not open questions.
       `packages/cli/src/commands/migrate.ts`,
       `packages/cli/test/migrate-command.test.ts`.
 
-- [ ] 1.5 (~6m) `raise` refuses on `occupied` before its ledger-history
+- [x] 1.5 (~6m) `raise` refuses on `occupied` before its ledger-history
       read. `applyRaise` probes first; on `occupied` nothing else runs
       (no `readLedger`, no bootstrap, no file statement); `absent` and
       `ledger` proceed as today. Red: `packages/cli/test/apply-raise.test.ts`,

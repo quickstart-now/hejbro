@@ -24,10 +24,18 @@ type FailWhen = (compiled: CompileResult) => boolean;
  * the lock or the ledger read/write, so the failure under test is
  * unambiguous).
  */
+/** One `pg_class`/`pg_attribute` row shape, as `probeLedgerIdentity`'s own statement returns it. */
+type ProbeRow = {
+	readonly relkind: string;
+	readonly name: string | null;
+	readonly type: string | null;
+};
+
 const makeFakeDriver = (options?: {
 	readonly seededLedgerRows?: ReadonlyArray<string>;
 	readonly failWhen?: FailWhen;
 	readonly failError?: unknown;
+	readonly probeRows?: ReadonlyArray<ProbeRow>;
 }): {
 	readonly driver: Driver;
 	readonly calls: CompileResult[];
@@ -47,6 +55,11 @@ const makeFakeDriver = (options?: {
 				throw options?.failError ?? new Error("fake failure");
 			}
 			const sql = compiled.sql.trim().toLowerCase();
+			// [harden-ledger-identity, 1.5] `probeRows` (unset by default,
+			// answering "absent") stands for the identity probe's own answer.
+			if (sql.startsWith("select c.relkind")) {
+				return options?.probeRows ?? [];
+			}
 			if (sql.startsWith("create schema") || sql.startsWith("create table")) {
 				return [];
 			}
@@ -303,5 +316,35 @@ describe("applyRaise / 6.1 (D106 R1, N6)", () => {
 		expect(generatedFile.sql.toLowerCase()).not.toContain(
 			'create table "uo_raise"."users"',
 		);
+	});
+});
+
+describe("applyRaise — a relation that is not the ledger at the ledger's name refuses raise before anything runs (harden-ledger-identity, 1.5)", () => {
+	it("a view at the ledger's name -- apply-ledger-occupied, only the probe was ever sent", async () => {
+		const { driver, calls } = makeFakeDriver({
+			probeRows: [{ relkind: "v", name: "x", type: "integer" }],
+		});
+
+		const error: unknown = await applyRaise(
+			driver,
+			snapshotFile,
+			COMMAND,
+		).catch((caught: unknown) => caught);
+
+		expect(error).toMatchObject({ code: "apply-ledger-occupied" });
+		expect(calls).toHaveLength(1);
+		expect(calls[0]?.sql.toLowerCase()).toContain("pg_class");
+	});
+
+	it("regression: an absent ledger still bootstraps and applies as today", async () => {
+		const { driver } = makeFakeDriver();
+
+		await applyRaise(driver, snapshotFile, COMMAND);
+
+		const state = await readLedger(driver);
+		expect(state).toEqual({
+			exists: true,
+			applied: [{ filename: snapshotFile.fileName, origin: "raised" }],
+		});
 	});
 });
