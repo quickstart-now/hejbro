@@ -1,3 +1,4 @@
+import { isAbsolute } from "node:path";
 import type { MigrationPrefixStrategy, Preset } from "@hejbro/core";
 import { migrationPrefixStrategies, throwHejbroError } from "@hejbro/core";
 import type { ZodIssue } from "zod";
@@ -113,6 +114,44 @@ const findInvalidPresetIndex = (
 	return index;
 };
 
+const CONFIGURED_PATH_FIELDS = ["migrationsDir", "snapshotPath"] as const;
+
+type ConfiguredPathField = (typeof CONFIGURED_PATH_FIELDS)[number];
+
+/** The leading run of `/` stripped from `value` -- the relative spelling `Next:` suggests as a fix. */
+const stripLeadingSeparators = (value: string): string =>
+	value.replace(/^\/+/, "");
+
+/** `migrationsDir`/`snapshotPath`, in field order, paired with their value where one is set and spelled absolute -- `[]` when neither is. */
+const absolutePathFields = (data: {
+	readonly migrationsDir?: string | undefined;
+	readonly snapshotPath?: string | undefined;
+}): ReadonlyArray<{
+	readonly field: ConfiguredPathField;
+	readonly value: string;
+}> =>
+	CONFIGURED_PATH_FIELDS.flatMap((field) => {
+		const value = data[field];
+		if (value === undefined || !isAbsolute(value)) {
+			return [];
+		}
+		return [{ field, value }];
+	});
+
+/** `join(cwd, value)` silently swallows a leading "/", so an absolute-
+ * looking `migrationsDir`/`snapshotPath` used to resolve under the
+ * working directory anyway, with only the display differing between
+ * commands (#743) -- `verify` even embeds the spelling in a shell
+ * command, where it resolves at the filesystem root. Refusing is the
+ * only honest answer: silently re-rooting the value keeps the
+ * disagreement, just earlier. No `configPath` here (#745 owns that
+ * text). */
+const describeAbsolutePathField = (
+	field: ConfiguredPathField,
+	value: string,
+): string =>
+	`config field "${field}" is an absolute path ("${value}"), but hejbro resolves it relative to the working directory. Next: drop the leading "/" (e.g. "${stripLeadingSeparators(value)}") so the path names a location under the project.`;
+
 /**
  * Validates an unknown loaded value (the default export of a
  * `hejbro.config.ts`) against {@link HejbroConfig}. zod issues are
@@ -132,6 +171,13 @@ export const parseConfig = (
 			.map((issue) => describeIssue(issue, configPath))
 			.join(" ");
 		return throwHejbroError("invalid-config", message);
+	}
+	const offendingPath = absolutePathFields(result.data)[0];
+	if (offendingPath !== undefined) {
+		return throwHejbroError(
+			"invalid-config",
+			describeAbsolutePathField(offendingPath.field, offendingPath.value),
+		);
 	}
 	const invalidPresetIndex = findInvalidPresetIndex(result.data.presets);
 	if (invalidPresetIndex !== null) {

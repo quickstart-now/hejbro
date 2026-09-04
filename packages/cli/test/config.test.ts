@@ -126,6 +126,67 @@ describe("parseConfig", () => {
 		});
 	});
 
+	// #743, D2: an absolute-looking migrationsDir/snapshotPath used to be
+	// silently joined under the working directory (`join(cwd, value)`
+	// swallows the leading "/"), so init and generate reported two
+	// different locations for what was really the same field. Refusing at
+	// parse time ends the disagreement. D110 input table: both fields,
+	// a doubled leading separator, and the relative spellings that must
+	// keep working (bare, "./", "..", and the empty string the field's
+	// own kind check governs, unchanged).
+	describe("parseConfig / absolute-looking artifact paths (#743)", () => {
+		type Row = {
+			readonly field: "migrationsDir" | "snapshotPath";
+			readonly value: string;
+			readonly outcome: "refused" | "accepted";
+		};
+
+		const rows: ReadonlyArray<Row> = [
+			{ field: "migrationsDir", value: "/db/migrations", outcome: "refused" },
+			{ field: "snapshotPath", value: "/snap/state.json", outcome: "refused" },
+			{ field: "migrationsDir", value: "//db", outcome: "refused" },
+			{ field: "migrationsDir", value: "db/migrations", outcome: "accepted" },
+			{
+				field: "migrationsDir",
+				value: "./db/migrations",
+				outcome: "accepted",
+			},
+			{
+				field: "migrationsDir",
+				value: "../out/migrations",
+				outcome: "accepted",
+			},
+			{ field: "snapshotPath", value: "", outcome: "accepted" },
+		];
+
+		it.each(rows)(
+			"refuses an artifact path spelled as absolute, naming the field ($field: $value -> $outcome)",
+			({ field, value, outcome }) => {
+				const configValue = {
+					entry: ["src/**/*.schema.ts"],
+					presets: [],
+					[field]: value,
+				};
+				if (outcome === "accepted") {
+					expect(
+						parseConfig(configValue, "/repo/hejbro.config.ts"),
+					).toMatchObject({ [field]: value });
+					return;
+				}
+				try {
+					parseConfig(configValue, "/repo/hejbro.config.ts");
+					throw new Error("expected parseConfig to throw");
+				} catch (error) {
+					expect(error).toMatchObject({ code: "invalid-config" });
+					const message = (error as { message: string }).message;
+					expect(message).toContain(field);
+					expect(message).toContain("Next:");
+					expect(message).not.toContain("/repo/hejbro.config.ts");
+				}
+			},
+		);
+	});
+
 	it("reports an invalid prefixStrategy value, listing the three valid strategies", () => {
 		const value = {
 			entry: ["src/**/*.schema.ts"],

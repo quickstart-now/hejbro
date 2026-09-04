@@ -125,10 +125,11 @@ describe("runInit / configured paths (#687)", () => {
 	};
 
 	// D110 input table: absent config (falls back to the default), a
-	// nested value, the same value with a trailing slash, and a leading
-	// slash -- both spellings still land under `join(cwd, value)` (D2
-	// pin), never treated as absolute. "Config present, field omitted"
-	// moved to the "not configured" describe below (D3 revision, 1.4).
+	// nested value, and the same value with a trailing slash. An
+	// absolute-looking value is refused at config-read time instead
+	// (#743, D2) -- see "runInit / an absolute-looking configured path
+	// is refused" below. "Config present, field omitted" moved to the
+	// "not configured" describe below (D3 revision, 1.4).
 	const migrationsDirRows: ReadonlyArray<ConfiguredDirRow> = [
 		{
 			label: "no hejbro.config.ts",
@@ -145,12 +146,6 @@ describe("runInit / configured paths (#687)", () => {
 		{
 			label: 'migrationsDir: "db/migrations/"',
 			configContent: `export default { entry: ["src/**/*.schema.ts"], migrationsDir: "db/migrations/" };\n`,
-			expectedRelativeDir: "db/migrations",
-			expectedReportLine: "created db/migrations/",
-		},
-		{
-			label: 'migrationsDir: "/db/migrations"',
-			configContent: `export default { entry: ["src/**/*.schema.ts"], migrationsDir: "/db/migrations" };\n`,
 			expectedRelativeDir: "db/migrations",
 			expectedReportLine: "created db/migrations/",
 		},
@@ -196,12 +191,6 @@ describe("runInit / configured paths (#687)", () => {
 			expectedRelativeFile: "snap/state.json",
 			expectedReportLine: "created snap/state.json",
 		},
-		{
-			label: 'snapshotPath: "/snap/state.json"',
-			configContent: `export default { entry: ["src/**/*.schema.ts"], snapshotPath: "/snap/state.json" };\n`,
-			expectedRelativeFile: "snap/state.json",
-			expectedReportLine: "created snap/state.json",
-		},
 	];
 
 	it.each(snapshotPathRows)(
@@ -213,6 +202,36 @@ describe("runInit / configured paths (#687)", () => {
 			const result = await runInit(cwd);
 			expect(result.report).toContain(expectedReportLine);
 			expect(existsSync(join(cwd, expectedRelativeFile))).toBe(true);
+		},
+	);
+});
+
+// #743, D2: an absolute-looking migrationsDir/snapshotPath used to be
+// silently joined under cwd (`join(cwd, "/db/migrations")` swallows the
+// leading "/"); parseConfig now refuses it before init creates anything.
+describe("runInit / an absolute-looking configured path is refused (#743)", () => {
+	it.each([
+		{
+			field: "migrationsDir",
+			configContent: `export default { entry: ["src/**/*.schema.ts"], migrationsDir: "/db/migrations" };\n`,
+		},
+		{
+			field: "snapshotPath",
+			configContent: `export default { entry: ["src/**/*.schema.ts"], snapshotPath: "/snap/state.json" };\n`,
+		},
+	])(
+		"refuses an absolute-looking configured path before creating anything ($field)",
+		async ({ field, configContent }) => {
+			await writeFile(configPath(), configContent);
+
+			const result = await runInit(cwd);
+
+			expect(result.exitCode).toBe(1);
+			expect(result.stderr).toContain("error[invalid-config]");
+			expect(result.stderr).toContain(field);
+			expect(existsSync(join(cwd, "migrations"))).toBe(false);
+			expect(existsSync(join(cwd, "db"))).toBe(false);
+			expect(existsSync(snapshotPath())).toBe(false);
 		},
 	);
 });

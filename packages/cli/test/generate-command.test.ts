@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -505,6 +506,33 @@ describe("hejbro generate (built CLI, tmp-dir)", () => {
 		expect(result.exitCode).toBe(1);
 		expect(result.stderr).toContain("error[snapshot-not-found]");
 		expect(result.stderr).toContain("hejbro.snapshot.json");
+	});
+
+	// #743, D2: an absolute-looking migrationsDir used to be silently
+	// joined under cwd -- generate now refuses it at config-read time,
+	// before anything is written, the same as init does.
+	it("exits 1 with invalid-config for an absolute-looking migrationsDir, naming the field and writing nothing", async () => {
+		await writeFixtureFile(
+			cwd,
+			"hejbro.config.ts",
+			`import { defineConfig } from "hejbro";
+
+export default defineConfig({
+	entry: ["src/**/*.schema.ts"],
+	migrationsDir: "/db/migrations",
+	snapshotPath: "hejbro.snapshot.json",
+	prefixStrategy: "timestamp",
+});
+`,
+		);
+		await writeSchema(SCHEMA_SOURCE);
+
+		const result = await runCli(cwd, ["generate"]);
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain("error[invalid-config]");
+		expect(result.stderr).toContain("migrationsDir");
+		expect(result.stderr).not.toContain(cwd);
+		expect(existsSync(join(cwd, "db"))).toBe(false);
 	});
 
 	// Regression guard for a defect introduced (and caught before shipping)
