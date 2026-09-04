@@ -7,7 +7,21 @@
   "status": "open",
   "opened": "2026-09-04",
   "closed": null,
-  "decisions": [],
+  "decisions": [
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "412/D12",
+        "412/D13",
+        "412/R28"
+      ],
+      "at": "2026-09-04T22:19Z",
+      "title": "option (b): the column line becomes true by check's inventory line; brownfield witness asserts it (see 707/R1)",
+      "ratified": null
+    }
+  ],
   "work": [],
   "prs": [],
   "origin": null,

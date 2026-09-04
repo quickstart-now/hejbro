@@ -57,8 +57,8 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#686](686/) | ctx.return accepts a mutation with no returning() and renders invalid plpgsql | closed | #733 | 0 | 3 (0 pending) |
 | ↳ [#687](687/) | init ignores the configured migrationsDir and snapshotPath | closed | #739 #759 #770 | 0 | 8 (0 pending) |
 | ↳ [#697](697/) | vendored fn guard is count-only and a __proto__ column key loses its column | closed | #739 | 0 | 4 (0 pending) |
-| ↳ [#707](707/) | check is silent about undeclared indexes and check constraints on managed tables | open |  | 0 | 0 (0 pending) |
-| ↳ [#726](726/) | loss report promises check will report an omitted column, but check has no column-level inventory | open |  | 0 | 0 (0 pending) |
+| ↳ [#707](707/) | check is silent about undeclared indexes and check constraints on managed tables | open |  | 0 | 1 (0 pending) |
+| ↳ [#726](726/) | loss report promises check will report an omitted column, but check has no column-level inventory | open |  | 0 | 1 (0 pending) |
 | ↳ [#741](741/) | `hejbro init --config <path>` is ignored and scaffolds a competing project | closed | #840 #847 | 0 | 4 (0 pending) |
 | ↳ [#743](743/) | `init` and `generate` name the same file two different ways | closed | #840 #847 | 0 | 1 (1 pending) |
 | ↳ [#744](744/) | `docker-rm-hygiene` can fail on a temporary file another test is deleting | closed | #773 | 0 | 1 (0 pending) |
@@ -131,7 +131,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 
 ## Totals
 
-Owner decisions 80 · rulings 143 (interpretation 93, extension 48, stop 2) · pending extensions 10 · rejected 2
+Owner decisions 80 · rulings 145 (interpretation 95, extension 48, stop 2) · pending extensions 10 · rejected 2
 
 ## Conventions
 
