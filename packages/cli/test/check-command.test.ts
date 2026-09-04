@@ -192,6 +192,59 @@ describe("renderCheckReport / 5.1 inventory section", () => {
 	});
 });
 
+describe("the inventory section names objects, not only tables", () => {
+	// harden-check-inventory, task 1.6 (#707/#726): Q2(a) one shape per
+	// kind, same sentence, Q4's addition (an index that backs a
+	// constraint says so), Q7(a) identity order regardless of the
+	// catalog's own (here: deliberately scrambled) order.
+	it("prints one line per object, in identity order, none of them a Finding", () => {
+		const inventory: Inventory = {
+			unmanagedTables: [],
+			// scrambled catalog order (b before a) -- the report must not
+			// depend on it.
+			unmanagedColumns: [
+				{ schema: "app", table: "widgets", name: "b_col" },
+				{ schema: "app", table: "widgets", name: "a_col" },
+			],
+			unmanagedIndexes: [
+				{
+					schema: "app",
+					table: "widgets",
+					name: "widgets_legacy_idx",
+					constraintName: null,
+				},
+				{
+					schema: "app",
+					table: "widgets",
+					name: "widgets_legacy_pkey",
+					constraintName: "widgets_legacy_pkey",
+				},
+			],
+			unmanagedCheckConstraints: [
+				{ schema: "app", table: "widgets", name: "widgets_legacy_ck" },
+			],
+			extensions: [],
+		};
+
+		const report = renderCheckReport([], inventory);
+
+		expect(report.exitCode).toBe(0);
+		expect(report.stdout).toEqual([
+			"check does not compare view bodies.",
+			"a declared object is checked for existence even where its contents are not otherwise compared.",
+			"check's reads are not a single snapshot: opening no transaction is what keeps this command free of any driver capability, and a schema changing while check runs can produce a torn report.",
+			"unmanaged column (not covered by any declaration): app.widgets.a_col",
+			"unmanaged column (not covered by any declaration): app.widgets.b_col",
+			"unmanaged index (not covered by any declaration): app.widgets.widgets_legacy_idx",
+			"unmanaged index (backs constraint widgets_legacy_pkey; not covered by any declaration): app.widgets.widgets_legacy_pkey",
+			"unmanaged check constraint (not covered by any declaration): app.widgets.widgets_legacy_ck",
+			"check: no differences.",
+		]);
+		expect(report.stdout.join("\n")).not.toContain("error[");
+		expect(report.stdout.join("\n")).not.toContain("Next:");
+	});
+});
+
 describe("check's inventory does not widen to a whole reserved schema (D106 R3, #665)", () => {
 	// Declaring one existing table in `auth` used to pull `auth`'s own
 	// name into `declaredSchemaNames`, and once a schema counts as

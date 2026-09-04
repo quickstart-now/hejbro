@@ -29,7 +29,12 @@ import {
 	compareGeneratedColumn,
 	compareIndexKeys,
 } from "../check/expression";
-import type { Inventory } from "../check/inventory";
+import type {
+	Inventory,
+	UnmanagedCheckConstraint,
+	UnmanagedColumn,
+	UnmanagedIndex,
+} from "../check/inventory";
 import { buildInventory } from "../check/inventory";
 import { requireConfigFields } from "../config-required";
 import { fromHejbroError, renderDiagnostics } from "../diagnostics";
@@ -221,6 +226,62 @@ const extensionsLines = (
 };
 
 /**
+ * Every per-instance inventory line is sorted by the identity it names
+ * (Q7, design.md) right before rendering -- mirrors `infer/loss-report.ts`'s
+ * own `sortedBy` (D106 N3): a catalog read's order is never something a
+ * report should depend on, so two runs against the same database (or two
+ * databases holding the same objects) print the same lines in the same
+ * order regardless of the order the catalog happened to return them in.
+ */
+const sortedByIdentity = <T>(
+	items: ReadonlyArray<T>,
+	identityOf: (item: T) => string,
+): ReadonlyArray<T> =>
+	[...items].sort((a, b) => identityOf(a).localeCompare(identityOf(b)));
+
+const columnIdentity = (column: UnmanagedColumn): string =>
+	`${column.schema}.${column.table}.${column.name}`;
+
+const indexIdentity = (indexEntry: UnmanagedIndex): string =>
+	`${indexEntry.schema}.${indexEntry.table}.${indexEntry.name}`;
+
+const checkConstraintIdentity = (
+	constraint: UnmanagedCheckConstraint,
+): string => `${constraint.schema}.${constraint.table}.${constraint.name}`;
+
+/** An unmanaged index's own "backs constraint X; " clause (Q4, design.md) -- present only when the catalog's own `constraintName` fact says so, never inferred from a name match; `""` otherwise, so the sentence reads exactly as the table/column axes' does. */
+const indexBacksConstraintClause = (constraintName: string | null): string => {
+	if (constraintName === null) {
+		return "";
+	}
+	return `backs constraint ${constraintName}; `;
+};
+
+const unmanagedColumnLines = (
+	columns: ReadonlyArray<UnmanagedColumn>,
+): ReadonlyArray<string> =>
+	sortedByIdentity(columns, columnIdentity).map(
+		(column) =>
+			`unmanaged column (not covered by any declaration): ${columnIdentity(column)}`,
+	);
+
+const unmanagedIndexLines = (
+	indexes: ReadonlyArray<UnmanagedIndex>,
+): ReadonlyArray<string> =>
+	sortedByIdentity(indexes, indexIdentity).map(
+		(indexEntry) =>
+			`unmanaged index (${indexBacksConstraintClause(indexEntry.constraintName)}not covered by any declaration): ${indexIdentity(indexEntry)}`,
+	);
+
+const unmanagedCheckConstraintLines = (
+	constraints: ReadonlyArray<UnmanagedCheckConstraint>,
+): ReadonlyArray<string> =>
+	sortedByIdentity(constraints, checkConstraintIdentity).map(
+		(constraint) =>
+			`unmanaged check constraint (not covered by any declaration): ${checkConstraintIdentity(constraint)}`,
+	);
+
+/**
  * The report's own inventory section (task 5.1, spec Req5): informational
  * only, present whether or not `check` found any differences, and never
  * itself a `Finding` -- 2.1's own code set has no inventory entry,
@@ -232,6 +293,9 @@ const inventoryLines = (inventory: Inventory): ReadonlyArray<string> => [
 		(table) =>
 			`unmanaged table (not covered by any declaration): ${table.schema}.${table.table}`,
 	),
+	...unmanagedColumnLines(inventory.unmanagedColumns),
+	...unmanagedIndexLines(inventory.unmanagedIndexes),
+	...unmanagedCheckConstraintLines(inventory.unmanagedCheckConstraints),
 	...extensionsLines(inventory.extensions),
 ];
 
