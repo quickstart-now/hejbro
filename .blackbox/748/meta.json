@@ -63,6 +63,13 @@
       "title": "harden-core-derivations 1.1: plpgsql-declared variables and missing reserved keywords refused",
       "pr": null,
       "decisions": []
+    },
+    {
+      "id": "W2",
+      "at": "2026-09-04T13:59Z",
+      "title": "harden-core-derivations 2.1: category-T keywords refused after the review measurement",
+      "pr": null,
+      "decisions": []
     }
   ],
   "prs": [],

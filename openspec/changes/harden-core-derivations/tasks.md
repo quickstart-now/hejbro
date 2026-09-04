@@ -89,7 +89,7 @@ tightened in the same round (the row-name control in scenario 5 now
 states the projection condition; the reported pair is defined as the
 first key whose derived name repeats an earlier key's).
 
-- [ ] 2.1 (~5m) The keywords reserved for function and type names are
+- [x] 2.1 (~5m) The keywords reserved for function and type names are
       refused. Red: `packages/core/test/define-function.test.ts` — "a
       keyword reserved for function and type names is refused as an
       argument name", an input table of the 22 measured category-T
