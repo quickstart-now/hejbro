@@ -7,7 +7,19 @@
   "status": "open",
   "opened": "2026-09-04",
   "closed": null,
-  "decisions": [],
+  "decisions": [
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "D1"
+      ],
+      "at": "2026-09-04T14:28Z",
+      "title": "Q2: attgenerated splits default from generated in the bulk read; Q4: generated mismatch is one differs, the default axis is not compared",
+      "ratified": null
+    }
+  ],
   "work": [],
   "prs": [],
   "origin": null,

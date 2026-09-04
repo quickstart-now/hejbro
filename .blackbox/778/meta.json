@@ -18,6 +18,18 @@
       "at": "2026-09-04T14:14Z",
       "title": "Batch ck = #778 #779 #781 as one change harden-check-expressions, parallel to li and ip",
       "ratified": null
+    },
+    {
+      "id": "R2",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "D1",
+        "R1"
+      ],
+      "at": "2026-09-04T14:28Z",
+      "title": "harden-check-expressions approved; one rule for four expression surfaces; Q1 Q3 Q5 Q7 Q8 as recommended",
+      "ratified": null
     }
   ],
   "work": [],
