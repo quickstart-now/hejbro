@@ -10,7 +10,7 @@ task line at that point.
 
 ## 1. Order and shape follow the declaration (#701, #740, #749)
 
-- [ ] 1.1 (~8m) `[design — settled, 701/R2]` A table's indexes and
+- [x] 1.1 (~8m) `[design — settled, 701/R2]` A table's indexes and
       checks are recorded in canonical order through design.md
       mechanism 2: an optional, additive `ObjectKind.canonicalize?(node)`
       hook, applied by `buildSnapshot` to every serialized node;
@@ -29,7 +29,7 @@ task line at that point.
       `packages/core/src/kind/object-kind.ts`,
       `packages/core/src/snapshot/snapshot.ts`,
       `packages/core/test/table-kind-diff.test.ts`.
-- [ ] 1.2 (~7m) `[design — settled, 701/R2]` A policy's roles and a
+- [x] 1.2 (~7m) `[design — settled, 701/R2]` A policy's roles and a
       trigger's events are recorded in canonical order through the same
       hook: `policyKind` sorts `roles` by name (`compareKeys`);
       `triggerKind` orders `events` by the fixed rank insert, update,
@@ -52,7 +52,7 @@ task line at that point.
       `packages/core/src/kinds/trigger-kind.ts`,
       `packages/core/test/policy-kind.test.ts`,
       `packages/core/test/trigger-kind.test.ts`.
-- [ ] 1.3 (~8m) A previous snapshot in the old order compares equal and
+- [x] 1.3 (~8m) A previous snapshot in the old order compares equal and
       records nothing (design.md mechanism 2: `canonicalizeSnapshot`
       applied to both sides in `diffSnapshots` and in
       `snapshotChangedFrom`; `parseSnapshot` and the hash chain stay
@@ -78,7 +78,7 @@ task line at that point.
       `packages/core/src/index.ts`,
       `packages/core/test/generate.test.ts`,
       `packages/core/test/diff-engine.test.ts`.
-- [ ] 1.3b (~8m) `verify` matches the declarations through the canonical
+- [x] 1.3b (~8m) `verify` matches the declarations through the canonical
       form, and the goldens carry it. Red: `packages/cli/test/verify.test.ts`
       — "a checked-in snapshot differing from the declarations only by a
       set's order passes" (a fixture whose committed snapshot lists two
@@ -101,7 +101,7 @@ task line at that point.
       Files: `packages/cli/src/commands/verify.ts`,
       `packages/cli/test/verify.test.ts`,
       `packages/cli/test/generate-command.test.ts`.
-- [ ] 1.3c (~8m) The committed goldens and examples carry the canonical
+- [x] 1.3c (~8m) The committed goldens and examples carry the canonical
       order. Red: `packages/core/test/golden/golden.test.ts` and
       `examples/{postgres,supabase}/test/chain.test.ts` as they stand —
       their byte-exact snapshot comparisons go red the moment 1.1 lands
@@ -116,7 +116,7 @@ task line at that point.
       Files: `packages/core/test/golden/cases/*/expected/snapshot.json`,
       `examples/postgres/{hejbro.snapshot.json,migrations/*.sql}`,
       `examples/supabase/{hejbro.snapshot.json,migrations/*.sql}`.
-- [ ] 1.4 (~8m) `[design — settled, 740/R1]` The emitted client metadata
+- [x] 1.4 (~8m) `[design — settled, 740/R1]` The emitted client metadata
       lists columns in physical order as design.md shape A: `columns`
       becomes `ReadonlyArray<{ key, sqlName, typeNode, mode,
       notNullElements }>` in `entries` order, one entry per line, the
@@ -137,7 +137,7 @@ task line at that point.
       Files: `packages/cli/src/contract/tables.ts`,
       `packages/cli/src/contract/emit.ts`,
       `packages/cli/test/contract-emit.test.ts`.
-- [ ] 1.5 (~6m) The name-keyed client reads the list and renders that
+- [x] 1.5 (~6m) The name-keyed client reads the list and renders that
       order; the object-keyed map still builds. Red:
       `packages/query/test/client/synthesize.test.ts` — "a list-shaped
       columns metadata yields the table's columns in list order,
@@ -155,7 +155,7 @@ task line at that point.
       `packages/query/src/client/synthesize.ts`,
       `packages/query/test/client/synthesize.test.ts`,
       `packages/query/test/client/select.test.ts`.
-- [ ] 1.6 (~9m) `[design — settled, 749/R1]` A setof body returns the
+- [x] 1.6 (~9m) `[design — settled, 749/R1]` A setof body returns the
       declared table's whole row — design.md scope (a): every projection
       refused, complete and reordered ones included, and any query whose
       row source is another table; code `return-expects-whole-row`,
@@ -197,7 +197,7 @@ task line at that point.
       `packages/core/src/dsl/define-trigger.ts`,
       `packages/core/test/plpgsql/body-context.test.ts`,
       `packages/core/test/plpgsql/render-body.test.ts`.
-- [ ] 1.7 (~6m) The rules reach the user-facing skill and the release
+- [x] 1.7 (~6m) The rules reach the user-facing skill and the release
       carries all three fixes. Red: `pnpm check:diagnostic-xref` and
       `pnpm check:next-marker` over the new refusal's site, `pnpm
       --filter @hejbro/skills test` (link and snippet gates), and
