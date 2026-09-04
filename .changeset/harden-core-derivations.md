@@ -5,9 +5,9 @@
 `defineFunction`'s reserved-name check now refuses the variables plpgsql
 declares on its own, not only its keywords — `found`, `sqlstate`,
 `sqlerrm`, and the twelve `tg_*` trigger variables, compared
-case-insensitively the way an unquoted identifier folds — since a
-declared argument or local under one of those names shadowed plpgsql's
-own with no error at all, and the keywords Postgres reserves for
+case-insensitively the way an unquoted identifier folds — since an
+argument under one of those names was unreachable behind plpgsql's own
+variable, and a declared local hid it, with no error at all, and the keywords Postgres reserves for
 function and type names (`left`, `is`, `join`, `current_schema`, …)
 (#748).
 

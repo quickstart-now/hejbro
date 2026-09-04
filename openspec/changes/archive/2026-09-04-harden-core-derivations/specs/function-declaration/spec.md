@@ -40,7 +40,10 @@ keeps is unchanged for every list that passes.
 
 #### Scenario: A key's own refusal precedes the pair refusal
 - **WHEN** a function declares `{ order, userId, user_id }` or
-  `{ "my-arg", userId, user_id }`
-- **THEN** the declaration fails with `reserved-local-name`, or with
-  `invalid-sql-name`, for the offending key — not with
-  `duplicate-argument`
+  `{ "my-arg", userId, user_id }`, and separately `{ userId, user_id,
+  order }` or `{ userId, user_id, "my-arg" }` — the offending key after
+  the colliding pair
+- **THEN** in every case the declaration fails with `reserved-local-name`,
+  or with `invalid-sql-name`, for the offending key — not with
+  `duplicate-argument`: every key's own refusal runs before the pair
+  check, whatever the declaration order
