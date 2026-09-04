@@ -39,3 +39,10 @@ _lead · interpretation · basis R3, 412/D13 · 2026-09-04T21:54Z · ratified: p
 
 (c) accepted at c8f90f5d (d9be6ec9 + one docs commit: the two schema-vendoring WHEN clauses name the hand-edited / foreign-toolchain provenance of a non-identifier key). Constructor review at d9be6ec9: BLOCKING 0 / NON-BLOCKING 3 / OK 17, every gate green in the detached worktree. NB-1 (two update events on one trigger: canonical order not total, but Postgres refuses the SQL) and NB-2 (duplicate set members pass) are pre-existing input-validation gaps outside this delta — filed as follow-ups under #815 (trigger events; policy roles); the corpus candidates went to #714. NB-3 repaired in wording only, no re-review (normative sentences and code unchanged). Lead's next: rebase onto dev after #855 merges, gates, PR (Closes #701 #740 #749), pin, merge, D106.
 
+<a id="r5"></a>
+## R5 — D106 round 1 N3 wording (canonical serialization, not bytes); N1 → #856; archived
+
+_lead · interpretation · basis R4, 412/D13 · 2026-09-04T22:34Z · ratified: pending_
+
+D106 round 1 N3: the delta said the tip hash compares "the snapshot file as stored"; measured, a whitespace-only hand edit passes `verify` because the hash covers the canonical serialization. A value or order change is still caught, which is what the scenario names, so the scenario stands; the sentence now says canonical serialization, every value and order, not formatting. N1 (an empty `update of` list emits unparsable SQL) folded into #856. Archived.
+

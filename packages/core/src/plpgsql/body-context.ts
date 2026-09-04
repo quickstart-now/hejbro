@@ -650,7 +650,7 @@ const recordReturnQueryShape = (
 	if (query === null) {
 		throwHejbroError(
 			"unsupported-return-value",
-			`ctx.return() in ${state.identity} received a value that isn't a trigger row (new/old) or a query with .returning(). Next: pass one of those.`,
+			`ctx.return() in ${state.identity} received a value hejbro cannot return: pass a select over the declared table (under returns setof), a mutation with .returning(), or, in a trigger, new/old. Next: pass one of those.`,
 			state.declaredAt,
 		);
 		return;

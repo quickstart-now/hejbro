@@ -273,7 +273,9 @@ describe("body-context recording", () => {
 				// @ts-expect-error — a RowColumns object isn't a valid ctx.return() argument
 				ctx.return(parent);
 			}),
-		).toThrowError(/isn't a trigger row/);
+		).toThrowError(
+			/a value hejbro cannot return: pass a select over the declared table/,
+		);
 	});
 
 	it("a trigger row is returned as a ref even when the table has a column named exprNode (#445/R4)", () => {

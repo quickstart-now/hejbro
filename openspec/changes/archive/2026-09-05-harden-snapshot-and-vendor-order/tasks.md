@@ -228,3 +228,17 @@ built CLI; `openspec validate harden-snapshot-and-vendor-order --strict`
 and `openspec show harden-snapshot-and-vendor-order --diff` read in
 full. Ledger rows (`openspec/task-times.csv`) and the README badge/CRAP
 stamps are the close-out commit.
+
+## 2. D106 round-1 correction (B1 · N2 · N3 wording)
+
+- [x] 2.1 ~6m — Red: `packages/core/test/plpgsql/body-context.test.ts`
+  "unsupported-return-value" case pins the text that names the accepted
+  forms (a select over the declared table under `returns setof`, a
+  mutation with `.returning()`, `new`/`old` in a trigger). Green:
+  `body-context.ts` says so. Delta wording: schema-vendoring no longer
+  claims the owning repository's client sends the physical order (it
+  sends the declaration's literal order; the two agree by name);
+  cli-commands says the tip hash covers the file's canonical
+  serialization, not its formatting. Files: `body-context.ts`, its test,
+  the two deltas.
+

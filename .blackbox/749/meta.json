@@ -18,6 +18,19 @@
       "at": "2026-09-04T16:21Z",
       "title": "D6: whole-row only under returns setof (departs from the issue's full-projection line); D7 return-expects-whole-row; D8 try the type narrowing; D9 check order",
       "ratified": null
+    },
+    {
+      "id": "R2",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R1",
+        "R2",
+        "412/D13"
+      ],
+      "at": "2026-09-04T22:34Z",
+      "title": "D106 round 1 N2: unsupported-return-value names the accepted forms (repaired at archive)",
+      "ratified": null
     }
   ],
   "work": [

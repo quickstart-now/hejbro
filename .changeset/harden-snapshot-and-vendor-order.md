@@ -28,4 +28,4 @@ the new error code `return-expects-whole-row`. Postgres's `return query`
 matches result columns by position, never by name, so a complete but
 reordered projection previously compiled and shipped a function whose
 every call failed at runtime with "structure of query does not match
-function result type" (#749).
+function result type" (#749). `unsupported-return-value` now names the forms `ctx.return()` accepts.

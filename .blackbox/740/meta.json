@@ -18,6 +18,19 @@
       "at": "2026-09-04T16:21Z",
       "title": "D4: columns as an ordered list, reader accepts both shapes; D5: synthesize.ts and contract-types.ts inside this piece by exception",
       "ratified": null
+    },
+    {
+      "id": "R2",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R1",
+        "R2",
+        "412/D13"
+      ],
+      "at": "2026-09-04T22:34Z",
+      "title": "D106 round 1 B1: the owning-client clause was false rationale; delta reworded, SHALLs hold; archived",
+      "ratified": null
     }
   ],
   "work": [

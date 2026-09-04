@@ -55,6 +55,18 @@
       "at": "2026-09-04T21:54Z",
       "title": "so (c) accepted at c8f90f5d: review 0/3/17; NB-1/NB-2 filed under #815, corpus to #714; PR by the lead",
       "ratified": null
+    },
+    {
+      "id": "R5",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R4",
+        "412/D13"
+      ],
+      "at": "2026-09-04T22:34Z",
+      "title": "D106 round 1 N3 wording (canonical serialization, not bytes); N1 → #856; archived",
+      "ratified": null
     }
   ],
   "work": [
