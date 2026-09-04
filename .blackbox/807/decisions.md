@@ -18,3 +18,10 @@ _lead · interpretation · basis D1 · 2026-09-04T08:48Z · ratified: pending_
 
 `pull_request: branches: [dev]`. A PR run only for PRs into `dev` (feature PRs, the Version Packages PR). A PR into `main` is only ever `dev → main` (AGENTS.md "Git workflow"), whose head is `dev` itself: the push run on `dev` already tested that SHA, and the ruleset's required checks (`verify (22)`, `verify (24)`) match by check name on the head SHA regardless of event — #803's own checks list shows the push runs, so the release PR keeps its required checks from the single push run. The push trigger on `dev` stays because a squash commit is a new SHA no PR run tested; the push trigger on `main` stays for the merge commit. A hotfix PR straight into `main` would get no run and stay blocked, which enforces the dev → main rule rather than weakening it. Kept the job-level `if` skip alone rather than a `concurrency` group: concurrency cannot dedupe across two events.
 
+<a id="r2"></a>
+## R2 — PR-run filter withdrawn in favour of the approval gate on the release PR
+
+_lead · interpretation · basis D1 · 2026-09-04T08:57Z · ratified: pending_
+
+The `branches: [dev]` filter from R1 is withdrawn by 809 D3/R3: the release PR needs a `pull_request` run of its own so the owner's approval has something to gate. The duplicate on the release PR is now a run that waits without runner time and is cancelled whenever dev moves; the one real duplicate left is the approved release run, once per release.
+

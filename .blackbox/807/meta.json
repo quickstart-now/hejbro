@@ -27,6 +27,17 @@
       "at": "2026-09-04T08:48Z",
       "title": "PR runs are limited to PRs into dev; a dev → main PR takes its checks from the push run",
       "ratified": null
+    },
+    {
+      "id": "R2",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "D1"
+      ],
+      "at": "2026-09-04T08:57Z",
+      "title": "PR-run filter withdrawn in favour of the approval gate on the release PR",
+      "ratified": null
     }
   ],
   "work": [],

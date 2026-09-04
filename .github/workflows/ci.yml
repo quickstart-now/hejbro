@@ -2,13 +2,7 @@ name: ci
 on:
   push:
     branches: [dev, main]
-  # PR runs only for PRs into dev (feature PRs, the Version Packages PR).
-  # A PR into main is only ever dev -> main, whose head IS dev: the push
-  # run on dev already tested that exact SHA, and the required checks
-  # match by name on the SHA, so a second run per event only doubled the
-  # queue (owner, 2026-09-04, on the 0.2.0-pre.1 release PR).
   pull_request:
-    branches: [dev]
   # #180 added this trigger so release-version.yml could
   # `gh workflow run ci.yml --ref changeset-release/dev` after pushing
   # the "Version Packages" PR's branch, on the theory that a GITHUB_TOKEN
@@ -32,10 +26,12 @@ on:
   # and useful for a manual re-run of this workflow against an arbitrary
   # branch without needing a new commit.
   workflow_dispatch: {}
-# #809: a newer head on the same PR (the bot's pin commit lands within
-# seconds of the PR opening) cancels the run on the superseded head, so
-# a PR costs one verify run, on its final head. Pushes to dev/main are
-# never cancelled: each SHA there is a merge.
+# #807/#809: a newer head on the same PR cancels the run on the
+# superseded head -- the bot's pin commit that lands seconds after a
+# feature PR opens, and every dev merge that moves a long-lived PR's head
+# (the release PR, the Version Packages PR) while its verify is still
+# waiting for approval below. Pushes to dev/main are never cancelled:
+# each SHA there is a merge.
 concurrency:
   group: ci-${{ github.event_name }}-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -96,6 +92,16 @@ jobs:
     # (#804): without the status function a skipped `needs` skips this
     # job too, and the Version Packages PR would never get its CI.
     if: ${{ !cancelled() && needs.blackbox.result != 'failure' }}
+    # #809 (owner, 2026-09-04): a long-lived PR -- the release PR (head
+    # `dev`) and the Version Packages PR (head `changeset-release/*`) --
+    # has its head moved by every small merge into dev, and re-running
+    # the heavy checks each time is waste. Those PRs run `verify` under
+    # environment `ci-approval`, whose required reviewer is the owner:
+    # the job waits at the deployment review (no runner time) until the
+    # owner approves the release, and the concurrency group above drops
+    # the wait when dev moves again. Every other PR and every push runs
+    # under `ci-open`, which has no rules.
+    environment: ${{ (github.event_name == 'pull_request' && (github.head_ref == 'dev' || startsWith(github.head_ref, 'changeset-release/'))) && 'ci-approval' || 'ci-open' }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
