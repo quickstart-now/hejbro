@@ -2,6 +2,7 @@ import type { HejbroInput, JsonValue, Snapshot } from "@hejbro/core";
 import {
 	between,
 	check,
+	columnRef,
 	emptySnapshot,
 	eq,
 	generateMigration,
@@ -19,6 +20,7 @@ import { describe, expect, it } from "vitest";
 import type { Catalog } from "../src/check/catalog";
 import {
 	compareCheckConstraint,
+	compareGeneratedColumn,
 	normalizeCheckText,
 } from "../src/check/expression";
 
@@ -1527,6 +1529,235 @@ describe("compareCheckConstraint / 3.8 expression texts are delimited by backtic
 				"Next: change the declaration to match the database, or write a migration that alters the constraint to the declared expression.",
 			);
 		});
+	});
+});
+
+/**
+ * #778/#781, task 1.4: `compareGeneratedColumn`'s own axis is the
+ * expression only -- whether each side is generated at all is
+ * `compare.ts`'s synchronous `compareColumnGenerated` (1.3). Real
+ * `columnRef`s (not a bare `sql` template) so the declared side renders
+ * table-bound, qualified columns the way an actual generated column
+ * declaration does (matching design.md's own measured examples) -- the
+ * same primitive `table()` uses to build its own `t` proxy, per
+ * `column-builder.ts`'s tsdoc on why a sibling can't be read off `t`
+ * inside `generatedAlwaysAs()` itself.
+ */
+describe("compareGeneratedColumn / 4.1 a generated column's expression", () => {
+	const priceRef = () =>
+		columnRef("app", "widgets", "price", numeric().columnState.typeNode);
+	const qtyRef = () =>
+		columnRef("app", "widgets", "qty", numeric().columnState.typeNode);
+
+	const declaredTotalExpression = (): JsonValue => {
+		const widgets = table(app, "widgets", {
+			price: numeric(),
+			qty: numeric(),
+			total: numeric().generatedAlwaysAs(sql`${priceRef()} * ${qtyRef()}`),
+		});
+		const snapshot = buildTestSnapshot([widgets]);
+		const node = snapshot.objects["table:app.widgets"] as {
+			readonly columns: ReadonlyArray<{
+				readonly name: string;
+				readonly generated?: JsonValue;
+			}>;
+		};
+		const column = node.columns.find((entry) => entry.name === "total");
+		if (column?.generated === undefined) {
+			throw new Error(
+				'expected column "total" to carry a generated expression',
+			);
+		}
+		return column.generated;
+	};
+
+	const catalogWithTotal = (catalogGenerated: string | null): Catalog => ({
+		...emptyCatalog(),
+		tables: [{ schema: "app", table: "widgets", rls: false }],
+		columns: [
+			{
+				schema: "app",
+				table: "widgets",
+				name: "total",
+				notNull: false,
+				catalogType: "numeric",
+				baseTypeKind: null,
+				baseTypeSchema: null,
+				baseTypeName: null,
+				catalogDefault: null,
+				catalogGenerated,
+			},
+		],
+	});
+
+	type GeneratedFakeSessionOptions = {
+		readonly explainOutput?: ReadonlyArray<string> | null;
+		readonly explainError?: Error;
+	};
+
+	/** No `pg_constraint` lookup exists for a generated column (unlike a check constraint) -- every call is the single `explain` probe, or none at all in text mode. */
+	const makeGeneratedFakeSession = (
+		options: GeneratedFakeSessionOptions,
+	): { readonly session: DriverSession; readonly calls: CompileResult[] } => {
+		const calls: CompileResult[] = [];
+		const session: DriverSession = {
+			execute: async (compiled) => {
+				calls.push(compiled);
+				if (options.explainError !== undefined) {
+					throw options.explainError;
+				}
+				if (
+					options.explainOutput === undefined ||
+					options.explainOutput === null
+				) {
+					return [explainRow([])];
+				}
+				return [explainRow(options.explainOutput)];
+			},
+		};
+		return { session, calls };
+	};
+
+	it("reports no finding when the server renders both sides identically", async () => {
+		const matching = "(price * (qty)::numeric)";
+		const { session, calls } = makeGeneratedFakeSession({
+			explainOutput: [matching, matching],
+		});
+
+		const findings = await compareGeneratedColumn(
+			session,
+			catalogWithTotal("(price * (qty)::numeric)"),
+			"app",
+			"widgets",
+			"total",
+			declaredTotalExpression(),
+			"server",
+		);
+
+		expect(findings).toEqual([]);
+		expect(calls).toHaveLength(1);
+	});
+
+	it("reports a differing generation expression, naming the generated column", async () => {
+		const { session } = makeGeneratedFakeSession({
+			explainOutput: ["(price * (qty)::numeric)", "(price + (qty)::numeric)"],
+		});
+
+		const findings = await compareGeneratedColumn(
+			session,
+			catalogWithTotal("(price + (qty)::numeric)"),
+			"app",
+			"widgets",
+			"total",
+			declaredTotalExpression(),
+			"server",
+		);
+
+		expect(findings).toHaveLength(1);
+		expect(findings[0]?.identity).toBe("app.widgets.total");
+		expect(findings[0]?.error).toMatchObject({ code: "check-object-differs" });
+		expect(findings[0]?.error.message).toContain("generated column");
+		expect(findings[0]?.error.message).toContain(
+			"renders as `(price * (qty)::numeric)`,",
+		);
+		expect(findings[0]?.error.message).toContain(
+			"renders as `(price + (qty)::numeric)`.",
+		);
+	});
+
+	it("reports not-compared with backticked texts and an EXPLAIN Next: when the probe fails", async () => {
+		const { session } = makeGeneratedFakeSession({
+			explainError: Object.assign(
+				new Error("permission denied for table widgets"),
+				{ code: "42501" },
+			),
+		});
+
+		const findings = await compareGeneratedColumn(
+			session,
+			catalogWithTotal("(price * (qty)::numeric)"),
+			"app",
+			"widgets",
+			"total",
+			declaredTotalExpression(),
+			"server",
+		);
+
+		expect(findings).toHaveLength(1);
+		expect(findings[0]?.error).toMatchObject({ code: "check-not-compared" });
+		expect(findings[0]?.error.message).toContain("permission denied");
+		expect(findings[0]?.error.message).toMatch(/Declared expression: `.*`\./);
+		expect(findings[0]?.error.message).toMatch(/Catalog expression: `.*`\./);
+		expect(findings[0]?.error.message).toContain("EXPLAIN");
+	});
+
+	it("agrees under text mode after the declaring table's qualifier normalizes away", async () => {
+		const { session, calls } = makeGeneratedFakeSession({});
+
+		const findings = await compareGeneratedColumn(
+			session,
+			catalogWithTotal("(price * qty)"),
+			"app",
+			"widgets",
+			"total",
+			declaredTotalExpression(),
+			"text",
+		);
+
+		expect(findings).toEqual([]);
+		expect(calls).toHaveLength(0);
+	});
+
+	it("is not compared under text mode when the catalog carries a column cast normalization never strips", async () => {
+		const { session } = makeGeneratedFakeSession({});
+
+		const findings = await compareGeneratedColumn(
+			session,
+			catalogWithTotal("(price * (qty)::numeric)"),
+			"app",
+			"widgets",
+			"total",
+			declaredTotalExpression(),
+			"text",
+		);
+
+		expect(findings).toHaveLength(1);
+		expect(findings[0]?.error).toMatchObject({ code: "check-not-compared" });
+		expect(findings[0]?.error.message).not.toMatch(/EXPLAIN/i);
+	});
+
+	it("reports nothing and issues zero statements when the catalog column is not generated", async () => {
+		const { session, calls } = makeGeneratedFakeSession({});
+
+		const findings = await compareGeneratedColumn(
+			session,
+			catalogWithTotal(null),
+			"app",
+			"widgets",
+			"total",
+			declaredTotalExpression(),
+			"server",
+		);
+
+		expect(findings).toEqual([]);
+		expect(calls).toHaveLength(0);
+	});
+
+	it("reports nothing and issues zero statements when the column is absent from the catalog", async () => {
+		const { session, calls } = makeGeneratedFakeSession({});
+
+		const findings = await compareGeneratedColumn(
+			session,
+			emptyCatalog(),
+			"app",
+			"widgets",
+			"total",
+			declaredTotalExpression(),
+			"server",
+		);
+
+		expect(findings).toEqual([]);
+		expect(calls).toHaveLength(0);
 	});
 });
 

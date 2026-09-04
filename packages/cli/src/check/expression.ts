@@ -14,6 +14,19 @@ import { differsFinding } from "./compare";
 import { describeDriverError } from "./error-message";
 
 /**
+ * One expression-bearing object `check` compares this way (design.md,
+ * "one comparison, four surfaces") -- `describe` names the kind in every
+ * finding message (`"check constraint"`, `"index predicate"`,
+ * `` `index expression column ${n}` ``, `"generated column"`), so the
+ * probe, the text comparison and the finding builders below read the same
+ * for all four instead of each hardcoding "check constraint".
+ */
+export type ExpressionSurface = {
+	readonly identity: string;
+	readonly describe: string;
+};
+
+/**
  * `exprTexts` is `null` for a failure before either side was ever
  * assembled (the `conbin` lookup itself errored -- there is no catalog
  * text yet to show); otherwise both the declared and catalog expression
@@ -22,24 +35,24 @@ import { describeDriverError } from "./error-message";
  * read (tasks.md 3.1, review round 2).
  */
 const notComparedFinding = (
-	identity: string,
+	surface: ExpressionSurface,
 	reason: string,
 	exprTexts: { readonly declared: string; readonly catalog: string } | null,
 ): Finding => {
 	if (exprTexts === null) {
 		return {
-			identity,
+			identity: surface.identity,
 			error: hejbroError(
 				"check-not-compared",
-				`declared check constraint "${identity}" could not be compared: ${reason}. Next: confirm the connected role can run EXPLAIN against this table, then rerun \`hejbro check\`.`,
+				`declared ${surface.describe} "${surface.identity}" could not be compared: ${reason}. Next: confirm the connected role can run EXPLAIN against this table, then rerun \`hejbro check\`.`,
 			),
 		};
 	}
 	return {
-		identity,
+		identity: surface.identity,
 		error: hejbroError(
 			"check-not-compared",
-			`declared check constraint "${identity}" could not be compared: ${reason}. Declared expression: \`${exprTexts.declared}\`. Catalog expression: \`${exprTexts.catalog}\`. Next: confirm the connected role can run EXPLAIN against this table, then rerun \`hejbro check\`.`,
+			`declared ${surface.describe} "${surface.identity}" could not be compared: ${reason}. Declared expression: \`${exprTexts.declared}\`. Catalog expression: \`${exprTexts.catalog}\`. Next: confirm the connected role can run EXPLAIN against this table, then rerun \`hejbro check\`.`,
 		),
 	};
 };
@@ -63,16 +76,24 @@ const notEnforcedFinding = (identity: string, name: string): Finding => ({
  * pointer in the catalog's own spelling.
  */
 const notComparedByTextFinding = (
-	identity: string,
+	surface: ExpressionSurface,
 	declaredText: string,
 	catalogText: string,
 ): Finding => ({
-	identity,
+	identity: surface.identity,
 	error: hejbroError(
 		"check-not-compared",
-		`declared check constraint "${identity}" could not be compared: the registered preset declares this platform cannot plan a statement, and the declared and catalog texts still differ after normalization. Declared expression: \`${declaredText}\`. Catalog expression: \`${catalogText}\`. Next: restate the declaration to match the catalog's own spelling: ${catalogText}`,
+		`declared ${surface.describe} "${surface.identity}" could not be compared: the registered preset declares this platform cannot plan a statement, and the declared and catalog texts still differ after normalization. Declared expression: \`${declaredText}\`. Catalog expression: \`${catalogText}\`. Next: restate the declaration to match the catalog's own spelling: ${catalogText}`,
 	),
 });
+
+/** The `renders as ... but the database's own ... renders as ...` line every surface's differs finding shares -- only the describe noun and the `Next:` remedy vary per caller (design.md: the differs finding shape "takes a surface"). */
+const rendersAsMessage = (
+	surface: ExpressionSurface,
+	declaredText: string,
+	catalogText: string,
+): string =>
+	`declared ${surface.describe} "${surface.identity}" renders as \`${declaredText}\`, but the database's own ${surface.describe} renders as \`${catalogText}\`.`;
 
 /**
  * The catalog read itself failed under a preset that declares no
@@ -451,45 +472,58 @@ const explainPlanRow = z.object({
 		.min(1),
 });
 
-type BothProbeOutcome =
-	| {
-			readonly ok: true;
-			readonly declaredText: string;
-			readonly catalogText: string;
-	  }
+/** One declared/catalog SQL pair to probe in one statement's select list, and the pair of renderings the plan's `Output` carries back for it. */
+type ExpressionPair = {
+	readonly declaredSql: string;
+	readonly catalogSql: string;
+};
+type RenderedPair = {
+	readonly declaredText: string;
+	readonly catalogText: string;
+};
+
+type ProbeOutcome =
+	| { readonly ok: true; readonly renderings: ReadonlyArray<RenderedPair> }
 	| { readonly ok: false; readonly reason: string };
 
 /**
- * Renders both sides the way the server itself would, from **one
- * statement** -- `SELECT (<declared>), (<catalog>) FROM <table>` -- read
- * from the plan's own `Output` (task 3.1, settled after review round 2:
- * "same session" is unenforceable from outside the driver, since a
- * pooling driver checks out a connection per `execute()` call and two
- * separate statements can land on two connections whose `search_path`
- * differs; one statement makes "same session" true by construction
- * instead, and costs a round trip less). The select list, never a
- * `WHERE` predicate: a qual is subject to the planner and to
- * row-security rewriting, an output expression is neither. No `SET`, no
- * transaction: this command depends on no driver capability beyond the
- * parameterless reads every driver must already support.
+ * Renders every pair the way the server itself would, from **one
+ * statement** -- `SELECT (<declared1>), (<catalog1>), (<declared2>), …
+ * FROM <table>` -- read from the plan's own `Output` (task 3.1, settled
+ * after review round 2: "same session" is unenforceable from outside the
+ * driver, since a pooling driver checks out a connection per `execute()`
+ * call and two separate statements can land on two connections whose
+ * `search_path` differs; one statement makes "same session" true by
+ * construction instead, and costs a round trip less). One *object*'s
+ * pairs share a statement (a check constraint or a generated column
+ * carries one pair; an index carries its predicate pair first, then one
+ * pair per expression column, task 1.5) -- two different objects never
+ * share one. The select list, never a `WHERE` predicate: a qual is
+ * subject to the planner and to row-security rewriting, an output
+ * expression is neither. No `SET`, no transaction: this command depends
+ * on no driver capability beyond the parameterless reads every driver
+ * must already support.
  *
  * Measured directly (docker postgres:17-alpine, tasks.md 3.1's own
  * demand -- "measure it before trusting the fixture"): Postgres does
  * NOT fold two identical target-list entries into one. `SELECT (x), (x)
  * FROM t` still returns a two-element `Output`, both agreeing and
- * genuinely-differing constraints alike, so `Output[1]` is always the
- * catalog side even when it renders identically to `Output[0]`.
+ * genuinely-differing constraints alike, so a later pair's entries are
+ * always read from their own `Output` slots even when they render
+ * identically to an earlier pair's.
  */
-const probeBothExpressions = async (
+const probeRenderings = async (
 	session: DriverSession,
 	schema: string,
 	table: string,
-	declaredSql: string,
-	catalogSql: string,
-): Promise<BothProbeOutcome> => {
+	pairs: ReadonlyArray<ExpressionPair>,
+): Promise<ProbeOutcome> => {
 	try {
+		const selectList = pairs
+			.flatMap((pair) => [`(${pair.declaredSql})`, `(${pair.catalogSql})`])
+			.join(", ");
 		const rows = await session.execute({
-			sql: `explain (format json, costs off, verbose) select (${declaredSql}), (${catalogSql}) from ${qualifyName(schema, table)}`,
+			sql: `explain (format json, costs off, verbose) select ${selectList} from ${qualifyName(schema, table)}`,
 			params: [],
 			kind: "sql",
 		});
@@ -505,15 +539,26 @@ const probeBothExpressions = async (
 			return { ok: false, reason: "the plan did not have the expected shape" };
 		}
 		const [plan] = parsed.data["QUERY PLAN"];
-		const declaredText = plan?.Plan?.Output?.[0];
-		const catalogText = plan?.Plan?.Output?.[1];
-		if (declaredText === undefined || catalogText === undefined) {
+		const output = plan?.Plan?.Output;
+		const renderings = pairs.map((_, index) => ({
+			declaredText: output?.[index * 2],
+			catalogText: output?.[index * 2 + 1],
+		}));
+		const complete = renderings.every(
+			(rendering) =>
+				rendering.declaredText !== undefined &&
+				rendering.catalogText !== undefined,
+		);
+		if (!complete) {
 			return {
 				ok: false,
-				reason: "the plan's Output did not include both probed expressions",
+				reason: "the plan's Output did not include every probed expression",
 			};
 		}
-		return { ok: true, declaredText, catalogText };
+		return {
+			ok: true,
+			renderings: renderings as ReadonlyArray<RenderedPair>,
+		};
 	} catch (error) {
 		// Neither side was rendered -- the server's own error message is the
 		// reason, never split into a "which side failed" guess (Postgres's
@@ -533,42 +578,34 @@ const probeBothExpressions = async (
 export type CheckComparisonMode = "server" | "text";
 
 /**
- * The `"text"` mode's own comparison (fix-nile-findings, #755, task 2.2):
- * no rendering is obtained from the server at all, so this never throws
- * and never returns a `check-not-compared` for a *failed* rendering --
- * the only outcome besides agreement is `check-not-compared` for texts
- * that still differ after normalization (never `check-constraint-differs`
- * -- a textual difference is not evidence of a different meaning). The
- * declared side renders table-bound, two-part (`renderTableBoundExpr`,
- * fix-nile-findings task 1.1) -- the same form the constraint's own
- * migration SQL uses, so the comparison is against what was actually
- * applied.
+ * The `"text"` mode's own comparison (fix-nile-findings, #755, task 2.2;
+ * generalized over a surface, task 1.4): no rendering is obtained from the
+ * server at all, so this never throws and never returns a
+ * `check-not-compared` for a *failed* rendering -- the only outcome
+ * besides agreement is `check-not-compared` for texts that still differ
+ * after normalization (never a `differsFinding` -- a textual difference
+ * is not evidence of a different meaning). The declared side renders
+ * table-bound, two-part (`renderTableBoundExpr`, fix-nile-findings task
+ * 1.1) -- the same form the object's own migration SQL uses, so the
+ * comparison is against what was actually applied. Enforcement (a check
+ * constraint's own `NOT VALID` axis) is not this function's: it is
+ * neither compared nor reported here, so a caller with no enforcement
+ * concept (a generated column, an index) can share this unchanged.
  */
 const compareByText = (
-	identity: string,
+	surface: ExpressionSurface,
 	schema: string,
 	table: string,
-	name: string,
 	declaredExpression: JsonValue,
-	metadata: { readonly expression: string; readonly convalidated: boolean },
+	catalogText: string,
 ): ReadonlyArray<Finding> => {
 	const declaredSql = renderTableBoundExpr(decodeExprNode(declaredExpression));
 	const normalizedDeclared = normalizeCheckText(declaredSql, schema, table);
-	const normalizedCatalog = normalizeCheckText(
-		metadata.expression,
-		schema,
-		table,
-	);
-	const findings: Finding[] = [];
+	const normalizedCatalog = normalizeCheckText(catalogText, schema, table);
 	if (normalizedDeclared !== normalizedCatalog) {
-		findings.push(
-			notComparedByTextFinding(identity, declaredSql, metadata.expression),
-		);
+		return [notComparedByTextFinding(surface, declaredSql, catalogText)];
 	}
-	if (!metadata.convalidated) {
-		findings.push(notEnforcedFinding(identity, name));
-	}
-	return findings;
+	return [];
 };
 
 /**
@@ -582,7 +619,9 @@ const compareByText = (
  * (review m3: a declaration/database mismatch and a database that
  * doesn't enforce what it does have are two independent facts with two
  * different fixes; reporting only one drip-feeds the other, same
- * principle as compare.ts's own C7).
+ * principle as compare.ts's own C7). The check-constraint caller of the
+ * shared surface functions (task 1.4) -- its own `pg_constraint` read and
+ * the enforcement finding are the only parts still specific to it.
  *
  * Priority (2.1's precedence rule): a table that does not exist in
  * `catalog` is *missing*, already reported by compare.ts's own existence
@@ -600,6 +639,7 @@ export const compareCheckConstraint = async (
 	mode: CheckComparisonMode,
 ): Promise<ReadonlyArray<Finding>> => {
 	const identity = `${schema}.${table}.${name}`;
+	const surface: ExpressionSurface = { identity, describe: "check constraint" };
 	const tableExists = catalog.tables.some(
 		(row) => row.schema === schema && row.table === table,
 	);
@@ -614,40 +654,49 @@ export const compareCheckConstraint = async (
 		if (mode === "text") {
 			return [notComparedCatalogReadFinding(identity, metadata.reason)];
 		}
-		return [notComparedFinding(identity, metadata.reason, null)];
+		return [notComparedFinding(surface, metadata.reason, null)];
 	}
 	if (mode === "text") {
-		return compareByText(
-			identity,
-			schema,
-			table,
-			name,
-			declaredExpression,
-			metadata,
-		);
+		const findings = [
+			...compareByText(
+				surface,
+				schema,
+				table,
+				declaredExpression,
+				metadata.expression,
+			),
+		];
+		if (!metadata.convalidated) {
+			findings.push(notEnforcedFinding(identity, name));
+		}
+		return findings;
 	}
 	const declaredSql = renderExpr(decodeExprNode(declaredExpression));
-	const probe = await probeBothExpressions(
-		session,
-		schema,
-		table,
-		declaredSql,
-		metadata.expression,
-	);
+	const probe = await probeRenderings(session, schema, table, [
+		{ declaredSql, catalogSql: metadata.expression },
+	]);
 	if (!probe.ok) {
 		return [
-			notComparedFinding(identity, probe.reason, {
+			notComparedFinding(surface, probe.reason, {
 				declared: declaredSql,
 				catalog: metadata.expression,
 			}),
 		];
 	}
+	const [rendering] = probe.renderings;
 	const findings: Finding[] = [];
-	if (probe.declaredText !== probe.catalogText) {
+	if (
+		rendering !== undefined &&
+		rendering.declaredText !== rendering.catalogText
+	) {
 		findings.push(
 			differsFinding(
 				identity,
-				`declared check constraint "${identity}" renders as \`${probe.declaredText}\`, but the database's own constraint renders as \`${probe.catalogText}\`.`,
+				rendersAsMessage(
+					surface,
+					rendering.declaredText,
+					rendering.catalogText,
+				),
 				"change the declaration to match the database, or write a migration that alters the constraint to the declared expression.",
 			),
 		);
@@ -656,4 +705,73 @@ export const compareCheckConstraint = async (
 		findings.push(notEnforcedFinding(identity, name));
 	}
 	return findings;
+};
+
+/**
+ * Compares one declared generated column's expression against the
+ * database's own generation expression (#778/#781, task 1.4) -- the
+ * expression axis only; whether each side is generated *at all* is
+ * `compare.ts`'s own synchronous `compareColumnGenerated` (task 1.3),
+ * which runs first and reports a mismatch there without ever reaching
+ * this function. Reuses `row.catalogGenerated`, already read by group 1's
+ * bulk `columns` query (task 1.2) -- no second catalog read. A column
+ * absent from the catalog, or not generated there, produces no finding
+ * (existence and the generated-axis mismatch are the other functions'
+ * jobs) and issues zero statements.
+ */
+export const compareGeneratedColumn = async (
+	session: DriverSession,
+	catalog: Catalog,
+	schema: string,
+	table: string,
+	column: string,
+	declaredExpression: JsonValue,
+	mode: CheckComparisonMode,
+): Promise<ReadonlyArray<Finding>> => {
+	const identity = `${schema}.${table}.${column}`;
+	const row = catalog.columns.find(
+		(candidate) =>
+			candidate.schema === schema &&
+			candidate.table === table &&
+			candidate.name === column,
+	);
+	if (row === undefined || row.catalogGenerated === null) {
+		return [];
+	}
+	const surface: ExpressionSurface = { identity, describe: "generated column" };
+	if (mode === "text") {
+		return compareByText(
+			surface,
+			schema,
+			table,
+			declaredExpression,
+			row.catalogGenerated,
+		);
+	}
+	const declaredSql = renderExpr(decodeExprNode(declaredExpression));
+	const probe = await probeRenderings(session, schema, table, [
+		{ declaredSql, catalogSql: row.catalogGenerated },
+	]);
+	if (!probe.ok) {
+		return [
+			notComparedFinding(surface, probe.reason, {
+				declared: declaredSql,
+				catalog: row.catalogGenerated,
+			}),
+		];
+	}
+	const [rendering] = probe.renderings;
+	if (
+		rendering === undefined ||
+		rendering.declaredText === rendering.catalogText
+	) {
+		return [];
+	}
+	return [
+		differsFinding(
+			identity,
+			rendersAsMessage(surface, rendering.declaredText, rendering.catalogText),
+			"change the declaration to match the database, or write a migration that alters the column's generated expression to match the declaration.",
+		),
+	];
 };
