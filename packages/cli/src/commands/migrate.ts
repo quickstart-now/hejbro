@@ -468,7 +468,7 @@ export const runMigrate = async (
 			{ commandName: MIGRATE_COMMAND, codes: APPLY_CONNECTION_CODES },
 			async (driver) => {
 				assertInteractiveTransactions(driver, MIGRATE_COMMAND);
-				const identity = await probeLedgerIdentity(driver);
+				const identity = await probeLedgerIdentity(driver, MIGRATE_COMMAND);
 				assertLedgerNotOccupied(identity, MIGRATE_COMMAND);
 				// [task 1.5, harden-ledger-diagnostics] Neither statement here
 				// opens a transaction, so a tagged failure from either one is

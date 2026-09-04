@@ -165,7 +165,7 @@ export const applyRaise = async (
 	snapshotFile: SnapshotFile,
 	commandName: string,
 ): Promise<void> => {
-	const identity = await probeLedgerIdentity(driver);
+	const identity = await probeLedgerIdentity(driver, commandName);
 	assertLedgerNotOccupied(identity, commandName);
 	try {
 		const ledgerState = await readLedger(driver);

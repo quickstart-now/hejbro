@@ -234,7 +234,7 @@ export const runStatus = async (
 			process.env,
 			{ commandName: STATUS_COMMAND, codes: APPLY_CONNECTION_CODES },
 			async (driver) => {
-				const identity = await probeLedgerIdentity(driver);
+				const identity = await probeLedgerIdentity(driver, STATUS_COMMAND);
 				assertLedgerNotOccupied(identity, STATUS_COMMAND);
 				try {
 					const ledgerState = await readLedger(driver);

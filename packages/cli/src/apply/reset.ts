@@ -520,7 +520,7 @@ export const applyReset = async (
 	// for a `<database>:<count>` token on a run that is refused anyway is
 	// wasted and misleading, and this catalog read opens no transaction, so
 	// nothing the confirmation protects is touched by running it first.
-	const identity = await probeLedgerIdentity(driver);
+	const identity = await probeLedgerIdentity(driver, "hejbro reset");
 	assertLedgerNotOccupied(identity, "hejbro reset");
 	const databaseName = await currentDatabaseName(driver);
 	assertResetConfirmed(databaseName, changes, confirmed);

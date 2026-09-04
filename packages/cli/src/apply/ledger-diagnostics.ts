@@ -66,21 +66,42 @@ const grantSubject = (role: string | null): string => {
 };
 
 /**
+ * [design.md D8] The read failure's own opening clause -- `"probe"` names
+ * the catalog read that judges the ledger's identity (`ledger-
+ * identity.ts`'s own statement, never routed through `ledger.ts`'s
+ * `exec`, so never tagged); `"read"` (the default) names the ledger
+ * table itself, for `readLedger`'s own read and `isMigrationRecorded`'s
+ * in-transaction recheck.
+ */
+type LedgerReadContext = "read" | "probe";
+
+const readOpeningClause = (context: LedgerReadContext): string => {
+	if (context === "probe") {
+		return `the catalog read that judges \`${QUALIFIED_LEDGER_TABLE}\` was refused`;
+	}
+	return `\`${QUALIFIED_LEDGER_TABLE}\` could not be read`;
+};
+
+/**
  * [design.md D3] Turns a read failure `ledger.ts`'s `exec` tagged into
  * `apply-ledger-unreadable`, naming the ledger, the connecting role
  * (best-effort, D2) and the server's own SQLSTATE and message
  * unsummarized, ending with a `Next:` line offering the grant or the
  * applying role. `failure` is whatever `exec` threw (or, defensively, a
- * raw driver error if a caller already unwrapped it); either way the
- * server's own error ends up on `.cause`, never this function's own tag
- * object. Used identically for `readLedger`'s own read and
- * `isMigrationRecorded`'s in-transaction recheck (design.md D4) -- the
- * message names no site because a read has only ever the one shape.
+ * raw driver error if a caller already unwrapped it, e.g. the identity
+ * probe's own catalog read, task 1.8 -- never tagged, since it never runs
+ * through `ledger.ts`'s `exec`); either way the server's own error ends
+ * up on `.cause`, never this function's own tag object. Used identically
+ * for `readLedger`'s own read and `isMigrationRecorded`'s in-transaction
+ * recheck (design.md D4) -- the message names no site because a read has
+ * only ever the one shape, besides the probe's own opening clause
+ * (design.md D8, `context`).
  */
 export const throwLedgerReadFailure = async (
 	driver: Driver,
 	failure: unknown,
 	commandName: string,
+	context: LedgerReadContext = "read",
 ): Promise<never> => {
 	const tag = asLedgerAccessFailure(failure);
 	const cause = tag?.cause ?? failure;
@@ -90,7 +111,7 @@ export const throwLedgerReadFailure = async (
 	throw Object.assign(
 		hejbroError(
 			"apply-ledger-unreadable",
-			`\`${QUALIFIED_LEDGER_TABLE}\` could not be read${roleClause(role)}${codeSuffix(code)}: ${reason}. hejbro reads its own ledger before it can say what this database has applied. Next: grant ${grantSubject(role)} \`select\` on \`${QUALIFIED_LEDGER_TABLE}\` and \`usage\` on the \`"${LEDGER_SCHEMA}"\` schema, or connect as the role that applied, then rerun \`${commandName}\`.`,
+			`${readOpeningClause(context)}${roleClause(role)}${codeSuffix(code)}: ${reason}. hejbro reads its own ledger before it can say what this database has applied. Next: grant ${grantSubject(role)} \`select\` on \`${QUALIFIED_LEDGER_TABLE}\` and \`usage\` on the \`"${LEDGER_SCHEMA}"\` schema, or connect as the role that applied, then rerun \`${commandName}\`.`,
 		),
 		{ cause },
 	);
