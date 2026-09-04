@@ -18,6 +18,18 @@
       "at": "2026-09-04T15:17Z",
       "title": "Q3: refuse, innermost-in-progress invariant over the whole tree, two codes by remedy, at send time",
       "ratified": null
+    },
+    {
+      "id": "R2",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "D1",
+        "R1"
+      ],
+      "at": "2026-09-04T15:46Z",
+      "title": "1.4b: a nested transaction started from a settled handle is refused with statement-after-nested-transaction",
+      "ratified": null
     }
   ],
   "work": [],

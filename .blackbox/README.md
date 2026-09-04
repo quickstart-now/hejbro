@@ -46,7 +46,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | [#377](377/) | snapshot format stability policy for 1.0 | closed | #383 | 1 | 0 (0 pending) |
 | [#378](378/) | defect-leakage metric over escaped defects | closed | #384 | 1 | 0 (0 pending) |
 | [#412](412/) | 0.2.x: post-release commitments | open | #715 #808 #824 #835 #840 | 15 | 26 (0 pending) |
-| ↳ [#449](449/) | concurrent tx.execute beside a nested transaction is unguarded | open |  | 0 | 1 (1 pending) |
+| ↳ [#449](449/) | concurrent tx.execute beside a nested transaction is unguarded | open |  | 0 | 2 (1 pending) |
 | ↳ [#528](528/) | driver-conformance kit mis-observes transaction-wrapping session-state:false drivers | closed | #737 #760 | 0 | 6 (0 pending) |
 | ↳ [#531](531/) | pg checkout reads its own setupSession; the spec's late-binding scenario fails for spread decorators | closed | #737 | 0 | 3 (0 pending) |
 | ↳ [#533](533/) | cli restore-command test flakes on first heavy parallel run after install | open | #773 | 0 | 1 (0 pending) |
@@ -116,7 +116,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 
 ## Totals
 
-Owner decisions 80 · rulings 130 (interpretation 81, extension 47, stop 2) · pending extensions 9 · rejected 2
+Owner decisions 80 · rulings 131 (interpretation 82, extension 47, stop 2) · pending extensions 9 · rejected 2
 
 ## Conventions
 
