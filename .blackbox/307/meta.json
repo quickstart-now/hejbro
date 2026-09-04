@@ -1,0 +1,125 @@
+{
+  "version": 1,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#307",
+  "title": "Left-join nullability widening in query type inference",
+  "parent": "quickstart-now/hejbro#282",
+  "status": "closed",
+  "opened": "2026-09-04",
+  "closed": "2026-08-31",
+  "decisions": [
+    {
+      "id": "D1",
+      "by": "owner",
+      "at": "2026-08-31T00:00Z",
+      "title": "s (English rewrites)",
+      "raw": []
+    }
+  ],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-08-31T00:00Z",
+      "title": "narrow-join-nullability \u2014 left joins stop lying (#307)",
+      "pr": null,
+      "decisions": []
+    }
+  ],
+  "prs": [
+    {
+      "number": 550,
+      "ref": "quickstart-now/hejbro#550",
+      "title": "Left-join nullability widening in query type inference",
+      "head": "36fb711965fc380cdd5356f4fcf3722435d2440a",
+      "headRef": "feat-narrow-join-nullability",
+      "base": "dev",
+      "merged": "2026-08-31T03:14:13Z",
+      "pinnedAt": "2026-08-31T00:00Z",
+      "migrated": true,
+      "refs": [
+        {
+          "path": ".changeset/narrow-join-nullability.md",
+          "blob": "5143f4270981a28185fc2fb9e1ebbc7450e85a1e"
+        },
+        {
+          "path": "README.md",
+          "blob": "b111764a19270a043a54dc60f390f6d8b4b506ff"
+        },
+        {
+          "path": "openspec/changes/archive/2026-08-31-narrow-join-nullability/proposal.md",
+          "blob": "428a0db9fdee39ab1a2752808872422e6e8acea2"
+        },
+        {
+          "path": "openspec/changes/archive/2026-08-31-narrow-join-nullability/specs/query-type-inference/spec.md",
+          "blob": "e89832a7efb86f35ec48918009540dfda64e2d3b"
+        },
+        {
+          "path": "openspec/changes/archive/2026-08-31-narrow-join-nullability/tasks.md",
+          "blob": "e13fa8e98958ffc15923fcabb528483b271be136"
+        },
+        {
+          "path": "openspec/task-times.csv",
+          "blob": "88cf9f8616e518b3f2f474eb6b16148e7e581b70"
+        },
+        {
+          "path": "packages/core/src/index.ts",
+          "blob": "747021dfe4178360ec0a2b1cc3f5123b386336f6"
+        },
+        {
+          "path": "packages/core/src/query/left-joined.ts",
+          "blob": "c61e4f12a72521b83171e1661c538bdf0fb4179f"
+        },
+        {
+          "path": "packages/core/src/query/select.ts",
+          "blob": "45c0fb0104170d8459b4c2a6e07221fc3822238d"
+        },
+        {
+          "path": "packages/core/test/query/select-join-types.test.ts",
+          "blob": "39a2e2d8fc5a9704bd0b889e5ef6e6d0ba219b07"
+        },
+        {
+          "path": "packages/query/src/db/chain.ts",
+          "blob": "a95cafd6c271c3f984210ef31ad6ed78d5768cfa"
+        },
+        {
+          "path": "packages/query/src/db/db.ts",
+          "blob": "5e45a9719011ff79730b0044acb8e8bcc0ddc718"
+        },
+        {
+          "path": "packages/query/src/types/returning.ts",
+          "blob": "55b1d00bd359794b30f9cfb7efa00d426ba26490"
+        },
+        {
+          "path": "packages/query/src/types/select-result.ts",
+          "blob": "48fe00ff9a8154be479a9246b4e2b5892b1120bc"
+        },
+        {
+          "path": "packages/query/test/db/execute-result-type.test.ts",
+          "blob": "a818d0e8120d3e8d5d236ba1f3d95861e54d3212"
+        },
+        {
+          "path": "packages/query/test/types/chain-types.test.ts",
+          "blob": "dc79eac2c0dfd691269f40e6960b01f41fe2ab4b"
+        },
+        {
+          "path": "packages/query/test/types/nested-read.test.ts",
+          "blob": "e43ec03d722783ea5ddaf6c1d0225d0baab3751a"
+        },
+        {
+          "path": "packages/query/test/types/returning.test.ts",
+          "blob": "eaa73ee6357ed296f95bfd09b0db218abfdd28ca"
+        },
+        {
+          "path": "packages/query/test/types/select-result.test.ts",
+          "blob": "1c5573c33caec441533a63e4cc9e49bea008f4c9"
+        },
+        {
+          "path": "skills/hejbro/references/query-layer.md",
+          "blob": "996fb1646eb19cb3e541c7bfcd2cb460aaf810c7"
+        }
+      ]
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

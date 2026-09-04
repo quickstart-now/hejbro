@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#793",
+  "title": "blackbox: first PR pinned by CI over the owner's BLACKBOX_TOKEN",
+  "parent": "quickstart-now/hejbro#412",
+  "status": "closed",
+  "opened": "2026-09-04",
+  "closed": "2026-09-04",
+  "decisions": [
+    {
+      "id": "D1",
+      "by": "owner",
+      "at": "2026-09-04T05:41Z",
+      "title": "The bot-pin credential: register it directly; a PAT issued by the owner",
+      "raw": [
+        "ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#8,9,10"
+      ]
+    },
+    {
+      "id": "D2",
+      "by": "owner",
+      "at": "2026-09-04T06:09Z",
+      "title": "The bot is a GitHub App with a cat avatar; its pin commits must be signed",
+      "raw": [
+        "ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#12,13,14,15"
+      ]
+    }
+  ],
+  "work": [],
+  "prs": [
+    {
+      "number": 794,
+      "ref": "quickstart-now/hejbro#794",
+      "title": "docs(blackbox): record the bot-pin credential ruling; CI pins this PR itself",
+      "head": "c6fccda2669562b09c724faa437265c55c962a01",
+      "headRef": "bot-pin-witness",
+      "base": "dev",
+      "merged": null,
+      "pinnedAt": "2026-09-04T06:19Z",
+      "refs": [
+        {
+          "path": ".github/workflows/ci.yml",
+          "blob": "6bb81fc25a43cb88bdd0ce9e618310a38a88a6f2"
+        },
+        {
+          "path": "AGENTS.md",
+          "blob": "ab8742e85391e5090319878198fd07d5f41e0dc7"
+        }
+      ]
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

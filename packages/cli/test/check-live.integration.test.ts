@@ -596,3 +596,141 @@ describe("hejbro check / the exit code contract (group 6, task 4.5 live)", () =>
 		expect(result.stderr).toContain("check-declarations-empty");
 	});
 });
+
+/**
+ * fix-nile-findings, #755, task 2.4: the Docker witness for the seam 2.1-
+ * 2.3's own tests cannot reach -- every unit test either calls
+ * `checkComparisonMode` directly (proving the derivation alone) or calls
+ * `compareCheckAgainstCatalog`/`renderCheckReport` with the mode passed as
+ * a literal (proving the threading alone), so `runCheck`'s own
+ * `checkComparisonMode(config.presets)` call site (`commands/check.ts`)
+ * is unexercised by anything short of the real, assembled path: a
+ * `hejbro.config.ts` registering a preset that declares
+ * `explainUnavailable`, generated and applied against a real server, then
+ * checked through the spawned CLI. A bare preset-literal fixture (not
+ * `@hejbro/nile`'s own) keeps this witness scoped to the mode-selection
+ * wiring, not Nile's own validators (already 2.1's job).
+ */
+describe("hejbro check / text-comparison live witness (fix-nile-findings, #755, task 2.4)", () => {
+	const WitnessDb = "nile_witness";
+	let projectDir = "";
+
+	const witnessConfigSource = `import { defineConfig } from "hejbro";
+
+export default defineConfig({
+	entry: ["src/**/*.schema.ts"],
+	migrationsDir: "migrations",
+	snapshotPath: "hejbro.snapshot.json",
+	prefixStrategy: "timestamp",
+	presets: [
+		{
+			name: "explain-unavailable-witness",
+			kinds: [],
+			validators: [],
+			explainUnavailable: true,
+		},
+	],
+});
+`;
+
+	// `widgets_name_not_blank`: declared two-part
+	// (\`length(btrim("widgets"."name")) > 0\`), and Postgres's own
+	// pg_get_expr for this exact shape agrees after normalization alone
+	// (design.md's own scenario, task 2.2). `widgets_role_valid`: Postgres
+	// rewrites \`in (...)\` to \`= ANY (ARRAY[...])\` when it stores the
+	// constraint -- the fixed five-step normalization cannot and must not
+	// reconcile that (R64), so this one names the "not compared" half of
+	// the witness.
+	const witnessSchemaSource = `import { check, inArray, schema, sql, table, text, uuid } from "hejbro";
+
+export const app = schema("app");
+
+export const widgets = table(
+	app,
+	"widgets",
+	{
+		id: uuid().primaryKey().defaultRandom(),
+		name: text().notNull(),
+		role: text().notNull(),
+	},
+	(t) => ({
+		checks: [
+			check("widgets_name_not_blank", sql\`length(btrim(\${t.name})) > 0\`),
+			check("widgets_role_valid", inArray(t.role, ["owner", "admin"])),
+		],
+	}),
+);
+`;
+
+	beforeAll(async () => {
+		psqlCommand("postgres", `create database ${WitnessDb};`);
+		projectDir = await createCliFixtureDir();
+		// `init` scaffolds the empty snapshot and migrations directory
+		// `generate` requires on a project's very first run (matches
+		// generate-command.test.ts's own fixtures) -- its own onboarding
+		// config and schema are overwritten right after with this witness's.
+		await runCli(projectDir, ["init"]);
+		await writeFixtureFile(projectDir, "hejbro.config.ts", witnessConfigSource);
+		await writeFixtureFile(
+			projectDir,
+			"src/app.schema.ts",
+			witnessSchemaSource,
+		);
+		const generated = await runCli(projectDir, ["generate"]);
+		expect(generated.exitCode).toBe(0);
+		const migrationsDir = resolve(projectDir, "migrations");
+		const [migrationFile] = readdirSync(migrationsDir).filter((name) =>
+			name.endsWith(".sql"),
+		);
+		if (migrationFile === undefined) {
+			throw new Error("generate did not write a migration file");
+		}
+		psqlFile(
+			WitnessDb,
+			readFileSync(resolve(migrationsDir, migrationFile), "utf-8"),
+		);
+	}, 60_000);
+
+	afterAll(async () => {
+		await removeCliFixtureDir(projectDir);
+	});
+
+	const witnessUrl = (): string => hostUrl("postgres", WitnessDb);
+
+	it("compares by normalized text, agreeing on one constraint and reporting the other not-compared, never issuing explain", async () => {
+		const before = execFileSync("docker", ["logs", CONTAINER], {
+			encoding: "utf-8",
+		});
+
+		const result = await runCli(projectDir, ["check", "--url", witnessUrl()]);
+
+		const after = execFileSync("docker", ["logs", CONTAINER], {
+			encoding: "utf-8",
+		});
+		const logDelta = after.slice(before.length);
+
+		// Scenario 1 (design.md): the declared and catalog texts equal after
+		// normalization -- no finding for widgets_name_not_blank, and the
+		// coverage boundary states the run compared by normalized text.
+		expect(result.stdout).toContain("compared by normalized text");
+		expect(result.stderr).not.toContain("widgets_name_not_blank");
+
+		// Scenario 2 (design.md): the in(...) rewrite is not compared, never
+		// reported as differing, carries both texts and a restatement Next:,
+		// and never mentions EXPLAIN.
+		expect(result.stderr).toContain("check-not-compared");
+		expect(result.stderr).toContain("widgets_role_valid");
+		expect(result.stderr).not.toContain("check-object-differs");
+		expect(result.stderr).toContain("Next:");
+		expect(result.stderr.toLowerCase()).not.toContain("explain");
+
+		// Not compared, alone, is exit 2 -- never 0 (spec: "the run does not
+		// exit zero").
+		expect(result.exitCode).toBe(2);
+
+		// The seam itself: no `explain` statement reached the server for
+		// this run -- if runCheck ever stopped threading `mode` through to
+		// compareCheckAgainstCatalog, this is what would catch it.
+		expect(logDelta.toLowerCase()).not.toContain("explain");
+	});
+});

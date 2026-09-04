@@ -1,9 +1,9 @@
 -- hejbro migration
 -- + schema app [new]
--- + table app.comments [new]
 -- + table app.members [new]
 -- + table app.projects [new]
 -- + table app.tasks [new]
+-- + table app.comments [new]
 -- + function app.comments_enforce_single_depth [new]
 -- + trigger app.comments.comments_single_depth [new]
 -- + rls app.comments [new]
@@ -31,22 +31,13 @@
 
 create schema "app";
 
-create table "app"."comments" (
-	"id" uuid not null default gen_random_uuid(),
-	"task_id" uuid not null,
-	"parent_id" uuid,
-	"body" text not null,
-	constraint "comments_pkey" primary key ("id"),
-	constraint "comments_body_not_blank" check (length(btrim("app"."comments"."body")) > 0)
-);
-
 create table "app"."members" (
 	"id" uuid not null default gen_random_uuid(),
 	"email" text not null constraint "members_email_key" unique,
 	"display_name" text not null,
 	"role" text not null default 'member',
 	constraint "members_pkey" primary key ("id"),
-	constraint "members_role_valid" check ("app"."members"."role" in ('owner', 'admin', 'member'))
+	constraint "members_role_valid" check ("members"."role" in ('owner', 'admin', 'member'))
 );
 
 create table "app"."projects" (
@@ -56,7 +47,7 @@ create table "app"."projects" (
 	"owner_id" uuid not null,
 	"archived_at" timestamp with time zone,
 	constraint "projects_pkey" primary key ("id"),
-	constraint "projects_slug_format" check ("app"."projects"."slug" ~ '^[a-z0-9]+(-[a-z0-9]+)*$')
+	constraint "projects_slug_format" check ("projects"."slug" ~ '^[a-z0-9]+(-[a-z0-9]+)*$')
 );
 
 create table "app"."tasks" (
@@ -67,14 +58,23 @@ create table "app"."tasks" (
 	"priority" smallint not null default 3,
 	"due_at" timestamp with time zone,
 	constraint "tasks_pkey" primary key ("id"),
-	constraint "tasks_title_length" check (char_length("app"."tasks"."title") between 1 and 200),
-	constraint "tasks_status_valid" check ("app"."tasks"."status" in ('todo', 'in_progress', 'done')),
-	constraint "tasks_priority_range" check ("app"."tasks"."priority" between 1 and 5)
+	constraint "tasks_title_length" check (char_length("tasks"."title") between 1 and 200),
+	constraint "tasks_status_valid" check ("tasks"."status" in ('todo', 'in_progress', 'done')),
+	constraint "tasks_priority_range" check ("tasks"."priority" between 1 and 5)
 );
 
-create index "tasks_project_id_due_at_idx" on "app"."tasks" ("project_id", "due_at" desc) where "app"."tasks"."status" <> 'done';
+create index "tasks_project_id_due_at_idx" on "app"."tasks" ("project_id", "due_at" desc) where "tasks"."status" <> 'done';
 
-create unique index "tasks_project_id_title_idx" on "app"."tasks" ("project_id", "title") where "app"."tasks"."status" <> 'done';
+create unique index "tasks_project_id_title_idx" on "app"."tasks" ("project_id", "title") where "tasks"."status" <> 'done';
+
+create table "app"."comments" (
+	"id" uuid not null default gen_random_uuid(),
+	"task_id" uuid not null,
+	"parent_id" uuid,
+	"body" text not null,
+	constraint "comments_pkey" primary key ("id"),
+	constraint "comments_body_not_blank" check (length(btrim("comments"."body")) > 0)
+);
 
 create or replace function "app"."comments_enforce_single_depth"()
 returns trigger
@@ -126,7 +126,7 @@ create policy "members_write_all" on "app"."members" for all to "app_writer" usi
 
 drop policy if exists "projects_read_all" on "app"."projects";
 
-create policy "projects_read_all" on "app"."projects" for select to "app_reader" using ("app"."projects"."archived_at" is null);
+create policy "projects_read_all" on "app"."projects" for select to "app_reader" using ("projects"."archived_at" is null);
 
 drop policy if exists "projects_write_all" on "app"."projects";
 
@@ -134,7 +134,7 @@ create policy "projects_write_all" on "app"."projects" for all to "app_writer" u
 
 drop policy if exists "tasks_read_all" on "app"."tasks";
 
-create policy "tasks_read_all" on "app"."tasks" for select to "app_reader" using (exists (select 1 from "app"."projects" where ("app"."projects"."id" = "app"."tasks"."project_id") and ("app"."projects"."archived_at" is null)));
+create policy "tasks_read_all" on "app"."tasks" for select to "app_reader" using (exists (select 1 from "app"."projects" where ("projects"."id" = "tasks"."project_id") and ("projects"."archived_at" is null)));
 
 drop policy if exists "tasks_write_all" on "app"."tasks";
 
@@ -156,10 +156,10 @@ grant usage on schema "app" to "app_reader";
 
 grant usage on schema "app" to "app_writer";
 
-alter table "app"."comments" add constraint "comments_parent_id_fk" foreign key ("parent_id") references "app"."comments" ("id") on delete cascade;
-
-alter table "app"."comments" add constraint "comments_task_id_fk" foreign key ("task_id") references "app"."tasks" ("id") on delete cascade;
-
 alter table "app"."projects" add constraint "projects_owner_id_fk" foreign key ("owner_id") references "app"."members" ("id");
 
 alter table "app"."tasks" add constraint "tasks_project_id_fk" foreign key ("project_id") references "app"."projects" ("id") on delete cascade;
+
+alter table "app"."comments" add constraint "comments_parent_id_fk" foreign key ("parent_id") references "app"."comments" ("id") on delete cascade;
+
+alter table "app"."comments" add constraint "comments_task_id_fk" foreign key ("task_id") references "app"."tasks" ("id") on delete cascade;

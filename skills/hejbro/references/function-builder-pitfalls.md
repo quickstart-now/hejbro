@@ -36,6 +36,25 @@ Never write `if (someCondition) { ... }` with a real JS condition inside a
 body callback — the condition itself must be a hejbro `Expr<"boolean">`,
 recorded via `ctx.if`, not evaluated in JS.
 
+## Argument names are hejbro SQL names
+
+A `defineFunction` argument key is snake_cased into its SQL name exactly
+as a column key is, and checked against the same rule (D36): a key whose
+derived name isn't lower-case snake_case — a hyphen, a leading digit, a
+non-ASCII letter — fails at declaration time with `invalid-sql-name`,
+naming the function, the declared key and the derived name. An argument
+name reaches the generated function unquoted, in the parameter list and
+in every body reference to it, so a name that would need quoting is
+refused before it can produce SQL Postgres can't parse.
+
+A literal `__proto__:` key in an `args` object literal doesn't declare an
+argument at all — it replaces the object's own prototype, the same way
+it would in any JS object literal. That's refused separately, with
+`args-prototype-key`. Writing it as a computed key (`["__proto__"]:
+uuid()`) does declare an argument under that name, and is refused the
+ordinary way instead, with `invalid-sql-name` (`__proto__` isn't
+lower-case snake_case).
+
 ## The body context API
 
 - `ctx.if(condition, then).elseIf(condition, then).else(then)` — an
@@ -47,10 +66,11 @@ recorded via `ctx.if`, not evaluated in JS.
   into **one scalar local per projected column** (never a `record`
   variable); `row` is `select ... into strict` (errors on 0 or >1 rows),
   `rowOrNull` is a plain `select ... into` (fields are `null` on no row).
-- `ctx.execute(statement)` — runs a select, insert, update or delete for
-  its side effect, in body order: a select renders `perform <sql>;`
-  (plpgsql rejects a bare `select` with no `into`), a mutation renders
-  `<sql>;` as-is. A mutation ending in `.returning()` is refused
+- `ctx.execute(statement: ExecutableQuery)` — runs a select, insert,
+  update or delete for its side effect, in body order, at *either*
+  `.returning()` stage: a select renders `perform <sql>;` (plpgsql
+  rejects a bare `select` with no `into`), a mutation renders `<sql>;`
+  as-is. A mutation ending in `.returning()` is refused
   (`execute-expects-no-returning`) — plpgsql's `perform`/bare form has no
   `into` clause to receive returned rows, so drop the `.returning()` to
   run it for effect, or pass it to `ctx.return(...)` when its rows are
@@ -69,6 +89,20 @@ recorded via `ctx.if`, not evaluated in JS.
   just the bare no-arg form — is accepted the same way (#634); the
   rendered `return query ...` carries exactly that projection's
   `RETURNING` list, never the full row.
+
+  `ctx.return` takes a mutation only *after* `.returning()` — a missing
+  stage is a type error, and `tsc`'s own message on that line won't
+  mention `.returning()` by name (it only says the value isn't
+  assignable), so read that failure as this rule first.
+
+  A mutation that never called `.returning()` is not accepted: the
+  pre-`.returning()` stage isn't assignable where `ctx.return` expects a
+  query, so passing one fails to compile, and a caller that reaches
+  `ctx.return` with the type bypassed fails at declaration time with
+  `return-expects-returning`, naming the statement kind and both working
+  forms — add `.returning()` when its rows are the function's result, or
+  run it with `ctx.execute(...)` instead when it's for effect only. This
+  is the mirror of `ctx.execute`'s own `execute-expects-no-returning`.
 
   Passing the wrong shape fails at declaration time with a named error
   (`scalar-return-expects-expression`,

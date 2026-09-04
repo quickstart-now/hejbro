@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
+import { defineTrigger } from "../src/dsl/define-trigger";
+import { defineView } from "../src/dsl/define-view";
 import { pgEnum } from "../src/dsl/pg-enum";
+import { rls } from "../src/dsl/rls";
 import { schema } from "../src/dsl/schema";
 import { getTableMeta, table } from "../src/dsl/table";
-import { diffSnapshots } from "../src/engine/diff-engine";
+import { diffSnapshots, rankKinds } from "../src/engine/diff-engine";
 import { generateMigration } from "../src/engine/generate";
+import { isNull } from "../src/expr/operators";
 import {
 	createDefaultRegistry,
 	createKindRegistry,
@@ -12,6 +16,12 @@ import { enumKind } from "../src/kinds/enum-kind";
 import { schemaKind } from "../src/kinds/schema-kind";
 import { sequenceKind } from "../src/kinds/sequence-kind";
 import { tableKind } from "../src/kinds/table-kind";
+import type {
+	ColumnSnapshot,
+	TableSnapshot,
+} from "../src/kinds/table-snapshot";
+import { select } from "../src/query/select";
+import type { Snapshot } from "../src/snapshot/snapshot";
 import { buildSnapshot, emptySnapshot } from "../src/snapshot/snapshot";
 import { serial, uuid } from "../src/types/column-builder-factories";
 
@@ -123,6 +133,326 @@ describe("diffSnapshots — kind dependency ordering", () => {
 			"app.alpha",
 			"app.zebra",
 		]);
+	});
+});
+
+// #753/task 1.2: diffSnapshots applies tableKind.dependsOnIdentities as a
+// stable, intra-kind topological refinement of the order it already
+// computes -- never `cascade`, and never a diff-time throw on a genuine
+// cycle (a drop the database actually refuses surfaces through the
+// apply-time coded failure, task 1.4).
+describe("diffSnapshots — same-kind dependency ordering", () => {
+	it("drops a referencing table before the table it references, and creates the referenced table first -- the pair sorting with the referenced table first alphabetically (the shape #753 itself reported)", () => {
+		const posts = table(app, "posts", { id: uuid().primaryKey() });
+		const reviews = table(
+			app,
+			"reviews",
+			{ id: uuid().primaryKey(), postId: uuid() },
+			(t) => ({
+				foreignKeys: [
+					{
+						columns: [t.postId],
+						references: { table: posts, columns: [posts.id] },
+					},
+				],
+			}),
+		);
+		const next = buildSnapshot(
+			[app, getTableMeta(posts), getTableMeta(reviews)],
+			registry,
+			emptySnapshot,
+		);
+
+		const createOrder = diffSnapshots(emptySnapshot, next, registry)
+			.filter((change) => change.kind === "table")
+			.map((change) => change.identity);
+		expect(createOrder).toEqual(["app.posts", "app.reviews"]);
+
+		const dropOrder = diffSnapshots(next, emptySnapshot, registry)
+			.filter((change) => change.kind === "table")
+			.map((change) => change.identity);
+		expect(dropOrder).toEqual(["app.reviews", "app.posts"]);
+	});
+
+	it("leaves an already-correct drop order alone -- the same shape, but the referencing table's name already sorts first alphabetically", () => {
+		const bananas = table(app, "bananas", { id: uuid().primaryKey() });
+		const apples = table(
+			app,
+			"apples",
+			{ id: uuid().primaryKey(), bananaId: uuid() },
+			(t) => ({
+				foreignKeys: [
+					{
+						columns: [t.bananaId],
+						references: { table: bananas, columns: [bananas.id] },
+					},
+				],
+			}),
+		);
+		const next = buildSnapshot(
+			[app, getTableMeta(bananas), getTableMeta(apples)],
+			registry,
+			emptySnapshot,
+		);
+
+		const dropOrder = diffSnapshots(next, emptySnapshot, registry)
+			.filter((change) => change.kind === "table")
+			.map((change) => change.identity);
+		expect(dropOrder).toEqual(["app.apples", "app.bananas"]);
+	});
+
+	it("fully orders a three-table chain in both directions", () => {
+		const grandparent = table(app, "grandparent", { id: uuid().primaryKey() });
+		const parent = table(
+			app,
+			"parent",
+			{ id: uuid().primaryKey(), grandparentId: uuid() },
+			(t) => ({
+				foreignKeys: [
+					{
+						columns: [t.grandparentId],
+						references: { table: grandparent, columns: [grandparent.id] },
+					},
+				],
+			}),
+		);
+		const child = table(
+			app,
+			"child",
+			{ id: uuid().primaryKey(), parentId: uuid() },
+			(t) => ({
+				foreignKeys: [
+					{
+						columns: [t.parentId],
+						references: { table: parent, columns: [parent.id] },
+					},
+				],
+			}),
+		);
+		const next = buildSnapshot(
+			[
+				app,
+				getTableMeta(grandparent),
+				getTableMeta(parent),
+				getTableMeta(child),
+			],
+			registry,
+			emptySnapshot,
+		);
+
+		const createOrder = diffSnapshots(emptySnapshot, next, registry)
+			.filter((change) => change.kind === "table")
+			.map((change) => change.identity);
+		expect(createOrder).toEqual(["app.grandparent", "app.parent", "app.child"]);
+
+		const dropOrder = diffSnapshots(next, emptySnapshot, registry)
+			.filter((change) => change.kind === "table")
+			.map((change) => change.identity);
+		expect(dropOrder).toEqual(["app.child", "app.parent", "app.grandparent"]);
+	});
+
+	it("orders a table referencing two independent tables after both, without asserting the independents' own relative order", () => {
+		const alpha = table(app, "alpha", { id: uuid().primaryKey() });
+		const beta = table(app, "beta", { id: uuid().primaryKey() });
+		const gamma = table(
+			app,
+			"gamma",
+			{ id: uuid().primaryKey(), alphaId: uuid(), betaId: uuid() },
+			(t) => ({
+				foreignKeys: [
+					{
+						columns: [t.alphaId],
+						references: { table: alpha, columns: [alpha.id] },
+					},
+					{
+						columns: [t.betaId],
+						references: { table: beta, columns: [beta.id] },
+					},
+				],
+			}),
+		);
+		const next = buildSnapshot(
+			[app, getTableMeta(alpha), getTableMeta(beta), getTableMeta(gamma)],
+			registry,
+			emptySnapshot,
+		);
+
+		const createOrder = diffSnapshots(emptySnapshot, next, registry)
+			.filter((change) => change.kind === "table")
+			.map((change) => change.identity);
+		expect(createOrder.at(-1)).toBe("app.gamma");
+		expect(new Set(createOrder)).toEqual(
+			new Set(["app.alpha", "app.beta", "app.gamma"]),
+		);
+
+		const dropOrder = diffSnapshots(next, emptySnapshot, registry)
+			.filter((change) => change.kind === "table")
+			.map((change) => change.identity);
+		expect(dropOrder.at(0)).toBe("app.gamma");
+	});
+
+	it("never throws on a genuine two-table cycle -- both operations keep the pair in its existing identity order", () => {
+		// A genuine mutual foreign-key cycle can't be built through table()
+		// itself (its `extras` callback resolves `references: { table }`
+		// eagerly, and the two tables would each need the other to already
+		// exist) -- spliced directly at the snapshot level instead, the same
+		// way the malformed-snapshot-node test above does.
+		const cycleColumns: ReadonlyArray<ColumnSnapshot> = [
+			{ name: "id", typeNode: { typeName: "uuid" }, primaryKey: true },
+		];
+		const cycleA: TableSnapshot = {
+			schema: "app",
+			name: "cycle_a",
+			columns: [
+				...cycleColumns,
+				{ name: "b_id", typeNode: { typeName: "uuid" } },
+			],
+			indexes: [],
+			foreignKeys: [
+				{
+					name: "cycle_a_b_id_fk",
+					columns: ["b_id"],
+					referencesTable: "app.cycle_b",
+					referencesColumns: ["id"],
+				},
+			],
+		};
+		const cycleB: TableSnapshot = {
+			schema: "app",
+			name: "cycle_b",
+			columns: [
+				...cycleColumns,
+				{ name: "a_id", typeNode: { typeName: "uuid" } },
+			],
+			indexes: [],
+			foreignKeys: [
+				{
+					name: "cycle_b_a_id_fk",
+					columns: ["a_id"],
+					referencesTable: "app.cycle_a",
+					referencesColumns: ["id"],
+				},
+			],
+		};
+		const next: Snapshot = {
+			...emptySnapshot,
+			objects: {
+				"schema:app": { name: "app" },
+				"table:app.cycle_a": cycleA,
+				"table:app.cycle_b": cycleB,
+			},
+		};
+
+		const createOrder = diffSnapshots(emptySnapshot, next, registry)
+			.filter((change) => change.kind === "table")
+			.map((change) => change.identity);
+		expect(createOrder).toEqual(["app.cycle_a", "app.cycle_b"]);
+
+		const dropOrder = diffSnapshots(next, emptySnapshot, registry)
+			.filter((change) => change.kind === "table")
+			.map((change) => change.identity);
+		expect(dropOrder).toEqual(["app.cycle_a", "app.cycle_b"]);
+	});
+
+	it("ignores a foreign key to a table outside this diff's own same-kind change set -- ordinary identity order", () => {
+		const external = table(app, "external", { id: uuid().primaryKey() });
+		const previous = buildSnapshot(
+			[app, getTableMeta(external)],
+			registry,
+			emptySnapshot,
+		);
+		const local = table(
+			app,
+			"local",
+			{ id: uuid().primaryKey(), externalId: uuid() },
+			(t) => ({
+				foreignKeys: [
+					{
+						columns: [t.externalId],
+						references: { table: external, columns: [external.id] },
+					},
+				],
+			}),
+		);
+		const next = buildSnapshot(
+			[app, getTableMeta(external), getTableMeta(local)],
+			registry,
+			previous,
+		);
+
+		const changes = diffSnapshots(previous, next, registry).filter(
+			(change) => change.kind === "table",
+		);
+		expect(changes.map((change) => change.identity)).toEqual(["app.local"]);
+		expect(changes.map((change) => change.operation)).toEqual(["create"]);
+	});
+
+	// Regression pin (D110): the pre-existing "no foreign key between these
+	// two" case, unchanged by this refinement -- see "sorts changes by
+	// identity (byte order) within the same kind" above.
+});
+
+// #753/task 1.3: a regression witness that this change leaves the
+// already-correct *cross-kind* order alone -- the dependency graph this
+// proposal names (foreign keys, a view's/policy's/trigger's own table, a
+// trigger's own function, a sequence's owning table) is wider than the
+// one real gap 1.1/1.2 close.
+describe("diffSnapshots — cross-kind order (regression witness, #753)", () => {
+	it("a schema, a table, its sequence-backed column, a trigger, an RLS policy, and a view all drop before the schema, and the view/trigger/policy all drop before the table", () => {
+		const widgets = table(
+			app,
+			"widgets",
+			{ id: serial().primaryKey(), suspendedAt: uuid() },
+			(t) => ({
+				rls: rls.enabled({
+					readAll: rls
+						.policy("widgets_read_all")
+						.for("select")
+						.to("reader")
+						.using(isNull(t.suspendedAt)),
+				}),
+			}),
+		);
+		const guardTrigger = defineTrigger(
+			widgets,
+			{ name: "guard", timing: "before", events: ["insert"], forEach: "row" },
+			(ctx, { new: row }) => {
+				ctx.return(row);
+			},
+		);
+		const widgetsView = defineView(app, "widgets_view", select(widgets));
+
+		const next = generateMigration({
+			declarations: [app, widgets, guardTrigger, widgetsView],
+			previousSnapshot: emptySnapshot,
+			registry,
+		}).snapshot;
+
+		const dropKindOrder = diffSnapshots(next, emptySnapshot, registry).map(
+			(change) => change.kind,
+		);
+
+		// Pinned against rankKinds' own computed order (reversed for drop),
+		// not a hand-copied literal -- so this pin tracks the real
+		// dependency graph (dependsOn) instead of restating today's
+		// incidental array order (task 1.3's own instruction).
+		const rankOf = rankKinds(registry);
+		const expectedKindOrder = Array.from(new Set(dropKindOrder)).sort(
+			(a, b) => rankOf(b) - rankOf(a),
+		);
+		expect(dropKindOrder).toEqual(expectedKindOrder);
+		expect(new Set(dropKindOrder)).toEqual(
+			new Set([
+				"view",
+				"trigger",
+				"policy",
+				"rls",
+				"function",
+				"table",
+				"sequence",
+				"schema",
+			]),
+		);
 	});
 });
 

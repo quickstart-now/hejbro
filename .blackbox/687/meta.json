@@ -1,0 +1,292 @@
+{
+  "version": 1,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#687",
+  "title": "init ignores the configured migrationsDir and snapshotPath",
+  "parent": "quickstart-now/hejbro#412",
+  "status": "closed",
+  "opened": "2026-09-04",
+  "closed": "2026-09-03",
+  "decisions": [
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [],
+      "at": "2026-09-03T00:00Z",
+      "title": "init reads the existing configuration and creates only what is missing there",
+      "ratified": null
+    },
+    {
+      "id": "R2",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [],
+      "at": "2026-09-03T07:40Z",
+      "title": "init keeps its output shape and resolves paths like generate",
+      "ratified": null
+    },
+    {
+      "id": "R3",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [],
+      "at": "2026-09-03T08:50Z",
+      "title": "cl adds the assertBuiltCli guard in this PR; init option 1",
+      "ratified": null
+    },
+    {
+      "id": "R4",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "D110"
+      ],
+      "at": "2026-09-03T11:25Z",
+      "title": "Constructor-review findings on init are fixed in the same piece",
+      "ratified": null
+    },
+    {
+      "id": "R5",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [],
+      "at": "2026-09-03T11:35Z",
+      "title": "With a configuration file, init creates only the configured artifacts",
+      "ratified": {
+        "verdict": "accepted",
+        "by": "evaluator",
+        "at": "2026-09-04T07:21Z",
+        "decision": null
+      }
+    },
+    {
+      "id": "R6",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [],
+      "at": "2026-09-03T11:50Z",
+      "title": "init's path invariant is generate's resolution function",
+      "ratified": null
+    },
+    {
+      "id": "R7",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [],
+      "at": "2026-09-03T14:20Z",
+      "title": "The d106 round-1 correction group of six tasks is approved",
+      "ratified": null
+    },
+    {
+      "id": "R8",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [],
+      "at": "2026-09-03T15:25Z",
+      "title": "init-path-conflict's Next names the real node; the first line keeps the user's spelling",
+      "ratified": null
+    }
+  ],
+  "work": [],
+  "prs": [
+    {
+      "number": 739,
+      "ref": "quickstart-now/hejbro#739",
+      "title": "fix(cli): honour the configuration in init, and stop two silent losses on the vendoring boundary",
+      "head": "f7b3e4aed02c9a882e8ce004409f75fa9e6715e9",
+      "headRef": "fix-cli-init-and-vendoring",
+      "base": "dev",
+      "merged": "2026-09-03T12:15:16Z",
+      "pinnedAt": "2026-09-04T04:45Z",
+      "refs": [
+        {
+          "path": ".changeset/fix-cli-init-and-vendoring.md",
+          "blob": "938418dbf8508feb754e048c97c2e2c7f4463eff"
+        },
+        {
+          "path": "README.md",
+          "blob": "df5b44911d690e22f934732f6dd38c87f75c39c9"
+        },
+        {
+          "path": "openspec/changes/fix-cli-init-and-vendoring/proposal.md",
+          "blob": "bb55fda04d16e31bec024d84379d26eb48384e2a"
+        },
+        {
+          "path": "openspec/changes/fix-cli-init-and-vendoring/specs/cli-commands/spec.md",
+          "blob": "d4d7670aaa102f732fa2452c8fe41c3f6c961568"
+        },
+        {
+          "path": "openspec/changes/fix-cli-init-and-vendoring/specs/schema-vendoring/spec.md",
+          "blob": "72a51630334d6b4387e8fac84a9d6abd7072f9d6"
+        },
+        {
+          "path": "openspec/changes/fix-cli-init-and-vendoring/tasks.md",
+          "blob": "049c4d6e22b066e3cf4e483d37ce69091c333f25"
+        },
+        {
+          "path": "openspec/task-times.csv",
+          "blob": "6dd1c851cf38cedb761263c9cdc510f42d05ade8"
+        },
+        {
+          "path": "packages/cli/src/commands/init.ts",
+          "blob": "26361f58a36d1122b139539b190a4839ad8b0fab"
+        },
+        {
+          "path": "packages/cli/src/contract/emit.ts",
+          "blob": "5b4ad99b6d9d003b75d652768f729b7559d9260e"
+        },
+        {
+          "path": "packages/cli/src/vendor/validate-export.ts",
+          "blob": "c676c7b40f3c9b1c210c2a0e5b7866db5f55c4c4"
+        },
+        {
+          "path": "packages/cli/test/contract-emit.test.ts",
+          "blob": "18666b5cb9e4a357142e75cf3a155dc3b0d10e07"
+        },
+        {
+          "path": "packages/cli/test/init.test.ts",
+          "blob": "2f4c976a5b7421bc75e6526d72bf9d7a87557680"
+        },
+        {
+          "path": "packages/cli/test/status-command.test.ts",
+          "blob": "6d9e506bf5c04e7e616cc7179fb438aed25248ad"
+        },
+        {
+          "path": "packages/query/src/db/fn.ts",
+          "blob": "9c9ee340e4e506daabe5194a894e9f99acc63b9a"
+        },
+        {
+          "path": "packages/query/test/client/functions.test.ts",
+          "blob": "a31cec3c7810975efa860d3ef94ad3f7d9bfcfc2"
+        },
+        {
+          "path": "skills/hejbro/references/generate-verify-workflow.md",
+          "blob": "7e8d2a4c25ca67d53548bf1e1ee4f8f5f0c56f5d"
+        }
+      ]
+    },
+    {
+      "number": 759,
+      "ref": "quickstart-now/hejbro#759",
+      "title": "fix(cli): close the d106 round-1 findings on init path kinds and the vendored client guard",
+      "head": "ff708d741296774769a45e4bd32a1d24df2157af",
+      "headRef": "fix-cli-init-d106-r1",
+      "base": "dev",
+      "merged": "2026-09-03T14:12:12Z",
+      "pinnedAt": "2026-09-04T04:45Z",
+      "refs": [
+        {
+          "path": ".changeset/fix-cli-init-d106-r1.md",
+          "blob": "9cadd70c23a0c834285e33611e0dfd6cfcf70351"
+        },
+        {
+          "path": "README.md",
+          "blob": "97e08d5f9ca1ac8211b56368287d1c7969beeb4b"
+        },
+        {
+          "path": "openspec/changes/fix-cli-init-and-vendoring/evaluation.md",
+          "blob": "4090682f3a136541501d6bad8fb11402ea606ba9"
+        },
+        {
+          "path": "openspec/changes/fix-cli-init-and-vendoring/specs/cli-commands/spec.md",
+          "blob": "7637466f7e6d2694a2e74866557a711be7f273b8"
+        },
+        {
+          "path": "openspec/changes/fix-cli-init-and-vendoring/tasks.md",
+          "blob": "5e9c25979131c57d921922c53a12d94980a98ac0"
+        },
+        {
+          "path": "openspec/task-times.csv",
+          "blob": "94f3397ca65a59f476bbfd9be4197abc417fbb6d"
+        },
+        {
+          "path": "packages/cli/src/commands/init.ts",
+          "blob": "be3fba83fd96bfd5a7e176cb0a4e223c68c3e5a6"
+        },
+        {
+          "path": "packages/cli/test/init.test.ts",
+          "blob": "3871a6677550c92b095345b248306ef9aaf0f71a"
+        },
+        {
+          "path": "packages/query/src/client/name-keyed-db.ts",
+          "blob": "042c080e828036eaaad00e064b55b8a7e0383f15"
+        },
+        {
+          "path": "packages/query/test/client/errors.test.ts",
+          "blob": "edaf7034a43bb05616df6a8a191c2b2dd6e4f36c"
+        },
+        {
+          "path": "skills/hejbro/references/polyrepo.md",
+          "blob": "6a55dedb7bf4e7e6df1137765e45d8f43eca4197"
+        },
+        {
+          "path": "skills/hejbro/references/query-layer.md",
+          "blob": "45df905667a3c9a4b060574f16228e28fc7633c9"
+        }
+      ]
+    },
+    {
+      "number": 770,
+      "ref": "quickstart-now/hejbro#770",
+      "title": "chore(openspec): archive fix-cli-init-and-vendoring (d106 round 2 clean)",
+      "head": "303c034ba35266efa0273d7850dfda7989d7f8da",
+      "headRef": "archive-fix-cli-init-and-vendoring",
+      "base": "dev",
+      "merged": "2026-09-03T15:33:40Z",
+      "pinnedAt": "2026-09-04T04:45Z",
+      "refs": [
+        {
+          "path": "openspec/changes/archive/2026-09-04-fix-cli-init-and-vendoring/evaluation.md",
+          "blob": "9a1ceace0ab2df8a90eeaf396b7b98f91d744f6b"
+        },
+        {
+          "path": "openspec/changes/fix-cli-init-and-vendoring/evaluation.md",
+          "blob": null
+        },
+        {
+          "path": "openspec/changes/archive/2026-09-04-fix-cli-init-and-vendoring/proposal.md",
+          "blob": "bb55fda04d16e31bec024d84379d26eb48384e2a"
+        },
+        {
+          "path": "openspec/changes/fix-cli-init-and-vendoring/proposal.md",
+          "blob": null
+        },
+        {
+          "path": "openspec/changes/archive/2026-09-04-fix-cli-init-and-vendoring/specs/cli-commands/spec.md",
+          "blob": "7637466f7e6d2694a2e74866557a711be7f273b8"
+        },
+        {
+          "path": "openspec/changes/fix-cli-init-and-vendoring/specs/cli-commands/spec.md",
+          "blob": null
+        },
+        {
+          "path": "openspec/changes/archive/2026-09-04-fix-cli-init-and-vendoring/specs/schema-vendoring/spec.md",
+          "blob": "72a51630334d6b4387e8fac84a9d6abd7072f9d6"
+        },
+        {
+          "path": "openspec/changes/fix-cli-init-and-vendoring/specs/schema-vendoring/spec.md",
+          "blob": null
+        },
+        {
+          "path": "openspec/changes/archive/2026-09-04-fix-cli-init-and-vendoring/tasks.md",
+          "blob": "5e9c25979131c57d921922c53a12d94980a98ac0"
+        },
+        {
+          "path": "openspec/changes/fix-cli-init-and-vendoring/tasks.md",
+          "blob": null
+        },
+        {
+          "path": "openspec/specs/cli-commands/spec.md",
+          "blob": "809c1ff0cf7990fcb771f5c4fc39e4f3336f789d"
+        },
+        {
+          "path": "openspec/specs/schema-vendoring/spec.md",
+          "blob": "d789958c6aabce5a91a59a972babe9361c8daabd"
+        }
+      ]
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

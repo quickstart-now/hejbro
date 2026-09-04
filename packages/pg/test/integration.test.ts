@@ -200,7 +200,7 @@ const discoverHostPort = (): number => {
  * onto this file's own `g5_integration.roundtrip.labels`.
  */
 const labelsNoNullElementsConstraint =
-	'constraint "labels_no_null_elements" check (array_position("g5_integration"."roundtrip"."labels", null) is null)';
+	'constraint "labels_no_null_elements" check (array_position("roundtrip"."labels", null) is null)';
 
 /**
  * `seq`'s exact create-table clause -- core's own `generateMigration`
@@ -1075,7 +1075,7 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 		const commentFkClause =
 			'constraint "rel_comments_post_id_fk" foreign key ("post_id") references "g5_integration"."rel_posts" ("id")';
 		const policySql =
-			'create policy "g4_viewer_read" on "g5_integration"."rel_comments" for select to "g4_viewer" using ("g5_integration"."rel_comments"."view_count" < 100);';
+			'create policy "g4_viewer_read" on "g5_integration"."rel_comments" for select to "g4_viewer" using ("rel_comments"."view_count" < 100);';
 		expect(relMigration).toContain(postFkClause);
 		expect(relMigration).toContain(commentFkClause);
 		expect(relMigration).toContain(policySql);

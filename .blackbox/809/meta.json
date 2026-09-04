@@ -1,0 +1,93 @@
+{
+  "version": 1,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#809",
+  "title": "ci: verify on a pr waits for the owner's environment approval",
+  "parent": "quickstart-now/hejbro#412",
+  "status": "closed",
+  "opened": "2026-09-04",
+  "closed": "2026-09-04",
+  "decisions": [
+    {
+      "id": "D1",
+      "by": "owner",
+      "at": "2026-09-04T08:52Z",
+      "title": "The heavy PR checks run only once the owner approves them (environment review)",
+      "raw": [
+        "ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#66"
+      ]
+    },
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "D1"
+      ],
+      "at": "2026-09-04T08:52Z",
+      "title": "Environment gate on verify, cheap blackbox job free, one approval per PR through concurrency cancellation",
+      "ratified": null
+    },
+    {
+      "id": "D2",
+      "by": "owner",
+      "at": "2026-09-04T08:55Z",
+      "title": "The approval applies to the release PR only, not to every PR",
+      "raw": [
+        "ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#71"
+      ]
+    },
+    {
+      "id": "R2",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "D2"
+      ],
+      "at": "2026-09-04T08:55Z",
+      "title": "Gate withdrawn: after #807 the release PR runs nothing of its own; concurrency dedupe kept",
+      "ratified": null
+    },
+    {
+      "id": "D3",
+      "by": "owner",
+      "at": "2026-09-04T08:57Z",
+      "title": "Long-lived PRs (release, Version Packages) run their checks only when approved; feature PRs run at once",
+      "raw": [
+        "ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#76"
+      ]
+    },
+    {
+      "id": "R3",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "D3"
+      ],
+      "at": "2026-09-04T08:57Z",
+      "title": "Environment gate scoped to long-lived PR heads (dev, changeset-release/*); PR runs restored for the release PR",
+      "ratified": null
+    }
+  ],
+  "work": [],
+  "prs": [
+    {
+      "number": 813,
+      "ref": "quickstart-now/hejbro#813",
+      "title": "ci: no push run on dev; revendor the blackbox tool (#812)",
+      "head": "5864ed89008375148ede079eb9a9490d0d06a3e7",
+      "headRef": "ci-no-dev-push",
+      "base": "dev",
+      "merged": null,
+      "pinnedAt": "2026-09-04T10:33Z",
+      "refs": [
+        {
+          "path": ".github/workflows/ci.yml",
+          "blob": "01152a6f01bf4ceb33fdf41542809463bc9d20c0"
+        }
+      ]
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

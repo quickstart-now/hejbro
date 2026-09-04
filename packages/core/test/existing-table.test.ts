@@ -113,7 +113,7 @@ describe("existingTable in exists() and view from/joins (Task 7 regression pins)
 			previousSnapshot: emptySnapshot,
 		});
 		expect(result.sql).toContain(
-			'exists (select 1 from "auth"."users" where "auth"."users"."id" = "app"."accounts"."user_id")',
+			'exists (select 1 from "auth"."users" where "users"."id" = "accounts"."user_id")',
 		);
 		expect(result.sql).not.toContain('create schema "auth"');
 		expect(Object.keys(result.snapshot.objects)).not.toContain(

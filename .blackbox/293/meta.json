@@ -1,0 +1,558 @@
+{
+  "version": 1,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#293",
+  "title": "Design spec: PostgreSQL/serverless ORM direction (query layer, drivers, RLS context)",
+  "parent": "quickstart-now/hejbro#282",
+  "status": "closed",
+  "opened": "2026-09-04",
+  "closed": "2026-08-27",
+  "decisions": [
+    {
+      "id": "D1",
+      "by": "owner",
+      "at": "2026-08-26T00:00Z",
+      "title": "start the session with the rebase, then the proposal",
+      "raw": []
+    },
+    {
+      "id": "D2",
+      "by": "owner",
+      "at": "2026-08-26T00:00Z",
+      "title": "merge and start implementing",
+      "raw": []
+    },
+    {
+      "id": "D3",
+      "by": "owner",
+      "at": "2026-08-26T00:00Z",
+      "title": "the discovery, and the owner's call",
+      "raw": []
+    },
+    {
+      "id": "D4",
+      "by": "owner",
+      "at": "2026-08-26T00:00Z",
+      "title": "AI-native performance badges (filed, separate change)",
+      "raw": []
+    },
+    {
+      "id": "D5",
+      "by": "owner",
+      "at": "2026-08-26T00:00Z",
+      "title": "s and decisions in this piece",
+      "raw": []
+    },
+    {
+      "id": "D6",
+      "by": "owner",
+      "at": "2026-08-26T00:00Z",
+      "title": "s and decisions in this piece",
+      "raw": []
+    },
+    {
+      "id": "D7",
+      "by": "owner",
+      "at": "2026-08-26T00:00Z",
+      "title": "s and decisions in this piece",
+      "raw": []
+    },
+    {
+      "id": "D8",
+      "by": "owner",
+      "at": "2026-08-27T00:00Z",
+      "title": "s (English rewrites, in order)",
+      "raw": []
+    }
+  ],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-08-26T00:00Z",
+      "title": "2026-08-26 \u2014 ORM query-layer proposal: first OpenSpec change (D91\u2013D98)",
+      "pr": null,
+      "decisions": []
+    },
+    {
+      "id": "W2",
+      "at": "2026-08-26T00:00Z",
+      "title": "2026-08-26 \u2014 add-query-layer group 1: one vocabulary, D94 amended",
+      "pr": null,
+      "decisions": []
+    },
+    {
+      "id": "W3",
+      "at": "2026-08-26T00:00Z",
+      "title": "2026-08-26 \u2014 add-query-layer group 2: the compiler (piece team g2)",
+      "pr": null,
+      "decisions": []
+    },
+    {
+      "id": "W4",
+      "at": "2026-08-26T00:00Z",
+      "title": "2026-08-26 \u2014 add-query-layer group 3: type inference (piece team g3)",
+      "pr": null,
+      "decisions": []
+    },
+    {
+      "id": "W5",
+      "at": "2026-08-26T00:00Z",
+      "title": "2026-08-26 \u2014 add-query-layer group 4: execution + driver contract (piece team g4)",
+      "pr": null,
+      "decisions": []
+    },
+    {
+      "id": "W6",
+      "at": "2026-08-27T00:00Z",
+      "title": "Groups 5/6 re-plan and [design] pre-settlement round (add-query-layer, #293)",
+      "pr": null,
+      "decisions": []
+    },
+    {
+      "id": "W7",
+      "at": "2026-08-27T00:00Z",
+      "title": "add-query-layer group 5 \u2014 `@hejbro/pg` vanilla driver",
+      "pr": null,
+      "decisions": []
+    },
+    {
+      "id": "W8",
+      "at": "2026-08-27T00:00Z",
+      "title": "add-query-layer group 6 \u2014 Supabase driver decorator + RLS context surface",
+      "pr": null,
+      "decisions": []
+    }
+  ],
+  "prs": [
+    {
+      "number": 304,
+      "ref": "quickstart-now/hejbro#304",
+      "title": "docs(spec): propose add-query-layer orm change (d91-d98)",
+      "head": "6bd0310c103dfd0ce5e1aaba32c1417302c7966c",
+      "headRef": "phase10-orm-spec",
+      "base": "dev",
+      "merged": "2026-08-26T08:56:08Z",
+      "pinnedAt": "2026-08-26T00:00Z",
+      "migrated": true,
+      "refs": [
+        {
+          "path": "openspec/changes/add-query-layer/.openspec.yaml",
+          "blob": "701445b8918c5053f1ef1286eca58370ff4029e7"
+        },
+        {
+          "path": "openspec/changes/add-query-layer/proposal.md",
+          "blob": "6351dd439e008bffc040cb1dc2747deb65a6c60d"
+        },
+        {
+          "path": "openspec/changes/add-query-layer/design.md",
+          "blob": "383e001bfed2abb820c5bed12dc4dd7c857ea1ef"
+        },
+        {
+          "path": "openspec/changes/add-query-layer/tasks.md",
+          "blob": "c47413ed2ef95a29eba48816b1287b216c4a224b"
+        },
+        {
+          "path": "openspec/changes/add-query-layer/specs/query-builder/spec.md",
+          "blob": "c8682d9d8df4ce64bf4029a4f7f8c37479545f1f"
+        },
+        {
+          "path": "openspec/changes/add-query-layer/specs/query-type-inference/spec.md",
+          "blob": "e3ed6b3f5cd3ed239ab866a036869e97386261d2"
+        },
+        {
+          "path": "openspec/changes/add-query-layer/specs/driver-contract/spec.md",
+          "blob": "23a384bead03ddc03071b6d467edacdbb9df86d9"
+        },
+        {
+          "path": "openspec/changes/add-query-layer/specs/query-execution/spec.md",
+          "blob": "ec3ba541a949ece22f6b769f3e96619e835b4b92"
+        },
+        {
+          "path": "openspec/changes/add-query-layer/specs/rls-execution-context/spec.md",
+          "blob": "6b4b79bc8ec1e045407df8d8cfbcafb67a102ee8"
+        },
+        {
+          "path": "openspec/changes/add-query-layer/specs/typed-function-execution/spec.md",
+          "blob": "cce8b6daf78cc731ff469915a32436bdcb4795a4"
+        },
+        {
+          "path": "docs/specs/2026-08-19-hejbro-design.md",
+          "blob": "4b0be05440880e3ba344370ccae04673635f8c3f"
+        }
+      ]
+    },
+    {
+      "number": 306,
+      "ref": "quickstart-now/hejbro#306",
+      "title": "feat(core): left join and returning projection (#293 group 1)",
+      "head": "83a8a15b3480e463b3fa5de6834e2c52ce06a1a4",
+      "headRef": "phase10-query-ir",
+      "base": "dev",
+      "merged": "2026-08-26T09:21:26Z",
+      "pinnedAt": "2026-08-26T00:00Z",
+      "migrated": true,
+      "refs": [
+        {
+          "path": "packages/core/src/expr/ast.ts",
+          "blob": "4b863e498a024303465536c34057292401adc289"
+        },
+        {
+          "path": "packages/core/src/expr/codec.ts",
+          "blob": "57512a960239a093166dcada6034b7216d23f118"
+        },
+        {
+          "path": "packages/core/src/expr/render-sql.ts",
+          "blob": "17b4948922781e4e48d417ce637313cb616489b0"
+        },
+        {
+          "path": "packages/core/src/query/select.ts",
+          "blob": "4e4f69be8573e701dde5b36b5a98b3f7eda7f129"
+        },
+        {
+          "path": "packages/core/src/query/mutate.ts",
+          "blob": "11d682235f06468ab7f855829bf23d70292a4a3c"
+        },
+        {
+          "path": "packages/core/src/index.ts",
+          "blob": "4ba7af3a1667de60ddd52d03fad116ee59608c7e"
+        },
+        {
+          "path": "packages/query/package.json",
+          "blob": "d543b98afffe31270e01c982b0a1574e413b08ed"
+        },
+        {
+          "path": "packages/query/vitest.config.ts",
+          "blob": "869d3b27c118804cb49cdc8e693b6d6df28031f4"
+        },
+        {
+          "path": "openspec/changes/add-query-layer/tasks.md",
+          "blob": "75e48cf01089d06b20ce6300f414c64cdf99ae12"
+        },
+        {
+          "path": "openspec/changes/add-query-layer/design.md",
+          "blob": "bfb5ec7c859ad40f59ffd74367923fd7d7774f20"
+        },
+        {
+          "path": "openspec/changes/add-query-layer/proposal.md",
+          "blob": "470bd5b09893c88b91030f337acd0655c2d9ffb8"
+        },
+        {
+          "path": "docs/specs/2026-08-19-hejbro-design.md",
+          "blob": "2c6672457300b728893d0f6d928173192c4c2e86"
+        },
+        {
+          "path": "openspec/task-times.csv",
+          "blob": "a5b6e4513db9f3ef71095fc91952d77147aacfdb"
+        }
+      ]
+    },
+    {
+      "number": 309,
+      "ref": "quickstart-now/hejbro#309",
+      "title": "feat(query): pure compiler and sql escape hatch (#293 group 2)",
+      "head": "1b095b75772d1bf51774e507009f4bf69a21167a",
+      "headRef": "phase10-query-g2",
+      "base": "dev",
+      "merged": "2026-08-26T10:52:38Z",
+      "pinnedAt": "2026-08-26T00:00Z",
+      "migrated": true,
+      "refs": [
+        {
+          "path": "packages/query/src/compile/compile.ts",
+          "blob": "6316a61ff7491bd5b139320768c72c2f1a39fec2"
+        },
+        {
+          "path": "packages/query/src/compile/select.ts",
+          "blob": "cc9e2ec3755481ba0e91d66994401775c7e176d6"
+        },
+        {
+          "path": "packages/query/src/compile/mutation.ts",
+          "blob": "51e2887442530b64e9ea59d73485e07a5b61a2d0"
+        },
+        {
+          "path": "packages/query/src/compile/params.ts",
+          "blob": "e2bd6ea06f9cb9b7bf756a30b5d04b011f33d590"
+        },
+        {
+          "path": "packages/query/src/sql.ts",
+          "blob": "fe34a8ff57c68daf6b1c2c3516d71e6236002c58"
+        },
+        {
+          "path": "openspec/changes/add-query-layer/specs/query-builder/spec.md",
+          "blob": "a26a896f9c0dcc2484a1c177adc74dd868b85696"
+        },
+        {
+          "path": "openspec/changes/add-query-layer/design.md",
+          "blob": "ca53b3e990990b088932f321325337e163266855"
+        },
+        {
+          "path": "openspec/changes/add-query-layer/tasks.md",
+          "blob": "a9ffbeecfd34ce0417fe1b3a73c546e9b56e6120"
+        },
+        {
+          "path": "openspec/task-times.csv",
+          "blob": "6c64d12dbc2b9e4824ee621d9984b4861d1cc2e0"
+        },
+        {
+          "path": "openspec/task-tokens.csv",
+          "blob": "e04d2e50b6d7532b8477aaf72884f4be91b40dd6"
+        },
+        {
+          "path": "docs/specs/2026-08-19-hejbro-design.md",
+          "blob": "72ef77497abc79fb4df695d2670ffde97a88f1fa"
+        },
+        {
+          "path": "README.md",
+          "blob": "0758388cb26c13a258f8b49dccb14d3faeb381cc"
+        },
+        {
+          "path": "scripts/crap-report.mjs",
+          "blob": "d3837bea3ec562f9e7f51f478876b4f90319246d"
+        },
+        {
+          "path": "scripts/update-crap-readme.mjs",
+          "blob": "8c5f89104a46bcea4e1970202fdce74faf0c7db5"
+        }
+      ]
+    },
+    {
+      "number": 312,
+      "ref": "quickstart-now/hejbro#312",
+      "title": "feat(core): declaration-driven query type inference (#293 group 3)",
+      "head": "085fd7fe4aa3c44ec26081ad2cca4efa7e3cafa9",
+      "headRef": "phase10-query-g3",
+      "base": "dev",
+      "merged": "2026-08-26T13:14:52Z",
+      "pinnedAt": "2026-08-26T00:00Z",
+      "migrated": true,
+      "refs": [
+        {
+          "path": "packages/core/src/types/column-builder.ts",
+          "blob": "a09150fc6ae6fc708bc39a96f2459e9ac5adae16"
+        },
+        {
+          "path": "packages/core/src/types/column-builder-factories.ts",
+          "blob": "ab213f38c6ad7b0d5eb8a373115f521faa2e7171"
+        },
+        {
+          "path": "packages/core/src/types/ts-type-map.ts",
+          "blob": "a54ff096705aac24164b6d82d79ff14b0064e162"
+        },
+        {
+          "path": "packages/core/src/index.ts",
+          "blob": "1332250c6360f923f3e6bccd6d2ba87257062be1"
+        },
+        {
+          "path": "packages/query/src/types/select-result.ts",
+          "blob": "ab2b3939f7f932ec8fe0c1cca2a6a55bb564054e"
+        },
+        {
+          "path": "packages/query/src/types/numeric-mode.ts",
+          "blob": "a596083998fc59b8ba7404939f7bfa9d456215b4"
+        },
+        {
+          "path": "packages/query/src/types/interval.ts",
+          "blob": "49f27411719cf6f29c32bf9bc7cbb918ad7235e0"
+        },
+        {
+          "path": "openspec/changes/add-query-layer/specs/query-type-inference/spec.md",
+          "blob": "54650fcb0427cde3cb4e6ca22dafbbd8813a70fe"
+        },
+        {
+          "path": "openspec/changes/add-query-layer/tasks.md",
+          "blob": "5ace98e870a65b394a0e7bb19d8ee9b765d5e5a0"
+        },
+        {
+          "path": "openspec/task-times.csv",
+          "blob": "187da6586038d96f8bf83be9fa8d626a9b5c315f"
+        },
+        {
+          "path": "openspec/task-tokens.csv",
+          "blob": "f40700d15c9ed1fa8d7682648a23a479008f8267"
+        },
+        {
+          "path": "docs/specs/2026-08-19-hejbro-design.md",
+          "blob": "c40345d29d757a8d506cb60496382ecb8035c4a7"
+        }
+      ]
+    },
+    {
+      "number": 316,
+      "ref": "quickstart-now/hejbro#316",
+      "title": "feat(query): execution layer, driver contract, and typed db.fn",
+      "head": "e12079cda84fb58443c835756aff48c86ef3ef91",
+      "headRef": "phase10-query-g4",
+      "base": "dev",
+      "merged": "2026-08-26T22:29:13Z",
+      "pinnedAt": "2026-08-26T00:00Z",
+      "migrated": true,
+      "refs": [
+        {
+          "path": "packages/query/src/driver/contract.ts",
+          "blob": "1cfff5dea92332b682faccde28b8c0c52ed21e4a"
+        },
+        {
+          "path": "packages/query/src/driver/errors.ts",
+          "blob": "ce847af9811bac2ba972907703c5f061de666cf8"
+        },
+        {
+          "path": "packages/query/src/db/db.ts",
+          "blob": "e3f72783d37df223d4211c0f716c4388871eec46"
+        },
+        {
+          "path": "packages/query/src/db/execute.ts",
+          "blob": "6cd9778e349685c5cf80bc5b36e5e395369647b7"
+        },
+        {
+          "path": "packages/query/src/db/convert.ts",
+          "blob": "6d9c8ee409428ca04efdf56daf34cd87c2b573ca"
+        },
+        {
+          "path": "packages/query/src/db/context.ts",
+          "blob": "a83e32589c4ece82653c167da2da28e51cacb1c0"
+        },
+        {
+          "path": "packages/query/src/db/transaction.ts",
+          "blob": "fe7e6bc6edf3b4cb89929a936db655bc5192c0c0"
+        },
+        {
+          "path": "packages/query/src/db/fn.ts",
+          "blob": "6da2af1a44a166956bf1eaa3954375a60e17501b"
+        },
+        {
+          "path": "packages/query/src/db/fn-types.ts",
+          "blob": "9080eb3815d15db79b034d39f82ec828c4a9f8c3"
+        },
+        {
+          "path": "packages/core/src/dsl/define-function.ts",
+          "blob": "192a64216d447f0c493a41feabb69f2e1356c5fb"
+        },
+        {
+          "path": "packages/core/src/query/mutate.ts",
+          "blob": "6e919a0b152ded93e06ca8970e8e556832dd2c4b"
+        },
+        {
+          "path": "openspec/changes/add-query-layer/specs/driver-contract/spec.md",
+          "blob": "7184fd7e2ee8367328496a06a27268aa983cf1e4"
+        },
+        {
+          "path": "openspec/changes/add-query-layer/specs/query-execution/spec.md",
+          "blob": "966fe62e7a4e79cf08dcf6bbaf333080910e9b11"
+        },
+        {
+          "path": "openspec/changes/add-query-layer/specs/rls-execution-context/spec.md",
+          "blob": "5bf14dbe335113409f4029f7c4b7af98ccc8a1e9"
+        },
+        {
+          "path": "openspec/changes/add-query-layer/tasks.md",
+          "blob": "63bb656ec23e9e3320da6565e8c5b09003a391ed"
+        }
+      ]
+    },
+    {
+      "number": 319,
+      "ref": "quickstart-now/hejbro#319",
+      "title": "docs(openspec): re-plan query groups 5/6 (design pre-settlement)",
+      "head": "5c9f90f844b956b4bede38155afb83442be9b400",
+      "headRef": "phase10-query-g5g6-replan",
+      "base": "dev",
+      "merged": "2026-08-27T00:11:05Z",
+      "pinnedAt": "2026-08-27T00:00Z",
+      "migrated": true,
+      "refs": [
+        {
+          "path": "openspec/changes/add-query-layer/tasks.md",
+          "blob": "0f75edca54b8eeceb93678ba14019f38cec0b185"
+        },
+        {
+          "path": "packages/query/src/index.ts",
+          "blob": "2d8bd5b68616cb4c8512c43c8d69aa3aa6b239b0"
+        },
+        {
+          "path": "packages/query/package.json",
+          "blob": "f52474656f0e98dd733a553a83d88f1d09937580"
+        }
+      ]
+    },
+    {
+      "number": 321,
+      "ref": "quickstart-now/hejbro#321",
+      "title": "feat(supabase): rls context surface and driver decorator (#293 group 6)",
+      "head": "e2de12f6f06462cbe1aa0783341a55d87f025a78",
+      "headRef": "phase10-query-g6",
+      "base": "dev",
+      "merged": "2026-08-27T01:52:18Z",
+      "pinnedAt": "2026-08-27T00:00Z",
+      "migrated": true,
+      "refs": [
+        {
+          "path": "packages/supabase/src/driver.ts",
+          "blob": "01f166a206ef74e44a281b9309db40f3cbf8c601"
+        },
+        {
+          "path": "packages/supabase/src/context.ts",
+          "blob": "7b44e8a30ab6b59f23a5075bbe15a7fb1f9029b2"
+        },
+        {
+          "path": "packages/supabase/src/index.ts",
+          "blob": "3b58656354de3977583bb715388d4b3f7282d5da"
+        },
+        {
+          "path": "openspec/changes/add-query-layer/specs/rls-execution-context/spec.md",
+          "blob": "53c7f5d12a0346ac538c84feaffb8078cdd786b1"
+        },
+        {
+          "path": ".claude/rules/supabase-preset.md",
+          "blob": "ebfc35edcf359b0072cc40a234c7b472182083f1"
+        },
+        {
+          "path": ".changeset/config.json",
+          "blob": "42df85d29497dfd3f415589efe061a2ceaef891d"
+        },
+        {
+          "path": "openspec/changes/add-query-layer/tasks.md",
+          "blob": "f755f299944093e99724aa0f01920cd665360f68"
+        }
+      ]
+    },
+    {
+      "number": 324,
+      "ref": "quickstart-now/hejbro#324",
+      "title": "feat(pg): vanilla tcp driver with interval override and session pin (#293 group 5)",
+      "head": "79ed4648bc4ea87a7b4168eb6d24c3ad2ef05aba",
+      "headRef": "phase10-query-g5",
+      "base": "dev",
+      "merged": "2026-08-27T02:08:14Z",
+      "pinnedAt": "2026-08-27T00:00Z",
+      "migrated": true,
+      "refs": [
+        {
+          "path": "packages/pg/src/driver.ts",
+          "blob": "9c481e4a918b94ea06147d42538875adafffe2fa"
+        },
+        {
+          "path": "packages/pg/package.json",
+          "blob": "baaa7c06c3bb9b9bb0ff8f3b9ae7c7692970a85b"
+        },
+        {
+          "path": "packages/pg/test/driver.test.ts",
+          "blob": "59cbd11f3eae56f413a2bdee4ae25d82c3b5294a"
+        },
+        {
+          "path": "openspec/changes/add-query-layer/specs/driver-contract/spec.md",
+          "blob": "ddc33d72dc0144c8538506c90dea8e3c45b23943"
+        },
+        {
+          "path": "scripts/crap-report.mjs",
+          "blob": "9d48e3c47a38cdb50d1507d2ec2765d062de8470"
+        },
+        {
+          "path": "openspec/changes/add-query-layer/tasks.md",
+          "blob": "f755f299944093e99724aa0f01920cd665360f68"
+        }
+      ]
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

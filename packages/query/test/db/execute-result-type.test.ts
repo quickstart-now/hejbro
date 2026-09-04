@@ -6,6 +6,7 @@ import type {
 	IntervalValue,
 	QueryNode,
 	SelectLimited,
+	SetOpStage,
 	UpdateFinal,
 	UpdateReturnable,
 } from "@hejbro/core";
@@ -100,6 +101,120 @@ describe("Db.execute's resolved row type (task 4.11)", () => {
 		expectTypeOf<ExecuteRows<QueryNode>>().toEqualTypeOf<
 			ReadonlyArray<Readonly<Record<string, unknown>>>
 		>();
+	});
+});
+
+describe("Db.execute's resolved row type for a core-built set operation (task 3.1, #551)", () => {
+	it("a whole-table union reads back as the left branch's declared row shape, not a raw driver row", () => {
+		type Stage = SetOpStage<Posts>;
+		type BranchAlone = SelectLimited<Posts>;
+
+		// Independent oracle (review repair, task 5.2): the type the same
+		// handle resolves executing the left branch alone -- not
+		// `ReadonlyArray<SelectResult<Posts>>`, the exact expression
+		// ExecuteResult itself evaluates for this branch, which would hold
+		// tautologically however that expression resolved.
+		expectTypeOf<ExecuteRows<Stage>>().toEqualTypeOf<
+			ExecuteRows<BranchAlone>
+		>();
+	});
+
+	it("an object-projection union reads back as the left branch's declared keys and types, widened with null where the join record is missing -- no more, no less", () => {
+		// posts.status is declared notNull (review repair, task 5.2) --
+		// the original fixture here projected posts.amount, already
+		// nullable, so the widening this scenario promises was invisible:
+		// `bigint | null` looks identical whether or not it widened.
+		type Projection = { readonly label: Posts["status"] };
+		type Stage = SetOpStage<Projection>;
+		type BranchAlone = SelectLimited<Projection>;
+		type Row = ExecuteRows<Stage>[number];
+
+		// Unlike the whole-table oracle above, this one is not fully
+		// independent: a real (value-level) execute() of BranchAlone would
+		// infer `{ label: string }`, not `| null` -- this bare, type-only
+		// SelectLimited<Projection> defaults TLeftJoined to UntrackedJoins,
+		// the same default ExecuteResult's SetOpStage branch takes, so both
+		// sides pass through the same widening. The literal pin right below
+		// is the genuinely independent check for the widening itself.
+		expectTypeOf<ExecuteRows<Stage>>().toEqualTypeOf<
+			ExecuteRows<BranchAlone>
+		>();
+		expectTypeOf<Row>().toEqualTypeOf<{ readonly label: string | null }>();
+		// @ts-expect-error "id" was never projected -- not a key of Row.
+		type _Rejected = Row["id"];
+	});
+
+	it("a set-op stage further chained with orderBy()/limit() keeps the same resolved row type -- neither changes TProjection", () => {
+		type OrderedStage = ReturnType<SetOpStage<Posts>["orderBy"]>;
+		type LimitedStage = ReturnType<SetOpStage<Posts>["limit"]>;
+
+		expectTypeOf<ExecuteRows<OrderedStage>>().toEqualTypeOf<
+			ReadonlyArray<SelectResult<Posts>>
+		>();
+		expectTypeOf<ExecuteRows<LimitedStage>>().toEqualTypeOf<
+			ReadonlyArray<SelectResult<Posts>>
+		>();
+	});
+
+	// Controls, mirroring this file's own existing cases above -- not new
+	// claims, proof that touching db.ts's ExecuteResult for the SetOpStage
+	// branch left these two dispatch arms exactly where they were.
+	it("an already-unwrapped node stays the plain DriverRow shape -- unaffected by the new branch", () => {
+		expectTypeOf<ExecuteRows<QueryNode>>().toEqualTypeOf<
+			ReadonlyArray<Readonly<Record<string, unknown>>>
+		>();
+	});
+
+	it("a mutation chain still resolves through ReturningRow -- never mistaken for a SetOpStage", () => {
+		type Stage = InsertFinal<Posts>;
+		expectTypeOf<ExecuteRows<Stage>>().toEqualTypeOf<
+			ReadonlyArray<SelectResult<Posts>>
+		>();
+	});
+});
+
+describe("the two corrected set-operation scenarios get their own observers (task 4.2, review repair)", () => {
+	// No red is available here -- ExecuteResult already resolves both
+	// forms via SelectResult<TProjection> (task 3.1); this pins the
+	// corrected delta sentences directly, spelled out concretely rather
+	// than through SelectResult, so a regression in SelectResult itself
+	// doesn't silently move both the production code and this pin
+	// together. The discriminating check is the mutant tasks.md names:
+	// switching ExecuteResult's SetOpStage branch to
+	// `SelectResult<TProjection, never>` must fail the object-projection
+	// pin below while leaving the whole-table pin green, since the
+	// whole-table branch of SelectResult never reads its second type
+	// argument at all (resolved from the table's own declaration) and
+	// the object-projection branch does (NestedOrExprResult widens with
+	// null only for the untracked/UntrackedJoins default, never for
+	// `never`, the fully-tracked-empty reading).
+	it("the whole-table form reads back identical to the same branch read alone (Scenario: A core-built set operation executed on a handle reads back as its left branch)", () => {
+		type Stage = SetOpStage<Posts>;
+		type BranchAlone = SelectLimited<Posts>;
+
+		expectTypeOf<ExecuteRows<Stage>>().toEqualTypeOf<
+			ExecuteRows<BranchAlone>
+		>();
+		expectTypeOf<ExecuteRows<Stage>[number]>().toEqualTypeOf<{
+			readonly id: string;
+			readonly status: string;
+			readonly amount: bigint | null;
+			readonly duration: IntervalValue | null;
+		}>();
+	});
+
+	it("the object-projection form widens the left branch's declared-notNull key with null, where the join record is missing (Scenario: An object projection widens where the join record is missing)", () => {
+		// posts.status is declared notNull -- chosen deliberately (unlike
+		// this file's other object-projection fixtures, which use the
+		// already-nullable posts.amount) so the widening this scenario
+		// promises is the reason this type differs from `string`, not an
+		// accident of an already-nullable column.
+		type Projection = { readonly label: Posts["status"] };
+		type Stage = SetOpStage<Projection>;
+
+		expectTypeOf<ExecuteRows<Stage>[number]>().toEqualTypeOf<{
+			readonly label: string | null;
+		}>();
 	});
 });
 

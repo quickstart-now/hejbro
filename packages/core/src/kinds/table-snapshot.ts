@@ -1,6 +1,6 @@
 import type { ForeignKeyAction, IndexMethod, IndexNulls } from "../dsl/table";
 import { decodeExprNode } from "../expr/codec";
-import { renderExpr } from "../expr/render-sql";
+import { renderExpr, renderTableBoundExpr } from "../expr/render-sql";
 import type { JsonValue } from "../snapshot/stable-json";
 import type { TypeNode } from "../types/type-node";
 
@@ -99,12 +99,18 @@ export const columnDefault = (column: ColumnSnapshot): string | null => {
 	return renderExpr(decodeExprNode(column.default));
 };
 
-/** `column.generated` decoded and rendered back to SQL text, defaulting to `null` when absent (compact snapshot) — mirrors {@link columnDefault} (D100). */
+/**
+ * `column.generated` decoded and rendered back to SQL text, defaulting to
+ * `null` when absent (compact snapshot) — mirrors {@link columnDefault}
+ * (D100), except a generated column's expression is table-bound
+ * (table-declaration spec, "A table-bound expression names columns by
+ * table and column"): a sibling column it interpolates renders two-part.
+ */
 export const columnGenerated = (column: ColumnSnapshot): string | null => {
 	if (column.generated === undefined) {
 		return null;
 	}
-	return renderExpr(decodeExprNode(column.generated));
+	return renderTableBoundExpr(decodeExprNode(column.generated));
 };
 
 /** `column.identity`, defaulting to `null` when absent (compact snapshot, D100). */
@@ -154,14 +160,14 @@ export const isExpressionIndexColumn = (
 ): column is Extract<IndexColumnSnapshot, { readonly expression: JsonValue }> =>
 	"expression" in column;
 
-/** `column.expression` decoded and rendered back to SQL text, `null` for a plain-column entry (mirrors {@link indexWhere}). */
+/** `column.expression` decoded and rendered back to SQL text, `null` for a plain-column entry (mirrors {@link indexWhere}) — table-bound (table-declaration spec, "An index expression names its own columns by table and column"). */
 export const indexColumnExpression = (
 	column: IndexColumnSnapshot,
 ): string | null => {
 	if (!isExpressionIndexColumn(column)) {
 		return null;
 	}
-	return renderExpr(decodeExprNode(column.expression));
+	return renderTableBoundExpr(decodeExprNode(column.expression));
 };
 
 /**
@@ -186,12 +192,12 @@ export type IndexSnapshot = {
 export const indexUnique = (index: IndexSnapshot): boolean =>
 	index.unique === true;
 
-/** `index.where` decoded and rendered back to SQL text, defaulting to `null` when absent (compact snapshot). */
+/** `index.where` decoded and rendered back to SQL text, defaulting to `null` when absent (compact snapshot) — table-bound (table-declaration spec, "A partial-index predicate names its own columns by table and column"). */
 export const indexWhere = (index: IndexSnapshot): string | null => {
 	if (index.where === undefined || index.where === null) {
 		return null;
 	}
-	return renderExpr(decodeExprNode(index.where));
+	return renderTableBoundExpr(decodeExprNode(index.where));
 };
 
 /** `index.method`, defaulting to `"btree"` when absent (compact snapshot — `btree` is never written, R8). */
@@ -224,9 +230,9 @@ export type CheckSnapshot = {
 	readonly expression: JsonValue;
 };
 
-/** `check.expression` decoded and rendered back to SQL text. */
+/** `check.expression` decoded and rendered back to SQL text — table-bound (table-declaration spec, "A check constraint names its own columns by table and column"). */
 export const checkExpression = (check: CheckSnapshot): string =>
-	renderExpr(decodeExprNode(check.expression));
+	renderTableBoundExpr(decodeExprNode(check.expression));
 
 /**
  * The full snapshot node `tableKind.serialize` produces for one table.

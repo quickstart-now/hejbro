@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#415",
+  "title": "add-set-operations: union/intersect/except",
+  "parent": "quickstart-now/hejbro#299",
+  "status": "closed",
+  "opened": "2026-09-04",
+  "closed": "2026-08-28",
+  "decisions": [
+    {
+      "id": "D1",
+      "by": "owner",
+      "at": "2026-08-28T00:00Z",
+      "title": "s (English rewrites)",
+      "raw": []
+    }
+  ],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-08-28T00:00Z",
+      "title": "add-set-operations proposal \u2014 five settled, two parked, one recon audit",
+      "pr": null,
+      "decisions": []
+    }
+  ],
+  "prs": [
+    {
+      "number": 418,
+      "ref": "quickstart-now/hejbro#418",
+      "title": "docs(openspec): propose add-set-operations (d103)",
+      "head": "4a55c031856f0a45407e22318cf380d1786c3de1",
+      "headRef": "phase10-setops-spec",
+      "base": "dev",
+      "merged": "2026-08-28T11:56:12Z",
+      "pinnedAt": "2026-08-28T00:00Z",
+      "migrated": true,
+      "refs": [
+        {
+          "path": "openspec/changes/add-set-operations/proposal.md",
+          "blob": "b7d511ce2013197fb303808d0fdbb5d1aa88fa62"
+        },
+        {
+          "path": "openspec/changes/add-set-operations/design.md",
+          "blob": "151a3f4685503502d95d83456a732b5b0042be9e"
+        },
+        {
+          "path": "openspec/changes/add-set-operations/tasks.md",
+          "blob": "2fe40771ea76f1230618e9cc239cbbf5b24b9d6d"
+        },
+        {
+          "path": "docs/specs/2026-08-19-hejbro-design.md",
+          "blob": "e41211b9974ce5f78c0b90431ec8e99f58126829"
+        }
+      ]
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

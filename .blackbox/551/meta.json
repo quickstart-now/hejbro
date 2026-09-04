@@ -1,0 +1,116 @@
+{
+  "version": 1,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#551",
+  "title": "execute() of a core-built set operation loses per-key result typing",
+  "parent": "quickstart-now/hejbro#412",
+  "status": "closed",
+  "opened": "2026-09-04",
+  "closed": "2026-09-03",
+  "decisions": [
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [],
+      "at": "2026-09-03T00:00Z",
+      "title": "ExecuteResult carries the SetOpNode type through",
+      "ratified": null
+    },
+    {
+      "id": "R2",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [],
+      "at": "2026-09-03T07:55Z",
+      "title": "Honesty on set-operation typing: the pass-through reaches the left row type only",
+      "ratified": {
+        "verdict": "accepted",
+        "by": "evaluator",
+        "at": "2026-09-04T07:21Z",
+        "decision": null
+      }
+    }
+  ],
+  "work": [],
+  "prs": [
+    {
+      "number": 737,
+      "ref": "quickstart-now/hejbro#737",
+      "title": "fix(query,core): harden conformance kit, join projection, set-op types",
+      "head": "d5f20557965f6768f48a4c8b372e9c9d9cf6423a",
+      "headRef": "harden-query-conformance",
+      "base": "dev",
+      "merged": "2026-09-03T13:54:29Z",
+      "pinnedAt": "2026-09-04T04:45Z",
+      "refs": [
+        {
+          "path": ".changeset/harden-query-conformance.md",
+          "blob": "e4096273b78b92626695c5fcf5459385aabfba32"
+        },
+        {
+          "path": "README.md",
+          "blob": "fa7bceb8f45c9474c56ded77ed2c72a355a3d0c6"
+        },
+        {
+          "path": "openspec/changes/harden-query-conformance/proposal.md",
+          "blob": "c5c487e3d39ec0667ac1ace4ebb1ba9c6c1a09d8"
+        },
+        {
+          "path": "openspec/changes/harden-query-conformance/specs/driver-contract/spec.md",
+          "blob": "d5103e80739d36367c39f738f44ab9aee0a31d58"
+        },
+        {
+          "path": "openspec/changes/harden-query-conformance/specs/query-type-inference/spec.md",
+          "blob": "6ff1a63c2868a52bbd41841b008f7277137a934a"
+        },
+        {
+          "path": "openspec/changes/harden-query-conformance/tasks.md",
+          "blob": "be0af599eb2772d6b3fab6bb6bea0f8780a6373f"
+        },
+        {
+          "path": "openspec/task-times.csv",
+          "blob": "a4f1fe647371efabc5c365a9fc9067b6f9b1e642"
+        },
+        {
+          "path": "packages/core/src/expr/render-sql.ts",
+          "blob": "92f14949275f90e6c07c6c57686b1323699b8392"
+        },
+        {
+          "path": "packages/core/test/query/select.test.ts",
+          "blob": "b2a56635e2221bf7b829d42b0971050d6ed8ed7c"
+        },
+        {
+          "path": "packages/pg/test/driver.test.ts",
+          "blob": "723f319f794ca2a7577c67af7f53cb9e5bfb6f47"
+        },
+        {
+          "path": "packages/query/src/db/db.ts",
+          "blob": "49cffbc440f7caa2ddcf1fe80098c0aedc589d1e"
+        },
+        {
+          "path": "packages/query/src/testing/driver-conformance.ts",
+          "blob": "b875aa71aa2703b735438028b37cba7acdcbb133"
+        },
+        {
+          "path": "packages/query/test/compile/join.test.ts",
+          "blob": "017d7e5d70a55accb9eb6a9e140e92e63289a74e"
+        },
+        {
+          "path": "packages/query/test/db/execute-result-type.test.ts",
+          "blob": "6c87213a3d42427140db79ba960475c011dab003"
+        },
+        {
+          "path": "packages/query/test/driver/conformance.test.ts",
+          "blob": "cfc6ce208b343547216500988fbbcf3d763cfb9f"
+        },
+        {
+          "path": "packages/supabase/test/pooler.test.ts",
+          "blob": "cd7fc036d4030a6584e93cc4605f3b072f7ce95e"
+        }
+      ]
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

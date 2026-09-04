@@ -204,12 +204,11 @@ describe("check()", () => {
 // is a structured node (columnRef + functionCall + null literal, wrapped in
 // the same nullTest `isNull()` itself builds) -- never a rawSql/sqlTemplate
 // fragment, so a column rename keeps tracking it the same way it tracks
-// every hand-written check. The renderer always fully qualifies a
-// columnRef (render-sql.ts's renderColumnRefNode), so the emitted SQL text
-// is schema.table.column-qualified -- pinned once here, for this file's
+// every hand-written check. A check constraint's expression is table-bound
+// (fix-nile-findings, table-declaration spec) and renders its columnRef
+// two-part through `checkExpression` -- pinned once here, for this file's
 // own `app`/`posts`/`tags` fixture, and reused by every assertion below.
-const tagsNoNullElementsSql =
-	'array_position("app"."posts"."tags", null) is null';
+const tagsNoNullElementsSql = 'array_position("posts"."tags", null) is null';
 
 describe(".notNullElements() derives its own backing check (add-array-ergonomics, task 1.3)", () => {
 	it("emits a CHECK named <column>_no_null_elements with the owner-settled expression", () => {

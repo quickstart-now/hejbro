@@ -1,5 +1,20 @@
 # hejbro
 
+## 0.2.0-pre.1
+
+### Patch Changes
+
+- 75f0bbe: Fixes three silent failures: `hejbro init` now honours an existing `hejbro.config.ts`'s `migrationsDir`/`snapshotPath` instead of always scaffolding the default paths, a vendored contract no longer silently drops a table, column, or function named `__proto__`, and `db.fn` now refuses a pre-built argument object that names a key its declaration doesn't, instead of silently sending `null`/`undefined` for the misspelled argument.
+- d5cda78: `hejbro init` now refuses, with a coded diagnostic instead of a raw filesystem crash or a silent partial run: a configured migrations directory or snapshot path spelled with a trailing separator that holds a file, a file sitting in a configured artifact's own ancestor directory chain, two configured fields that resolve to the same path, and a directory sitting where `hejbro.config.ts` itself belongs. The name-keyed vendored client (`createDb`) also now refuses a table or function lookup by an inherited `Object.prototype` name (`__proto__`, `hasOwnProperty`, ...) the contract doesn't actually vendor, instead of silently resolving to `Object.prototype` and throwing an uncoded error on the call.
+- adb916c: `check` under a preset that declares no planning (`explainUnavailable`) no longer normalizes the inside of a string literal — a quoted word or a qualifier-like name inside a literal is content and a difference it carries is reported as not compared; a reserved keyword stays quoted under the identifier-unquoting step; and a failed catalog read in that mode gets a `Next:` that names the catalog read instead of `EXPLAIN` (naming `pg_get_expr`, the read that fails). The cast-stripping step now strips the whole cast the server appends to a string literal — `text[]`, `character varying(20)`, `timestamp with time zone`, a schema-qualified or quoted type name — not only a single-word type name.
+- 6973aab: `hejbro reset` on a database that was never migrated by hejbro (every migration applied via `psql -f` or another external pipeline, so `hejbro.migration_ledger` never existed) now drops the declared objects instead of reporting success and doing nothing. Its coded `reset-drop-failed` error now names which step actually failed (dropping the objects or clearing the ledger afterward) instead of always claiming a failed drop, carries the database's own `DETAIL` line, and — only when the run's own declared objects include a pair that reference each other — adds that possibility alongside the existing one (an object outside your declarations), without asserting either as the cause: the server's own `DETAIL` is what names the actual dependent.
+- e22ea23: `hejbro reset` now orders its drops by the declared tables' own foreign keys, so a table referenced by another declared table drops after its dependent instead of failing on an arbitrary alphabetical order; a drop the database refuses (something outside your declarations still depends on what's being dropped) is now reported as a coded `reset-drop-failed` error with the transaction rolled back, instead of an uncaught crash — the database and the migration ledger are left exactly as they were. `hejbro verify` now also runs any registered preset validators as an additional check, refusing a declaration with the same coded error `hejbro generate` itself would report for it, rather than passing a declaration `generate` would refuse. `hejbro generate` now emits statements in dependency order within a kind (a referenced table before the table referencing it, alters included); the migration's file name is unchanged by this ordering.
+- Updated dependencies [333dae8]
+- Updated dependencies [b02443a]
+- Updated dependencies [17f5495]
+  - @hejbro/core@0.2.0-pre.1
+  - @hejbro/query@0.2.0-pre.1
+
 ## 0.2.0-pre.0
 
 ### Minor Changes

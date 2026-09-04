@@ -17,7 +17,7 @@ import type {
 	WithEntryNode,
 	WithNode,
 } from "../expr/ast";
-import { renderExpr } from "../expr/render-sql";
+import { renderTableBoundExpr } from "../expr/render-sql";
 import type { HejbroDeclaration } from "../kind/object-kind"; // type-only; object-kind.ts imports ColumnOrderOracle back as `import type`, which TS erases — no runtime cycle
 import type { ColumnSnapshot } from "../kinds/table-snapshot";
 import { asTableSnapshot, columnGenerated } from "../kinds/table-snapshot";
@@ -96,7 +96,10 @@ const parentColumnsByName = (
  * table (`drop column` + `add column`, `table-kind-emit.ts`'s
  * `generatedRebuildStatements`). `declaredGenerated === null` (a plain or
  * absent-generated column) or no parent column is never a rebuild by this
- * check alone.
+ * check alone. The declared side renders through {@link renderTableBoundExpr},
+ * the same entry point {@link columnGenerated} renders the snapshot side
+ * through — comparing a two-part rendering against a three-part one would
+ * report every generated column as rebuilt.
  */
 const isGeneratedRebuild = (
 	previousColumn: ColumnSnapshot | undefined,
@@ -109,7 +112,7 @@ const isGeneratedRebuild = (
 	if (previousGenerated === null) {
 		return false;
 	}
-	return previousGenerated !== renderExpr(declaredGenerated);
+	return previousGenerated !== renderTableBoundExpr(declaredGenerated);
 };
 
 /** Every declared column whose expression-change rebuild this build must reflect (see {@link isGeneratedRebuild}). */

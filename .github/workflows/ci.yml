@@ -1,7 +1,11 @@
 name: ci
 on:
+  # No push run on dev (#812): a feature PR's verify checks out the merge
+  # ref (dev + branch), so the squash commit's tree was already tested,
+  # and the approved release-PR run checks the dev tip right before a
+  # release. The push run on main validates the merge commit that ships.
   push:
-    branches: [dev, main]
+    branches: [main]
   pull_request:
   # #180 added this trigger so release-version.yml could
   # `gh workflow run ci.yml --ref changeset-release/dev` after pushing
@@ -26,8 +30,124 @@ on:
   # and useful for a manual re-run of this workflow against an arbitrary
   # branch without needing a new commit.
   workflow_dispatch: {}
+# #807/#809: a newer head on the same PR cancels the run on the
+# superseded head -- the bot's pin commit that lands seconds after a
+# feature PR opens, and every dev merge that moves a long-lived PR's head
+# (the release PR, the Version Packages PR) while its verify is still
+# waiting for approval below. Pushes to dev/main are never cancelled:
+# each SHA there is a merge.
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
+  # #785 (D89, folder form): the blackbox record is checked before anything
+  # else runs -- a PR whose record is missing or whose pins are stale is
+  # not entitled to a test run, so every other job `needs` this one. On a
+  # PR the check reads the record at the PR head and verifies pins both
+  # ways; on a push it verifies the record's structure and generated
+  # READMEs. The same script serves the pre-merge Claude Code hook
+  # (.claude/settings.json), so the two cannot disagree.
+  blackbox:
+    # #804: a bot PR (changesets' Version Packages, dependabot) is exempt
+    # from the record, so the job is skipped outright instead of running
+    # to print "exempt". A release PR (dev -> main) still runs it: the
+    # script checks the release conditions only there.
+    if: github.event.pull_request.user.type != 'Bot'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: read
+      issues: read
+    env:
+      HAS_APP: ${{ secrets.BLACKBOX_APP_ID != '' }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
+          token: ${{ secrets.BLACKBOX_TOKEN || github.token }}
+      - uses: actions/setup-node@v7
+        with: { node-version: 24 }
+      # Bot mode (#793). With the GitHub App (BLACKBOX_APP_ID +
+      # BLACKBOX_APP_PRIVATE_KEY) the pins are committed through the Git Data
+      # API -- signed by GitHub, attributed to hello-pooh-blackbox[bot], so
+      # they pass dev's required-signatures ruleset -- and the ref update
+      # re-runs CI on that commit. With only a PAT (BLACKBOX_TOKEN) they are
+      # pushed with git, unsigned. With neither, verify only.
+      - uses: actions/create-github-app-token@v2
+        id: app
+        if: env.HAS_APP == 'true'
+        with:
+          app-id: ${{ secrets.BLACKBOX_APP_ID }}
+          private-key: ${{ secrets.BLACKBOX_APP_PRIVATE_KEY }}
+      - if: github.event_name == 'pull_request'
+        run: node .blackbox/bin/blackbox.mjs ci --pr ${{ github.event.pull_request.number }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BLACKBOX_APP_TOKEN: ${{ steps.app.outputs.token }}
+          BLACKBOX_PUSH: ${{ steps.app.outputs.token && 'api' || (secrets.BLACKBOX_TOKEN && 'git' || '') }}
+      - if: github.event_name != 'pull_request'
+        run: node .blackbox/bin/blackbox.mjs check
+        env:
+          GH_TOKEN: ${{ github.token }}
+  # #810: the ci-approval review lives on the workflow run page, not on
+  # the PR, and the owner could not find it from "Approve and run". On a
+  # gated PR this job keeps one comment (edited in place on every new
+  # head) pointing at the waiting run's review banner and carrying the
+  # gh one-liner that approves from a terminal.
+  approval-notice:
+    if: ${{ github.event_name == 'pull_request' && (github.head_ref == 'dev' || startsWith(github.head_ref, 'changeset-release/')) }}
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      PR: ${{ github.event.pull_request.number }}
+      RUN_ID: ${{ github.run_id }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      HEAD: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - run: |
+          env_id=$(gh api "repos/$REPO/environments/ci-approval" --jq .id)
+          body=$(cat <<EOF2
+          <!-- ci-approval-notice -->
+          **\`verify\` is waiting for the owner's approval** (\`ci-approval\` environment, #809) at head \`${HEAD:0:8}\`.
+
+          1. Open the run: $RUN_URL
+          2. In the yellow banner press **Review pending deployments**, tick **ci-approval**, then **Approve and deploy**.
+
+          Or from a terminal:
+
+          \`\`\`bash
+          gh api -X POST repos/$REPO/actions/runs/$RUN_ID/pending_deployments -f state=approved -F "environment_ids[]=$env_id"
+          \`\`\`
+
+          A new merge into \`dev\` moves this PR's head, cancels the waiting run and refreshes this comment; approve only the run you mean to release.
+          EOF2
+          )
+          existing=$(gh api "repos/$REPO/issues/$PR/comments" --paginate --jq '.[] | select(.body | startswith("<!-- ci-approval-notice -->")) | .id' | head -n 1)
+          if [ -n "$existing" ]; then
+            gh api -X PATCH "repos/$REPO/issues/comments/$existing" -f body="$body" --jq .id
+          else
+            gh api -X POST "repos/$REPO/issues/$PR/comments" -f body="$body" --jq .id
+          fi
   verify:
+    needs: blackbox
+    # Runs past a skipped blackbox job (bot PR), never past a failed one
+    # (#804): without the status function a skipped `needs` skips this
+    # job too, and the Version Packages PR would never get its CI.
+    if: ${{ !cancelled() && needs.blackbox.result != 'failure' }}
+    # #809 (owner, 2026-09-04): a long-lived PR -- the release PR (head
+    # `dev`) and the Version Packages PR (head `changeset-release/*`) --
+    # has its head moved by every small merge into dev, and re-running
+    # the heavy checks each time is waste. Those PRs run `verify` under
+    # environment `ci-approval`, whose required reviewer is the owner:
+    # the job waits at the deployment review (no runner time) until the
+    # owner approves the release, and the concurrency group above drops
+    # the wait when dev moves again. Every other PR and every push runs
+    # under `ci-open`, which has no rules.
+    environment: ${{ (github.event_name == 'pull_request' && (github.head_ref == 'dev' || startsWith(github.head_ref, 'changeset-release/'))) && 'ci-approval' || 'ci-open' }}
     runs-on: ubuntu-latest
     strategy:
       matrix:

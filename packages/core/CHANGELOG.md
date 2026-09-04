@@ -1,5 +1,35 @@
 # @hejbro/core
 
+## 0.2.0-pre.1
+
+### Patch Changes
+
+- 333dae8: A table-bound expression's column reference — a CHECK constraint, a
+  partial index predicate, an index expression, a generated column's
+  expression, or a policy's `using`/`with check` — now renders
+  `"table"."column"` instead of schema-qualified, including one inside a
+  correlated `exists()` subquery. A platform that keeps a tenant-aware
+  table under an internal schema name (Nile) rejects the schema-qualified
+  form outright; the two-part form is accepted everywhere and keeps the
+  table visible to a reviewer. A view body and a query-builder statement
+  are unaffected.
+- b02443a: `defineFunction` now refuses, with `invalid-sql-name`, an argument key
+  whose derived SQL name isn't a valid hejbro SQL identifier — the same
+  D36 rule a column key already enforces — instead of silently emitting an
+  unquoted, invalid name into the generated DDL and function body. A
+  literal `__proto__:` key in an `args` object literal, which replaces the
+  object's prototype instead of declaring an argument, is refused
+  separately with `args-prototype-key`, naming the computed-key form that
+  does declare one. `ctx.return` no longer accepts a mutation whose chain
+  never called `.returning()`: the pre-`.returning()` stage is excluded at
+  the type level, and a caller that reaches `ctx.return` with the type
+  bypassed now fails at declaration time with `return-expects-returning`
+  instead of rendering a `return query …;` statement Postgres accepts at
+  creation and rejects only when the function is called. `ctx.execute`
+  keeps accepting a mutation at either stage through the new exported
+  `ExecutableQuery` type (re-exported by `hejbro`).
+- 17f5495: A whole-table projection in a select that also joins now renders its columns schema-qualified, the way the same select's object-projection form always has; a select with no join renders exactly the SQL it did before. `execute()` of a set operation built with the core builder's own combinators now reads back as the left branch's declared row shape instead of an untyped driver row.
+
 ## 0.2.0-pre.0
 
 ### Minor Changes

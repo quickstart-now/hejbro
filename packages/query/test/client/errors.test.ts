@@ -103,3 +103,165 @@ describe("errors name the contract, not internals (R2-G6 6.8)", () => {
 		}
 	});
 });
+
+/**
+ * `"__proto__" in {}` is `true` (inherited from `Object.prototype`), so
+ * a guard deciding "unknown" with `prop in obj` cannot refuse a lookup
+ * of a name `Object.prototype` itself carries when the contract vendors
+ * nothing under that exact name (D106 R1 N8) -- `client.fn.__proto__`
+ * returned `Object.prototype` instead of refusing, and calling it threw
+ * an uncoded `TypeError` instead of `unknown-contract-function`.
+ */
+describe("the guard refuses an inherited name the contract does not vendor (D106 R1 N8)", () => {
+	type ProtoTestDatabase = {
+		readonly Tables: {
+			readonly posts: {
+				readonly Row: { readonly id: string };
+				readonly Insert: { readonly id?: string };
+				readonly Update: { readonly id?: string };
+			};
+		};
+		readonly Functions: {
+			readonly add: {
+				readonly Args: Record<string, never>;
+				readonly Returns: bigint;
+			};
+		};
+	};
+
+	const ProtoMetadata: ContractMetadata = {
+		commit: "abc123",
+		exportHash: "sha256:x",
+		roles: [],
+		tables: {
+			posts: {
+				schema: "app",
+				name: "posts",
+				columns: {
+					id: {
+						sqlName: "id",
+						typeNode: { typeName: "uuid" },
+						mode: null,
+						notNullElements: false,
+					},
+				},
+				foreignKeys: [],
+			},
+		},
+		functions: {
+			add: {
+				schema: "app",
+				name: "add",
+				args: [],
+				returns: {
+					kind: "scalar",
+					typeNode: { typeName: "bigint" },
+					mode: "bigint",
+				},
+			},
+		},
+	};
+
+	it("refuses client.fn.__proto__ when the contract vendors no function named __proto__", () => {
+		const { driver } = recordingTransactionalDriver();
+		const client = createNameKeyedDb<ProtoTestDatabase>(driver, ProtoMetadata);
+		const looseFn = client.fn as unknown as Record<string, unknown>;
+
+		expect.assertions(1);
+		try {
+			void Reflect.get(looseFn, "__proto__");
+			expect.unreachable("should have refused __proto__");
+		} catch (error) {
+			expect(error).toHaveProperty("code", "unknown-contract-function");
+		}
+	});
+
+	it("refuses client.__proto__ when the contract vendors no table named __proto__", () => {
+		const { driver } = recordingTransactionalDriver();
+		const client = createNameKeyedDb<ProtoTestDatabase>(driver, ProtoMetadata);
+		const looseClient = client as unknown as Record<string, unknown>;
+
+		expect.assertions(1);
+		try {
+			void Reflect.get(looseClient, "__proto__");
+			expect.unreachable("should have refused __proto__");
+		} catch (error) {
+			expect(error).toHaveProperty("code", "unknown-contract-table");
+		}
+	});
+
+	it("refuses client.fn.hasOwnProperty, an inherited name the contract does not vendor", () => {
+		const { driver } = recordingTransactionalDriver();
+		const client = createNameKeyedDb<ProtoTestDatabase>(driver, ProtoMetadata);
+		const looseFn = client.fn as unknown as Record<string, unknown>;
+
+		expect.assertions(1);
+		try {
+			void looseFn.hasOwnProperty;
+			expect.unreachable("should have refused hasOwnProperty");
+		} catch (error) {
+			expect(error).toHaveProperty("code", "unknown-contract-function");
+		}
+	});
+
+	it("a vendored table and function lookup is unaffected (control)", () => {
+		const { driver } = recordingTransactionalDriver();
+		const client = createNameKeyedDb<ProtoTestDatabase>(driver, ProtoMetadata);
+
+		expect(client.posts).toBeDefined();
+		expect(typeof client.fn.add).toBe("function");
+	});
+
+	it("client.fn.__proto__ resolves to the vendored callable when the contract does vendor a function named __proto__ (control -- the own property wins)", async () => {
+		const { driver } = recordingTransactionalDriver({
+			rows: [{ result: "5" }],
+		});
+		// A literal `{ __proto__: ... }` key sets the prototype instead of
+		// creating an own property -- built with Object.fromEntries, the
+		// same construction the emitter itself uses for this exact name
+		// (contract/emit.ts's own renderMetadataKey).
+		const protoFnMetadata: ContractMetadata = {
+			...ProtoMetadata,
+			functions: Object.fromEntries([
+				...Object.entries(ProtoMetadata.functions ?? {}),
+				[
+					"__proto__",
+					{
+						schema: "app",
+						name: "proto_fn",
+						args: [],
+						returns: {
+							kind: "scalar",
+							typeNode: { typeName: "bigint" },
+							mode: "bigint",
+						},
+					},
+				],
+			]),
+		};
+		const client = createNameKeyedDb<ProtoTestDatabase>(
+			driver,
+			protoFnMetadata,
+		);
+		const looseFn = client.fn as unknown as Record<
+			string,
+			(args: unknown) => Promise<unknown>
+		>;
+
+		const protoFn = Reflect.get(looseFn, "__proto__") as (
+			args: unknown,
+		) => Promise<unknown>;
+		const value = await protoFn({});
+
+		expect(value).toBe(5n);
+	});
+
+	it("the names the language itself reads off the client stay readable, not refused (control)", async () => {
+		const { driver } = recordingTransactionalDriver();
+		const client = createNameKeyedDb<ProtoTestDatabase>(driver, ProtoMetadata);
+
+		await expect(Promise.resolve(client)).resolves.toBe(client);
+		expect(() => String(client)).not.toThrow();
+		expect(() => JSON.stringify(client)).not.toThrow();
+	});
+});

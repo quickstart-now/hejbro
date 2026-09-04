@@ -1,0 +1,81 @@
+{
+  "version": 1,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#326",
+  "title": "Tx.execute resolves untyped DriverRow rows instead of ExecuteResult",
+  "parent": "quickstart-now/hejbro#282",
+  "status": "closed",
+  "opened": "2026-09-04",
+  "closed": "2026-08-27",
+  "decisions": [],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-08-27T00:00Z",
+      "title": "harden-query-layer group 3 \u2014 tx.execute typing, deferred coverage, derived default modes",
+      "pr": null,
+      "decisions": []
+    }
+  ],
+  "prs": [
+    {
+      "number": 340,
+      "ref": "quickstart-now/hejbro#340",
+      "title": "fix(query): typed tx.execute, deferred coverage, derived default modes",
+      "head": "f4116b851f6b0d02ff90f8d427eda96d6f28d86a",
+      "headRef": "phase10-harden-g3",
+      "base": "dev",
+      "merged": "2026-08-27T10:25:58Z",
+      "pinnedAt": "2026-08-27T00:00Z",
+      "migrated": true,
+      "refs": [
+        {
+          "path": "openspec/changes/harden-query-layer/tasks.md",
+          "blob": "5a63fbd21e86bf7b2972840b20cf33903272cdad"
+        },
+        {
+          "path": "packages/core/src/types/column-builder-factories.ts",
+          "blob": "2dc5f2af5615266b13e45bf1b44796184effca03"
+        },
+        {
+          "path": "packages/core/src/types/numeric-mode-defaults.ts",
+          "blob": "b868a31415ba8013ddbca0da63d29d7f17ad13ca"
+        },
+        {
+          "path": "packages/core/src/types/ts-type-map.ts",
+          "blob": "8e3cab5cc1140ed313dbb3bd552bd409a70cc073"
+        },
+        {
+          "path": "packages/core/test/column-builder.test.ts",
+          "blob": "f0692ea93812acedc4a145019fa45c5cc5c65285"
+        },
+        {
+          "path": "packages/query/src/db/fn.ts",
+          "blob": "29722e6136e82a41d68051d9402b914f44309b38"
+        },
+        {
+          "path": "packages/query/src/db/transaction.ts",
+          "blob": "cea0812aa88a5be9d6e7d228490a136c51195d94"
+        },
+        {
+          "path": "packages/query/test/db/context.test.ts",
+          "blob": "11e3ae1773462d1b47626c01e08e92e74631ea2c"
+        },
+        {
+          "path": "packages/query/test/db/execute-result-type.test.ts",
+          "blob": "0ef304b79f5f3070d96636e957012af12953a7ae"
+        },
+        {
+          "path": "packages/query/test/db/fn.test.ts",
+          "blob": "c58a0deb26c288d891eb27c7226684a03871e3b1"
+        },
+        {
+          "path": "packages/query/test/types/chain-types.test.ts",
+          "blob": "28640652bae573866424b5a81d87c10021b4d0be"
+        }
+      ]
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

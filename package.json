@@ -4,7 +4,7 @@
 	"scripts": {
 		"build": "turbo run build",
 		"check-types": "turbo run check-types",
-		"test": "turbo run test",
+		"test": "turbo run test && turbo run test:types",
 		"test:coverage": "turbo run test:coverage",
 		"format": "biome format --write .",
 		"check": "biome check .",
@@ -17,6 +17,8 @@
 		"check:pnpm-publish-tool": "node scripts/verify-pnpm-publish-tool.mjs",
 		"check:crap": "node scripts/crap-gate.mjs",
 		"check:tasktime": "node scripts/tasktime-badges.mjs",
+		"check:blackbox": "node .blackbox/bin/blackbox.mjs check",
+		"blackbox": "node .blackbox/bin/blackbox.mjs",
 		"regen:examples": "bash scripts/regen-examples.sh",
 		"verify:supabase-image": "bash scripts/verify-supabase-image.sh",
 		"changeset": "changeset",

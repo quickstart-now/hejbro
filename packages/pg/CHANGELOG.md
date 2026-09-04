@@ -1,5 +1,11 @@
 # @hejbro/pg
 
+## 0.2.0-pre.1
+
+### Patch Changes
+
+- @hejbro/query@0.2.0-pre.1
+
 ## 0.2.0-pre.0
 
 ### Minor Changes

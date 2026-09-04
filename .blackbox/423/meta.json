@@ -1,0 +1,193 @@
+{
+  "version": 1,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#423",
+  "title": "plpgsql bodies silently discard statement builders that were never returned",
+  "parent": "quickstart-now/hejbro#282",
+  "status": "closed",
+  "opened": "2026-09-04",
+  "closed": "2026-08-29",
+  "decisions": [
+    {
+      "id": "D1",
+      "by": "owner",
+      "at": "2026-08-29T00:00Z",
+      "title": "Owner context",
+      "raw": []
+    }
+  ],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-08-29T00:00Z",
+      "title": "add-body-statements \u2014 ctx.execute, the unused-builder guard, and returns accepting a builder (#426 #423 #433)",
+      "pr": null,
+      "decisions": []
+    }
+  ],
+  "prs": [
+    {
+      "number": 479,
+      "ref": "quickstart-now/hejbro#479",
+      "title": "feat(core): plpgsql bodies execute statements, guard unused builders",
+      "head": "b0087b58471e66a905e0fcfa465e0fd8b7be5654",
+      "headRef": "feat-plpgsql-bodies",
+      "base": "dev",
+      "merged": "2026-08-29T10:32:21Z",
+      "pinnedAt": "2026-08-29T00:00Z",
+      "migrated": true,
+      "refs": [
+        {
+          "path": ".changeset/plpgsql-execute-and-typed-returns.md",
+          "blob": "02831d3071d51b5e11fc20d696c75baf2facc1b7"
+        },
+        {
+          "path": "examples/postgres/hejbro.snapshot.json",
+          "blob": "ff5f5584902f20e4fa9140edf492b88ed3156ebb"
+        },
+        {
+          "path": "examples/postgres/migrations/0009_add_task_status_audit.sql",
+          "blob": "c993b4a5d0273d4dd1bb5b71863f4b4ac06a224c"
+        },
+        {
+          "path": "examples/postgres/src/app.schema.ts",
+          "blob": "29095d09353a06773d79a223189fa88506820d0b"
+        },
+        {
+          "path": "examples/postgres/src/steps/step-9.schema.ts",
+          "blob": "29095d09353a06773d79a223189fa88506820d0b"
+        },
+        {
+          "path": "examples/postgres/test/chain.test.ts",
+          "blob": "63b45dd195065ca0c38e9a124007ce5b303e1b98"
+        },
+        {
+          "path": "examples/postgres/test/cli.test.ts",
+          "blob": "b62520c475ab659fa3b864d4252065ba6526c7d8"
+        },
+        {
+          "path": "openspec/changes/add-body-statements/proposal.md",
+          "blob": "d0a3a06beabbc63a2c053145ddc9d71d2b70244e"
+        },
+        {
+          "path": "openspec/changes/add-body-statements/specs/function-declaration/spec.md",
+          "blob": "9b43752f064fee2591b8a2a7c0bbc23fb25770d9"
+        },
+        {
+          "path": "openspec/changes/add-body-statements/specs/plpgsql-function-bodies/spec.md",
+          "blob": "c99a3131ba0faa2cbd0e50a8626e4ba90b77e35b"
+        },
+        {
+          "path": "openspec/changes/add-body-statements/specs/typed-function-execution/spec.md",
+          "blob": "7846594ae108453e90f30e916cb7a3fee1e12405"
+        },
+        {
+          "path": "openspec/changes/add-body-statements/tasks.md",
+          "blob": "c507fd96db2427f84c96b9868932a990ddd3b311"
+        },
+        {
+          "path": "openspec/task-times.csv",
+          "blob": "40f042da0d9b22e6331ac61250315fa0114ed110"
+        },
+        {
+          "path": "packages/core/src/dsl/define-function.ts",
+          "blob": "f9d92a853e0e621d5313002ee8e2cf440179f1f1"
+        },
+        {
+          "path": "packages/core/src/dsl/define-view.ts",
+          "blob": "16f0b8fd4d8920b9d266e0298c1b51bdfa92e49e"
+        },
+        {
+          "path": "packages/core/src/plpgsql/body-ast.ts",
+          "blob": "08094a543c6e0c841c7db2da4a227c3e27d4c92e"
+        },
+        {
+          "path": "packages/core/src/plpgsql/body-context.ts",
+          "blob": "5d1a044d5bc37e6cf3219a879b2e5915aa1856a4"
+        },
+        {
+          "path": "packages/core/src/plpgsql/recording-session.ts",
+          "blob": "6a5fde34cab0b52081e4e1b0fde7936e2e799922"
+        },
+        {
+          "path": "packages/core/src/plpgsql/render-body.ts",
+          "blob": "a100aa531211c423b2799c8f860c9cd23e5fec7e"
+        },
+        {
+          "path": "packages/core/src/query/mutate.ts",
+          "blob": "9b58d4b8b2f8e7103dc05bdbd7147a46f5a59d57"
+        },
+        {
+          "path": "packages/core/src/query/select.ts",
+          "blob": "cceea1b049c222522609277b5a1b486b49762ef3"
+        },
+        {
+          "path": "packages/core/test/define-function.test.ts",
+          "blob": "1e933b1fcbbeaa8e28971801398d06841b475bf1"
+        },
+        {
+          "path": "packages/core/test/golden/cases/audit-posts/declarations.ts",
+          "blob": "de276c0fdd42afaa95acce2dbc101ee2f94d1e86"
+        },
+        {
+          "path": "packages/core/test/golden/cases/audit-posts/expected/from-empty.sql",
+          "blob": "2af5fd3533b091c6a304df036811f6c78520e203"
+        },
+        {
+          "path": "packages/core/test/golden/cases/audit-posts/expected/snapshot.json",
+          "blob": "ffc5f3f9b40bc1686aad4e05a32ea9513a518846"
+        },
+        {
+          "path": "packages/core/test/golden/cases/audit-posts/steps.ts",
+          "blob": "ab5f047852817eefe8bdaafc98354e41fed66246"
+        },
+        {
+          "path": "packages/core/test/plpgsql/body-context.test.ts",
+          "blob": "b91816ab299e7dfe6f40f8f006323a6b08d920d7"
+        },
+        {
+          "path": "packages/core/test/plpgsql/render-body.test.ts",
+          "blob": "41d31b48cf2b023b162408c67c4e1bf81551ab2d"
+        },
+        {
+          "path": "packages/core/test/plpgsql/unused-builder.test.ts",
+          "blob": "1e0d00be4c6b4d0a7d08981f050bd058a3948a9a"
+        },
+        {
+          "path": "packages/query/src/db/fn-types.ts",
+          "blob": "ed9a47beb8fa18765d09b38da66fcd543f817248"
+        },
+        {
+          "path": "packages/query/src/db/fn.ts",
+          "blob": "4b82c080561ae55d92c5bd5a0f32727e7eda59fc"
+        },
+        {
+          "path": "packages/query/test/db/fn-types.test.ts",
+          "blob": "57f99a3ffe3afa9b57dc0073a90839882a3a8f3c"
+        },
+        {
+          "path": "packages/query/test/db/fn.test.ts",
+          "blob": "3a929803e9701d7987159600dfd452ed157cb9e0"
+        },
+        {
+          "path": "README.md",
+          "blob": "8f7a5e17edfd6f62ad6db1d18375bcec663cba17"
+        },
+        {
+          "path": "skills/hejbro/references/dsl-cheatsheet.md",
+          "blob": "319ca53c8f10928b62e618400e5a7a8008ab4de2"
+        },
+        {
+          "path": "skills/hejbro/references/function-builder-pitfalls.md",
+          "blob": "ee4e917c81fba66f8df97a24fb6649f03c79a61a"
+        },
+        {
+          "path": "skills/hejbro/SKILL.md",
+          "blob": "e54f8b376888967b9f2e1ec866a31158cac607c1"
+        }
+      ]
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

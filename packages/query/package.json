@@ -1,6 +1,6 @@
 {
 	"name": "@hejbro/query",
-	"version": "0.2.0-pre.0",
+	"version": "0.2.0-pre.1",
 	"description": "Typed query layer for hejbro: pure statement compiler on the schema DSL, driver contract, RLS execution context.",
 	"license": "Apache-2.0",
 	"type": "module",

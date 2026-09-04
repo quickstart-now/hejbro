@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#377",
+  "title": "snapshot format stability policy for 1.0",
+  "parent": "quickstart-now/hejbro#282",
+  "status": "closed",
+  "opened": "2026-09-04",
+  "closed": "2026-08-28",
+  "decisions": [
+    {
+      "id": "D1",
+      "by": "owner",
+      "at": "2026-08-28T00:00Z",
+      "title": "s (English rewrites)",
+      "raw": []
+    }
+  ],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-08-28T00:00Z",
+      "title": "fix-format-policy \u2014 the stability commitment, correctly framed (#377)",
+      "pr": null,
+      "decisions": []
+    }
+  ],
+  "prs": [
+    {
+      "number": 383,
+      "ref": "quickstart-now/hejbro#383",
+      "title": "docs(specs): snapshot format stability policy (d101)",
+      "head": "969eaa3fa731db649b504d829384fe4cbefb461e",
+      "headRef": "fix-format-policy",
+      "base": "dev",
+      "merged": "2026-08-28T02:43:04Z",
+      "pinnedAt": "2026-08-28T00:00Z",
+      "migrated": true,
+      "refs": [
+        {
+          "path": "docs/specs/2026-08-19-hejbro-design.md",
+          "blob": "3a78c11927e0d0bee4cb1cb2126e3ac4711aeb57"
+        },
+        {
+          "path": "docs/guide/getting-started.md",
+          "blob": "3096bbbfa9eb737eaf588ac622d73e6f745b3ed8"
+        }
+      ]
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

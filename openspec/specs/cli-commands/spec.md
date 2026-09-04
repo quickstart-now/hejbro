@@ -241,10 +241,14 @@ without reconstructing the surrounding statement.
   inferred
 
 ### Requirement: An expression is compared through the server's own rendering
-Where `check` compares an expression — a check constraint, an index
-predicate, a generated column — it SHALL obtain the rendering of **both**
+Where `check` compares an expression through the server's rendering — a
+check constraint's expression — it SHALL obtain the rendering of **both**
 the declared expression and the database's own expression from **one
-statement**, and compare those.
+statement**, and compare those. An index's predicate and a generated
+column's expression are not compared this way: an index is compared by
+its existence and a generated column by its default text, so neither
+reaches this requirement's comparison, and extending it to them is a
+separate change.
 
 One statement, not two sent to one connection: a driver is free to pool
 connections, so two statements can land on two sessions whose
@@ -256,10 +260,10 @@ within the no-capability rule: pinning a connection any other way means a
 transaction.
 
 Comparing hejbro's rendered text against the catalog's text directly is
-not permitted. Postgres rewrites an expression when it stores it, so the
-two texts differ for expressions that agree: measured against
-`examples/postgres`, 8 of 8 check constraints differed textually while
-being identical in meaning.
+not permitted where a rendering can be obtained. Postgres rewrites an
+expression when it stores it, so the two texts differ for expressions
+that agree: measured against `examples/postgres`, 8 of 8 check
+constraints differed textually while being identical in meaning.
 
 This comparison is syntactic equality of the server's own rendering. It
 is not a proof of semantic equivalence, and reordered operands are
@@ -272,6 +276,26 @@ suppress. An expression compared as a query *predicate* fails both:
 the planner may place it differently depending on the indexes and
 statistics that happen to exist, and row-security rewriting can remove it
 entirely, which makes two genuinely different expressions compare equal.
+
+On a platform whose registered preset declares that the server cannot
+plan a statement, no rendering can be obtained. There, and only there,
+`check` SHALL compare the declared check constraint's text with the
+catalog's own text after a fixed normalization — whitespace outside
+string literals, one parenthesis pair enclosing the whole text, the
+enclosing table's qualifier on a column reference, identifier quoting
+where the identifier would render unquoted anyway, a type cast the
+server appended to a string literal, and letter case outside quoted
+identifiers and string literals — and nothing else. Texts equal after
+that normalization SHALL count as agreeing. Texts that still differ SHALL
+be reported as **not compared**, carrying both texts and a `Next:` that
+names restating the declaration in the catalog's own spelling; they SHALL
+NOT be reported as differing, because a textual difference is not
+evidence of a different meaning. The `Next:` line SHALL NOT ask the user
+to run or be granted `EXPLAIN` on such a platform. The report's coverage
+boundary SHALL state that the run compared check-constraint expressions
+by normalized text. On a platform whose presets make no such
+declaration, a failure to obtain the rendering remains reported exactly
+as before.
 
 Whether the database **enforces** a check constraint is compared
 separately from its expression. A constraint the database is not
@@ -298,6 +322,48 @@ claims, and its expression matches all the same.
 - **WHEN** the database holds a declared check constraint as `NOT VALID`
 - **THEN** `check` reports it, stating that existing rows are not
   enforced, even though its expression matches the declaration
+
+#### Scenario: Under a preset that declares no planning, equal normalized texts agree
+- **WHEN** a registered preset declares the platform cannot plan a
+  statement, the declaration renders
+  `length(btrim("projects"."name")) > 0`, and the catalog holds
+  `(length(btrim(name)) > 0)`
+- **THEN** `check` reports no difference for that constraint, and its
+  coverage boundary states that check-constraint expressions were
+  compared by normalized text on this run
+
+#### Scenario: Under a preset that declares no planning, a rewritten expression is not compared
+- **WHEN** a registered preset declares the platform cannot plan a
+  statement, the declaration renders `"role" in ('owner', 'admin')`, and
+  the catalog holds `(role = ANY (ARRAY['owner'::text, 'admin'::text]))`
+- **THEN** `check` reports that constraint as not compared, carrying
+  both texts, with a `Next:` that names restating the declaration in the
+  catalog's spelling and never mentions `EXPLAIN`, and the run does not
+  exit zero
+
+#### Scenario: Under a preset that declares no planning, a string literal's content is never normalized
+- **WHEN** a registered preset declares the platform cannot plan a
+  statement, the declaration renders `"projects"."format" <> '"json"'`,
+  and the catalog holds `(format <> 'json'::text)`
+- **THEN** `check` reports that constraint as not compared: no
+  normalization step rewrites the inside of a string literal, so the
+  quoted word in the literal and the qualifier-like text a literal may
+  carry stay exactly as written on both sides
+
+#### Scenario: Under a preset that declares no planning, a failed catalog read is not compared without asking for EXPLAIN
+- **WHEN** a registered preset declares the platform cannot plan a
+  statement, and reading the constraint's own expression from
+  `pg_constraint` fails
+- **THEN** `check` reports the constraint as not compared with the
+  server's own reason, and its `Next:` names the catalog read to confirm
+  and never asks the user to run or be granted `EXPLAIN`
+
+#### Scenario: Without such a declaration, a failed rendering is reported as before
+- **WHEN** no registered preset declares the platform cannot plan a
+  statement, and the rendering statement fails
+- **THEN** `check` reports the constraint as not compared with the
+  server's own reason, exactly as it does today, and never compares by
+  text
 
 ### Requirement: The check states the boundary of its own coverage
 `check` SHALL state, in its own report, what it did not compare. A
@@ -411,6 +477,19 @@ the same declarations against the same snapshot SHALL produce
 byte-identical migration SQL, byte-identical snapshot bytes, and the same
 number of migration files, run anywhere, with no database connection.
 
+Within a kind, the statements a run emits SHALL follow the declarations'
+own dependency order: a declared object is created — or altered — after
+the declared objects it references, so a table carrying a foreign key to
+another declared table comes after that table, whichever order their
+identities sort in, and a mutually referencing pair — which no order
+satisfies — keeps its existing identity order. A reset's drops run in
+reverse *dependency* order — a dependent before what it depends on,
+computed from the same references (migration-apply) — never the literal
+reverse of the statement sequence this run emits. The migration's own name SHALL
+NOT follow it: the name is derived from the change list as it stands
+before this dependency refinement — kind order, then identity — so that
+refining the order a run emits never renames the file a run writes.
+
 A run whose declarations produce a snapshot identical to the previous
 one SHALL write neither a migration nor a snapshot, report "no changes
 — snapshot already matches your declarations", and exit zero. A run
@@ -515,6 +594,13 @@ line SHALL NOT collapse them into one file.
 - **THEN** both runs produce byte-identical migration SQL and
   byte-identical snapshot bytes
 
+#### Scenario: A referencing table is created after the table it references
+- **WHEN** two declared tables in one schema are generated from an empty
+  snapshot, one carrying a foreign key to the other, and the referencing
+  table's identity sorts first
+- **THEN** the migration creates the referenced table before the
+  referencing one
+
 #### Scenario: No difference writes nothing
 - **WHEN** `hejbro generate` runs and the snapshot already matches the
   declarations
@@ -602,6 +688,16 @@ one body edit hejbro does catch — a transaction-control statement — is
 refused at apply time (migration-apply); detecting other body edits
 needs a record of what was applied, which is a separate capability.
 
+`verify` SHALL also run every validator a registered preset provides —
+the same check `generate` runs before writing anything — over the
+declarations against the snapshot its own snapshot-parity check already
+builds, and SHALL refuse with the identical coded error `generate` would
+raise for the same declaration, so a declaration `generate` refuses
+never passes `verify` silently. Where the active configuration registers
+no preset validator — including a configuration with no preset at all —
+this check does not run at all, and `verify`'s report is unaffected by
+its existence.
+
 #### Scenario: An untouched chain passes
 - **WHEN** `hejbro verify` runs over migrations and a snapshot that
   hejbro wrote and nothing edited
@@ -640,6 +736,20 @@ needs a record of what was applied, which is a separate capability.
   snapshot's own hash differ
 - **THEN** the report names that migration file and the snapshot path,
   and states the observation only — never a cause
+
+#### Scenario: A preset-refused declaration is refused by verify too
+- **WHEN** a registered preset's validator would refuse a declaration at
+  `hejbro generate` time, and `hejbro verify` runs against the same
+  declarations and its checked-in snapshot
+- **THEN** `verify` fails with the identical coded error `generate`
+  would raise for that declaration
+
+#### Scenario: A configuration with no preset runs unaffected
+- **WHEN** the active configuration registers no preset validator — no
+  preset at all, or a preset that provides kinds but no validator — and
+  `hejbro verify` runs on declarations that pass every other check
+- **THEN** it passes exactly as it would without this capability
+  existing, and its report never mentions a preset-validator check
 
 ### Requirement: An external tool is an optional dependency
 The vendoring commands and `check` reach outside the process — `git`
@@ -940,3 +1050,132 @@ command line at all: the contract goes where `vendor` puts it.
 - **THEN** a contract is written whose header says it was inferred from
   a database, whose `Tables` are the inferred tables with guessed keys,
   and the loss report is printed
+
+### Requirement: init scaffolds what is missing, where the configuration says
+`hejbro init` SHALL create the three artifacts a migration-authoring
+repository starts from — `hejbro.config.ts`, the migrations directory,
+and an empty snapshot file — creating only the ones that are absent. An
+artifact already on disk SHALL be left byte-untouched and reported as
+skipped, so the command doubles as a repair of a partially present
+project whose configuration it can read.
+
+An artifact is present only when what sits at its path is the kind of
+thing it names: a directory for the migrations directory, a file for the
+snapshot and the configuration. A path holding the other kind SHALL stop
+the run with a coded failure naming that path and the kind expected
+there, creating nothing — reporting it as present would tell a repair
+run that a broken project is whole, and replacing it would be the
+overwrite this command never does. The same refusal SHALL cover a path
+an artifact would have to be created inside, and a configuration that
+names one path for two artifacts: neither can be satisfied, and one of
+them would otherwise be reported as already present. Every one of these
+checks SHALL be made before anything is created, so a refused run leaves
+the project as it found it. A path a configuration spells as a
+directory SHALL be refused the same way when the artifact is a file:
+the commands that read that file resolve the same spelling and look
+inside a directory that cannot hold it, so creating anything for such a
+value would produce a file none of them reads.
+
+Where the last two go SHALL come from the repository's own
+configuration when it has one: `init` SHALL read `hejbro.config.ts` and
+place the migrations directory and the snapshot file at its
+`migrationsDir` and `snapshotPath`, resolved exactly as the commands
+that consume those fields resolve them, so `init` cannot create a
+directory `generate` will not read. A configuration that omits one of
+those fields SHALL get no artifact for it, reported as not configured:
+the commands that write migrations refuse without that field, so a
+directory created for it would be one nothing reads, and a repository
+that vendors a schema rather than authoring one SHALL NOT acquire
+migration artifacts by running `init`. Only a project with no
+configuration file at all falls back to defaults — there `init` writes
+the configuration itself, and that file names both fields. Every report
+line SHALL name the path acted on, never the default the command would
+otherwise have used.
+
+A configuration file that exists but cannot be read — an import that
+does not resolve, a shape that does not validate — SHALL stop the run
+before any artifact is created, failing with the same coded diagnostic
+any other command raises for that file. `init` SHALL NOT fall back to
+the default locations for a repository whose configuration it could not
+read: that would scaffold a second project beside the real one. This is
+the same refusal every other command makes for that file — scaffolding a
+configuration does not install the toolchain it imports, so a project
+that cannot resolve its own imports gets the same answer from `init` as
+from `generate`.
+
+#### Scenario: An empty project is scaffolded
+- **WHEN** `hejbro init` runs in a directory with no `hejbro.config.ts`
+- **THEN** it writes the configuration, the default migrations directory
+  and an empty snapshot file, reports each as created, and exits 0
+
+#### Scenario: A configured location is honoured
+- **WHEN** `hejbro init` runs in a repository whose configuration names
+  a migrations directory and a snapshot file under a nested directory,
+  neither of which exists
+- **THEN** both are created at those configured paths, nothing is
+  created at the default paths, and each report line names the
+  configured path
+
+#### Scenario: A configuration that names neither field gets neither artifact
+- **WHEN** `hejbro init` runs with a configuration that sets neither the
+  migrations directory nor the snapshot path
+- **THEN** neither is created, each is reported as not configured, the
+  configuration file itself is reported as skipped, and the run exits 0
+
+#### Scenario: Only the absent piece is created
+- **WHEN** `hejbro init` runs in a repository whose configured
+  migrations directory already exists and whose configured snapshot file
+  does not
+- **THEN** only the snapshot file is created, the directory is reported
+  as skipped by its configured path and left untouched, and the run
+  exits 0
+
+#### Scenario: A path holding the wrong kind of node stops the run
+- **WHEN** `hejbro init` runs where the configured snapshot path holds a
+  directory, or the configured migrations directory holds a file
+- **THEN** the run fails naming that path and the kind expected there,
+  nothing is created, and the run does not report the artifact as
+  already present
+
+#### Scenario: A path that cannot hold the artifact stops the run before anything is created
+- **WHEN** `hejbro init` runs where a regular file sits where a
+  directory holding a configured artifact would have to be, or where
+  the configuration names one path for both the migrations directory
+  and the snapshot
+- **THEN** the run fails naming the path it cannot use, and nothing is
+  created — including the artifacts whose own paths were usable
+
+#### Scenario: A configuration that cannot be read stops the run
+- **WHEN** `hejbro init` runs beside a `hejbro.config.ts` whose import
+  does not resolve, or whose exported value does not match the
+  configuration shape
+- **THEN** the run fails with that file's own coded diagnostic and
+  neither the migrations directory nor the snapshot file is created
+
+### Requirement: A preset declares whether its platform can plan a statement
+A provider preset SHALL be able to declare that its platform cannot plan
+a statement — that `EXPLAIN` is not available — as data on the preset
+value (`explainUnavailable: true`), fixed before any connection exists
+and never discovered by probing the server. Its absence SHALL mean the
+platform can plan, so no existing preset changes meaning by staying
+silent. `check` SHALL read the declaration from the presets the
+configuration registers, and from nowhere else: the connection `check`
+opens is the vanilla driver's, so a declaration on a preset's driver
+would never reach it.
+
+The Nile preset SHALL carry the declaration.
+
+#### Scenario: The declaration is readable as data
+- **WHEN** a preset value declaring `explainUnavailable` is examined
+  before any connection is made
+- **THEN** the declaration is present as data, and nothing was sent to a
+  server to establish it
+
+#### Scenario: Silence means the platform can plan
+- **WHEN** `check` runs with presets that make no such declaration
+- **THEN** it compares expressions through the server's own rendering,
+  exactly as before
+
+#### Scenario: The Nile preset declares it
+- **WHEN** the Nile preset value is examined
+- **THEN** it declares `explainUnavailable`

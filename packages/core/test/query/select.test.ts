@@ -1,5 +1,10 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
-import type { ColumnBuilder, ColumnRef, SetOpNode } from "../../src/index";
+import type {
+	ColumnBuilder,
+	ColumnRef,
+	SelectNode,
+	SetOpNode,
+} from "../../src/index";
 import {
 	and,
 	asc,
@@ -100,7 +105,7 @@ describe("select builder", () => {
 			sql`${comments.postId} = ${posts.id}`,
 		);
 		expect(renderSelect(query.selectQuery)).toBe(
-			'select "id", "status", "published_at" from "app"."posts" inner join "app"."comments" on "app"."comments"."post_id" = "app"."posts"."id"',
+			'select "app"."posts"."id", "app"."posts"."status", "app"."posts"."published_at" from "app"."posts" inner join "app"."comments" on "app"."comments"."post_id" = "app"."posts"."id"',
 		);
 	});
 	it("composes a sql fragment with an operator-built condition", () => {
@@ -142,7 +147,7 @@ describe("select builder", () => {
 			expect.objectContaining({ joinKind: "left" }),
 		]);
 		expect(renderSelect(query.selectQuery)).toBe(
-			'select "id", "status", "published_at" from "app"."posts" left join "app"."comments" on "app"."comments"."post_id" = "app"."posts"."id"',
+			'select "app"."posts"."id", "app"."posts"."status", "app"."posts"."published_at" from "app"."posts" left join "app"."comments" on "app"."comments"."post_id" = "app"."posts"."id"',
 		);
 	});
 	it("renders a correlated subquery referencing the outer table", () => {
@@ -169,6 +174,95 @@ describe("select builder", () => {
 		const query = select(posts).where(isNotNull(comments.postId));
 		expect(() => renderSelect(query.selectQuery)).toThrowError(
 			/foreign-column-ref|join that table/,
+		);
+	});
+});
+
+describe("a whole-table projection is qualified once a join is in scope (#552)", () => {
+	it("no join -- bytes unchanged, the pin", () => {
+		expect(renderSelect(select(posts).selectQuery)).toBe(
+			'select "id", "status", "published_at" from "app"."posts"',
+		);
+	});
+
+	it('one inner join qualifies every projected column, the same form an object projection\'s own column reference already renders -- posts and comments both declare "id", the exact shape #552 was filed over: unqualified, this is SQL a server refuses as ambiguous (42702)', () => {
+		const query = select(posts).innerJoin(
+			comments,
+			eq(comments.postId, posts.id),
+		);
+		expect(renderSelect(query.selectQuery)).toBe(
+			'select "app"."posts"."id", "app"."posts"."status", "app"."posts"."published_at" from "app"."posts" inner join "app"."comments" on "app"."comments"."post_id" = "app"."posts"."id"',
+		);
+	});
+
+	it("one left join qualifies the same way", () => {
+		const query = select(posts).leftJoin(
+			comments,
+			eq(comments.postId, posts.id),
+		);
+		expect(renderSelect(query.selectQuery)).toBe(
+			'select "app"."posts"."id", "app"."posts"."status", "app"."posts"."published_at" from "app"."posts" left join "app"."comments" on "app"."comments"."post_id" = "app"."posts"."id"',
+		);
+	});
+
+	it("two joins still qualify against the select's own from-source, not either joined table", () => {
+		const authors = table(app, "authors", { id: uuid().primaryKey() });
+		const query = select(posts)
+			.innerJoin(comments, eq(comments.postId, posts.id))
+			.innerJoin(authors, sql`true`);
+		expect(renderSelect(query.selectQuery)).toBe(
+			'select "app"."posts"."id", "app"."posts"."status", "app"."posts"."published_at" from "app"."posts" inner join "app"."comments" on "app"."comments"."post_id" = "app"."posts"."id" inner join "app"."authors" on true',
+		);
+	});
+
+	it("a CTE from-source qualifies bare, the same way the from clause itself renders a CTE reference", () => {
+		// Hand-built at the AST level, mirroring this file's own SetOpNode
+		// literal below (the "rejects a non-projected column" test) --
+		// select() only accepts an allColumns projection straight off a
+		// declared Table (resolveProjection's own isTable() check), never
+		// off a CTE reference, so a whole-table projection from a CTE has
+		// no builder path and is constructed directly to exercise the
+		// renderer's own behavior against driver-contract's promise that a
+		// CTE qualifier renders bare.
+		const query: SelectNode = {
+			queryKind: "select",
+			projection: {
+				projectionKind: "allColumns",
+				columnNames: ["id", "status", "published_at"],
+			},
+			from: { cteName: "ranked" },
+			joins: [
+				{
+					joinKind: "inner",
+					table: { schemaName: "app", tableName: "comments" },
+					on: {
+						nodeKind: "comparison",
+						operator: "=",
+						left: {
+							nodeKind: "columnRef",
+							schemaName: null,
+							tableName: "ranked",
+							columnName: "id",
+						},
+						right: {
+							nodeKind: "columnRef",
+							schemaName: "app",
+							tableName: "comments",
+							columnName: "post_id",
+						},
+					},
+				},
+			],
+			where: null,
+			groupBy: [],
+			having: null,
+			orderBy: [],
+			limit: null,
+			offset: null,
+			distinct: null,
+		};
+		expect(renderSelect(query, [{ declaredCte: "ranked" }])).toBe(
+			'select "ranked"."id", "ranked"."status", "ranked"."published_at" from "ranked" inner join "app"."comments" on "ranked"."id" = "app"."comments"."post_id"',
 		);
 	});
 });

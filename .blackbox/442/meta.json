@@ -1,0 +1,117 @@
+{
+  "version": 1,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#442",
+  "title": "introspection-assisted adoption: seed or verify declarations from a live schema",
+  "parent": "quickstart-now/hejbro#282",
+  "status": "closed",
+  "opened": "2026-09-04",
+  "closed": "2026-08-29",
+  "decisions": [
+    {
+      "id": "D1",
+      "by": "owner",
+      "at": "2026-08-29T00:00Z",
+      "title": "Owner input",
+      "raw": []
+    }
+  ],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-08-29T00:00Z",
+      "title": "add-check-schema \u2014 `hejbro check` (#442)",
+      "pr": null,
+      "decisions": []
+    }
+  ],
+  "prs": [
+    {
+      "number": 466,
+      "ref": "quickstart-now/hejbro#466",
+      "title": "feat(cli): hejbro check verifies declarations against a live database",
+      "head": "8ce9ea0fdf2925041e641b7d679357e2d837328b",
+      "headRef": "feat-check-schema",
+      "base": "dev",
+      "merged": "2026-08-29T08:05:59Z",
+      "pinnedAt": "2026-08-29T00:00Z",
+      "migrated": true,
+      "refs": [
+        {
+          "path": "openspec/changes/add-check-schema/proposal.md",
+          "blob": "d7a171b454881017c7f34ec45d0ca90278b51262"
+        },
+        {
+          "path": "openspec/changes/add-check-schema/tasks.md",
+          "blob": "237fc97ab625419f6594a498f214fefb3c78f16f"
+        },
+        {
+          "path": "openspec/changes/add-check-schema/specs/cli-commands/spec.md",
+          "blob": "976e93fd78ec464586feff2088525b593a0eaf4a"
+        },
+        {
+          "path": "packages/cli/src/check/driver.ts",
+          "blob": "b27320fe02dd4a47ca12a6448d8da6a95f229b34"
+        },
+        {
+          "path": "packages/cli/src/check/catalog.ts",
+          "blob": "1460fdf19ef8e00c07bd6df4ba11f096094bc422"
+        },
+        {
+          "path": "packages/cli/src/check/compare.ts",
+          "blob": "9ce57a50ea69f6cd71c049a7a0d62f6709eb0928"
+        },
+        {
+          "path": "packages/cli/src/check/expression.ts",
+          "blob": "c50b179524ff2cc736b00810cc6488563f7489a1"
+        },
+        {
+          "path": "packages/cli/src/check/error-message.ts",
+          "blob": "ef81feda8b6f0d7503427f0dc1ce00833fed838a"
+        },
+        {
+          "path": "packages/cli/src/check/inventory.ts",
+          "blob": "9d734afad1487f302c48c9e35a9f343abb62a047"
+        },
+        {
+          "path": "packages/cli/src/commands/check.ts",
+          "blob": "2ee4c0efb20104c72935460a0c6fe3448a4d8c14"
+        },
+        {
+          "path": "packages/cli/src/flags.ts",
+          "blob": "44f6f48fafb03c48f8623573af5c4e42e643d683"
+        },
+        {
+          "path": "packages/cli/test/check-command.test.ts",
+          "blob": "c8142a2ae88d53b01508ebc401a53f7e262a5ea0"
+        },
+        {
+          "path": "packages/cli/test/check-live.integration.test.ts",
+          "blob": "7407a342d4e15e119ddd8f1aa4ad7c8e387969fa"
+        },
+        {
+          "path": "skills/hejbro/references/brownfield-adoption.md",
+          "blob": "d450f59e637b51dd7e64d1efb698b8e232847b57"
+        },
+        {
+          "path": "skills/hejbro/SKILL.md",
+          "blob": "f0360abf42aba67548c03ab3148642fcd8a4f498"
+        },
+        {
+          "path": ".changeset/add-check-schema.md",
+          "blob": "712d49d19cee9f502924292f1534691a47c9a375"
+        },
+        {
+          "path": "openspec/task-times.csv",
+          "blob": "ddc19d75fa9a4a2f3c5f02140c1de71f302b6287"
+        },
+        {
+          "path": "README.md",
+          "blob": "0d5835211c6a7e42c13151bcab22cd3244c9e210"
+        }
+      ]
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

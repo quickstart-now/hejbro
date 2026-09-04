@@ -6,9 +6,11 @@ apply tool (e.g. `supabase db push`) failed partway through a migration.
 
 ## The loop
 
-`hejbro init` (once, scaffolds config + empty snapshot) → declare or edit
-schema files → `hejbro generate` → read the banner → commit the migration
-file and the updated snapshot → `hejbro verify` (locally or in CI).
+`hejbro init` (once, scaffolds config + empty snapshot, honouring an
+existing `hejbro.config.ts`'s `migrationsDir`/`snapshotPath` and creating
+only what's missing) → declare or edit schema files → `hejbro generate` →
+read the banner → commit the migration file and the updated snapshot →
+`hejbro verify` (locally or in CI).
 
 ## Reading the banner
 
@@ -126,17 +128,53 @@ it `not null` in a later migration.
 
 ## `hejbro verify`
 
-Five checks, entirely from checked-out files — no live database
-connection: snapshot parses, no two migration files share a version,
-declarations match the snapshot, the migration chain is linear (no
-diverged/broken parent links), and the chain's tip hash matches the
-snapshot. Run it in CI. See
+Five checks always run, entirely from checked-out files — no live
+database connection: snapshot parses, no two migration files share a
+version, declarations match the snapshot, the migration chain is linear
+(no diverged/broken parent links), and the chain's tip hash matches the
+snapshot. Two more can apply on top, independently, each still file/
+declaration-based rather than a database connection: the export-
+freshness check (only when `generate --export` is in use) and every
+registered preset's own validators (only when the active config
+registers at least one preset validator) — up to seven checks in one
+run, whichever apply; a config with neither never mentions either and
+reports the same five it always has. Run it in CI. See
 `packages/cli/src/commands/verify.ts` (guide page lands in #109).
 
 The **local Docker round-trip** (`pnpm roundtrip` in an example package)
 goes further: it applies the full committed migration chain to one
 database and a single fresh migration to another, then diffs the schema
 dumps — the deeper, pre-merge check `verify` can't do without a database.
+
+## `hejbro reset`
+
+`hejbro reset --confirm-drop <database>:<count>` drops every object your
+declarations manage and clears the ledger for what it dropped — refusing
+first without the exact confirmation it names, bound to the connected
+database's own name (queried live) so a confirmation learned against one
+database can't silently pass, unchanged, against another. Drops run in
+reverse *dependency* order: a table that references another declared
+table drops before the table it references, so nothing this run also
+drops still stands as a dependency when its own turn comes — the same
+graph `generate` computes (above), read in the opposite direction, never
+the literal reverse of one specific run's own emitted statement sequence.
+Two declared tables that reference each other can't both drop first;
+`reset` leaves that pair in its existing identity order and lets the
+database itself refuse the one drop that order can't satisfy.
+
+A drop the database refuses — most commonly an object outside your
+declarations still depending on one being dropped, or the mutual-reference
+case above — surfaces as the coded `reset-drop-failed` error carrying the
+database's own reason. The whole transaction (every drop, and the ledger
+clear) rolls back: the database and the ledger are exactly as they were,
+`hejbro status` run afterward still reports every previously-applied
+migration as applied, and nothing is left half-dropped.
+
+A database whose declared objects were applied outside hejbro (`psql -f`,
+an external pipeline) has no ledger table at all — `reset` still drops
+every object the declarations manage, but its report says so: "There was
+no hejbro ledger to clear" rather than claiming a clear that never
+happened.
 
 ## When an apply step fails partway through
 
@@ -165,14 +203,16 @@ guarantee.
 
 ### What `verify` tells you here, and what it doesn't
 
-`hejbro verify`'s five checks are entirely file-based (see above) — a
-green `verify` after a failed apply confirms your migration *history* is
+`hejbro verify`'s checks are entirely file/declaration-based (see
+above, including the export and preset-validator checks) — a green
+`verify` after a failed apply confirms your migration *history* is
 internally consistent (unique versions, a parseable snapshot, a linear
-hash chain, a matching tip hash). It says nothing about the live
-database: the same five checks pass identically whether the last
-migration was fully applied, half applied, or never run at all. There is
-no sixth check and no database-inspecting option — `verify` cannot see a
-database, by design.
+hash chain, a matching tip hash) and, where they apply, that the export
+and every registered preset's validators still agree with your
+declarations. It says nothing about the live database: the same checks
+pass identically whether the last migration was fully applied, half
+applied, or never run at all. There is no database-inspecting check or
+option — `verify` cannot see a database, by design.
 
 ### A straight retry is not automatically safe
 

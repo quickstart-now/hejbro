@@ -22,7 +22,7 @@ describe("compile: joins", () => {
 		const result = compile(statement);
 
 		expect(result.sql).toBe(
-			'select "id", "status" from "app"."posts" left join "app"."comments" on "app"."comments"."post_id" = "app"."posts"."id"',
+			'select "app"."posts"."id", "app"."posts"."status" from "app"."posts" left join "app"."comments" on "app"."comments"."post_id" = "app"."posts"."id"',
 		);
 		expect(result.sql).not.toContain("*");
 	});
@@ -35,7 +35,7 @@ describe("compile: joins", () => {
 		const result = compile(statement);
 
 		expect(result.sql).toBe(
-			'select "id", "status" from "app"."posts" inner join "app"."comments" on "app"."comments"."post_id" = "app"."posts"."id"',
+			'select "app"."posts"."id", "app"."posts"."status" from "app"."posts" inner join "app"."comments" on "app"."comments"."post_id" = "app"."posts"."id"',
 		);
 		expect(result.sql).not.toContain("*");
 	});

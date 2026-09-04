@@ -1,0 +1,217 @@
+{
+  "version": 1,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#416",
+  "title": "add-window-and-aggregates: over(), aggregate functions, group by",
+  "parent": "quickstart-now/hejbro#299",
+  "status": "closed",
+  "opened": "2026-09-04",
+  "closed": "2026-08-29",
+  "decisions": [
+    {
+      "id": "D1",
+      "by": "owner",
+      "at": "2026-08-29T00:00Z",
+      "title": "Owner context",
+      "raw": []
+    }
+  ],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-08-29T00:00Z",
+      "title": "add-window-functions \u2014 WindowNode, over(), and the D4 fork settled as D104 (#416)",
+      "pr": null,
+      "decisions": []
+    }
+  ],
+  "prs": [
+    {
+      "number": 462,
+      "ref": "quickstart-now/hejbro#462",
+      "title": "feat(core): window functions with over(), build-time placement rejection",
+      "head": "c6ff15176581d63dd59cac9c9d23a626655a6e32",
+      "headRef": "feat-window-functions",
+      "base": "dev",
+      "merged": "2026-08-29T05:48:10Z",
+      "pinnedAt": "2026-08-29T00:00Z",
+      "migrated": true,
+      "refs": [
+        {
+          "path": ".changeset/add-window-functions.md",
+          "blob": "9b7a5f240bfbe7b650bd52f7fdca768c7e19b4df"
+        },
+        {
+          "path": "docs/specs/2026-08-19-hejbro-design.md",
+          "blob": "de65640e1d4219c1b952ee06bbbaeaed6710c25a"
+        },
+        {
+          "path": "openspec/changes/add-window-functions/design.md",
+          "blob": "381fcc6561b9e47645270eca2862352115c4fd1d"
+        },
+        {
+          "path": "openspec/changes/add-window-functions/proposal.md",
+          "blob": "7564a65f6d597ff009d0fc014f853dcf938af196"
+        },
+        {
+          "path": "openspec/changes/add-window-functions/specs/query-builder/spec.md",
+          "blob": "84de6f68b22c9a88e2d2cb5282e99bce69a34a15"
+        },
+        {
+          "path": "openspec/changes/add-window-functions/specs/query-type-inference/spec.md",
+          "blob": "9a8e4295c2ec8363e0dc7f3b51cc47202de8bf81"
+        },
+        {
+          "path": "openspec/changes/add-window-functions/specs/table-declaration/spec.md",
+          "blob": "f0747ad4e72519fef070124f3c203c2ce31262cc"
+        },
+        {
+          "path": "openspec/changes/add-window-functions/tasks.md",
+          "blob": "a2b25354fe8c9292151e331d4082661d00850ae3"
+        },
+        {
+          "path": "openspec/task-times.csv",
+          "blob": "ded105d6c76c2e4d3730cb4c424ac416c3c2c12c"
+        },
+        {
+          "path": "packages/cli/test/exports.test.ts",
+          "blob": "b881476c9b53ac54ce48bf7004dcbafda00044e5"
+        },
+        {
+          "path": "packages/core/src/dsl/rls.ts",
+          "blob": "9f9dd5902b53209f32c121b8395519394bc242f1"
+        },
+        {
+          "path": "packages/core/src/dsl/table.ts",
+          "blob": "a5209625c17e984cbccfd696d7d4a34453249e06"
+        },
+        {
+          "path": "packages/core/src/expr/aggregate.ts",
+          "blob": "8f36cd62a97d9308430a3f04358cafeb194fc38c"
+        },
+        {
+          "path": "packages/core/src/expr/ast.ts",
+          "blob": "26007f38a0acb2826e957cf6049e72e4820e4fa1"
+        },
+        {
+          "path": "packages/core/src/expr/codec.ts",
+          "blob": "25df12d986b89535b490101ba87eab6ffe5783b2"
+        },
+        {
+          "path": "packages/core/src/expr/render-sql.ts",
+          "blob": "79c99b9d33bde8d93df680734e86dc5d0610b9ca"
+        },
+        {
+          "path": "packages/core/src/expr/retarget.ts",
+          "blob": "c49767f9eb64648421a6a9ea0d14611d097a807e"
+        },
+        {
+          "path": "packages/core/src/expr/walk.ts",
+          "blob": "fe2e062d5e9608f450a22a576f3ffc402fa2a24d"
+        },
+        {
+          "path": "packages/core/src/expr/window.ts",
+          "blob": "0ffda71c70ac3dc4fe7d183e537e9b7a65de65dc"
+        },
+        {
+          "path": "packages/core/src/index.ts",
+          "blob": "7fe6ddbab994d77e0f54275464efc57dd53ceb26"
+        },
+        {
+          "path": "packages/core/src/query/select.ts",
+          "blob": "1f9440696fa97499229c5d1740c01e568a1dbb77"
+        },
+        {
+          "path": "packages/core/test/dsl/check.test.ts",
+          "blob": "ebcfb0443440ee392d1f421281e8e2f24c5ec601"
+        },
+        {
+          "path": "packages/core/test/dsl/window-declaration.test.ts",
+          "blob": "fea77ad1eedaf22340ba69faf98194042449b2d2"
+        },
+        {
+          "path": "packages/core/test/expr/codec.test.ts",
+          "blob": "2b569c209d830cb768d165120ca63c4c595c7864"
+        },
+        {
+          "path": "packages/core/test/expr/reachable-kinds.ts",
+          "blob": "9429cfcb0083e4e75fe863b7f4e7fc703b3d07a6"
+        },
+        {
+          "path": "packages/core/test/expr/retarget.test.ts",
+          "blob": "3e7292b5bf7127dddbd0900eb08813acf459f9ab"
+        },
+        {
+          "path": "packages/core/test/expr/walk.test.ts",
+          "blob": "674be89969421d78f049993f84e01c3b77916d72"
+        },
+        {
+          "path": "packages/core/test/expr/window-node.test.ts",
+          "blob": "4f6e583c9e3cffa01dd987c74a1668abd3c55429"
+        },
+        {
+          "path": "packages/core/test/naming-conventions.test.ts",
+          "blob": "c852b841b7393e1797efd3e7913395abd1c343f1"
+        },
+        {
+          "path": "packages/core/test/query/window-placement.test.ts",
+          "blob": "5058008881382d2d02fb05ceb007f78f5e8aeb5c"
+        },
+        {
+          "path": "packages/core/test/query/window.test.ts",
+          "blob": "651bbd31469dcb89db67a089009b18c7cdfef7cd"
+        },
+        {
+          "path": "packages/core/test/view-kind.test.ts",
+          "blob": "e260c91cd5c43d42b748a0c640937117674fecdb"
+        },
+        {
+          "path": "packages/pg/test/integration.test.ts",
+          "blob": "5ffc13499f6b468ee73d7d79a949feea820b086e"
+        },
+        {
+          "path": "packages/query/src/compile/params.ts",
+          "blob": "592d42bfea20ca5929e7f0d51d1faf4d032a43ce"
+        },
+        {
+          "path": "packages/query/src/db/convert.ts",
+          "blob": "027d6ecf0980766cc58b2c639687b8a941902362"
+        },
+        {
+          "path": "packages/query/test/compile/window.test.ts",
+          "blob": "4b7c4887974a42240dc0bc8d978b03acc624ab12"
+        },
+        {
+          "path": "packages/query/test/db/window.test.ts",
+          "blob": "a982878fe6b1901da0d1e461d7c5f454fdde9318"
+        },
+        {
+          "path": "packages/query/test/types/window.test.ts",
+          "blob": "132a23b84140edb12dfd062fd83a6aaef9116e65"
+        },
+        {
+          "path": "packages/supabase/src/validators/rls-uncached-auth-call.ts",
+          "blob": "0b82c881a3edd3151fc0717e6c5bf649c03c9480"
+        },
+        {
+          "path": "packages/supabase/test/rls-cached-auth-outside-rls.test.ts",
+          "blob": "eda9867333de54f580db7c8cce1e6f8997386310"
+        },
+        {
+          "path": "packages/supabase/test/rls-uncached-auth-call.test.ts",
+          "blob": "68e74735d94171d60038b171369728976e718099"
+        },
+        {
+          "path": "README.md",
+          "blob": "787dd4b52cb7c0df4d9183a66befb7eda10b4846"
+        },
+        {
+          "path": "skills/hejbro/references/query-layer.md",
+          "blob": "bd1c6ab5e2c1572f87583ef4c498091efb6d9c1e"
+        }
+      ]
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

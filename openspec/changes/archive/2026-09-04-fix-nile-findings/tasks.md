@@ -1,0 +1,165 @@
+# Tasks: fix-nile-findings
+
+Change issue: #750. Group 1 tracks as #754, group 2 as #755. One team runs
+the groups in order (group 2 uses group 1's exported entry point). Group 2's
+reviewer runs in constructor mode: its input (the catalog's `pg_get_expr`
+text) is foreign to hejbro's own output (D110).
+
+Definition of done for every task: `pnpm check`, `pnpm check-types`,
+`pnpm test` green (`TURBO_FORCE=1` in this worktree); the delta scenarios
+of `openspec show fix-nile-findings --diff` hold.
+
+## 1. Table-bound column references render by table and column (#754)
+
+- [x] 1.1 [design] ~9m — Red: `packages/core/test/expr/render-table-bound.test.ts`
+  (new) with an input table spanning the requirement: a top-level ref; a ref
+  inside a `sql` template chunk; a ref inside `exists(...)` to the outer table
+  and to the subquery's own table (both two-part, the `from` target three-part);
+  a subquery whose `from` names a same-bare-name table under another schema
+  (both refs three-part); a CTE column ref (unchanged); and the same nodes
+  through plain `renderExpr` (three-part, unchanged). Green: a scope marker
+  beside `DeclaredCteMarker`, the column-reference arm reading it, exported
+  `renderTableBoundExpr(node, outerScope?)`.
+  Files: `packages/core/src/expr/render-sql.ts`, `packages/core/src/index.ts`,
+  the new test.
+- [x] 1.2 ~8m — Red: the four expectations in
+  `packages/core/test/table-kind-emit.test.ts` that pin a check, an
+  `alter table … add constraint … check`, a partial-index predicate and an
+  expression index (lines ~649/681/717/887) rewritten to the two-part form,
+  plus `packages/core/test/generated-columns.test.ts`'s interpolated-sibling
+  case. Green: `checkExpression`, `indexWhere`, `indexColumnExpression`,
+  `columnGenerated` render through the table-bound entry;
+  `column-order.ts`'s declared-side render uses the same entry so the
+  rebuild comparison stays like-for-like.
+  Files: `packages/core/src/kinds/table-snapshot.ts`,
+  `packages/core/src/snapshot/column-order.ts`, the two tests.
+- [x] 1.3 ~7m — Red: `packages/core/test/policy-kind.test.ts`'s top-level
+  (`using ("posts"."published_at" is not null)`), `with check`, and
+  correlated-`exists` expectations rewritten to the delta scenario's text;
+  `packages/core/test/not-null-elements.test.ts`'s
+  `array_position("posts"."tags", null) is null`. Green: `policyUsing`/
+  `policyWithCheck` render through the table-bound entry with the policy's
+  table still in the outer scope.
+  Files: `packages/core/src/kinds/policy-kind.ts`, the two tests.
+- [x] 1.4 ~9m — Red: `examples/postgres/test/chain.test.ts` and
+  `examples/supabase/test/chain.test.ts` (committed migration text vs
+  regenerated), `packages/core/test/golden` cases whose `expected/` carry a
+  check, partial index, expression index or policy, and any
+  `packages/{supabase,neon,nile}/test` expectation pinning a table-bound
+  rendering (`packages/supabase/test/auth.test.ts`,
+  `packages/neon/test/auth.test.ts`). Green: regenerate the example chains
+  step by step (the chain test's own procedure), update the goldens, and
+  confirm `hejbro.snapshot.json` in both examples is byte-identical.
+  Files: `examples/*/migrations/*.sql`, `packages/core/test/golden/cases/*/expected/*`,
+  the listed tests.
+- [x] 1.5 ~6m — Red: `packages/skills/test` (or the skill's own check) is
+  not applicable; the red test here is the delta scenario "A view body is
+  unchanged" pinned in `packages/core/test/view-kind.test.ts` (an existing
+  three-part expectation that must stay green). Green: one sentence in
+  `skills/hejbro/references/dsl-cheatsheet.md` (table-bound column
+  references render `"table"."column"`), one in
+  `skills/hejbro/references/nile-preset.md` (tenant-aware tables and the
+  schema-name limit), and `.changeset/fix-nile-findings.md` (`patch`).
+  Files: the two references, the changeset.
+
+## 2. `check` compares by text where the preset says the server cannot plan (#755)
+
+- [x] 2.1 [design] ~6m — Red: `packages/nile/test/preset.test.ts` "declares
+  explainUnavailable" and `packages/core/test/engine/preset.test.ts` (or
+  the nearest existing preset-shape test) "a preset without the field is a
+  Preset". Green: `Preset.explainUnavailable?: true` in
+  `packages/core/src/engine/preset.ts`; `nilePreset` carries it.
+  Files: `packages/core/src/engine/preset.ts`, `packages/nile/src/preset.ts`,
+  the two tests.
+- [x] 2.2 [design] ~9m — Red: `packages/cli/test/check-expression.test.ts`
+  new describe "3.5 text comparison" with an input table: equal after each
+  normalization step alone (whitespace; one enclosing paren pair; two-part
+  and three-part table qualifier; quoted vs unquoted plain identifier;
+  `'x'::text` vs `'x'`), equal after all of them together, an inner paren
+  difference that must stay unequal, `"Name"` vs `"name"` that must stay
+  unequal, and the `in (...)` vs `= ANY (ARRAY[...])` case → not compared
+  with both texts, a `Next:` naming the restatement and no `EXPLAIN` word.
+  Green: `compareCheckConstraint(..., mode)` with `"server"` unchanged and
+  `"text"` normalizing both sides; the not-compared reason and `Next:` for
+  the text mode.
+  Files: `packages/cli/src/check/expression.ts`, the test.
+- [x] 2.3 ~8m — Red: `packages/cli/test/check-command.test.ts` with a fake
+  preset declaring `explainUnavailable`: the run never issues an `explain`
+  statement, the coverage boundary carries the text-comparison line, and a
+  config without the declaration issues `explain` exactly as before.
+  Green: `check.ts` derives the mode from `config.presets`, threads it to
+  `compareCheckConstraint`, and appends the boundary line for the run.
+  Files: `packages/cli/src/commands/check.ts`, the test.
+- [x] 2.4 ~7m — Red: `packages/cli/test/check-live.integration.test.ts`
+  (Docker) with a fake `explainUnavailable` preset against real Postgres:
+  the reporter's `length(btrim(name)) > 0` constraint agrees, an `in (...)`
+  constraint is not compared, and exit codes follow. Green: nothing beyond
+  2.1–2.3 unless the witness finds a normalization gap.
+  Files: the integration test.
+- [x] 2.5 ~6m — Red: none runnable (documentation); the definition of done
+  is `openspec validate fix-nile-findings --strict` green. Green:
+  `skills/hejbro/references/nile-preset.md` "check on Nile" paragraph
+  (what agrees, what is reported as not compared, the restatement advice),
+  `skills/hejbro/references/brownfield-adoption.md` exit-2 row extended,
+  and the file-a-follow-up for view/query references on Nile
+  tenant-aware tables (sub-issue of #412).
+  Files: the two references.
+
+## 3. D106 round-1 correction (B1 · N1 · N4 · N5)
+
+- [x] 3.1 ~8m — Red: `packages/cli/test/check-expression.test.ts` "3.6 literal
+  content is never normalized" with an input table: a declared literal
+  `'"json"'` against a catalog `'json'` (step 4 inside a literal) → not
+  compared; the same literal on both sides → agree; a declared literal
+  `'see "posts"."name"'` against a catalog `'see name'` (step 3 inside a
+  literal) → not compared; the same text outside a literal still normalizes.
+  Green: steps 3 and 4 run through `transformOutsideSpans(text,
+  STRING_LITERAL, …)` like steps 1 and 6 (R1-B1).
+  Files: `packages/cli/src/check/expression.ts`, the test.
+- [x] 3.2 ~6m — Red: the exported `normalizeCheckText` keeps a reserved word
+  quoted (`"order"`, `"user"`, `"select"`) and unquotes a plain identifier
+  (`"name"`), with a table of both classes. Green: step 4's predicate is
+  "plain lower-case identifier that is not a reserved keyword", matching the
+  delta sentence "would render unquoted anyway" (R1-N4).
+  Files: `packages/cli/src/check/expression.ts`, the test.
+- [x] 3.3 ~7m — Red: "3.7 a failed catalog read under text mode" — a fake
+  session whose `pg_constraint` lookup throws, `mode: "text"` → one
+  `check-not-compared` finding carrying the server's reason whose `Next:`
+  names the catalog read and never the word `EXPLAIN`; under `"server"` the
+  existing `Next:` is unchanged. Green: the conbin-error branch chooses its
+  `Next:` by mode (R1-N1); the cli-commands delta gains the scenario
+  "a failed catalog read is not compared without asking for EXPLAIN".
+  Files: `packages/cli/src/check/expression.ts`, the test,
+  `openspec/changes/fix-nile-findings/specs/cli-commands/spec.md`.
+- [x] 3.4 ~5m — Red: `packages/skills/test/nile-preset-doc.test.ts` asserts
+  `nile-preset.md` links no `openspec/changes/` path and does not claim
+  "silently, exactly as on a platform that can plan". Green: the reference
+  points at `openspec/specs/cli-commands/spec.md` and the sentence states
+  the literal-content rule (R1-N5). Plus the round-1 disposition in
+  `evaluation.md` (N2 → #781, N3 → #782) and a patch changeset.
+  Files: `skills/hejbro/references/nile-preset.md`, the test,
+  `openspec/changes/fix-nile-findings/evaluation.md`, `.changeset/`.
+
+
+## 4. D106 round-2 correction (N1 · N2 · N3)
+
+- [x] 4.1 ~8m — Red: `packages/cli/test/check-expression.test.ts` "step 5
+  strips the whole cast the server appends to a literal" with an input
+  table spanning the server's spellings: `text[]`, `character varying`,
+  `character varying(20)`, `timestamp with time zone`, `timestamp(3)
+  without time zone`, `numeric(10,2)`, `double precision`, a
+  schema-qualified name, a quoted name, a cast followed by `and b` (must
+  keep `and b`), two casts in one text, and `null::text[]` (not a string
+  literal, untouched). Green: `CAST_TYPE_NAME` grammar in
+  `stripStringLiteralCast` (R2-N1).
+  Files: `packages/cli/src/check/expression.ts`, the test.
+- [x] 4.2 ~5m — Red: "3.7 a failed catalog read under text mode" asserts
+  the `Next:` names `pg_get_expr` and never `pg_get_constraintdef`
+  (R2-N2); `nile-preset-doc.test.ts` reads the cited `cli-commands`
+  requirement heading out of `nile-preset.md` and asserts the main spec
+  carries it (R2-N3). Green: the wording and the citation; plus the
+  round-2 disposition in `evaluation.md` (N4 → #800) and the changeset
+  sentence.
+  Files: `packages/cli/src/check/expression.ts`,
+  `skills/hejbro/references/nile-preset.md`, both tests,
+  `openspec/changes/fix-nile-findings/evaluation.md`, `.changeset/`.

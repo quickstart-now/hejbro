@@ -392,10 +392,12 @@ and no declaration in hand.
 
 A mismatch is caught where TypeScript can see it: a missing or wrongly
 typed argument fails to compile anywhere; an extra property fails to
-compile on a fresh object literal, and a pre-built value whose key count
-does not match the declared arguments is refused at runtime by the
-argument-count check, never sent (the runtime check counts keys; it does
-not inspect their names).
+compile on a fresh object literal. A value TypeScript never checked —
+built elsewhere, widened, or parsed from text — is refused at the call
+instead: the runtime check compares the caller's key set against the
+declared arguments, so an argument object carrying a key the function
+does not declare is refused, naming that key and the declared ones,
+never sent as a missing value for the argument it was misspelling.
 
 #### Scenario: A scalar function crosses the boundary
 - **WHEN** a schema declaring a scalar-returning function is vendored
@@ -417,8 +419,10 @@ not inspect their names).
   wrongly typed argument, or with an extra property on a fresh object
   literal
 - **THEN** the call fails to compile; a pre-built value whose key count
-  does not match the declared arguments is refused at runtime before
-  any SQL is sent
+  does not match the declared arguments, and one whose keys are the
+  right number but name an argument the function does not declare, are
+  both refused at runtime before any SQL is sent, the second naming the
+  unknown key and the declared arguments
 
 #### Scenario: A function returning an uncarried table is absent
 - **WHEN** a vendored schema declares an exported function returning a
@@ -460,19 +464,21 @@ function surface existed has — and expose an empty `fn`.
 The contract emitter SHALL quote a table column key or function argument
 key that is not a valid TypeScript identifier, and SHALL import every
 value type its own output names, so that a contract compiles whatever the
-schema declared.
+export carries.
 
-This requirement is about the emitted contract only. Whether the *DDL*
-side quotes a non-identifier function argument name is a separate axis
-this change does not touch and does not promise: it renders such a name
-unquoted, so a declaration carrying one still produces invalid migration
-SQL. That gap is tracked on its own.
+Such a key reaches the emitter from the export it reads, never from a
+declaration: a declared column key and a declared function argument key
+both derive a hejbro SQL name, and every key that survives that
+derivation is already a valid TypeScript identifier. The emitter carries
+the key the export holds and never re-derives it, so quoting is what
+keeps a hand-edited export — or one written by a toolchain whose rules
+differed — compiling.
 
 #### Scenario: A non-identifier key is quoted
-- **WHEN** a schema declaring a function argument under a key such as
-  `my-arg` is vendored, and an export whose table fact carries such a
-  column key is read
-- **THEN** the contract compiles and the key is preserved as written
+- **WHEN** an export whose table fact carries a column key such as
+  `user-id`, and whose function fact carries an argument key such as
+  `my-arg`, is vendored
+- **THEN** the contract compiles and each key is preserved as written
 
 #### Scenario: An interval column compiles
 - **WHEN** a schema declaring an `interval` column and an `interval`
@@ -544,3 +550,35 @@ a contract already committed.
 - **WHEN** `hejbro outdated` runs in a repository whose contract came
   from `pull --db-url`
 - **THEN** it fails with the coded diagnostic and names `link`
+
+### Requirement: An emitted key survives as data, whatever it is named
+One key name carries meaning in a JavaScript object instead of becoming
+a property, and a vendored schema travels through two objects keyed by
+what the declaring repository named things: the description that is read
+and the metadata that is emitted. Both SHALL carry every table key,
+function key and column key as an own property, whatever the schema
+named it — the facts a description holds under such a key SHALL reach
+the contract, and the contract's own keys SHALL be own properties at run
+time. A key that is silently absorbed rather than carried loses the
+column from every statement the client builds, or loses what the
+declaring repository said about it, with the contract still compiling
+and every type still claiming the column is there.
+
+#### Scenario: A column whose name is meaningful in an object literal is carried
+- **WHEN** an export carries a table whose column key is `__proto__`,
+  and a contract is generated from it
+- **THEN** the generated module's metadata lists that column among the
+  table's own column keys, and a read of that table names the column in
+  its statement like any other
+
+#### Scenario: What the description says under such a key reaches the contract
+- **WHEN** a vendored description holds a column fact under the key
+  `__proto__`, carrying that column's TypeScript key and numeric mode
+- **THEN** the contract carries that column with the key and the mode
+  the description gave it, not with values recovered from elsewhere
+
+#### Scenario: A key that only looks dangerous is carried the same way
+- **WHEN** an export carries column keys named `constructor`,
+  `prototype`, `hasOwnProperty` and `toString`
+- **THEN** each is an own property of the emitted metadata and reaches
+  the client's statements, unchanged from how an ordinary key is carried

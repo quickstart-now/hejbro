@@ -1,0 +1,473 @@
+{
+  "version": 1,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#412",
+  "title": "0.2.x: post-release commitments",
+  "parent": null,
+  "status": "open",
+  "opened": "2026-09-04",
+  "closed": null,
+  "decisions": [
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [],
+      "at": "2026-09-03T00:00Z",
+      "title": "Order of attack for the 0.2.x queue",
+      "ratified": {
+        "verdict": "accepted",
+        "by": "evaluator",
+        "at": "2026-09-04T07:21Z",
+        "decision": null
+      }
+    },
+    {
+      "id": "R2",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [],
+      "at": "2026-09-03T00:00Z",
+      "title": "Bugs travel two to four per change and per PR; the tracking issue is the bug itself",
+      "ratified": {
+        "verdict": "accepted",
+        "by": "evaluator",
+        "at": "2026-09-04T07:21Z",
+        "decision": null
+      }
+    },
+    {
+      "id": "R3",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "D110"
+      ],
+      "at": "2026-09-03T00:00Z",
+      "title": "Reviewers are summoned at group completion; cl's reviewer runs in constructor mode",
+      "ratified": null
+    },
+    {
+      "id": "R4",
+      "by": "lead",
+      "kind": "stop",
+      "basis": [
+        "D105"
+      ],
+      "at": "2026-09-03T00:00Z",
+      "title": "#500 goes to the owner's hold queue; #503 waits for a measurement",
+      "ratified": null
+    },
+    {
+      "id": "R5",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [],
+      "at": "2026-09-03T08:50Z",
+      "title": "One review per piece at the branch tip; heavy gates run in a single slot",
+      "ratified": {
+        "verdict": "accepted",
+        "by": "evaluator",
+        "at": "2026-09-04T07:21Z",
+        "decision": null
+      }
+    },
+    {
+      "id": "R6",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [],
+      "at": "2026-09-03T11:10Z",
+      "title": "The build deny mismatch: canonical spellings that pass",
+      "ratified": null
+    },
+    {
+      "id": "R7",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [],
+      "at": "2026-09-03T11:10Z",
+      "title": "Harness diagnostics after an Edit are not a compiler run",
+      "ratified": {
+        "verdict": "accepted",
+        "by": "evaluator",
+        "at": "2026-09-04T07:21Z",
+        "decision": null
+      }
+    },
+    {
+      "id": "R8",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [],
+      "at": "2026-09-03T11:50Z",
+      "title": "Mutants are applied to committed files and reverted with git checkout",
+      "ratified": {
+        "verdict": "accepted",
+        "by": "evaluator",
+        "at": "2026-09-04T07:21Z",
+        "decision": null
+      }
+    },
+    {
+      "id": "R9",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [],
+      "at": "2026-09-03T12:10Z",
+      "title": "Diagnostics state only what the check observed",
+      "ratified": {
+        "verdict": "accepted",
+        "by": "evaluator",
+        "at": "2026-09-04T07:21Z",
+        "decision": null
+      }
+    },
+    {
+      "id": "R10",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [],
+      "at": "2026-09-03T12:40Z",
+      "title": "Badge and CRAP stamps are committed once, right before the PR, after the dev rebase",
+      "ratified": {
+        "verdict": "accepted",
+        "by": "evaluator",
+        "at": "2026-09-04T07:21Z",
+        "decision": null
+      }
+    },
+    {
+      "id": "R11",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [],
+      "at": "2026-09-03T13:05Z",
+      "title": "Never run the test suite and the type check at once in one worktree",
+      "ratified": {
+        "verdict": "accepted",
+        "by": "evaluator",
+        "at": "2026-09-04T07:21Z",
+        "decision": null
+      }
+    },
+    {
+      "id": "R12",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [],
+      "at": "2026-09-03T13:25Z",
+      "title": "The final tip's heavy gates are the reviewer's one isolated run",
+      "ratified": {
+        "verdict": "accepted",
+        "by": "evaluator",
+        "at": "2026-09-04T07:21Z",
+        "decision": null
+      }
+    },
+    {
+      "id": "R13",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [],
+      "at": "2026-09-03T13:45Z",
+      "title": "check:crap is a slot-only gate",
+      "ratified": null
+    },
+    {
+      "id": "R14",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [],
+      "at": "2026-09-03T14:10Z",
+      "title": "A mutant is specified by its edit, not by a number",
+      "ratified": {
+        "verdict": "accepted",
+        "by": "evaluator",
+        "at": "2026-09-04T07:21Z",
+        "decision": null
+      }
+    },
+    {
+      "id": "R15",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [],
+      "at": "2026-09-03T14:40Z",
+      "title": "How the CRAP README stamp behaves under a rebase",
+      "ratified": null
+    },
+    {
+      "id": "R16",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [],
+      "at": "2026-09-03T15:20Z",
+      "title": "Rebase under load: refresh the index, and after three failures merge dev instead",
+      "ratified": {
+        "verdict": "accepted",
+        "by": "evaluator",
+        "at": "2026-09-04T07:21Z",
+        "decision": null
+      }
+    },
+    {
+      "id": "R17",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "R36"
+      ],
+      "at": "2026-09-03T15:55Z",
+      "title": "While a PR is in its review-closing phase, no other merge moves dev",
+      "ratified": {
+        "verdict": "rejected",
+        "by": "evaluator",
+        "at": "2026-09-04T07:21Z",
+        "decision": null
+      }
+    },
+    {
+      "id": "R18",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R46"
+      ],
+      "at": "2026-09-03T13:05Z",
+      "title": "CI's check:crap output is an isolated measurement and may restamp the README",
+      "ratified": null
+    },
+    {
+      "id": "R19",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [],
+      "at": "2026-09-03T17:00Z",
+      "title": "Teammate reports go to a status file; messages arrive when the lead's turn ends",
+      "ratified": {
+        "verdict": "accepted",
+        "by": "evaluator",
+        "at": "2026-09-04T07:21Z",
+        "decision": null
+      }
+    },
+    {
+      "id": "R20",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [],
+      "at": "2026-09-03T17:08Z",
+      "title": "The permission prompt's real cause: relative Read deny rules after a cd",
+      "ratified": null
+    },
+    {
+      "id": "R21",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "D88"
+      ],
+      "at": "2026-09-03T17:00Z",
+      "title": "task-times rows for a dissolved piece: derived from commit spans, source stated",
+      "ratified": {
+        "verdict": "accepted",
+        "by": "evaluator",
+        "at": "2026-09-04T07:21Z",
+        "decision": null
+      }
+    },
+    {
+      "id": "R22",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [],
+      "at": "2026-09-04T00:15Z",
+      "title": "Every brief's task gates are AGENTS.md's whole 'before claiming done' list",
+      "ratified": {
+        "verdict": "accepted",
+        "by": "evaluator",
+        "at": "2026-09-04T07:21Z",
+        "decision": null
+      }
+    },
+    {
+      "id": "R23",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "D110"
+      ],
+      "at": "2026-09-04T00:40Z",
+      "title": "Two reusable rules from nl: constructor mode for foreign input, fixed verdict paths before measuring",
+      "ratified": {
+        "verdict": "accepted",
+        "by": "evaluator",
+        "at": "2026-09-04T07:21Z",
+        "decision": null
+      }
+    },
+    {
+      "id": "R24",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R67"
+      ],
+      "at": "2026-09-04T00:50Z",
+      "title": "Two permission prompts confirmed: the 2.1.259 regression and the documented rm guard",
+      "ratified": null
+    },
+    {
+      "id": "R25",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [],
+      "at": "2026-09-04T01:40Z",
+      "title": "A brief's gate list is every check:* script in package.json",
+      "ratified": {
+        "verdict": "accepted",
+        "by": "evaluator",
+        "at": "2026-09-04T07:21Z",
+        "decision": null
+      }
+    },
+    {
+      "id": "R26",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R67",
+        "R85"
+      ],
+      "at": "2026-09-04T04:30Z",
+      "title": "2.1.260 reverts the regression: the workarounds are removed and R67 becomes a recommendation",
+      "ratified": null
+    },
+    {
+      "id": "D1",
+      "by": "owner",
+      "at": "2026-09-03T00:00Z",
+      "title": "Owner input 1",
+      "raw": []
+    },
+    {
+      "id": "D2",
+      "by": "owner",
+      "at": "2026-09-03T00:00Z",
+      "title": "Owner input 2",
+      "raw": []
+    },
+    {
+      "id": "D3",
+      "by": "owner",
+      "at": "2026-09-03T00:00Z",
+      "title": "Owner input 3",
+      "raw": []
+    },
+    {
+      "id": "D4",
+      "by": "owner",
+      "at": "2026-09-03T00:00Z",
+      "title": "Owner input 4",
+      "raw": []
+    },
+    {
+      "id": "D5",
+      "by": "owner",
+      "at": "2026-09-03T00:00Z",
+      "title": "Owner input 5",
+      "raw": []
+    },
+    {
+      "id": "D6",
+      "by": "owner",
+      "at": "2026-09-03T00:00Z",
+      "title": "Owner input 6",
+      "raw": []
+    },
+    {
+      "id": "D7",
+      "by": "owner",
+      "at": "2026-09-03T00:00Z",
+      "title": "Owner input 7",
+      "raw": []
+    },
+    {
+      "id": "D8",
+      "by": "owner",
+      "at": "2026-09-04T08:25Z",
+      "title": "After pre.1 ships: polish the bot avatar, then work through the oldest open issues",
+      "raw": [
+        "ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#47"
+      ]
+    },
+    {
+      "id": "D9",
+      "by": "owner",
+      "at": "2026-09-04T08:48Z",
+      "title": "After the release, process the #412 queue",
+      "raw": [
+        "ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#54"
+      ]
+    }
+  ],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-03T00:00Z",
+      "title": "2026-09-03 — Three process amendments after the round-5 review (D110)",
+      "pr": null,
+      "decisions": []
+    }
+  ],
+  "prs": [
+    {
+      "number": 715,
+      "ref": "quickstart-now/hejbro#715",
+      "title": "docs(process): adopt three amendments after the round-5 review (D110)",
+      "head": "3d376c6c7daa646c1d98aee245174bb0ca9e9c73",
+      "headRef": "docs-process-three-rules",
+      "base": "dev",
+      "merged": "2026-09-02T23:28:38Z",
+      "pinnedAt": "2026-09-03T00:00Z",
+      "migrated": true,
+      "refs": [
+        {
+          "path": "docs/specs/2026-08-19-hejbro-design.md",
+          "blob": "7e734d5a86c8b44e0fee0fd1a4cfc9f50bf85ceb"
+        },
+        {
+          "path": "AGENTS.md",
+          "blob": "fe0b0ce6e9d27939ae9d2119a474a489a1330bfa"
+        },
+        {
+          "path": "openspec/config.yaml",
+          "blob": "ac06240b67e82b06b92df55cda0985017b1e57c9"
+        }
+      ]
+    },
+    {
+      "number": 808,
+      "ref": "quickstart-now/hejbro#808",
+      "title": "ci: approval-gated verify on long-lived prs, one run per head (#807, #809)",
+      "head": "edd67cafbad895bec80816bd60a1ee2f5e87b92e",
+      "headRef": "fix-ci-duplicate-runs",
+      "base": "dev",
+      "merged": null,
+      "pinnedAt": "2026-09-04T08:58Z",
+      "refs": [
+        {
+          "path": ".github/workflows/ci.yml",
+          "blob": "542c664a547c064ad9bd795c026ff58c0cec5052"
+        },
+        {
+          "path": "AGENTS.md",
+          "blob": "e665d68453e0fc66a9bc90fbb23832edb03105aa"
+        }
+      ]
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

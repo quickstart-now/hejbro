@@ -1,4 +1,7 @@
-import type { HejbroInput } from "@hejbro/core";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { HejbroInput, Snapshot } from "@hejbro/core";
 import {
 	bigint,
 	defineFunction,
@@ -11,6 +14,7 @@ import {
 	text,
 	uuid,
 } from "@hejbro/core";
+import { createJiti } from "jiti";
 import { describe, expect, it } from "vitest";
 import { emitContract } from "../src/contract/emit";
 import type {
@@ -18,7 +22,11 @@ import type {
 	ExportTableFact,
 } from "../src/export/description";
 import type { ExportPayload } from "../src/export/write";
-import type { ValidatedFunctionFact } from "../src/vendor/validate-export";
+import type {
+	ValidatedExportPayload,
+	ValidatedFunctionFact,
+} from "../src/vendor/validate-export";
+import { validateExport } from "../src/vendor/validate-export";
 import { buildFixturePayload } from "./support/contract-fixture";
 
 const app = schema("app");
@@ -393,17 +401,16 @@ const requireColumnFact = (
 };
 
 /**
- * #662: the column half enters through the emitter's *other* input
+ * #662/#679: both halves enter through the emitter's *other* input
  * contract, a hand-editable `schema.json` whose reader never checks a
- * key's shape (`columnFactSchema.key` is `z.string()`) -- not through
- * `table()`, which D36's `assertSqlName` makes structurally incapable of
- * declaring a non-identifier column key (every key that survives it is
- * already a valid TS identifier; tasks.md 1.4's own measurement). So the
- * snapshot/description come from a real declaration, and only the export
- * table fact's TS keys are hand-edited afterward, standing in for a
- * committed `schema.json` a person touched. The function argument half
- * has no such D36 check (`defineFunction` validates reserved words only)
- * and rides the real DSL directly.
+ * key's shape (`columnFactSchema.key`/the function arg fact's `key` are
+ * both `z.string()`) -- not through `table()`/`defineFunction()`, which
+ * D36's `assertSqlName` makes structurally incapable of declaring a
+ * non-identifier column key or argument key (every key that survives it
+ * is already a valid TS identifier; tasks.md 1.4's own measurement for
+ * columns, 1.1's for arguments). So the snapshot/description come from a
+ * real declaration, and only the export facts' TS keys are hand-edited
+ * afterward, standing in for a committed `schema.json` a person touched.
  */
 describe("non-identifier keys are quoted in the emitted contract (#662)", () => {
 	it("quotes a column key and an argument key that are not identifiers", () => {
@@ -415,9 +422,9 @@ describe("non-identifier keys are quoted in the emitted contract (#662)", () => 
 		const echoArg = defineFunction(
 			app,
 			"echo_arg",
-			{ args: { "my-arg": uuid() }, returns: uuid() },
+			{ args: { myArg: uuid() }, returns: uuid() },
 			(ctx, args) => {
-				ctx.return(sql`${args["my-arg"]}`);
+				ctx.return(sql`${args.myArg}`);
 			},
 		);
 		const declarations: ReadonlyArray<HejbroInput> = [app, posts, echoArg];
@@ -440,11 +447,23 @@ describe("non-identifier keys are quoted in the emitted contract (#662)", () => 
 				[twoFaSqlName]: { ...twoFaFact, key: "2fa" },
 			},
 		};
-		// `posts` is the only declared table, so the patched array replaces
-		// `payload.tables` outright rather than searching it back out.
+		const echoArgFact = requireFunctionFact(payload, "echoArg");
+		const patchedFunction = {
+			...echoArgFact,
+			args: echoArgFact.args.map((arg) => {
+				if (arg.sqlName !== myArgSqlName) {
+					return arg;
+				}
+				return { ...arg, key: "my-arg" };
+			}),
+		};
+		// `posts`/`echoArg` are the only declared table/function, so the
+		// patched arrays replace `payload.tables`/`payload.functions`
+		// outright rather than searching them back out.
 		const patchedPayload: ExportPayload = {
 			...payload,
 			tables: [patchedTable],
+			functions: [patchedFunction],
 		};
 
 		const source = emitContract(patchedPayload, ORIGIN);
@@ -701,4 +720,208 @@ describe("the IntervalValue import is conditional on the contract actually namin
 
 		expect(source).toContain(INTERVAL_IMPORT);
 	});
+});
+
+/**
+ * A `ValidatedExportPayload`/`Snapshot` pair hand-written directly (never
+ * run through the `table()`/`schema()` DSL, D110): the DSL's own object
+ * literal would lose a `__proto__`-named field the exact same way the
+ * emitter's own bug does, one layer earlier, so it cannot construct this
+ * input at all. `key` names the table, its one column, and the one
+ * exported function's export name all at once, at schema "app".
+ */
+const buildKeyNamePayload = (key: string): ValidatedExportPayload => {
+	const snapshot: Snapshot = {
+		formatVersion: 8,
+		dialect: "postgres",
+		objects: {
+			[`table:app.${key}`]: {
+				schema: "app",
+				name: key,
+				columns: [{ name: key, typeNode: { typeName: "uuid" } }],
+				indexes: [],
+				foreignKeys: [],
+			},
+		},
+	};
+	const tableFact: ExportTableFact = {
+		schemaName: "app",
+		tableName: key,
+		exportName: null,
+		columns: {},
+		existing: false,
+	};
+	const functionFact: ValidatedFunctionFact = {
+		schemaName: "app",
+		functionName: "a_function",
+		exportName: key,
+		args: [],
+		returns: { kind: "scalar", typeNode: { typeName: "uuid" }, mode: null },
+	};
+	return {
+		tables: [tableFact],
+		functions: [functionFact],
+		roles: [],
+		snapshot,
+	};
+};
+
+/**
+ * Extracts just the `export const contractMetadata = { … } as const;`
+ * statement (self-contained, no imports) and imports it through jiti in
+ * a scratch directory — proves the emitted *runtime value* carries a key,
+ * not merely that the source text contains it, without needing "hejbro"
+ * itself resolvable (the full generated module's `createNameKeyedDb`
+ * import would need a built dist, same as a subprocess test; this
+ * fragment carries no such import).
+ */
+const importEmittedMetadata = async (
+	source: string,
+): Promise<{ readonly contractMetadata: Record<string, unknown> }> => {
+	const startMarker = "export const contractMetadata";
+	const closeMarker = "} as const;";
+	const start = source.indexOf(startMarker);
+	const close = source.indexOf(closeMarker, start) + closeMarker.length;
+	const standalone = `${source.slice(start, close)}\n`;
+	const dir = await mkdtemp(join(tmpdir(), "hejbro-contract-emit-"));
+	const filePath = join(dir, "metadata.ts");
+	await writeFile(filePath, standalone);
+	try {
+		const jiti = createJiti(filePath, { fsCache: false });
+		return (await jiti.import(filePath)) as {
+			readonly contractMetadata: Record<string, unknown>;
+		};
+	} finally {
+		await rm(dir, { recursive: true, force: true });
+	}
+};
+
+describe("contractMetadata's emitted keys survive as own properties (#697, R2-N2)", () => {
+	type KeyNameRow = {
+		readonly label: string;
+		readonly key: string;
+	};
+
+	// D110 input table: the defect itself, plus four names that only
+	// *look* dangerous as controls -- each an own property of `Object`'s
+	// own prototype, carried the same way an ordinary key is.
+	const rows: ReadonlyArray<KeyNameRow> = [
+		{ label: "__proto__ (the defect)", key: "__proto__" },
+		{ label: "constructor (control)", key: "constructor" },
+		{ label: "prototype (control)", key: "prototype" },
+		{ label: "hasOwnProperty (control)", key: "hasOwnProperty" },
+		{ label: "toString (control)", key: "toString" },
+	];
+
+	it.each(rows)(
+		"carries $label at the table key, the column key, and the function export-name key",
+		async ({ key }) => {
+			const payload = buildKeyNamePayload(key);
+			const source = emitContract(payload, ORIGIN);
+			const { contractMetadata } = await importEmittedMetadata(source);
+
+			const tables = contractMetadata.tables as Record<
+				string,
+				{ readonly columns: Record<string, unknown> }
+			>;
+			expect(Object.hasOwn(tables, key)).toBe(true);
+			expect(Object.keys(tables)).toContain(key);
+
+			expect(Object.hasOwn(tables[key]?.columns ?? {}, key)).toBe(true);
+			expect(Object.keys(tables[key]?.columns ?? {})).toContain(key);
+
+			const functions = contractMetadata.functions as Record<string, unknown>;
+			expect(Object.hasOwn(functions, key)).toBe(true);
+			expect(Object.keys(functions)).toContain(key);
+		},
+	);
+});
+
+const VALIDATE_EXPORT_FORMAT_TEXT =
+	'{"descriptionFormat":1,"snapshotFormat":8}';
+
+/**
+ * A hand-written `schema.json` naming a single column under `columnKey`
+ * -- the description's own key/mode (`protoKey`/`"string"`) differ from
+ * what a fallback would recover (the SQL name itself, and a `null`
+ * mode), so the two are only indistinguishable if the description's own
+ * fact survived `validateExport`'s reading (#697, R2-N2 sibling: the
+ * loss lives in the reader, so this drives the real pipeline rather
+ * than an in-memory payload).
+ */
+const buildSchemaTextWithColumnKey = (columnKey: string): string =>
+	JSON.stringify({
+		tables: [
+			{
+				schemaName: "app",
+				tableName: "posts",
+				exportName: "posts",
+				columns: {
+					[columnKey]: {
+						key: "protoKey",
+						mode: "string",
+						notNullElements: false,
+					},
+				},
+				existing: false,
+			},
+		],
+		functions: [],
+		roles: [],
+		snapshot: {
+			formatVersion: 8,
+			dialect: "postgres",
+			objects: {
+				"table:app.posts": {
+					schema: "app",
+					name: "posts",
+					columns: [
+						{
+							name: columnKey,
+							typeNode: { typeName: "numeric", precision: null, scale: null },
+						},
+					],
+					indexes: [],
+					foreignKeys: [],
+				},
+			},
+		},
+	});
+
+describe("a description's column fact reaches the contract under any column key (#697, R2-N2 sibling)", () => {
+	type ColumnKeyRow = {
+		readonly label: string;
+		readonly columnKey: string;
+	};
+
+	// D110 input table: the defect, plus a look-alike and a plain
+	// control -- each column fact's own key ("protoKey") and mode
+	// ("string") differ from what column.name/null (the fallback) would
+	// produce, so only a correct read produces them.
+	const rows: ReadonlyArray<ColumnKeyRow> = [
+		{ label: "__proto__ (the defect)", columnKey: "__proto__" },
+		{ label: "constructor (control)", columnKey: "constructor" },
+		{ label: "plain (control)", columnKey: "plain" },
+	];
+
+	it.each(rows)(
+		"carries the description's own key and mode for a $label column key",
+		async ({ columnKey }) => {
+			const schemaText = buildSchemaTextWithColumnKey(columnKey);
+			const { payload } = validateExport(
+				VALIDATE_EXPORT_FORMAT_TEXT,
+				schemaText,
+			);
+
+			const source = emitContract(payload, ORIGIN);
+			const { contractMetadata } = await importEmittedMetadata(source);
+
+			const tables = contractMetadata.tables as Record<
+				string,
+				{ readonly columns: Record<string, { readonly mode: unknown }> }
+			>;
+			expect(Object.hasOwn(tables.posts?.columns ?? {}, "protoKey")).toBe(true);
+			expect(tables.posts?.columns.protoKey?.mode).toBe("string");
+		},
+	);
 });

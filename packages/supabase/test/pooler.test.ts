@@ -261,7 +261,7 @@ describe("task 1.6: the envelope-positional properties the conformance kit canno
 		]);
 	});
 
-	it("red/green contrast, checked before relying on it: a fixture that sends the pins before the transaction opens passes the kit's own check (1.7's observation) and fails the envelope-positional property above", () => {
+	it("the gap #528/1.2 closes: a fixture that sends the pins before the transaction opens is now rejected on two independent layers -- shape refusal for the (superseded) session-surface-only observation, and the positional check for the wire-level one", () => {
 		// Not poolerDriver's own output (already proven correct above) --
 		// this is the counterexample tasks.md's own red condition names,
 		// built by hand: the pins run before `BEGIN` rather than inside the
@@ -271,57 +271,72 @@ describe("task 1.6: the envelope-positional properties the conformance kit canno
 			beginStatement,
 			callerStatement,
 		];
-		// 1.7's own observation is the driver-session surface only --
-		// exactly what a `session.execute`-level stub would have recorded
-		// for this one execution, which never includes the bare `BEGIN`
-		// string (design.md's boundary). Modeled here by filtering it out.
+
+		// (a) The wire-level envelope (1.7's own observation, post-1.3):
+		// sees `BEGIN`, and the positional obligation (1.2) rejects this
+		// ordering -- nothing was sent between the transaction's own
+		// opening and the caller's own statement, because the pins landed
+		// before `BEGIN`, not after it.
+		expect(() =>
+			assertSessionStateConformance(
+				{ "interactive-transactions": true, "session-state": false },
+				{ recordedOnConnection: brokenEnvelope, callerStatement },
+			),
+		).toThrowError(
+			/no statement was sent between the transaction's own opening/,
+		);
+
+		// (b) The (superseded) session-surface-only observation never saw
+		// `BEGIN` at all -- filtering it out models what that narrower
+		// shape used to capture, back when it was accepted for this
+		// declaration (and passed it, silently, which is the blind spot
+		// #528 was filed over). The kit's own shape guard (1.2) now
+		// refuses it outright, before it can even reach the positional
+		// check.
 		const sessionSurfaceOnly = brokenEnvelope.filter(
 			(statement) => statement.sql !== beginStatement.sql,
 		);
-
 		expect(() =>
 			assertSessionStateConformance(
 				{ "interactive-transactions": true, "session-state": false },
 				{ recordedForOneExecute: sessionSurfaceOnly, callerStatement },
 			),
-		).not.toThrow();
+		).toThrowError(/recordedOnConnection\/callerStatement is required/);
 
-		const beginIndex = brokenEnvelope.findIndex(
-			(statement) => statement.sql === beginStatement.sql,
-		);
-		const firstPin = PIN_STATEMENTS[0];
-		if (firstPin === undefined) {
-			throw new Error(
-				"PIN_STATEMENTS is empty -- this test's own fixture is broken",
-			);
-		}
-		const firstPinIndex = brokenEnvelope.findIndex(
-			(statement) => statement.sql === firstPin.sql,
-		);
-
-		// the property 1.6 exists to guard: the kit above did not throw,
-		// yet the pin is discarded by the database with a warning here --
-		// sent before the transaction that would have scoped it even
-		// exists. If this assertion and the one above it ever agree
-		// (both pass or both fail), this test is guarding nothing.
-		expect(firstPinIndex).toBeLessThan(beginIndex);
+		// If either assertion above ever matched the *other* half's
+		// reason instead of its own (or stopped throwing), this test
+		// would no longer be distinguishing the two layers it exists to
+		// pin.
 	});
 });
 
 describe("poolerDriver(driver) conforms to the driver contract (task 1.7, #481-style)", () => {
-	it("conforms to the session-state:false tier -- the observation taken at the driver-session surface, mirroring driver.test.ts's own #481 conformance test", async () => {
-		const recorded: Array<CompileResult> = [];
+	it("conforms to the session-state:false tier -- the observation fed to the kit is the wire-level envelope (recordedOnConnection), the same one task 1.6's own fixture records, since the driver-session surface alone cannot show transaction control (#528)", async () => {
+		const beginStatement: CompileResult = {
+			sql: "BEGIN",
+			params: [],
+			kind: "sql",
+		};
+		const commitStatement: CompileResult = {
+			sql: "COMMIT",
+			params: [],
+			kind: "sql",
+		};
+		const envelope: Array<CompileResult> = [];
 		const underlying: Driver = {
 			capabilities: { "interactive-transactions": true, "session-state": true },
 			execute: vi.fn(async () => []),
 			transaction: vi.fn(async (callback) => {
+				envelope.push(beginStatement);
 				const session: DriverSession = {
 					execute: vi.fn(async (compiled: CompileResult) => {
-						recorded.push(compiled);
+						envelope.push(compiled);
 						return [];
 					}),
 				};
-				return callback(session);
+				const result = await callback(session);
+				envelope.push(commitStatement);
+				return result;
 			}),
 			setupSession: vi.fn(async () => {}),
 		};
@@ -334,13 +349,16 @@ describe("poolerDriver(driver) conforms to the driver contract (task 1.7, #481-s
 
 		await wrapped.execute(callerStatement);
 
-		// `recorded` is exactly the driver-session surface (design.md's own
-		// boundary): what passed through `session.execute`, never the bare
-		// `BEGIN` string -- the underlying stub's `transaction` above never
-		// pushes one, unlike task 1.6's own envelope-recording fixture.
+		// `envelope` is the wire-level order the underlying driver actually
+		// emits on its connection -- BEGIN, then whatever crossed
+		// `session.execute` (the pins and the caller's own statement), then
+		// COMMIT. This is what the kit's transaction-envelope obligation
+		// (1.2) requires for this declaration; the driver-session-surface-
+		// only shape (`recordedForOneExecute`) is refused outright for it
+		// (proven by task 1.6's own red/green contrast test).
 		expect(() =>
 			assertSessionStateConformance(wrapped.capabilities, {
-				recordedForOneExecute: recorded,
+				recordedOnConnection: envelope,
 				callerStatement,
 			}),
 		).not.toThrow();

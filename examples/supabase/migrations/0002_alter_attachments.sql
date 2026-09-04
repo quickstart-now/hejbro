@@ -6,7 +6,7 @@
 
 alter table "app"."attachments" add column "content_type" text;
 
-alter table "app"."attachments" add constraint "attachments_content_type_allowed" check ("app"."attachments"."content_type" in ('image/png', 'image/jpeg'));
+alter table "app"."attachments" add constraint "attachments_content_type_allowed" check ("attachments"."content_type" in ('image/png', 'image/jpeg'));
 
 insert into storage.buckets ("id", "name", "public", "file_size_limit", "allowed_mime_types")
 values ('attachments', 'attachments', false, 10485760, array['image/png', 'image/jpeg', 'application/pdf']::text[])

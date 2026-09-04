@@ -313,12 +313,64 @@ const lastIdentitySegment = (identity: string): string => {
 };
 
 /**
- * Derives a migration slug from its first change: `add_posts`,
- * `alter_posts`, `drop_posts`. Falls back to `"migration"` when there are
- * no changes. Kept here (not in `generate.ts`) for reuse by Phase 5's CLI.
+ * Groups already kind-rank-sorted changes into contiguous same-`kind`
+ * runs. A local twin of `engine/diff-engine.ts`'s own
+ * `groupContiguousByKind` (not imported: `engine/generate.ts` already
+ * imports from this file, so the reverse import would cycle) -- kept
+ * here because `deriveSlug` below needs the same grouping to undo the
+ * same-kind dependency refinement that function's caller applies.
+ */
+const groupContiguousByKind = (
+	changes: ReadonlyArray<KindChange>,
+): ReadonlyArray<ReadonlyArray<KindChange>> =>
+	changes.reduce<Array<Array<KindChange>>>((groups, change) => {
+		const lastGroup = groups.at(-1);
+		if (lastGroup !== undefined && lastGroup[0]?.kind === change.kind) {
+			lastGroup.push(change);
+			return groups;
+		}
+		groups.push([change]);
+		return groups;
+	}, []);
+
+/**
+ * Undoes `diffSnapshots`' same-kind dependency refinement (#753 task 1.2)
+ * before naming a migration: that refinement only permutes *within* a
+ * contiguous same-`kind` run, and never moves an element across the
+ * create/alter vs. drop split -- so re-sorting each such run (identified
+ * from `changes` alone, operation-partitioned the same way
+ * `diffSnapshots` itself partitions them) by identity recovers the exact
+ * order `deriveSlug` named migrations by before that refinement existed,
+ * with no second array to thread through the pipeline.
+ */
+const preRefinementOrder = (
+	changes: ReadonlyArray<KindChange>,
+): ReadonlyArray<KindChange> => {
+	const byIdentity = (a: KindChange, b: KindChange): number =>
+		compareKeys(a.identity, b.identity);
+	const restoreIdentityOrder = (
+		group: ReadonlyArray<KindChange>,
+	): ReadonlyArray<KindChange> =>
+		groupContiguousByKind(group).flatMap((run) => [...run].sort(byIdentity));
+	return [
+		...restoreIdentityOrder(
+			changes.filter((change) => change.operation !== "drop"),
+		),
+		...restoreIdentityOrder(
+			changes.filter((change) => change.operation === "drop"),
+		),
+	];
+};
+
+/**
+ * Derives a migration slug from its first change, in the order the
+ * changes existed before `diffSnapshots`' same-kind dependency
+ * refinement (#753 task 1.2): `add_posts`, `alter_posts`, `drop_posts`.
+ * Falls back to `"migration"` when there are no changes. Kept here (not
+ * in `generate.ts`) for reuse by Phase 5's CLI.
  */
 export const deriveSlug = (changes: ReadonlyArray<KindChange>): string => {
-	const [firstChange] = changes;
+	const [firstChange] = preRefinementOrder(changes);
 	if (firstChange === undefined) {
 		return "migration";
 	}

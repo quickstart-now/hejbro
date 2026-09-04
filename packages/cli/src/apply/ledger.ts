@@ -1,4 +1,9 @@
-import type { CompileResult, DriverRow, DriverSession } from "@hejbro/query";
+import type {
+	CompileResult,
+	Driver,
+	DriverRow,
+	DriverSession,
+} from "@hejbro/query";
 
 /*
  * [design, task 1.1] The error codes `add-apply-engine` raises, settled
@@ -322,28 +327,43 @@ export const recordAppliedMigration = async (
 };
 
 /**
- * [group 5, task 5.3] Empties the ledger -- every row, not a selected
- * subset: `reset` drops every declared object, so nothing this tool
- * applied is still standing afterward, and the next `migrate` run SHALL
- * apply the chain from its beginning (spec). There is no partial state
- * to express, so there is nothing to select.
- *
- * Deletes rows, never the table: `reset` destroys only what the
- * declarations describe (spec, "A reset destroys only what the
- * declarations manage"), and the ledger table is hejbro's own
- * bookkeeping, not a declared object -- the same reasoning that keeps
- * `reset` off a project's unmanaged inventory keeps it off this table
- * too. A ledger that was never bootstrapped (42P01) is already empty of
- * rows in every sense that matters here, so this is a silent no-op for
- * it, the same leniency `readLedger` already extends to an absent table.
+ * [D106 R1, B1, #753 reopened] Whether the ledger table exists, read
+ * through `driver` directly -- never inside a transaction, and always
+ * before one opens. `reset`'s own drop-then-clear transaction needs this
+ * answer BEFORE it decides whether to attempt the delete at all: a
+ * database whose migrations were all applied outside hejbro (`psql -f`, an
+ * external pipeline -- both valid apply paths this project documents)
+ * never bootstraps the ledger, and a delete against a table that was never
+ * created must not be a statement this module's transaction path catches
+ * -- a caught failure there previously left an aborted transaction with a
+ * plain `COMMIT` Postgres never reports as an error (B1's own root cause).
+ * Built from {@link QUALIFIED_LEDGER_TABLE} (never a second, hand-assembled
+ * spelling of the same name) -- `to_regclass` accepts a quoted, qualified
+ * name inside its own string-literal argument unchanged.
  */
-export const clearLedger = async (session: DriverSession): Promise<void> => {
-	try {
-		await exec(session, `delete from ${QUALIFIED_LEDGER_TABLE}`);
-	} catch (error) {
-		if (isUndefinedTableError(error)) {
-			return;
-		}
-		throw error;
-	}
+export const ledgerTableExists = async (driver: Driver): Promise<boolean> => {
+	const rows = await driver.execute({
+		sql: `select to_regclass('${QUALIFIED_LEDGER_TABLE}') as "reg"`,
+		params: [],
+		kind: "sql",
+	});
+	return rows[0]?.reg != null;
+};
+
+/**
+ * [D106 R1, B1, #753 reopened] Deletes every ledger row -- never the
+ * table, which is hejbro's own bookkeeping, not a declared object.
+ * Carries no leniency for an absent table: the one caller ({@link
+ * ledgerTableExists}, read before the transaction this runs inside) SHALL
+ * already know the table exists, so a failure here is a genuine one and
+ * SHALL propagate rather than be swallowed into a silent no-op that
+ * leaves the transaction's earlier statements (the drops) uncommitted but
+ * unreported. A race that drops the table between that read and this
+ * delete surfaces its own 42P01 uncaught, into `reset-drop-failed` --
+ * honest about the race rather than silently rolled back the way B1 was.
+ */
+export const clearLedgerRows = async (
+	session: DriverSession,
+): Promise<void> => {
+	await exec(session, `delete from ${QUALIFIED_LEDGER_TABLE}`);
 };

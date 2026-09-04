@@ -4,6 +4,7 @@ import { existsSync, readdirSync, statSync } from "node:fs";
 import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { transcript } from "./call-transcript";
 
 // Shared tmp-dir + built-CLI runner for generate-command.test.ts and
 // golden.test.ts. Drives `dist/cli.js` via child_process rather than
@@ -18,6 +19,7 @@ const CLI_PACKAGE_ROOT = join(import.meta.dirname, "..", "..");
 export const CLI_PATH = join(CLI_PACKAGE_ROOT, "dist", "cli.js");
 const CLI_INDEX_PATH = join(CLI_PACKAGE_ROOT, "dist", "index.js");
 const SUPABASE_PACKAGE_ROOT = join(CLI_PACKAGE_ROOT, "..", "supabase");
+const NILE_PACKAGE_ROOT = join(CLI_PACKAGE_ROOT, "..", "nile");
 const CORE_PACKAGE_ROOT = join(CLI_PACKAGE_ROOT, "..", "core");
 
 /** The most recent mtime (ms since epoch) of any file under `dir`, recursively. */
@@ -81,6 +83,8 @@ export const assertBuiltCli = (): void => {
 		);
 	}
 	assertFreshBuild("@hejbro/core", CORE_PACKAGE_ROOT);
+	assertFreshBuild("@hejbro/supabase", SUPABASE_PACKAGE_ROOT);
+	assertFreshBuild("@hejbro/nile", NILE_PACKAGE_ROOT);
 	assertFreshBuild("hejbro", CLI_PACKAGE_ROOT);
 };
 
@@ -102,7 +106,7 @@ export type CliRun = {
 	readonly stderr: string;
 };
 
-/** Creates a fresh tmp dir with `node_modules/hejbro` symlinked back to this package's real root, so a fixture's `import { ... } from "hejbro"` (U2 self-import cycle) resolves exactly as an installed dependency would. Also symlinks `node_modules/@hejbro/supabase`, so a preset fixture's `import { supabasePreset, storageBucket } from "@hejbro/supabase"` resolves — `hejbro`'s own `dependencies` never include `@hejbro/supabase` (it's a devDependency of the CLI package used only by these fixtures, D55). Caller is responsible for `rm`-ing the returned path. */
+/** Creates a fresh tmp dir with `node_modules/hejbro` symlinked back to this package's real root, so a fixture's `import { ... } from "hejbro"` (U2 self-import cycle) resolves exactly as an installed dependency would. Also symlinks `node_modules/@hejbro/supabase` and `node_modules/@hejbro/nile`, so a preset fixture's `import { supabasePreset, storageBucket } from "@hejbro/supabase"` or `import { nilePreset } from "@hejbro/nile"` resolves — neither is in `hejbro`'s own `dependencies` (both are devDependencies of the CLI package used only by these fixtures, D55/#752). Caller is responsible for `rm`-ing the returned path. */
 export const createCliFixtureDir = async (): Promise<string> => {
 	const cwd = await mkdtemp(join(tmpdir(), "hejbro-cli-"));
 	await mkdir(join(cwd, "node_modules", "@hejbro"), { recursive: true });
@@ -110,6 +114,11 @@ export const createCliFixtureDir = async (): Promise<string> => {
 	await symlink(
 		SUPABASE_PACKAGE_ROOT,
 		join(cwd, "node_modules", "@hejbro", "supabase"),
+		"dir",
+	);
+	await symlink(
+		NILE_PACKAGE_ROOT,
+		join(cwd, "node_modules", "@hejbro", "nile"),
 		"dir",
 	);
 	return cwd;
@@ -151,15 +160,35 @@ export const runCli = async (
 			{ cwd, env: options?.env ?? process.env },
 			(error, stdout, stderr) => {
 				if (error === null) {
+					// #533 G2.3b: recorded unconditionally, unlike the
+					// console.error below -- a call that succeeds still
+					// belongs in the transcript, since the test that made
+					// it can fail on its own assertions about this stdout.
+					transcript.record({
+						argv: [CLI_PATH, ...args],
+						cwd,
+						exitCode: 0,
+						stdout,
+						stderr,
+					});
 					resolve({ exitCode: 0, stdout, stderr });
 					return;
 				}
 				const exitCode = exitCodeFrom(error);
+				transcript.record({
+					argv: [CLI_PATH, ...args],
+					cwd,
+					exitCode,
+					stdout,
+					stderr,
+				});
 				// Keep the full child stderr in the report even when the test's
 				// own assertions don't inspect it — a flaky failure otherwise
 				// leaves no trace of what the spawned CLI actually printed (#102).
 				// Skip the log for hejbro's own diagnostics: those are expected
-				// non-zero exits a negative-path test asserted on.
+				// non-zero exits a negative-path test asserted on. This is a
+				// narrower, separate decision from the transcript's own
+				// recording above (never filtered) -- see call-transcript.ts.
 				if (!isHejbroDiagnostic(stderr)) {
 					console.error(`[cli-runner] exit ${exitCode}\n${stderr}`);
 				}

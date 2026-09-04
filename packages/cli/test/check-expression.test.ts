@@ -3,10 +3,13 @@ import {
 	between,
 	check,
 	emptySnapshot,
+	eq,
 	generateMigration,
 	inArray,
+	isNotNull,
 	numeric,
 	schema,
+	sql,
 	table,
 	text,
 	uuid,
@@ -14,7 +17,10 @@ import {
 import type { CompileResult, DriverRow, DriverSession } from "@hejbro/query";
 import { describe, expect, it } from "vitest";
 import type { Catalog } from "../src/check/catalog";
-import { compareCheckConstraint } from "../src/check/expression";
+import {
+	compareCheckConstraint,
+	normalizeCheckText,
+} from "../src/check/expression";
 
 const app = schema("app");
 
@@ -100,6 +106,7 @@ type FakeSessionOptions = {
 	/** The single combined EXPLAIN statement's own `Output` -- `[declaredText, catalogText]` -- or `null`/omitted to simulate a plan with no usable Output (elided). */
 	readonly explainOutput?: ReadonlyArray<string> | null;
 	readonly explainError?: Error;
+	readonly metadataError?: Error;
 };
 
 /**
@@ -143,6 +150,9 @@ const makeFakeSession = (
 		execute: async (compiled) => {
 			calls.push(compiled);
 			if (compiled.sql.includes("pg_constraint")) {
+				if (options.metadataError !== undefined) {
+					throw options.metadataError;
+				}
 				if (options.metadata === undefined) {
 					return [];
 				}
@@ -206,6 +216,7 @@ describe("compareCheckConstraint / 3.1 probe form and single statement", () => {
 			"posts",
 			"posts_status_valid",
 			declaredExpression,
+			"server",
 		);
 
 		expect(findings).toEqual([]);
@@ -244,6 +255,7 @@ describe("compareCheckConstraint / 3.1 probe form and single statement", () => {
 			"posts",
 			"posts_amount_valid",
 			declaredExpression,
+			"server",
 		);
 
 		expect(findings).toHaveLength(1);
@@ -284,6 +296,7 @@ describe("compareCheckConstraint / 3.1 probe form and single statement", () => {
 			"posts",
 			"posts_status_valid",
 			declaredExpression,
+			"server",
 		);
 
 		// One metadata lookup plus exactly one EXPLAIN statement carrying
@@ -340,6 +353,7 @@ describe("compareCheckConstraint / 3.2 index robustness", () => {
 				"posts",
 				"posts_status_valid",
 				declaredExpression,
+				"server",
 			),
 			compareCheckConstraint(
 				withIndex.session,
@@ -348,6 +362,7 @@ describe("compareCheckConstraint / 3.2 index robustness", () => {
 				"posts",
 				"posts_status_valid",
 				declaredExpression,
+				"server",
 			),
 		]);
 
@@ -399,6 +414,7 @@ describe("compareCheckConstraint / 3.3 uncomparable classification", () => {
 			"posts",
 			"posts_status_valid",
 			declaredExpression,
+			"server",
 		);
 
 		expect(findings).toHaveLength(1);
@@ -453,6 +469,7 @@ describe("compareCheckConstraint / 3.3 uncomparable classification", () => {
 			"posts",
 			"posts_amount_valid",
 			declaredExpression,
+			"server",
 		);
 
 		expect(findings).toHaveLength(1);
@@ -492,6 +509,7 @@ describe("compareCheckConstraint / 3.3 uncomparable classification", () => {
 			"posts",
 			"posts_status_valid",
 			declaredExpression,
+			"server",
 		);
 
 		expect(findings).toEqual([]);
@@ -540,6 +558,7 @@ describe("compareCheckConstraint / 3.4 catalog side via conbin, enforcement", ()
 			"posts",
 			"posts_status_valid",
 			declaredExpression,
+			"server",
 		);
 
 		expect(findings).toHaveLength(2);
@@ -587,6 +606,7 @@ describe("compareCheckConstraint / 3.4 catalog side via conbin, enforcement", ()
 			"posts",
 			"posts_status_valid",
 			declaredExpression,
+			"server",
 		);
 
 		expect(findings).toHaveLength(1);
@@ -631,6 +651,7 @@ describe("compareCheckConstraint / 3.4 catalog side via conbin, enforcement", ()
 			"posts",
 			"posts_status_valid",
 			declaredExpression,
+			"server",
 		);
 
 		expect(findings).toEqual([]);
@@ -668,6 +689,7 @@ describe("compareCheckConstraint / 3.4 catalog side via conbin, enforcement", ()
 			"posts",
 			"posts_status_valid",
 			declaredExpression,
+			"server",
 		);
 
 		expect(findings).toEqual([]);
@@ -677,5 +699,720 @@ describe("compareCheckConstraint / 3.4 catalog side via conbin, enforcement", ()
 			call.sql.trim().toLowerCase().startsWith("explain"),
 		);
 		expect(explainCalls).toHaveLength(0);
+	});
+});
+
+/**
+ * fix-nile-findings, #755, task 2.2: `mode: "text"` compares the declared
+ * and catalog texts after the fixed five-step normalization (cli-commands
+ * spec, "An expression is compared through the server's own rendering")
+ * -- and nothing else. Every `it` below issues no `explain` statement (a
+ * text-mode metadata-only lookup): asserted once per case via
+ * `explainCallCount`, not repeated per assertion.
+ */
+describe("compareCheckConstraint / 3.5 text comparison", () => {
+	const explainCallCount = (calls: ReadonlyArray<CompileResult>): number =>
+		calls.filter((call) => call.sql.trim().toLowerCase().startsWith("explain"))
+			.length;
+
+	it("agrees after whitespace normalization alone", async () => {
+		const posts = table(
+			app,
+			"posts",
+			{ id: uuid().primaryKey(), name: text() },
+			(t) => ({
+				checks: [check("posts_name_check", isNotNull(t.name))],
+			}),
+		);
+		const snapshot = buildTestSnapshot([posts]);
+		const declaredExpression = declaredCheckExpression(
+			snapshot,
+			"app.posts",
+			"posts_name_check",
+		);
+		const { session, calls } = makeFakeSession({
+			metadata: {
+				expression: '"posts"."name"    is  not   null',
+				convalidated: true,
+			},
+		});
+
+		const findings = await compareCheckConstraint(
+			session,
+			withPostsTable(),
+			"app",
+			"posts",
+			"posts_name_check",
+			declaredExpression,
+			"text",
+		);
+
+		expect(findings).toEqual([]);
+		expect(explainCallCount(calls)).toBe(0);
+	});
+
+	// fix-nile-findings, #755, lead ruling R80: the sixth normalization
+	// step, added after review measured that a real catalog folds a
+	// keyword back to upper-case (`is not null` -> `IS NOT NULL`) -- without
+	// it, this ordinary declaration would report not-compared on Nile.
+	it("agrees after folding a keyword's letter case alone", async () => {
+		const posts = table(
+			app,
+			"posts",
+			{ id: uuid().primaryKey(), name: text() },
+			(t) => ({
+				checks: [check("posts_name_check", isNotNull(t.name))],
+			}),
+		);
+		const snapshot = buildTestSnapshot([posts]);
+		const declaredExpression = declaredCheckExpression(
+			snapshot,
+			"app.posts",
+			"posts_name_check",
+		);
+		const { session } = makeFakeSession({
+			metadata: { expression: "(name IS NOT NULL)", convalidated: true },
+		});
+
+		const findings = await compareCheckConstraint(
+			session,
+			withPostsTable(),
+			"app",
+			"posts",
+			"posts_name_check",
+			declaredExpression,
+			"text",
+		);
+
+		expect(findings).toEqual([]);
+	});
+
+	it("is not compared when only a string literal's letter case differs (never folded)", async () => {
+		const posts = table(
+			app,
+			"posts",
+			{ id: uuid().primaryKey(), status: text() },
+			(t) => ({
+				checks: [check("posts_status_check", eq(t.status, "Done"))],
+			}),
+		);
+		const snapshot = buildTestSnapshot([posts]);
+		const declaredExpression = declaredCheckExpression(
+			snapshot,
+			"app.posts",
+			"posts_status_check",
+		);
+		const { session } = makeFakeSession({
+			metadata: { expression: `"posts"."status" = 'done'`, convalidated: true },
+		});
+
+		const findings = await compareCheckConstraint(
+			session,
+			withPostsTable(),
+			"app",
+			"posts",
+			"posts_status_check",
+			declaredExpression,
+			"text",
+		);
+
+		expect(findings).toHaveLength(1);
+		expect(findings[0]?.error).toMatchObject({ code: "check-not-compared" });
+	});
+
+	it("agrees after stripping one enclosing parenthesis pair alone", async () => {
+		const posts = table(
+			app,
+			"posts",
+			{ id: uuid().primaryKey(), name: text() },
+			(t) => ({
+				checks: [check("posts_name_check", isNotNull(t.name))],
+			}),
+		);
+		const snapshot = buildTestSnapshot([posts]);
+		const declaredExpression = declaredCheckExpression(
+			snapshot,
+			"app.posts",
+			"posts_name_check",
+		);
+		const { session } = makeFakeSession({
+			metadata: {
+				expression: '("posts"."name" is not null)',
+				convalidated: true,
+			},
+		});
+
+		const findings = await compareCheckConstraint(
+			session,
+			withPostsTable(),
+			"app",
+			"posts",
+			"posts_name_check",
+			declaredExpression,
+			"text",
+		);
+
+		expect(findings).toEqual([]);
+	});
+
+	it("agrees after stripping a two-part table qualifier alone (catalog carries no qualifier at all)", async () => {
+		const posts = table(
+			app,
+			"posts",
+			{ id: uuid().primaryKey(), name: text() },
+			(t) => ({
+				checks: [check("posts_name_check", isNotNull(t.name))],
+			}),
+		);
+		const snapshot = buildTestSnapshot([posts]);
+		const declaredExpression = declaredCheckExpression(
+			snapshot,
+			"app.posts",
+			"posts_name_check",
+		);
+		// The declared side renders table-bound, two-part: "posts"."name" is
+		// not null. Stripping that qualifier alone (leaving it quoted) already
+		// matches this catalog fixture -- no unquoting needed to reach equality.
+		const { session } = makeFakeSession({
+			metadata: { expression: '"name" is not null', convalidated: true },
+		});
+
+		const findings = await compareCheckConstraint(
+			session,
+			withPostsTable(),
+			"app",
+			"posts",
+			"posts_name_check",
+			declaredExpression,
+			"text",
+		);
+
+		expect(findings).toEqual([]);
+	});
+
+	it("agrees after stripping a three-part table qualifier alone (catalog carries schema.table.column)", async () => {
+		const posts = table(
+			app,
+			"posts",
+			{ id: uuid().primaryKey(), name: text() },
+			(t) => ({
+				checks: [check("posts_name_check", isNotNull(t.name))],
+			}),
+		);
+		const snapshot = buildTestSnapshot([posts]);
+		const declaredExpression = declaredCheckExpression(
+			snapshot,
+			"app.posts",
+			"posts_name_check",
+		);
+		const { session } = makeFakeSession({
+			metadata: {
+				expression: '"app"."posts"."name" is not null',
+				convalidated: true,
+			},
+		});
+
+		const findings = await compareCheckConstraint(
+			session,
+			withPostsTable(),
+			"app",
+			"posts",
+			"posts_name_check",
+			declaredExpression,
+			"text",
+		);
+
+		expect(findings).toEqual([]);
+	});
+
+	it("agrees after unquoting a plain lower-case identifier alone (catalog carries no quotes at all)", async () => {
+		const posts = table(
+			app,
+			"posts",
+			{ id: uuid().primaryKey(), name: text() },
+			(t) => ({
+				checks: [check("posts_name_check", isNotNull(t.name))],
+			}),
+		);
+		const snapshot = buildTestSnapshot([posts]);
+		const declaredExpression = declaredCheckExpression(
+			snapshot,
+			"app.posts",
+			"posts_name_check",
+		);
+		// Qualifier-stripping alone leaves the declared side as `"name" is
+		// not null` -- still quoted; this fixture is already bare, so only
+		// the unquote step (not the qualifier strip) closes the remaining gap.
+		const { session } = makeFakeSession({
+			metadata: { expression: "name is not null", convalidated: true },
+		});
+
+		const findings = await compareCheckConstraint(
+			session,
+			withPostsTable(),
+			"app",
+			"posts",
+			"posts_name_check",
+			declaredExpression,
+			"text",
+		);
+
+		expect(findings).toEqual([]);
+	});
+
+	it("agrees after stripping a cast the server appended to a string literal alone", async () => {
+		const posts = table(
+			app,
+			"posts",
+			{ id: uuid().primaryKey(), status: text() },
+			(t) => ({
+				checks: [check("posts_status_check", eq(t.status, "draft"))],
+			}),
+		);
+		const snapshot = buildTestSnapshot([posts]);
+		const declaredExpression = declaredCheckExpression(
+			snapshot,
+			"app.posts",
+			"posts_status_check",
+		);
+		const { session } = makeFakeSession({
+			metadata: {
+				expression: `"posts"."status" = 'draft'::text`,
+				convalidated: true,
+			},
+		});
+
+		const findings = await compareCheckConstraint(
+			session,
+			withPostsTable(),
+			"app",
+			"posts",
+			"posts_status_check",
+			declaredExpression,
+			"text",
+		);
+
+		expect(findings).toEqual([]);
+	});
+
+	it("agrees after all five normalizations together (the spec scenario's own text, verbatim)", async () => {
+		const projects = table(
+			app,
+			"projects",
+			{ id: uuid().primaryKey(), name: text() },
+			(t) => ({
+				checks: [check("name_not_empty", sql`length(btrim(${t.name})) > 0`)],
+			}),
+		);
+		const snapshot = buildTestSnapshot([projects]);
+		const declaredExpression = declaredCheckExpression(
+			snapshot,
+			"app.projects",
+			"name_not_empty",
+		);
+		const { session } = makeFakeSession({
+			metadata: {
+				expression: "(length(btrim(name)) > 0)",
+				convalidated: true,
+			},
+		});
+
+		const findings = await compareCheckConstraint(
+			session,
+			{
+				...emptyCatalog(),
+				tables: [{ schema: "app", table: "projects", rls: false }],
+			},
+			"app",
+			"projects",
+			"name_not_empty",
+			declaredExpression,
+			"text",
+		);
+
+		expect(findings).toEqual([]);
+	});
+
+	it("is not compared when an inner parenthesis difference changes the expression's meaning", async () => {
+		const nums = table(
+			app,
+			"nums",
+			{ id: uuid().primaryKey(), a: numeric(), b: numeric(), c: numeric() },
+			(t) => ({
+				checks: [check("assoc_check", sql`${t.a} + (${t.b} * ${t.c})`)],
+			}),
+		);
+		const snapshot = buildTestSnapshot([nums]);
+		const declaredExpression = declaredCheckExpression(
+			snapshot,
+			"app.nums",
+			"assoc_check",
+		);
+		const { session } = makeFakeSession({
+			metadata: {
+				expression: '("nums"."a" + "nums"."b") * "nums"."c"',
+				convalidated: true,
+			},
+		});
+
+		const findings = await compareCheckConstraint(
+			session,
+			{
+				...emptyCatalog(),
+				tables: [{ schema: "app", table: "nums", rls: false }],
+			},
+			"app",
+			"nums",
+			"assoc_check",
+			declaredExpression,
+			"text",
+		);
+
+		expect(findings).toHaveLength(1);
+		expect(findings[0]?.error).toMatchObject({ code: "check-not-compared" });
+		expect(findings[0]?.error.message).not.toMatch(/EXPLAIN/i);
+	});
+
+	it('is not compared when a quoted identifier\'s case genuinely differs ("Name" vs "name")', async () => {
+		const posts = table(
+			app,
+			"posts",
+			{ id: uuid().primaryKey(), name: text() },
+			(t) => ({
+				checks: [check("posts_name_check", isNotNull(t.name))],
+			}),
+		);
+		const snapshot = buildTestSnapshot([posts]);
+		const declaredExpression = declaredCheckExpression(
+			snapshot,
+			"app.posts",
+			"posts_name_check",
+		);
+		const { session } = makeFakeSession({
+			metadata: { expression: '"Name" is not null', convalidated: true },
+		});
+
+		const findings = await compareCheckConstraint(
+			session,
+			withPostsTable(),
+			"app",
+			"posts",
+			"posts_name_check",
+			declaredExpression,
+			"text",
+		);
+
+		expect(findings).toHaveLength(1);
+		expect(findings[0]?.error).toMatchObject({ code: "check-not-compared" });
+	});
+
+	it("is not compared for an `in (...)` vs `= ANY (ARRAY[...])` rewrite, names the restatement, and never mentions EXPLAIN", async () => {
+		const posts = table(
+			app,
+			"posts",
+			{ id: uuid().primaryKey(), role: text() },
+			(t) => ({
+				checks: [
+					check("posts_role_check", inArray(t.role, ["owner", "admin"])),
+				],
+			}),
+		);
+		const snapshot = buildTestSnapshot([posts]);
+		const declaredExpression = declaredCheckExpression(
+			snapshot,
+			"app.posts",
+			"posts_role_check",
+		);
+		const { session } = makeFakeSession({
+			metadata: {
+				expression: `role = ANY (ARRAY['owner'::text, 'admin'::text])`,
+				convalidated: true,
+			},
+		});
+
+		const findings = await compareCheckConstraint(
+			session,
+			withPostsTable(),
+			"app",
+			"posts",
+			"posts_role_check",
+			declaredExpression,
+			"text",
+		);
+
+		expect(findings).toHaveLength(1);
+		expect(findings[0]?.error).toMatchObject({ code: "check-not-compared" });
+		expect(findings[0]?.error.message).toContain("Next:");
+		expect(findings[0]?.error.message).not.toMatch(/EXPLAIN/i);
+	});
+
+	it("is not compared when only a string literal's internal whitespace differs (never collapsed)", async () => {
+		const posts = table(
+			app,
+			"posts",
+			{ id: uuid().primaryKey(), label: text() },
+			(t) => ({
+				checks: [check("posts_label_check", eq(t.label, "a  b"))],
+			}),
+		);
+		const snapshot = buildTestSnapshot([posts]);
+		const declaredExpression = declaredCheckExpression(
+			snapshot,
+			"app.posts",
+			"posts_label_check",
+		);
+		const { session } = makeFakeSession({
+			metadata: {
+				expression: `"posts"."label" = 'a b'`,
+				convalidated: true,
+			},
+		});
+
+		const findings = await compareCheckConstraint(
+			session,
+			withPostsTable(),
+			"app",
+			"posts",
+			"posts_label_check",
+			declaredExpression,
+			"text",
+		);
+
+		expect(findings).toHaveLength(1);
+		expect(findings[0]?.error).toMatchObject({ code: "check-not-compared" });
+	});
+
+	it("strips only the enclosing table's own qualifier, leaving a different table's reference untouched", async () => {
+		const posts = table(
+			app,
+			"posts",
+			{ id: uuid().primaryKey(), name: text() },
+			(t) => ({
+				checks: [check("posts_name_check", isNotNull(t.name))],
+			}),
+		);
+		const snapshot = buildTestSnapshot([posts]);
+		const declaredExpression = declaredCheckExpression(
+			snapshot,
+			"app.posts",
+			"posts_name_check",
+		);
+		// A genuinely different table's column, coincidentally named the same
+		// -- must not be conflated with the declaring table's own bare column.
+		const { session } = makeFakeSession({
+			metadata: {
+				expression: '"other"."name" is not null',
+				convalidated: true,
+			},
+		});
+
+		const findings = await compareCheckConstraint(
+			session,
+			withPostsTable(),
+			"app",
+			"posts",
+			"posts_name_check",
+			declaredExpression,
+			"text",
+		);
+
+		expect(findings).toHaveLength(1);
+		expect(findings[0]?.error).toMatchObject({ code: "check-not-compared" });
+	});
+
+	it("never issues an explain statement in text mode, even when the texts differ", async () => {
+		const posts = table(
+			app,
+			"posts",
+			{ id: uuid().primaryKey(), role: text() },
+			(t) => ({
+				checks: [
+					check("posts_role_check", inArray(t.role, ["owner", "admin"])),
+				],
+			}),
+		);
+		const snapshot = buildTestSnapshot([posts]);
+		const declaredExpression = declaredCheckExpression(
+			snapshot,
+			"app.posts",
+			"posts_role_check",
+		);
+		const { session, calls } = makeFakeSession({
+			metadata: {
+				expression: `role = ANY (ARRAY['owner'::text, 'admin'::text])`,
+				convalidated: true,
+			},
+		});
+
+		await compareCheckConstraint(
+			session,
+			withPostsTable(),
+			"app",
+			"posts",
+			"posts_role_check",
+			declaredExpression,
+			"text",
+		);
+
+		expect(explainCallCount(calls)).toBe(0);
+	});
+});
+
+// fix-nile-findings, D106 round 1 (R1-B1, R1-N4, R1-N1): the corrections
+// below are each a shipped-behavior-contradicts-delta finding turned into
+// the row that would have caught it.
+describe("compareCheckConstraint / 3.6 literal content is never normalized", () => {
+	const declared = (value: string) => {
+		const posts = table(
+			app,
+			"posts",
+			{ id: uuid().primaryKey(), format: text() },
+			(t) => ({ checks: [check("posts_format", eq(t.format, value))] }),
+		);
+		const snapshot = buildTestSnapshot([posts]);
+		return declaredCheckExpression(snapshot, "app.posts", "posts_format");
+	};
+	const run = async (value: string, catalog: string) => {
+		const { session } = makeFakeSession({
+			metadata: { expression: catalog, convalidated: true },
+		});
+		return compareCheckConstraint(
+			session,
+			withPostsTable(),
+			"app",
+			"posts",
+			"posts_format",
+			declared(value),
+			"text",
+		);
+	};
+
+	it.each([
+		{
+			label:
+				"a quoted word inside a literal is content, not an identifier (step 4)",
+			value: '"json"',
+			catalog: "format = 'json'",
+			agrees: false,
+		},
+		{
+			label: "the same literal on both sides agrees",
+			value: '"json"',
+			catalog: "format = '\"json\"'",
+			agrees: true,
+		},
+		{
+			label:
+				"a table qualifier inside a literal is content, not a reference (step 3)",
+			value: 'see "posts"."name"',
+			catalog: "format = 'see name'",
+			agrees: false,
+		},
+		{
+			label: "outside a literal the qualifier still normalizes away",
+			value: "plain",
+			catalog: "(format = 'plain'::text)",
+			agrees: true,
+		},
+	])("$label", async ({ value, catalog, agrees }) => {
+		const findings = await run(value, catalog);
+		if (agrees) {
+			expect(findings).toEqual([]);
+			return;
+		}
+		expect(findings).toHaveLength(1);
+		expect(findings[0]?.error).toMatchObject({ code: "check-not-compared" });
+	});
+});
+
+describe("normalizeCheckText / step 4 unquotes only what the server would render unquoted", () => {
+	it.each([
+		{ input: '"name" is not null', expected: "name is not null" },
+		{ input: '"order" is not null', expected: '"order" is not null' },
+		{ input: "\"user\" <> 'x'", expected: "\"user\" <> 'x'" },
+		{ input: '"select" > 0', expected: '"select" > 0' },
+		{ input: '"Name" is not null', expected: '"Name" is not null' },
+	])("$input → $expected", ({ input, expected }) => {
+		expect(normalizeCheckText(input, "app", "posts")).toBe(expected);
+	});
+});
+
+describe("normalizeCheckText / step 5 strips the whole cast the server appends to a literal", () => {
+	it.each([
+		{ input: "tags <> '{}'::text[]", expected: "tags <> '{}'" },
+		{ input: "name <> 'x'::character varying", expected: "name <> 'x'" },
+		{ input: "name <> 'x'::character varying(20)", expected: "name <> 'x'" },
+		{
+			input: "at > '2020-01-01'::timestamp with time zone",
+			expected: "at > '2020-01-01'",
+		},
+		{
+			input: "at > '2020-01-01'::timestamp(3) without time zone",
+			expected: "at > '2020-01-01'",
+		},
+		{ input: "price > '1'::numeric(10,2)", expected: "price > '1'" },
+		{ input: "ratio > '1'::double precision", expected: "ratio > '1'" },
+		{ input: "state = 'a'::app.status", expected: "state = 'a'" },
+		{ input: "state = 'a'::\"MyType\"", expected: "state = 'a'" },
+		{ input: "kind = 'a'::text and b", expected: "kind = 'a' and b" },
+		{ input: "s = 'x'::text || 'y'::text[]", expected: "s = 'x' || 'y'" },
+		{ input: "tags <> null::text[]", expected: "tags <> null::text[]" },
+	])("$input → $expected", ({ input, expected }) => {
+		expect(normalizeCheckText(input, "app", "posts")).toBe(expected);
+	});
+});
+
+describe("compareCheckConstraint / 3.7 a failed catalog read under text mode", () => {
+	const declared = () => {
+		const posts = table(
+			app,
+			"posts",
+			{ id: uuid().primaryKey(), name: text() },
+			(t) => ({ checks: [check("posts_name_check", isNotNull(t.name))] }),
+		);
+		const snapshot = buildTestSnapshot([posts]);
+		return declaredCheckExpression(snapshot, "app.posts", "posts_name_check");
+	};
+	const failing = () =>
+		makeFakeSession({
+			metadataError: Object.assign(
+				new Error("permission denied for function pg_get_expr"),
+				{ code: "42501" },
+			),
+		}).session;
+
+	it("names the catalog read, never EXPLAIN, when the preset declares no planning", async () => {
+		const findings = await compareCheckConstraint(
+			failing(),
+			withPostsTable(),
+			"app",
+			"posts",
+			"posts_name_check",
+			declared(),
+			"text",
+		);
+		expect(findings).toHaveLength(1);
+		expect(findings[0]?.error).toMatchObject({ code: "check-not-compared" });
+		expect(findings[0]?.error.message).toContain(
+			"permission denied for function pg_get_expr",
+		);
+		expect(findings[0]?.error.message).not.toMatch(/explain/i);
+		expect(findings[0]?.error.message).toMatch(/Next: .*pg_constraint/);
+		expect(findings[0]?.error.message).toMatch(/Next: .*pg_get_expr/);
+		expect(findings[0]?.error.message).not.toContain("pg_get_constraintdef");
+	});
+
+	it("keeps asking for EXPLAIN under server mode, where it is the remedy", async () => {
+		const findings = await compareCheckConstraint(
+			failing(),
+			withPostsTable(),
+			"app",
+			"posts",
+			"posts_name_check",
+			declared(),
+			"server",
+		);
+		expect(findings).toHaveLength(1);
+		expect(findings[0]?.error.message).toContain("EXPLAIN");
 	});
 });
