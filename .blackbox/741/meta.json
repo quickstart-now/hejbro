@@ -39,6 +39,13 @@
       "title": "init honours --config; artifacts stay cwd-rooted",
       "pr": null,
       "decisions": []
+    },
+    {
+      "id": "W2",
+      "at": "2026-09-04T15:34Z",
+      "title": "review round 1: three constructed-input findings fixed",
+      "pr": null,
+      "decisions": []
     }
   ],
   "prs": [],

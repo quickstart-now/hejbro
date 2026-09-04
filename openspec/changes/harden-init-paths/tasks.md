@@ -175,7 +175,7 @@ Files this group owns: `packages/cli/src/commands/init.ts`,
 `process.getuid?.() === 0` and restores modes (and the umask) in an
 inner `afterEach` before the fixture is removed.
 
-- [ ] 2.1 (~8m) `[design]` A dangling symbolic link is refused as the
+- [x] 2.1 (~8m) `[design]` A dangling symbolic link is refused as the
       wrong kind, and a loop is not a permission (D8). Red:
       `packages/cli/test/init.test.ts` — "refuses a dangling symbolic
       link at an artifact path instead of writing through it". Input
@@ -198,7 +198,7 @@ inner `afterEach` before the fixture is removed.
       link on the way as a conflict naming it; `throwStatFailed`'s
       non-permission `Next:` reworded. Files: `init.ts`, `init.test.ts`.
 
-- [ ] 2.2 (~9m) `[design]` A parent that cannot be written into stops
+- [x] 2.2 (~9m) `[design]` A parent that cannot be written into stops
       the run before anything is created (D6, check side). Red:
       `packages/cli/test/init.test.ts` — "refuses a parent the process
       cannot write into, and creates nothing". Input table:
@@ -217,7 +217,7 @@ inner `afterEach` before the fixture is removed.
       returns the directory it stopped at as data. Files: `init.ts`,
       `init.test.ts`.
 
-- [ ] 2.3 (~9m) `[design]` A creation that fails after the checks is
+- [x] 2.3 (~9m) `[design]` A creation that fails after the checks is
       coded and undone (D6, create side). Red:
       `packages/cli/test/init.test.ts` — "undoes what it created when a
       creation fails part-way, and reports it coded". Input table (each
@@ -239,7 +239,7 @@ inner `afterEach` before the fixture is removed.
       `error.path` relative to cwd and its code. Files: `init.ts`,
       `init.test.ts`.
 
-- [ ] 2.4 (~10m) `[design]` An unreadable snapshot file is
+- [x] 2.4 (~10m) `[design]` An unreadable snapshot file is
       `snapshot-unreadable` on every read-side command, and the skill
       names the codes (D7; review non-blocking 5). Red:
       `packages/cli/test/generate-command.test.ts` — "refuses an

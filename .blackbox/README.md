@@ -67,6 +67,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#754](754/) | Nile rejects the schema-qualified column references rendered inside CHECK and partial-index predicates (42622) | closed | #780 #795 #802 | 0 | 4 (0 pending) |
 | ↳ [#755](755/) | check cannot compare CHECK constraints on Nile because Nile has no EXPLAIN | closed | #780 #795 | 0 | 6 (0 pending) |
 | ↳ [#766](766/) | init: nested migrationsDir/snapshotPath pass the duplicate check, then generate crashes EISDIR | open |  | 0 | 1 (1 pending) |
+| ↳ [#767](767/) | init: EACCES at mkdir/write surfaces as a raw stack with absolute paths, after a partial create | open |  | 0 | 0 (0 pending) |
 | ↳ [#768](768/) | init: stat-failure refusal's Next: names the missing leaf, not the blocking ancestor | open |  | 0 | 1 (0 pending) |
 | ↳ [#774](774/) | core: diff-engine byIdentity reassembly drops a second same-identity, same-direction change from one kind | closed | #824 #833 | 0 | 1 (1 pending) |
 | ↳ [#783](783/) | reset: a table that merely shares the ledger's name has all its rows deleted and is reported as the cleared ledger | closed | #835 #838 | 0 | 6 (2 pending) |
