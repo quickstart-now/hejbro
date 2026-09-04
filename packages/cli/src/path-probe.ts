@@ -1,5 +1,17 @@
-import { lstatSync, readlinkSync, statSync } from "node:fs";
+import { lstatSync, readlinkSync, type Stats, statSync } from "node:fs";
 import { dirname, isAbsolute, relative } from "node:path";
+
+/** The two kinds of node a configured artifact can be (#846 D2, moved
+ * from `commands/init.ts` -- shared by every module that judges a
+ * configured path). */
+export type NodeKind = "file" | "directory";
+
+const kindOfStat = (stat: Stats): NodeKind => {
+	if (stat.isDirectory()) {
+		return "directory";
+	}
+	return "file";
+};
 
 /** A configured path's trailing `/`s dropped before it is stat'd -- POSIX
  * `stat()` on a path spelled with a trailing separator refuses with
@@ -170,4 +182,99 @@ export const permissionCulpritFor = (
 		return outcome.culprit;
 	}
 	return null;
+};
+
+/** One judgement of a configured path (#846 D2), shared by every module
+ * that scaffolds or reads a configured artifact: ancestors first (a
+ * file, a dangling link, or a blocked directory on the way is named as
+ * that node, never as the leaf with a bare operating-system code), then
+ * the leaf itself, judged by what it points at when it is a symbolic
+ * link. `absent` carries the deepest existing ancestor (`parent`) --
+ * the node a caller's own writability check and first-node-to-create
+ * both need, so neither re-walks. */
+export type PathOutcome =
+	| { readonly kind: "absent"; readonly parent: string }
+	| { readonly kind: "present"; readonly actualKind: NodeKind }
+	| { readonly kind: "dangling"; readonly target: string }
+	| { readonly kind: "ancestor-file"; readonly path: string }
+	| {
+			readonly kind: "ancestor-dangling";
+			readonly path: string;
+			readonly target: string;
+	  }
+	| {
+			readonly kind: "blocked";
+			readonly culprit: string;
+			readonly code: string;
+	  }
+	| {
+			readonly kind: "stat-failed";
+			readonly path: string;
+			readonly code: string;
+	  };
+
+/** `leafPath`'s own outcome once its ancestors are already known "ok"
+ * (`parent` is that deepest existing ancestor, for an absent leaf) --
+ * `lstat`s first: a non-link node's `lstat` already carries its kind, so
+ * only a link needs the second, following `stat` (#767 review, D8). */
+const leafOutcomeAt = (
+	cwd: string,
+	path: string,
+	parent: string,
+): PathOutcome => {
+	try {
+		const lstat = lstatSync(path);
+		if (!lstat.isSymbolicLink()) {
+			return { kind: "present", actualKind: kindOfStat(lstat) };
+		}
+		try {
+			return { kind: "present", actualKind: kindOfStat(statSync(path)) };
+		} catch (error) {
+			const code = errorCode(error);
+			if (code === "ENOENT") {
+				return { kind: "dangling", target: symlinkTargetLabel(cwd, path) };
+			}
+			return { kind: "stat-failed", path, code };
+		}
+	} catch (error) {
+		const code = errorCode(error);
+		if (code === "ENOENT") {
+			return { kind: "absent", parent };
+		}
+		return { kind: "stat-failed", path, code };
+	}
+};
+
+/** Judges `leafPath` (already trailing-separator-stripped by the caller,
+ * D106 R1 B1) by its ancestors, then by itself (#846 D2): the one
+ * judgement `commands/init.ts` applies to every planned artifact,
+ * including the configuration artifact, and the read side applies to
+ * the paths it consumes. */
+export const probePath = (cwd: string, leafPath: string): PathOutcome => {
+	const ancestorOutcome = walkAncestors(cwd, dirname(leafPath));
+	if (ancestorOutcome.kind === "conflict") {
+		return { kind: "ancestor-file", path: ancestorOutcome.path };
+	}
+	if (ancestorOutcome.kind === "dangling") {
+		return {
+			kind: "ancestor-dangling",
+			path: ancestorOutcome.path,
+			target: ancestorOutcome.target,
+		};
+	}
+	if (ancestorOutcome.kind === "blocked") {
+		return {
+			kind: "blocked",
+			culprit: ancestorOutcome.culprit,
+			code: ancestorOutcome.code,
+		};
+	}
+	if (ancestorOutcome.kind === "stat-failed") {
+		return {
+			kind: "stat-failed",
+			path: ancestorOutcome.path,
+			code: ancestorOutcome.code,
+		};
+	}
+	return leafOutcomeAt(cwd, leafPath, ancestorOutcome.path);
 };

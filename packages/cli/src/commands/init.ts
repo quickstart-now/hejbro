@@ -2,11 +2,8 @@ import {
 	accessSync,
 	constants,
 	existsSync,
-	lstatSync,
 	mkdirSync,
 	rmSync,
-	type Stats,
-	statSync,
 	writeFileSync,
 } from "node:fs";
 import { dirname, isAbsolute, join, relative } from "node:path";
@@ -20,10 +17,10 @@ import { identityFromMessage } from "../identity";
 import { loadConfig, resolveConfigPath } from "../loader";
 import {
 	errorCode,
+	type NodeKind,
 	permissionCulpritFor,
+	probePath,
 	stripTrailingSeparators,
-	symlinkTargetLabel,
-	walkAncestors,
 } from "../path-probe";
 
 const CONFIG_FILE_NAME = "hejbro.config.ts";
@@ -92,17 +89,8 @@ type DirArtifact = {
 
 type Artifact = FileArtifact | DirArtifact;
 
-type NodeKind = "file" | "directory";
-
 const expectedKindOf = (artifact: Artifact): NodeKind => {
 	if (artifact.kind === "dir") {
-		return "directory";
-	}
-	return "file";
-};
-
-const kindOfStat = (stat: Stats): NodeKind => {
-	if (stat.isDirectory()) {
 		return "directory";
 	}
 	return "file";
@@ -304,81 +292,6 @@ const errorPath = (error: unknown, fallback: string): string => {
 	return fallback;
 };
 
-type StatOutcome =
-	| { readonly kind: "absent" }
-	| { readonly kind: "present"; readonly actualKind: NodeKind }
-	| { readonly kind: "dangling"; readonly target: string }
-	| { readonly kind: "stat-failed"; readonly code: string };
-
-/** `stat`'s own outcomes at `path` (already trailing-separator-stripped
- * by the caller, D106 R1 B1): the node's kind, "nothing is there"
- * (`ENOENT` only), a dangling symbolic link (#767 review, D8 -- `stat`
- * follows a link and a dangling one also fails `ENOENT`, indistinguish-
- * able from "nothing there" without `lstat`ing first), or any other
- * failure. `lstat`s first: a non-link node's `lstat` already carries its
- * kind, so only a link needs the second, following `stat`. Carried as
- * data instead of being decided by a bare `existsSync` that a trailing
- * separator can make silently `false` for a file that is really there. */
-const statOutcomeAt = (cwd: string, path: string): StatOutcome => {
-	try {
-		const lstat = lstatSync(path);
-		if (!lstat.isSymbolicLink()) {
-			return { kind: "present", actualKind: kindOfStat(lstat) };
-		}
-		try {
-			return { kind: "present", actualKind: kindOfStat(statSync(path)) };
-		} catch (error) {
-			const code = errorCode(error);
-			if (code === "ENOENT") {
-				return { kind: "dangling", target: symlinkTargetLabel(cwd, path) };
-			}
-			return { kind: "stat-failed", code };
-		}
-	} catch (error) {
-		const code = errorCode(error);
-		if (code === "ENOENT") {
-			return { kind: "absent" };
-		}
-		return { kind: "stat-failed", code };
-	}
-};
-
-/** Refuses before creating anything: a file sitting somewhere in a
- * planned artifact's own directory chain, not just at its leaf
- * (D106 R1 N1), or a directory on the way that denies this process
- * permission to look inside it (#768, D4). Runs before
- * {@link checkPathKind}: a leaf whose own `stat` also fails with
- * `ENOTDIR`/`EACCES` (because an ancestor, not the leaf, is the file or
- * the blocked directory) is named here by the ancestor that actually
- * blocks it, instead of by the leaf with a bare OS code. Labelled with
- * {@link fileLabel} (no trailing separator, D106 R1 lead-approved
- * option A extended to ancestors): unlike a leaf's own field, no user
- * ever spelled this path with a trailing slash for this function to
- * preserve -- it is derived from a nested field's own value, so both
- * the quote and the `Next:` clause name the one real path. */
-const checkAncestors = (cwd: string, artifact: Artifact): void => {
-	const outcome = walkAncestors(cwd, dirname(artifact.path));
-	if (outcome.kind === "ok") {
-		return;
-	}
-	if (outcome.kind === "blocked") {
-		throwStatFailed(
-			artifact.label,
-			artifact.fieldName,
-			outcome.code,
-			fileLabel(cwd, outcome.culprit),
-		);
-	}
-	const label = fileLabel(cwd, outcome.path);
-	if (outcome.kind === "conflict") {
-		throwAncestorConflict(label, artifact.fieldName, outcome.actualKind);
-	}
-	if (outcome.kind === "dangling") {
-		throwAncestorDanglingLink(label, artifact.fieldName, outcome.target);
-	}
-	throwStatFailed(label, artifact.fieldName, outcome.code, label);
-};
-
 type ArtifactPair = readonly [Artifact, Artifact];
 
 /** Every unordered pair of `artifacts`, each appearing once, in the
@@ -482,21 +395,39 @@ const culpritFor = (cwd: string, artifact: Artifact, code: string): string => {
 	return fileLabel(cwd, culpritPath);
 };
 
-/** Refuses before creating anything (checked for every planned artifact
- * before any of them is created): an existing path that is the wrong
- * kind of node for what `artifact` names. init resolves the same way
- * `generate` does and never normalizes the configured value away. A
- * `snapshotPath` spelled as a directory never reaches this check at all
- * (#846 D1): `parseConfig` refuses that spelling when the configuration
- * is read, before `init` builds any artifact from it. The presence/kind
- * check itself does strip trailing separators before stat'ing (D106 R1
- * B1): a directory field honours `"mig/"` the same as `"mig"`, so the
- * check that path is inspected under must too, or a file sitting there
- * escapes it and reaches a raw `mkdirSync` crash instead. */
-const checkPathKind = (cwd: string, artifact: Artifact): void => {
+/** Refuses before creating anything (checked for every planned artifact,
+ * the configuration artifact included, before any of them is created):
+ * ancestors first -- a file, a dangling link or a blocked directory on
+ * the way is named as that node, never as the leaf with a bare
+ * operating-system code (D106 R1 N1, #768 D4) -- then the leaf's own
+ * kind, judged by what it points at when it is a symbolic link (#767
+ * review, D8). One `probePath` call (#846 D2) replaces the ancestor walk
+ * and the leaf stat this used to be two separate functions for. init
+ * resolves the same way `generate` does and never normalizes the
+ * configured value away. A `snapshotPath` spelled as a directory never
+ * reaches this check at all (#846 D1): `parseConfig` refuses that
+ * spelling when the configuration is read, before `init` builds any
+ * artifact from it. The presence/kind check itself does strip trailing
+ * separators before stat'ing (D106 R1 B1): a directory field honours
+ * `"mig/"` the same as `"mig"`, so the path probed under must too, or a
+ * file sitting there escapes it and reaches a raw `mkdirSync` crash
+ * instead. */
+const checkArtifactPath = (cwd: string, artifact: Artifact): void => {
 	const expectedKind = expectedKindOf(artifact);
-	const outcome = statOutcomeAt(cwd, stripTrailingSeparators(artifact.path));
+	const strippedPath = stripTrailingSeparators(artifact.path);
+	const outcome = probePath(cwd, strippedPath);
 	if (outcome.kind === "absent") {
+		return;
+	}
+	if (outcome.kind === "present") {
+		if (outcome.actualKind !== expectedKind) {
+			throwPathConflict(
+				artifact.label,
+				artifact.fieldName,
+				expectedKind,
+				outcome.actualKind,
+			);
+		}
 		return;
 	}
 	if (outcome.kind === "dangling") {
@@ -507,7 +438,34 @@ const checkPathKind = (cwd: string, artifact: Artifact): void => {
 			outcome.target,
 		);
 	}
-	if (outcome.kind === "stat-failed") {
+	if (outcome.kind === "ancestor-file") {
+		throwAncestorConflict(
+			fileLabel(cwd, outcome.path),
+			artifact.fieldName,
+			"file",
+		);
+	}
+	if (outcome.kind === "ancestor-dangling") {
+		throwAncestorDanglingLink(
+			fileLabel(cwd, outcome.path),
+			artifact.fieldName,
+			outcome.target,
+		);
+	}
+	if (outcome.kind === "blocked") {
+		throwStatFailed(
+			artifact.label,
+			artifact.fieldName,
+			outcome.code,
+			fileLabel(cwd, outcome.culprit),
+		);
+	}
+	// "stat-failed" is shared by the ancestor walk and the leaf's own
+	// stat (#846 D2): the leaf when its own path is the one that failed,
+	// an ancestor otherwise -- an ancestor's stat-failed never carries an
+	// EACCES/EPERM code (walkAncestors reports those as "blocked",
+	// above), so it never needs `culpritFor`'s own walk.
+	if (outcome.path === strippedPath) {
 		throwStatFailed(
 			artifact.label,
 			artifact.fieldName,
@@ -515,44 +473,36 @@ const checkPathKind = (cwd: string, artifact: Artifact): void => {
 			culpritFor(cwd, artifact, outcome.code),
 		);
 	}
-	if (outcome.kind === "present" && outcome.actualKind !== expectedKind) {
-		throwPathConflict(
-			artifact.label,
-			artifact.fieldName,
-			expectedKind,
-			outcome.actualKind,
-		);
-	}
+	const label = fileLabel(cwd, outcome.path);
+	throwStatFailed(label, artifact.fieldName, outcome.code, label);
 };
 
 /** Refuses before creating anything (#767 review, D6 check side; runs
  * after the kind/ancestor pass, over every planned artifact): an absent
- * artifact whose deepest existing ancestor (the node `walkAncestors`
- * stops at) denies this process permission to write into it. The stat
- * pass above proves the tree's shape, not that this process may add to
- * it. An artifact already present is never checked -- it will be
- * skipped, not created. */
+ * artifact whose deepest existing ancestor (`probePath`'s own `parent`
+ * for an absent outcome, #846 D2) denies this process permission to
+ * write into it. The stat pass above proves the tree's shape, not that
+ * this process may add to it. An artifact already present is never
+ * checked -- it will be skipped, not created. */
 const checkWritable = (
 	cwd: string,
 	artifacts: ReadonlyArray<Artifact>,
 ): void => {
 	artifacts.forEach((artifact) => {
-		if (existsSync(artifact.path)) {
-			return;
-		}
-		const outcome = walkAncestors(cwd, dirname(artifact.path));
-		if (outcome.kind !== "ok") {
-			// Already refused by checkAncestors, above -- unreachable.
+		const outcome = probePath(cwd, stripTrailingSeparators(artifact.path));
+		if (outcome.kind !== "absent") {
+			// Already present, or already refused by checkArtifactPath,
+			// above -- unreachable for anything but "absent".
 			return;
 		}
 		try {
-			accessSync(outcome.path, constants.W_OK);
+			accessSync(outcome.parent, constants.W_OK);
 		} catch (error) {
 			throwNotWritable(
 				artifact.label,
 				artifact.fieldName,
 				errorCode(error),
-				fileLabel(cwd, outcome.path),
+				fileLabel(cwd, outcome.parent),
 			);
 		}
 	});
@@ -570,22 +520,23 @@ const createArtifact = (artifact: Artifact): void => {
 };
 
 /** The first node this run's own creation of `artifact` would add
- * (#767 review, D6 create side): the deepest existing ancestor (from
- * {@link walkAncestors}'s own "ok" outcome, already proven writable by
- * {@link checkWritable}) joined with the next path segment on the way
- * to `artifact.path` -- computed before creating anything, since a
- * `mkdirSync(recursive)` that fails part-way reports nothing about
- * which segments it made. That single node is what a rollback removes:
- * `rmSync(..., { recursive: true })` clears everything under it. */
+ * (#767 review, D6 create side): the deepest existing ancestor
+ * (`probePath`'s own `parent` for an absent outcome, already proven
+ * writable by {@link checkWritable}) joined with the next path segment
+ * on the way to `artifact.path` -- computed before creating anything,
+ * since a `mkdirSync(recursive)` that fails part-way reports nothing
+ * about which segments it made. That single node is what a rollback
+ * removes: `rmSync(..., { recursive: true })` clears everything under
+ * it. */
 const firstNodeToCreate = (cwd: string, artifact: Artifact): string => {
-	const outcome = walkAncestors(cwd, dirname(artifact.path));
-	if (outcome.kind !== "ok") {
-		// Already refused by checkAncestors/checkWritable -- unreachable.
+	const outcome = probePath(cwd, stripTrailingSeparators(artifact.path));
+	if (outcome.kind !== "absent") {
+		// Already refused by checkArtifactPath/checkWritable -- unreachable.
 		return artifact.path;
 	}
-	const remainder = relative(outcome.path, artifact.path);
+	const remainder = relative(outcome.parent, artifact.path);
 	const firstSegment = remainder.split("/")[0] ?? remainder;
-	return join(outcome.path, firstSegment);
+	return join(outcome.parent, firstSegment);
 };
 
 /** Builds and throws the coded failure for a creation that still fails
@@ -825,7 +776,7 @@ export const runInit = async (
 		// among the artifacts whose wrong-kind path stops the run, but
 		// the loader would otherwise answer first, with a config-load-
 		// failed diagnostic about import resolution instead of this one.
-		checkPathKind(cwd, configArtifact);
+		checkArtifactPath(cwd, configArtifact);
 		const config = await readExistingConfig(cwd, configFilePath, configFlag);
 		const configPresent = config !== null;
 		const migrationsField = resolveField(
@@ -844,15 +795,15 @@ export const runInit = async (
 		const migrationsArtifact = buildMigrationsArtifact(cwd, migrationsField);
 		const snapshotArtifact = buildSnapshotArtifact(cwd, snapshotField);
 
-		// Every planned artifact's path kind is checked before any of
-		// them is created -- a conflict discovered on the snapshot must
-		// not leave a just-created config file or migrations directory
-		// behind it. Two fields resolving to the same path (D106 R1 N2)
-		// are checked first: creating one would make the other's own
-		// existsSync check see it as already present. The ancestor chain
-		// (D106 R1 N1) is checked before the leaf's own kind (3.1/
-		// checkPathKind): a leaf blocked by a file ancestor is named by
-		// that ancestor, not by the leaf.
+		// Every planned artifact's path is checked before any of them is
+		// created -- a conflict discovered on the snapshot must not leave
+		// a just-created config file or migrations directory behind it.
+		// Two fields resolving to the same path (D106 R1 N2) are checked
+		// first: creating one would make the other's own existsSync check
+		// see it as already present. checkArtifactPath itself judges the
+		// ancestor chain (D106 R1 N1) before the leaf's own kind (#846
+		// D2): a leaf blocked by a file ancestor is named by that
+		// ancestor, not by the leaf.
 		const plannedArtifacts: ReadonlyArray<Artifact> = [
 			configArtifact,
 			migrationsArtifact,
@@ -861,8 +812,7 @@ export const runInit = async (
 		checkNoDuplicatePaths(cwd, plannedArtifacts);
 		checkNoNestedPaths(cwd, plannedArtifacts);
 		plannedArtifacts.forEach((artifact) => {
-			checkAncestors(cwd, artifact);
-			checkPathKind(cwd, artifact);
+			checkArtifactPath(cwd, artifact);
 		});
 		checkWritable(cwd, plannedArtifacts);
 

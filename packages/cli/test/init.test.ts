@@ -1862,3 +1862,140 @@ export const posts = table(app, "posts", {
 		});
 	});
 });
+
+// #846 D2, NB3: the configuration artifact's own kind used to be checked
+// before its ancestors, so `--config f/h.ts` with `f` a file stat'd the
+// non-existent leaf "f/h.ts" directly and named it with a bare ENOTDIR,
+// instead of the ancestor refusal naming `f` every other artifact
+// already gets. One `probePath` judgement (ancestors, then the leaf) now
+// covers the configuration artifact too.
+describe.skipIf(process.getuid?.() === 0)(
+	"runInit / judges the --config path by its ancestors before its own node (#846 D2, NB3)",
+	() => {
+		afterEach(async () => {
+			const nx = join(cwd, "nx");
+			if (existsSync(nx)) {
+				await chmod(nx, 0o755);
+			}
+		});
+
+		type ConfigAncestorRow = {
+			readonly label: string;
+			readonly configFlag: ReadonlyArray<string>;
+			readonly setup: (fixtureCwd: string) => Promise<void>;
+			readonly assert: (result: Awaited<ReturnType<typeof runInit>>) => void;
+		};
+
+		const rows: ReadonlyArray<ConfigAncestorRow> = [
+			{
+				label: "--config f/h.ts, f a regular file",
+				configFlag: ["--config", "f/h.ts"],
+				setup: async (fixtureCwd) => {
+					await writeFile(join(fixtureCwd, "f"), "not a directory");
+				},
+				assert: (result) => {
+					expect(result.exitCode).toBe(1);
+					expect(result.stderr).toBe(
+						'error[init-path-conflict]: f\n  "f" was expected to be a directory to hold hejbro.config.ts, but a file is there. Next: move or remove the existing file at "f", then rerun `hejbro init`.',
+					);
+					expect(existsSync(join(cwd, "f", "h.ts"))).toBe(false);
+				},
+			},
+			{
+				label: "--config lnk/h.ts, lnk -> nowhere (dangling ancestor)",
+				configFlag: ["--config", "lnk/h.ts"],
+				setup: async (fixtureCwd) => {
+					await symlink("nowhere", join(fixtureCwd, "lnk"));
+				},
+				assert: (result) => {
+					expect(result.exitCode).toBe(1);
+					expect(result.stderr).toBe(
+						'error[init-path-conflict]: lnk\n  "lnk" was expected to be a directory to hold hejbro.config.ts, but a dangling symbolic link is there, pointing at "nowhere". Next: remove the link or create its target, then rerun `hejbro init`.',
+					);
+				},
+			},
+			{
+				label: "--config nx/h.ts, nx mode 000 (blocked)",
+				configFlag: ["--config", "nx/h.ts"],
+				setup: async (fixtureCwd) => {
+					await mkdir(join(fixtureCwd, "nx"), { recursive: true });
+					await chmod(join(fixtureCwd, "nx"), 0o000);
+				},
+				assert: (result) => {
+					expect(result.exitCode).toBe(1);
+					expect(result.stderr).toBe(
+						'error[init-path-conflict]: nx/h.ts\n  "nx/h.ts" could not be checked for hejbro.config.ts (EACCES): "nx" does not let this process look inside it. Next: check permissions on "nx", then rerun `hejbro init`.',
+					);
+				},
+			},
+			{
+				label: "--config nx/a/h.ts, nx mode 000 (names nx, not nx/a)",
+				configFlag: ["--config", "nx/a/h.ts"],
+				setup: async (fixtureCwd) => {
+					await mkdir(join(fixtureCwd, "nx", "a"), { recursive: true });
+					await chmod(join(fixtureCwd, "nx"), 0o000);
+				},
+				assert: (result) => {
+					expect(result.exitCode).toBe(1);
+					expect(result.stderr).toBe(
+						'error[init-path-conflict]: nx/a/h.ts\n  "nx/a/h.ts" could not be checked for hejbro.config.ts (EACCES): "nx" does not let this process look inside it. Next: check permissions on "nx", then rerun `hejbro init`.',
+					);
+				},
+			},
+			{
+				label: "--config d/h.ts, d an empty directory (control: created)",
+				configFlag: ["--config", "d/h.ts"],
+				setup: async (fixtureCwd) => {
+					await mkdir(join(fixtureCwd, "d"), { recursive: true });
+				},
+				assert: (result) => {
+					expect(result.exitCode).toBe(0);
+					expect(result.report).toContain("created d/h.ts");
+				},
+			},
+			{
+				label:
+					"--config h.ts, h.ts -> nowhere (control: leaf dangling link as today)",
+				configFlag: ["--config", "h.ts"],
+				setup: async (fixtureCwd) => {
+					await symlink("nowhere", join(fixtureCwd, "h.ts"));
+				},
+				assert: (result) => {
+					expect(result.exitCode).toBe(1);
+					expect(result.stderr).toBe(
+						'error[init-path-conflict]: h.ts\n  "h.ts" was expected to be a file for hejbro.config.ts, but a dangling symbolic link is there, pointing at "nowhere". Next: remove the link or create its target, then rerun `hejbro init`.',
+					);
+				},
+			},
+			{
+				label:
+					'omitted --config, migrationsDir: "f/mig", f a file (control: other artifacts unchanged)',
+				configFlag: [],
+				setup: async (fixtureCwd) => {
+					await writeFile(
+						configPath(),
+						'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "f/mig" };\n',
+					);
+					await writeFile(join(fixtureCwd, "f"), "not a directory");
+				},
+				assert: (result) => {
+					expect(result.exitCode).toBe(1);
+					expect(result.stderr).toBe(
+						'error[init-path-conflict]: f\n  "f" was expected to be a directory to hold migrationsDir, but a file is there. Next: move or remove the existing file at "f", then rerun `hejbro init`.',
+					);
+				},
+			},
+		];
+
+		it.each(rows)(
+			"judges the --config path by its ancestors before its own node ($label)",
+			async ({ configFlag, setup, assert }) => {
+				await setup(cwd);
+
+				const result = await runInit(cwd, configFlag);
+
+				assert(result);
+			},
+		);
+	},
+);
