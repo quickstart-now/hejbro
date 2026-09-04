@@ -431,3 +431,12 @@ _owner · 2026-09-04T13:53Z · raw ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#121_
 
 The lead's decision rule for the delegated queue: before ruling, restate the product — hejbro is the owner's production tool for declaring a Postgres database in TypeScript and generating deterministic migrations; the test of any surface is "does it cover my database" — and pick the option that serves that, at the smallest scope that fixes the issue at hand. No new work is opened from a decision beyond the issue it settles; anything wider is filed, not built.
 
+<a id="d11"></a>
+## D11 — The boundary is hejbro's purpose, not the smallest diff
+
+_owner · 2026-09-04T13:54Z · raw ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#122_
+
+"I did not say 'minimal fix'. I said: handle things within the scope of what hejbro pursues and what its goals are."
+
+Correction of the lead's reading of D10 on this branch (the decision rule): the boundary is the product's purpose, not the smallest diff. When a decision comes up, restate what hejbro is for — the owner's production tool for declaring a Postgres database in TypeScript with deterministic migrations; the test is "does it cover my database" — and choose what serves that purpose, fully, inside that category. Work that falls outside hejbro's purpose is what "widening" means; a complete fix inside it is not.
+
