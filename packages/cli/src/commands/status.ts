@@ -1,8 +1,10 @@
 import { join } from "node:path";
+import type { Driver } from "@hejbro/query";
 import { defineCommand } from "citty";
 import { APPLY_CONNECTION_CODES } from "../apply/capability";
 import type { LedgerState } from "../apply/ledger";
-import { readLedger } from "../apply/ledger";
+import { asLedgerAccessFailure, readLedger } from "../apply/ledger";
+import { throwLedgerReadFailure } from "../apply/ledger-diagnostics";
 import {
 	assertLedgerNotOccupied,
 	probeLedgerIdentity,
@@ -169,6 +171,33 @@ export const renderPlanFailure = (
 	};
 };
 
+/**
+ * [task 1.6, harden-ledger-diagnostics] `readLedger`'s own tagged read
+ * failure becomes `apply-ledger-unreadable` -- `status` never writes, so
+ * this is the only ledger classification it ever needs (unlike
+ * `migrate`/`raise`, which also classify a write).
+ */
+const readFailureResult = async (
+	driver: Driver,
+	rawFailure: unknown,
+): Promise<StatusResult> => {
+	try {
+		await throwLedgerReadFailure(driver, rawFailure, STATUS_COMMAND);
+	} catch (classified) {
+		return {
+			exitCode: 1,
+			stdout: [],
+			stderr: renderDiagnostics(
+				[fromHejbroError(asHejbroError(classified), STATUS_COMMAND)],
+				null,
+			),
+		};
+	}
+	throw new Error(
+		"unreachable: throwLedgerReadFailure resolved instead of throwing",
+	);
+};
+
 const preconditionResult = (error: unknown): StatusResult => {
 	const hejbroErr = asHejbroError(error);
 	return {
@@ -207,12 +236,19 @@ export const runStatus = async (
 			async (driver) => {
 				const identity = await probeLedgerIdentity(driver);
 				assertLedgerNotOccupied(identity, STATUS_COMMAND);
-				const ledgerState = await readLedger(driver);
-				const plan = planApply(chain, ledgerState);
-				if (!plan.ok) {
-					return renderPlanFailure(plan);
+				try {
+					const ledgerState = await readLedger(driver);
+					const plan = planApply(chain, ledgerState);
+					if (!plan.ok) {
+						return renderPlanFailure(plan);
+					}
+					return renderStatusReport(plan, ledgerState);
+				} catch (error) {
+					if (asLedgerAccessFailure(error) === null) {
+						throw error;
+					}
+					return readFailureResult(driver, error);
 				}
-				return renderStatusReport(plan, ledgerState);
 			},
 			importer,
 		);

@@ -348,3 +348,48 @@ describe("applyRaise — a relation that is not the ledger at the ledger's name 
 		});
 	});
 });
+
+describe("applyRaise — a ledger raise may not read refuses before the bootstrap / 1.6 (harden-ledger-diagnostics)", () => {
+	it("42501 on the ledger's own read -> apply-ledger-unreadable, no create schema and no file statement sent", async () => {
+		const { driver, calls } = makeFakeDriver({
+			failWhen: (call) =>
+				call.sql.trim().toLowerCase().startsWith('select "filename"'),
+			failError: Object.assign(
+				new Error("permission denied for table migration_ledger"),
+				{ code: "42501" },
+			),
+		});
+
+		const error: unknown = await applyRaise(
+			driver,
+			snapshotFile,
+			COMMAND,
+		).catch((caught: unknown) => caught);
+
+		expect(error).toMatchObject({ code: "apply-ledger-unreadable" });
+		expect(
+			calls.some((call) => call.sql.toLowerCase().startsWith("create schema")),
+		).toBe(false);
+		expect(calls.some((call) => call.sql === snapshotFile.sql)).toBe(false);
+	});
+
+	it("42501 on bootstrap's own create schema -> apply-ledger-unwritable, no file statement sent", async () => {
+		const { driver, calls } = makeFakeDriver({
+			failWhen: (call) =>
+				call.sql.trim().toLowerCase().startsWith("create schema"),
+			failError: Object.assign(
+				new Error("permission denied for database ldtest"),
+				{ code: "42501" },
+			),
+		});
+
+		const error: unknown = await applyRaise(
+			driver,
+			snapshotFile,
+			COMMAND,
+		).catch((caught: unknown) => caught);
+
+		expect(error).toMatchObject({ code: "apply-ledger-unwritable" });
+		expect(calls.some((call) => call.sql === snapshotFile.sql)).toBe(false);
+	});
+});

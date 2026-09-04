@@ -8,7 +8,11 @@ import {
 	driverErrorReason,
 } from "./execute";
 import type { LedgerState } from "./ledger";
-import { bootstrapLedger, readLedger } from "./ledger";
+import { asLedgerAccessFailure, bootstrapLedger, readLedger } from "./ledger";
+import {
+	throwLedgerReadFailure,
+	throwLedgerWriteFailure,
+} from "./ledger-diagnostics";
 import {
 	assertLedgerNotOccupied,
 	probeLedgerIdentity,
@@ -163,12 +167,39 @@ export const applyRaise = async (
 ): Promise<void> => {
 	const identity = await probeLedgerIdentity(driver);
 	assertLedgerNotOccupied(identity, commandName);
-	const ledgerState = await readLedger(driver);
-	assertDatabaseEmptyByLedger(ledgerState, commandName);
-	await bootstrapLedger(driver);
 	try {
-		await applyMigration(driver, snapshotFile, commandName);
+		const ledgerState = await readLedger(driver);
+		assertDatabaseEmptyByLedger(ledgerState, commandName);
+		await bootstrapLedger(driver);
+		try {
+			await applyMigration(driver, snapshotFile, commandName);
+		} catch (error) {
+			rethrowIfAlreadyExists(snapshotFile.fileName, commandName, error);
+		}
 	} catch (error) {
-		rethrowIfAlreadyExists(snapshotFile.fileName, commandName, error);
+		// [task 1.6, harden-ledger-diagnostics] Every ledger statement this
+		// function sends (or that applyMigration sends on its behalf, task
+		// 1.4) reaches this one catch tagged or not tagged: `readLedger`'s
+		// own read, `bootstrapLedger`'s own write, and, escaping
+		// `rethrowIfAlreadyExists` untouched, the apply transaction's own
+		// ledger row and recheck. `assertDatabaseEmptyByLedger`'s and
+		// `rethrowIfAlreadyExists`'s own `raise-not-empty` throws carry no
+		// tag and pass through unchanged -- this is the completeness check
+		// tasks.md 1.6 names: no ledger statement failure escapes `raise`
+		// unclassified.
+		const tag = asLedgerAccessFailure(error);
+		if (tag === null) {
+			throw error;
+		}
+		if (tag.direction === "read") {
+			await throwLedgerReadFailure(driver, error, commandName);
+		} else {
+			await throwLedgerWriteFailure(
+				driver,
+				error,
+				commandName,
+				snapshotFile.fileName,
+			);
+		}
 	}
 };
