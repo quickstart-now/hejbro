@@ -176,7 +176,8 @@ documents everything and comes last.
       scoped handle (`client.as(context)`) as guarded alike, `as` on it
       included. Files: that reference.
 
-## 2. Review repairs
+Review repairs (same group — their files overlap group 1's, so they
+are not a parallel slice):
 
 - [x] 1.2b (~4m, actual ~1m) A savepoint rollback keeps its optional words. Found in
       review: `rollback transaction to savepoint x` and `rollback work to
