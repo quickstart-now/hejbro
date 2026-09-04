@@ -1,0 +1,117 @@
+{
+  "version": 1,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#302",
+  "title": "Startup verify assertion on the db handle",
+  "parent": "quickstart-now/hejbro#282",
+  "status": "closed",
+  "opened": "2026-09-04",
+  "closed": "2026-08-30",
+  "decisions": [],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-08-30T00:00Z",
+      "title": "extend-query-runtime \u2014 one half ships, one half is measured and does not",
+      "pr": null,
+      "decisions": []
+    }
+  ],
+  "prs": [
+    {
+      "number": 535,
+      "ref": "quickstart-now/hejbro#535",
+      "title": "feat(cli): assert a connected database against a handle's declarations",
+      "head": "94761c20722320f23068697af1b8b31a43b66136",
+      "headRef": "feat-extend-query-runtime",
+      "base": "dev",
+      "merged": "2026-08-30T20:41:59Z",
+      "pinnedAt": "2026-08-30T00:00Z",
+      "migrated": true,
+      "refs": [
+        {
+          "path": ".changeset/add-assert-schema.md",
+          "blob": "7bc31f24ea5178c7deef769333dfd60dd23cebed"
+        },
+        {
+          "path": "openspec/changes/archive/2026-08-31-extend-query-runtime/issues.md",
+          "blob": "85f13d11267423908ff1bb25761d0d1bfc78f3fb"
+        },
+        {
+          "path": "openspec/changes/archive/2026-08-31-extend-query-runtime/measurement.md",
+          "blob": "6c00be28cb949f8a960e1e0e7f497268300d531e"
+        },
+        {
+          "path": "openspec/changes/archive/2026-08-31-extend-query-runtime/proposal.md",
+          "blob": "7be4ff7f4ce5e63dfc89d61e0c917cc699043c16"
+        },
+        {
+          "path": "openspec/changes/archive/2026-08-31-extend-query-runtime/specs/query-execution/spec.md",
+          "blob": "5978643a1c18043d4585303f10c6c1c6f67c1f68"
+        },
+        {
+          "path": "openspec/changes/archive/2026-08-31-extend-query-runtime/tasks.md",
+          "blob": "0d82cc9bdfc6e46e67a8e32eab75b1e46c5de450"
+        },
+        {
+          "path": "openspec/task-times.csv",
+          "blob": "1ec762a4d764cd15705676a225f956ff48004a7c"
+        },
+        {
+          "path": "packages/cli/src/assert-schema.ts",
+          "blob": "fa351c6c902e02cfa8305bf1e023977c3141fc43"
+        },
+        {
+          "path": "packages/cli/src/index.ts",
+          "blob": "3214e36aac733d70150bec904dd6cd2694126708"
+        },
+        {
+          "path": "packages/cli/test/assert-schema-imports.test.ts",
+          "blob": "ff182161c5ebcb33cc4e4891975209d74693dc80"
+        },
+        {
+          "path": "packages/cli/test/assert-schema-live.integration.test.ts",
+          "blob": "9fd5d3fbafe08618745163aebf927df125733179"
+        },
+        {
+          "path": "packages/cli/test/assert-schema.test.ts",
+          "blob": "ca0f9e5f3c15a2725c3a1f43e535620335f3cfaf"
+        },
+        {
+          "path": "packages/cli/test/exports.test.ts",
+          "blob": "cf3631f0b9e1a4084fe6515f732cdfb6658fc60f"
+        },
+        {
+          "path": "packages/pg/test/prepared-statement.bench.integration.test.ts",
+          "blob": "55579942e3a75d0f3630c634a5aafd20f2acf753"
+        },
+        {
+          "path": "packages/query/src/db/db.ts",
+          "blob": "184b829b800dd9527b9727b55f1c3a694c3cf037"
+        },
+        {
+          "path": "packages/query/test/db/db.test.ts",
+          "blob": "166e1d6371580dfef8ed14fd1b7330f7a01c549a"
+        },
+        {
+          "path": "packages/query/test/types/chain-types.test.ts",
+          "blob": "14d85770ef36048f4e108a3dc04b781245aee409"
+        },
+        {
+          "path": "README.md",
+          "blob": "b7dba96771ff029d8399e32ca6b7bae5f74ee4ac"
+        },
+        {
+          "path": "skills/hejbro/references/query-layer.md",
+          "blob": "63650455b52c662ce25222855b503fe2ffd115a5"
+        },
+        {
+          "path": "skills/hejbro/SKILL.md",
+          "blob": "aa69f02f8be689fc08dd9125f362af5567ffa583"
+        }
+      ]
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

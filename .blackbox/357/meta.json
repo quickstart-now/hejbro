@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#357",
+  "title": "add-array-ergonomics group 2: assertNoNulls utility and exports",
+  "parent": "quickstart-now/hejbro#354",
+  "status": "closed",
+  "opened": "2026-09-04",
+  "closed": "2026-08-27",
+  "decisions": [
+    {
+      "id": "D1",
+      "by": "owner",
+      "at": "2026-08-28T00:00Z",
+      "title": "s (English rewrites)",
+      "raw": []
+    }
+  ],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-08-28T00:00Z",
+      "title": "array-ergonomics group 2 \u2014 assertNoNulls, and the SHALL nobody was guarding",
+      "pr": null,
+      "decisions": []
+    }
+  ],
+  "prs": [
+    {
+      "number": 358,
+      "ref": "quickstart-now/hejbro#358",
+      "title": "feat(core): runtime-checked narrowing for nullable-element arrays",
+      "head": "bbe3d323a77842b169420dbdd4584196bd0d1c9c",
+      "headRef": "phase10-array-g2",
+      "base": "dev",
+      "merged": "2026-08-27T17:41:17Z",
+      "pinnedAt": "2026-08-28T00:00Z",
+      "migrated": true,
+      "refs": [
+        {
+          "path": "packages/core/src/types/assert-no-nulls.ts",
+          "blob": "51c6fb505285363c210963d0337544732a7c791c"
+        },
+        {
+          "path": "packages/core/src/index.ts",
+          "blob": "ede8955066493533633f966e0b83c1df704d945a"
+        },
+        {
+          "path": "packages/core/test/assert-no-nulls.test.ts",
+          "blob": "a4019255b2cec6c10c7f81c5fdbbee86b3460703"
+        },
+        {
+          "path": "packages/cli/test/exports.test.ts",
+          "blob": "51fc7de058cfa372ef9bb765a0ac30a769d5bd63"
+        }
+      ]
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

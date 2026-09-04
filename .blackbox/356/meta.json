@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#356",
+  "title": "add-array-ergonomics group 1: declaration surface and type narrowing",
+  "parent": "quickstart-now/hejbro#354",
+  "status": "closed",
+  "opened": "2026-09-04",
+  "closed": "2026-08-27",
+  "decisions": [],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-08-28T00:00Z",
+      "title": "array-ergonomics group 1 \u2014 notNullElements, and the lead's oscillation on the record",
+      "pr": null,
+      "decisions": []
+    }
+  ],
+  "prs": [
+    {
+      "number": 359,
+      "ref": "quickstart-now/hejbro#359",
+      "title": "feat(core): declare non-null array elements with a backing check",
+      "head": "74d2e96b7d3a9826ac18d7dda792449a83e8b08e",
+      "headRef": "phase10-array-g1",
+      "base": "dev",
+      "merged": "2026-08-27T17:52:50Z",
+      "pinnedAt": "2026-08-28T00:00Z",
+      "migrated": true,
+      "refs": [
+        {
+          "path": "packages/core/src/dsl/table.ts",
+          "blob": "99c23abca3238d937be9468daed94b1da74a32b6"
+        },
+        {
+          "path": "packages/core/src/types/column-builder.ts",
+          "blob": "8889f63f6c98797a1cef294e8cced5e77563c7bd"
+        },
+        {
+          "path": "packages/core/src/types/ts-type-map.ts",
+          "blob": "8760cd0f5904826049daa9ef3bc4277569975456"
+        },
+        {
+          "path": "packages/core/test/column-builder.test.ts",
+          "blob": "d29e01e6aee57d17ab9fc8515060e8360eaf6f0f"
+        },
+        {
+          "path": "packages/core/test/dsl/check.test.ts",
+          "blob": "0bf55b510f1ffbf97dc03e78689eb3c2b4b56988"
+        },
+        {
+          "path": "packages/core/test/not-null-elements.test.ts",
+          "blob": "af239b6853f7897acfb41ed45eac26a55105096d"
+        },
+        {
+          "path": "packages/core/test/query/mutate.test.ts",
+          "blob": "3612ea6ce862e92b36b2d658d085a151260db45e"
+        }
+      ]
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

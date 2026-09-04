@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#298",
+  "title": "Relational query layer on top of the query builder",
+  "parent": "quickstart-now/hejbro#282",
+  "status": "closed",
+  "opened": "2026-09-04",
+  "closed": "2026-08-28",
+  "decisions": [
+    {
+      "id": "D1",
+      "by": "owner",
+      "at": "2026-08-28T00:00Z",
+      "title": "s (English rewrites)",
+      "raw": []
+    }
+  ],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-08-28T00:00Z",
+      "title": "add-relational-reads proposal \u2014 seven rounds, two of them opened by the owner's own questions",
+      "pr": null,
+      "decisions": []
+    }
+  ],
+  "prs": [
+    {
+      "number": 399,
+      "ref": "quickstart-now/hejbro#399",
+      "title": "docs(openspec): propose add-relational-reads (d102)",
+      "head": "200a3f670fe6a292ccdac6b6617be400d28cc3b9",
+      "headRef": "phase10-relational-spec",
+      "base": "dev",
+      "merged": "2026-08-28T06:47:20Z",
+      "pinnedAt": "2026-08-28T00:00Z",
+      "migrated": true,
+      "refs": [
+        {
+          "path": "openspec/changes/add-relational-reads/proposal.md",
+          "blob": "0fa18cd8992c07ed1158d5c15c3eee42916d250b"
+        },
+        {
+          "path": "openspec/changes/add-relational-reads/design.md",
+          "blob": "787eb12ed9931b730841e8ca9e1becf9838df740"
+        },
+        {
+          "path": "openspec/changes/add-relational-reads/tasks.md",
+          "blob": "76043eb393387a775d18589472ab4b411e921c59"
+        },
+        {
+          "path": "docs/specs/2026-08-19-hejbro-design.md",
+          "blob": "b32ec21e30b1a72463e4e1ed603693cab2b19d6a"
+        }
+      ]
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

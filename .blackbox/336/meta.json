@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#336",
+  "title": "check:crap cannot run uncached: the root script does not forward --force",
+  "parent": "quickstart-now/hejbro#282",
+  "status": "closed",
+  "opened": "2026-09-04",
+  "closed": "2026-08-27",
+  "decisions": [
+    {
+      "id": "D1",
+      "by": "owner",
+      "at": "2026-08-27T00:00Z",
+      "title": "s (English rewrites)",
+      "raw": []
+    }
+  ],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-08-27T00:00Z",
+      "title": "fix-crap-gate \u2014 check:crap forwards its flags and gains --check (#336)",
+      "pr": null,
+      "decisions": []
+    }
+  ],
+  "prs": [
+    {
+      "number": 347,
+      "ref": "quickstart-now/hejbro#347",
+      "title": "fix(ci): forward check:crap flags to turbo and add readme --check mode",
+      "head": "c06da98c3beed203866af90a347e85718c7e141d",
+      "headRef": "fix-crap-gate",
+      "base": "dev",
+      "merged": "2026-08-27T12:33:57Z",
+      "pinnedAt": "2026-08-27T00:00Z",
+      "migrated": true,
+      "refs": [
+        {
+          "path": "package.json",
+          "blob": "081e5cea17d627e39c5d9f0edc801996877dd84c"
+        },
+        {
+          "path": "scripts/crap-gate.mjs",
+          "blob": "074fb850bc284e58dc7a59c2e685493fb59c377a"
+        },
+        {
+          "path": "scripts/update-crap-readme.mjs",
+          "blob": "c18b5789115ea964b5ec55a52f9f2e47a8a398b5"
+        }
+      ]
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

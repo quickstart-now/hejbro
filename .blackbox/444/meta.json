@@ -1,0 +1,117 @@
+{
+  "version": 1,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#444",
+  "title": "select-node traversal misses its new clause fields at every site",
+  "parent": "quickstart-now/hejbro#282",
+  "status": "closed",
+  "opened": "2026-09-04",
+  "closed": "2026-08-29",
+  "decisions": [],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-08-29T00:00Z",
+      "title": "fix-select-traversal \u2014 a SelectNode field grows, every traversal site must too (#444)",
+      "pr": null,
+      "decisions": []
+    }
+  ],
+  "prs": [
+    {
+      "number": 451,
+      "ref": "quickstart-now/hejbro#451",
+      "title": "fix(core): every select clause is traversed, and the compiler enforces it",
+      "head": "2fa8478caf0620411f1a376959e3cd4582fca159",
+      "headRef": "fix-select-traversal",
+      "base": "dev",
+      "merged": "2026-08-29T01:51:38Z",
+      "pinnedAt": "2026-08-29T00:00Z",
+      "migrated": true,
+      "refs": [
+        {
+          "path": "openspec/changes/archive/2026-08-29-fix-select-traversal/proposal.md",
+          "blob": "48fb646617e1fc12e22d3ecadde2ee13b9f04b86"
+        },
+        {
+          "path": "openspec/changes/archive/2026-08-29-fix-select-traversal/specs/query-type-inference/spec.md",
+          "blob": "f7e547b1c7fe4063fc397349d4b7fafbdfe7e5f5"
+        },
+        {
+          "path": "openspec/changes/archive/2026-08-29-fix-select-traversal/tasks.md",
+          "blob": "9db335d8c22a45a795125de71d9cc24ca0089ce7"
+        },
+        {
+          "path": "packages/core/src/expr/aggregate.ts",
+          "blob": "43d86f66fe0469bdf876370dd913b09ce1d8d125"
+        },
+        {
+          "path": "packages/core/src/expr/codec.ts",
+          "blob": "d8712e8450dbf6d2c565c5149e2b6b3f51384aa5"
+        },
+        {
+          "path": "packages/core/src/expr/render-sql.ts",
+          "blob": "46e6d83b7766b49784965a7dc8005da4ee60bf78"
+        },
+        {
+          "path": "packages/core/src/expr/retarget.ts",
+          "blob": "513070054eccd252a959e540963aa1fb74c8fab5"
+        },
+        {
+          "path": "packages/core/src/expr/select-children.ts",
+          "blob": "309ab570cf50dd3a34e13e6f8fd8791a102b8106"
+        },
+        {
+          "path": "packages/core/src/expr/walk.ts",
+          "blob": "8747bc88cae2e6a3448af857faeaf579acf4fd41"
+        },
+        {
+          "path": "packages/core/src/index.ts",
+          "blob": "cf9d3f9b75e0236264c162dc7f136f88c104fd1d"
+        },
+        {
+          "path": "packages/core/src/query/column-value.ts",
+          "blob": "1668fc0ef4a9e999366212c2a8d18209bc61d78b"
+        },
+        {
+          "path": "packages/core/src/query/select.ts",
+          "blob": "8a0b45cb2920a555053130c06cc462fa43d6edea"
+        },
+        {
+          "path": "packages/query/src/compile/params.ts",
+          "blob": "4a8bca46fb71d1f8d7fda089e0fc39a3b1422d20"
+        },
+        {
+          "path": "packages/query/src/db/convert.ts",
+          "blob": "a9df993271eb6e622cfba9ddda75a6d834b38091"
+        },
+        {
+          "path": "packages/supabase/src/validators/rls-uncached-auth-call.ts",
+          "blob": "587ec8487058b0d63da07bdcae617b60f7b5057d"
+        },
+        {
+          "path": "packages/pg/test/integration.test.ts",
+          "blob": "25b6044d7b121f59a27fd95b89b7e03a67ffd0f9"
+        },
+        {
+          "path": "README.md",
+          "blob": "f7403c9ae87b027d60b01ba3c40b4d7922ac57ab"
+        },
+        {
+          "path": "skills/hejbro/references/query-layer.md",
+          "blob": "e287512c9b4451b18dc6c1e362d1d3edcac0503b"
+        },
+        {
+          "path": ".changeset/fix-select-traversal.md",
+          "blob": "e14f25b38d449b5d7c6334df368d61952d298054"
+        },
+        {
+          "path": "openspec/task-times.csv",
+          "blob": "fcc8066608ecd7f99e65f5483cf69021bd02ee03"
+        }
+      ]
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}
