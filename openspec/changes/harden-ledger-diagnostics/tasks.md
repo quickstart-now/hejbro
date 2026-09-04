@@ -255,3 +255,117 @@ makes `migrate` exit two; the failing statement is identified by the tag
 `openspec/task-times.csv` rows, the README stamps (`pnpm check:tasktime`,
 `pnpm check:crap`), and the `.blackbox/836|823` work entries land in one
 close-out commit at PR time.
+
+## 2. Review repairs (constructor-mode review of 1351d507)
+
+The reviewer built privilege-starved roles and altered ledgers against
+`postgres:17-alpine` and ran the built CLI. Four findings are the code
+disagreeing with the delta, not the delta needing rework; two more are
+text that says something untrue. Every repair keeps the delta as approved.
+
+- [ ] 2.1 (~9m) **[design]** `migrate` reads the ledger before it
+      bootstraps one. Measured by the reviewer: against a database whose
+      ledger exists but whose read is refused, `status` and `raise` answer
+      `apply-ledger-unreadable` while `migrate` answers
+      `apply-ledger-unwritable` naming "the ledger's own bootstrap" — a
+      statement about a ledger that is already there. The cause is order:
+      `commands/migrate.ts` bootstraps and then reads, `apply/raise.ts`
+      reads and then bootstraps, and `create … if not exists` checks the
+      ACL before it checks existence, so a privilege answer arrives before
+      the existence answer. Which code a database gets then depends on
+      which grants happen to be missing (the reviewer flipped it by
+      granting `create` on the schema). `migrate` takes `raise`'s order:
+      read first (`readLedger` already reports an absent table as a
+      state), bootstrap only when the read says there is none. Red:
+      `packages/cli/test/migrate-command.test.ts`, case *"a ledger that
+      exists but cannot be read is not reported as a bootstrap"*, input
+      table: ledger present + `select` withheld → exit 2,
+      `apply-ledger-unreadable`, no `create schema` sent; ledger present +
+      schema `usage` withheld (with `create` granted) → same; ledger
+      absent + database `create` withheld → exit 2,
+      `apply-ledger-unwritable` naming the bootstrap (unchanged);
+      ledger absent and creatable → bootstrap runs exactly once and the
+      pending migration applies (regression); ledger present and readable
+      → today's report (regression). The integration witness gains the
+      first row beside its existing (a2). Files:
+      `packages/cli/src/commands/migrate.ts`,
+      `packages/cli/test/migrate-command.test.ts`,
+      `packages/cli/test/apply-ledger-diagnostics.integration.test.ts`.
+
+- [ ] 2.2 (~9m) **[design]** The in-transaction recheck never swallows a
+      vanished ledger. Measured (2 of 2): with the ledger dropped while
+      `migrate` holds its transaction, `isMigrationRecorded`'s 42P01
+      leniency returns "not recorded", the aborted transaction refuses the
+      migration's own statement with `25P02`, and that untagged failure is
+      billed to the migration — `apply-failed` naming the file, exit 1.
+      Both halves of #823's own rule break at once: the half that failed
+      was a ledger read, and exit 1 says the database refused a migration,
+      which is exactly what did not happen. The leniency goes: this
+      function's one caller runs inside the apply transaction *after* the
+      bootstrap, so an absent ledger there is a race, not the "never
+      applied to" state `readLedger` reports. `readLedger`'s own leniency
+      is untouched — outside a transaction, absence is still a state (D9).
+      Red: `packages/cli/test/apply-execute.test.ts`, case *"a ledger that
+      vanishes mid-transaction is the ledger's failure"*: the fake driver
+      answers the recheck with 42P01 → the tagged read failure escapes
+      `applyMigration`, no migration SQL is sent after it, and
+      `migrate-command.test.ts` renders it as `apply-ledger-unreadable`
+      with exit 2; plus the integration witness for the real race (drop
+      the ledger under a held lock, as the reviewer reproduced it). Files:
+      `packages/cli/src/apply/ledger.ts`,
+      `packages/cli/test/apply-ledger.test.ts`,
+      `packages/cli/test/apply-execute.test.ts`,
+      `packages/cli/test/migrate-command.test.ts`,
+      `packages/cli/test/apply-ledger-diagnostics.integration.test.ts`.
+
+- [ ] 2.3 (~6m) The `23502` hint is about `id` and is said only about
+      `id`. Measured: dropping the default from `applied_at` — or from an
+      extra `not null` column the identity rule explicitly tolerates —
+      produces "The ledger's "applied_at" column has no identity and no
+      default; the ledger hejbro bootstraps declares it `bigint generated
+      always as identity`", which is false about that column (the
+      bootstrap declares `applied_at timestamptz not null default now()`).
+      The sentence is D3's one SQLSTATE branch and it exists for #823's
+      own measured case, so it is said when the driver's `.column` is
+      `id`, and every other column falls to the generic branch that names
+      the column without claiming what the bootstrap gave it. Red:
+      `packages/cli/test/apply-ledger-diagnostics.test.ts`, input table:
+      `23502` on `id` (hint present, regression), on `applied_at` (column
+      named, no identity claim), on a tolerated extra `not null` column
+      (same), and with no `.column` at all (today's generic sentence,
+      regression). Files: `packages/cli/src/apply/ledger-diagnostics.ts`,
+      `packages/cli/test/apply-ledger-diagnostics.test.ts`.
+
+- [ ] 2.4 (~6m) One identity for the ledger's own diagnostics. Measured:
+      the same code prints two kinds of header —
+      `error[apply-ledger-unwritable]: "hejbro"."migration_ledger"` from
+      `migrate`, `error[apply-ledger-unreadable]: hejbro status` from the
+      others. Both satisfy "the header does not name a migration", but a
+      reader (and anything parsing) meets one code with two identities.
+      The identity is the artifact that failed, so every ledger diagnostic
+      names the ledger, whichever command raised it. Red:
+      `packages/cli/test/status-command.test.ts`,
+      `packages/cli/test/apply-raise.test.ts`,
+      `packages/cli/test/apply-reset.test.ts`: each command's ledger
+      diagnostic header is `error[<code>]: "hejbro"."migration_ledger"`,
+      while every non-ledger diagnostic each command raises keeps the
+      header it has today (regression rows). Files:
+      `packages/cli/src/commands/status.ts`,
+      `packages/cli/src/apply/raise.ts`, `packages/cli/src/apply/reset.ts`,
+      and the three tests.
+
+- [ ] 2.5 (~6m) A raised snapshot file is not called a migration.
+      Measured: `raise`'s write refusal says "the row recording
+      "…/20260904224853_add_app.sql" … the migration ran in the same
+      transaction", but `raise`'s input is a snapshot SQL file, which the
+      public surface never calls a migration. The rollback sentence stops
+      naming the kind of file and states what actually happened — the
+      statements from that file ran in the same transaction and rolled
+      back with it — which is true for both callers, so no second wording
+      is introduced. The file's own path stays: `raise` takes it from
+      `--file` and echoing it back is how a reader knows which one.
+      Red: `packages/cli/test/apply-raise.test.ts` (the word "migration"
+      is absent from `raise`'s ledger-write message) and
+      `packages/cli/test/migrate-command.test.ts` (migrate's own message
+      still states the rollback, regression). Files:
+      `packages/cli/src/apply/ledger-diagnostics.ts`, the two tests.
