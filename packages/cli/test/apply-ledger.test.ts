@@ -1,6 +1,7 @@
 import type { CompileResult, DriverRow, DriverSession } from "@hejbro/query";
 import { describe, expect, it } from "vitest";
 import {
+	asLedgerAccessFailure,
 	bootstrapLedger,
 	clearLedgerRows,
 	readLedger,
@@ -258,12 +259,22 @@ describe("clearLedgerRows / 5.3, D106 R1 B1", () => {
 	// leniency for an absent table -- the one caller (`reset.ts`) probes
 	// the ledger's identity first and only calls this when that probe
 	// found the real ledger; a failure here is a genuine one, never a
-	// silent no-op.
+	// silent no-op. [task 1.1] The failure now arrives tagged (write/clear,
+	// design.md D4) rather than raw -- the server's own 42P01 lives on
+	// `.cause`.
 	it("throws when the ledger was never bootstrapped", async () => {
 		const session = makeUnbootstrappedSession();
 
-		await expect(clearLedgerRows(session)).rejects.toMatchObject({
-			code: "42P01",
-		});
+		await expect(clearLedgerRows(session)).rejects.toSatisfy(
+			(thrown: unknown) => {
+				const tag = asLedgerAccessFailure(thrown);
+				return (
+					tag !== null &&
+					tag.direction === "write" &&
+					tag.site === "clear" &&
+					(tag.cause as { readonly code?: unknown } | null)?.code === "42P01"
+				);
+			},
+		);
 	});
 });

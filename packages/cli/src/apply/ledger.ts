@@ -186,12 +186,96 @@ const isUndefinedTableError = (error: unknown): boolean =>
 	"code" in error &&
 	(error as { readonly code?: unknown }).code === UNDEFINED_TABLE;
 
-const exec = (
+/**
+ * [task 1.1, design.md D4] Which way a statement `exec` sent moved data --
+ * every ledger-touching command's read is answered by a grant or by
+ * another role, every write additionally by the ledger's own shape, so a
+ * caller three layers up (`execute.ts`, task 1.4) needs this to choose
+ * between the two new codes without reading SQL text back.
+ */
+export type LedgerAccessDirection = "read" | "write";
+
+/**
+ * [task 1.1, design.md D3] Which of `exec`'s own callers sent the
+ * statement, in the words task 1.3's diagnostic text reuses verbatim for
+ * a write's site; a read is always `"read"` except the recheck `exec`
+ * runs from inside the apply transaction, kept distinct because it is the
+ * one read a write-side caller (`execute.ts`) can also see.
+ */
+export type LedgerAccessSite =
+	| "bootstrap"
+	| "row"
+	| "recheck"
+	| "clear"
+	| "read";
+
+/**
+ * [task 1.1, design.md D4] What `exec` attaches to a statement's own
+ * failure -- never a `HejbroError` (this module mints none, its own file
+ * header states why); `cause` is the server's unmodified error, so a
+ * caller that needs its `.code`/`.message`/`.detail` reads them from
+ * there, never from this wrapper.
+ */
+export type LedgerAccessFailure = {
+	readonly direction: LedgerAccessDirection;
+	readonly site: LedgerAccessSite;
+	readonly cause: unknown;
+};
+
+const isLedgerAccessFailure = (
+	error: unknown,
+): error is LedgerAccessFailure & Error =>
+	error instanceof Error &&
+	"direction" in error &&
+	"site" in error &&
+	"cause" in error;
+
+/**
+ * [task 1.1, design.md D4] Reads back the tag {@link exec} attaches on
+ * failure -- `null` for anything that isn't one of this module's own
+ * tagged failures. The one way a caller (`readLedger`/`isMigrationRecorded`
+ * here, `execute.ts` three layers up) tells a ledger-statement failure
+ * apart from anything else, structurally rather than by matching a
+ * message or SQL text back.
+ */
+export const asLedgerAccessFailure = (
+	error: unknown,
+): LedgerAccessFailure | null => {
+	if (!isLedgerAccessFailure(error)) {
+		return null;
+	}
+	return { direction: error.direction, site: error.site, cause: error.cause };
+};
+
+/**
+ * [task 1.1, design.md D4] The one path every statement this module sends
+ * to the ledger goes through. On failure, rethrows the server's error
+ * tagged with `direction`/`site` (never summarized, never classified into
+ * a `HejbroError` here -- that is task 1.2/1.3's job, one layer up) so a
+ * caller can tell which statement failed without reading its SQL or
+ * message back.
+ */
+const exec = async (
 	session: DriverSession,
 	sql: string,
-	params: ReadonlyArray<unknown> = [],
-): Promise<ReadonlyArray<DriverRow>> =>
-	session.execute({ sql, params, kind: "sql" } satisfies CompileResult);
+	params: ReadonlyArray<unknown>,
+	direction: LedgerAccessDirection,
+	site: LedgerAccessSite,
+): Promise<ReadonlyArray<DriverRow>> => {
+	try {
+		return await session.execute({
+			sql,
+			params,
+			kind: "sql",
+		} satisfies CompileResult);
+	} catch (error) {
+		throw Object.assign(new Error("ledger statement failed"), {
+			direction,
+			site,
+			cause: error,
+		});
+	}
+};
 
 /**
  * Creates the ledger's schema and table if either is absent -- idempotent
@@ -211,10 +295,19 @@ const exec = (
 export const bootstrapLedger = async (
 	session: DriverSession,
 ): Promise<void> => {
-	await exec(session, `create schema if not exists "${LEDGER_SCHEMA}"`);
+	await exec(
+		session,
+		`create schema if not exists "${LEDGER_SCHEMA}"`,
+		[],
+		"write",
+		"bootstrap",
+	);
 	await exec(
 		session,
 		`create table if not exists ${QUALIFIED_LEDGER_TABLE} (\n\t"id" bigint generated always as identity primary key,\n\t"filename" text not null unique,\n\t"origin" text not null check ("origin" in (${LEDGER_ORIGIN_CHECK_LIST})),\n\t"applied_at" timestamptz not null default now()\n)`,
+		[],
+		"write",
+		"bootstrap",
 	);
 };
 
@@ -250,6 +343,9 @@ export const readLedger = async (
 		const rows = await exec(
 			session,
 			`select "filename", "origin" from ${QUALIFIED_LEDGER_TABLE} order by "id"`,
+			[],
+			"read",
+			"read",
 		);
 		return {
 			exists: true,
@@ -259,7 +355,8 @@ export const readLedger = async (
 			})),
 		};
 	} catch (error) {
-		if (isUndefinedTableError(error)) {
+		const tag = asLedgerAccessFailure(error);
+		if (tag !== null && isUndefinedTableError(tag.cause)) {
 			return { exists: false };
 		}
 		throw error;
@@ -290,10 +387,13 @@ export const isMigrationRecorded = async (
 			session,
 			`select 1 from ${QUALIFIED_LEDGER_TABLE} where "filename" = $1 limit 1`,
 			[filename],
+			"read",
+			"recheck",
 		);
 		return rows.length > 0;
 	} catch (error) {
-		if (isUndefinedTableError(error)) {
+		const tag = asLedgerAccessFailure(error);
+		if (tag !== null && isUndefinedTableError(tag.cause)) {
 			return false;
 		}
 		throw error;
@@ -324,6 +424,8 @@ export const recordAppliedMigration = async (
 		session,
 		`insert into ${QUALIFIED_LEDGER_TABLE} ("filename", "origin") values ($1, $2)`,
 		[filename, origin],
+		"write",
+		"row",
 	);
 };
 
@@ -343,5 +445,11 @@ export const recordAppliedMigration = async (
 export const clearLedgerRows = async (
 	session: DriverSession,
 ): Promise<void> => {
-	await exec(session, `delete from ${QUALIFIED_LEDGER_TABLE}`);
+	await exec(
+		session,
+		`delete from ${QUALIFIED_LEDGER_TABLE}`,
+		[],
+		"write",
+		"clear",
+	);
 };
