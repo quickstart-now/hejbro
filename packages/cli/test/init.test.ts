@@ -1785,6 +1785,31 @@ describe("runInit / --config (#741)", () => {
 			expect(initRun.stderr).toBe(generateRun.stderr);
 		});
 
+		// #846 D5 (#830, NB8): --config= used to resolve to cwd and refuse
+		// it as an existing "directory" -- a confusing answer for a value
+		// the user never spelled as a path at all.
+		it("refuses --config= as invalid-config-flag, creating nothing and never mentioning the working directory", async () => {
+			const result = await runCli(cwd, ["init", "--config="]);
+
+			expect(result.exitCode).toBe(1);
+			expect(result.stderr).toContain("error[invalid-config-flag]");
+			expect(result.stderr).not.toContain(
+				'move or remove the existing directory at "."',
+			);
+			expect(existsSync(join(cwd, "hejbro.config.ts"))).toBe(false);
+		});
+
+		// #846 D5: a trailing --config (no value follows) used to be
+		// silently treated as "flag absent", scaffolding the default
+		// hejbro.config.ts instead of refusing the empty value.
+		it("refuses a trailing --config (no value) as invalid-config-flag, never silently the default", async () => {
+			const result = await runCli(cwd, ["init", "--config"]);
+
+			expect(result.exitCode).toBe(1);
+			expect(result.stderr).toContain("error[invalid-config-flag]");
+			expect(existsSync(join(cwd, "hejbro.config.ts"))).toBe(false);
+		});
+
 		it("honours --config: --config=<path> is identical to the space form", async () => {
 			await mkdir(join(cwd, "sub"), { recursive: true });
 			await writeFile(

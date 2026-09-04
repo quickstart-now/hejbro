@@ -1,4 +1,4 @@
-import { existsSync, realpathSync } from "node:fs";
+import { realpathSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import type { HejbroInput } from "@hejbro/core";
 import { HejbroError, isTable, throwHejbroError } from "@hejbro/core";
@@ -6,6 +6,8 @@ import { createJiti } from "jiti";
 import { glob } from "tinyglobby";
 import type { HejbroConfig } from "./config";
 import { parseConfig } from "./config";
+import { normalizeEqualsFlags } from "./flags";
+import { probePath } from "./path-probe";
 
 /** First line only — a Node error's `.message` can carry a trailing
  * "Require stack:" block, and `Diagnostic.body`'s indentation assumes one
@@ -81,10 +83,110 @@ const importOrDiagnose = async <T>(
 
 const DEFAULT_CONFIG_FILE_NAME = "hejbro.config.ts";
 
+/**
+ * The `--config` value every command that accepts the flag shares (#846
+ * D5): the last occurrence's value, after `--config=value` is normalized
+ * to the space form. A trailing `--config` (no value follows) is `""` —
+ * refused the same way an explicit `--config=` is, never silently
+ * "flag absent" (NB8: that silent fallback used to resolve to the
+ * working directory and then refuse it as an existing "directory").
+ */
+export const configFlagFrom = (
+	rawArgs: ReadonlyArray<string>,
+): string | undefined => {
+	const normalized = normalizeEqualsFlags(rawArgs);
+	const lastIndex = normalized.lastIndexOf("--config");
+	if (lastIndex === -1) {
+		return undefined;
+	}
+	const value = normalized[lastIndex + 1];
+	if (value === undefined) {
+		return "";
+	}
+	return value;
+};
+
+/** `relative(cwd, path)`, `"./"` when that's empty (the resolved path is
+ * `cwd` itself) — never a bare empty string in a message (D57-style
+ * convention, shared by every configured-path label in this codebase). */
+const relLabel = (cwd: string, path: string): string => {
+	const rel = relative(cwd, path);
+	if (rel === "") {
+		return "./";
+	}
+	return rel;
+};
+
+/**
+ * The configuration path spelled as a directory (#846 D5, D2): a
+ * directory or a dangling link where the configuration file belongs.
+ * Exported so `init` throws the identical sentence under
+ * `init-path-conflict` (#846 D5/D6) — `tail` is the one difference,
+ * `"then rerun."` on the read side, `` "then rerun `hejbro init`." ``
+ * for `init`'s own refusal.
+ */
+export const configNotAFileMessage = (
+	rel: string,
+	holder:
+		| { readonly kind: "directory" }
+		| { readonly kind: "dangling"; readonly target: string },
+	tail: string,
+): string => {
+	if (holder.kind === "directory") {
+		return `"${rel}" is the configuration path, but a directory is there — the configuration is a file hejbro reads. Next: move or remove the existing directory at "${rel}", or name another file with --config, ${tail}`;
+	}
+	return `"${rel}" is the configuration path, but a dangling symbolic link is there, pointing at "${holder.target}". Next: remove the link or create its target, or name another file with --config, ${tail}`;
+};
+
+/**
+ * The configuration path judged unreadable (#846 D5, D3 adapted): an
+ * ancestor in the way, a blocked directory, or a path that could not
+ * even be inspected. Exported for the same reason as
+ * {@link configNotAFileMessage}.
+ */
+export const configUnreadableMessage = (
+	rel: string,
+	cause:
+		| { readonly kind: "ancestor-file"; readonly culprit: string }
+		| {
+				readonly kind: "ancestor-dangling";
+				readonly culprit: string;
+				readonly target: string;
+		  }
+		| {
+				readonly kind: "blocked";
+				readonly culprit: string;
+				readonly code: string;
+		  }
+		| {
+				readonly kind: "stat-failed";
+				readonly path: string;
+				readonly code: string;
+		  },
+	tail: string,
+): string => {
+	if (cause.kind === "ancestor-file") {
+		return `"${rel}" is the configuration path, but "${cause.culprit}" is a file and cannot hold it. Next: move or remove the file at "${cause.culprit}", ${tail}`;
+	}
+	if (cause.kind === "ancestor-dangling") {
+		return `"${rel}" is the configuration path, but "${cause.culprit}" is a dangling symbolic link, pointing at "${cause.target}". Next: remove the link or create its target, ${tail}`;
+	}
+	if (cause.kind === "blocked") {
+		return `"${rel}" is the configuration path, but it could not be checked (${cause.code}): "${cause.culprit}" does not let this process look inside it. Next: check permissions on "${cause.culprit}", ${tail}`;
+	}
+	return `"${rel}" is the configuration path, but it could not be checked (${cause.code}). Next: check what "${cause.path}" points at, ${tail}`;
+};
+
 export const resolveConfigPath = (
 	cwd: string,
 	configFlag: string | undefined,
 ): string => {
+	if (configFlag !== undefined && configFlag.trim() === "") {
+		return throwHejbroError(
+			"invalid-config-flag",
+			"--config was given an empty value. Next: pass the configuration file's path (--config path/to/hejbro.config.ts), or drop the flag to use ./hejbro.config.ts.",
+		);
+	}
 	if (configFlag === undefined) {
 		return join(cwd, DEFAULT_CONFIG_FILE_NAME);
 	}
@@ -101,16 +203,102 @@ export const resolveConfigPath = (
  * is the one loader path for both config and declaration entries (U1/U2,
  * decisions D29/D30) — this also exercises the self-import cycle a real
  * `hejbro.config.ts` relies on (`import { defineConfig } from "hejbro"`).
+ * The path is judged the same way `init` judges every configured
+ * artifact (`probePath`, #846 D2) before it is ever handed to jiti: a
+ * directory or a dangling link is refused as `config-not-a-file`, an
+ * ancestor in the way or an uninspectable path as `config-unreadable` —
+ * never an import-resolution diagnostic about a path that was never a
+ * file to begin with.
  */
 export const loadConfig = async (
 	cwd: string,
 	configFlag: string | undefined,
 ): Promise<{ readonly config: HejbroConfig; readonly configPath: string }> => {
 	const configPath = resolveConfigPath(cwd, configFlag);
-	if (!existsSync(configPath)) {
+	const outcome = probePath(cwd, configPath);
+	if (outcome.kind === "absent") {
+		if (configFlag === undefined) {
+			return throwHejbroError(
+				"config-not-found",
+				"no hejbro.config.ts was found. Next: run `hejbro init` to scaffold hejbro.config.ts, a migrations directory, and an empty snapshot file, then add a declaration file and rerun `hejbro generate`.",
+			);
+		}
+		const rel = relLabel(cwd, configPath);
 		return throwHejbroError(
 			"config-not-found",
-			"no hejbro.config.ts was found. Next: run `hejbro init` to scaffold hejbro.config.ts, a migrations directory, and an empty snapshot file, then add a declaration file and rerun `hejbro generate`.",
+			`no configuration file was found at "${rel}". Next: run \`hejbro init --config ${rel}\` to scaffold it there, with a migrations directory and an empty snapshot file, then add a declaration file and rerun \`hejbro generate\`.`,
+		);
+	}
+	if (outcome.kind === "present" && outcome.actualKind === "directory") {
+		return throwHejbroError(
+			"config-not-a-file",
+			configNotAFileMessage(
+				relLabel(cwd, configPath),
+				{ kind: "directory" },
+				"then rerun.",
+			),
+		);
+	}
+	if (outcome.kind === "dangling") {
+		return throwHejbroError(
+			"config-not-a-file",
+			configNotAFileMessage(
+				relLabel(cwd, configPath),
+				{ kind: "dangling", target: outcome.target },
+				"then rerun.",
+			),
+		);
+	}
+	if (outcome.kind === "ancestor-file") {
+		return throwHejbroError(
+			"config-unreadable",
+			configUnreadableMessage(
+				relLabel(cwd, configPath),
+				{ kind: "ancestor-file", culprit: relative(cwd, outcome.path) },
+				"then rerun.",
+			),
+		);
+	}
+	if (outcome.kind === "ancestor-dangling") {
+		return throwHejbroError(
+			"config-unreadable",
+			configUnreadableMessage(
+				relLabel(cwd, configPath),
+				{
+					kind: "ancestor-dangling",
+					culprit: relative(cwd, outcome.path),
+					target: outcome.target,
+				},
+				"then rerun.",
+			),
+		);
+	}
+	if (outcome.kind === "blocked") {
+		return throwHejbroError(
+			"config-unreadable",
+			configUnreadableMessage(
+				relLabel(cwd, configPath),
+				{
+					kind: "blocked",
+					culprit: relative(cwd, outcome.culprit),
+					code: outcome.code,
+				},
+				"then rerun.",
+			),
+		);
+	}
+	if (outcome.kind === "stat-failed") {
+		return throwHejbroError(
+			"config-unreadable",
+			configUnreadableMessage(
+				relLabel(cwd, configPath),
+				{
+					kind: "stat-failed",
+					path: relative(cwd, outcome.path),
+					code: outcome.code,
+				},
+				"then rerun.",
+			),
 		);
 	}
 	// #102: disabled as a precaution — the cache buys nothing for a

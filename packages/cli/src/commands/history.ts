@@ -15,7 +15,7 @@ import { computeMigrationState } from "../history-state";
 import type { HistoryRow } from "../history-table";
 import { renderHistoryTable } from "../history-table";
 import { identityFromMessage } from "../identity";
-import { loadConfig } from "../loader";
+import { configFlagFrom, loadConfig } from "../loader";
 import { listMigrationFiles } from "../snapshot-file";
 import type { LinkMode } from "../tty";
 import { shouldUseLinks } from "../tty";
@@ -38,23 +38,6 @@ const HISTORY_ARGS = {
 		description: "never render links, even in an interactive terminal",
 	},
 } as const;
-
-const lastFlagValue = (
-	rawArgs: ReadonlyArray<string>,
-	flagName: string,
-): string | undefined => {
-	const values = rawArgs.flatMap((token, index) => {
-		if (token !== flagName) {
-			return [];
-		}
-		const value = rawArgs[index + 1];
-		if (value === undefined) {
-			return [];
-		}
-		return [value];
-	});
-	return values.at(-1);
-};
 
 /** `--no-links` wins over `--links` if a caller somehow passes both — the safer of the two conflicting instructions (never producing a link a script didn't ask for beats occasionally omitting one a script did). */
 const parseLinksFlag = (
@@ -107,7 +90,7 @@ export const runHistory = async (
 ): Promise<HistoryResult> => {
 	const fallbackIdentity = "hejbro.config.ts";
 	try {
-		const configFlag = lastFlagValue(rawArgs, "--config");
+		const configFlag = configFlagFrom(rawArgs);
 		const { config } = await loadConfig(cwd, configFlag);
 		requireConfigFields(config, "history", ["migrationsDir", "snapshotPath"]);
 		if (!isGitRepository(cwd)) {

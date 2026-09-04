@@ -12,9 +12,8 @@ import { defineCommand } from "citty";
 import type { HejbroConfig } from "../config";
 import { fromHejbroError, renderDiagnostics } from "../diagnostics";
 import { asHejbroError } from "../errors";
-import { normalizeEqualsFlags } from "../flags";
 import { identityFromMessage } from "../identity";
-import { loadConfig, resolveConfigPath } from "../loader";
+import { configFlagFrom, loadConfig, resolveConfigPath } from "../loader";
 import {
 	errorCode,
 	type NodeKind,
@@ -32,23 +31,6 @@ const INIT_ARGS = {
 		description: "path to hejbro.config.ts (default: ./hejbro.config.ts)",
 	},
 } as const;
-
-const lastFlagValue = (
-	rawArgs: ReadonlyArray<string>,
-	flagName: string,
-): string | undefined => {
-	const values = rawArgs.flatMap((token, index) => {
-		if (token !== flagName) {
-			return [];
-		}
-		const value = rawArgs[index + 1];
-		if (value === undefined) {
-			return [];
-		}
-		return [value];
-	});
-	return values.at(-1);
-};
 
 const CONFIG_FILE_CONTENT = `import { defineConfig } from "hejbro";
 
@@ -748,16 +730,20 @@ export const runInit = async (
 	rawArgs: ReadonlyArray<string> = [],
 ): Promise<InitResult> => {
 	const fallbackIdentity = "init";
-	const configFlag = lastFlagValue(normalizeEqualsFlags(rawArgs), "--config");
-	const configFilePath = resolveConfigPath(cwd, configFlag);
-	const configArtifact: Artifact = {
-		kind: "file",
-		label: fileLabel(cwd, configFilePath),
-		path: configFilePath,
-		content: CONFIG_FILE_CONTENT,
-		fieldName: CONFIG_FILE_NAME,
-	};
+	const configFlag = configFlagFrom(rawArgs);
 	try {
+		// `resolveConfigPath` itself refuses an empty --config value
+		// (#846 D5) -- inside the try so that refusal renders through the
+		// same coded-diagnostic path as every other one here, instead of
+		// escaping as a raw, unrendered throw.
+		const configFilePath = resolveConfigPath(cwd, configFlag);
+		const configArtifact: Artifact = {
+			kind: "file",
+			label: fileLabel(cwd, configFilePath),
+			path: configFilePath,
+			content: CONFIG_FILE_CONTENT,
+			fieldName: CONFIG_FILE_NAME,
+		};
 		// The configuration's own kind is checked before it is loaded
 		// (D106 R1 N3): the requirement already names the configuration
 		// among the artifacts whose wrong-kind path stops the run, but

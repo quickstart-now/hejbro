@@ -39,7 +39,12 @@ import {
 } from "../flags";
 import { sha256Hex } from "../hash";
 import { identityFromMessage, relativizeDeclaredAt } from "../identity";
-import { loadConfig, loadDeclarations, ONBOARDING_EXAMPLE } from "../loader";
+import {
+	configFlagFrom,
+	loadConfig,
+	loadDeclarations,
+	ONBOARDING_EXAMPLE,
+} from "../loader";
 import { buildRegistry, configValidators } from "../presets";
 import { buildAmbiguityDiagnostic } from "../rename-diagnostics";
 import { listMigrationFiles, readSnapshotFileText } from "../snapshot-file";
@@ -185,7 +190,7 @@ const lastFlagValue = (
 const parseGenerateArgv = (
 	rawArgs: ReadonlyArray<string>,
 ): ParsedGenerateArgv => ({
-	configFlag: lastFlagValue(rawArgs, "--config"),
+	configFlag: configFlagFrom(rawArgs),
 	name: lastFlagValue(rawArgs, "--name"),
 	renameValues: collectFlagValues(rawArgs, "--rename"),
 	confirmDropValues: collectFlagValues(rawArgs, "--confirm-drop"),

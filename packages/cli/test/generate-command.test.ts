@@ -1790,3 +1790,26 @@ export default defineConfig({
 		expect(result.stderr).not.toContain("migrations-dir");
 	});
 });
+
+// #846 D5 (#830, NB8): an empty --config value used to resolve to cwd
+// and refuse it as an existing "directory"; a directory at --config
+// reached jiti and leaked an absolute path in a config-load-failed
+// diagnostic instead of a coded refusal.
+describe("hejbro generate / --config names a file (#846 D5)", () => {
+	it("refuses --config= as invalid-config-flag, never resolving it to the working directory", async () => {
+		const result = await runCli(cwd, ["generate", "--config="]);
+
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain("error[invalid-config-flag]");
+		expect(result.stderr).not.toContain("directory");
+	});
+
+	it("refuses --config . as config-not-a-file naming ./, never an absolute path", async () => {
+		const result = await runCli(cwd, ["generate", "--config", "."]);
+
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain("error[config-not-a-file]");
+		expect(result.stderr).toContain("./");
+		expect(result.stderr).not.toContain(cwd);
+	});
+});
