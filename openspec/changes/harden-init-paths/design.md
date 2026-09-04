@@ -141,7 +141,15 @@ takes. Measured facts come from reading `packages/cli/src` at `eb340e73`.
   snapshotPath, but this process cannot read it (EACCES). Next: check
   permissions on "state.json", then rerun.` Path printed as configured,
   never absolute. Shared by `generate`, `baseline`, `verify`, `check` by
-  construction (one reader).
+  construction (one reader). Order: kind first (a directory is
+  `snapshot-not-a-file` even when unreadable), then the read.
+- **Ancestor-blocked stat (ruled: option a).** A `stat` failure other
+  than `ENOENT` is the same code with `could not be checked (<code>)`,
+  and its `Next:` names the blocking directory by `init`'s own rule —
+  `walkAncestors` and the culprit rule move to
+  `packages/cli/src/path-probe.ts` and both callers import them (a pure
+  move; `init.ts` keeps its labels and messages). One fact, one answer
+  on both sides.
 
 ## D8 — A dangling symbolic link is refused as the wrong kind
 

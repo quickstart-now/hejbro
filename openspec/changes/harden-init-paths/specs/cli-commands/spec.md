@@ -39,8 +39,15 @@ kind expected there, with a `Next:` that names the way back to a
 snapshot file. A file there that the process cannot read SHALL stop the
 run with the error code `snapshot-unreadable`, naming the configured
 path and the operating system's own code, with a `Next:` naming the
-permissions to check. Neither SHALL surface as a raw read failure, and
-neither message SHALL carry an absolute path. The commands that consume
+permissions to check. The kind is decided first: a directory is refused
+as a directory even when it could not have been read, and only a
+regular file whose read fails is refused as unreadable. A snapshot
+whose path cannot even be inspected — a directory on the way refuses
+the look-up — SHALL be refused as unreadable too, naming the operating
+system's own code, and its `Next:` SHALL name the directory that blocks
+the look-up, decided exactly as `init` decides it: the deepest ancestor
+the run could still inspect. Neither SHALL surface as a raw read
+failure, and neither message SHALL carry an absolute path. The commands that consume
 the snapshot resolve the same path `init` scaffolds, so a directory
 there is a project `init` would refuse to create; the read side SHALL
 say so in the same terms rather than fail inside a read that was never
@@ -61,6 +68,15 @@ going to succeed.
   that path and the operating system's own code, with a `Next:` line,
   before any migration is read or written, and no raw filesystem error
   and no absolute path reaches the output
+
+#### Scenario: A snapshot path that cannot be inspected names the directory that blocks it
+- **WHEN** the configured `snapshotPath` is `parent/state.json`, the
+  directory `parent` exists with no permission to look inside it, and
+  `hejbro generate` runs
+- **THEN** it fails with the error code `snapshot-unreadable` naming
+  the configured path and the operating system's own code, and its
+  `Next:` line names `parent` — the same directory `hejbro init` would
+  name for the same tree
 
 ## MODIFIED Requirements
 
@@ -114,10 +130,12 @@ anything is created, and a directory that refuses SHALL stop the run
 with the same coded failure, naming that directory and the operating
 system's own code. A creation that still fails — a permission the check
 could not see, a device that filled — SHALL surface as the same coded
-failure, never a raw stack, and everything this run created before the
-failure SHALL be removed again, deepest first, so that a refused run
-leaves the project as it found it; an artifact the run found already
-present is never removed.
+failure, never a raw stack, and the run SHALL remove only what this run
+created, deepest first — anything it found already there stays, a
+directory it reported as skipped and every file inside it included — so
+that a refused run leaves the project as it found it. What to remove is
+decided by this run's own record of what it created, never by which
+paths the configuration names.
 
 Where a check cannot be made at all — the operating system refuses to
 say what sits at a path — the run SHALL stop with the same coded

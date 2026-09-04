@@ -228,7 +228,8 @@ inner `afterEach` before the fixture is removed.
       |---|---|
       | `migrationsDir: "x/mig"` (nothing exists) | `x` is created then `x/mig` fails → `init-path-conflict` naming `x` with `(EACCES)`, exit 1, **`x` no longer exists** |
       | `migrationsDir: "mig"`, `snapshotPath: "y/state.json"` | `mig/` created fine, `y` created, `y/state.json` fails → refusal, **neither `mig` nor `y` remains** |
-      | `migrationsDir: "mig"` already present, `snapshotPath: "y/state.json"` | refusal; `mig` (found present) is untouched, `y` removed |
+      | `migrationsDir: "mig"` already present **holding `0001_x.sql`**, `snapshotPath: "y/state.json"` | refusal; `mig/` and `mig/0001_x.sql` are byte-untouched (reported `skipped`, never in this run's record), `y` removed |
+      | `migrationsDir: "db/mig"`, `snapshotPath: "db/state.json"`, `db` already present | `db/mig` created then the snapshot write fails → `db/mig` removed, **`db` stays** (found present) |
       | umask 0o022, `migrationsDir: "x/mig"` | created (control) |
 
       Green: the apply pass computes each absent artifact's first node
@@ -252,9 +253,18 @@ inner `afterEach` before the fixture is removed.
       | `check` (no `--url`, no `DATABASE_URL`) | same | same refusal, reached before any connection is attempted |
       | `baseline` | same | same |
       | `generate` | regular file, mode 444 | reads as today (control) |
+      | `generate` | a directory, mode 000 | `snapshot-not-a-file` — kind first, readability second (control for the overlap) |
+      | `generate` | `snapshotPath: "parent/state.json"`, `parent` mode 000 | `snapshot-unreadable` naming the configured path and `(EACCES)`, `Next:` names `parent` — the same directory `init` names for this tree |
+      | `generate` | `snapshotPath: "nx/a/state.json"`, `nx` mode 000 | `Next:` names `nx`, not `nx/a` |
 
       Green: `readSnapshotFileText` wraps the read; a non-`ENOENT` failure
-      → `snapshot-unreadable` with design D7's sentence. Close:
+      → `snapshot-unreadable` with design D7's sentence; a stat failure
+      other than `ENOENT` → the same code, `Next:` naming the blocking
+      directory. For that, `walkAncestors`, the culprit rule and their
+      outcome types move from `commands/init.ts` to a new
+      `packages/cli/src/path-probe.ts` (pure move, `init.ts` imports
+      them back; no behaviour change — the existing init tests are the
+      pin). Close:
       `skills/hejbro/references/generate-verify-workflow.md` gains the
       three codes a path can now raise — `invalid-config` for an
       absolute-looking `migrationsDir`/`snapshotPath` (a behaviour
@@ -262,6 +272,7 @@ inner `afterEach` before the fixture is removed.
       `snapshot-not-a-file`, `snapshot-unreadable` — in the file's own
       code-in-prose style; `.changeset/harden-init-paths.md` gains the
       three review fixes and `#767`. Files: `snapshot-file.ts`,
+      `path-probe.ts` (new), `commands/init.ts` (imports only),
       `generate-command.test.ts`, that reference, the changeset.
 
 Group close (group 2): `openspec validate --strict` and `show --diff`
