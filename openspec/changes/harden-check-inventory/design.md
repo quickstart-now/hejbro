@@ -221,6 +221,73 @@ uncapped today and a cap would make the report lie by omission. If the
 lead wants a ceiling, it should be a `check`-wide reporting decision, not
 one this change invents for one section.
 
+## Why the loss report's new sentence is unconditional
+
+The omitted-index and omitted-check lines now claim, without a
+condition, that `check` keeps listing the object as unmanaged. That
+claim is only true if such an object always sits on a table `check`
+treats as managed — and this change's own Q3 boundary says an unmanaged
+table's objects are never listed. Read in the source (not inferred):
+`omittedIndexes`/`omittedChecks` are produced **inside** `inferTable`
+(`infer/table.ts`), and `inferTable` is called only over
+`snapshotTables` (`infer/compose.ts`), which is what survives
+`partitionTables` — the filter that removes a table whose own catalog
+name no declaration can carry, *before* `table()` is ever called. A
+table whose name was omitted therefore contributes no omitted index and
+no omitted check at all; every one that exists belongs to a table the
+starter files declare with `table()`, which is exactly a managed table.
+The sentence needs no `stillReportedInInventory`-style branch, unlike
+the omitted-*table* line one level up, whose object may well sit in a
+schema with nothing else declared.
+
+## M6 — the join reads more than the constraint an index implements
+
+The first live run of this change's own witness, against
+`examples/postgres`'s real chain, reported seven unmanaged indexes on a
+database that agreed with its declarations — every declared primary key,
+`tasks_pkey` four times over:
+
+```
+unmanaged index (backs constraint projects_owner_id_fk; not covered by any declaration): app.members.members_pkey
+unmanaged index (backs constraint task_labels_task_id_fk; not covered by any declaration): app.tasks.tasks_pkey
+…
+```
+
+The cause, reproduced directly:
+
+```
+       conname       | contype |  conrelid  |    conindid
+---------------------+---------+------------+----------------
+ users_pkey          | p       | app.users  | app.users_pkey
+ orders_user_id_fkey | f       | app.orders | app.users_pkey
+```
+
+`conindid` is not only "the index this constraint implements". A foreign
+key's own record names the index it points at on the *referenced* table,
+so joining on `conindid` alone yields one extra row per foreign key
+pointing at a key, each carrying that foreign key's name — the declared
+key is then excluded by nothing (its name is not a declared constraint
+name) and is reported, once per referencing table.
+
+The join is therefore restricted to the constraint kinds Postgres backs
+with an index of their own — primary key, unique, exclusion. M3/M4 could
+not have caught this: that database had no foreign key at all. The
+scenario a reviewer would build first — two tables and a reference — is
+exactly the one the measurement lacked.
+
+## A gate that does not cover its own witness
+
+`packages/cli/test/infer-omitted-names.integration.test.ts` asserts the
+loss-report wording against a live database, and it does **not** run
+under `pnpm test`: there is no `test:integration` task in `turbo.json`,
+so the suite is reachable only through its own vitest config. A wording
+change therefore passes every gate in `AGENTS.md`'s "Before claiming
+done" list while leaving that file asserting text the product no longer
+prints. It was found here by reading, not by a gate. The same is true of
+`check-live.integration.test.ts`, which this change's own live witness
+lands in — both are run explicitly and their output is quoted in the
+completion report.
+
 ## Measurements
 
 Run by cv-implementer in this worktree (built `dist/cli.js`,

@@ -49,7 +49,11 @@ one where nothing true can be said:
   database hejbro's own migration produced would otherwise report an
   unmanaged index for every key it declared. Which constraint an index
   backs SHALL be read from the catalog's own record of it, never
-  inferred from the two names matching. Any other index the catalog
+  inferred from the two names matching — and the record to read is the
+  constraint the index *implements*. A foreign key's own catalog record
+  names the index it points at on the referenced table, so a key that
+  something references is otherwise reported as unmanaged once per
+  foreign key pointing at it, under that foreign key's name. Any other index the catalog
   holds on a managed table is inventoried — and where such an index
   backs a constraint, its line SHALL name that constraint, so that a
   reader is not sent looking for an index nobody wrote.
