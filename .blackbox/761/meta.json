@@ -7,7 +7,19 @@
   "status": "open",
   "opened": "2026-09-04",
   "closed": null,
-  "decisions": [],
+  "decisions": [
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "D1"
+      ],
+      "at": "2026-09-04T15:17Z",
+      "title": "Q2: leading word = first non-space non-semicolon run; second word only across whitespace; comments stated as a limit",
+      "ratified": null
+    }
+  ],
   "work": [],
   "prs": [],
   "origin": null,
