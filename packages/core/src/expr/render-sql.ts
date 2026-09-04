@@ -171,6 +171,12 @@ const isTableBoundMarker = (
 	node: FromNode | DeclaredCteMarker | TableBoundMarker,
 ): node is TableBoundMarker => "tableBound" in node;
 
+/** Either scope marker — neither grants column access on its own, only a real `FromNode` does ({@link isInScope}'s sole caller of this predicate); a type predicate, not a plain boolean, so the negative branch still narrows to `FromNode`. */
+const isScopeMarker = (
+	node: FromNode | DeclaredCteMarker | TableBoundMarker,
+): node is DeclaredCteMarker | TableBoundMarker =>
+	isDeclaredCteMarker(node) || isTableBoundMarker(node);
+
 /** Renders a {@link FromNode}: a CTE reference bare and quoted (add-ctes, task 1.2), a table reference schema-qualified. */
 export const renderFromNode = (node: FromNode): string => {
 	if (isCteRef(node)) {
@@ -224,7 +230,7 @@ const isInScope = (
 	scope.some((source) => {
 		// Neither scope marker grants column access on its own (task 1.6,
 		// fix-nile-findings task 1.1) -- only a real from/join target does.
-		if (isDeclaredCteMarker(source) || isTableBoundMarker(source)) {
+		if (isScopeMarker(source)) {
 			return false;
 		}
 		if (isCteRef(source)) {
