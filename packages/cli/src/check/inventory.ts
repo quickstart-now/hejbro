@@ -7,18 +7,27 @@ export type UnmanagedTable = {
 	readonly table: string;
 };
 
+/** A column the database holds on a *managed* table that no declaration covers (harden-check-inventory, #726) -- the object-level counterpart of {@link UnmanagedTable}, anchored the same way (see {@link managedTableIdentities}). */
+export type UnmanagedColumn = {
+	readonly schema: string;
+	readonly table: string;
+	readonly name: string;
+};
+
 /**
  * Existence-only information (spec Req5): tables inside a declared
- * schema that no declaration covers, and the extensions the database
- * has. Neither carries a hejbro error code -- 2.1's own code set has no
- * inventory entry, because this is never a difference (a project may
- * legitimately leave objects unmanaged) and SHALL NOT affect the exit
- * code. Existence only, by construction: nothing here compares a type,
- * a default, or an expression, so nothing here can produce a false
+ * schema that no declaration covers, columns on a managed table that no
+ * declaration covers, and the extensions the database has. Neither
+ * carries a hejbro error code -- 2.1's own code set has no inventory
+ * entry, because this is never a difference (a project may legitimately
+ * leave objects unmanaged) and SHALL NOT affect the exit code.
+ * Existence only, by construction: nothing here compares a type, a
+ * default, or an expression, so nothing here can produce a false
  * positive.
  */
 export type Inventory = {
 	readonly unmanagedTables: ReadonlyArray<UnmanagedTable>;
+	readonly unmanagedColumns: ReadonlyArray<UnmanagedColumn>;
 	readonly extensions: ReadonlyArray<string>;
 };
 
@@ -28,6 +37,10 @@ type LocalObjectWithSchema = { readonly schema: string };
 type LocalTableWithExisting = {
 	readonly schema: string;
 	readonly existing?: true;
+};
+type LocalColumnNode = { readonly name: string };
+type LocalTableWithColumns = {
+	readonly columns: ReadonlyArray<LocalColumnNode>;
 };
 
 /**
@@ -84,6 +97,71 @@ const unmanagedTables = (
 		.map((row) => ({ schema: row.schema, table: row.table }));
 };
 
+/** `declaredTableIdentities(snapshot)` narrowed to the ones declared `existing: true` -- the complement `managedTableIdentities` below removes. */
+const existingTableIdentities = (snapshot: Snapshot): ReadonlySet<string> =>
+	new Set(
+		Object.entries(snapshot.objects)
+			.filter(([key]) => key.startsWith("table:"))
+			.filter(([, node]) => (node as LocalTableWithExisting).existing === true)
+			.map(([key]) => key.slice("table:".length)),
+	);
+
+/**
+ * The object-level inventory's own anchor (harden-check-inventory,
+ * #707/#726): a table a `table:` declaration manages -- declared, and
+ * not `existingTable()` (add-unmanaged-objects, D106 R3: an existing
+ * declaration claims a shape hejbro does not own, so nothing on it is
+ * hejbro's to call unmanaged). A table this set excludes for either
+ * reason contributes no column, index or check-constraint line: an
+ * undeclared table's own `unmanaged table` line already says everything
+ * true about what it holds, and a schema no declaration touches is out
+ * of scope by `declaredTableIdentities`/`declaredSchemaNames` never
+ * naming it in the first place.
+ */
+const managedTableIdentities = (snapshot: Snapshot): ReadonlySet<string> => {
+	const existing = existingTableIdentities(snapshot);
+	return new Set(
+		[...declaredTableIdentities(snapshot)].filter(
+			(identity) => !existing.has(identity),
+		),
+	);
+};
+
+/** The column names a managed table's own declaration names, read from its snapshot node -- absent (schema no declaration touches, or the table itself unmanaged/existing) reads as no declared columns, which never matters: {@link unmanagedColumns} only calls this for an identity `managedTableIdentities` already vouches for. */
+const declaredColumnNames = (
+	snapshot: Snapshot,
+	identity: string,
+): ReadonlySet<string> => {
+	const node = snapshot.objects[`table:${identity}`] as
+		| LocalTableWithColumns
+		| undefined;
+	return new Set((node?.columns ?? []).map((column) => column.name));
+};
+
+/**
+ * Columns the catalog has on a managed table that no declaration
+ * covers (#726) -- the column-level counterpart of {@link
+ * unmanagedTables}, anchored on {@link managedTableIdentities} rather
+ * than `declaredSchemaNames`: a managed table's schema is always
+ * declared by construction (it holds a `table:` declaration), so no
+ * separate schema filter is needed here.
+ */
+const unmanagedColumns = (
+	snapshot: Snapshot,
+	catalog: Catalog,
+): ReadonlyArray<UnmanagedColumn> => {
+	const managedTables = managedTableIdentities(snapshot);
+	return catalog.columns
+		.filter((row) => managedTables.has(`${row.schema}.${row.table}`))
+		.filter(
+			(row) =>
+				!declaredColumnNames(snapshot, `${row.schema}.${row.table}`).has(
+					row.name,
+				),
+		)
+		.map((row) => ({ schema: row.schema, table: row.table, name: row.name }));
+};
+
 /**
  * Builds the report's own inventory section (task 5.1) -- pure, no I/O
  * (group 1's `readCatalog` already ran), same split as `compare.ts` and
@@ -94,5 +172,6 @@ export const buildInventory = (
 	catalog: Catalog,
 ): Inventory => ({
 	unmanagedTables: unmanagedTables(snapshot, catalog),
+	unmanagedColumns: unmanagedColumns(snapshot, catalog),
 	extensions: catalog.extensions.map((row) => row.name),
 });

@@ -162,6 +162,7 @@ describe("renderCheckReport / 5.1 inventory section", () => {
 	it("prints the inventory section in the report", () => {
 		const inventory: Inventory = {
 			unmanagedTables: [{ schema: "app", table: "legacy_table" }],
+			unmanagedColumns: [],
 			extensions: ["pgcrypto"],
 		};
 
@@ -178,6 +179,7 @@ describe("renderCheckReport / 5.1 inventory section", () => {
 	it("says nothing extra when there is no unmanaged inventory", () => {
 		const report = renderCheckReport([], {
 			unmanagedTables: [],
+			unmanagedColumns: [],
 			extensions: [],
 		});
 

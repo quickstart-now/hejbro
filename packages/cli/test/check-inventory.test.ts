@@ -1,13 +1,15 @@
 import type { HejbroInput, Snapshot } from "@hejbro/core";
 import {
 	emptySnapshot,
+	existingTable,
 	generateMigration,
+	getTableMeta,
 	schema,
 	table,
 	uuid,
 } from "@hejbro/core";
 import { describe, expect, it } from "vitest";
-import type { Catalog } from "../src/check/catalog";
+import type { Catalog, ColumnRow } from "../src/check/catalog";
 import { buildInventory } from "../src/check/inventory";
 
 const app = schema("app");
@@ -107,4 +109,115 @@ describe("buildInventory / 5.1 extensions", () => {
 
 		expect(inventory.extensions).toEqual(["pgcrypto", "uuid-ossp"]);
 	});
+});
+
+const columnRow = (schema: string, table: string, name: string): ColumnRow => ({
+	schema,
+	table,
+	name,
+	notNull: false,
+	catalogType: "text",
+	baseTypeKind: null,
+	baseTypeSchema: null,
+	baseTypeName: null,
+	catalogDefault: null,
+	catalogGenerated: null,
+});
+
+describe("the inventory's anchor is a managed table", () => {
+	// harden-check-inventory, task 1.1 (#707/#726): the object-level axes
+	// (columns here; indexes and check constraints follow the same anchor
+	// in 1.4/1.5) only ever fire on a table a `table:` declaration
+	// manages -- not an unmanaged table (its own line already says
+	// everything true), not an `existingTable()` (a declared shape this
+	// project does not own), and never outside a declared schema.
+	type AnchorRow = {
+		readonly label: string;
+		readonly declarations: ReadonlyArray<HejbroInput>;
+		readonly catalogTables: Catalog["tables"];
+		readonly catalogColumns: ReadonlyArray<ColumnRow>;
+		readonly expectedUnmanagedColumns: ReadonlyArray<{
+			readonly schema: string;
+			readonly table: string;
+			readonly name: string;
+		}>;
+		readonly expectedUnmanagedTables: ReadonlyArray<{
+			readonly schema: string;
+			readonly table: string;
+		}>;
+	};
+
+	const rows: ReadonlyArray<AnchorRow> = [
+		{
+			label: "a table a `table:` declaration manages",
+			declarations: [table(app, "posts", { id: uuid().primaryKey() })],
+			catalogTables: [{ schema: "app", table: "posts", rls: false }],
+			catalogColumns: [
+				columnRow("app", "posts", "id"),
+				columnRow("app", "posts", "legacy_note"),
+			],
+			expectedUnmanagedColumns: [
+				{ schema: "app", table: "posts", name: "legacy_note" },
+			],
+			expectedUnmanagedTables: [],
+		},
+		{
+			label: "a catalog table no declaration covers",
+			declarations: [table(app, "posts", { id: uuid().primaryKey() })],
+			catalogTables: [
+				{ schema: "app", table: "posts", rls: false },
+				{ schema: "app", table: "legacy_table", rls: false },
+			],
+			catalogColumns: [
+				columnRow("app", "posts", "id"),
+				columnRow("app", "legacy_table", "note"),
+			],
+			expectedUnmanagedColumns: [],
+			expectedUnmanagedTables: [{ schema: "app", table: "legacy_table" }],
+		},
+		{
+			label: "a table declared `existingTable()`",
+			declarations: [
+				getTableMeta(existingTable("app", "legacy_customers", { id: uuid() })),
+			],
+			catalogTables: [{ schema: "app", table: "legacy_customers", rls: false }],
+			catalogColumns: [
+				columnRow("app", "legacy_customers", "id"),
+				columnRow("app", "legacy_customers", "legacy_note"),
+			],
+			expectedUnmanagedColumns: [],
+			expectedUnmanagedTables: [],
+		},
+		{
+			label: "a table in a schema no declaration touches",
+			declarations: [table(app, "posts", { id: uuid().primaryKey() })],
+			catalogTables: [{ schema: "other", table: "unrelated", rls: false }],
+			catalogColumns: [columnRow("other", "unrelated", "note")],
+			expectedUnmanagedColumns: [],
+			expectedUnmanagedTables: [],
+		},
+	];
+
+	it.each(rows)(
+		"$label",
+		({
+			declarations,
+			catalogTables,
+			catalogColumns,
+			expectedUnmanagedColumns,
+			expectedUnmanagedTables,
+		}) => {
+			const snapshot = buildTestSnapshot(declarations);
+			const catalog: Catalog = {
+				...emptyCatalog(),
+				tables: catalogTables,
+				columns: catalogColumns,
+			};
+
+			const inventory = buildInventory(snapshot, catalog);
+
+			expect(inventory.unmanagedColumns).toEqual(expectedUnmanagedColumns);
+			expect(inventory.unmanagedTables).toEqual(expectedUnmanagedTables);
+		},
+	);
 });

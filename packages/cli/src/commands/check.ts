@@ -204,6 +204,7 @@ export type CheckReport = {
 /** Exported so a test can build one explicitly (4.5, o2) -- `renderCheckReport` no longer defaults this away. */
 export const EMPTY_INVENTORY: Inventory = {
 	unmanagedTables: [],
+	unmanagedColumns: [],
 	extensions: [],
 };
 
