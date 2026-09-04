@@ -78,6 +78,19 @@ describe("nile-preset.md survives the archive and states the literal rule (cli-c
 	it("links no path under openspec/changes/", () => {
 		expect(REFERENCE).not.toMatch(/openspec\/changes\//);
 	});
+	// D106 round 2 (R2-N3): the cited requirement must be a heading the
+	// main spec actually carries, not a phrase from inside one.
+	it("cites a cli-commands requirement by a heading the main spec carries", () => {
+		const cited = REFERENCE_FLAT.match(
+			/`openspec\/specs\/cli-commands\/spec\.md`'s requirement "([^"]+)"/,
+		);
+		expect(cited?.[1]).toBeDefined();
+		const spec = readFileSync(
+			join(REPO_ROOT, "openspec", "specs", "cli-commands", "spec.md"),
+			"utf8",
+		);
+		expect(spec).toContain(`### Requirement: ${cited?.[1]}`);
+	});
 	it("does not claim that equal normalized texts agree 'exactly as on a platform that can plan'", () => {
 		expect(REFERENCE).not.toContain("silently, exactly as");
 		expect(REFERENCE).toMatch(/inside a string literal/);

@@ -126,8 +126,8 @@ expressions that actually differ). The `Next:` line never asks the reader
 to run or be granted `EXPLAIN` on such a platform — the whole reason this
 mode exists is that no role could satisfy that request here. See
 `packages/cli/src/check/expression.ts` for the exact normalization order
-and `openspec/specs/cli-commands/spec.md`'s "compares by text where the
-preset declares no planning" requirement for the contract each step
+and `openspec/specs/cli-commands/spec.md`'s requirement "An expression is
+compared through the server's own rendering" for the contract each step
 serves.
 
 Whether a view body or a query-builder statement referencing a
