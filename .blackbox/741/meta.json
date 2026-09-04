@@ -30,6 +30,19 @@
       "at": "2026-09-04T13:07Z",
       "title": "harden-init-paths approved; D1: root = cwd, --config names the file only; every-command config-relative goes to a follow-up",
       "ratified": null
+    },
+    {
+      "id": "R3",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "D1",
+        "R1",
+        "R2"
+      ],
+      "at": "2026-09-04T15:55Z",
+      "title": "Review disposition: three blockers fixed here, #767 absorbed, undo by this run's record, shared path-probe; round 2 passed",
+      "ratified": null
     }
   ],
   "work": [
