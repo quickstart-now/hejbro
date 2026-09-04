@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#748",
+  "title": "core: \"found\" is missing from the plpgsql reserved-name list and shadows PL/pgSQL's FOUND silently",
+  "parent": "quickstart-now/hejbro#412",
+  "status": "open",
+  "opened": "2026-09-04",
+  "closed": null,
+  "decisions": [
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "D1"
+      ],
+      "at": "2026-09-04T12:53Z",
+      "title": "Batch co = #748 #751 #774 as one change harden-core-derivations, parallel to li and ip",
+      "ratified": null
+    }
+  ],
+  "work": [],
+  "prs": [],
+  "origin": null,
+  "followUps": []
+}

@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#774",
+  "title": "core: diff-engine byIdentity reassembly drops a second same-identity, same-direction change from one kind",
+  "parent": "quickstart-now/hejbro#412",
+  "status": "open",
+  "opened": "2026-09-04",
+  "closed": null,
+  "decisions": [],
+  "work": [],
+  "prs": [],
+  "origin": null,
+  "followUps": []
+}
