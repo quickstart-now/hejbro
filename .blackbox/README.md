@@ -73,7 +73,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#768](768/) | init: stat-failure refusal's Next: names the missing leaf, not the blocking ancestor | closed | #840 #847 | 0 | 1 (0 pending) |
 | ↳ [#769](769/) | query: createDb(conn).as(ctx) table surface skips the unknown-member guard | closed | #849 #850 | 0 | 4 (0 pending) |
 | ↳ [#774](774/) | core: diff-engine byIdentity reassembly drops a second same-identity, same-direction change from one kind | closed | #824 #833 | 0 | 1 (1 pending) |
-| ↳ [#778](778/) | check: index predicates and generated-column expressions are not compared through the server's rendering as the spec claims | closed | #851 | 0 | 4 (0 pending) |
+| ↳ [#778](778/) | check: index predicates and generated-column expressions are not compared through the server's rendering as the spec claims | closed | #851 | 0 | 5 (0 pending) |
 | ↳ [#779](779/) | check: not-compared finding delimits expression texts with the same quote SQL identifiers use | closed | #851 | 0 | 1 (0 pending) |
 | ↳ [#781](781/) | check: a matching generated column is always reported as a default difference | closed | #851 | 0 | 1 (0 pending) |
 | ↳ [#783](783/) | reset: a table that merely shares the ledger's name has all its rows deleted and is reported as the cleared ledger | closed | #835 #838 | 0 | 6 (2 pending) |
@@ -126,7 +126,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 
 ## Totals
 
-Owner decisions 80 · rulings 140 (interpretation 90, extension 48, stop 2) · pending extensions 10 · rejected 2
+Owner decisions 80 · rulings 141 (interpretation 91, extension 48, stop 2) · pending extensions 10 · rejected 2
 
 ## Conventions
 

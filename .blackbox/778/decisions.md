@@ -36,3 +36,10 @@ _lead · interpretation · basis R1, R2, R3 · 2026-09-04T20:48Z · ratified: pe
 
 Constructor review (opus, live PG 17 in Docker, detached worktree) closed at round 3: BLOCKING 0 / NON-BLOCKING 0 / OK 21 at fd7c9cfd. Round 1 (B1 plain-vs-expression silence, B2 total-vs-partial silence, B3 bare/paren/COLLATE round-trip false positive) drove the ordered-key-list redesign (R3); round 2 (B4 INCLUDE columns counted as keys, NB-5 boundary wording and a `.blackbox/` citation in the user-facing skill) was repaired in 1.11. The lead accepts (c): four surfaces under one rule, an index compared as its ordered key list without the include list, generated columns on their own axis. One unconstructible scenario (text-mode "failed catalog read") stays pinned by the fake-driver unit, as ruled earlier. Follow-ups #841–#844 stand; the corpus proposals (11, incl. index-include-columns) go to #714. Rebased onto dev 625be135 (task-times union, README restamp, blackbox index regenerated); full gates green; PR opened by the lead.
 
+<a id="r5"></a>
+## R5 — D106 round 1: 0 blocking / 4 non-blocking; #852 #853 #854 filed, NB2 = #841; archived
+
+_lead · interpretation · basis R4, 412/D13 · 2026-09-04T21:41Z · ratified: pending_
+
+D106 round 1 (context-free, opus, dev 3437086a, live PostgreSQL 17.11 with log_statement=all, 26 scratch projects × 60 hand-built databases across every neighbour class): BLOCKING 0 / NON-BLOCKING 4 / OK 17. Every delta scenario and the prose universals hold (every declared index reaches the comparison, zero explains for count/one-side-partial differences, one statement per object, collation carried but not rendered, existence-only attributes untouched). Disposition: NB1 → #852 (default axis delimiter), NB2 = #841, NB3 → #853 (Next: follows the server's reason class), NB4 → #854 (one rendering of the declared side). None is repaired at the archive: each is a diagnostics contract of its own (a delimiter rule for a fifth axis, a remedy classification, a rendering rule), outside the four-surface delta and sized for its own change. Archived.
+

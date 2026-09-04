@@ -55,6 +55,18 @@
       "at": "2026-09-04T20:48Z",
       "title": "ck (c) accepted: constructor review round 3 0/0/21 at fd7c9cfd; rebased onto dev; PR by the lead",
       "ratified": null
+    },
+    {
+      "id": "R5",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R4",
+        "412/D13"
+      ],
+      "at": "2026-09-04T21:41Z",
+      "title": "D106 round 1: 0 blocking / 4 non-blocking; #852 #853 #854 filed, NB2 = #841; archived",
+      "ratified": null
     }
   ],
   "work": [
