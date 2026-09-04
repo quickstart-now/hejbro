@@ -451,19 +451,15 @@
       "number": 808,
       "ref": "quickstart-now/hejbro#808",
       "title": "ci: one run per commit, and verify waits for the owner's approval (#807, #809)",
-      "head": "c64df026efe3ea828c1ca050381bdbcacb7401b8",
+      "head": "dedd59448cfd1ed80f49cad9c59f4298e48a2214",
       "headRef": "fix-ci-duplicate-runs",
       "base": "dev",
       "merged": null,
-      "pinnedAt": "2026-09-04T08:54Z",
+      "pinnedAt": "2026-09-04T08:56Z",
       "refs": [
         {
           "path": ".github/workflows/ci.yml",
-          "blob": "08a4c260e7faa530d1bc0f2aafb7d4a8f609f2a3"
-        },
-        {
-          "path": "AGENTS.md",
-          "blob": "0744eef045a5ae5b9920703f7aaa5f60f238cfaa"
+          "blob": "fde075cb170ef1cf735895e63139bf2782b826a6"
         }
       ]
     }
