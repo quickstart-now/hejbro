@@ -54,6 +54,19 @@
       "at": "2026-09-04T13:51Z",
       "title": "Review: category-T keywords are added now that they are measured; the sentence stands",
       "ratified": null
+    },
+    {
+      "id": "R5",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "D1",
+        "R2",
+        "R4"
+      ],
+      "at": "2026-09-04T14:08Z",
+      "title": "Review, final: all 23 type_func_name keywords refused, class defined by source; current_schema is the silent-shadow case",
+      "ratified": null
     }
   ],
   "work": [

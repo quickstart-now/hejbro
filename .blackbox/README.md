@@ -57,7 +57,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#687](687/) | init ignores the configured migrationsDir and snapshotPath | closed | #739 #759 #770 | 0 | 8 (0 pending) |
 | ↳ [#697](697/) | vendored fn guard is count-only and a __proto__ column key loses its column | closed | #739 | 0 | 4 (0 pending) |
 | ↳ [#744](744/) | `docker-rm-hygiene` can fail on a temporary file another test is deleting | closed | #773 | 0 | 1 (0 pending) |
-| ↳ [#748](748/) | core: "found" is missing from the plpgsql reserved-name list and shadows PL/pgSQL's FOUND silently | open |  | 0 | 4 (1 pending) |
+| ↳ [#748](748/) | core: "found" is missing from the plpgsql reserved-name list and shadows PL/pgSQL's FOUND silently | open |  | 0 | 5 (1 pending) |
 | ↳ [#750](750/) | 0.2.0-pre.0: five findings from applying one declaration to Postgres 18, Neon, Nile and Supabase | closed | #784 #802 | 7 | 2 (0 pending) |
 | ↳ [#751](751/) | core: two function argument keys that derive to one SQL name are not refused | open |  | 0 | 1 (1 pending) |
 | ↳ [#752](752/) | verify does not run preset validators, so it passes a declaration generate refuses | closed | #775 #784 #799 | 0 | 2 (0 pending) |
@@ -96,7 +96,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 
 ## Totals
 
-Owner decisions 75 · rulings 110 (interpretation 66, extension 42, stop 2) · pending extensions 4 · rejected 2
+Owner decisions 75 · rulings 111 (interpretation 67, extension 42, stop 2) · pending extensions 4 · rejected 2
 
 ## Conventions
 
