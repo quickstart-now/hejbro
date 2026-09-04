@@ -69,7 +69,7 @@ describe("policyKind.emit", () => {
 		});
 		expect(created.map((s) => s.sql)).toEqual([
 			`drop policy if exists "posts_read_published" on "app"."posts";`,
-			`create policy "posts_read_published" on "app"."posts" for select to "anon" using ("app"."posts"."published_at" is not null);`,
+			`create policy "posts_read_published" on "app"."posts" for select to "anon" using ("posts"."published_at" is not null);`,
 		]);
 	});
 
@@ -93,7 +93,7 @@ describe("policyKind.emit", () => {
 		});
 		expect(created.map((s) => s.sql)).toEqual([
 			`drop policy if exists "insert_gate" on "app"."posts";`,
-			`create policy "insert_gate" on "app"."posts" as restrictive for insert to "anon", "authenticated" with check ("app"."posts"."status" = 'draft');`,
+			`create policy "insert_gate" on "app"."posts" as restrictive for insert to "anon", "authenticated" with check ("posts"."status" = 'draft');`,
 		]);
 	});
 
@@ -133,7 +133,7 @@ describe("policyKind.emit", () => {
 				permissive: true,
 				command: "select",
 				roles: ["anon"],
-				using: `"app"."posts"."published_at" is not null`,
+				using: `"posts"."published_at" is not null`,
 				withCheck: null,
 			},
 			next: null,
@@ -184,7 +184,7 @@ describe("policyKind.serialize", () => {
 		// accessor emit uses, so this keeps asserting final SQL text
 		// rather than the node's internal shape.
 		expect(policyUsing(snapshot as Parameters<typeof policyUsing>[0])).toBe(
-			`exists (select 1 from "app"."posts" where "app"."posts"."id" = "app"."comments"."post_id")`,
+			`exists (select 1 from "app"."posts" where "posts"."id" = "comments"."post_id")`,
 		);
 	});
 

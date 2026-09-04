@@ -195,7 +195,7 @@ export {
 	now,
 	or,
 } from "./expr/operators";
-export type { DeclaredCteMarker } from "./expr/render-sql";
+export type { DeclaredCteMarker, TableBoundMarker } from "./expr/render-sql";
 export {
 	collectColumnRefs,
 	renderDelete,
@@ -205,6 +205,7 @@ export {
 	renderSelect,
 	renderSelectInto,
 	renderSetOp,
+	renderTableBoundExpr,
 	renderTableRef,
 	renderUpdate,
 } from "./expr/render-sql";

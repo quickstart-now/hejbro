@@ -88,12 +88,14 @@ The exit code answers three separate questions, not one:
 |------|---------|
 | `0`  | every declared object was compared and agreed |
 | `1`  | at least one declared object is missing or differs from the database |
-| `2`  | the run could not answer — something could not be compared (e.g. a role without EXPLAIN privilege on a table it owns no policy on), or the declaration set was empty |
+| `2`  | the run could not answer — something could not be compared (e.g. a role without EXPLAIN privilege on a table it owns no policy on, or — on a platform whose preset declares `explainUnavailable`, e.g. Nile — a check constraint whose declared and catalog text still differ after the fixed text normalization), or the declaration set was empty |
 
 `2` is never a pass and is never folded into `0` or `1`: a CI pipeline
 running `check` under a limited role should treat `1` (real drift) and
-`2` ("ask for more privilege, then rerun") as different answers, not one
-red build indistinguishable from the other.
+`2` ("ask for more privilege, then rerun", or, on a text-comparison
+platform, "restate the declaration in the catalog's own spelling, then
+rerun") as different answers, not one red build indistinguishable from
+the other.
 
 `check` does not compare everything. View bodies are never compared
 (only that a declared view exists). Primary keys, unique constraints,

@@ -6,4 +6,4 @@ drop policy "posts_read_published" on "app"."posts";
 
 alter table "app"."posts" force row level security;
 
-create policy "posts_read_published" on "app"."posts" for select to "anon" using ("app"."posts"."published_at" is not null);
+create policy "posts_read_published" on "app"."posts" for select to "anon" using ("posts"."published_at" is not null);

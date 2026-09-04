@@ -39,7 +39,7 @@ create table "app"."attachments" (
 	"storage_path" text not null,
 	"size_bytes" bigint not null,
 	constraint "attachments_pkey" primary key ("id"),
-	constraint "attachments_size_bytes_positive" check ("app"."attachments"."size_bytes" > 0)
+	constraint "attachments_size_bytes_positive" check ("attachments"."size_bytes" > 0)
 );
 
 alter table "app"."attachments" enable row level security;
@@ -48,11 +48,11 @@ alter table "app"."profiles" enable row level security;
 
 drop policy if exists "attachments_read_own" on "app"."attachments";
 
-create policy "attachments_read_own" on "app"."attachments" for select to "authenticated" using (exists (select 1 from "app"."profiles" where ("app"."profiles"."id" = "app"."attachments"."profile_id") and ("app"."profiles"."user_id" = (select auth.uid()))));
+create policy "attachments_read_own" on "app"."attachments" for select to "authenticated" using (exists (select 1 from "app"."profiles" where ("profiles"."id" = "attachments"."profile_id") and ("profiles"."user_id" = (select auth.uid()))));
 
 drop policy if exists "profiles_read_own" on "app"."profiles";
 
-create policy "profiles_read_own" on "app"."profiles" for select to "authenticated" using ("app"."profiles"."user_id" = (select auth.uid()));
+create policy "profiles_read_own" on "app"."profiles" for select to "authenticated" using ("profiles"."user_id" = (select auth.uid()));
 
 create or replace view "app"."profiles_public" as select "id", "user_id", "display_name" from "app"."profiles";
 

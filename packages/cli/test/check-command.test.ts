@@ -1,4 +1,4 @@
-import type { HejbroInput, Snapshot } from "@hejbro/core";
+import type { HejbroInput, Preset, Snapshot } from "@hejbro/core";
 import {
 	check,
 	emptySnapshot,
@@ -7,18 +7,20 @@ import {
 	getTableMeta,
 	hejbroError,
 	inArray,
+	isNotNull,
 	schema,
 	table,
 	text,
 	uuid,
 } from "@hejbro/core";
-import type { DriverRow, DriverSession } from "@hejbro/query";
+import type { CompileResult, DriverRow, DriverSession } from "@hejbro/query";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { Catalog } from "../src/check/catalog";
 import type { Finding } from "../src/check/compare";
 import type { Inventory } from "../src/check/inventory";
 import { buildInventory } from "../src/check/inventory";
 import {
+	checkComparisonMode,
 	compareCheckAgainstCatalog,
 	EMPTY_INVENTORY,
 	renderCheckReport,
@@ -753,5 +755,170 @@ describe("an existing declaration is neither compared nor inventoried (add-unman
 	it("does not affect the exit code", async () => {
 		const { report } = await buildCoverageBoundaryReport();
 		expect(report.exitCode).toBe(0);
+	});
+});
+
+/**
+ * fix-nile-findings, #755, task 2.3: `checkComparisonMode` reads only the
+ * presets the configuration registers -- its own signature (`presets`,
+ * never a driver/connection) makes "and from nowhere else" (cli-commands
+ * spec) structural, not just documented.
+ */
+describe("checkComparisonMode (fix-nile-findings, #755)", () => {
+	const fakePresetDeclaringExplainUnavailable: Preset = {
+		name: "fake",
+		kinds: [],
+		validators: [],
+		explainUnavailable: true,
+	};
+	const fakePresetSilentOnIt: Preset = {
+		name: "fake",
+		kinds: [],
+		validators: [],
+	};
+
+	it("is 'text' when a registered preset declares explainUnavailable", () => {
+		expect(checkComparisonMode([fakePresetDeclaringExplainUnavailable])).toBe(
+			"text",
+		);
+	});
+
+	it("is 'server' when no registered preset declares it (silence means the platform can plan)", () => {
+		expect(checkComparisonMode([fakePresetSilentOnIt])).toBe("server");
+	});
+
+	it("is 'server' for no presets at all", () => {
+		expect(checkComparisonMode([])).toBe("server");
+	});
+});
+
+/**
+ * fix-nile-findings, #755, task 2.3: mode threaded end to end through
+ * `compareCheckAgainstCatalog` and `renderCheckReport` -- the CLI
+ * boundary a fake `explainUnavailable` preset exercises (constructor
+ * mode's own catalog-text fixtures are 2.4's Docker witness; this is the
+ * mode-selection wiring only).
+ */
+describe("compareCheckAgainstCatalog / renderCheckReport text mode (fix-nile-findings, #755)", () => {
+	const nameCheckCatalog = (): Catalog => ({
+		...emptyCatalog(),
+		tables: [{ schema: "app", table: "posts", rls: false }],
+		columns: [idColumnRow("posts")],
+		constraints: [
+			{
+				schema: "app",
+				table: "posts",
+				name: "posts_name_check",
+				type: "c",
+				columns: ["name"],
+			},
+		],
+	});
+
+	const buildNameCheckSnapshot = (): Snapshot =>
+		buildTestSnapshot([
+			table(app, "posts", { id: uuid().primaryKey(), name: text() }, (t) => ({
+				checks: [check("posts_name_check", isNotNull(t.name))],
+			})),
+		]);
+
+	/** Tracks every statement the session receives, so a test can assert on `explain` presence/absence directly, the same guard 3.2/3.3 established in check-expression.test.ts. */
+	const makeTrackedFakeSession = (
+		expression: string,
+	): { readonly session: DriverSession; readonly calls: CompileResult[] } => {
+		const calls: CompileResult[] = [];
+		const session: DriverSession = {
+			execute: async (compiled) => {
+				calls.push(compiled);
+				if (compiled.sql.includes("pg_constraint")) {
+					return [{ expression, convalidated: true }];
+				}
+				return [explainRow(["irrelevant"])];
+			},
+		};
+		return { session, calls };
+	};
+
+	it("never issues an explain statement when mode is text", async () => {
+		const { session, calls } = makeTrackedFakeSession('"name" is not null');
+
+		await compareCheckAgainstCatalog(
+			buildNameCheckSnapshot(),
+			nameCheckCatalog(),
+			session,
+			undefined,
+			"text",
+		);
+
+		const explainCalls = calls.filter((call) =>
+			call.sql.trim().toLowerCase().startsWith("explain"),
+		);
+		expect(explainCalls).toHaveLength(0);
+	});
+
+	it("issues an explain statement exactly as before when mode is server (regression guard)", async () => {
+		const { session, calls } = makeTrackedFakeSession('"name" is not null');
+
+		await compareCheckAgainstCatalog(
+			buildNameCheckSnapshot(),
+			nameCheckCatalog(),
+			session,
+			undefined,
+			"server",
+		);
+
+		const explainCalls = calls.filter((call) =>
+			call.sql.trim().toLowerCase().startsWith("explain"),
+		);
+		expect(explainCalls).toHaveLength(1);
+	});
+
+	it("states the text-comparison boundary line only when mode is text", () => {
+		const textReport = renderCheckReport(
+			[],
+			EMPTY_INVENTORY,
+			undefined,
+			undefined,
+			"text",
+		);
+		const serverReport = renderCheckReport([], EMPTY_INVENTORY);
+
+		expect(
+			textReport.stdout.some((line) =>
+				line.includes("compared by normalized text"),
+			),
+		).toBe(true);
+		expect(
+			serverReport.stdout.some((line) =>
+				line.includes("compared by normalized text"),
+			),
+		).toBe(false);
+	});
+
+	it("a text-mode not-compared finding does not exit zero (the exit-code rule itself is unchanged, finding-based)", async () => {
+		// A genuinely different expression (opposite negation) the fixed
+		// normalization cannot and must not reconcile.
+		const { session } = makeTrackedFakeSession('"name" is null');
+
+		const findings = await compareCheckAgainstCatalog(
+			buildNameCheckSnapshot(),
+			nameCheckCatalog(),
+			session,
+			undefined,
+			"text",
+		);
+
+		expect(
+			findings.some((finding) => finding.error.code === "check-not-compared"),
+		).toBe(true);
+
+		const report = renderCheckReport(
+			findings,
+			EMPTY_INVENTORY,
+			undefined,
+			undefined,
+			"text",
+		);
+		expect(report.exitCode).not.toBe(0);
 	});
 });

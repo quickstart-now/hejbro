@@ -15,6 +15,6 @@ create table "app"."posts" (
 
 create index "posts_recent_idx" on "app"."posts" ("created_at", "published_at" desc nulls first);
 
-create unique index "posts_slug_published_uidx" on "app"."posts" ("slug") where "app"."posts"."published_at" is not null;
+create unique index "posts_slug_published_uidx" on "app"."posts" ("slug") where "posts"."published_at" is not null;
 
 create index "posts_status_idx" on "app"."posts" ("status");
