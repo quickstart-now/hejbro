@@ -14,7 +14,7 @@ scenarios of `openspec show harden-check-expressions --diff` hold.
 
 ## 1. `check` compares every table-bound expression by one rule (#778 · #779 · #781)
 
-- [ ] 1.1 [design] ~7m — Red: `packages/cli/test/check-expression.test.ts`
+- [x] 1.1 [design] ~7m — Red: `packages/cli/test/check-expression.test.ts`
   new describe "3.8 expression texts are delimited by backticks" with an
   input table over the three message sites (server-mode not-compared with
   both texts, text-mode not-compared, differs) × declared expressions that
@@ -26,7 +26,7 @@ scenarios of `openspec show harden-check-expressions --diff` hold.
   `expression.ts` (`notComparedFinding`, `notComparedByTextFinding`, the
   `differsFinding` message).
   Files: `packages/cli/src/check/expression.ts`, the test.
-- [ ] 1.2 ~9m — Red: `packages/cli/test/check-catalog.test.ts` "columns and
+- [x] 1.2 ~9m — Red: `packages/cli/test/check-catalog.test.ts` "columns and
   indexes carry expression texts": the fake session's `columns` rows carry
   `catalogGenerated` and the parsed `Catalog` exposes it beside
   `catalogDefault`; `indexes` rows carry `predicate: string | null` and
@@ -40,7 +40,7 @@ scenarios of `openspec show harden-check-expressions --diff` hold.
   `IndexRow` literal in `packages/cli/test/*.test.ts` (check-compare,
   check-command, assert-schema, infer-*, contract-from-catalog).
   Files: `packages/cli/src/check/catalog.ts`, the tests.
-- [ ] 1.3 [design] ~9m — Red: `packages/cli/test/check-compare.test.ts` new
+- [x] 1.3 [design] ~9m — Red: `packages/cli/test/check-compare.test.ts` new
   describe "a generated column's own axis" with an input table: declared
   `generatedAlwaysAs(sql\`price * qty\`)` vs catalog `catalogGenerated:
   "(price * (qty)::numeric)"` → no finding from `compareCatalog`; declared
@@ -53,7 +53,7 @@ scenarios of `openspec show harden-check-expressions --diff` hold.
   with the same default → no finding (regression). Green: `compareColumnGenerated`
   and the default axis skipped when either side is generated, in `compareColumn`.
   Files: `packages/cli/src/check/compare.ts`, the test.
-- [ ] 1.4 [design] ~10m — Red: `packages/cli/test/check-expression.test.ts`
+- [x] 1.4 [design] ~10m — Red: `packages/cli/test/check-expression.test.ts`
   new describe "4.1 a generated column's expression" with an input table
   over `compareGeneratedColumn(session, catalog, schema, table, column,
   declaredExpression, mode)`: server agree (`Output` pair equal) → `[]`;
@@ -69,7 +69,7 @@ scenarios of `openspec show harden-check-expressions --diff` hold.
   rerouted through them (its existing tests stay green byte-for-byte), and
   the new export.
   Files: `packages/cli/src/check/expression.ts`, the test.
-- [ ] 1.5 [design] ~10m — Red: `packages/cli/test/check-expression.test.ts`
+- [x] 1.5 [design] ~10m — Red: `packages/cli/test/check-expression.test.ts`
   new describe "4.2 an index's predicate and expression columns" with an
   input table over `compareIndexExpressions(session, catalog, schema, table,
   index, mode)`: partial predicate rewrite agrees (`ne(t.status,'done')`
@@ -85,7 +85,7 @@ scenarios of `openspec show harden-check-expressions --diff` hold.
   `catalog.indexes` → `[]`, zero statements. Green: the export, count and
   presence checks before the probe, pair layout `[pred?, e1, e2, …]`.
   Files: `packages/cli/src/check/expression.ts`, the test.
-- [ ] 1.6 ~9m — Red: `packages/cli/test/check-command.test.ts` "every
+- [x] 1.6 ~9m — Red: `packages/cli/test/check-command.test.ts` "every
   expression surface reaches the run": a snapshot with a partial index, an
   expression index and a generated column (no checks) through
   `compareCheckAgainstCatalog` with a fake session — server mode issues
@@ -97,7 +97,7 @@ scenarios of `openspec show harden-check-expressions --diff` hold.
   unchanged. Green: `declaredIndexExpressions`, `declaredGeneratedColumns`,
   the merge in `compareCheckAgainstCatalog`, `TEXT_MODE_BOUNDARY_LINE`.
   Files: `packages/cli/src/commands/check.ts`, the test.
-- [ ] 1.7 ~9m — Red: `packages/cli/test/check-live.integration.test.ts`
+- [x] 1.7 ~9m — Red: `packages/cli/test/check-live.integration.test.ts`
   (Docker) new describe "expression surfaces live witness": a fixture
   project declaring `tasks` with a partial index (`where ne(status,
   'done')`), an expression index (`lower(email)`) and a generated column
@@ -113,7 +113,7 @@ scenarios of `openspec show harden-check-expressions --diff` hold.
   real partial and expression indexes and must stay green. Green: nothing
   beyond 1.1–1.6 unless the witness finds a gap.
   Files: the integration test.
-- [ ] 1.8 ~6m — Red: none runnable (documentation); the definition of done
+- [x] 1.8 ~6m — Red: none runnable (documentation); the definition of done
   is `openspec validate harden-check-expressions --strict` green and
   `pnpm check:crap`/`pnpm check:tasktime` clean. Green:
   `skills/hejbro/references/brownfield-adoption.md` ("indexes are checked
