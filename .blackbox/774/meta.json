@@ -7,7 +7,19 @@
   "status": "open",
   "opened": "2026-09-04",
   "closed": null,
-  "decisions": [],
+  "decisions": [
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "D1"
+      ],
+      "at": "2026-09-04T13:05Z",
+      "title": "Q6: identity groups placed as one unit, kind order kept; new capability snapshot-diff",
+      "ratified": null
+    }
+  ],
   "work": [],
   "prs": [],
   "origin": null,
