@@ -800,6 +800,71 @@ describe("db().transaction (task 4.6)", () => {
 			]);
 		});
 
+		/**
+		 * task 1.4b (#449, lead R2): a settled nested handle's own
+		 * `transaction()` member is refused too -- otherwise it would still
+		 * send a real SAVEPOINT and, on release, restore `tree.innermost` to
+		 * its own now-settled token, which would wrongly refuse the LIVE
+		 * parent's next statement (the tree-corruption this checks for).
+		 */
+		it("a settled nested handle's own transaction() is refused, released and rolled-back alike, and the live parent keeps working", async () => {
+			const { driver, sessionExecute } = transactionalDriver(true);
+			const handle = db({ posts }, driver);
+			const ran = vi.fn();
+
+			// released
+			await handle.transaction(async (tx) => {
+				const leaked = await tx.transaction(async (inner) => inner);
+				const outcome = await leaked
+					.transaction(async () => {
+						ran();
+					})
+					.catch((error: unknown) => error);
+				expect(outcome).toHaveProperty(
+					"code",
+					"statement-after-nested-transaction",
+				);
+				expect(ran).not.toHaveBeenCalled();
+				// the tree-corruption check: the live parent still works.
+				await expect(tx.execute(select(posts))).resolves.toEqual([]);
+			});
+
+			// rolled back
+			const boom = new Error("inner failed");
+			const holder = { inner: undefined as Tx | undefined };
+			await handle.transaction(async (tx) => {
+				await tx
+					.transaction(async (inner) => {
+						holder.inner = inner;
+						throw boom;
+					})
+					.catch(() => {});
+				const outcome = await holder.inner
+					?.transaction(async () => {
+						ran();
+					})
+					.catch((error: unknown) => error);
+				expect(outcome).toHaveProperty(
+					"code",
+					"statement-after-nested-transaction",
+				);
+				expect(ran).not.toHaveBeenCalled();
+				await expect(tx.execute(select(posts))).resolves.toEqual([]);
+			});
+
+			const sql = sessionExecute.mock.calls.map(
+				(call) => (call[0] as { sql: string }).sql,
+			);
+			// no second savepoint for either leaked handle's own transaction()
+			// call ever reached the connection -- each block is its own
+			// top-level `handle.transaction()`, so each starts its own tree at
+			// "hejbro_sp_1".
+			expect(sql.filter((s) => s.startsWith("savepoint"))).toEqual([
+				'savepoint "hejbro_sp_1"',
+				'savepoint "hejbro_sp_1"',
+			]);
+		});
+
 		it("sequential use after a nested transaction settles keeps working, for both released and rolled-back (control)", async () => {
 			const { driver, sessionExecute } = transactionalDriver(true);
 			const handle = db({ posts }, driver);

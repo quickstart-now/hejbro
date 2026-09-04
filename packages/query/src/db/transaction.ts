@@ -235,7 +235,7 @@ async function recoverFromFailedRelease(
 	);
 }
 
-/** Builds the `transaction` member a {@link Tx} carries — one savepoint per call, released on return and rolled back on a throw, guarded against a second nested transaction starting on this same `tx` while one is still in flight (#445/D1). `token` is this `tx`'s own place in `tree` -- restored as `tree.innermost` once the nested transaction settles, so the enclosing `tx` may send again (#449); the nested transaction's own fresh token is marked `settled` in the same step, so a caller that kept that handle is refused under its own code afterward (task 1.4), not silently allowed to send into the now-unbracketed enclosing transaction. */
+/** Builds the `transaction` member a {@link Tx} carries — one savepoint per call, released on return and rolled back on a throw, guarded against a second nested transaction starting on this same `tx` while one is still in flight (#445/D1). `token` is this `tx`'s own place in `tree` -- restored as `tree.innermost` once the nested transaction settles, so the enclosing `tx` may send again (#449); the nested transaction's own fresh token is marked `settled` in the same step, so a caller that kept that handle is refused under its own code afterward (task 1.4), not silently allowed to send into the now-unbracketed enclosing transaction. `token.settled` is checked before the sibling guard (task 1.4b, lead R2): a settled handle starting a new nested transaction would otherwise send a real `SAVEPOINT` and, on its own release, restore `tree.innermost` to this already-settled token -- wrongly refusing the live parent's next statement instead of its own. */
 const createSavepointApi = (
 	session: DriverSession,
 	tables: Declarations["tables"],
@@ -244,6 +244,9 @@ const createSavepointApi = (
 ): Tx["transaction"] => {
 	const state = { active: false };
 	return (async <T>(callback: (tx: Tx) => Promise<T>): Promise<T> => {
+		if (token.settled) {
+			throwStatementAfterNestedTransaction();
+		}
 		if (state.active) {
 			throwConcurrentNestedTransaction();
 		}

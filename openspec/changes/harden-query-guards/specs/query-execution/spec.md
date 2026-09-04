@@ -20,10 +20,10 @@ refusal.
 
 A `tx` handed to a nested callback is that nested transaction and
 nothing else: once its callback has settled, its savepoint no longer
-exists, and a statement issued through it would land in the enclosing
-transaction unbracketed. Such a statement SHALL be refused with
-`statement-after-nested-transaction`, before it is sent, naming the
-enclosing `tx` as where the statement belongs.
+exists, and a statement issued through it — or a nested transaction
+started from it — would land in the enclosing transaction unbracketed.
+Either SHALL be refused with `statement-after-nested-transaction`,
+before anything is sent, naming the enclosing `tx` as where it belongs.
 
 Sequential use stays unaffected: once a nested transaction has settled —
 released or rolled back — the `tx` that started it accepts statements
@@ -53,10 +53,11 @@ its own refusal, `concurrent-nested-transaction`.
   transaction is
 
 #### Scenario: A nested handle used after its callback settled is refused
-- **WHEN** the `tx` a nested callback received is kept and a statement is
-  issued through it after the nested transaction released or rolled back
-- **THEN** it is refused with `statement-after-nested-transaction` and
-  nothing reaches the connection
+- **WHEN** the `tx` a nested callback received is kept and, after the
+  nested transaction released or rolled back, a statement is issued
+  through it, or a nested transaction is started from it
+- **THEN** each is refused with `statement-after-nested-transaction` and
+  nothing reaches the connection — no statement, no savepoint
 
 #### Scenario: Sequential use after a settled nested transaction still works
 - **WHEN** a nested transaction settles — by releasing, or by rolling

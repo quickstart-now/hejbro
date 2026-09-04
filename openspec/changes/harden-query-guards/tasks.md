@@ -19,7 +19,7 @@ documents everything and comes last.
 
 ## 1. Query-layer guards
 
-- [ ] 1.1 (~8m) **[design]** The scoped handle refuses exactly what the
+- [x] 1.1 (~8m, actual ~4m) **[design]** The scoped handle refuses exactly what the
       unscoped handle refuses. Settles that the scoped handle shares the
       code, the message and the pass-through list, and that `as` on the
       scoped handle is refused like any other name it does not carry.
@@ -48,7 +48,7 @@ documents everything and comes last.
       guard. Files: `packages/query/src/client/name-keyed-db.ts`,
       `packages/query/test/client/errors.test.ts`.
 
-- [ ] 1.2 (~8m) **[design]** The kit classifies by the leading word as the
+- [x] 1.2 (~8m, actual ~2m) **[design]** The kit classifies by the leading word as the
       contract defines it. Settles the rule (design Q2a) and the
       comment-led limit (Q2b). Red:
       `packages/query/test/driver/conformance.test.ts`, a new
@@ -89,7 +89,7 @@ documents everything and comes last.
       `packages/query/src/testing/driver-conformance.ts`,
       `packages/query/test/driver/conformance.test.ts`.
 
-- [ ] 1.3 (~9m) **[design]** A statement through the `tx` that started an
+- [x] 1.3 (~9m, actual ~2m) **[design]** A statement through the `tx` that started an
       in-flight nested transaction is refused before it is sent. Settles
       the code, the message's two remedies (design Q3c), and that the
       check runs at the send (Q3d). Red:
@@ -117,7 +117,7 @@ documents everything and comes last.
       `packages/query/src/db/transaction.ts`,
       `packages/query/test/db/transaction.test.ts`.
 
-- [ ] 1.4 (~6m) **[design]** The whole tree, not one level: any `tx` above
+- [x] 1.4 (~6m, actual ~4m) **[design]** The whole tree, not one level: any `tx` above
       the in-flight nested transaction is refused, and a nested handle
       kept past its callback is refused under its own code. Settles
       `statement-after-nested-transaction` and its remedy. Red: same
@@ -134,7 +134,19 @@ documents everything and comes last.
       marked so the refusal picks the second code; nothing else changes.
       Files: those two.
 
-- [ ] 1.5 (~6m) A real server witnesses the refusal and the survival.
+- [ ] 1.4b (~3m) A settled nested handle refuses to start a nested
+      transaction too, under the same code. Found in 1.4: `leaked
+      .transaction(cb)` sent a fresh savepoint with no error, and its
+      exit restored the tree's innermost token to the settled handle,
+      so the live parent's next statement would have been refused.
+      Red: `packages/query/test/db/transaction.test.ts`, one case — a
+      kept nested handle, released and rolled back alike, calling
+      `transaction(cb)` rejects with `statement-after-nested-transaction`,
+      `cb` never runs, no savepoint is sent, and the parent's next
+      `execute` still runs. Green: the settled check at the savepoint
+      api's entry, before the sibling guard. Files: those two.
+
+- [x] 1.5 (~6m, actual ~8m) A real server witnesses the refusal and the survival.
       Red: `packages/pg/test/integration.test.ts` (Docker-gated,
       `pnpm --filter @hejbro/pg test:integration`, `postgres:17` as the
       harness already pulls), new case *"a statement beside a nested
