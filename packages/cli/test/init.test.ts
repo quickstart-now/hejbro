@@ -768,6 +768,159 @@ describe("runInit / a configuration whose fields resolve to the same path (D106 
 	});
 });
 
+// #766, D3: checkNoDuplicatePaths only ever compared for equality, so a
+// planned file that is a strict ancestor of another planned path (the
+// migrations directory nested inside the snapshot file's own path)
+// passed every pre-creation check -- init created the directory, then
+// reported the snapshot as already present (the directory it just made).
+// The nesting fault is in the configuration itself, so it answers before
+// any disk-based check, whatever already sits on disk (rows 8/9 below).
+describe("runInit / a planned file that would have to hold another planned path (#766)", () => {
+	type NestedPathRow = {
+		readonly label: string;
+		readonly migrationsDir: string;
+		readonly snapshotPath: string;
+		readonly onDisk: "nothing" | "dir-at-mig" | "file-at-mig";
+		readonly outcome: "nested-refusal" | "created-both" | "duplicate-refusal";
+	};
+
+	const nestedPathRows: ReadonlyArray<NestedPathRow> = [
+		{
+			label: 'migrationsDir: "mig/sub", snapshotPath: "mig"',
+			migrationsDir: "mig/sub",
+			snapshotPath: "mig",
+			onDisk: "nothing",
+			outcome: "nested-refusal",
+		},
+		{
+			label: 'migrationsDir: "snap.json/mig", snapshotPath: "snap.json"',
+			migrationsDir: "snap.json/mig",
+			snapshotPath: "snap.json",
+			onDisk: "nothing",
+			outcome: "nested-refusal",
+		},
+		{
+			label: 'migrationsDir: "a/b/c", snapshotPath: "a" (any depth)',
+			migrationsDir: "a/b/c",
+			snapshotPath: "a",
+			onDisk: "nothing",
+			outcome: "nested-refusal",
+		},
+		{
+			label:
+				'migrationsDir: "mig/sub/", snapshotPath: "mig/" (spellings, not strings)',
+			migrationsDir: "mig/sub/",
+			snapshotPath: "mig/",
+			onDisk: "nothing",
+			outcome: "nested-refusal",
+		},
+		{
+			label: 'migrationsDir: "./mig/sub", snapshotPath: "mig"',
+			migrationsDir: "./mig/sub",
+			snapshotPath: "mig",
+			onDisk: "nothing",
+			outcome: "nested-refusal",
+		},
+		{
+			label:
+				'migrationsDir: "mig", snapshotPath: "mig/state.json" (control: a directory holds a file)',
+			migrationsDir: "mig",
+			snapshotPath: "mig/state.json",
+			onDisk: "nothing",
+			outcome: "created-both",
+		},
+		{
+			label:
+				'migrationsDir: "migrations", snapshotPath: "migrations-state.json" (control: a shared prefix is not nesting)',
+			migrationsDir: "migrations",
+			snapshotPath: "migrations-state.json",
+			onDisk: "nothing",
+			outcome: "created-both",
+		},
+		{
+			label:
+				'migrationsDir: "mig/sub", snapshotPath: "mig", a directory at mig (the configuration is at fault whatever sits on disk)',
+			migrationsDir: "mig/sub",
+			snapshotPath: "mig",
+			onDisk: "dir-at-mig",
+			outcome: "nested-refusal",
+		},
+		{
+			label:
+				'migrationsDir: "mig/sub", snapshotPath: "mig", a regular file at mig (before the ancestor check)',
+			migrationsDir: "mig/sub",
+			snapshotPath: "mig",
+			onDisk: "file-at-mig",
+			outcome: "nested-refusal",
+		},
+		{
+			label:
+				'migrationsDir: "same", snapshotPath: "same" (control: the duplicate refusal, unchanged)',
+			migrationsDir: "same",
+			snapshotPath: "same",
+			onDisk: "nothing",
+			outcome: "duplicate-refusal",
+		},
+	];
+
+	it.each(nestedPathRows)(
+		"refuses a configuration whose snapshot path would have to hold the migrations directory ($label)",
+		async ({
+			migrationsDir,
+			snapshotPath: snapshotPathValue,
+			onDisk,
+			outcome,
+		}) => {
+			await writeFile(
+				configPath(),
+				`export default { entry: ["src/**/*.schema.ts"], migrationsDir: ${JSON.stringify(migrationsDir)}, snapshotPath: ${JSON.stringify(snapshotPathValue)} };\n`,
+			);
+			if (onDisk === "dir-at-mig") {
+				await mkdir(join(cwd, "mig"), { recursive: true });
+			}
+			if (onDisk === "file-at-mig") {
+				await writeFile(join(cwd, "mig"), "not a directory");
+			}
+
+			const result = await runInit(cwd);
+
+			if (outcome === "created-both") {
+				expect(result.exitCode).toBe(0);
+				return;
+			}
+			expect(result.exitCode).toBe(1);
+			// A refusal's report is always [] (runInit's own catch) -- this
+			// doubles as "nothing created" and "no skipped line" for every
+			// refusal row in this table.
+			expect(result.report).toEqual([]);
+			if (outcome === "duplicate-refusal") {
+				expect(result.stderr).toBe(
+					'error[init-path-conflict]: same\n  "same" is named by both migrationsDir and snapshotPath. Next: point them at two different paths, then rerun `hejbro init`.',
+				);
+				return;
+			}
+			expect(result.stderr).toContain("error[init-path-conflict]");
+			expect(result.stderr).toContain("migrationsDir");
+			expect(result.stderr).toContain("snapshotPath");
+			expect(result.stderr).toContain("cannot hold a directory");
+		},
+	);
+
+	it("names the exact labels and both fields for the canonical nested case", async () => {
+		await writeFile(
+			configPath(),
+			'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "mig/sub", snapshotPath: "mig" };\n',
+		);
+
+		const result = await runInit(cwd);
+
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toBe(
+			'error[init-path-conflict]: mig\n  "mig" is named by snapshotPath, and migrationsDir ("mig/sub") would have to be created inside it — a file cannot hold a directory. Next: point snapshotPath at a file outside migrationsDir, then rerun `hejbro init`.',
+		);
+	});
+});
+
 // D106 R1 N3: a directory sitting where hejbro.config.ts belongs reached
 // the loader before its own kind was checked, so it failed as
 // config-load-failed (an import-resolution diagnostic) instead of this

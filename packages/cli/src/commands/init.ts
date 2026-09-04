@@ -5,7 +5,7 @@ import {
 	statSync,
 	writeFileSync,
 } from "node:fs";
-import { dirname, join, relative } from "node:path";
+import { dirname, isAbsolute, join, relative } from "node:path";
 import { emptySnapshot, renderSnapshot, throwHejbroError } from "@hejbro/core";
 import { defineCommand } from "citty";
 import type { HejbroConfig } from "../config";
@@ -183,6 +183,25 @@ function throwDuplicatePath(
 }
 
 /** Builds and throws the `init-path-conflict`-coded, enriched plain
+ * `HejbroError` for a planned file whose own path would have to hold
+ * another planned artifact (#766, D3): a planned file cannot hold a
+ * planned node, and `checkNoDuplicatePaths`'s equality check does not
+ * see containment. Both labels via {@link fileLabel} -- the directory
+ * field's usual trailing-slash label would misstate a path that is
+ * being refused, not created. */
+function throwNestedPathConflict(
+	fileNodeLabel: string,
+	fileFieldName: string,
+	otherLabel: string,
+	otherFieldName: string,
+): never {
+	return throwHejbroError(
+		"init-path-conflict",
+		`"${fileNodeLabel}" is named by ${fileFieldName}, and ${otherFieldName} ("${otherLabel}") would have to be created inside it — a file cannot hold a directory. Next: point ${fileFieldName} at a file outside ${otherFieldName}, then rerun \`hejbro init\`.`,
+	);
+}
+
+/** Builds and throws the `init-path-conflict`-coded, enriched plain
  * `HejbroError` for a `stat` failure other than "nothing is there"
  * (D106 R1 B1) -- an `EACCES`/`ELOOP`/etc, named by the operating
  * system's own code instead of the raw Node stack this CLI's
@@ -327,6 +346,60 @@ const checkNoDuplicatePaths = (
 		fileLabel(cwd, first.path),
 		first.fieldName,
 		second.fieldName,
+	);
+};
+
+/** Whether `filePath` (a planned file artifact's own path, separator-
+ * stripped) is a strict ancestor of `otherPath` (also stripped): a
+ * planned file cannot hold a planned node, and the equality check above
+ * does not see containment (#766, D3). `relative` returning a segment
+ * that neither escapes (`..`) nor is itself absolute means `otherPath`
+ * sits somewhere inside `filePath`. */
+const isStrictAncestor = (filePath: string, otherPath: string): boolean => {
+	const rel = relative(
+		stripTrailingSeparators(filePath),
+		stripTrailingSeparators(otherPath),
+	);
+	return rel !== "" && !isAbsolute(rel) && !rel.startsWith("..");
+};
+
+type NestedConflict = { readonly file: Artifact; readonly other: Artifact };
+
+/** `pair` labelled as a nested conflict when either side is a file
+ * artifact whose own path would have to hold the other's -- checked in
+ * both orientations, since `artifactPairs` fixes no kind to either
+ * position. */
+const nestedConflictIn = (pair: ArtifactPair): NestedConflict | null => {
+	const [a, b] = pair;
+	if (a.kind === "file" && isStrictAncestor(a.path, b.path)) {
+		return { file: a, other: b };
+	}
+	if (b.kind === "file" && isStrictAncestor(b.path, a.path)) {
+		return { file: b, other: a };
+	}
+	return null;
+};
+
+/** Refuses before creating anything, and before any disk-based check
+ * (D3, lead ruling): a planned file that would have to hold another
+ * planned path is a fault in the configuration itself, so it answers
+ * whatever already sits on disk -- the same priority the duplicate
+ * check above already gives an equal-path fault over a wrong-kind one. */
+const checkNoNestedPaths = (
+	cwd: string,
+	artifacts: ReadonlyArray<Artifact>,
+): void => {
+	const conflict = artifactPairs(artifacts)
+		.map(nestedConflictIn)
+		.find((candidate): candidate is NestedConflict => candidate !== null);
+	if (conflict === undefined) {
+		return;
+	}
+	throwNestedPathConflict(
+		fileLabel(cwd, conflict.file.path),
+		conflict.file.fieldName,
+		fileLabel(cwd, conflict.other.path),
+		conflict.other.fieldName,
 	);
 };
 
@@ -567,6 +640,7 @@ export const runInit = async (
 			snapshotArtifact,
 		].filter((artifact): artifact is Artifact => artifact !== null);
 		checkNoDuplicatePaths(cwd, plannedArtifacts);
+		checkNoNestedPaths(cwd, plannedArtifacts);
 		plannedArtifacts.forEach((artifact) => {
 			checkAncestors(cwd, artifact);
 			checkPathKind(cwd, artifact);

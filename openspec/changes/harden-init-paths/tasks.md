@@ -91,15 +91,18 @@ no behaviour change), `packages/cli/src/snapshot-file.ts`,
       | `"./mig/sub"` | `"mig"` | nothing | the same refusal |
       | `"mig"` | `"mig/state.json"` | nothing | both created, exit 0 (control: a directory holds a file) |
       | `"migrations"` | `"migrations-state.json"` | nothing | both created (control: a shared prefix is not nesting) |
-      | `"mig/sub"` | `"mig"` | a directory at `mig` | the wrong-kind refusal as today, message unchanged (control: the existing check answers first) |
-      | `"mig/sub"` | `"mig"` | a regular file at `mig` | the ancestor refusal as today (control) |
+      | `"mig/sub"` | `"mig"` | a directory at `mig` | the same nested refusal — the configuration is at fault whatever sits on disk, so it answers before the wrong-kind check (as the duplicate check already does for `"same"`/`"same"` with a directory at `same`) |
+      | `"mig/sub"` | `"mig"` | a regular file at `mig` | the same nested refusal, before the ancestor check |
+      | `"same"` | `"same"` | nothing | the duplicate refusal as today, message unchanged (control: equality is the duplicate check's, not this one's) |
 
       Green: `checkNoNestedPaths` beside `checkNoDuplicatePaths`, over
       the same `artifactPairs`, refusing when a file artifact's
       separator-stripped path is a strict ancestor of another planned
       path (`relative(file, other)` non-empty, not starting with `..`,
       not absolute). Runs after the duplicate check, before the
-      ancestor walk. Files: `init.ts`, `init.test.ts`.
+      ancestor walk: a configuration-level fault names the configuration,
+      never the node that happens to sit where it points. Files:
+      `init.ts`, `init.test.ts`.
 
 - [ ] 1.3b (~6m) `[design]` A directory at the snapshot path is refused
       before it is read (#766 second ask, D3b). Red:
