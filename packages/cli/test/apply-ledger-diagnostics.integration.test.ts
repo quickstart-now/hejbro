@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { readdirSync } from "node:fs";
 import { pgDriver } from "@hejbro/pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -89,6 +89,95 @@ const psqlCommand = (database: string, sql: string): void => {
 		],
 		{ stdio: ["ignore", "ignore", "inherit"] },
 	);
+};
+
+/** `migrate`'s own advisory-lock key (`apply/execute.ts`'s `MIGRATE_LOCK_KEY`) -- the deterministic race below holds this exact lock from outside hejbro, so `migrate`'s own transaction blocks on the same lock a second runner would. */
+const MIGRATE_LOCK_KEY = 4_095_729_033;
+
+/** `count(*)` of unwaited advisory-lock requests in `database` -- used to confirm a blocked `migrate` process has actually reached its own `pg_advisory_xact_lock` call (not merely "hasn't connected yet") before the test proceeds to drop the ledger table out from under it. */
+const advisoryLockWaiterCount = (database: string): number => {
+	const output = execFileSync(
+		"docker",
+		[
+			"exec",
+			CONTAINER,
+			"psql",
+			"-U",
+			"postgres",
+			"-d",
+			database,
+			"-t",
+			"-A",
+			"-c",
+			"select count(*) from pg_locks where locktype = 'advisory' and not granted",
+		],
+		{ encoding: "utf-8" },
+	);
+	return Number(output.trim());
+};
+
+const waitUntilLockWaiter = async (
+	database: string,
+	attemptsLeft: number,
+): Promise<void> => {
+	if (advisoryLockWaiterCount(database) >= 1) {
+		return;
+	}
+	if (attemptsLeft <= 0) {
+		throw new Error(
+			"migrate never started waiting on its own advisory lock -- the race this test builds never armed.",
+		);
+	}
+	await sleep(100);
+	return waitUntilLockWaiter(database, attemptsLeft - 1);
+};
+
+/**
+ * Opens an interactive `psql` session against `database` and holds
+ * `migrate`'s own advisory lock inside an uncommitted transaction, so a
+ * `hejbro migrate` process racing for the same lock blocks -- the
+ * deterministic half of task 2.2's race (dropping the ledger table
+ * happens while that block holds, never left to two `hejbro migrate`
+ * processes racing each other on their own schedules).
+ */
+const holdMigrateLock = (
+	database: string,
+): { readonly ready: Promise<void>; readonly release: () => void } => {
+	const proc = spawn(
+		"docker",
+		[
+			"exec",
+			"-i",
+			CONTAINER,
+			"psql",
+			"-U",
+			"postgres",
+			"-d",
+			database,
+			"-t",
+			"-A",
+		],
+		{ stdio: ["pipe", "pipe", "inherit"] },
+	);
+	const ready = new Promise<void>((resolveReady) => {
+		let buffer = "";
+		proc.stdout?.on("data", (chunk: Buffer) => {
+			buffer += chunk.toString();
+			if (buffer.includes("LOCKHELD")) {
+				resolveReady();
+			}
+		});
+	});
+	proc.stdin?.write(
+		`begin;\nselect pg_advisory_xact_lock(${MIGRATE_LOCK_KEY});\nselect 'LOCKHELD';\n`,
+	);
+	return {
+		ready,
+		release: () => {
+			proc.stdin?.write("commit;\n");
+			proc.stdin?.end();
+		},
+	};
 };
 
 let hostPort = "";
@@ -330,6 +419,50 @@ describe("hejbro ledger diagnostics — live witness (#836/#823, task 1.9)", () 
 				expect(ledgerRows).toHaveLength(0);
 			} finally {
 				await driver.client.end();
+			}
+		} finally {
+			await removeCliFixtureDir(cwd);
+		}
+	}, 60_000);
+
+	it("(c) task 2.2: the ledger dropped while migrate holds the advisory lock -- exit 2, apply-ledger-unreadable, never apply-failed naming the migration file", async () => {
+		const database = "ld_race";
+		psqlCommand("postgres", `create database ${database};`);
+		const cwd = await createCliFixtureDir();
+		try {
+			await runCli(cwd, ["init"]);
+			await writeFixtureFile(cwd, "src/a.schema.ts", SCHEMA_A_SOURCE);
+			await runCli(cwd, ["generate"]);
+			const bootstrap = await runCli(cwd, [
+				"migrate",
+				"--url",
+				hostUrl(database),
+			]);
+			expect(bootstrap.exitCode).toBe(0);
+			await writeFixtureFile(cwd, "src/b.schema.ts", SCHEMA_B_SOURCE);
+			await runCli(cwd, ["generate"]);
+			// The second (still-pending) migration file -- two generate calls
+			// in order produce two files whose prefixes sort in creation
+			// order, so the last one is the one this run is about to apply.
+			const pendingFileName = readdirSync(`${cwd}/migrations`).sort().at(-1);
+
+			const holder = holdMigrateLock(database);
+			await holder.ready;
+			const migratePromise = runCli(cwd, [
+				"migrate",
+				"--url",
+				hostUrl(database),
+			]);
+			await waitUntilLockWaiter(database, 50);
+			psqlCommand(database, 'drop table "hejbro"."migration_ledger";');
+			holder.release();
+			const migrate = await migratePromise;
+
+			expect(migrate.exitCode).toBe(2);
+			expect(migrate.stderr).toContain("error[apply-ledger-unreadable]");
+			expect(migrate.stderr).not.toContain("error[apply-failed]");
+			if (pendingFileName !== undefined) {
+				expect(migrate.stderr).not.toContain(pendingFileName);
 			}
 		} finally {
 			await removeCliFixtureDir(cwd);

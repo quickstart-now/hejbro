@@ -337,6 +337,43 @@ describe("which half of the transaction failed decides which artifact is named /
 			);
 		});
 	});
+
+	// [task 2.2, harden-ledger-diagnostics review repair, 836/R4 B2, 836/R6]
+	// A ledger dropped concurrently mid-transaction: isMigrationRecorded's
+	// own 42P01 no longer reads as "not recorded" -- a tagged read failure
+	// escapes the same way 42501 does above, never the migration's own
+	// (untagged) statement failing next inside an already-aborted
+	// transaction.
+	it("42P01 (the ledger vanished) on the in-transaction recheck -> the tagged read failure escapes, no migration SQL sent after it", async () => {
+		const migration: Migration = {
+			fileName: "0010_ok.sql",
+			sql: 'create table "app"."t10" (id integer);',
+			origin: "applied",
+		};
+		const error = Object.assign(
+			new Error('relation "hejbro.migration_ledger" does not exist'),
+			{ code: "42P01" },
+		);
+		const { driver, calls } = makeFakeDriver({
+			failWhen: (call) =>
+				call.sql.toLowerCase().includes("select") &&
+				call.params.includes(migration.fileName),
+			failError: error,
+		});
+
+		await expect(
+			applyMigration(driver, migration, NEXT_COMMAND),
+		).rejects.toSatisfy((thrown: unknown) => {
+			const tag = asLedgerAccessFailure(thrown);
+			return (
+				tag !== null &&
+				tag.direction === "read" &&
+				tag.site === "recheck" &&
+				tag.cause === error
+			);
+		});
+		expect(calls.some((call) => call.sql === migration.sql)).toBe(false);
+	});
 });
 
 describe("applyMigration / 3.4", () => {

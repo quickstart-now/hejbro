@@ -249,12 +249,25 @@ describe("a failed ledger statement says which statement failed / 1.1 (harden-le
 			});
 		});
 
-		it("42P01 keeps its false leniency, not a failure", async () => {
-			const { session } = makeScriptedSession([{ throws: undefinedTable() }]);
+		// [task 2.2, harden-ledger-diagnostics review repair, 836/R4 B2] No
+		// leniency inside the transaction: a ledger vanishing mid-run is a race,
+		// not the "never applied to" state readLedger reports pre-transaction
+		// (D9 unchanged -- see readLedger's own describe above).
+		it("42P01 is a tagged read failure at the recheck site too -- no leniency inside the transaction", async () => {
+			const error = undefinedTable();
+			const { session } = makeScriptedSession([{ throws: error }]);
 
-			await expect(isMigrationRecorded(session, "0001_init.sql")).resolves.toBe(
-				false,
-			);
+			await expect(
+				isMigrationRecorded(session, "0001_init.sql"),
+			).rejects.toSatisfy((thrown: unknown) => {
+				const tag = asLedgerAccessFailure(thrown);
+				return (
+					tag !== null &&
+					tag.direction === "read" &&
+					tag.site === "recheck" &&
+					tag.cause === error
+				);
+			});
 		});
 
 		it("success control: an ordinary recheck is not tagged at all", async () => {

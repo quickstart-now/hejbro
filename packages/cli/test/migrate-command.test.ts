@@ -820,6 +820,27 @@ describe("applyFrom — a ledger failure is not the migration's failure / 1.5 (h
 	});
 });
 
+describe("applyFrom — a ledger that vanishes mid-transaction is the ledger's failure / 2.2 (harden-ledger-diagnostics review repair)", () => {
+	it("42P01 on the in-transaction recheck -> exit 2, apply-ledger-unreadable, never apply-failed naming the file", async () => {
+		const { driver } = makeFakeDriver({
+			failWhen: (call) =>
+				call.sql.toLowerCase().includes("select") &&
+				call.params.includes(migrationA.fileName),
+			failError: Object.assign(
+				new Error('relation "hejbro.migration_ledger" does not exist'),
+				{ code: "42P01" },
+			),
+		});
+
+		const result = await applyFrom(driver, [migrationA], []);
+
+		expect(result.exitCode).toBe(2);
+		expect(result.stderr).toContain("error[apply-ledger-unreadable]");
+		expect(result.stderr).not.toContain("error[apply-failed]");
+		expect(result.stdout).toEqual([]);
+	});
+});
+
 /** The four bootstrap columns, exactly as `bootstrapLedger` creates them -- makes the identity probe answer `ledger`, so the run reaches `bootstrapLedger`/`readLedger` instead of refusing on `apply-ledger-occupied` first. Shared by every describe below that needs a genuine (not absent, not occupied) ledger identity. */
 const LEDGER_SHAPE_PROBE_ROWS = [
 	{ relkind: "r", persistence: "p", name: "id", type: "bigint" },

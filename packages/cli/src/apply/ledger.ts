@@ -386,32 +386,36 @@ export const readLedger = async (
  * just the targeted read). A single-row probe (`limit 1`), not a reuse
  * of `readLedger`'s full-table read -- the caller only ever needs one
  * filename's answer, and the caller already holds a lock a full-table
- * read has no need to widen. Table absence reads as "not recorded"
- * (mirrors `readLedger`'s own `{exists:false}` leniency): a caller
- * reaching this always ran `bootstrapLedger` first, so the table is
- * expected to exist, but this function claims nothing stronger than what
- * it can itself observe.
+ * read has no need to widen.
+ *
+ * [task 2.2, harden-ledger-diagnostics review repair, D106 R1 836/R4 B2,
+ * 836/R6] No leniency for an absent table here, unlike `readLedger`'s own
+ * `{exists:false}` (D9 unchanged: absence *before* any transaction is
+ * still a state). A caller reaching this call already ran
+ * `bootstrapLedger` inside the *same* transaction, so a 42P01 here can
+ * only be the ledger vanishing out from under a run that is mid-flight --
+ * a race, not "never applied to". Measured: tolerating it let an
+ * already-aborted transaction's own next statement fail with `25P02`
+ * (untagged) and get billed to the migration as `apply-failed`, breaking
+ * both halves of #823's rule at once (the failed half was a ledger read,
+ * and exit 1 claims a migration was refused, which never happened). The
+ * tag this rethrow carries (`read`/`recheck`) is what lets a caller three
+ * layers up answer `apply-ledger-unreadable`, never a written code, for
+ * this exact race (836/R6: which statement failed decides, not the
+ * surrounding activity).
  */
 export const isMigrationRecorded = async (
 	session: DriverSession,
 	filename: string,
 ): Promise<boolean> => {
-	try {
-		const rows = await exec(
-			session,
-			`select 1 from ${QUALIFIED_LEDGER_TABLE} where "filename" = $1 limit 1`,
-			[filename],
-			"read",
-			"recheck",
-		);
-		return rows.length > 0;
-	} catch (error) {
-		const tag = asLedgerAccessFailure(error);
-		if (tag !== null && isUndefinedTableError(tag.cause)) {
-			return false;
-		}
-		throw error;
-	}
+	const rows = await exec(
+		session,
+		`select 1 from ${QUALIFIED_LEDGER_TABLE} where "filename" = $1 limit 1`,
+		[filename],
+		"read",
+		"recheck",
+	);
+	return rows.length > 0;
 };
 
 /**
