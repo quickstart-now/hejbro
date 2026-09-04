@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#800",
+  "title": "amend D99: notNullElements check renders its column by table, not fully qualified",
+  "parent": "quickstart-now/hejbro#412",
+  "status": "open",
+  "opened": "2026-09-04",
+  "closed": null,
+  "decisions": [
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "D1"
+      ],
+      "at": "2026-09-04T13:53Z",
+      "title": "D99 parenthetical amended to the shipped table-bound rendering, marked as amended under delegation",
+      "ratified": null
+    }
+  ],
+  "work": [],
+  "prs": [],
+  "origin": null,
+  "followUps": []
+}

@@ -422,3 +422,12 @@ _owner · 2026-09-04T08:48Z · raw ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#54_
 
 Read with D8 (avatar first, then the oldest issues): after 0.2.0-pre.1 ships, #805 (avatar badge) closes, then the #412 queue is processed in the order R1 already fixed — bugs, then correctness gaps, then observers and tooling, then decisions, then new capabilities — two to four bugs per change and PR (R2).
 
+<a id="d10"></a>
+## D10 — Decide against the product we are building, at the smallest scope; do not widen the work
+
+_owner · 2026-09-04T13:53Z · raw ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#121_
+
+"Don't widen the work too much. When there is a decision to make, remind yourself what we are trying to build, and then decide."
+
+The lead's decision rule for the delegated queue: before ruling, restate the product — hejbro is the owner's production tool for declaring a Postgres database in TypeScript and generating deterministic migrations; the test of any surface is "does it cover my database" — and pick the option that serves that, at the smallest scope that fixes the issue at hand. No new work is opened from a decision beyond the issue it settles; anything wider is filed, not built.
+
