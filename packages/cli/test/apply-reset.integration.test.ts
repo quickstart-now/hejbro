@@ -1,4 +1,6 @@
 import { execFileSync } from "node:child_process";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { pgDriver } from "@hejbro/pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { removeContainer } from "./docker-volumes";
@@ -90,6 +92,35 @@ const psqlCommand = (database: string, sql: string): void => {
 			sql,
 		],
 		{ stdio: ["ignore", "ignore", "inherit"] },
+	);
+};
+
+/**
+ * [task 4.1, D106 R1, B1, #753 reopened] Applies `sql` the same way
+ * `psql -f` would, over `docker exec -i` -- standing in for "the project's
+ * migrations were applied without `hejbro migrate` ever running" (the
+ * skill's own documented external-pipeline apply path), so
+ * `hejbro.migration_ledger` never gets bootstrapped. `execFileSync`'s own
+ * `input` option feeds `sql` over `psql`'s stdin -- no file needs to exist
+ * inside the container.
+ */
+const psqlApplySql = (database: string, sql: string): void => {
+	execFileSync(
+		"docker",
+		[
+			"exec",
+			"-i",
+			CONTAINER,
+			"psql",
+			"-U",
+			"postgres",
+			"-v",
+			"ON_ERROR_STOP=1",
+			"-q",
+			"-d",
+			database,
+		],
+		{ input: sql, stdio: ["pipe", "ignore", "inherit"] },
 	);
 };
 
@@ -293,6 +324,10 @@ describe("hejbro reset — live witness (#753, task 1.5)", () => {
 			]);
 			expect(result.exitCode).toBe(1);
 			expect(result.stderr).toContain("error[reset-drop-failed]");
+			// [D106 R1, N2, #753 reopened] The server's own DETAIL line names
+			// the dependent (`external_refs`) -- exactly the one fact N2 found
+			// missing from this same scenario's message before this fix.
+			expect(result.stderr).toContain("external_refs");
 
 			const driver = pgDriver(hostUrl(database));
 			try {
@@ -356,6 +391,13 @@ describe("hejbro reset — live witness (#753, task 1.5)", () => {
 			expect(result.exitCode).toBe(1);
 			expect(result.stderr).toContain("error[reset-drop-failed]");
 			expect(result.stderr).toContain("(2BP01)");
+			// [D106 R1, N3, C5, #753 reopened] `dropsContainCycle` only knows
+			// the run's own plan contains a cycle, never that the cycle is
+			// what the server actually refused over -- the advice states the
+			// cycle fact and keeps the outside-declarations possibility too,
+			// asserting neither as the one true cause.
+			expect(result.stderr).toContain("your own declared objects");
+			expect(result.stderr).toContain("an object outside your declarations");
 
 			const driver = pgDriver(hostUrl(database));
 			try {
@@ -375,6 +417,83 @@ describe("hejbro reset — live witness (#753, task 1.5)", () => {
 			expect(status.exitCode).toBe(0);
 			expect(status.stdout).toContain("recorded as applied:");
 			expect(status.stdout).toContain("nothing pending");
+		} finally {
+			await removeCliFixtureDir(cwd);
+		}
+	}, 60_000);
+
+	// [task 4.1, D106 R1, B1, #753 reopened] evaluation.md's own
+	// reproduction: every migration applied without `hejbro migrate` ever
+	// running (`psql -f`, a valid apply path this project documents), so
+	// `hejbro.migration_ledger` never exists. Before the fix, `reset`
+	// reported success and dropped nothing -- a caught 42P01, reached from
+	// inside the drop transaction, left it aborted with no error ever
+	// surfaced.
+	it("declared objects applied without hejbro (no hejbro.migration_ledger): reset still drops everything and never claims the ledger was cleared", async () => {
+		const database = "reset_noledger";
+		psqlCommand("postgres", `create database ${database};`);
+		const cwd = await createCliFixtureDir();
+		try {
+			await runCli(cwd, ["init"]);
+			await writeFixtureFile(cwd, "src/lab.schema.ts", LAB_SCHEMA_SOURCE);
+			await runCli(cwd, ["generate"]);
+
+			// [lead-approved, R88] A single `generate` run can write more
+			// than one migration file (engine/split.ts's own transaction-
+			// boundary condition) -- every `.sql` file this run wrote is
+			// applied, in sorted (chain) order, standing in for "the whole
+			// chain applied without hejbro ever touching the ledger", not
+			// only its first file.
+			const migrationsDir = join(cwd, "migrations");
+			const migrationFiles = readdirSync(migrationsDir)
+				.filter((name) => name.endsWith(".sql"))
+				.sort();
+			if (migrationFiles.length === 0) {
+				throw new Error(
+					`expected at least one migration file in ${migrationsDir}`,
+				);
+			}
+			migrationFiles.map((migrationFile) =>
+				psqlApplySql(
+					database,
+					readFileSync(join(migrationsDir, migrationFile), "utf-8"),
+				),
+			);
+
+			const refused = await runCli(cwd, ["reset", "--url", hostUrl(database)]);
+			expect(refused.exitCode).toBe(1);
+			const confirmation = extractRequiredConfirmation(refused.stderr);
+
+			const result = await runCli(cwd, [
+				"reset",
+				"--url",
+				hostUrl(database),
+				"--confirm-drop",
+				confirmation,
+			]);
+			expect(result.exitCode).toBe(0);
+			expect(result.stdout).toContain(
+				"dropped every object your declarations manage",
+			);
+			expect(result.stdout).not.toContain("cleared the ledger");
+
+			const driver = pgDriver(hostUrl(database));
+			try {
+				const rows = await driver.execute({
+					sql: "select to_regclass('lab.tasks') as tasks, to_regclass('lab.projects') as projects, (select nspname from pg_namespace where nspname = 'lab') as lab_schema, to_regclass('hejbro.migration_ledger') as ledger",
+					params: [],
+					kind: "sql",
+				});
+				expect(rows[0]?.tasks).toBeNull();
+				expect(rows[0]?.projects).toBeNull();
+				expect(rows[0]?.lab_schema).toBeNull();
+				// [C4] `reset` never bootstraps the ledger it found absent --
+				// it doesn't get to "succeed" by creating the very bookkeeping
+				// B1's own reproduction never had.
+				expect(rows[0]?.ledger).toBeNull();
+			} finally {
+				await driver.client.end();
+			}
 		} finally {
 			await removeCliFixtureDir(cwd);
 		}

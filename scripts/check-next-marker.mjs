@@ -444,7 +444,22 @@ const extractAssignSites = (filePath, text) => {
  * throw Object.assign(new Error(message), { code }); }`. Their assign
  * site is dynamic (skipped above), so the helper NAME joins the call-site
  * scan instead, under the same (code, message) argument convention as
- * throwHejbroError. */
+ * throwHejbroError.
+ *
+ * A declaration only qualifies when it actually attaches a `code` field
+ * to the thrown error -- `{ code }`, `{ code: SOME_CONST }`, or `{ code,
+ * ...rest }` all satisfy `/\bcode\b\s*[,:}]/` -- because a diagnostic
+ * helper, by definition, mints a code somehow; a same-shape enrichment
+ * that attaches no `code` at all (`throwPhaseTagged`'s own `{ resetPhase,
+ * cause }`, #753 D106 R1 round 2) cannot be a `(code, message)` thrower no
+ * matter how its body is written, and registering its name here reads its
+ * call sites' first argument (a phase label, not a code) as a literal
+ * diagnostic code -- the false positive CI measured. This requirement
+ * narrows the gate, it does not widen the miss: a genuine thrower with a
+ * *literal* `code: "..."` string is already caught by
+ * {@link extractAssignSites} directly, which is exactly why the existing
+ * `!/\bcode:\s*"/.test(declText)` exclusion stays -- the two conditions
+ * together mean "attaches a code, but not as an inline literal string". */
 const findLocalThrowerNames = (text) => {
 	const names = [];
 	const declRe = /\bconst ([a-zA-Z_][a-zA-Z0-9_]*)\s*=/g;
@@ -454,6 +469,7 @@ const findLocalThrowerNames = (text) => {
 		if (
 			declText?.includes("Object.assign(") &&
 			declText.includes("new Error(") &&
+			/\bcode\b\s*[,:}]/.test(declText) &&
 			!/\bcode:\s*"/.test(declText)
 		) {
 			names.push(match[1]);

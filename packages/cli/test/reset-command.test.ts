@@ -35,9 +35,18 @@ const managedSnapshot = buildSnapshot(
 	emptySnapshot,
 );
 
+/**
+ * `ledgerExists` (D106 R1, B1, #753 reopened): answers `select
+ * to_regclass('hejbro.migration_ledger')` -- `false` (the default) mirrors
+ * a database whose migrations were all applied without `hejbro migrate`
+ * ever running, so `applyReset` reports `ledgerCleared: false` and
+ * `commands/reset.ts`'s own success line drops its "and cleared the
+ * ledger" clause.
+ */
 const makeFakeDriver = (
 	databaseName = "testdb",
 	capabilities?: DriverCapabilities,
+	ledgerExists = false,
 ): { readonly driver: Driver; readonly calls: CompileResult[] } => {
 	const calls: CompileResult[] = [];
 	const session: DriverSession = {
@@ -46,6 +55,12 @@ const makeFakeDriver = (
 			const sql = compiled.sql.trim().toLowerCase();
 			if (sql.startsWith("select current_database()")) {
 				return [{ name: databaseName }];
+			}
+			if (sql.startsWith("select to_regclass(")) {
+				if (ledgerExists) {
+					return [{ reg: "hejbro.migration_ledger" }];
+				}
+				return [{ reg: null }];
 			}
 			return [];
 		},
@@ -85,6 +100,40 @@ describe("applyResetReport / 7.7", () => {
 		expect(result.stdout[0]).toContain("dropped");
 	});
 
+	// [task 4.1, D106 R1, B1, #753 reopened] The success line's own wording
+	// pin, both directions: `commands/reset.ts` now builds it from
+	// `applyReset`'s own `ledgerCleared`, never a fixed string, so both
+	// outcomes need their own byte-exact assertion.
+	it("does not claim the ledger was cleared when it never existed", async () => {
+		const { driver } = makeFakeDriver("testdb", undefined, false);
+
+		const result = await applyResetReport(
+			driver,
+			managedSnapshot,
+			registry,
+			"testdb:2",
+		);
+
+		expect(result.stdout).toEqual([
+			"reset: dropped every object your declarations manage. There was no hejbro ledger to clear.",
+		]);
+	});
+
+	it("claims the ledger was cleared when it existed", async () => {
+		const { driver } = makeFakeDriver("testdb", undefined, true);
+
+		const result = await applyResetReport(
+			driver,
+			managedSnapshot,
+			registry,
+			"testdb:2",
+		);
+
+		expect(result.stdout).toEqual([
+			"reset: dropped every object your declarations manage, and cleared the ledger.",
+		]);
+	});
+
 	it("refuses a driver without interactive transactions, before ever confirming", async () => {
 		const { driver, calls } = makeFakeDriver("testdb", {
 			"interactive-transactions": false,
@@ -115,11 +164,11 @@ describe("applyResetReport / 18.1 (D106 M6)", () => {
 	// Arrives green: `assertResetConfirmed` already throws before
 	// `driver.transaction` ever runs whenever `changes.length > 0`, so
 	// this is a pin (D106 M6 wants it named as a scenario), not a red.
-	// Measured, not assumed: the branch-move mutant (moving `clearLedger`
+	// Measured, not assumed: the branch-move mutant (moving `clearLedgerRows`
 	// back outside the `changes.length > 0` branch) does NOT turn this
 	// test red -- `assertResetConfirmed`'s refusal for a non-empty
 	// `changes` set happens before the transaction runs regardless of
-	// where `clearLedger` sits inside it, so this scenario alone cannot
+	// where `clearLedgerRows` sits inside it, so this scenario alone cannot
 	// discriminate the branch move. See the completion report for what
 	// does: `changes.length === 0` is unreachable from a non-empty
 	// declaration set (every registered kind reports "drop" when an
