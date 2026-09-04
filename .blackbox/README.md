@@ -124,7 +124,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | [#843](843/) | check: a not-compared outcome folds into exit 1 with real differences | open | #851 | 0 | 0 (0 pending) |
 | [#844](844/) | check: plain index key columns, uniqueness and method are still compared for existence only | open | #851 | 0 | 0 (0 pending) |
 | [#845](845/) | vendor: a table named fn or as is unreachable behind the client's own members | open | #849 #850 | 0 | 0 (0 pending) |
-| [#846](846/) | init/config paths round 2: read-side trailing separator, config ancestor order, nesting wording, dangling link on read, empty --config | open | #847 | 0 | 2 (0 pending) |
+| [#846](846/) | init/config paths round 2: read-side trailing separator, config ancestor order, nesting wording, dangling link on read, empty --config | open | #847 | 0 | 3 (0 pending) |
 | [#848](848/) | query: a nested transaction the root callback never awaited commits alone after the root commit | open | #849 #850 | 0 | 0 (0 pending) |
 | [#852](852/) | check: the column-default axis still delimits expression text with double quotes | open | #855 | 0 | 0 (0 pending) |
 | [#853](853/) | check: a not-compared Next: blames EXPLAIN privilege for a non-privilege server reason | open | #855 | 0 | 0 (0 pending) |
@@ -134,7 +134,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 
 ## Totals
 
-Owner decisions 80 · rulings 155 (interpretation 102, extension 51, stop 2) · pending extensions 13 · rejected 2
+Owner decisions 80 · rulings 156 (interpretation 103, extension 51, stop 2) · pending extensions 13 · rejected 2
 
 ## Conventions
 

@@ -30,6 +30,19 @@
       "at": "2026-09-04T20:16Z",
       "title": "harden-config-paths-2 approved; OD1 spelling refused at parse (invalid-config, stated code exception); OD3 two read-side codes via probePath; nesting wording",
       "ratified": null
+    },
+    {
+      "id": "R3",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R1",
+        "R2",
+        "412/D13"
+      ],
+      "at": "2026-09-04T22:31Z",
+      "title": "cp (b) accepted at 9c95244d; D1/D5 details and the 1.2 order deviation ratified; #860 filed; reviewer summoned",
+      "ratified": null
     }
   ],
   "work": [
