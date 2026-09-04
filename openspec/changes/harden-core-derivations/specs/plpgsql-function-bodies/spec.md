@@ -6,10 +6,10 @@ derived SQL name, the scalar locals a row read declares, a loop's record
 name — SHALL be refused at declaration time with `reserved-local-name`
 when it is a name plpgsql already owns. Two classes of name are owned:
 
-- a keyword Postgres fully reserves — its keyword table's reserved
-  category and its reserved-for-function-and-type-names category alike
-  — or plpgsql reserves for its own statements, which cannot stand
-  unquoted in a body at all;
+- a keyword Postgres fully reserves — its keyword table's categories
+  `R` and `T`, less `current_schema`, which reads as a local — or
+  plpgsql reserves for its own statements, which cannot stand unquoted
+  in a body at all;
 - a variable plpgsql declares on its own — `found` in every function,
   `sqlstate` and `sqlerrm` inside an exception handler, and the
   variables a trigger function receives: `tg_name`, `tg_when`,
@@ -60,12 +60,14 @@ refused the same way.
 #### Scenario: A keyword reserved for function and type names is refused
 - **WHEN** a function declares an argument whose derived SQL name is
   one of `authorization`, `binary`, `collation`, `concurrently`,
-  `cross`, `current_schema`, `freeze`, `full`, `ilike`, `inner`, `is`,
-  `isnull`, `join`, `left`, `like`, `natural`, `notnull`, `outer`,
-  `overlaps`, `right`, `similar`, `tablesample` or `verbose`
+  `cross`, `freeze`, `full`, `ilike`, `inner`, `is`, `isnull`, `join`,
+  `left`, `like`, `natural`, `notnull`, `outer`, `overlaps`, `right`,
+  `similar`, `tablesample` or `verbose`
 - **THEN** the declaration fails with `reserved-local-name` — a body
   that reads such a name as rendered (`raise exception 'value %',
-  left;`) is refused by Postgres at creation with a syntax error
+  left;`) is refused by Postgres at creation with a syntax error —
+  while `current_schema`, the one keyword of that category a body reads
+  as a local, stays accepted
 
 #### Scenario: A name that merely contains an owned name is accepted
 - **WHEN** a function declares an argument, or names a loop,

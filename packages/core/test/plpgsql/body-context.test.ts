@@ -44,6 +44,14 @@ const trickyTriggerConfig = {
 	forEach: "row" as const,
 };
 
+// #748/task 2.1: a row read's locals depend on its projection -- `id`
+// derives no owned name, `op` derives the owned `tg_op` under a row named
+// `tg`.
+const events = table(app, "events", {
+	id: uuid().primaryKey(),
+	op: uuid(),
+});
+
 describe("body-context recording", () => {
 	it("records rowOrNull as non-strict selectInto with derived scalar names", () => {
 		const declaration = defineTrigger(
@@ -486,6 +494,42 @@ describe("body-context recording", () => {
 				typeNode: { typeName: "uuid" },
 			},
 		]);
+	});
+
+	it("a row read named tg is accepted when its projection derives no owned name (#748/task 2.1 control)", () => {
+		const declaration = defineTrigger(
+			comments,
+			triggerConfig,
+			(ctx, { new: row }) => {
+				const tg = ctx.row(
+					select({ id: events.id }, events).where(eq(events.id, row.id)),
+					"tg",
+				);
+				ctx.if(isNull(tg.id), () => {
+					ctx.raise("not found");
+				});
+				ctx.return(row);
+			},
+		);
+		expect(declaration.functionDeclaration.body.declarations).toEqual([
+			{
+				declKind: "scalar",
+				name: "tg_id",
+				typeNode: { typeName: "uuid" },
+			},
+		]);
+	});
+
+	it("a row read named tg is refused when its projection derives an owned name -- tg_op (#748/task 2.1)", () => {
+		expect(() =>
+			defineTrigger(comments, triggerConfig, (ctx, { new: row }) => {
+				ctx.row(
+					select({ op: events.op }, events).where(eq(events.id, row.id)),
+					"tg",
+				);
+				ctx.return(row);
+			}),
+		).toThrowError(/collides with a name plpgsql reserves/);
 	});
 
 	it("forEach over a derived-expression projection throws row-projection-not-column", () => {

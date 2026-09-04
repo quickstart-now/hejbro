@@ -7,7 +7,9 @@ declares on its own, not only its keywords — `found`, `sqlstate`,
 `sqlerrm`, and the twelve `tg_*` trigger variables, compared
 case-insensitively the way an unquoted identifier folds — since a
 declared argument or local under one of those names shadowed plpgsql's
-own with no error at all (#748).
+own with no error at all, and the keywords Postgres reserves for
+function and type names (`left`, `is`, `join`, …, `current_schema`
+excepted — it reads as a local, not the function) (#748).
 
 Two `defineFunction` argument keys that derive to the same SQL name
 (`userId` beside `user_id`) are now refused at declaration time with

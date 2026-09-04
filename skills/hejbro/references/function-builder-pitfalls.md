@@ -59,10 +59,13 @@ The reserved-name check (`reserved-local-name`) refuses a keyword *and* a
 variable plpgsql declares on its own — `found`, `sqlstate`, `sqlerrm`,
 and the twelve `tg_*` trigger variables — case-insensitively, since an
 unquoted name shadowing one of those resolves to the argument instead of
-plpgsql's own value with no error at all. Two argument keys that derive
-to the same SQL name (`userId` beside `user_id`) are refused too, with
-`duplicate-argument`, naming both keys and the shared name — the same
-check a table's colliding column keys already get.
+plpgsql's own value with no error at all, and the keywords Postgres
+reserves for function and type names (`left`, `is`, `join`, …,
+`current_schema` excepted — it reads as a local, not the function). Two
+argument keys that derive to the same SQL name (`userId` beside
+`user_id`) are refused too, with `duplicate-argument`, naming both keys
+and the shared name — the same check a table's colliding column keys
+already get.
 
 ## The body context API
 

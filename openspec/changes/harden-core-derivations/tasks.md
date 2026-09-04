@@ -82,8 +82,9 @@ definition of done, never a task.
 
 The spec-bound reviewer measured, on PostgreSQL 17.11, every keyword of
 `pg_get_keywords()` category T as a rendered local: 22 of 23 fail at
-creation with a syntax error. The requirement's owned-name sentence
-already covered that class; the list did not. Two delta sentences were
+creation with a syntax error; `current_schema` reads as a local. The
+requirement's owned-name sentence already covered that class; the list
+did not. Two delta sentences were
 tightened in the same round (the row-name control in scenario 5 now
 states the projection condition; the reported pair is defined as the
 first key whose derived name repeats an earlier key's).
@@ -91,18 +92,19 @@ first key whose derived name repeats an earlier key's).
 - [ ] 2.1 (~5m) The keywords reserved for function and type names are
       refused. Red: `packages/core/test/define-function.test.ts` — "a
       keyword reserved for function and type names is refused as an
-      argument name", an input table of the 23 category-T keywords
-      (`authorization`, `binary`, `collation`, `concurrently`, `cross`,
-      `current_schema`, `freeze`, `full`, `ilike`, `inner`, `is`,
-      `isnull`, `join`, `left`, `like`, `natural`, `notnull`, `outer`,
+      argument name", an input table of the 22 measured category-T
+      keywords (`authorization`, `binary`, `collation`, `concurrently`,
+      `cross`, `freeze`, `full`, `ilike`, `inner`, `is`, `isnull`,
+      `join`, `left`, `like`, `natural`, `notnull`, `outer`,
       `overlaps`, `right`, `similar`, `tablesample`, `verbose`), each
-      asserted on `code` `reserved-local-name`; the row-name control
+      asserted on `code` `reserved-local-name`, with `current_schema`
+      as the accepted control row; the row-name control
       rows from scenario 5 beside it in
       `packages/core/test/plpgsql/body-context.test.ts` — `ctx.row(…,
       "tg")` over a projection `{ id }` accepted, over `{ op }` refused
       — and the four-key pair row `{ aB, xY, x_y, a_b }` in
       `define-function.test.ts` asserting the message names `xY` and
-      `x_y`. Green: the 23 entries in `reservedPlpgsqlNames`,
+      `x_y`. Green: the 22 entries in `reservedPlpgsqlNames`,
       alphabetically; no other code.
       Files: `packages/core/src/plpgsql/reserved.ts`,
       `packages/core/test/define-function.test.ts`,

@@ -486,6 +486,67 @@ describe("a name plpgsql declares itself is refused as an argument name (#748)",
 	);
 });
 
+describe("a keyword reserved for function and type names is refused as an argument name (#748, review round)", () => {
+	const categoryTNameCases: ReadonlyArray<{ readonly argName: string }> = [
+		{ argName: "authorization" },
+		{ argName: "binary" },
+		{ argName: "collation" },
+		{ argName: "concurrently" },
+		{ argName: "cross" },
+		{ argName: "freeze" },
+		{ argName: "full" },
+		{ argName: "ilike" },
+		{ argName: "inner" },
+		{ argName: "is" },
+		{ argName: "isnull" },
+		{ argName: "join" },
+		{ argName: "left" },
+		{ argName: "like" },
+		{ argName: "natural" },
+		{ argName: "notnull" },
+		{ argName: "outer" },
+		{ argName: "overlaps" },
+		{ argName: "right" },
+		{ argName: "similar" },
+		{ argName: "tablesample" },
+		{ argName: "verbose" },
+	];
+
+	it.each(categoryTNameCases)(
+		"refuses an argument whose derived name is $argName with reserved-local-name",
+		({ argName }) => {
+			expect(
+				codeOf(() =>
+					defineFunction(
+						app,
+						"echo_category_t",
+						{ args: { [argName]: uuid() }, returns: { typeName: "uuid" } },
+						(ctx) => {
+							ctx.return(sql`null`);
+						},
+					),
+				),
+			).toBe("reserved-local-name");
+		},
+	);
+
+	it("accepts an argument named current_schema -- the one category-T keyword that reads as a local, not the function (control)", () => {
+		const fn = defineFunction(
+			app,
+			"echo_current_schema",
+			{
+				// biome-ignore lint/style/useNamingConvention: adversarial snake_case key under test.
+				args: { current_schema: uuid() },
+				returns: { typeName: "uuid" },
+			},
+			(ctx) => {
+				ctx.return(sql`null`);
+			},
+		);
+		expect(fn.args[0]?.argName).toBe("current_schema");
+	});
+});
+
 describe("two argument keys deriving to one SQL name are refused (#751)", () => {
 	const collidingCases: ReadonlyArray<{
 		readonly label: string;
@@ -541,6 +602,14 @@ describe("two argument keys deriving to one SQL name are refused (#751)", () => 
 			firstKey: "userId",
 			secondKey: "user_id",
 			sharedName: "user_id",
+		},
+		{
+			label: "four keys forming two pairs -- the second pair is reported",
+			// biome-ignore lint/style/useNamingConvention: adversarial snake_case key under test.
+			args: { aB: uuid(), xY: uuid(), x_y: uuid(), a_b: uuid() },
+			firstKey: "xY",
+			secondKey: "x_y",
+			sharedName: "x_y",
 		},
 	];
 
