@@ -158,12 +158,27 @@ table drops before the table it references, so nothing this run also
 drops still stands as a dependency when its own turn comes — the same
 graph `generate` computes (above), read in the opposite direction, never
 the literal reverse of one specific run's own emitted statement sequence.
-Two declared tables that reference each other can't both drop first;
-`reset` leaves that pair in its existing identity order and lets the
-database itself refuse the one drop that order can't satisfy.
+Declared tables that reference each other in a cycle — two or more,
+around one loop — can't all drop first; `reset` leaves them in their
+existing identity order and lets the database itself refuse the one drop
+that order can't satisfy.
+
+Before it touches anything, `reset` (like `hejbro status`, `hejbro
+migrate` and `hejbro raise`) checks who the relation at
+`"hejbro"."migration_ledger"` actually is — not merely whether one
+exists. It is hejbro's own ledger only when it is an ordinary table
+carrying the four columns the bootstrap creates, each under its
+bootstrap type (a further column doesn't disqualify it); anything else
+at that name — a table of another shape, a view, a materialized view, a
+foreign table, a sequence, a partitioned table — is refused with the
+coded `apply-ledger-occupied` error, naming what was found. `reset`
+refuses this way *before* it ever asks for `--confirm-drop`'s
+confirmation. None of the four commands reads, writes or clears that
+object: it's left exactly as it was, and the error says to move or drop
+it yourself, or point `--url` at the database hejbro actually manages.
 
 A drop the database refuses — most commonly an object outside your
-declarations still depending on one being dropped, or the mutual-reference
+declarations still depending on one being dropped, or the declared-cycle
 case above — surfaces as the coded `reset-drop-failed` error carrying the
 database's own reason. The whole transaction (every drop, and the ledger
 clear) rolls back: the database and the ledger are exactly as they were,

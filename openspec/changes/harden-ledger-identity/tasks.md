@@ -164,7 +164,7 @@ marks the tasks that carry them into code, not open questions.
       reporting the migration applied. Files:
       `packages/cli/test/apply-reset.integration.test.ts`.
 
-- [ ] 1.9 (~6m) `skills/hejbro/references/generate-verify-workflow.md`:
+- [x] 1.9 (~6m) `skills/hejbro/references/generate-verify-workflow.md`:
       one paragraph on the identity judgement (what the ledger is, that
       `migrate`/`status`/`reset`/`raise` all refuse with
       `apply-ledger-occupied` when something else holds its name, that
