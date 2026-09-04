@@ -1,7 +1,13 @@
 import type { Table } from "../dsl/table";
 import { toSnakeCase } from "../dsl/table";
 import { throwHejbroError } from "../error";
-import type { ColumnRef, Condition, Expr, QueryNode } from "../expr/ast";
+import type {
+	ColumnRef,
+	Condition,
+	Expr,
+	QueryNode,
+	TableRefNode,
+} from "../expr/ast";
 import { expr, isExpr } from "../expr/ast";
 import { liftOperand } from "../expr/literal";
 import type { SqlTypeFamily } from "../expr/type-family";
@@ -87,26 +93,36 @@ export type TriggerRow<TTable extends Table> = {
 } & { readonly [triggerRowMeta]: "new" | "old" };
 
 /**
- * What `ctx.return()` accepts besides a trigger row: any query ending in
- * `.returning()`/a bare select. The three mutation members carry
- * `ReturningProjection | undefined`, not the bare (`undefined`-only)
- * default (#634) -- a projected `.returning({...})` is the canonical
- * form the body requirement names, exactly as accepted as the bare
- * `.returning()` form. Names the third, stage argument as `"final"`
- * explicitly (#686) -- `mutate.ts`'s own two-argument default now covers
- * *both* stages (needed so `@hejbro/query`'s existing two-argument sites
- * keep compiling, #686), so naming only `"final"` here, not omitting the
- * argument, is what excludes a mutation that never called `.returning()`
+ * What `ctx.return()` accepts besides a trigger row: a select whose
+ * projection is the declared table's whole row, or a mutation on that
+ * table ending in a bare `.returning()` (#749/D6/D8) -- narrower than
+ * #634's own widening, which is what a `returns setof <table>` body
+ * needed before this: a projected `.returning({...})` is never the row
+ * shape such a function's caller sees (Postgres matches `return query`'s
+ * columns positionally, names ignored), so `assertReturnIsWholeRow`
+ * refuses it at declaration time regardless of what the type here
+ * accepts -- this narrowing is a compile-time head start on that same
+ * refusal, not the check itself; a caller that reaches `ctx.return()`
+ * with the type bypassed still gets the runtime refusal. The select
+ * member's projection narrows to `Table` (dropping the `Record<string,
+ * Expr>` half of `SelectProjection`) for the same reason. Names the
+ * third, stage argument as `"final"` explicitly (#686) -- `mutate.ts`'s
+ * own two-argument default now covers *both* stages (needed so
+ * `@hejbro/query`'s existing two-argument sites keep compiling, #686),
+ * so naming only `"final"` here, not omitting the argument, is what
+ * excludes a mutation that never called `.returning()`
  * (`InsertReturnable`/`UpdateReturnable`/`DeleteReturnable`, stage
  * `"returnable"`) -- `return query …` over a statement with no
  * `RETURNING` clause is invalid plpgsql. `ExecutableQuery` below is the
- * stage-agnostic sibling `ctx.execute()` accepts.
+ * stage-agnostic sibling `ctx.execute()` accepts, unaffected by this
+ * narrowing -- a mutation run for its effect never has a whole-row rule
+ * to satisfy.
  */
 export type ReturnableQuery =
-	| SelectLimited
-	| InsertFinal<Table, ReturningProjection | undefined, "final">
-	| UpdateFinal<Table, ReturningProjection | undefined, "final">
-	| DeleteFinal<Table, ReturningProjection | undefined, "final">;
+	| SelectLimited<Table>
+	| InsertFinal<Table, undefined, "final">
+	| UpdateFinal<Table, undefined, "final">
+	| DeleteFinal<Table, undefined, "final">;
 
 /**
  * What `ctx.execute()` accepts: the same four query shapes as
@@ -197,10 +213,17 @@ type IfStatementDraft = {
  */
 export type ReturnKind = "trigger" | "setofTable" | "scalar";
 
+/** The table a `returns setof <table>` declaration names (#749/D7) — `null` for a trigger or scalar declaration, which has no whole-row shape to check `ctx.return()`'s query against. Threaded in from `defineFunction` the same way {@link ReturnKind} already is; `defineTrigger` passes `null`. */
+export type SetofTableIdentity = {
+	readonly schemaName: string;
+	readonly tableName: string;
+} | null;
+
 type RecordingState = {
 	readonly identity: string;
 	readonly declaredAt: string | null;
 	readonly returnKind: ReturnKind;
+	readonly declaredTable: SetofTableIdentity;
 	/** The declared scalar `returns` type's family — `null` for a setof or trigger declaration, which returns no scalar expression to check. */
 	readonly scalarReturnFamily: SqlTypeFamily | null;
 	/** set the moment any return statement is recorded, at any nesting depth — a scalar function that never sets it has no way to produce its value. */
@@ -534,6 +557,74 @@ function throwScalarReturnExpectsExpression(state: RecordingState): never {
 	);
 }
 
+/** `true` when `ref` (a mutation's `table`, or a select's `from` when it's a table and not a CTE) names the same table `declaredTable` does. */
+const namesDeclaredTable = (
+	ref: TableRefNode,
+	declaredTable: NonNullable<SetofTableIdentity>,
+): boolean =>
+	ref.schemaName === declaredTable.schemaName &&
+	ref.tableName === declaredTable.tableName;
+
+/**
+ * `true` when `query`'s own rows are exactly the declared table's whole
+ * row (#749/D6/D7) — a select whose projection is `allColumns` and whose
+ * `from` is that table (a `cteName` source is never a table), or a
+ * mutation whose `returning` is `allColumns` and whose own `table` is
+ * that table. Every other shape — a projection (complete, reordered, or
+ * partial), an aliased column, or a query over a different table — is
+ * not whole-row, even when nothing is technically missing.
+ */
+const isWholeRowQuery = (
+	query: QueryNode,
+	declaredTable: NonNullable<SetofTableIdentity>,
+): boolean => {
+	if (query.queryKind === "select") {
+		return (
+			query.projection.projectionKind === "allColumns" &&
+			"schemaName" in query.from &&
+			namesDeclaredTable(query.from, declaredTable)
+		);
+	}
+	// `ReturnableQuery`'s own shape excludes a set operation and a with
+	// statement (neither ever reaches `ctx.return()`) -- this mirrors
+	// `assertReturnHasReturning`'s own `"returning" in query` narrowing,
+	// which the type checker needs here for the same reason.
+	if (!("returning" in query)) {
+		return false;
+	}
+	return (
+		query.returning !== null &&
+		query.returning.returningKind === "allColumns" &&
+		namesDeclaredTable(query.table, declaredTable)
+	);
+};
+
+/**
+ * Refuses a query whose rows are not the declared table's whole row, for
+ * a `returns setof <table>` body (#749/D6) — `state.declaredTable` is
+ * `null` for a trigger or scalar declaration, which never reaches this
+ * check (both refuse a query shape of their own, earlier). Runs after
+ * {@link assertReturnHasReturning} and before `markConsumed` (design.md):
+ * a mutation with no `.returning()` at all still fails with
+ * `return-expects-returning` first, and a refused query's builder is
+ * never marked consumed, so `unusedBuilderMessage` still names it.
+ */
+const assertReturnIsWholeRow = (
+	state: RecordingState,
+	query: QueryNode,
+): void => {
+	const declaredTable = state.declaredTable;
+	if (declaredTable === null || isWholeRowQuery(query, declaredTable)) {
+		return;
+	}
+	const { schemaName, tableName } = declaredTable;
+	throwHejbroError(
+		"return-expects-whole-row",
+		`ctx.return() in ${state.identity} received ${describeQueryKind(query)} whose rows are not the whole row of "${schemaName}"."${tableName}" — this declaration returns setof that table, and plpgsql's "return query" must produce exactly that row shape; Postgres accepts the CREATE and every call then fails with "structure of query does not match function result type". Next: return select(${tableName}), or an insert/update/delete on ${tableName} ending in a bare .returning(); to return a different shape, declare "returns" as that shape instead.`,
+		state.declaredAt,
+	);
+};
+
 /** {@link recordReturnShape}'s non-trigger-row half — split out to keep each function's own branching under the CRAP gate (#154 ratchet-5) now that the trigger-vs-query check (#426/1.10) adds one more branch. */
 const recordReturnQueryShape = (
 	state: RecordingState,
@@ -560,6 +651,7 @@ const recordReturnQueryShape = (
 		return;
 	}
 	assertReturnHasReturning(state, query);
+	assertReturnIsWholeRow(state, query);
 	markConsumed(query);
 	pushStatement(state, { stmtKind: "returnQuery", query });
 };
@@ -755,12 +847,14 @@ export const createRecordingContext = (
 	declaredAt: string | null,
 	returnKind: ReturnKind,
 	scalarReturnFamily: SqlTypeFamily | null,
+	declaredTable: SetofTableIdentity,
 ): { readonly ctx: BodyContext; readonly finish: () => FunctionBody } => {
 	openRecordingSession();
 	const state: RecordingState = {
 		identity,
 		declaredAt,
 		returnKind,
+		declaredTable,
 		scalarReturnFamily,
 		returned: { current: false },
 		declarations: [],
@@ -830,6 +924,7 @@ const recordOnce = (
 	declaredAt: string | null,
 	returnKind: ReturnKind,
 	scalarReturnFamily: SqlTypeFamily | null,
+	declaredTable: SetofTableIdentity,
 	run: (ctx: BodyContext) => void,
 ): FunctionBody => {
 	const { ctx, finish } = createRecordingContext(
@@ -837,6 +932,7 @@ const recordOnce = (
 		declaredAt,
 		returnKind,
 		scalarReturnFamily,
+		declaredTable,
 	);
 	try {
 		run(ctx);
@@ -859,6 +955,7 @@ export const recordBodyWithGuard = (
 	declaredAt: string | null,
 	returnKind: ReturnKind,
 	scalarReturnFamily: SqlTypeFamily | null,
+	declaredTable: SetofTableIdentity,
 	run: (ctx: BodyContext) => void,
 ): FunctionBody => {
 	const firstBody = recordOnce(
@@ -866,6 +963,7 @@ export const recordBodyWithGuard = (
 		declaredAt,
 		returnKind,
 		scalarReturnFamily,
+		declaredTable,
 		run,
 	);
 	const secondBody = recordOnce(
@@ -873,6 +971,7 @@ export const recordBodyWithGuard = (
 		declaredAt,
 		returnKind,
 		scalarReturnFamily,
+		declaredTable,
 		run,
 	);
 
