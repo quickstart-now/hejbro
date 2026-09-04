@@ -449,7 +449,9 @@ describe("hejbro reset — live witness (#753, task 1.5)", () => {
 				.filter((name) => name.endsWith(".sql"))
 				.sort();
 			if (migrationFiles.length === 0) {
-				throw new Error(`expected at least one migration file in ${migrationsDir}`);
+				throw new Error(
+					`expected at least one migration file in ${migrationsDir}`,
+				);
 			}
 			migrationFiles.map((migrationFile) =>
 				psqlApplySql(
