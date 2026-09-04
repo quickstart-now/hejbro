@@ -1804,6 +1804,20 @@ describe("hejbro generate / --config names a file (#846 D5)", () => {
 		expect(result.stderr).not.toContain("directory");
 	});
 
+	// #846 review N2: the header names --config on every command that
+	// shares resolveConfigPath, not just generate.
+	it.each(["generate", "history"])(
+		"reports error[invalid-config-flag]: --config as the header (%s)",
+		async (command) => {
+			const result = await runCli(cwd, [command, "--config="]);
+
+			expect(result.exitCode).toBe(1);
+			expect(result.stderr.split("\n")[0]).toBe(
+				"error[invalid-config-flag]: --config",
+			);
+		},
+	);
+
 	it("refuses --config . as config-not-a-file naming ./, never an absolute path", async () => {
 		const result = await runCli(cwd, ["generate", "--config", "."]);
 

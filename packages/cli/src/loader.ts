@@ -216,7 +216,7 @@ export const resolveConfigPath = (
 	if (configFlag !== undefined && configFlag.trim() === "") {
 		return throwHejbroError(
 			"invalid-config-flag",
-			"--config was given an empty value. Next: pass the configuration file's path (--config path/to/hejbro.config.ts), or drop the flag to use ./hejbro.config.ts.",
+			'"--config" was given an empty value. Next: pass the configuration file\'s path (--config path/to/hejbro.config.ts), or drop the flag to use ./hejbro.config.ts.',
 		);
 	}
 	if (configFlag === undefined) {

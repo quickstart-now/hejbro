@@ -104,6 +104,20 @@ const ancestorSubjectFor = (artifact: Artifact): string => {
 	return artifact.fieldName;
 };
 
+/** The clause a write-permission/create-failure sentence names its
+ * subject with (#846 review N1): `"for ${fieldName}"` for a planned
+ * `migrationsDir`/`snapshotPath` (unchanged), `"as the configuration
+ * file"` for the configuration artifact -- `"for hejbro.config.ts"`
+ * doubled the label's own name (which already reads "hejbro.config.ts"
+ * or the path `--config` named), and always named the default field
+ * even when `--config` pointed elsewhere. */
+const writeSubjectClauseFor = (artifact: Artifact): string => {
+	if (isConfigArtifact(artifact)) {
+		return "as the configuration file";
+	}
+	return `for ${artifact.fieldName}`;
+};
+
 /** Builds and throws the `init-path-conflict`-coded, enriched plain
  * `HejbroError` (lead-approved): a configured path exists but holds the
  * wrong kind of node for what it's supposed to be. Nothing is ever
@@ -255,13 +269,13 @@ function throwStatFailed(
  * this process may add to it. */
 function throwNotWritable(
 	label: string,
-	fieldName: string,
+	subjectClause: string,
 	code: string,
 	culprit: string,
 ): never {
 	return throwHejbroError(
 		"init-path-conflict",
-		`"${label}" cannot be created for ${fieldName} (${code}): "${culprit}" does not let this process write into it. Next: check permissions on "${culprit}", then rerun \`hejbro init\`.`,
+		`"${label}" cannot be created ${subjectClause} (${code}): "${culprit}" does not let this process write into it. Next: check permissions on "${culprit}", then rerun \`hejbro init\`.`,
 	);
 }
 
@@ -272,13 +286,13 @@ function throwNotWritable(
  * ancestor to blame the way {@link throwNotWritable} does. */
 function throwCreateDiskFailed(
 	label: string,
-	fieldName: string,
+	subjectClause: string,
 	code: string,
 	path: string,
 ): never {
 	return throwHejbroError(
 		"init-path-conflict",
-		`"${label}" cannot be created for ${fieldName} (${code}): "${path}" refused it. Next: check the disk and permissions at "${path}", then rerun \`hejbro init\`.`,
+		`"${label}" cannot be created ${subjectClause} (${code}): "${path}" refused it. Next: check the disk and permissions at "${path}", then rerun \`hejbro init\`.`,
 	);
 }
 
@@ -540,7 +554,7 @@ const checkWritable = (
 		} catch (error) {
 			throwNotWritable(
 				artifact.label,
-				artifact.fieldName,
+				writeSubjectClauseFor(artifact),
 				errorCode(error),
 				fileLabel(cwd, outcome.parent),
 			);
@@ -594,17 +608,18 @@ const throwCreateFailed = (
 ): never => {
 	const code = errorCode(error);
 	const rawPath = errorPath(error, artifact.path);
+	const subjectClause = writeSubjectClauseFor(artifact);
 	if (code === "EACCES" || code === "EPERM") {
 		throwNotWritable(
 			artifact.label,
-			artifact.fieldName,
+			subjectClause,
 			code,
 			fileLabel(cwd, dirname(rawPath)),
 		);
 	}
 	throwCreateDiskFailed(
 		artifact.label,
-		artifact.fieldName,
+		subjectClause,
 		code,
 		fileLabel(cwd, rawPath),
 	);

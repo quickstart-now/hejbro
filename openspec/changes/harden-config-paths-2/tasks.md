@@ -270,7 +270,7 @@ running. Files this group owns: `packages/cli/src/identity.ts`,
       satisfied that way — then with the reproduction in its reasoning.
       Files: `loader.ts`, `init.ts`.
 
-- [ ] 2.4 (~6m) The configuration path is named once on every `init`
+- [x] 2.4 (~6m) The configuration path is named once on every `init`
       branch, and `invalid-config-flag` names the flag (review N1, N2).
       Red: `init.test.ts` — "names the configuration path once on the
       write-permission and create-failure branches" with rows: cwd mode

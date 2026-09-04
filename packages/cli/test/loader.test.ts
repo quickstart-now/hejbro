@@ -89,6 +89,10 @@ describe("loadConfig / resolveConfigPath — --config names a file (#846 D5)", (
 			} catch (error) {
 				expect(error).toMatchObject({ code: "invalid-config-flag" });
 				const message = (error as { message: string }).message;
+				// #846 review N2: the message opens with a quoted "--config"
+				// so identityFromMessage's header reads
+				// error[invalid-config-flag]: --config on every command.
+				expect(message.startsWith('"--config" was given')).toBe(true);
 				expect(message).toContain("--config path/to/hejbro.config.ts");
 				expect(message).not.toContain("directory");
 			}

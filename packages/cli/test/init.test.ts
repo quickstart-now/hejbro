@@ -1199,6 +1199,74 @@ describe.skipIf(process.getuid?.() === 0)(
 	},
 );
 
+// #846 review N1: throwNotWritable/throwCreateDiskFailed named the
+// configuration artifact's own field as `hejbro.config.ts`, doubling the
+// name the label already carries ("hejbro.config.ts" cannot be created
+// for hejbro.config.ts") -- and naming the default field even when
+// --config pointed elsewhere. The configuration artifact now reads "as
+// the configuration file"; every other artifact is unchanged.
+describe.skipIf(process.getuid?.() === 0)(
+	"runInit / names the configuration path once on the write-permission and create-failure branches (#846 review N1)",
+	() => {
+		afterEach(async () => {
+			await Promise.all(
+				["ro"].map(async (name) => {
+					const candidate = join(cwd, name);
+					if (!existsSync(candidate)) {
+						return;
+					}
+					await chmod(candidate, 0o755);
+				}),
+			);
+			await chmod(cwd, 0o755);
+		});
+
+		it("names the configuration file, never repeating it, when cwd itself cannot be written into", async () => {
+			await chmod(cwd, 0o500);
+
+			const result = await runInit(cwd);
+
+			expect(result.exitCode).toBe(1);
+			expect(result.stderr).toBe(
+				'error[init-path-conflict]: hejbro.config.ts\n  "hejbro.config.ts" cannot be created as the configuration file (EACCES): "./" does not let this process write into it. Next: check permissions on "./", then rerun `hejbro init`.',
+			);
+		});
+
+		it("names the --config path, never the default hejbro.config.ts, when its parent cannot be written into", async () => {
+			await mkdir(join(cwd, "ro"), { recursive: true });
+			await chmod(join(cwd, "ro"), 0o500);
+
+			const result = await runInit(cwd, ["--config", "ro/my.config.ts"]);
+
+			expect(result.exitCode).toBe(1);
+			expect(result.stderr).toContain(
+				"error[init-path-conflict]: ro/my.config.ts",
+			);
+			expect(result.stderr).toContain("ro/my.config.ts");
+			expect(result.stderr).toContain(
+				'"ro" does not let this process write into it',
+			);
+			expect(result.stderr).not.toContain("hejbro.config.ts");
+		});
+
+		it("keeps a field artifact's wording unchanged (control)", async () => {
+			await writeFile(
+				configPath(),
+				'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "ro/mig" };\n',
+			);
+			await mkdir(join(cwd, "ro"), { recursive: true });
+			await chmod(join(cwd, "ro"), 0o500);
+
+			const result = await runInit(cwd);
+
+			expect(result.exitCode).toBe(1);
+			expect(result.stderr).toContain(
+				'"ro/mig/" cannot be created for migrationsDir (EACCES)',
+			);
+		});
+	},
+);
+
 // #767 review round 1, D6 (create side): `access` can be wrong (ACLs,
 // immutable flags, a disk that fills, a race) -- the check pass above
 // cannot prove a node that doesn't exist yet will stay writable once
