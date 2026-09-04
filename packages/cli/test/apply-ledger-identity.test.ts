@@ -394,3 +394,44 @@ describe("assertLedgerNotOccupied / 2.1, 783/R5 -- the (columns: ...) clause", (
 		expect(message).toContain("(no columns)");
 	});
 });
+
+describe("assertLedgerNotOccupied / 2.3, review repair of 8f44e927 -- the article agrees with the relation word", () => {
+	const messageFor = (identity: LedgerIdentity): string => {
+		try {
+			assertLedgerNotOccupied(identity, "hejbro status");
+			throw new Error("expected assertLedgerNotOccupied to throw");
+		} catch (error) {
+			return (error as Error).message;
+		}
+	};
+
+	it('says "an index" (vowel-initial word)', () => {
+		const message = messageFor({
+			kind: "occupied",
+			relation: "index",
+			columns: ["id"],
+		});
+
+		expect(message).toContain("is held by an index");
+	});
+
+	it('says "an unlogged table" (vowel-initial prefix)', () => {
+		const message = messageFor({
+			kind: "occupied",
+			relation: "unlogged table",
+			columns: ["id", "filename", "origin", "applied_at"],
+		});
+
+		expect(message).toContain("is held by an unlogged table");
+	});
+
+	it('says "a partitioned index" (consonant-initial word, control)', () => {
+		const message = messageFor({
+			kind: "occupied",
+			relation: "partitioned index",
+			columns: ["id"],
+		});
+
+		expect(message).toContain("is held by a partitioned index");
+	});
+});

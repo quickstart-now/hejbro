@@ -169,6 +169,17 @@ const columnsSuffix = (
 	return ` (${clause})`;
 };
 
+/** [2.3, review repair of 8f44e927] `"an"` before a vowel-initial word, `"a"` otherwise -- the closed set of relation words this module ever produces (`table`, `index`, `unlogged table`, `TOAST table`, …) never needs anything more than the first-letter rule. */
+const VOWELS = new Set(["a", "e", "i", "o", "u"]);
+
+const article = (word: string): string => {
+	const firstLetter = word.charAt(0).toLowerCase();
+	if (VOWELS.has(firstLetter)) {
+		return "an";
+	}
+	return "a";
+};
+
 /**
  * [design.md, 783/R3] Refuses with `apply-ledger-occupied` when `identity`
  * is `occupied`; a no-op for `absent`/`ledger` -- every one of the four
@@ -185,6 +196,6 @@ export const assertLedgerNotOccupied = (
 	}
 	throwHejbroError(
 		"apply-ledger-occupied",
-		`"${LEDGER_SCHEMA}"."${LEDGER_TABLE}" is held by a ${identity.relation} that is not hejbro's ledger${columnsSuffix(identity.relation, identity.columns)}. hejbro reads, writes and clears only the ledger it created, so this database is not one hejbro has applied to. Next: move or drop that ${identity.relation} yourself (hejbro will not touch it), or point --url at the database hejbro manages, then rerun \`${commandName}\`.`,
+		`"${LEDGER_SCHEMA}"."${LEDGER_TABLE}" is held by ${article(identity.relation)} ${identity.relation} that is not hejbro's ledger${columnsSuffix(identity.relation, identity.columns)}. hejbro reads, writes and clears only the ledger it created, so this database is not one hejbro has applied to. Next: move or drop that ${identity.relation} yourself (hejbro will not touch it), or point --url at the database hejbro manages, then rerun \`${commandName}\`.`,
 	);
 };

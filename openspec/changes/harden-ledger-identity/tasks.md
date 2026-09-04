@@ -220,6 +220,21 @@ marks the tasks that carry them into code, not open questions.
       `packages/cli/test/apply-ledger-identity.test.ts`,
       `skills/hejbro/references/generate-verify-workflow.md`.
 
+- [x] 2.3 (~5m) The article agrees with the word. The message template
+      hardcodes `a ` before the relation word; the words 2.1 and 2.2
+      introduced begin with a vowel (`index`, every `unlogged …`), so
+      five constructed inputs print "a index" / "a unlogged table" /
+      "a unlogged partitioned table" / "a unlogged sequence" /
+      "a unlogged index". An `article(word)` helper returns `an` before
+      a vowel-initial word and `a` otherwise (the word set is closed, so
+      the rule is exact); the `Next:` line's `that ${relation}` carries
+      no article and is untouched. Red:
+      `packages/cli/test/apply-ledger-identity.test.ts`, message
+      assertions `"is held by an index"`, `"is held by an unlogged
+      table"`, and the consonant control `"is held by a partitioned
+      index"`. Files: `packages/cli/src/apply/ledger-identity.ts`,
+      `packages/cli/test/apply-ledger-identity.test.ts`.
+
 ## Close-out (not a group)
 
 `.changeset/harden-ledger-identity.md` (`"hejbro": patch`),

@@ -62,7 +62,7 @@ implementation takes.
 - **Message**:
 
   ```
-  "hejbro"."migration_ledger" is held by a <word> that is not hejbro's ledger[ (columns: <a, b, c>|no columns)]. hejbro reads, writes and clears only the ledger it created, so this database is not one hejbro has applied to. Next: move or drop that <word> yourself (hejbro will not touch it), or point --url at the database hejbro manages, then rerun `hejbro <command>`.
+  "hejbro"."migration_ledger" is held by <a|an> <word> that is not hejbro's ledger[ (columns: <a, b, c>|no columns)]. hejbro reads, writes and clears only the ledger it created, so this database is not one hejbro has applied to. Next: move or drop that <word> yourself (hejbro will not touch it), or point --url at the database hejbro manages, then rerun `hejbro <command>`.
   ```
 
 - **Where `reset` refuses**: before the confirmation check, right after
