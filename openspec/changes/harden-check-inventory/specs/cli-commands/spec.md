@@ -47,8 +47,12 @@ one where nothing true can be said:
   unmanaged index. The declaration accounts for it, under that
   constraint's own name, and Postgres creates it with that name; a
   database hejbro's own migration produced would otherwise report an
-  unmanaged index for every key it declared. Any other index the catalog
-  holds on a managed table is inventoried.
+  unmanaged index for every key it declared. Which constraint an index
+  backs SHALL be read from the catalog's own record of it, never
+  inferred from the two names matching. Any other index the catalog
+  holds on a managed table is inventoried — and where such an index
+  backs a constraint, its line SHALL name that constraint, so that a
+  reader is not sent looking for an index nobody wrote.
 
 The inventory SHALL be ordered by the identity each line names, so two
 runs against the same database print the same report and two databases
@@ -81,6 +85,13 @@ nothing in the declared set records that.
   hejbro's own migration for them is applied, and `hejbro check` runs
 - **THEN** no inventory line names the indexes Postgres created for those
   two constraints, and the run exits zero
+
+#### Scenario: An unmanaged index that backs a constraint names that constraint
+- **WHEN** a table the declarations manage carries a primary key or a
+  unique constraint no declaration names, and `hejbro check` runs
+- **THEN** `check` reports that constraint's own index as unmanaged,
+  naming the constraint it backs beside the index's identity, and exits
+  zero
 
 #### Scenario: An unmanaged table's own objects are not listed under it
 - **WHEN** the database has a table in a declared schema that no

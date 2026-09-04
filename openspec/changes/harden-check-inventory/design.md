@@ -3,6 +3,40 @@
 Open decisions for the owner-delegated lead, each as background →
 options → recommendation. Nothing here is settled by the implementer.
 
+## Rulings (lead, `.blackbox/707/` R1 and `.blackbox/726/` R1)
+
+The proposal is approved and every question below is settled. The
+recommendations stand as written, with one addition and one consequence:
+
+- **Q4** is (a) **plus** a reporting clause: an index this inventory
+  reports while it backs a constraint SHALL say so, from the catalog's
+  own fact — `unmanaged index (backs constraint <name>; not covered by
+  any declaration): <identity>`. A line that named only the index would
+  send a reader looking for an index nobody wrote.
+- A fourth kind — `unmanaged constraint` for a database-only primary
+  key, unique, foreign key or exclusion constraint — is inside hejbro's
+  purpose but is its own change: **#859**, filed under #815. This change
+  does not touch it.
+- Q5's annotation idea (`check` applying the D36 identifier rule to say
+  *why* a name cannot be declared) stays recorded here as a candidate
+  and gets no issue.
+- The changeset is `minor`.
+
+**Consequence for the catalog read (planner, from the Q4 clause).** "The
+constraint this index backs" is `pg_constraint.conindid`, and today's
+`indexes` query does not select it. Deriving it by matching the index's
+name against the constraint names on the same table would be *nearly*
+right — Postgres gives a constraint's backing index the constraint's own
+name (M4) — but a plain index that happens to carry a name like
+`users_email_fkey` would then be annotated as backing a constraint it
+has nothing to do with. The `indexes` query therefore gains
+`constraintName` from a join on `conindid`, and the exclusion rule reads
+that field rather than comparing names: an index is excluded when the
+constraint it backs is one the declarations name (the declared primary
+key, a declared column's unique constraint). One join on a query
+`check` already issues — no new statement, no new round trip, no new
+privilege.
+
 ## What is already fixed by the code, not by a decision
 
 `check/catalog.ts` already reads the **whole** catalog inventory

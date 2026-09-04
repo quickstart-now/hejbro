@@ -46,7 +46,13 @@ level, and hejbro's own `import` output promises it is not.
   included; a schema no declaration touches stays out of scope; and an
   index that backs a constraint the declarations name (a declared primary
   key, a declared unique column) is not an unmanaged index, because the
-  declaration accounts for it under that constraint's own name.
+  declaration accounts for it under that constraint's own name. Which
+  constraint an index backs is read from the catalog's own record of it
+  (`pg_constraint.conindid`, joined into the `indexes` query `check`
+  already issues), and an index reported while backing a constraint
+  names that constraint on its line. A database-only primary key,
+  unique, foreign key or exclusion *constraint* as a reported kind of
+  its own is #859, not this change.
 - **The inventory stays existence-only and exit-code-neutral**, exactly as
   the table axis is today: nothing here reads a type, a default or an
   expression, so nothing here can report a difference that is not one, and
@@ -78,9 +84,11 @@ level, and hejbro's own `import` output promises it is not.
 ## Impact
 
 - `packages/cli/src/check/inventory.ts` (the object-level axes and their
-  boundaries), `packages/cli/src/commands/check.ts` (`inventoryLines`,
-  `EMPTY_INVENTORY`), `packages/cli/src/infer/loss-report.ts` (the
-  omitted-index and omitted-check consequence sentences).
+  boundaries), `packages/cli/src/check/catalog.ts` (the `indexes` query
+  gains the constraint an index backs), `packages/cli/src/commands/check.ts`
+  (`inventoryLines`, `EMPTY_INVENTORY`),
+  `packages/cli/src/infer/loss-report.ts` (the omitted-index and
+  omitted-check consequence sentences).
 - Tests: `packages/cli/test/check-inventory.test.ts`,
   `check-command.test.ts`, `check-live.integration.test.ts` (Docker),
   `infer-loss-report.test.ts`, and the brownfield corpus witness
@@ -88,4 +96,5 @@ level, and hejbro's own `import` output promises it is not.
   `// the column line's own check promise is not asserted -- #726`
   becomes an assertion.
 - `skills/hejbro/references/brownfield-adoption.md`;
-  `.changeset/harden-check-inventory.md`.
+  `.changeset/harden-check-inventory.md` (`minor` — `check` gains a
+  report axis it did not have, not a correction inside one it had).
