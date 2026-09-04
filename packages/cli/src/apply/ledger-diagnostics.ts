@@ -178,7 +178,7 @@ const writeRollbackSentence = (
 	return `the migration ran in the same transaction and rolled back with it, so nothing from "${rowFilename}" is applied and the ledger records nothing new.`;
 };
 
-/** Postgres's own code for a not-null violation -- the one SQLSTATE design.md D3 gives its own sentence, the #823 shape: the ledger's own row insert refused because `id` lost the identity/default `bootstrapLedger` declares. */
+/** Postgres's own code for a not-null violation -- the one SQLSTATE design.md D3 gives its own sentence, the #823 shape: the ledger's own row insert refused because a bootstrap column lost the value `bootstrapLedger` declares for it. */
 const NOT_NULL_VIOLATION = "23502";
 
 /** [design.md D3] node-postgres's own `.column` field on a constraint-violation error -- `null` when absent, never parsed from the message text. No equivalent exists in `execute.ts` to import; this reader is local to this module, not a duplicate of anything shared. */
@@ -193,17 +193,32 @@ const driverErrorColumn = (error: unknown): string | null => {
 	return null;
 };
 
+/** [task 2.3, 836/B4] `bootstrapLedger`'s two columns whose value is not a fixed default -- hejbro itself supplies one on every row it writes, so a null there is never a shape claim about the ledger, only a rejected row. */
+const NO_DEFAULT_ROW_COLUMNS = new Set(["filename", "origin"]);
+
 /**
- * [design.md D3] `23502`'s own sentence -- named from the driver's own
- * `.column` field when the server supplied one, never parsed from the
- * message text; a generic subject when it did not.
+ * [design.md D3, task 2.3 (836/B4)] `23502`'s own sentence -- named from
+ * the driver's own `.column` field when the server supplied one, never
+ * parsed from the message text. Each named branch states only what
+ * `bootstrapLedger` actually declares for that column, so none of them
+ * claims identity for a column that has none (the B4 defect this task
+ * fixes); a generic subject, unchanged, when the server named none.
  */
 const identityLostSentence = (cause: unknown): string => {
 	const column = driverErrorColumn(cause);
 	if (column === null) {
 		return "A column in the ledger has no identity and no default; the ledger hejbro bootstraps declares its `id` column `bigint generated always as identity`, so hejbro never supplies that value itself.";
 	}
-	return `The ledger's "${column}" column has no identity and no default; the ledger hejbro bootstraps declares it \`bigint generated always as identity\`, so hejbro never supplies that value itself.`;
+	if (column === "id") {
+		return `The ledger's "id" column has no identity and no default; the ledger hejbro bootstraps declares it \`bigint generated always as identity\`, so hejbro never supplies that value itself.`;
+	}
+	if (column === "applied_at") {
+		return `The ledger's "applied_at" column has no default; the ledger hejbro bootstraps declares it \`timestamptz not null default now()\`, so hejbro never supplies that value itself.`;
+	}
+	if (NO_DEFAULT_ROW_COLUMNS.has(column)) {
+		return `The ledger's "${column}" column has no default; hejbro supplies that value on every row it writes, so a null there means the row hejbro sent was rejected, not that the ledger's shape has drifted.`;
+	}
+	return `The ledger's "${column}" column has no identity and no default; that is a column the ledger's bootstrap does not declare, so hejbro cannot say what value it expects there.`;
 };
 
 /** `" <sentence>"` for `23502` (D3's one named branch), `""` for every other code -- the leading space matches where {@link throwLedgerWriteFailure} splices it in, right after the rollback sentence's own trailing period. */

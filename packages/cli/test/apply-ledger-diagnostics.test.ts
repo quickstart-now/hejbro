@@ -81,24 +81,25 @@ const permissionDeniedDatabase = () =>
 		code: "42501",
 	});
 
-const notNullViolation = () =>
-	Object.assign(
-		new Error(
-			'null value in column "id" of relation "migration_ledger" violates not-null constraint',
-		),
-		{
-			code: "23502",
-			detail: "Failing row contains (null, 0001_init.sql, applied, now()).",
-			column: "id",
-		},
-	);
-
 const notNullViolationNoColumn = () =>
 	Object.assign(
 		new Error(
 			'null value in column "id" of relation "migration_ledger" violates not-null constraint',
 		),
 		{ code: "23502" },
+	);
+
+/** [task 2.3, 836/B4] The same `23502` shape, naming whichever column the driver reports -- the identity/default sentence must name what the bootstrap actually declares for *that* column, never a blanket identity claim. */
+const notNullViolationOn = (column: string) =>
+	Object.assign(
+		new Error(
+			`null value in column "${column}" of relation "migration_ledger" violates not-null constraint`,
+		),
+		{
+			code: "23502",
+			detail: "Failing row contains (null, 0001_init.sql, applied, now()).",
+			column,
+		},
 	);
 
 const uniqueViolation = () =>
@@ -278,8 +279,58 @@ describe("a ledger write the database refuses names the ledger and what was bein
 		},
 	);
 
-	it("row site, 23502 with .column -> the identity/default sentence, naming the column", async () => {
-		const error = notNullViolation();
+	// [task 2.3, 836/B4] The 23502 hint names what the bootstrap actually
+	// declares for the column the driver reports -- claiming identity for
+	// a column that has none (B4's own defect) is what every non-`id` row
+	// below must never do. `hasIdentityClaim` is the one predicate the
+	// whole table shares: true only for the one column the bootstrap truly
+	// gives `generated always as identity`.
+	const hasIdentityClaim = (message: string): boolean =>
+		message.includes("generated always as identity");
+
+	it.each<[string, unknown, ReadonlyArray<string>]>([
+		[
+			"id -> names id, claims identity (regression, #823's own shape)",
+			notNullViolationOn("id"),
+			['The ledger\'s "id" column has no identity and no default'],
+		],
+		[
+			"applied_at -> names its own default, no identity claim",
+			notNullViolationOn("applied_at"),
+			['The ledger\'s "applied_at" column', "default now()", "no default"],
+		],
+		[
+			"filename -> a row hejbro sent was rejected, no identity/default claim",
+			notNullViolationOn("filename"),
+			[
+				'The ledger\'s "filename" column',
+				"hejbro supplies that value",
+				"the row hejbro sent was rejected",
+			],
+		],
+		[
+			"origin -> same no-default framing as filename",
+			notNullViolationOn("origin"),
+			[
+				'The ledger\'s "origin" column',
+				"hejbro supplies that value",
+				"the row hejbro sent was rejected",
+			],
+		],
+		[
+			"a tolerated extra column -> a column the bootstrap does not declare, no identity/default claim",
+			notNullViolationOn("extra_note"),
+			[
+				'The ledger\'s "extra_note" column',
+				"the ledger's bootstrap does not declare",
+			],
+		],
+		[
+			"no .column field -> today's generic id sentence, unchanged",
+			notNullViolationNoColumn(),
+			["has no identity and no default", "generated always as identity"],
+		],
+	])("row site, 23502, %s", async (_label, error, mustInclude) => {
 		const failure = taggedFailure("write", "row", error);
 		const { driver } = makeScriptedDriver([
 			{ rows: [{ currentUser: "postgres" }] },
@@ -293,38 +344,39 @@ describe("a ledger write the database refuses names the ledger and what was bein
 			}
 			return (
 				thrown.code === "apply-ledger-unwritable" &&
-				thrown.message.includes(
-					'The ledger\'s "id" column has no identity and no default',
-				) &&
-				thrown.message.includes("generated always as identity") &&
+				mustInclude.every((fragment) => thrown.message.includes(fragment)) &&
 				thrown.message.includes('the row recording "0001_init.sql"') &&
 				causeOf(thrown) === error
 			);
 		});
 	});
 
-	it("row site, 23502 with no .column field -> the generic identity/default sentence, no column name claimed", async () => {
-		const error = notNullViolationNoColumn();
-		const failure = taggedFailure("write", "row", error);
-		const { driver } = makeScriptedDriver([
-			{ rows: [{ currentUser: "postgres" }] },
-		]);
+	it.each<[string, unknown]>([
+		["applied_at", notNullViolationOn("applied_at")],
+		["filename", notNullViolationOn("filename")],
+		["origin", notNullViolationOn("origin")],
+		["a tolerated extra column", notNullViolationOn("extra_note")],
+	])(
+		"row site, 23502 on %s -> never claims identity for a column that has none (836/B4)",
+		async (_label, error) => {
+			const failure = taggedFailure("write", "row", error);
+			const { driver } = makeScriptedDriver([
+				{ rows: [{ currentUser: "postgres" }] },
+			]);
 
-		await expect(
-			throwLedgerWriteFailure(driver, failure, commandName, "0001_init.sql"),
-		).rejects.toSatisfy((thrown: unknown) => {
-			if (!(thrown instanceof HejbroError)) {
-				return false;
-			}
-			return (
-				thrown.code === "apply-ledger-unwritable" &&
-				thrown.message.includes("has no identity and no default") &&
-				thrown.message.includes("generated always as identity") &&
-				!thrown.message.includes('The ledger\'s "id" column') &&
-				causeOf(thrown) === error
-			);
-		});
-	});
+			await expect(
+				throwLedgerWriteFailure(driver, failure, commandName, "0001_init.sql"),
+			).rejects.toSatisfy((thrown: unknown) => {
+				if (!(thrown instanceof HejbroError)) {
+					return false;
+				}
+				return (
+					thrown.code === "apply-ledger-unwritable" &&
+					!hasIdentityClaim(thrown.message)
+				);
+			});
+		},
+	);
 
 	it("clear site, 42501 -> apply-ledger-unwritable naming the clearing, drops-rolled-back sentence", async () => {
 		const error = permissionDeniedTable();
