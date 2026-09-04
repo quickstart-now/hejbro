@@ -64,7 +64,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#755](755/) | check cannot compare CHECK constraints on Nile because Nile has no EXPLAIN | closed | #780 | 0 | 5 (2 pending) |
 | ↳ [#785](785/) | blackbox v2: per-issue folders under .blackbox, hooks + CI-first gate, shipped by the dd-blackbox script | closed | #786 | 5 | 2 (0 pending) |
 | ↳ [#787](787/) | blackbox: migrate the lead ruling ledger R1–R90 into issue folders (first ratification queue of 0.2.1) | closed | #789 | 0 | 0 (0 pending) |
-| ↳ [#788](788/) | blackbox: migrate the 78 legacy single-file entries into issue folders | open |  | 0 | 0 (0 pending) |
+| ↳ [#788](788/) | blackbox: migrate the 78 legacy single-file entries into issue folders | closed | #790 | 0 | 0 (0 pending) |
 | [#415](415/) | add-set-operations: union/intersect/except | closed | #418 | 1 | 0 (0 pending) |
 | [#416](416/) | add-window-and-aggregates: over(), aggregate functions, group by | closed | #462 | 1 | 0 (0 pending) |
 | [#417](417/) | add-ctes: with, named row sources, recursive | closed | #492 | 0 | 0 (0 pending) |
