@@ -224,9 +224,15 @@ export const loadConfig = async (
 			);
 		}
 		const rel = relLabel(cwd, configPath);
+		// #846 review B3: the --config value here is the one the user
+		// typed, verbatim -- D57's "never an absolute path" rule protects
+		// a path hejbro discovered on the machine, not a value handed
+		// back to the person who supplied it. Everywhere else in this
+		// sentence (the label above) stays cwd-relative like every other
+		// report line.
 		return throwHejbroError(
 			"config-not-found",
-			`no configuration file was found at "${rel}". Next: run \`hejbro init --config ${rel}\` to scaffold it there, with a migrations directory and an empty snapshot file, then add a declaration file and rerun \`hejbro generate\`.`,
+			`no configuration file was found at "${rel}". Next: run \`hejbro init --config ${configFlag}\` to scaffold it there, with a migrations directory and an empty snapshot file, then add a declaration file and rerun \`hejbro generate\`.`,
 		);
 	}
 	if (outcome.kind === "present" && outcome.actualKind === "directory") {

@@ -231,7 +231,7 @@ running. Files this group owns: `packages/cli/src/identity.ts`,
       identifiers only. Files: `identity.ts`, its test,
       `generate-command.test.ts`.
 
-- [ ] 2.2 (~6m) `[design]` The `Next:` of `config-not-found` echoes the
+- [x] 2.2 (~6m) `[design]` The `Next:` of `config-not-found` echoes the
       `--config` value as the user typed it (review B3; the ruling: a
       path the user supplied is never re-spelled — relativization is
       for paths hejbro discovered). Review B2 moved the other way: the

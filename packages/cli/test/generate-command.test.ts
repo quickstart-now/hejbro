@@ -1812,6 +1812,28 @@ describe("hejbro generate / --config names a file (#846 D5)", () => {
 		expect(result.stderr).toContain("./");
 		expect(result.stderr).not.toContain(cwd);
 	});
+
+	// #846 review B3: the header and the "found at" body clause stay
+	// cwd-relative (the report rule), but Next: echoes the absolute
+	// --config value verbatim -- the one documented exception to D57.
+	// An absolute path unrelated to `cwd` (never a path under `cwd`,
+	// whose own string form can differ from the spawned process's
+	// resolved `process.cwd()` on macOS's /tmp -> /private/tmp symlink)
+	// keeps this test's own assertions independent of that resolution.
+	it("echoes an absolute --config value verbatim in Next:, while the header and body stay relative", async () => {
+		const absolutePath = "/nonexistent-hejbro-review-b3/hejbro.config.ts";
+		const result = await runCli(cwd, ["generate", "--config", absolutePath]);
+
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain("error[config-not-found]");
+		const nextIndex = result.stderr.indexOf("Next:");
+		const body = result.stderr.slice(0, nextIndex);
+		const next = result.stderr.slice(nextIndex);
+		// The body's own label is relative (a "../" chain out of cwd),
+		// never the exact absolute value quoted on its own.
+		expect(body).not.toContain(`"${absolutePath}"`);
+		expect(next).toContain(`--config ${absolutePath}`);
+	});
 });
 
 // #846 review B1: identityFromMessage's own accidental quoted-pair match

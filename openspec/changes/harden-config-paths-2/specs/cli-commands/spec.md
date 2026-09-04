@@ -12,10 +12,13 @@ configured path and — for a link — the target it points at, with a
 inspected or listed — a directory on the way that refuses the look-up,
 a file on the way, a link on the way whose target does not exist, a
 directory the process may not read — SHALL stop the run with the error
-code `migrations-dir-unreadable`, naming the configured path and the
-operating system's own code, and its `Next:` SHALL name the node that
-blocks: the deepest ancestor the run could still inspect for a
-permission, the file or link itself otherwise. A symbolic link to a
+code `migrations-dir-unreadable`, naming the configured path, and its
+`Next:` SHALL name the node that blocks: the deepest ancestor the run
+could still inspect for a permission, the file or link itself
+otherwise. The operating system's own code is named where the operating
+system refused — a permission, a loop, a listing that failed; a file or
+a dangling link on the way is a judgement of kind, named by the node
+and what it is, with no code to report. A symbolic link to a
 directory is that directory. Nothing at the configured path is not a
 fault: the directory is read as holding no migrations, exactly as
 before, and the commands that write into it create it. Neither refusal
@@ -43,9 +46,10 @@ an absolute path.
   `nx` exists with no permission to look inside it, or `nx` is a regular
   file, and `hejbro generate` runs
 - **THEN** it fails with the error code `migrations-dir-unreadable`
-  naming the configured path and the operating system's own code, and
-  its `Next:` line names `nx` — the same node `hejbro init` names for
-  the same tree
+  naming the configured path — with the operating system's own code
+  where `nx` refused the look-up, and as the file it is where `nx` is a
+  file — and its `Next:` line names `nx` — the same node `hejbro init`
+  names for the same tree
 
 #### Scenario: An absent migrations directory is still no migrations
 - **WHEN** nothing sits at the configured `migrationsDir` and `hejbro
@@ -69,15 +73,24 @@ resolved path before loading it, by the same judgement `init` applies
 to the same path. Nothing there SHALL fail with the error code
 `config-not-found`, naming the path that was looked up and, in its
 `Next:`, `hejbro init` with the same `--config` value when the flag was
-given — never a default the user did not ask for. A directory there, or
+given — never a default the user did not ask for. The value that
+`Next:` echoes is the one the user typed, as typed: a path the user
+supplied is never re-spelled, whether it was absolute or relative and
+wherever the command was run from. That echo is the user's own input
+reflected back, not a path hejbro discovered — the one place an
+absolute path may appear in a report — and it appears in the `Next:`
+command only; the header and every label still name the path relative
+to the working directory. A directory there, or
 a symbolic link whose target does not exist, SHALL fail with the error
 code `config-not-a-file`, naming the path — and the link's target —
 once, and a `Next:` naming the node to move and that `--config` can
 name another file. A path that cannot be inspected — a permission on the
 way, a file on the way, a link on the way whose target does not exist —
-SHALL fail with the error code `config-unreadable`, naming the path and
-the operating system's own code, and its `Next:` SHALL name the node
-that blocks, decided as `init` decides it. `init` SHALL refuse the same
+SHALL fail with the error code `config-unreadable`, naming the path —
+and the operating system's own code where the operating system refused
+the look-up; a file or a dangling link on the way is named by the node
+and what it is — and its `Next:` SHALL name the node that blocks,
+decided as `init` decides it. `init` SHALL refuse the same
 trees with the same sentences under its own code, and SHALL create the
 configuration only where the judgement found nothing at all.
 
@@ -453,12 +466,12 @@ permissions to check. The kind is decided first: a directory is refused
 as a directory even when it could not have been read, and only a
 regular file whose read fails is refused as unreadable. A snapshot
 whose path cannot even be inspected SHALL be refused as unreadable
-too, naming the operating system's own code, and its `Next:` SHALL
-name the node that blocks the look-up, decided exactly as `init`
-decides it: for a permission, the deepest ancestor the run could still
-inspect; for a file or a dangling link on the way, that file or link
-by its own path — never the configured path as a thing to check
-permissions on. Neither SHALL surface as a raw read
+too, and its `Next:` SHALL name the node that blocks the look-up,
+decided exactly as `init` decides it: for a permission, the deepest
+ancestor the run could still inspect, with the operating system's own
+code; for a file or a dangling link on the way, that file or link by
+its own path and what it is, with no code — never the configured path
+as a thing to check permissions on. Neither SHALL surface as a raw read
 failure, and neither message SHALL carry an absolute path. The commands that consume
 the snapshot resolve the same path `init` scaffolds, so a directory
 there is a project `init` would refuse to create; the read side SHALL

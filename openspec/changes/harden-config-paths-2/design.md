@@ -142,9 +142,14 @@ implementation takes and the lead's rulings on the `[design]` details
   `migrationsDir: "f/mig"` (`"f" was expected to be a directory to hold
   the configuration file, but a file is there. Next: move or remove the
   existing file at "f", then rerun \`hejbro init\`.`), which is the
-  parity the scenario names — node and remedy, not the sentence. A
-  `--config` value spelled absolute is echoed relative to the working
-  directory in `config-not-found`'s `Next:` (D57).
+  parity the scenario names — node and remedy, not the sentence. The
+  `--config` value `config-not-found`'s `Next:` echoes is the one the
+  user typed, as typed — D57's relativization is for paths hejbro
+  discovered, never for a path the user supplied; the header and the
+  message label stay relative to the working directory as every report
+  line does. An ancestor that is a file or a dangling link carries no
+  operating-system code on any side: that is a judgement of kind, and
+  the code belongs only to a look-up the operating system refused.
 - **Shape, init phrasing.** The configuration artifact's messages open
   with `"<path>" is the configuration path` instead of `"<path>" was
   expected to be a file for hejbro.config.ts`; ancestor messages say `to

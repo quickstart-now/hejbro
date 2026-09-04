@@ -107,7 +107,12 @@ describe("loadConfig / resolveConfigPath — --config names a file (#846 D5)", (
 		}
 	});
 
-	it("names an absolute --config path relative to cwd, never as an absolute path, when absent", async () => {
+	// #846 review B3: D57's "never an absolute path" rule protects a path
+	// hejbro discovered on the machine, not a value the user typed back
+	// to them -- the header and the "found at" body clause stay
+	// cwd-relative, but Next: echoes the --config value verbatim (the
+	// one documented exception).
+	it("names an absolute --config path relative to cwd in the header and body, but echoes it verbatim in Next:", async () => {
 		const outsideDir = await mkdtemp(join(tmpdir(), "hejbro-loader-outside-"));
 		try {
 			const absolutePath = join(outsideDir, "h.ts");
@@ -117,8 +122,12 @@ describe("loadConfig / resolveConfigPath — --config names a file (#846 D5)", (
 			} catch (error) {
 				expect(error).toMatchObject({ code: "config-not-found" });
 				const message = (error as { message: string }).message;
-				expect(message).not.toContain(cwd);
-				expect(message).not.toContain(outsideDir);
+				const nextIndex = message.indexOf("Next:");
+				const body = message.slice(0, nextIndex);
+				const next = message.slice(nextIndex);
+				expect(body).not.toContain(cwd);
+				expect(body).not.toContain(outsideDir);
+				expect(next).toContain(`--config ${absolutePath}`);
 			}
 		} finally {
 			await rm(outsideDir, { recursive: true, force: true });
@@ -219,6 +228,74 @@ describe("loadConfig / resolveConfigPath — --config names a file (#846 D5)", (
 			throw new Error("expected loadConfig to throw");
 		} catch (error) {
 			expect(error).toMatchObject({ code: "config-load-failed" });
+		}
+	});
+});
+
+// #846 review B3: the --config value config-not-found's Next: echoes is
+// the one the user typed, as typed -- relativization (D57) is for a
+// path hejbro discovered on the machine, never for a path the user
+// supplied back to them.
+describe("loadConfig / config-not-found echoes --config as typed in Next: (#846 review B3)", () => {
+	it.each([
+		{
+			label: "a relative value (control)",
+			value: "sub/hejbro.config.ts",
+			expected: "--config sub/hejbro.config.ts",
+		},
+		{
+			label: "a leading ./ is kept",
+			value: "./sub/hejbro.config.ts",
+			expected: "--config ./sub/hejbro.config.ts",
+		},
+		{
+			label: "an escaping ../ is kept",
+			value: "../shared/hejbro.config.ts",
+			expected: "--config ../shared/hejbro.config.ts",
+		},
+	])("echoes $label", async ({ value, expected }) => {
+		const cwd = await mkdtemp(join(tmpdir(), "hejbro-loader-echo-"));
+		try {
+			await loadConfig(cwd, value);
+			throw new Error("expected loadConfig to throw");
+		} catch (error) {
+			expect(error).toMatchObject({ code: "config-not-found" });
+			const message = (error as { message: string }).message;
+			expect(message).toContain(`hejbro init ${expected}`);
+		} finally {
+			await rm(cwd, { recursive: true, force: true });
+		}
+	});
+
+	it("echoes an absolute --config value verbatim, from a shallow working directory", async () => {
+		const cwd = await mkdtemp(join(tmpdir(), "hejbro-loader-echo-abs-"));
+		const absolutePath = "/abs/hejbro.config.ts";
+		try {
+			await loadConfig(cwd, absolutePath);
+			throw new Error("expected loadConfig to throw");
+		} catch (error) {
+			expect(error).toMatchObject({ code: "config-not-found" });
+			const message = (error as { message: string }).message;
+			expect(message).toContain(`hejbro init --config ${absolutePath}`);
+		} finally {
+			await rm(cwd, { recursive: true, force: true });
+		}
+	});
+
+	it("echoes an absolute --config value verbatim, from a working directory nested four levels deep", async () => {
+		const base = await mkdtemp(join(tmpdir(), "hejbro-loader-echo-deep-"));
+		const cwd = join(base, "a", "b", "c", "d");
+		const absolutePath = "/abs/hejbro.config.ts";
+		await mkdir(cwd, { recursive: true });
+		try {
+			await loadConfig(cwd, absolutePath);
+			throw new Error("expected loadConfig to throw");
+		} catch (error) {
+			expect(error).toMatchObject({ code: "config-not-found" });
+			const message = (error as { message: string }).message;
+			expect(message).toContain(`hejbro init --config ${absolutePath}`);
+		} finally {
+			await rm(base, { recursive: true, force: true });
 		}
 	});
 });
