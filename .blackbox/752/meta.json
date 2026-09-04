@@ -272,6 +272,78 @@
           "blob": "f7da6249392135bcd28e065bd5394541ea130ad6"
         }
       ]
+    },
+    {
+      "number": 799,
+      "ref": "quickstart-now/hejbro#799",
+      "title": "docs(openspec): archive harden-reset-and-verify after the d106 gate",
+      "head": "e508e9f8b39233808bce9be1043289732b7212a2",
+      "headRef": "archive-harden-reset-and-verify",
+      "base": "dev",
+      "merged": null,
+      "pinnedAt": "2026-09-04T06:53Z",
+      "refs": [
+        {
+          "path": "openspec/changes/archive/2026-09-04-harden-reset-and-verify/evaluation.md",
+          "blob": "63412a8f49817fd7e4704663b747825ac6075e83"
+        },
+        {
+          "path": "openspec/changes/archive/2026-09-04-harden-reset-and-verify/proposal.md",
+          "blob": "841c2866d0bceaa0569c3534e032d9e935c1bfbb"
+        },
+        {
+          "path": "openspec/changes/harden-reset-and-verify/proposal.md",
+          "blob": null
+        },
+        {
+          "path": "openspec/changes/archive/2026-09-04-harden-reset-and-verify/specs/cli-commands/spec.md",
+          "blob": "6906ffb92c44f9a447b4b988858985e7b7b7a247"
+        },
+        {
+          "path": "openspec/changes/harden-reset-and-verify/specs/cli-commands/spec.md",
+          "blob": null
+        },
+        {
+          "path": "openspec/changes/archive/2026-09-04-harden-reset-and-verify/specs/migration-apply/spec.md",
+          "blob": "b6f93f877bcbeb72ea82169145a1c0f347aafd04"
+        },
+        {
+          "path": "openspec/changes/harden-reset-and-verify/specs/migration-apply/spec.md",
+          "blob": null
+        },
+        {
+          "path": "openspec/changes/archive/2026-09-04-harden-reset-and-verify/specs/preset-validation/spec.md",
+          "blob": "09f663115c847dd34aaf354e2cd42213af1dd9a4"
+        },
+        {
+          "path": "openspec/changes/harden-reset-and-verify/specs/preset-validation/spec.md",
+          "blob": null
+        },
+        {
+          "path": "openspec/changes/archive/2026-09-04-harden-reset-and-verify/tasks.md",
+          "blob": "8f7ae0d24ae3c34b6796c434da8f7acf2946bbab"
+        },
+        {
+          "path": "openspec/changes/harden-reset-and-verify/tasks.md",
+          "blob": null
+        },
+        {
+          "path": "openspec/changes/harden-reset-and-verify/evaluation.md",
+          "blob": null
+        },
+        {
+          "path": "openspec/specs/cli-commands/spec.md",
+          "blob": "a3237e6a80558898357706c9f232df136aa33def"
+        },
+        {
+          "path": "openspec/specs/migration-apply/spec.md",
+          "blob": "b0064d48ebe9d38660b848fb4b060beff24705cf"
+        },
+        {
+          "path": "openspec/specs/preset-validation/spec.md",
+          "blob": "a6c0b5e14f39c8f85351727475159e2a3cedd527"
+        }
+      ]
     }
   ],
   "origin": null,
