@@ -33,16 +33,31 @@ const BOOTSTRAP_COLUMNS: Readonly<Record<string, string>> = {
 	applied_at: "timestamp with time zone",
 };
 
-/** [design.md, 783/R2] `relkind` letter to the word a diagnostic names -- any letter not listed here (there is none among Postgres's own relation kinds this probe would ever see) falls back to its own letter rather than a guess. */
+/** [design.md, 783/R2; 2.1, review repair of 51c0d7d5] `relkind` letter to the word a diagnostic names -- every relation kind PostgreSQL 17 has, so the fallback below is reached only by a letter a later Postgres version adds. */
 const RELATION_WORDS: Readonly<Record<string, string>> = {
 	r: "table",
 	p: "partitioned table",
 	v: "view",
 	m: "materialized view",
 	f: "foreign table",
+	c: "composite type",
+	i: "index",
+	// biome-ignore lint/style/useNamingConvention: Postgres's own relkind letter
+	I: "partitioned index",
+	t: "TOAST table",
 	// biome-ignore lint/style/useNamingConvention: Postgres's own relkind letter
 	S: "sequence",
 };
+
+/** [2.1, 783/R5] Relation kinds whose `(columns: …)` clause says something a user can act on -- a sequence's or an index's own catalog columns are internal machinery, not a schema. */
+const COLUMN_BEARING_WORDS = new Set([
+	"table",
+	"partitioned table",
+	"view",
+	"materialized view",
+	"foreign table",
+	"composite type",
+]);
 
 const relationWord = (relkind: string): string =>
 	RELATION_WORDS[relkind] ?? `relation (${relkind})`;
@@ -99,11 +114,30 @@ export const probeLedgerIdentity = async (
 	return { kind: "occupied", relation: relationWord(relkind), columns };
 };
 
-const columnsClause = (columns: ReadonlyArray<string>): string => {
+/** [2.1, 783/R5] `null` when `relation`'s kind carries no columns worth naming (a sequence, an index, a partitioned index, a TOAST table) -- the clause is omitted entirely, never rendered empty. `"no columns"` is reserved for a column-bearing kind that happens to have none (a zero-column table). */
+const columnsClause = (
+	relation: string,
+	columns: ReadonlyArray<string>,
+): string | null => {
+	if (!COLUMN_BEARING_WORDS.has(relation)) {
+		return null;
+	}
 	if (columns.length === 0) {
 		return "no columns";
 	}
 	return `columns: ${columns.join(", ")}`;
+};
+
+/** `" (columns: …)"`/`" (no columns)"`, or `""` when {@link columnsClause} omits the clause -- the leading space and parentheses live here, not at each call site. */
+const columnsSuffix = (
+	relation: string,
+	columns: ReadonlyArray<string>,
+): string => {
+	const clause = columnsClause(relation, columns);
+	if (clause === null) {
+		return "";
+	}
+	return ` (${clause})`;
 };
 
 /**
@@ -122,6 +156,6 @@ export const assertLedgerNotOccupied = (
 	}
 	throwHejbroError(
 		"apply-ledger-occupied",
-		`"${LEDGER_SCHEMA}"."${LEDGER_TABLE}" is held by a ${identity.relation} that is not hejbro's ledger (${columnsClause(identity.columns)}). hejbro reads, writes and clears only the ledger it created, so this database is not one hejbro has applied to. Next: move or drop that ${identity.relation} yourself (hejbro will not touch it), or point --url at the database hejbro manages, then rerun \`${commandName}\`.`,
+		`"${LEDGER_SCHEMA}"."${LEDGER_TABLE}" is held by a ${identity.relation} that is not hejbro's ledger${columnsSuffix(identity.relation, identity.columns)}. hejbro reads, writes and clears only the ledger it created, so this database is not one hejbro has applied to. Next: move or drop that ${identity.relation} yourself (hejbro will not touch it), or point --url at the database hejbro manages, then rerun \`${commandName}\`.`,
 	);
 };

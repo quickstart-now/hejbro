@@ -175,6 +175,51 @@ marks the tasks that carry them into code, not open questions.
       codes and is untouched. Files:
       `skills/hejbro/references/generate-verify-workflow.md`.
 
+## 2. Review repairs (constructor-mode review of 51c0d7d5)
+
+- [x] 2.1 (~9m) The refusal names every relation kind in words, and
+      lists columns only where they mean something. The relkind-to-word
+      map covers only `r/p/v/m/f/S`; a composite type (`c`), an index
+      (`i`), a partitioned index (`I`) and a TOAST table (`t`) can all
+      hold `"hejbro"."migration_ledger"` — constructed against a real
+      server, the first three reach the probe — and the message then
+      says `relation (c)`, a catalog letter, not a kind of object. The
+      map gains `c` composite type, `i` index, `I` partitioned index,
+      `t` TOAST table; the fallback stays for a letter a later Postgres
+      adds, and its comment states only that (the claim that no other
+      letter can reach the probe is removed — it was false). The
+      `(columns: …)` clause is rendered only for a kind that carries
+      columns (`r`, `p`, `v`, `m`, `f`, `c`); a sequence, an index, a
+      partitioned index and a TOAST table get no column clause (their
+      catalog columns are internal). Red:
+      `packages/cli/test/apply-ledger-identity.test.ts`, four rows added
+      to the input table — a composite type carrying the ledger's four
+      columns (occupied, "composite type", the four columns listed), an
+      index (occupied, "index"), a partitioned index (occupied,
+      "partitioned index"), a TOAST table (occupied, "TOAST table") —
+      each asserting the word and that no bare letter appears in
+      `relation`; plus the message assertions (wherever the occupied
+      message is pinned) that a sequence's and an index's message carry
+      no `(columns:` clause and a table's still does. Files:
+      `packages/cli/src/apply/ledger-identity.ts`,
+      `packages/cli/test/apply-ledger-identity.test.ts`.
+
+- [ ] 2.2 (~7m) An unlogged table is not the ledger. The probe reads
+      `relpersistence` beside `relkind`; the judgement admits `ledger`
+      only for `relkind = 'r'` with `relpersistence = 'p'`; an unlogged
+      table (`u`) is `occupied` with the word "unlogged table" (a
+      temporary table, `t`, cannot sit in the `hejbro` schema and is
+      not constructed). An inheritance child stays an ordinary table.
+      Red: `packages/cli/test/apply-ledger-identity.test.ts`, one row
+      added — an unlogged table carrying the exact four columns
+      (occupied, "unlogged table", the four columns listed) — and the
+      existing ledger rows gain `relpersistence: "p"` in their fake
+      catalog answer. The skill reference's identity sentence says
+      "ordinary, logged table". Files:
+      `packages/cli/src/apply/ledger-identity.ts`,
+      `packages/cli/test/apply-ledger-identity.test.ts`,
+      `skills/hejbro/references/generate-verify-workflow.md`.
+
 ## Close-out (not a group)
 
 `.changeset/harden-ledger-identity.md` (`"hejbro": patch`),

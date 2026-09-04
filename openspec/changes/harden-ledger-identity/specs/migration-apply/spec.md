@@ -15,21 +15,26 @@ database-assigned identity, the migration's full filename, the origin
 recorded below, and the timestamp the database assigned it.
 
 The ledger is recognized by identity, never by existence alone. The
-relation at that name is hejbro's ledger only when it is an ordinary
-table whose columns include the four the bootstrap creates — `id`,
-`filename`, `origin` and `applied_at` — each carrying the type the
+relation at that name is hejbro's ledger only when it is an ordinary,
+logged table whose columns include the four the bootstrap creates —
+`id`, `filename`, `origin` and `applied_at` — each carrying the type the
 bootstrap gave it; a column beyond those four does not disqualify it.
 Anything else at that name — a table missing one of them or carrying one
-under another type, a view, a materialized view, a foreign table, a
-sequence, a partitioned table — is not the ledger, and SHALL be treated
-as an object hejbro did not create: never read as a ledger, never
-written, never cleared. The judgement is one catalog read that opens no
+under another type, an unlogged table (hejbro never creates one, and a
+table whose rows vanish on a crash cannot hold the record of what was
+applied), a view, a materialized view, a foreign table, a sequence, a
+partitioned table, a composite type, an index — is not the ledger, and
+SHALL be treated as an object hejbro did not create: never read as a
+ledger, never written, never cleared. The refusal names the kind of
+object in words — every relation kind the catalog can hold at that name
+has its own — never the catalog's own one-letter code, and, for a
+relation that carries columns, the columns found. The judgement is one catalog read that opens no
 transaction and needs no privilege beyond reading the catalog, and it is
 one judgement: every command that touches the ledger — `migrate`,
 `status`, `reset` and `raise` — makes it once, before reading or writing
 anything there, and refuses with the one shared code
-`apply-ledger-occupied`, naming the kind of object found and the columns
-it carries and ending with a `Next:` line. `migrate` SHALL make it
+`apply-ledger-occupied`, naming the kind of object found and, where it
+carries columns, the columns found, ending with a `Next:` line. `migrate` SHALL make it
 before its bootstrap runs — the bootstrap's own `create table if not
 exists` skips over any relation at that name with a notice, and the run
 would otherwise write hejbro's rows into a table it never created — and
@@ -107,11 +112,15 @@ connection string carries a secret.
   without further columns — and separately when it is a table missing
   one of them or carrying one under another type, a view (even one
   whose columns match the four), a materialized view, a foreign table,
-  a sequence, or a partitioned table carrying the same four columns
+  a sequence, a partitioned table carrying the same four columns, an
+  unlogged table carrying the same four columns, a composite type, an
+  index, or a partitioned index
 - **THEN** the first is judged the ledger and every one of the others is
   judged not to be, by the one judgement `migrate`, `status`, `reset`
-  and `raise` share, and none of the others is read, written or cleared
-  as a ledger
+  and `raise` share, none of the others is read, written or cleared as
+  a ledger, and each refusal names that kind of object in words — with
+  the columns found where the relation carries columns, and no column
+  list for a sequence or an index
 
 #### Scenario: migrate refuses a relation that is not the ledger before bootstrapping
 - **WHEN** a table of another shape — even one carrying the ledger's
@@ -136,8 +145,9 @@ caller automating it can tell them apart without parsing the report.
 When the relation at the ledger's name is not the ledger — by the
 identity the first requirement of this capability states — `status`
 SHALL refuse with `apply-ledger-occupied`, the code every ledger-touching
-command uses for the same finding, naming the kind of object found and
-its columns and ending with a `Next:` line, and SHALL exit non-zero. No
+command uses for the same finding, naming the kind of object found and,
+where it carries columns, the columns found, ending with a `Next:` line,
+and SHALL exit non-zero. No
 error the database raised on that object SHALL reach the user raw: the
 finding is what sits at the name, not the failure of a read hejbro
 should never have attempted.
@@ -158,8 +168,9 @@ should never have attempted.
 - **WHEN** a view, or any other relation that is not the ledger, sits at
   `"hejbro"."migration_ledger"` and `status` runs
 - **THEN** it exits non-zero with `apply-ledger-occupied`, names the
-  kind of object it found and the columns it carries, gives a `Next:`
-  line, and prints no raw database error and no stack trace
+  kind of object it found and, where it carries columns, the columns
+  found, gives a `Next:` line, and prints no raw database error and no
+  stack trace
 
 ### Requirement: A reset destroys only what the declarations manage
 The CLI SHALL provide a command that returns a database to the state

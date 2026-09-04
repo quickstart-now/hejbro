@@ -18,15 +18,28 @@ implementation takes.
   `information_schema` (role-dependent) and never `to_regclass`
   (answers non-null for every relation kind, measured).
 - **Judgement** (`LedgerIdentity`): `{ kind: "absent" }` when no row
-  comes back; `{ kind: "ledger" }` when `relkind = 'r'` and the columns
-  include `id bigint`, `filename text`, `origin text`, `applied_at
-  timestamp with time zone` (a further column does not disqualify);
-  otherwise `{ kind: "occupied", relation: <word>, columns:
-  ReadonlyArray<string> }`. Relkind `p` (partitioned, can carry the
-  exact four columns — measured) is `occupied`: hejbro never creates
-  one. The relkind-to-word map: `r` table, `p` partitioned table, `v`
-  view, `m` materialized view, `f` foreign table, `S` sequence, any
-  other letter rendered as `relation (<letter>)`.
+  comes back; `{ kind: "ledger" }` when `relkind = 'r'`,
+  `relpersistence = 'p'` (read beside `relkind`; 783/R5) and the
+  columns include `id bigint`, `filename text`, `origin text`,
+  `applied_at timestamp with time zone` (a further column does not
+  disqualify); otherwise `{ kind: "occupied", relation: <word>,
+  columns: ReadonlyArray<string> }`. Relkind `p` (partitioned, can
+  carry the exact four columns — measured) and an unlogged table
+  (`relpersistence = 'u'`, rows vanish on a crash) are `occupied`:
+  hejbro never creates either. The word map covers every relkind the
+  catalog has: `r` table (or "unlogged table" when `relpersistence =
+  'u'`), `p` partitioned table, `v` view, `m` materialized view, `f`
+  foreign table, `S` sequence, `c` composite type, `i` index, `I`
+  partitioned index, `t` TOAST table; a letter a later Postgres adds
+  falls back to `relation (<letter>)`. `relpersistence = 'u'` prefixes
+  whatever word the kind gets with `unlogged ` — "unlogged table",
+  "unlogged partitioned table", "unlogged sequence" — so neither fact
+  is lost when the two combine. The `(columns: …)` clause is rendered
+  only for a kind that carries columns (`r`, `p`, `v`, `m`, `f`, `c`) —
+  a sequence's or an index's catalog columns are internal and say
+  nothing to a user (783/R5); a column-carrying kind found with no
+  columns (an empty table, every column dropped, an attribute-less
+  composite type) renders `(no columns)`.
 - **Callers, one probe each, before any read or write of the ledger**:
   `migrate` (before `bootstrapLedger` — `create table if not exists`
   skips any relation at the name with a notice, measured, so the insert
@@ -49,7 +62,7 @@ implementation takes.
 - **Message**:
 
   ```
-  "hejbro"."migration_ledger" is held by a <word> that is not hejbro's ledger (columns: <a, b, c>|no columns). hejbro reads, writes and clears only the ledger it created, so this database is not one hejbro has applied to. Next: move or drop that <word> yourself (hejbro will not touch it), or point --url at the database hejbro manages, then rerun `hejbro <command>`.
+  "hejbro"."migration_ledger" is held by a <word> that is not hejbro's ledger[ (columns: <a, b, c>|no columns)]. hejbro reads, writes and clears only the ledger it created, so this database is not one hejbro has applied to. Next: move or drop that <word> yourself (hejbro will not touch it), or point --url at the database hejbro manages, then rerun `hejbro <command>`.
   ```
 
 - **Where `reset` refuses**: before the confirmation check, right after
