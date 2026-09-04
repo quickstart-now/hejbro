@@ -413,3 +413,12 @@ _owner · 2026-09-04T08:25Z · raw ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#47_
 
 Order after the release, as read by the lead: (1) the avatar polish tracked as #805, (2) the oldest open issues (tracker page 3, sorted newest first) — taken up under this queue, each in its own work item.
 
+<a id="d9"></a>
+## D9 — After the release, process the #412 queue
+
+_owner · 2026-09-04T08:48Z · raw ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#54_
+
+"After the release, work through #412."
+
+Read with D8 (avatar first, then the oldest issues): after 0.2.0-pre.1 ships, #805 (avatar badge) closes, then the #412 queue is processed in the order R1 already fixed — bugs, then correctness gaps, then observers and tooling, then decisions, then new capabilities — two to four bugs per change and PR (R2).
+

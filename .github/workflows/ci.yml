@@ -2,7 +2,13 @@ name: ci
 on:
   push:
     branches: [dev, main]
+  # PR runs only for PRs into dev (feature PRs, the Version Packages PR).
+  # A PR into main is only ever dev -> main, whose head IS dev: the push
+  # run on dev already tested that exact SHA, and the required checks
+  # match by name on the SHA, so a second run per event only doubled the
+  # queue (owner, 2026-09-04, on the 0.2.0-pre.1 release PR).
   pull_request:
+    branches: [dev]
   # #180 added this trigger so release-version.yml could
   # `gh workflow run ci.yml --ref changeset-release/dev` after pushing
   # the "Version Packages" PR's branch, on the theory that a GITHUB_TOKEN

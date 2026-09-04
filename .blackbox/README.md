@@ -45,7 +45,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | [#374](374/) | adversarial spec-only review stage in the opsx cycle | closed | #539 | 1 | 0 (0 pending) |
 | [#377](377/) | snapshot format stability policy for 1.0 | closed | #383 | 1 | 0 (0 pending) |
 | [#378](378/) | defect-leakage metric over escaped defects | closed | #384 | 1 | 0 (0 pending) |
-| [#412](412/) | 0.2.x: post-release commitments | open | #715 | 8 | 26 (0 pending) |
+| [#412](412/) | 0.2.x: post-release commitments | open | #715 | 9 | 26 (0 pending) |
 | ↳ [#528](528/) | driver-conformance kit mis-observes transaction-wrapping session-state:false drivers | closed | #737 #760 | 0 | 6 (0 pending) |
 | ↳ [#531](531/) | pg checkout reads its own setupSession; the spec's late-binding scenario fails for spread decorators | closed | #737 | 0 | 3 (0 pending) |
 | ↳ [#533](533/) | cli restore-command test flakes on first heavy parallel run after install | open | #773 | 0 | 1 (0 pending) |
@@ -70,6 +70,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#801](801/) | make the README metric-block stamp merge-safe instead of freezing dev merges | closed | #802 | 0 | 0 (0 pending) |
 | ↳ [#804](804/) | blackbox CI: release PRs run only the release conditions, bot PRs skip the job | closed | #806 | 1 | 0 (0 pending) |
 | ↳ [#805](805/) | bot and org avatars: no white badge ring around a square photo | open | #806 | 1 | 0 (0 pending) |
+| ↳ [#807](807/) | ci: a dev → main PR runs every check twice (push + pull_request on the same sha) | open |  | 1 | 1 (0 pending) |
 | [#415](415/) | add-set-operations: union/intersect/except | closed | #418 | 1 | 0 (0 pending) |
 | [#416](416/) | add-window-and-aggregates: over(), aggregate functions, group by | closed | #462 | 1 | 0 (0 pending) |
 | [#417](417/) | add-ctes: with, named row sources, recursive | closed | #492 | 0 | 0 (0 pending) |
@@ -88,7 +89,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 
 ## Totals
 
-Owner decisions 66 · rulings 97 (interpretation 57, extension 38, stop 2) · pending extensions 0 · rejected 2
+Owner decisions 68 · rulings 98 (interpretation 58, extension 38, stop 2) · pending extensions 0 · rejected 2
 
 ## Conventions
 

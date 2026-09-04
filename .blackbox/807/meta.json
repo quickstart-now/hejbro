@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#807",
+  "title": "ci: a dev → main PR runs every check twice (push + pull_request on the same sha)",
+  "parent": "quickstart-now/hejbro#412",
+  "status": "open",
+  "opened": "2026-09-04",
+  "closed": null,
+  "decisions": [
+    {
+      "id": "D1",
+      "by": "owner",
+      "at": "2026-09-04T08:48Z",
+      "title": "One commit is checked once: the release PR must not run CI twice",
+      "raw": [
+        "ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#61"
+      ]
+    },
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "D1"
+      ],
+      "at": "2026-09-04T08:48Z",
+      "title": "PR runs are limited to PRs into dev; a dev → main PR takes its checks from the push run",
+      "ratified": null
+    }
+  ],
+  "work": [],
+  "prs": [],
+  "origin": null,
+  "followUps": []
+}
