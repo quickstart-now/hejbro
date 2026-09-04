@@ -34,11 +34,11 @@
       "number": 851,
       "ref": "quickstart-now/hejbro#851",
       "title": "fix(cli): compare every table-bound expression through the server's rendering (#778, #779, #781)",
-      "head": "c4a257d73fcbaba2c1b160d13cfcd9ccb68fd88a",
+      "head": "a4f92fd352cfbda8655eb7314dca11ba9908282b",
       "headRef": "fix-check-expressions",
       "base": "dev",
       "merged": null,
-      "pinnedAt": "2026-09-04T20:48Z",
+      "pinnedAt": "2026-09-04T21:12Z",
       "refs": [
         {
           "path": ".changeset/harden-check-expressions.md",
@@ -46,7 +46,7 @@
         },
         {
           "path": "README.md",
-          "blob": "3e7eb7be00574ff92c8c2941706e250aedfc9d2a"
+          "blob": "b3b8a44b023aba5348ab44000a94c7af331110c3"
         },
         {
           "path": "openspec/changes/harden-check-expressions/design.md",
@@ -66,7 +66,7 @@
         },
         {
           "path": "openspec/task-times.csv",
-          "blob": "70f8f83e82e4fb213a7b7189fd93129cbf24748c"
+          "blob": "3a98cca3f60368b945dc4713682599ed7a253b22"
         },
         {
           "path": "packages/cli/src/check/catalog.ts",
