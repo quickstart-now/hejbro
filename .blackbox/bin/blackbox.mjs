@@ -870,6 +870,17 @@ const checkPr = ({ root, repo, number, release, head, readerOverride }) => {
 	const reader = readerOverride ?? commitReader(root, repo, head ?? pr.head);
 	const state = loadState(reader);
 	const problems = validateState(state, reader, repo);
+	// A release PR carries every merged PR's work, pinned on those PRs
+	// already; it is not a work item, so only the release conditions apply.
+	if (releaseMode) {
+		problems.push(...validateRelease(state, repo));
+		return {
+			problems,
+			notes: [
+				`PR #${number} (${pr.headRef} → ${pr.base}) at ${reader.label} · release mode: work-item gate skipped, release conditions checked`,
+			],
+		};
+	}
 	const holders = state.folders.filter(
 		(folder) =>
 			folder.meta.prs.some((entry) => entry.number === number) ||
@@ -882,13 +893,10 @@ const checkPr = ({ root, repo, number, release, head, readerOverride }) => {
 	}
 	const changed = prFiles(repo, number);
 	checkPins({ state, reader, holders, number, changed, problems });
-	if (releaseMode) {
-		problems.push(...validateRelease(state, repo));
-	}
 	return {
 		problems,
 		notes: [
-			`PR #${number} (${pr.headRef} → ${pr.base}) at ${reader.label}${iff(releaseMode, " · release mode")}`,
+			`PR #${number} (${pr.headRef} → ${pr.base}) at ${reader.label}`,
 			`folders: ${holders.map((folder) => folder.dir).join(", ") || "none"} · changed files ${changed.length}`,
 		],
 	};
@@ -1600,6 +1608,14 @@ const cmdCi = (_positional, opts) => {
 		);
 		return;
 	}
+	// Nothing to open or pin on a release PR: check the release conditions.
+	if (isReleasePr(repo, pr)) {
+		const verdict = checkPr({ root, repo, number, release: true });
+		if (!report(verdict, (text) => process.stdout.write(text))) {
+			process.exitCode = 1;
+		}
+		return;
+	}
 	const changed = localChangedFiles(root, pr.baseSha);
 	// A PR that touches an item with no folder for its linked issue gets one
 	// opened here, so the lead never has to pre-create a folder per item.
@@ -2172,6 +2188,9 @@ const snippets = (
   }
 
 CI (GitHub Actions) — run first, make every other job \`needs: blackbox\`, and mark it a required status check.
+Skip the job on bot PRs (\`if: github.event.pull_request.user.type != 'Bot'\`) and let the dependents run past a
+skip but not a failure (\`if: \${{ !cancelled() && needs.blackbox.result != 'failure' }}\`). A release PR
+(integration branch → default branch) is checked for the release conditions only.
 Bot mode: with a GitHub App (secrets BLACKBOX_APP_ID + BLACKBOX_APP_PRIVATE_KEY) CI commits the pins through the
 Git Data API — signed by GitHub, attributed to the App — and the ref update re-runs CI; with only a PAT
 (BLACKBOX_TOKEN) it pushes with git, unsigned; with neither it verifies and the lead pins locally.

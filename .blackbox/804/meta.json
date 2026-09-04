@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#804",
+  "title": "blackbox CI: release PRs run only the release conditions, bot PRs skip the job",
+  "parent": "quickstart-now/hejbro#412",
+  "status": "closed",
+  "opened": "2026-09-04",
+  "closed": "2026-09-04",
+  "decisions": [
+    {
+      "id": "D1",
+      "by": "owner",
+      "at": "2026-09-04T08:25Z",
+      "title": "Release PRs and bot PRs are not put through the blackbox work-item gate",
+      "raw": [
+        "ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#48"
+      ]
+    }
+  ],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-04T08:25Z",
+      "title": "Re-vendored tool and workflow skip for bot PRs",
+      "pr": null,
+      "decisions": []
+    }
+  ],
+  "prs": [
+    {
+      "number": 806,
+      "ref": "quickstart-now/hejbro#806",
+      "title": "ci(blackbox): release check only on release prs, skip the job on bot prs",
+      "head": "37a8eab64ce4f88c0657a8180de4af5134803568",
+      "headRef": "fix-blackbox-release-gate",
+      "base": "dev",
+      "merged": null,
+      "pinnedAt": "2026-09-04T08:26Z",
+      "refs": [
+        {
+          "path": ".github/workflows/ci.yml",
+          "blob": "14f479819d5c77334282c4b00af7e84124c84f23"
+        }
+      ]
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}
