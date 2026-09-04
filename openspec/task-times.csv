@@ -861,3 +861,5 @@ date,change-id,task-id,group,est_min,actual_min,waited_user_min,notes
 2026-09-05,harden-check-expressions,1.6,1,9,45,0,three walks wired; boundary line names four surfaces
 2026-09-05,harden-check-expressions,1.7,1,9,75,0,docker witness found a real bug (pg_get_indexdef needs int not bigint); qty type fixed to force the text-mode cast case
 2026-09-05,harden-check-expressions,1.8,1,6,25,0,brownfield + nile-preset docs updated; line-wrap broke a skill test string match once, fixed
+2026-09-05,harden-check-expressions,1.9,1,10,70,0,review round 1 R3: index compared as ordered key list; declaredSql closures replace JsonValue for plain-key rendering; old expressions-based attempt discarded and redone
+2026-09-05,harden-check-expressions,1.10,1,9,55,0,review B1/B2: hasExpressionSurface filter removed; docker witness round-trips bare/paren/collate keys live and catches db-only expression/predicate in both directions; brownfield doc updated

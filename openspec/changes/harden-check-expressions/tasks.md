@@ -113,6 +113,55 @@ scenarios of `openspec show harden-check-expressions --diff` hold.
   real partial and expression indexes and must stay green. Green: nothing
   beyond 1.1–1.6 unless the witness finds a gap.
   Files: the integration test.
+- [x] 1.9 [design] ~10m — Red: `packages/cli/test/check-catalog.test.ts`
+  "an index's keys are read as an ordered list": the `indexes` rows carry
+  `keys: [{ text, expression }]` in position order and `predicate`; the
+  pinned query text contains `pg_get_indexdef`, `indcollation` and
+  `attcollation`; a parsed row for `(lower(email), name)` yields
+  `[{ "lower(email)", true }, { "name", false }]`, and a row whose second
+  key carries a non-default collation yields `name collate "C"`. Plus
+  `packages/cli/test/check-expression.test.ts` "4.2" rewritten over
+  `compareIndexKeys(session, catalog, schema, table, index, mode)` with an
+  input table: declared key kind × catalog key kind ∈ {plain, expression,
+  `(col)`, `col collate "C"`}² at one position — every cell where either
+  side is an expression pairs through one statement (the plain side
+  rendered as its own column reference), a bare/parenthesized/collated
+  declared expression against the plain catalog key agrees when the
+  `Output` pair is equal, plain × plain issues no pair; key count 2 vs 3
+  and 3 vs 2 → one `check-object-differs` naming both counts and zero
+  `explain`; predicate on one side only, both directions → one
+  `check-object-differs`; predicate + two expression positions in one
+  index → one `explain`, six `Output` entries, one finding per differing
+  pair; text mode agree/not compared per position; index absent → `[]`.
+  Green: the `keys` shape in `catalog.ts` (`json_agg` over
+  `unnest(ix.indkey) with ordinality`, `pg_get_indexdef(…, n::int, true)`,
+  collation suffix from `pg_collation`/`pg_attribute.attcollation`),
+  `compareIndexKeys` replacing `compareIndexExpressions` (count → predicate
+  presence → pairs at positions where either side is an expression), and
+  the `IndexRow` fixture literals updated (`keys: []`).
+  Files: `packages/cli/src/check/catalog.ts`,
+  `packages/cli/src/check/expression.ts`, the two tests and every
+  `IndexRow` literal under `packages/cli/test/`.
+- [x] 1.10 ~9m — Red: `packages/cli/test/check-command.test.ts` "every
+  declared index reaches the key comparison" with an input table over
+  `compareCheckAgainstCatalog`: a declared plain index against a catalog
+  index on `lower(a)` → one `check-object-differs`; a declared total index
+  against a catalog partial one → one `check-object-differs`; a plain
+  index matching a plain catalog index → no statement, no finding; the
+  1.6 fixtures unchanged in outcome. Plus `check-live.integration.test.ts`
+  "expression surfaces live witness" gains: a declaration with a bare
+  column reference, a parenthesized column and `(col collate "C")` as
+  index keys → `generate`, `psql` apply, `check` exits 0 with no
+  finding (the round trip); the database index recreated on `lower(a)`
+  against a plain declaration, and recreated partial against a total
+  declaration → exit 1 with one `check-object-differs` each. Green:
+  `declaredIndexExpressions` walks every declared index (the
+  `hasExpressionSurface` filter removed); the delta's "in either
+  direction" scenarios; `skills/hejbro/references/brownfield-adoption.md`
+  states the ordered-key-list rule (plain × plain positions, uniqueness
+  and method existence-only).
+  Files: `packages/cli/src/commands/check.ts`, the two tests, the skill
+  reference.
 - [x] 1.8 ~6m — Red: none runnable (documentation); the definition of done
   is `openspec validate harden-check-expressions --strict` green and
   `pnpm check:crap`/`pnpm check:tasktime` clean. Green:

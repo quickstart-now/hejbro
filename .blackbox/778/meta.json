@@ -51,6 +51,13 @@
       "title": "check compares index predicates, expression columns and generated columns through the server's rendering",
       "pr": null,
       "decisions": []
+    },
+    {
+      "id": "W2",
+      "at": "2026-09-04T16:45Z",
+      "title": "review round 1: index compared as an ordered key list",
+      "pr": null,
+      "decisions": []
     }
   ],
   "prs": [],
