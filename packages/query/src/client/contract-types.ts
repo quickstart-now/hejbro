@@ -19,6 +19,16 @@ export type ContractColumnMeta = {
 	readonly notNullElements: boolean;
 };
 
+/**
+ * One column's vendored facts in the snapshot's physical order (#740/D4) —
+ * {@link ContractColumnMeta} plus the TS key a JavaScript object's own
+ * property could carry (an integer-like name, `__proto__`, `constructor`)
+ * but never in a caller-visible, order-independent way. See
+ * `contract/tables.ts`'s own `ContractColumnEntry` (the emitting side of
+ * this same shape).
+ */
+export type ContractColumnEntry = ContractColumnMeta & { readonly key: string };
+
 /** A vendored foreign key, target schema/name already split out — see `contract/tables.ts`'s own `ContractForeignKeyMeta` (the emitting side of this same shape). */
 export type ContractForeignKeyMeta = {
 	readonly name: string;
@@ -35,11 +45,21 @@ export type ContractForeignKeyMeta = {
  * a managed one, matching the emitting side's own convention — no code
  * in this package reads it today; it is carried for the reader of the
  * generated file and for tooling built on it.
+ *
+ * `columns` (#740/D4) is a union: the physical-order list every contract
+ * `hejbro vendor`/`hejbro generate --export` writes from now on, or the
+ * pre-#740 object-keyed map a contract vendored before the list existed
+ * still carries — `synthesize.ts`'s own `columnEntries` reads either
+ * shape through one helper, so an older vendored contract still builds a
+ * client (its statements keep the order that map's own JS key
+ * enumeration yields, exactly as before).
  */
 export type ContractTableMeta = {
 	readonly schema: string;
 	readonly name: string;
-	readonly columns: { readonly [tsKey: string]: ContractColumnMeta };
+	readonly columns:
+		| ReadonlyArray<ContractColumnEntry>
+		| { readonly [tsKey: string]: ContractColumnMeta };
 	readonly foreignKeys: ReadonlyArray<ContractForeignKeyMeta>;
 	readonly existing?: true;
 };
