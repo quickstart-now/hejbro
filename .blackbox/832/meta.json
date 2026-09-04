@@ -1,0 +1,104 @@
+{
+  "version": 1,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#832",
+  "title": "core: category-C keywords fail as argument names but are not refused; the stated class does not match the list",
+  "parent": "quickstart-now/hejbro#815",
+  "status": "open",
+  "opened": "2026-09-04",
+  "closed": null,
+  "decisions": [],
+  "work": [],
+  "prs": [
+    {
+      "number": 833,
+      "ref": "quickstart-now/hejbro#833",
+      "title": "chore(openspec): archive harden-core-derivations after d106 round 1",
+      "head": "b98651cb30837ae1933570a082e03628bfff849e",
+      "headRef": "archive-core-derivations",
+      "base": "dev",
+      "merged": null,
+      "pinnedAt": "2026-09-04T14:49Z",
+      "refs": [
+        {
+          "path": ".changeset/harden-core-derivations.md",
+          "blob": "c8eb77d99b7d554b0f6b818c4403b4f7f447d208"
+        },
+        {
+          "path": "openspec/changes/archive/2026-09-04-harden-core-derivations/design.md",
+          "blob": "1b70b1365bbad3cb56d3589c95153a2274341282"
+        },
+        {
+          "path": "openspec/changes/harden-core-derivations/design.md",
+          "blob": null
+        },
+        {
+          "path": "openspec/changes/archive/2026-09-04-harden-core-derivations/evaluation.md",
+          "blob": "7630c82e37f8ee8ac88ed8e7370a3a21413e2ac9"
+        },
+        {
+          "path": "openspec/changes/archive/2026-09-04-harden-core-derivations/proposal.md",
+          "blob": "ecf74f15da4395c318fa04f597f75e33c3cfd0c5"
+        },
+        {
+          "path": "openspec/changes/harden-core-derivations/proposal.md",
+          "blob": null
+        },
+        {
+          "path": "openspec/changes/archive/2026-09-04-harden-core-derivations/specs/function-declaration/spec.md",
+          "blob": "e98ffd3e209a946742496394b9147392aa0b739c"
+        },
+        {
+          "path": "openspec/changes/harden-core-derivations/specs/function-declaration/spec.md",
+          "blob": null
+        },
+        {
+          "path": "openspec/changes/archive/2026-09-04-harden-core-derivations/specs/plpgsql-function-bodies/spec.md",
+          "blob": "f73bf36e692fad3333ab10f232eb1f59b6618104"
+        },
+        {
+          "path": "openspec/changes/harden-core-derivations/specs/plpgsql-function-bodies/spec.md",
+          "blob": null
+        },
+        {
+          "path": "openspec/changes/archive/2026-09-04-harden-core-derivations/specs/snapshot-diff/spec.md",
+          "blob": "2b1e8ebc329bd512749bf1a01e489ff239569b95"
+        },
+        {
+          "path": "openspec/changes/harden-core-derivations/specs/snapshot-diff/spec.md",
+          "blob": null
+        },
+        {
+          "path": "openspec/changes/archive/2026-09-04-harden-core-derivations/tasks.md",
+          "blob": "7dfb4730710e212bd9bfbd6811bb1dab89671458"
+        },
+        {
+          "path": "openspec/changes/harden-core-derivations/tasks.md",
+          "blob": null
+        },
+        {
+          "path": "openspec/specs/function-declaration/spec.md",
+          "blob": "c780577960c77fae03a1582ee2c4a5e58e775684"
+        },
+        {
+          "path": "openspec/specs/plpgsql-function-bodies/spec.md",
+          "blob": "c0480d0bec047d331df24b0d0e27d2e88c00e618"
+        },
+        {
+          "path": "openspec/specs/snapshot-diff/spec.md",
+          "blob": "476fece5c1ddedc581af9556efc4c8e0fb4e1921"
+        },
+        {
+          "path": "packages/core/test/define-function.test.ts",
+          "blob": "32a70d8153a32b9fa8357111821215dbac374bbe"
+        },
+        {
+          "path": "skills/hejbro/references/function-builder-pitfalls.md",
+          "blob": "2d75c0a1d77c0d52329b6d4587e23b6217c2db11"
+        }
+      ]
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}
