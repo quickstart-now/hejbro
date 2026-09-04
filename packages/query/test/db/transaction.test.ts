@@ -1,8 +1,8 @@
 import { schema, select, table, text, uuid } from "@hejbro/core";
 import { describe, expect, it, vi } from "vitest";
 import { db } from "../../src/db/db";
-import type { Driver, DriverSession } from "../../src/driver/contract";
 import type { Tx } from "../../src/db/transaction";
+import type { Driver, DriverSession } from "../../src/driver/contract";
 
 const app = schema("app");
 const posts = table(app, "posts", {
@@ -579,9 +579,10 @@ describe("db().transaction (task 4.6)", () => {
 			const handle = db({ posts }, driver);
 
 			await handle.transaction(async (tx) => {
-				const insertChain = tx
-					.insert(posts)
-					.values({ id: "11111111-1111-1111-1111-111111111111", status: "draft" });
+				const insertChain = tx.insert(posts).values({
+					id: "11111111-1111-1111-1111-111111111111",
+					status: "draft",
+				});
 				const withChain = tx.with((w) => {
 					const ranked = w.as("ranked", select(posts));
 					return select({ id: ranked.id, status: ranked.status }, ranked);

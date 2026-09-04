@@ -1540,9 +1540,7 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 					})
 					.catch((error: unknown) => error),
 				tx
-					.execute(
-						insert(spRows).values({ id: rowBId, label: "independent" }),
-					)
+					.execute(insert(spRows).values({ id: rowBId, label: "independent" }))
 					.catch((error: unknown) => error),
 			]);
 

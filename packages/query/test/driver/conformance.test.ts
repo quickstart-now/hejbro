@@ -690,19 +690,19 @@ describe("assertSessionStateConformance (task 1.4/1.5, #481)", () => {
 	 * either way -- these rows exist to show the rule does *not* open or
 	 * close on them).
 	 */
-	const SETTINGS_STATEMENT = {
+	const SettingsStatement = {
 		sql: "set intervalstyle to 'postgres'",
 		params: [],
 	} as const;
-	const CALLER_STATEMENT = { sql: "select 1", params: [] } as const;
-	const BEGIN_STATEMENT = { sql: "begin", params: [] } as const;
+	const CallerStatement = { sql: "select 1", params: [] } as const;
+	const BeginStatement = { sql: "begin", params: [] } as const;
 
 	type LeadingWordRow = {
 		readonly text: string;
 		readonly kind: "open" | "end" | "ordinary";
 	};
 
-	const LEADING_WORD_ROWS: ReadonlyArray<LeadingWordRow> = [
+	const LeadingWordRows: ReadonlyArray<LeadingWordRow> = [
 		{ text: "commit;", kind: "end" },
 		{ text: "commit; ;", kind: "end" },
 		{ text: "COMMIT;;", kind: "end" },
@@ -720,23 +720,21 @@ describe("assertSessionStateConformance (task 1.4/1.5, #481)", () => {
 
 	const buildRecordedOnConnection = (
 		row: LeadingWordRow,
-	): ReadonlyArray<{ readonly sql: string; readonly params: ReadonlyArray<unknown> }> => {
+	): ReadonlyArray<{
+		readonly sql: string;
+		readonly params: ReadonlyArray<unknown>;
+	}> => {
 		const rowStatement = { sql: row.text, params: [] };
 		if (row.kind === "open") {
-			return [rowStatement, SETTINGS_STATEMENT, CALLER_STATEMENT];
+			return [rowStatement, SettingsStatement, CallerStatement];
 		}
 		if (row.kind === "end") {
-			return [
-				BEGIN_STATEMENT,
-				SETTINGS_STATEMENT,
-				rowStatement,
-				CALLER_STATEMENT,
-			];
+			return [BeginStatement, SettingsStatement, rowStatement, CallerStatement];
 		}
-		return [BEGIN_STATEMENT, rowStatement, CALLER_STATEMENT];
+		return [BeginStatement, rowStatement, CallerStatement];
 	};
 
-	describe.each(LEADING_WORD_ROWS)(
+	describe.each(LeadingWordRows)(
 		"the leading word is read past a glued semicolon, and nothing past the leading statement -- $text ($kind)",
 		(row) => {
 			it(`classifies as ${row.kind}`, () => {
@@ -745,13 +743,11 @@ describe("assertSessionStateConformance (task 1.4/1.5, #481)", () => {
 						capabilitiesWithSessionState(false, true),
 						{
 							recordedOnConnection: buildRecordedOnConnection(row),
-							callerStatement: CALLER_STATEMENT,
+							callerStatement: CallerStatement,
 						},
 					);
 				if (row.kind === "end") {
-					expect(run).toThrowError(
-						/was not sent inside an open transaction/,
-					);
+					expect(run).toThrowError(/was not sent inside an open transaction/);
 					return;
 				}
 				expect(run).not.toThrow();

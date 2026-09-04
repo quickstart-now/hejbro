@@ -354,7 +354,7 @@ describe("the scoped handle refuses exactly what the unscoped handle refuses (#7
 		readonly onScoped: Expectation;
 	};
 
-	const ROWS: ReadonlyArray<Row> = [
+	const Rows: ReadonlyArray<Row> = [
 		{
 			label: "nope",
 			onFn: false,
@@ -427,7 +427,7 @@ describe("the scoped handle refuses exactly what the unscoped handle refuses (#7
 		},
 	];
 
-	const SURFACES = ["client", "scoped"] as const;
+	const Surfaces = ["client", "scoped"] as const;
 
 	const pickHolder = (
 		target: Record<string, unknown>,
@@ -441,7 +441,7 @@ describe("the scoped handle refuses exactly what the unscoped handle refuses (#7
 
 	const pickExpectation = (
 		row: Row,
-		surface: (typeof SURFACES)[number],
+		surface: (typeof Surfaces)[number],
 	): Expectation => {
 		if (surface === "client") {
 			return row.onClient;
@@ -459,13 +459,13 @@ describe("the scoped handle refuses exactly what the unscoped handle refuses (#7
 		return 1;
 	};
 
-	type CaseTuple = readonly [(typeof SURFACES)[number], string, Row];
+	type CaseTuple = readonly [(typeof Surfaces)[number], string, Row];
 
-	const CASES: ReadonlyArray<CaseTuple> = SURFACES.flatMap((surface) =>
-		ROWS.map((row) => [surface, row.label, row] as const),
+	const Cases: ReadonlyArray<CaseTuple> = Surfaces.flatMap((surface) =>
+		Rows.map((row) => [surface, row.label, row] as const),
 	);
 
-	it.each(CASES)("%s: %s", (surface, _label, row) => {
+	it.each(Cases)("%s: %s", (surface, _label, row) => {
 		const surfaces = buildSurfaces();
 		const target = surfaces[surface];
 		const holder = pickHolder(target, row.onFn);
