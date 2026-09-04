@@ -783,12 +783,12 @@ export const compareGeneratedColumn = async (
  * only `decodeExprNode`/`renderExpr`/`renderTableBoundExpr` are on core's
  * public surface, not the snapshot types themselves.
  */
-type LocalIndexColumnSnapshot =
+export type LocalIndexColumnSnapshot =
 	| { readonly name: string }
 	| { readonly expression: JsonValue };
 
-/** A declared index, read structurally the same way (mirrors core's `IndexSnapshot`). */
-type LocalIndexSnapshot = {
+/** A declared index, read structurally the same way (mirrors core's `IndexSnapshot`) -- exported so `commands/check.ts` (task 1.6) can build one from a walked snapshot without duplicating this shape. */
+export type LocalIndexSnapshot = {
 	readonly name: string;
 	readonly columns: ReadonlyArray<LocalIndexColumnSnapshot>;
 	readonly where?: JsonValue;

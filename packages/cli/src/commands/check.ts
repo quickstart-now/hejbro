@@ -20,8 +20,15 @@ import type { Finding } from "../check/compare";
 import { compareCatalog } from "../check/compare";
 import type { CheckDriverImporter } from "../check/driver";
 import { withCheckConnection } from "../check/driver";
-import type { CheckComparisonMode } from "../check/expression";
-import { compareCheckConstraint } from "../check/expression";
+import type {
+	CheckComparisonMode,
+	LocalIndexSnapshot,
+} from "../check/expression";
+import {
+	compareCheckConstraint,
+	compareGeneratedColumn,
+	compareIndexExpressions,
+} from "../check/expression";
 import type { Inventory } from "../check/inventory";
 import { buildInventory } from "../check/inventory";
 import { requireConfigFields } from "../config-required";
@@ -74,9 +81,17 @@ const COVERAGE_BOUNDARY_LINES: ReadonlyArray<string> = [
 	"check's reads are not a single snapshot: opening no transaction is what keeps this command free of any driver capability, and a schema changing while check runs can produce a torn report.",
 ];
 
-/** The coverage-boundary line added for a `"text"` run only (fix-nile-findings, #755, design.md: "The coverage boundary gains one line for the run"). */
+/**
+ * The coverage-boundary line added for a `"text"` run only
+ * (fix-nile-findings, #755, design.md: "The coverage boundary gains one
+ * line for the run") -- names every expression surface this text-mode
+ * fallback covers (task 1.6, #778: a check constraint's expression, an
+ * index's predicate and its expression columns, a generated column's
+ * expression), not only check constraints, since 1.4/1.5 extended the
+ * same fallback to all four.
+ */
 const TEXT_MODE_BOUNDARY_LINE =
-	"check-constraint expressions were compared by normalized text on this run, because a registered preset declares this platform cannot plan a statement -- a spelling difference the server would treat as equal is reported as not compared.";
+	"expressions (check constraints, index predicates and expression columns, generated columns) were compared by normalized text on this run, because a registered preset declares this platform cannot plan a statement -- a spelling difference the server would treat as equal is reported as not compared.";
 
 /**
  * Derives the check-constraint comparison mode from the presets the
@@ -327,10 +342,16 @@ type LocalCheckSnapshot = {
 	readonly name: string;
 	readonly expression: JsonValue;
 };
+type LocalGeneratedColumnSnapshot = {
+	readonly name: string;
+	readonly generated?: JsonValue;
+};
 type LocalTableSnapshot = {
 	readonly schema: string;
 	readonly name: string;
 	readonly checks?: ReadonlyArray<LocalCheckSnapshot>;
+	readonly indexes?: ReadonlyArray<LocalIndexSnapshot>;
+	readonly columns: ReadonlyArray<LocalGeneratedColumnSnapshot>;
 };
 
 type DeclaredCheckConstraint = {
@@ -363,11 +384,82 @@ export const declaredCheckConstraints = (
 			}));
 		});
 
+type DeclaredIndexExpression = {
+	readonly schema: string;
+	readonly table: string;
+	readonly index: LocalIndexSnapshot;
+};
+
+/** `true` for an index with a partial predicate or at least one expression column -- a plain index has nothing this group compares (existence only, `compare.ts`'s `compareIndexes`, unchanged). */
+const hasExpressionSurface = (index: LocalIndexSnapshot): boolean =>
+	index.where !== undefined ||
+	index.columns.some((column) => "expression" in column);
+
+/**
+ * Every declared index that carries a predicate or an expression column,
+ * across every declared table (#778, task 1.6) -- a plain index is never
+ * walked here at all, since it has no expression axis for
+ * `compareIndexExpressions` to compare.
+ */
+export const declaredIndexExpressions = (
+	snapshot: Snapshot,
+): ReadonlyArray<DeclaredIndexExpression> =>
+	Object.entries(snapshot.objects)
+		.filter(([key]) => key.startsWith("table:"))
+		.flatMap(([, node]) => {
+			const tableNode = node as LocalTableSnapshot;
+			return (tableNode.indexes ?? [])
+				.filter(hasExpressionSurface)
+				.map((index) => ({
+					schema: tableNode.schema,
+					table: tableNode.name,
+					index,
+				}));
+		});
+
+type DeclaredGeneratedColumn = {
+	readonly schema: string;
+	readonly table: string;
+	readonly column: string;
+	readonly declaredExpression: JsonValue;
+};
+
+/**
+ * Every declared generated column across every declared table (#778/#781,
+ * task 1.6) -- a plain column is never walked here at all, since
+ * `compareGeneratedColumn` itself already returns `[]` for one (task 1.4),
+ * making this filter a statement-count optimization, not a correctness
+ * requirement.
+ */
+export const declaredGeneratedColumns = (
+	snapshot: Snapshot,
+): ReadonlyArray<DeclaredGeneratedColumn> =>
+	Object.entries(snapshot.objects)
+		.filter(([key]) => key.startsWith("table:"))
+		.flatMap(([, node]) => {
+			const tableNode = node as LocalTableSnapshot;
+			return tableNode.columns.flatMap((column) => {
+				if (column.generated === undefined) {
+					return [];
+				}
+				return [
+					{
+						schema: tableNode.schema,
+						table: tableNode.name,
+						column: column.name,
+						declaredExpression: column.generated,
+					},
+				];
+			});
+		});
+
 /**
  * `compareCatalog` (existence/columns) plus, for every declared check
- * constraint, `compareCheckConstraint` (expression/enforcement, group
- * 3) -- merged into one findings list. Takes `session`, not a full
- * `Driver`, so a test injects a fake one with no real I/O at all;
+ * constraint, index expression surface and generated column,
+ * `compareCheckConstraint`/`compareIndexExpressions`/`compareGeneratedColumn`
+ * (task 1.6, #778/#781: the three walks the same `mode`, merged into one
+ * findings list) -- merged into one findings list. Takes `session`, not a
+ * full `Driver`, so a test injects a fake one with no real I/O at all;
  * `runCheck` passes its own already-open `Driver` (which structurally
  * satisfies `DriverSession`). `registry`'s default forwards straight to
  * `compareCatalog`'s own -- same optional-and-safe reasoning documented
@@ -386,7 +478,7 @@ export const compareCheckAgainstCatalog = async (
 	mode: CheckComparisonMode = "server",
 ): Promise<ReadonlyArray<Finding>> => {
 	const tableFindings = compareCatalog(snapshot, catalog, registry);
-	const expressionFindingLists = await Promise.all(
+	const checkFindingLists = await Promise.all(
 		declaredCheckConstraints(snapshot).map((constraint) =>
 			compareCheckConstraint(
 				session,
@@ -399,7 +491,37 @@ export const compareCheckAgainstCatalog = async (
 			),
 		),
 	);
-	return [...tableFindings, ...expressionFindingLists.flat()];
+	const indexFindingLists = await Promise.all(
+		declaredIndexExpressions(snapshot).map((entry) =>
+			compareIndexExpressions(
+				session,
+				catalog,
+				entry.schema,
+				entry.table,
+				entry.index,
+				mode,
+			),
+		),
+	);
+	const generatedFindingLists = await Promise.all(
+		declaredGeneratedColumns(snapshot).map((entry) =>
+			compareGeneratedColumn(
+				session,
+				catalog,
+				entry.schema,
+				entry.table,
+				entry.column,
+				entry.declaredExpression,
+				mode,
+			),
+		),
+	);
+	return [
+		...tableFindings,
+		...checkFindingLists.flat(),
+		...indexFindingLists.flat(),
+		...generatedFindingLists.flat(),
+	];
 };
 
 const FIRST_QUOTED_SUBSTRING = /"([^"]+)"/;

@@ -7,10 +7,14 @@ import {
 	getTableMeta,
 	hejbroError,
 	inArray,
+	index,
 	isNotNull,
+	numeric,
 	schema,
+	sql,
 	table,
 	text,
+	timestamptz,
 	uuid,
 } from "@hejbro/core";
 import type { CompileResult, DriverRow, DriverSession } from "@hejbro/query";
@@ -923,5 +927,210 @@ describe("compareCheckAgainstCatalog / renderCheckReport text mode (fix-nile-fin
 			"text",
 		);
 		expect(report.exitCode).not.toBe(0);
+	});
+});
+
+/**
+ * #778/#781, task 1.6: an index's predicate and expression column, and a
+ * generated column's expression, reach the same run a check constraint's
+ * always did -- `declaredIndexExpressions`/`declaredGeneratedColumns`
+ * merged into `compareCheckAgainstCatalog`. One index carries both a
+ * partial predicate and an expression column, so its own probe is one
+ * `explain` statement regardless of how many pairs it carries (1.5); the
+ * generated column is the second and last object, so "one per object"
+ * is exactly two statements total, with no check constraint declared at
+ * all.
+ */
+describe("compareCheckAgainstCatalog / 1.6 every expression surface reaches the run", () => {
+	const buildWidgetsSnapshot = (): Snapshot =>
+		buildTestSnapshot([
+			table(
+				app,
+				"widgets",
+				{
+					id: uuid().primaryKey(),
+					email: text(),
+					archivedAt: timestamptz(),
+					price: numeric(),
+					qty: numeric(),
+					total: numeric().generatedAlwaysAs(sql`price * qty`),
+				},
+				(t) => ({
+					indexes: [
+						index("widgets_email_idx")
+							.on(sql`lower(${t.email})`)
+							.where(isNotNull(t.archivedAt)),
+					],
+				}),
+			),
+		]);
+
+	const numericColumnRow = (name: string, catalogGenerated: string | null) => ({
+		schema: "app",
+		table: "widgets",
+		name,
+		notNull: false,
+		catalogType: "numeric",
+		baseTypeKind: null,
+		baseTypeSchema: null,
+		baseTypeName: null,
+		catalogDefault: null,
+		catalogGenerated,
+	});
+
+	const widgetsCatalog = (): Catalog => ({
+		...emptyCatalog(),
+		tables: [{ schema: "app", table: "widgets", rls: false }],
+		constraints: [
+			{
+				schema: "app",
+				table: "widgets",
+				name: "widgets_pkey",
+				type: "p",
+				columns: ["id"],
+			},
+		],
+		columns: [
+			idColumnRow("widgets"),
+			{
+				schema: "app",
+				table: "widgets",
+				name: "email",
+				notNull: false,
+				catalogType: "text",
+				baseTypeKind: null,
+				baseTypeSchema: null,
+				baseTypeName: null,
+				catalogDefault: null,
+				catalogGenerated: null,
+			},
+			{
+				schema: "app",
+				table: "widgets",
+				name: "archived_at",
+				notNull: false,
+				catalogType: "timestamp with time zone",
+				baseTypeKind: null,
+				baseTypeSchema: null,
+				baseTypeName: null,
+				catalogDefault: null,
+				catalogGenerated: null,
+			},
+			numericColumnRow("price", null),
+			numericColumnRow("qty", null),
+			numericColumnRow("total", "(price * (qty)::numeric)"),
+		],
+		indexes: [
+			{
+				schema: "app",
+				table: "widgets",
+				name: "widgets_email_idx",
+				predicate: "(archived_at IS NOT NULL)",
+				expressions: ["lower(email)"],
+			},
+		],
+	});
+
+	/** Routes by a substring unique to each object's own probe SQL -- `qty` only ever appears in the generated column's select list, `email` only in the index's (its predicate and its expression column both reference `archived_at`/`email`, never `qty`). No `pg_constraint` lookup exists for either surface. */
+	const makeSurfaceFakeSession = (
+		indexOutput: ReadonlyArray<string>,
+		generatedOutput: ReadonlyArray<string>,
+	): { readonly session: DriverSession; readonly calls: CompileResult[] } => {
+		const calls: CompileResult[] = [];
+		const session: DriverSession = {
+			execute: async (compiled) => {
+				calls.push(compiled);
+				if (compiled.sql.includes("qty")) {
+					return [explainRow(generatedOutput)];
+				}
+				if (compiled.sql.includes("email")) {
+					return [explainRow(indexOutput)];
+				}
+				return [explainRow([])];
+			},
+		};
+		return { session, calls };
+	};
+
+	it("issues exactly two explain statements in server mode, one per object", async () => {
+		const { session, calls } = makeSurfaceFakeSession(
+			[
+				"(archived_at IS NOT NULL)",
+				"(archived_at IS NOT NULL)",
+				"lower(email)",
+				"lower(email)",
+			],
+			["(price * (qty)::numeric)", "(price * (qty)::numeric)"],
+		);
+
+		await compareCheckAgainstCatalog(
+			buildWidgetsSnapshot(),
+			widgetsCatalog(),
+			session,
+		);
+
+		const explainCalls = calls.filter((call) =>
+			call.sql.trim().toLowerCase().startsWith("explain"),
+		);
+		expect(explainCalls).toHaveLength(2);
+	});
+
+	it("issues no explain statement in text mode", async () => {
+		const { session, calls } = makeSurfaceFakeSession([], []);
+
+		await compareCheckAgainstCatalog(
+			buildWidgetsSnapshot(),
+			widgetsCatalog(),
+			session,
+			undefined,
+			"text",
+		);
+
+		const explainCalls = calls.filter((call) =>
+			call.sql.trim().toLowerCase().startsWith("explain"),
+		);
+		expect(explainCalls).toHaveLength(0);
+	});
+
+	it("exits 0 and names no column when every surface agrees (#781 end-to-end)", async () => {
+		const { session } = makeSurfaceFakeSession(
+			[
+				"(archived_at IS NOT NULL)",
+				"(archived_at IS NOT NULL)",
+				"lower(email)",
+				"lower(email)",
+			],
+			["(price * (qty)::numeric)", "(price * (qty)::numeric)"],
+		);
+
+		const findings = await compareCheckAgainstCatalog(
+			buildWidgetsSnapshot(),
+			widgetsCatalog(),
+			session,
+		);
+		const report = renderCheckReport(findings, EMPTY_INVENTORY);
+
+		expect(report.exitCode).toBe(0);
+		expect(findings.some((finding) => finding.identity.includes("total"))).toBe(
+			false,
+		);
+	});
+
+	it("names every expression surface in the text-mode coverage boundary", () => {
+		const report = renderCheckReport(
+			[],
+			EMPTY_INVENTORY,
+			undefined,
+			undefined,
+			"text",
+		);
+
+		expect(
+			report.stdout.some((line) =>
+				line.includes(
+					"expressions (check constraints, index predicates and expression columns, generated columns) were compared by normalized text",
+				),
+			),
+		).toBe(true);
 	});
 });
