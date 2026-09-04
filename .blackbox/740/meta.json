@@ -7,7 +7,19 @@
   "status": "open",
   "opened": "2026-09-04",
   "closed": null,
-  "decisions": [],
+  "decisions": [
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "D1"
+      ],
+      "at": "2026-09-04T16:21Z",
+      "title": "D4: columns as an ordered list, reader accepts both shapes; D5: synthesize.ts and contract-types.ts inside this piece by exception",
+      "ratified": null
+    }
+  ],
   "work": [],
   "prs": [],
   "origin": null,

@@ -7,7 +7,19 @@
   "status": "open",
   "opened": "2026-09-04",
   "closed": null,
-  "decisions": [],
+  "decisions": [
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "D1"
+      ],
+      "at": "2026-09-04T16:21Z",
+      "title": "D6: whole-row only under returns setof (departs from the issue's full-projection line); D7 return-expects-whole-row; D8 try the type narrowing; D9 check order",
+      "ratified": null
+    }
+  ],
   "work": [],
   "prs": [],
   "origin": null,
