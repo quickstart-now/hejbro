@@ -445,13 +445,12 @@ const checkArtifactPath = (cwd: string, artifact: Artifact): void => {
 	if (outcome.kind === "present") {
 		if (outcome.actualKind !== expectedKind) {
 			if (isConfigArtifact(artifact)) {
+				const { reason, next } = configNotAFileMessage(artifact.label, {
+					kind: "directory",
+				});
 				throwHejbroError(
 					"init-path-conflict",
-					configNotAFileMessage(
-						artifact.label,
-						{ kind: "directory" },
-						"then rerun `hejbro init`.",
-					),
+					`${reason} Next: ${next} then rerun \`hejbro init\`.`,
 				);
 			}
 			throwPathConflict(
@@ -465,13 +464,13 @@ const checkArtifactPath = (cwd: string, artifact: Artifact): void => {
 	}
 	if (outcome.kind === "dangling") {
 		if (isConfigArtifact(artifact)) {
+			const { reason, next } = configNotAFileMessage(artifact.label, {
+				kind: "dangling",
+				target: outcome.target,
+			});
 			throwHejbroError(
 				"init-path-conflict",
-				configNotAFileMessage(
-					artifact.label,
-					{ kind: "dangling", target: outcome.target },
-					"then rerun `hejbro init`.",
-				),
+				`${reason} Next: ${next} then rerun \`hejbro init\`.`,
 			);
 		}
 		throwDanglingLink(

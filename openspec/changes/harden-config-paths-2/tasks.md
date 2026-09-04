@@ -256,7 +256,7 @@ running. Files this group owns: `packages/cli/src/identity.ts`,
       the test itself typed an absolute value. Files: `loader.ts`,
       `loader.test.ts`, `generate-command.test.ts` (one row).
 
-- [ ] 2.3 (~8m) The `check:next-marker` gate passes without an
+- [x] 2.3 (~8m) The `check:next-marker` gate passes without an
       exemption (review B4). Red: `pnpm check:next-marker` — the two
       `init.ts` sites (the config artifact's directory and dangling-link
       refusals) reported as carrying no `Next:`. Green: read the

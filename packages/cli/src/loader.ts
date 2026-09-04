@@ -118,24 +118,45 @@ const relLabel = (cwd: string, path: string): string => {
 };
 
 /**
+ * A message's "what happened" and "what to do" halves, kept apart so
+ * every throw site composes its own literal `` `${reason} Next:
+ * ${next}` `` (#846 review B4): `check:next-marker` scans a call site's
+ * own text for a literal `Next:` and cannot follow a message through an
+ * imported function, so a shared builder returning one already-joined
+ * string reads as "no Next:" from a call site outside this file (as
+ * `init.ts`'s own throws were). Composing the literal at each site,
+ * same-file or not, is what makes the scanner's read of the invariant
+ * match the message's own.
+ */
+type ConfigPathParts = {
+	readonly reason: string;
+	readonly next: string;
+};
+
+/**
  * The configuration path spelled as a directory (#846 D5, D2): a
  * directory or a dangling link where the configuration file belongs.
  * Exported so `init` throws the identical sentence under
- * `init-path-conflict` (#846 D5/D6) — `tail` is the one difference,
- * `"then rerun."` on the read side, `` "then rerun `hejbro init`." ``
- * for `init`'s own refusal.
+ * `init-path-conflict` (#846 D5/D6) — the tail each site appends
+ * (`"then rerun."` on the read side, `` "then rerun `hejbro init`." ``
+ * for `init`'s own refusal) is the one difference.
  */
 export const configNotAFileMessage = (
 	rel: string,
 	holder:
 		| { readonly kind: "directory" }
 		| { readonly kind: "dangling"; readonly target: string },
-	tail: string,
-): string => {
+): ConfigPathParts => {
 	if (holder.kind === "directory") {
-		return `"${rel}" is the configuration path, but a directory is there — the configuration is a file hejbro reads. Next: move or remove the existing directory at "${rel}", or name another file with --config, ${tail}`;
+		return {
+			reason: `"${rel}" is the configuration path, but a directory is there — the configuration is a file hejbro reads.`,
+			next: `move or remove the existing directory at "${rel}", or name another file with --config,`,
+		};
 	}
-	return `"${rel}" is the configuration path, but a dangling symbolic link is there, pointing at "${holder.target}". Next: remove the link or create its target, or name another file with --config, ${tail}`;
+	return {
+		reason: `"${rel}" is the configuration path, but a dangling symbolic link is there, pointing at "${holder.target}".`,
+		next: "remove the link or create its target, or name another file with --config,",
+	};
 };
 
 /**
@@ -163,18 +184,29 @@ export const configUnreadableMessage = (
 				readonly path: string;
 				readonly code: string;
 		  },
-	tail: string,
-): string => {
+): ConfigPathParts => {
 	if (cause.kind === "ancestor-file") {
-		return `"${rel}" is the configuration path, but "${cause.culprit}" is a file and cannot hold it. Next: move or remove the file at "${cause.culprit}", ${tail}`;
+		return {
+			reason: `"${rel}" is the configuration path, but "${cause.culprit}" is a file and cannot hold it.`,
+			next: `move or remove the file at "${cause.culprit}",`,
+		};
 	}
 	if (cause.kind === "ancestor-dangling") {
-		return `"${rel}" is the configuration path, but "${cause.culprit}" is a dangling symbolic link, pointing at "${cause.target}". Next: remove the link or create its target, ${tail}`;
+		return {
+			reason: `"${rel}" is the configuration path, but "${cause.culprit}" is a dangling symbolic link, pointing at "${cause.target}".`,
+			next: "remove the link or create its target,",
+		};
 	}
 	if (cause.kind === "blocked") {
-		return `"${rel}" is the configuration path, but it could not be checked (${cause.code}): "${cause.culprit}" does not let this process look inside it. Next: check permissions on "${cause.culprit}", ${tail}`;
+		return {
+			reason: `"${rel}" is the configuration path, but it could not be checked (${cause.code}): "${cause.culprit}" does not let this process look inside it.`,
+			next: `check permissions on "${cause.culprit}",`,
+		};
 	}
-	return `"${rel}" is the configuration path, but it could not be checked (${cause.code}). Next: check what "${cause.path}" points at, ${tail}`;
+	return {
+		reason: `"${rel}" is the configuration path, but it could not be checked (${cause.code}).`,
+		next: `check what "${cause.path}" points at,`,
+	};
 };
 
 export const resolveConfigPath = (
@@ -236,75 +268,74 @@ export const loadConfig = async (
 		);
 	}
 	if (outcome.kind === "present" && outcome.actualKind === "directory") {
+		const { reason, next } = configNotAFileMessage(relLabel(cwd, configPath), {
+			kind: "directory",
+		});
 		return throwHejbroError(
 			"config-not-a-file",
-			configNotAFileMessage(
-				relLabel(cwd, configPath),
-				{ kind: "directory" },
-				"then rerun.",
-			),
+			`${reason} Next: ${next} then rerun.`,
 		);
 	}
 	if (outcome.kind === "dangling") {
+		const { reason, next } = configNotAFileMessage(relLabel(cwd, configPath), {
+			kind: "dangling",
+			target: outcome.target,
+		});
 		return throwHejbroError(
 			"config-not-a-file",
-			configNotAFileMessage(
-				relLabel(cwd, configPath),
-				{ kind: "dangling", target: outcome.target },
-				"then rerun.",
-			),
+			`${reason} Next: ${next} then rerun.`,
 		);
 	}
 	if (outcome.kind === "ancestor-file") {
+		const { reason, next } = configUnreadableMessage(
+			relLabel(cwd, configPath),
+			{ kind: "ancestor-file", culprit: relative(cwd, outcome.path) },
+		);
 		return throwHejbroError(
 			"config-unreadable",
-			configUnreadableMessage(
-				relLabel(cwd, configPath),
-				{ kind: "ancestor-file", culprit: relative(cwd, outcome.path) },
-				"then rerun.",
-			),
+			`${reason} Next: ${next} then rerun.`,
 		);
 	}
 	if (outcome.kind === "ancestor-dangling") {
+		const { reason, next } = configUnreadableMessage(
+			relLabel(cwd, configPath),
+			{
+				kind: "ancestor-dangling",
+				culprit: relative(cwd, outcome.path),
+				target: outcome.target,
+			},
+		);
 		return throwHejbroError(
 			"config-unreadable",
-			configUnreadableMessage(
-				relLabel(cwd, configPath),
-				{
-					kind: "ancestor-dangling",
-					culprit: relative(cwd, outcome.path),
-					target: outcome.target,
-				},
-				"then rerun.",
-			),
+			`${reason} Next: ${next} then rerun.`,
 		);
 	}
 	if (outcome.kind === "blocked") {
+		const { reason, next } = configUnreadableMessage(
+			relLabel(cwd, configPath),
+			{
+				kind: "blocked",
+				culprit: relative(cwd, outcome.culprit),
+				code: outcome.code,
+			},
+		);
 		return throwHejbroError(
 			"config-unreadable",
-			configUnreadableMessage(
-				relLabel(cwd, configPath),
-				{
-					kind: "blocked",
-					culprit: relative(cwd, outcome.culprit),
-					code: outcome.code,
-				},
-				"then rerun.",
-			),
+			`${reason} Next: ${next} then rerun.`,
 		);
 	}
 	if (outcome.kind === "stat-failed") {
+		const { reason, next } = configUnreadableMessage(
+			relLabel(cwd, configPath),
+			{
+				kind: "stat-failed",
+				path: relative(cwd, outcome.path),
+				code: outcome.code,
+			},
+		);
 		return throwHejbroError(
 			"config-unreadable",
-			configUnreadableMessage(
-				relLabel(cwd, configPath),
-				{
-					kind: "stat-failed",
-					path: relative(cwd, outcome.path),
-					code: outcome.code,
-				},
-				"then rerun.",
-			),
+			`${reason} Next: ${next} then rerun.`,
 		);
 	}
 	// #102: disabled as a precaution — the cache buys nothing for a
