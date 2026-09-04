@@ -202,8 +202,9 @@ Enforcement is not this paragraph: the Claude Code hooks in
 `.claude/settings.json` save owner inputs at the keystroke, refuse a team
 brief that cites no recorded ruling, and gate `gh pr merge` on the
 record; CI's `blackbox` job runs the same check before every other job
-and, with the `BLACKBOX_TOKEN` secret present, pins the PR itself and
-commits the pins to the branch as `blackbox[bot]`.
+and, through the `hello-pooh-blackbox` GitHub App, pins the PR itself —
+the pin commit is created by the Git Data API, signed by GitHub and
+attributed to the App, so it passes the signed-commit ruleset.
 Read the folders only when investigating a rule's origin; never load
 them during normal work.
 

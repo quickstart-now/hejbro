@@ -39,6 +39,8 @@ jobs:
     permissions:
       contents: write
       pull-requests: read
+    env:
+      HAS_APP: ${{ secrets.BLACKBOX_APP_ID != '' }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -47,13 +49,23 @@ jobs:
           token: ${{ secrets.BLACKBOX_TOKEN || github.token }}
       - uses: actions/setup-node@v7
         with: { node-version: 24 }
-      # Bot mode when the BLACKBOX_TOKEN secret exists (pins are committed
-      # to the PR branch and CI re-runs on that commit); verify-only otherwise.
+      # Bot mode (#793). With the GitHub App (BLACKBOX_APP_ID +
+      # BLACKBOX_APP_PRIVATE_KEY) the pins are committed through the Git Data
+      # API -- signed by GitHub, attributed to hello-pooh-blackbox[bot], so
+      # they pass dev's required-signatures ruleset -- and the ref update
+      # re-runs CI on that commit. With only a PAT (BLACKBOX_TOKEN) they are
+      # pushed with git, unsigned. With neither, verify only.
+      - uses: actions/create-github-app-token@v2
+        id: app
+        if: env.HAS_APP == 'true'
+        with:
+          app-id: ${{ secrets.BLACKBOX_APP_ID }}
+          private-key: ${{ secrets.BLACKBOX_APP_PRIVATE_KEY }}
       - if: github.event_name == 'pull_request'
         run: node .blackbox/bin/blackbox.mjs ci --pr ${{ github.event.pull_request.number }}
         env:
-          GH_TOKEN: ${{ github.token }}
-          BLACKBOX_TOKEN: ${{ secrets.BLACKBOX_TOKEN }}
+          GH_TOKEN: ${{ steps.app.outputs.token || github.token }}
+          BLACKBOX_PUSH: ${{ steps.app.outputs.token && 'api' || (secrets.BLACKBOX_TOKEN && 'git' || '') }}
       - if: github.event_name != 'pull_request'
         run: node .blackbox/bin/blackbox.mjs check
         env:
