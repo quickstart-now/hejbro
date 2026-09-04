@@ -40,20 +40,22 @@ export const contractMetadata = {
 		posts: {
 			schema: "app",
 			name: "posts",
-			columns: {
-				id: {
+			columns: [
+				{
+					key: "id",
 					sqlName: "id",
 					typeNode: { typeName: "uuid" },
 					mode: null,
 					notNullElements: false,
 				},
-				title: {
+				{
+					key: "title",
 					sqlName: "title",
 					typeNode: { typeName: "text" },
 					mode: null,
 					notNullElements: false,
 				},
-			},
+			],
 			foreignKeys: [],
 		},
 	},
