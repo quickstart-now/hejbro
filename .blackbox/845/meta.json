@@ -1,59 +1,14 @@
 {
   "version": 1,
   "kind": "issue",
-  "ref": "quickstart-now/hejbro#769",
-  "title": "query: createDb(conn).as(ctx) table surface skips the unknown-member guard",
-  "parent": "quickstart-now/hejbro#412",
-  "status": "closed",
+  "ref": "quickstart-now/hejbro#845",
+  "title": "vendor: a table named fn or as is unreachable behind the client's own members",
+  "parent": "quickstart-now/hejbro#815",
+  "status": "open",
   "opened": "2026-09-04",
-  "closed": "2026-09-04",
-  "decisions": [
-    {
-      "id": "R1",
-      "by": "lead",
-      "kind": "interpretation",
-      "basis": [
-        "D1"
-      ],
-      "at": "2026-09-04T15:04Z",
-      "title": "Batch qy = #769 #761 #449 as one change harden-query-guards, parallel to ip and ck",
-      "ratified": null
-    },
-    {
-      "id": "R2",
-      "by": "lead",
-      "kind": "interpretation",
-      "basis": [
-        "D1",
-        "R1"
-      ],
-      "at": "2026-09-04T15:17Z",
-      "title": "harden-query-guards approved; D-1 ADDED requirement for the whole lookup surface; Q1 scoped handle guarded by the same builder",
-      "ratified": null
-    },
-    {
-      "id": "R3",
-      "by": "lead",
-      "kind": "interpretation",
-      "basis": [
-        "D1",
-        "R1",
-        "R2"
-      ],
-      "at": "2026-09-04T16:50Z",
-      "title": "Review disposition: passed; 1.2b and 1.4c taken; #845 filed; O1 filed",
-      "ratified": null
-    }
-  ],
-  "work": [
-    {
-      "id": "W1",
-      "at": "2026-09-04T16:00Z",
-      "title": "Scoped name-keyed handle guarded like the client",
-      "pr": null,
-      "decisions": []
-    }
-  ],
+  "closed": null,
+  "decisions": [],
+  "work": [],
   "prs": [
     {
       "number": 849,

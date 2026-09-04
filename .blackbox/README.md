@@ -45,8 +45,8 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | [#374](374/) | adversarial spec-only review stage in the opsx cycle | closed | #539 | 1 | 0 (0 pending) |
 | [#377](377/) | snapshot format stability policy for 1.0 | closed | #383 | 1 | 0 (0 pending) |
 | [#378](378/) | defect-leakage metric over escaped defects | closed | #384 | 1 | 0 (0 pending) |
-| [#412](412/) | 0.2.x: post-release commitments | open | #715 #808 #824 #835 #840 | 15 | 26 (0 pending) |
-| ↳ [#449](449/) | concurrent tx.execute beside a nested transaction is unguarded | open |  | 0 | 3 (2 pending) |
+| [#412](412/) | 0.2.x: post-release commitments | open | #715 #808 #824 #835 #840 #849 | 15 | 26 (0 pending) |
+| ↳ [#449](449/) | concurrent tx.execute beside a nested transaction is unguarded | closed | #849 | 0 | 3 (2 pending) |
 | ↳ [#528](528/) | driver-conformance kit mis-observes transaction-wrapping session-state:false drivers | closed | #737 #760 | 0 | 6 (0 pending) |
 | ↳ [#531](531/) | pg checkout reads its own setupSession; the spec's late-binding scenario fails for spread decorators | closed | #737 | 0 | 3 (0 pending) |
 | ↳ [#533](533/) | cli restore-command test flakes on first heavy parallel run after install | open | #773 | 0 | 1 (0 pending) |
@@ -67,11 +67,11 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#753](753/) | reset drops a referenced table before the table that references it, and the ledger hides the half-reset state | closed | #775 #784 | 0 | 14 (0 pending) |
 | ↳ [#754](754/) | Nile rejects the schema-qualified column references rendered inside CHECK and partial-index predicates (42622) | closed | #780 #795 #802 | 0 | 4 (0 pending) |
 | ↳ [#755](755/) | check cannot compare CHECK constraints on Nile because Nile has no EXPLAIN | closed | #780 #795 | 0 | 6 (0 pending) |
-| ↳ [#761](761/) | driver-conformance kit: leading-token normalizer keeps a glued semicolon (spec says the leading word) | open |  | 0 | 1 (0 pending) |
+| ↳ [#761](761/) | driver-conformance kit: leading-token normalizer keeps a glued semicolon (spec says the leading word) | closed | #849 | 0 | 1 (0 pending) |
 | ↳ [#766](766/) | init: nested migrationsDir/snapshotPath pass the duplicate check, then generate crashes EISDIR | closed | #840 #847 | 0 | 1 (1 pending) |
 | ↳ [#767](767/) | init: EACCES at mkdir/write surfaces as a raw stack with absolute paths, after a partial create | closed | #840 #847 | 0 | 0 (0 pending) |
 | ↳ [#768](768/) | init: stat-failure refusal's Next: names the missing leaf, not the blocking ancestor | closed | #840 #847 | 0 | 1 (0 pending) |
-| ↳ [#769](769/) | query: createDb(conn).as(ctx) table surface skips the unknown-member guard | open |  | 0 | 3 (0 pending) |
+| ↳ [#769](769/) | query: createDb(conn).as(ctx) table surface skips the unknown-member guard | closed | #849 | 0 | 3 (0 pending) |
 | ↳ [#774](774/) | core: diff-engine byIdentity reassembly drops a second same-identity, same-direction change from one kind | closed | #824 #833 | 0 | 1 (1 pending) |
 | ↳ [#783](783/) | reset: a table that merely shares the ledger's name has all its rows deleted and is reported as the cleared ledger | closed | #835 #838 | 0 | 6 (2 pending) |
 | ↳ [#785](785/) | blackbox v2: per-issue folders under .blackbox, hooks + CI-first gate, shipped by the dd-blackbox script | closed | #786 | 5 | 2 (0 pending) |
@@ -112,7 +112,9 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | [#832](832/) | core: category-C keywords fail as argument names but are not refused; the stated class does not match the list | open | #833 | 0 | 0 (0 pending) |
 | [#836](836/) | status: a permission error on a real ledger reaches the user as a raw node-postgres object | open | #838 | 0 | 0 (0 pending) |
 | [#837](837/) | raise --file with an absolute path is joined onto the cwd and dies with a raw ENOENT | open | #838 | 0 | 0 (0 pending) |
+| [#845](845/) | vendor: a table named fn or as is unreachable behind the client's own members | open | #849 | 0 | 0 (0 pending) |
 | [#846](846/) | init/config paths round 2: read-side trailing separator, config ancestor order, nesting wording, dangling link on read, empty --config | open | #847 | 0 | 0 (0 pending) |
+| [#848](848/) | query: a nested transaction the root callback never awaited commits alone after the root commit | open | #849 | 0 | 0 (0 pending) |
 
 ## Totals
 
