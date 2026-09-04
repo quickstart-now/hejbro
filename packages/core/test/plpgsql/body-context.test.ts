@@ -242,7 +242,9 @@ describe("body-context recording", () => {
 				{ args: { when: uuid() }, returns: comments },
 				() => {},
 			),
-		).toThrowError(/collides with a name plpgsql reserves/);
+		).toThrowError(
+			/collides with a name Postgres reserves or plpgsql declares itself/,
+		);
 	});
 
 	it("derived-expression projection throws row-projection-not-column", () => {
@@ -443,7 +445,9 @@ describe("body-context recording", () => {
 				);
 				ctx.return(row);
 			}),
-		).toThrowError(/collides with a name plpgsql reserves/);
+		).toThrowError(
+			/collides with a name Postgres reserves or plpgsql declares itself/,
+		);
 	});
 
 	const ownedLoopNameCases: ReadonlyArray<{ readonly loopName: string }> = [
@@ -466,7 +470,9 @@ describe("body-context recording", () => {
 					);
 					ctx.return(row);
 				}),
-			).toThrowError(/collides with a name plpgsql reserves/);
+			).toThrowError(
+				/collides with a name Postgres reserves or plpgsql declares itself/,
+			);
 		},
 	);
 
@@ -529,7 +535,9 @@ describe("body-context recording", () => {
 				);
 				ctx.return(row);
 			}),
-		).toThrowError(/collides with a name plpgsql reserves/);
+		).toThrowError(
+			/collides with a name Postgres reserves or plpgsql declares itself/,
+		);
 	});
 
 	it("forEach over a derived-expression projection throws row-projection-not-column", () => {

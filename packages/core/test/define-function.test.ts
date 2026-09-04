@@ -493,6 +493,7 @@ describe("a keyword reserved for function and type names is refused as an argume
 		{ argName: "collation" },
 		{ argName: "concurrently" },
 		{ argName: "cross" },
+		{ argName: "current_schema" },
 		{ argName: "freeze" },
 		{ argName: "full" },
 		{ argName: "ilike" },
@@ -529,22 +530,6 @@ describe("a keyword reserved for function and type names is refused as an argume
 			).toBe("reserved-local-name");
 		},
 	);
-
-	it("accepts an argument named current_schema -- the one category-T keyword that reads as a local, not the function (control)", () => {
-		const fn = defineFunction(
-			app,
-			"echo_current_schema",
-			{
-				// biome-ignore lint/style/useNamingConvention: adversarial snake_case key under test.
-				args: { current_schema: uuid() },
-				returns: { typeName: "uuid" },
-			},
-			(ctx) => {
-				ctx.return(sql`null`);
-			},
-		);
-		expect(fn.args[0]?.argName).toBe("current_schema");
-	});
 });
 
 describe("two argument keys deriving to one SQL name are refused (#751)", () => {
