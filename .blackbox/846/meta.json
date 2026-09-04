@@ -43,6 +43,19 @@
       "at": "2026-09-04T22:31Z",
       "title": "cp (b) accepted at 9c95244d; D1/D5 details and the 1.2 order deviation ratified; #860 filed; reviewer summoned",
       "ratified": null
+    },
+    {
+      "id": "R4",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R3",
+        "412/D12",
+        "412/D13"
+      ],
+      "at": "2026-09-04T22:59Z",
+      "title": "cp review round 1: B1/B3/B4 code repairs, B2 scenario sentence moves (OS code only when the OS refused); narrow re-review",
+      "ratified": null
     }
   ],
   "work": [
