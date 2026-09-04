@@ -1,5 +1,15 @@
 # @hejbro/nile
 
+## 0.2.0-pre.1
+
+### Patch Changes
+
+- Updated dependencies [333dae8]
+- Updated dependencies [b02443a]
+- Updated dependencies [17f5495]
+  - @hejbro/core@0.2.0-pre.1
+  - @hejbro/query@0.2.0-pre.1
+
 ## 0.2.0-pre.0
 
 ### Minor Changes

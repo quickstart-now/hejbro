@@ -1,6 +1,6 @@
 {
 	"name": "@hejbro/supabase",
-	"version": "0.2.0-pre.0",
+	"version": "0.2.0-pre.1",
 	"description": "Supabase provider preset for hejbro: auth expression helpers, storage buckets, role/grant presets, reserved-schema protection.",
 	"license": "Apache-2.0",
 	"type": "module",
