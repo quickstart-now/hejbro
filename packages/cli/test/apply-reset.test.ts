@@ -39,6 +39,62 @@ const managedSnapshot = buildSnapshot(
 	emptySnapshot,
 );
 
+// A genuine mutual foreign-key cycle can't be built through table()
+// itself (its `extras` callback resolves `references: { table }`
+// eagerly, each side needing the other to already exist) -- spliced
+// directly at the snapshot level instead, mirroring
+// `diff-engine.test.ts`'s own "never throws on a genuine two-table
+// cycle" fixture. Shared by every cycle-shaped row below: `dropsContainCycle`
+// reads this run's own plan, not the driver error, so every one needs the
+// identical structurally-cyclic snapshot.
+const buildCycleSnapshot = (): Snapshot => {
+	const cycleColumns: ReadonlyArray<ColumnSnapshot> = [
+		{ name: "id", typeNode: { typeName: "uuid" }, primaryKey: true },
+	];
+	const leftT: TableSnapshot = {
+		schema: "cyc",
+		name: "left_t",
+		columns: [
+			...cycleColumns,
+			{ name: "right_id", typeNode: { typeName: "uuid" } },
+		],
+		indexes: [],
+		foreignKeys: [
+			{
+				name: "left_t_right_id_fk",
+				columns: ["right_id"],
+				referencesTable: "cyc.right_t",
+				referencesColumns: ["id"],
+			},
+		],
+	};
+	const rightT: TableSnapshot = {
+		schema: "cyc",
+		name: "right_t",
+		columns: [
+			...cycleColumns,
+			{ name: "left_id", typeNode: { typeName: "uuid" } },
+		],
+		indexes: [],
+		foreignKeys: [
+			{
+				name: "right_t_left_id_fk",
+				columns: ["left_id"],
+				referencesTable: "cyc.left_t",
+				referencesColumns: ["id"],
+			},
+		],
+	};
+	return {
+		...emptySnapshot,
+		objects: {
+			"schema:cyc": { name: "cyc" },
+			"table:cyc.left_t": leftT,
+			"table:cyc.right_t": rightT,
+		},
+	};
+};
+
 /**
  * A fake `Driver` whose `transaction()` hands the callback one in-memory
  * ledger-and-recording session -- the ledger half actually stores rows
@@ -598,62 +654,6 @@ describe("applyReset — reset-drop-failed carries the server's detail and picks
 		expect(message).not.toContain("()");
 	});
 
-	// A genuine mutual foreign-key cycle can't be built through table()
-	// itself (its `extras` callback resolves `references: { table }`
-	// eagerly, each side needing the other to already exist) -- spliced
-	// directly at the snapshot level instead, mirroring
-	// `diff-engine.test.ts`'s own "never throws on a genuine two-table
-	// cycle" fixture. Shared by (iii) and (v): `dropsContainCycle` reads
-	// this run's own plan, not the driver error, so both rows need the
-	// identical structurally-cyclic snapshot.
-	const buildCycleSnapshot = (): Snapshot => {
-		const cycleColumns: ReadonlyArray<ColumnSnapshot> = [
-			{ name: "id", typeNode: { typeName: "uuid" }, primaryKey: true },
-		];
-		const leftT: TableSnapshot = {
-			schema: "cyc",
-			name: "left_t",
-			columns: [
-				...cycleColumns,
-				{ name: "right_id", typeNode: { typeName: "uuid" } },
-			],
-			indexes: [],
-			foreignKeys: [
-				{
-					name: "left_t_right_id_fk",
-					columns: ["right_id"],
-					referencesTable: "cyc.right_t",
-					referencesColumns: ["id"],
-				},
-			],
-		};
-		const rightT: TableSnapshot = {
-			schema: "cyc",
-			name: "right_t",
-			columns: [
-				...cycleColumns,
-				{ name: "left_id", typeNode: { typeName: "uuid" } },
-			],
-			indexes: [],
-			foreignKeys: [
-				{
-					name: "right_t_left_id_fk",
-					columns: ["left_id"],
-					referencesTable: "cyc.left_t",
-					referencesColumns: ["id"],
-				},
-			],
-		};
-		return {
-			...emptySnapshot,
-			objects: {
-				"schema:cyc": { name: "cyc" },
-				"table:cyc.left_t": leftT,
-				"table:cyc.right_t": rightT,
-			},
-		};
-	};
-
 	it("(iii) the run's own plan contains a cycle -- Next: states the cycle fact, additive to the outside-declarations possibility, never a replacement for it", async () => {
 		const cycleSnapshot = buildCycleSnapshot();
 		const changes = planReset(cycleSnapshot, registry);
@@ -743,5 +743,183 @@ describe("applyReset — reset-drop-failed carries the server's detail and picks
 		expect(message).toContain("view outside_view depends on table cyc.left_t");
 		expect(message).toContain("your own declared objects");
 		expect(message).toContain("an object outside your declarations");
+	});
+});
+
+describe("applyReset — reset-drop-failed names the phase that actually failed (D106 R1, NB1+NB4, lead ruling R86, #753 reopened)", () => {
+	const seedLedger = async (driver: Driver): Promise<void> => {
+		await driver.transaction(async (session) => {
+			await bootstrapLedger(session);
+			await recordAppliedMigration(session, "0001_add_managed.sql", "applied");
+		});
+	};
+
+	it("① 55000 from the ledger clear -- ledger-phase wording, no dependency advice", async () => {
+		const { driver } = makeFakeDriver("testdb", undefined, {
+			thrown: Object.assign(
+				new Error(
+					'relation "hejbro.migration_ledger" does not exist, but a view of that name does',
+				),
+				{ code: "55000" },
+			),
+		});
+		await seedLedger(driver);
+
+		const error: unknown = await applyReset(
+			driver,
+			managedSnapshot,
+			registry,
+			"testdb:2",
+		).catch((caught: unknown) => caught);
+
+		expect(error).toBeInstanceOf(HejbroError);
+		expect((error as HejbroError).code).toBe("reset-drop-failed");
+		const message = (error as HejbroError).message;
+		expect(message).toContain(
+			"hejbro reset dropped your declared objects, but then failed to clear the ledger",
+		);
+		expect(message).not.toContain("failed to drop your declared objects");
+		expect(message).not.toContain("resolve what the error above describes (");
+	});
+
+	it("② 42501 from the drop -- drop-phase wording, no dependency advice", async () => {
+		const { driver } = makeFakeDriver("testdb", {
+			thrown: Object.assign(new Error("must be owner of table managed"), {
+				code: "42501",
+			}),
+		});
+		await seedLedger(driver);
+
+		const error: unknown = await applyReset(
+			driver,
+			managedSnapshot,
+			registry,
+			"testdb:2",
+		).catch((caught: unknown) => caught);
+
+		expect(error).toBeInstanceOf(HejbroError);
+		expect((error as HejbroError).code).toBe("reset-drop-failed");
+		const message = (error as HejbroError).message;
+		expect(message).toContain(
+			"hejbro reset failed to drop your declared objects",
+		);
+		expect(message).toContain("must be owner of table managed");
+		expect(message).not.toContain("resolve what the error above describes (");
+	});
+
+	it("③ 42P01 from the ledger clear (TOCTOU) -- ledger-phase wording, still reset-drop-failed, still rejects", async () => {
+		const { driver } = makeFakeDriver("testdb", undefined, {
+			thrown: Object.assign(
+				new Error('relation "hejbro.migration_ledger" does not exist'),
+				{ code: "42P01" },
+			),
+		});
+		await seedLedger(driver);
+
+		const error: unknown = await applyReset(
+			driver,
+			managedSnapshot,
+			registry,
+			"testdb:2",
+		).catch((caught: unknown) => caught);
+
+		expect(error).toBeInstanceOf(HejbroError);
+		expect((error as HejbroError).code).toBe("reset-drop-failed");
+		const message = (error as HejbroError).message;
+		expect(message).toContain(
+			"hejbro reset dropped your declared objects, but then failed to clear the ledger",
+		);
+		expect(message).not.toContain("failed to drop your declared objects");
+		expect(message).not.toContain("resolve what the error above describes (");
+	});
+
+	it("④ 2BP01, no cycle in the plan -- today's drop-phase wording and outside-declarations advice (regression pin)", async () => {
+		const { driver } = makeFakeDriver("testdb", {
+			thrown: Object.assign(
+				new Error(
+					"cannot drop table app.managed because other objects depend on it",
+				),
+				{ code: "2BP01" },
+			),
+		});
+		await seedLedger(driver);
+
+		const error: unknown = await applyReset(
+			driver,
+			managedSnapshot,
+			registry,
+			"testdb:2",
+		).catch((caught: unknown) => caught);
+
+		const message = (error as HejbroError).message;
+		expect(message).toContain(
+			"hejbro reset failed to drop your declared objects",
+		);
+		expect(message).toContain(
+			"resolve what the error above describes (an object outside your declarations may still depend on one you're dropping)",
+		);
+	});
+
+	it("⑤ 2BP01, a cycle in the plan -- detail-first ordering, both possibilities, neither asserted as the cause", async () => {
+		const cycleSnapshot = buildCycleSnapshot();
+		const changes = planReset(cycleSnapshot, registry);
+		const confirmation = requiredConfirmation("testdb", changes);
+		const { driver } = makeFakeDriver("testdb", {
+			thrown: Object.assign(
+				new Error(
+					"cannot drop table cyc.left_t because other objects depend on it",
+				),
+				{
+					code: "2BP01",
+					detail: "view outside_view depends on table cyc.left_t",
+				},
+			),
+		});
+		await driver.transaction(async (session) => {
+			await bootstrapLedger(session);
+			await recordAppliedMigration(session, "0001_add_cycle.sql", "applied");
+		});
+
+		const error: unknown = await applyReset(
+			driver,
+			cycleSnapshot,
+			registry,
+			confirmation,
+		).catch((caught: unknown) => caught);
+
+		const message = (error as HejbroError).message;
+		const detailPointerIndex = message.indexOf(
+			"the detail above names the actual dependent",
+		);
+		const cycleClauseIndex = message.indexOf("your own declared objects");
+		const outsideClauseIndex = message.indexOf(
+			"an object outside your declarations",
+		);
+		expect(detailPointerIndex).toBeGreaterThan(-1);
+		expect(cycleClauseIndex).toBeGreaterThan(-1);
+		expect(outsideClauseIndex).toBeGreaterThan(-1);
+		// NB4's own ordering: the detail pointer comes first.
+		expect(detailPointerIndex).toBeLessThan(cycleClauseIndex);
+		expect(detailPointerIndex).toBeLessThan(outsideClauseIndex);
+	});
+
+	it("⑥ a HejbroError raised inside the transaction -- its own code survives (task 3.8's pin, unaffected by phase tagging)", async () => {
+		const { driver } = makeFakeDriver("testdb", {
+			thrown: new HejbroError(
+				"reset-migration-not-singular",
+				"reset's own migration run produced 2 file(s), not exactly one",
+			),
+		});
+		await seedLedger(driver);
+
+		const error: unknown = await applyReset(
+			driver,
+			managedSnapshot,
+			registry,
+			"testdb:2",
+		).catch((caught: unknown) => caught);
+
+		expect(error).toBeInstanceOf(HejbroError);
+		expect((error as HejbroError).code).toBe("reset-migration-not-singular");
 	});
 });

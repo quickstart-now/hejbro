@@ -254,7 +254,21 @@ const OUTSIDE_DECLARATIONS_ADVICE =
 	"resolve what the error above describes (an object outside your declarations may still depend on one you're dropping)";
 
 /**
- * [D106 R1, N3, C5, #753 reopened] Additive, never a replacement for
+ * [D106 R1, N3, C5, #753 reopened] "The detail above names the actual
+ * dependent" only when there IS a detail -- `driverErrorDetail` already
+ * reads `null` when the server sent none, and asserting this sentence
+ * without one would be exactly the false certainty this whole review
+ * round exists to close.
+ */
+const detailPointerClause = (detail: string | null): string => {
+	if (detail === null) {
+		return "";
+	}
+	return "the detail above names the actual dependent; ";
+};
+
+/**
+ * [D106 R1, N3, C5, NB4, #753 reopened] Additive, never a replacement for
  * {@link OUTSIDE_DECLARATIONS_ADVICE} -- `dropsContainCycle` only knows
  * this run's own plan contains a cycle (task 1.2's own "never throws"
  * case), never that the cycle is what the server actually refused over:
@@ -263,15 +277,102 @@ const OUTSIDE_DECLARATIONS_ADVICE =
  * as well). Stating the cycle fact while dropping the outside-declarations
  * clause would assert a cause this module cannot actually establish --
  * exactly the false certainty the plain N3 fix first shipped with.
+ * `detailPointerClause` leads (NB4's ordering): the server's own `DETAIL`
+ * line, when there is one, already names the real dependent -- the two
+ * possibilities below are what to check it against, never a guess to
+ * replace it with.
  */
-const DECLARED_CYCLE_ADVICE =
-	"resolve what the error above describes (your own declared objects include a pair that reference each other, and no order satisfies both, so they were left in identity order rather than refused outright; separately, an object outside your declarations may also still depend on one you're dropping)";
+const declaredCycleAdvice = (detail: string | null): string =>
+	`resolve what the error above describes (${detailPointerClause(detail)}your own declared objects include a pair that reference each other, which no order satisfies, so they were left in identity order rather than refused outright, and an object outside your declarations may also still depend on one you're dropping)`;
 
-const resetDropFailedAdvice = (dropsContainCycle: boolean): string => {
+/**
+ * [D106 R1, NB1, #753 reopened] Dependency advice only ever applies to
+ * `2BP01` (Postgres's own "cannot drop ... because other objects depend
+ * on it") -- every other code (`55000` a ledger-blocking view, `42501` a
+ * non-owner role, `42P01` a TOCTOU-raced ledger) has nothing to do with a
+ * dependency, and attaching this advice to it would assert a cause the
+ * error itself never named.
+ */
+const DEPENDENCY_CODE = "2BP01";
+
+const resetDropFailedAdvice = (
+	code: string | null,
+	dropsContainCycle: boolean,
+	detail: string | null,
+): string => {
+	if (code !== DEPENDENCY_CODE) {
+		return "resolve what the error above describes";
+	}
 	if (dropsContainCycle) {
-		return DECLARED_CYCLE_ADVICE;
+		return declaredCycleAdvice(detail);
 	}
 	return OUTSIDE_DECLARATIONS_ADVICE;
+};
+
+/**
+ * [D106 R1, NB1, #753 reopened] Which part of `applyReset`'s transaction
+ * actually failed -- `"drop"` (the DDL statement), `"ledger"` (clearing
+ * the ledger, reached only after the drop itself already succeeded
+ * within this same transaction), or `"unknown"` (the transaction
+ * machinery itself -- BEGIN/COMMIT, the connection -- never reached
+ * either statement's own catch). `reset-drop-failed`'s message names
+ * this phase instead of always claiming "failed to drop": a view
+ * squatting on the ledger's own name (`55000`) fails the ledger clear,
+ * not the drop, and saying otherwise is the same defect class this round
+ * closes for the dependency advice.
+ */
+type ResetFailurePhase = "drop" | "ledger" | "unknown";
+
+const phaseOpening = (phase: ResetFailurePhase): string => {
+	if (phase === "ledger") {
+		return "hejbro reset dropped your declared objects, but then failed to clear the ledger";
+	}
+	if (phase === "unknown") {
+		return "hejbro reset's transaction failed";
+	}
+	return "hejbro reset failed to drop your declared objects";
+};
+
+/**
+ * [D106 R1, NB1, #753 reopened] Tags `error` with which phase raised it,
+ * then rethrows immediately -- transform-and-rethrow, never a swallow:
+ * nothing here returns a value or lets the transaction continue past a
+ * failure, only the phase label travels out with it. A `HejbroError` is
+ * rethrown unchanged (task 3.8's own invariant) -- it is already a
+ * deliberate diagnostic no phase label improves.
+ */
+const throwPhaseTagged = (phase: ResetFailurePhase, error: unknown): never => {
+	if (error instanceof HejbroError) {
+		throw error;
+	}
+	throw Object.assign(new Error("reset transaction phase failure"), {
+		resetPhase: phase,
+		cause: error,
+	});
+};
+
+/** The phase a {@link throwPhaseTagged} carrier names, or `"unknown"` for anything that never passed through it (transaction machinery, not either statement). */
+const resetPhaseOf = (error: unknown): ResetFailurePhase => {
+	if (typeof error === "object" && error !== null && "resetPhase" in error) {
+		const phase = (error as { readonly resetPhase?: unknown }).resetPhase;
+		if (phase === "drop" || phase === "ledger") {
+			return phase;
+		}
+	}
+	return "unknown";
+};
+
+/** The real failure a {@link throwPhaseTagged} carrier wraps -- `error` itself when it was never tagged. */
+const resetPhaseCauseOf = (error: unknown): unknown => {
+	if (
+		typeof error === "object" &&
+		error !== null &&
+		"resetPhase" in error &&
+		"cause" in error
+	) {
+		return (error as { readonly cause: unknown }).cause;
+	}
+	return error;
 };
 
 /**
@@ -295,9 +396,18 @@ const resetDropFailedAdvice = (dropsContainCycle: boolean): string => {
  * unchanged -- it is already a deliberate diagnostic, with its own code
  * and its own advice, neither of which the drop-failure wording below
  * describes. Only a failure that is not one is re-coded.
+ *
+ * [D106 R1, NB1, #753 reopened] `phase` picks the opening clause
+ * ({@link phaseOpening}); the rolled-back sentence and the coded error
+ * itself (`reset-drop-failed`, never a second code) stay the same for
+ * every phase -- the whole transaction (drop and ledger clear alike)
+ * rolls back regardless of which statement inside it failed, and a
+ * second code per phase would be a contract addition this review round
+ * does not make, not a message fix.
  */
 const throwResetDropFailed = (
 	error: unknown,
+	phase: ResetFailurePhase,
 	dropsContainCycle: boolean,
 ): never => {
 	if (error instanceof HejbroError) {
@@ -309,7 +419,7 @@ const throwResetDropFailed = (
 	throw Object.assign(
 		hejbroError(
 			"reset-drop-failed",
-			`hejbro reset failed to drop your declared objects${codeSuffix(code)}: ${reason}${detailSuffix(detail)}. The transaction was rolled back — nothing was dropped and the ledger is unchanged. Next: run \`hejbro status\` to confirm, ${resetDropFailedAdvice(dropsContainCycle)}, then rerun \`hejbro reset\`.`,
+			`${phaseOpening(phase)}${codeSuffix(code)}: ${reason}${detailSuffix(detail)}. The transaction was rolled back — nothing was dropped and the ledger is unchanged. Next: run \`hejbro status\` to confirm, ${resetDropFailedAdvice(code, dropsContainCycle, detail)}, then rerun \`hejbro reset\`.`,
 		),
 		{ cause: error },
 	);
@@ -337,14 +447,16 @@ export type ResetOutcome = { readonly ledgerCleared: boolean };
  * whose migrations were all applied outside hejbro (`psql -f`, an
  * external pipeline) never bootstraps the ledger, and the transaction
  * below now only ever attempts `clearLedgerRows` when this read already
- * confirmed the table is there. Nothing inside the transaction catches an
- * error: a ledger-delete failure that happens anyway is a genuine one and
- * propagates like any other drop failure, into {@link throwResetDropFailed}
- * below, rather than being swallowed into a rollback nobody is told about
- * (B1's own root cause -- a caught 42P01 inside this same transaction
- * left it aborted with no error surfaced, and a plain `COMMIT` on an
- * aborted transaction is a rollback Postgres never reports as a
- * failure).
+ * confirmed the table is there. Nothing inside the transaction swallows an
+ * error (a caught branch that returns or carries on): each statement's own
+ * catch ({@link throwPhaseTagged}, D106 R1, NB1) only tags which phase
+ * failed and rethrows immediately, so a ledger-delete failure that happens
+ * anyway is a genuine one and propagates like any other drop failure, into
+ * {@link throwResetDropFailed} below, rather than being swallowed into a
+ * rollback nobody is told about (B1's own root cause -- a caught 42P01
+ * inside this same transaction returned instead of rethrowing, leaving it
+ * aborted with no error surfaced, and a plain `COMMIT` on an aborted
+ * transaction is a rollback Postgres never reports as a failure).
  *
  * A drop the database refuses (task 1.4, #753) -- an object outside the
  * declarations still depending on the one being dropped, most commonly --
@@ -374,13 +486,32 @@ export const applyReset = async (
 	const ledgerExists = await ledgerTableExists(driver);
 	try {
 		return await driver.transaction(async (session) => {
-			await session.execute({ sql, params: [], kind: "sql" });
+			try {
+				await session.execute({ sql, params: [], kind: "sql" });
+			} catch (error) {
+				// [D106 R1, NB1] Transform-and-rethrow, never swallowed: tags
+				// this failure as the drop phase before it leaves the
+				// transaction, so the outer catch never has to guess.
+				throwPhaseTagged("drop", error);
+			}
 			if (ledgerExists) {
-				await clearLedgerRows(session);
+				try {
+					await clearLedgerRows(session);
+				} catch (error) {
+					// [D106 R1, NB1] Same rule, tagged "ledger" -- by this
+					// point the drop above already succeeded, so a failure
+					// here (e.g. a view squatting on the ledger's own name,
+					// 55000) must never be worded as a failed drop.
+					throwPhaseTagged("ledger", error);
+				}
 			}
 			return { ledgerCleared: ledgerExists };
 		});
 	} catch (error) {
-		return throwResetDropFailed(error, dropsContainCycle(changes, registry));
+		return throwResetDropFailed(
+			resetPhaseCauseOf(error),
+			resetPhaseOf(error),
+			dropsContainCycle(changes, registry),
+		);
 	}
 };

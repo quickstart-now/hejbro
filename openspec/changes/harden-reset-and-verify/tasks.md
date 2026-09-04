@@ -499,3 +499,38 @@ scenarios of `openspec show harden-reset-and-verify --diff` hold.
   `reset` on a database that was never migrated by hejbro now drops the
   declared objects instead of reporting success and doing nothing). Files:
   evaluation.md, the changeset.
+- [ ] 4.5 [design] ~10m — **Review repairs (NB1 + NB3 + NB4), lead ruling
+  R86.** `reset-drop-failed` currently says "failed to **drop** your
+  declared objects" and attaches the dependency advice ("an object outside
+  your declarations may still depend on one you're dropping") to *every*
+  failure — measured against a real server: a view standing where the
+  ledger table belongs (`55000`, the drops had already succeeded and the
+  *ledger clear* is what failed), a non-owner role (`42501`), and a ledger
+  dropped between the probe and the transaction (`42P01`) all render as a
+  failed drop with dependency advice that does not apply. That is the same
+  defect class this round exists to close — a message asserting what the
+  run does not know. Green: the message names the phase that actually
+  failed (the drops, the ledger clear, or neither, when the failure is the
+  transaction's own); the dependency advice is attached only for `2BP01`;
+  and where it is attached, it points at the server's own `detail` line as
+  what names the real dependent *before* mentioning the declared mutual
+  pair (NB4's ordering). The code stays `reset-drop-failed` for every
+  phase — a second code would be a contract addition, and NB1 is about the
+  message, not the classification. `.changeset/fix-reset-d106-r1.md`'s own
+  N3 sentence is corrected to match the additive advice and the
+  disposition (NB3): the run adds the declared-pair possibility, it does
+  not name the dependent — the server's `detail` does. Red:
+  `packages/cli/test/apply-reset.test.ts`, input table over what the
+  transaction raises: `55000` from the ledger clear (ledger-phase wording,
+  no dependency advice); `42501` from the drops (drop-phase wording, no
+  dependency advice); `42P01` from the ledger clear, the TOCTOU shape
+  (ledger-phase wording, still `reset-drop-failed`, still rejects);
+  `2BP01` with no cycle in the plan (today's drop-phase wording and
+  outside-declarations advice, re-run as the regression pin); `2BP01` with
+  a cycle in the plan (both possibilities, detail-first ordering); and a
+  `HejbroError` raised inside the transaction (3.8's pin, code unchanged).
+  No new live case: the three server-side inputs are the reviewer's own,
+  re-run by them against a real container as 4.5's witness. Files:
+  `packages/cli/src/apply/reset.ts`, `packages/cli/test/apply-reset.test.ts`,
+  `.changeset/fix-reset-d106-r1.md`, and the two existing live cases'
+  advice assertions if the new wording moves them.
