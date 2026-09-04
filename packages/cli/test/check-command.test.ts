@@ -264,6 +264,7 @@ const idColumnRow = (table: string) => ({
 	baseTypeSchema: null,
 	baseTypeName: null,
 	catalogDefault: null,
+	catalogGenerated: null,
 });
 
 const statusColumnRow = (table: string) => ({
@@ -276,6 +277,7 @@ const statusColumnRow = (table: string) => ({
 	baseTypeSchema: null,
 	baseTypeName: null,
 	catalogDefault: null,
+	catalogGenerated: null,
 });
 
 /** One row of `EXPLAIN (FORMAT JSON, COSTS OFF, VERBOSE)` output, shaped exactly as a real postgres:17 returns it (same fixture shape check-expression.test.ts verified directly) -- `output` is `[declaredText, catalogText]`, the single-statement probe's own two-entry `Output`. */
@@ -617,6 +619,7 @@ describe("an existing declaration is neither compared nor inventoried (add-unman
 					baseTypeSchema: null,
 					baseTypeName: null,
 					catalogDefault: null,
+					catalogGenerated: null,
 				},
 			],
 		};

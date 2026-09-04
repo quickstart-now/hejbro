@@ -47,6 +47,7 @@ describe("describeCatalog / 1.6", () => {
 					baseTypeSchema: "pg_catalog",
 					baseTypeName: "uuid",
 					catalogDefault: null,
+					catalogGenerated: null,
 				},
 				{
 					schema: "app",
@@ -58,6 +59,7 @@ describe("describeCatalog / 1.6", () => {
 					baseTypeSchema: "pg_catalog",
 					baseTypeName: "point",
 					catalogDefault: null,
+					catalogGenerated: null,
 				},
 			],
 		};
@@ -114,6 +116,7 @@ describe("describeCatalog / 1.6", () => {
 					baseTypeSchema: "pg_catalog",
 					baseTypeName: "uuid",
 					catalogDefault: null,
+					catalogGenerated: null,
 				},
 				{
 					schema: "app",
@@ -125,6 +128,7 @@ describe("describeCatalog / 1.6", () => {
 					baseTypeSchema: "pg_catalog",
 					baseTypeName: "uuid",
 					catalogDefault: null,
+					catalogGenerated: null,
 				},
 			],
 		};
@@ -188,6 +192,7 @@ describe("describeCatalog / 1.6", () => {
 					baseTypeSchema: "pg_catalog",
 					baseTypeName: "uuid",
 					catalogDefault: null,
+					catalogGenerated: null,
 				},
 				{
 					schema: "app",
@@ -199,6 +204,7 @@ describe("describeCatalog / 1.6", () => {
 					baseTypeSchema: "pg_catalog",
 					baseTypeName: "uuid",
 					catalogDefault: null,
+					catalogGenerated: null,
 				},
 				{
 					schema: "app",
@@ -210,6 +216,7 @@ describe("describeCatalog / 1.6", () => {
 					baseTypeSchema: "pg_catalog",
 					baseTypeName: "uuid",
 					catalogDefault: null,
+					catalogGenerated: null,
 				},
 			],
 		};

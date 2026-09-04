@@ -20,6 +20,7 @@ const FIXTURE_ROWS: {
 			baseTypeSchema: null,
 			baseTypeName: null,
 			catalogDefault: null,
+			catalogGenerated: null,
 		},
 	],
 	constraints: [
@@ -31,7 +32,15 @@ const FIXTURE_ROWS: {
 			columns: ["id"],
 		},
 	],
-	indexes: [{ schema: "app", table: "posts", name: "posts_slug_idx" }],
+	indexes: [
+		{
+			schema: "app",
+			table: "posts",
+			name: "posts_slug_idx",
+			predicate: null,
+			expressions: [],
+		},
+	],
 	enums: [{ schema: "app", name: "status" }],
 	sequences: [{ schema: "app", name: "posts_id_seq" }],
 	functions: [{ schema: "app", name: "touch_updated_at" }],
@@ -101,6 +110,91 @@ describe("readCatalog", () => {
 		const catalog = await readCatalog(session);
 
 		expect(catalog).toEqual(FIXTURE_ROWS);
+	});
+});
+
+describe("readCatalog / 1.2 columns and indexes carry expression texts", () => {
+	// #778/#781: a generated column's expression and an index's predicate
+	// and expression columns are new catalog-read fields this group's
+	// comparison (1.3-1.5) needs -- pinned here at the read boundary so a
+	// later regression shows up as a parse failure, not a silent `null`.
+	it("pins the columns query text to attgenerated, and the indexes query text to indpred and pg_get_indexdef", () => {
+		expect(CHECK_CATALOG_QUERIES.columns).toContain("attgenerated");
+		expect(CHECK_CATALOG_QUERIES.indexes).toContain("indpred");
+		expect(CHECK_CATALOG_QUERIES.indexes).toContain("pg_get_indexdef");
+	});
+
+	it("parses a generated column's row with catalogGenerated set and catalogDefault null", async () => {
+		const rows: ReadonlyArray<DriverRow> = [
+			{
+				schema: "app",
+				table: "posts",
+				name: "total",
+				notNull: false,
+				catalogType: "numeric",
+				baseTypeKind: null,
+				baseTypeSchema: null,
+				baseTypeName: null,
+				catalogDefault: null,
+				catalogGenerated: "(price * (qty)::numeric)",
+			},
+		];
+		const session: DriverSession = {
+			execute: async (compiled) => {
+				if (compiled.sql === CHECK_CATALOG_QUERIES.columns) {
+					return rows;
+				}
+				const entry = (
+					Object.entries(CHECK_CATALOG_QUERIES) as ReadonlyArray<
+						[CatalogQueryKey, string]
+					>
+				).find(([key, sql]) => key !== "columns" && sql === compiled.sql);
+				if (entry === undefined) {
+					throw new Error(
+						`unexpected query sent to readCatalog: ${compiled.sql}`,
+					);
+				}
+				return FIXTURE_ROWS[entry[0]];
+			},
+		};
+
+		const catalog = await readCatalog(session);
+
+		expect(catalog.columns).toEqual(rows);
+	});
+
+	it("parses a partial, expression index's row with predicate and expressions set", async () => {
+		const rows: ReadonlyArray<DriverRow> = [
+			{
+				schema: "app",
+				table: "posts",
+				name: "posts_partial_lower_idx",
+				predicate: "(archived_at IS NULL)",
+				expressions: ["lower(email)"],
+			},
+		];
+		const session: DriverSession = {
+			execute: async (compiled) => {
+				if (compiled.sql === CHECK_CATALOG_QUERIES.indexes) {
+					return rows;
+				}
+				const entry = (
+					Object.entries(CHECK_CATALOG_QUERIES) as ReadonlyArray<
+						[CatalogQueryKey, string]
+					>
+				).find(([key, sql]) => key !== "indexes" && sql === compiled.sql);
+				if (entry === undefined) {
+					throw new Error(
+						`unexpected query sent to readCatalog: ${compiled.sql}`,
+					);
+				}
+				return FIXTURE_ROWS[entry[0]];
+			},
+		};
+
+		const catalog = await readCatalog(session);
+
+		expect(catalog.indexes).toEqual(rows);
 	});
 });
 

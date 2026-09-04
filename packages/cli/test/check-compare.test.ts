@@ -101,6 +101,7 @@ describe("compareCatalog / 2.2 column type comparison", () => {
 					baseTypeSchema: null,
 					baseTypeName: null,
 					catalogDefault: null,
+					catalogGenerated: null,
 				},
 				{
 					schema: "app",
@@ -112,6 +113,7 @@ describe("compareCatalog / 2.2 column type comparison", () => {
 					baseTypeSchema: null,
 					baseTypeName: null,
 					catalogDefault: null,
+					catalogGenerated: null,
 				},
 			],
 		};
@@ -155,6 +157,7 @@ describe("compareCatalog / 2.2 column type comparison", () => {
 					baseTypeSchema: null,
 					baseTypeName: null,
 					catalogDefault: null,
+					catalogGenerated: null,
 				},
 				{
 					schema: "app",
@@ -168,6 +171,7 @@ describe("compareCatalog / 2.2 column type comparison", () => {
 					baseTypeSchema: "app",
 					baseTypeName: "status",
 					catalogDefault: null,
+					catalogGenerated: null,
 				},
 			],
 		};
@@ -208,6 +212,7 @@ describe("compareCatalog / 2.3 notNull and default comparison", () => {
 					baseTypeSchema: null,
 					baseTypeName: null,
 					catalogDefault: null,
+					catalogGenerated: null,
 				},
 				{
 					schema: "app",
@@ -219,6 +224,7 @@ describe("compareCatalog / 2.3 notNull and default comparison", () => {
 					baseTypeSchema: null,
 					baseTypeName: null,
 					catalogDefault: "'member'::text",
+					catalogGenerated: null,
 				},
 			],
 		};
@@ -257,6 +263,7 @@ describe("compareCatalog / 2.3 notNull and default comparison", () => {
 					baseTypeSchema: null,
 					baseTypeName: null,
 					catalogDefault: null,
+					catalogGenerated: null,
 				},
 				{
 					schema: "app",
@@ -268,6 +275,7 @@ describe("compareCatalog / 2.3 notNull and default comparison", () => {
 					baseTypeSchema: null,
 					baseTypeName: null,
 					catalogDefault: null,
+					catalogGenerated: null,
 				},
 			],
 		};
@@ -306,6 +314,7 @@ describe("compareCatalog / 2.3 notNull and default comparison", () => {
 					baseTypeSchema: null,
 					baseTypeName: null,
 					catalogDefault: null,
+					catalogGenerated: null,
 				},
 				{
 					schema: "app",
@@ -317,6 +326,7 @@ describe("compareCatalog / 2.3 notNull and default comparison", () => {
 					baseTypeSchema: null,
 					baseTypeName: null,
 					catalogDefault: null,
+					catalogGenerated: null,
 				},
 			],
 		};
@@ -365,6 +375,7 @@ describe("compareCatalog / a serial column's owned-sequence default (#716)", () 
 					baseTypeSchema: null,
 					baseTypeName: null,
 					catalogDefault: "nextval('t_id_seq'::regclass)",
+					catalogGenerated: null,
 				},
 			],
 			sequences: [{ schema: "public", name: "t_id_seq" }],
@@ -392,6 +403,7 @@ describe("compareCatalog / a serial column's owned-sequence default (#716)", () 
 					baseTypeSchema: null,
 					baseTypeName: null,
 					catalogDefault: "nextval('app.t_id_seq'::regclass)",
+					catalogGenerated: null,
 				},
 			],
 			sequences: [{ schema: "app", name: "t_id_seq" }],
@@ -419,6 +431,7 @@ describe("compareCatalog / a serial column's owned-sequence default (#716)", () 
 					baseTypeSchema: null,
 					baseTypeName: null,
 					catalogDefault: null,
+					catalogGenerated: null,
 				},
 			],
 			sequences: [{ schema: "app", name: "t_id_seq" }],
@@ -450,6 +463,7 @@ describe("compareCatalog / a serial column's owned-sequence default (#716)", () 
 					baseTypeSchema: null,
 					baseTypeName: null,
 					catalogDefault: "nextval('other_seq'::regclass)",
+					catalogGenerated: null,
 				},
 			],
 			sequences: [{ schema: "app", name: "t_id_seq" }],
@@ -488,6 +502,7 @@ describe("compareCatalog / a serial column's owned-sequence default (#716)", () 
 					baseTypeSchema: null,
 					baseTypeName: null,
 					catalogDefault: "'member'::text",
+					catalogGenerated: null,
 				},
 			],
 		};
@@ -514,6 +529,7 @@ describe("compareCatalog / a serial column's owned-sequence default (#716)", () 
 					baseTypeSchema: null,
 					baseTypeName: null,
 					catalogDefault: "nextval('x_seq'::regclass)",
+					catalogGenerated: null,
 				},
 			],
 		};
@@ -575,6 +591,7 @@ describe("compareCatalog / 2.4 existence for every declared kind", () => {
 					baseTypeSchema: null,
 					baseTypeName: null,
 					catalogDefault: null,
+					catalogGenerated: null,
 				},
 			],
 			// posts_touch's own implicit function (posts_touch_fn) exists;
@@ -643,6 +660,7 @@ const uuidColumnRow = (table: string, name: string) => ({
 	baseTypeSchema: null,
 	baseTypeName: null,
 	catalogDefault: null,
+	catalogGenerated: null,
 });
 
 describe("compareCatalog / 2.5 table sub-object existence", () => {
