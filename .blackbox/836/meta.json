@@ -20,6 +20,18 @@
       "at": "2026-09-04T21:02Z",
       "title": "ld proposal approved; D1-D9 settled (codes unreadable/unwritable, current_user, one 23502 branch, tags in ledger.ts, migrate exit 2, reset delete to ledger code, measured path table, probe under read code, 42P01 tolerance kept)",
       "ratified": null
+    },
+    {
+      "id": "R2",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R1",
+        "412/D13"
+      ],
+      "at": "2026-09-04T21:13Z",
+      "title": "scope: migrate's raw bootstrap failure is covered by the write code; 1.9 integration witness stays",
+      "ratified": null
     }
   ],
   "work": [],

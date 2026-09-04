@@ -19,3 +19,10 @@ Proposal approved under the owner's delegation (412 D12/D13); the nine open deci
 - D8 the identity probe's own failure takes the read code, saying the catalog read was refused; the promise "nothing reaches the user raw" then closes over the whole ledger path.
 - D9 the 42P01 tolerance in `readLedger` stays (probe-to-read race only; the report "never applied" is true at report time). Measured (A2): a missing schema also answers 42P01, not 3F000, so there is no third face. Option ③ (skip `readLedger` when the probe says absent) is a defect-free structural improvement — recorded as reviewed and deferred in design.md, no issue.
 
+<a id="r2"></a>
+## R2 — scope: migrate's raw bootstrap failure is covered by the write code; 1.9 integration witness stays
+
+_lead · interpretation · basis R1, 412/D13 · 2026-09-04T21:13Z · ratified: pending_
+
+Measured (A4): with a role lacking privilege, `migrate` dies raw at the bootstrap `create schema` before any read. The issue text names `status`'s read only; the change covers the bootstrap write too, under the write code with the site named "bootstrap" (836/R1 D3/D7). Purpose-bound completeness (412 D13): the rule is "nothing the ledger owns reaches the user raw", and a scope narrowed to the issue's wording would leave the same defect one command over. 1.9's integration witness stays committed as a regression gate beside the one-off constructor review, as the ledger-identity change did (1.7/1.8 there).
+
