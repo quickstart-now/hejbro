@@ -1,4 +1,6 @@
 import {
+	accessSync,
+	constants,
 	existsSync,
 	lstatSync,
 	mkdirSync,
@@ -235,6 +237,25 @@ function throwStatFailed(
 }
 
 /** Builds and throws the `init-path-conflict`-coded, enriched plain
+ * `HejbroError` for an absent artifact whose deepest existing ancestor
+ * denies this process permission to *write* into it (#767 review, D6
+ * check side) -- distinct wording from {@link throwStatFailed} (`cannot
+ * be created for` / `write into it`, not `could not be checked for` /
+ * `look inside it`): the stat pass proves the tree's shape, not that
+ * this process may add to it. */
+function throwNotWritable(
+	label: string,
+	fieldName: string,
+	code: string,
+	culprit: string,
+): never {
+	return throwHejbroError(
+		"init-path-conflict",
+		`"${label}" cannot be created for ${fieldName} (${code}): "${culprit}" does not let this process write into it. Next: check permissions on "${culprit}", then rerun \`hejbro init\`.`,
+	);
+}
+
+/** Builds and throws the `init-path-conflict`-coded, enriched plain
  * `HejbroError` for a dangling symbolic link at an artifact's own leaf
  * (#767 review, D8): `statSync` follows a link, so a dangling one reads
  * as absent and a write would go straight through it to a target the
@@ -348,7 +369,7 @@ const danglingLinkTargetAt = (cwd: string, path: string): string | null => {
 };
 
 type AncestorOutcome =
-	| { readonly kind: "ok" }
+	| { readonly kind: "ok"; readonly path: string }
 	| {
 			readonly kind: "conflict";
 			readonly path: string;
@@ -400,7 +421,7 @@ const walkAncestors = (
 			if (permissionCode !== undefined) {
 				return { kind: "blocked", culprit: path, code: permissionCode };
 			}
-			return { kind: "ok" };
+			return { kind: "ok", path };
 		}
 		return { kind: "conflict", path, actualKind: "file" };
 	} catch (error) {
@@ -415,7 +436,7 @@ const walkAncestors = (
 				if (permissionCode !== undefined) {
 					return { kind: "blocked", culprit: path, code: permissionCode };
 				}
-				return { kind: "ok" };
+				return { kind: "ok", path };
 			}
 			return walkAncestors(cwd, parent, permissionCode);
 		}
@@ -425,7 +446,7 @@ const walkAncestors = (
 				if (permissionCode !== undefined) {
 					return { kind: "blocked", culprit: path, code: permissionCode };
 				}
-				return { kind: "ok" };
+				return { kind: "ok", path };
 			}
 			return walkAncestors(cwd, parent, permissionCode);
 		}
@@ -628,6 +649,39 @@ const checkPathKind = (cwd: string, artifact: Artifact): void => {
 			outcome.actualKind,
 		);
 	}
+};
+
+/** Refuses before creating anything (#767 review, D6 check side; runs
+ * after the kind/ancestor pass, over every planned artifact): an absent
+ * artifact whose deepest existing ancestor (the node `walkAncestors`
+ * stops at) denies this process permission to write into it. The stat
+ * pass above proves the tree's shape, not that this process may add to
+ * it. An artifact already present is never checked -- it will be
+ * skipped, not created. */
+const checkWritable = (
+	cwd: string,
+	artifacts: ReadonlyArray<Artifact>,
+): void => {
+	artifacts.forEach((artifact) => {
+		if (existsSync(artifact.path)) {
+			return;
+		}
+		const outcome = walkAncestors(cwd, dirname(artifact.path));
+		if (outcome.kind !== "ok") {
+			// Already refused by checkAncestors, above -- unreachable.
+			return;
+		}
+		try {
+			accessSync(outcome.path, constants.W_OK);
+		} catch (error) {
+			throwNotWritable(
+				artifact.label,
+				artifact.fieldName,
+				errorCode(error),
+				fileLabel(cwd, outcome.path),
+			);
+		}
+	});
 };
 
 const createArtifact = (artifact: Artifact): void => {
@@ -838,6 +892,7 @@ export const runInit = async (
 			checkAncestors(cwd, artifact);
 			checkPathKind(cwd, artifact);
 		});
+		checkWritable(cwd, plannedArtifacts);
 
 		const report = [
 			applyArtifact(configArtifact),

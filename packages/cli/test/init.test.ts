@@ -1042,6 +1042,150 @@ describe("runInit / a dangling symbolic link at an artifact path (#767, D8)", ()
 	});
 });
 
+// #767 review round 1, D6 (check side): the check stage stats; the create
+// stage had no diagnostic at all -- a parent with mode 555 passed every
+// stat and `writeFileSync`/`mkdirSync` threw a raw EACCES, sometimes
+// after another artifact was already created. A refused run must create
+// nothing.
+describe.skipIf(process.getuid?.() === 0)(
+	"runInit / refuses a parent the process cannot write into, and creates nothing (#767, D6)",
+	() => {
+		// Registered here so it runs before the file-level afterEach's own
+		// `rm(cwd, ...)` (vitest unwinds afterEach hooks inside-out) -- a
+		// still-mode-555 directory (or cwd itself) would otherwise make
+		// that removal fail.
+		afterEach(async () => {
+			await Promise.all(
+				["ro", "nx"].map(async (name) => {
+					const candidate = join(cwd, name);
+					if (!existsSync(candidate)) {
+						return;
+					}
+					await chmod(candidate, 0o755);
+				}),
+			);
+			await chmod(cwd, 0o755);
+		});
+
+		type NotWritableRow = {
+			readonly label: string;
+			readonly configContent: string | null;
+			readonly setup: (fixtureCwd: string) => Promise<void>;
+			readonly assert: (
+				result: Awaited<ReturnType<typeof runInit>>,
+				fixtureCwd: string,
+			) => void;
+		};
+
+		const rows: ReadonlyArray<NotWritableRow> = [
+			{
+				label:
+					'migrationsDir: "mig", snapshotPath: "ro/state.json", ro mode 555',
+				configContent:
+					'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "mig", snapshotPath: "ro/state.json" };\n',
+				setup: async (fixtureCwd) => {
+					await mkdir(join(fixtureCwd, "ro"), { recursive: true });
+					await chmod(join(fixtureCwd, "ro"), 0o555);
+				},
+				assert: (result, fixtureCwd) => {
+					expect(result.exitCode).toBe(1);
+					expect(result.stderr).toContain("error[init-path-conflict]");
+					expect(result.stderr).toContain("(EACCES)");
+					expect(result.stderr).toContain(
+						'"ro" does not let this process write into it',
+					);
+					expect(result.stderr).toContain('Next: check permissions on "ro"');
+					expect(result.stderr).not.toContain(fixtureCwd);
+					expect(existsSync(join(fixtureCwd, "mig"))).toBe(false);
+				},
+			},
+			{
+				label: 'migrationsDir: "nx/a/mig", nx mode 555 (deepest existing dir)',
+				configContent:
+					'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "nx/a/mig" };\n',
+				setup: async (fixtureCwd) => {
+					await mkdir(join(fixtureCwd, "nx"), { recursive: true });
+					await chmod(join(fixtureCwd, "nx"), 0o555);
+				},
+				assert: (result, fixtureCwd) => {
+					expect(result.exitCode).toBe(1);
+					expect(result.stderr).toContain("error[init-path-conflict]");
+					expect(result.stderr).toContain("(EACCES)");
+					expect(result.stderr).toContain(
+						'"nx" does not let this process write into it',
+					);
+					expect(result.stderr).toContain('Next: check permissions on "nx"');
+					expect(result.stderr).not.toContain(fixtureCwd);
+					expect(existsSync(join(fixtureCwd, "nx", "a"))).toBe(false);
+				},
+			},
+			{
+				label:
+					'snapshotPath: "ro/state.json", ro 555 and ro/state.json present (control: nothing to create)',
+				configContent:
+					'export default { entry: ["src/**/*.schema.ts"], snapshotPath: "ro/state.json" };\n',
+				setup: async (fixtureCwd) => {
+					await mkdir(join(fixtureCwd, "ro"), { recursive: true });
+					await writeFile(
+						join(fixtureCwd, "ro", "state.json"),
+						"pre-existing content",
+					);
+					await chmod(join(fixtureCwd, "ro"), 0o555);
+				},
+				assert: (result) => {
+					expect(result.exitCode).toBe(0);
+					expect(result.report).toContain("skipped ro/state.json (exists)");
+				},
+			},
+			{
+				label: "no config, cwd mode 555",
+				configContent: null,
+				setup: async (fixtureCwd) => {
+					await chmod(fixtureCwd, 0o555);
+				},
+				assert: (result, fixtureCwd) => {
+					expect(result.exitCode).toBe(1);
+					expect(result.stderr).toContain("error[init-path-conflict]");
+					expect(result.stderr).toContain("(EACCES)");
+					expect(result.stderr).toContain(
+						'"./" does not let this process write into it',
+					);
+					expect(result.stderr).toContain('Next: check permissions on "./"');
+					expect(existsSync(join(fixtureCwd, "hejbro.config.ts"))).toBe(false);
+					expect(existsSync(join(fixtureCwd, "migrations"))).toBe(false);
+				},
+			},
+			{
+				label: 'migrationsDir: "rw/mig", rw mode 755 (control)',
+				configContent:
+					'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "rw/mig" };\n',
+				setup: async (fixtureCwd) => {
+					await mkdir(join(fixtureCwd, "rw"), { recursive: true });
+				},
+				assert: (result, fixtureCwd) => {
+					expect(result.exitCode).toBe(0);
+					expect(result.report).toContain("created rw/mig/");
+					expect(existsSync(join(fixtureCwd, "rw", "mig"))).toBe(true);
+				},
+			},
+		];
+
+		it.each(rows)(
+			"refuses a parent the process cannot write into, and creates nothing ($label)",
+			async ({ configContent, setup, assert }) => {
+				if (configContent !== null) {
+					await writeFile(configPath(), configContent);
+				}
+				await setup(cwd);
+
+				const result = await runInit(cwd);
+
+				assert(result, cwd);
+			},
+		);
+	},
+);
+
 // D106 R1 N2: two configured fields resolving to the same path let the
 // run create one artifact and then report the other as already present
 // -- a repair run reading a broken project as whole. Resolved paths are
