@@ -1,13 +1,21 @@
 import { throwHejbroError } from "../error";
 
 /**
- * PL/pgSQL + SQL reserved words that break unquoted locals. plpgsql locals
- * (row scalars, function args, `new`/`old` and their fields) render
- * unquoted (dual quoting policy, spec §5.3 decision A3) — a reserved word
- * here would collide with the keyword and produce invalid SQL.
+ * Two classes of name an unquoted plpgsql local (row scalars, function
+ * args, `new`/`old` and their fields) cannot carry (dual quoting policy,
+ * spec §5.3 decision A3): a keyword Postgres or plpgsql fully reserves,
+ * which fails to parse; and a variable plpgsql declares on its own
+ * (`FOUND`, the exception-block `SQLSTATE`/`SQLERRM`, and a trigger
+ * function's `TG_*` variables) — which parses and creates, then silently
+ * resolves to the user's own name instead of plpgsql's, since nothing
+ * about a successful `CREATE FUNCTION` reveals the shadowing. Both fail
+ * the same way here, under one code, since the earliest place to catch
+ * either is the same: declaration time.
  */
 export const reservedPlpgsqlNames: ReadonlySet<string> = new Set([
 	"all",
+	"analyse",
+	"analyze",
 	"and",
 	"any",
 	"array",
@@ -25,6 +33,7 @@ export const reservedPlpgsqlNames: ReadonlySet<string> = new Set([
 	"column",
 	"constraint",
 	"create",
+	"current_catalog",
 	"current_date",
 	"current_role",
 	"current_time",
@@ -38,6 +47,7 @@ export const reservedPlpgsqlNames: ReadonlySet<string> = new Set([
 	"do",
 	"else",
 	"end",
+	"except",
 	"exception",
 	"execute",
 	"exists",
@@ -46,6 +56,7 @@ export const reservedPlpgsqlNames: ReadonlySet<string> = new Set([
 	"for",
 	"foreach",
 	"foreign",
+	"found",
 	"from",
 	"get",
 	"grant",
@@ -56,6 +67,7 @@ export const reservedPlpgsqlNames: ReadonlySet<string> = new Set([
 	"initially",
 	"intersect",
 	"into",
+	"lateral",
 	"leading",
 	"limit",
 	"localtime",
@@ -80,9 +92,24 @@ export const reservedPlpgsqlNames: ReadonlySet<string> = new Set([
 	"select",
 	"session_user",
 	"some",
+	"sqlerrm",
+	"sqlstate",
 	"strict",
 	"symmetric",
+	"system_user",
 	"table",
+	"tg_argv",
+	"tg_event",
+	"tg_level",
+	"tg_name",
+	"tg_nargs",
+	"tg_op",
+	"tg_relid",
+	"tg_relname",
+	"tg_table_name",
+	"tg_table_schema",
+	"tg_tag",
+	"tg_when",
 	"then",
 	"to",
 	"trailing",
@@ -100,18 +127,19 @@ export const reservedPlpgsqlNames: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * Throws `reserved-local-name` if `name` collides with a plpgsql/SQL
- * reserved word.
+ * Throws `reserved-local-name` if `name` collides with a name plpgsql
+ * reserves — the comparison folds case first, since an unquoted
+ * identifier folds to lower case the same way when Postgres resolves it.
  */
 export const assertValidLocalName = (
 	name: string,
 	identity: string,
 	declaredAt: string | null,
 ): void => {
-	if (reservedPlpgsqlNames.has(name)) {
+	if (reservedPlpgsqlNames.has(name.toLowerCase())) {
 		throwHejbroError(
 			"reserved-local-name",
-			`local name "${name}" in ${identity} collides with a plpgsql/SQL reserved word (reserved words cannot be used unquoted in a function body). Next: rename it.`,
+			`local name "${name}" in ${identity} collides with a name plpgsql reserves — a keyword, or a variable plpgsql declares itself such as found or tg_op — which cannot be declared unquoted in a function body. Next: rename it.`,
 			declaredAt,
 		);
 	}

@@ -234,7 +234,7 @@ describe("body-context recording", () => {
 				{ args: { when: uuid() }, returns: comments },
 				() => {},
 			),
-		).toThrowError(/reserved word/);
+		).toThrowError(/collides with a name plpgsql reserves/);
 	});
 
 	it("derived-expression projection throws row-projection-not-column", () => {
@@ -435,7 +435,57 @@ describe("body-context recording", () => {
 				);
 				ctx.return(row);
 			}),
-		).toThrowError(/reserved word/);
+		).toThrowError(/collides with a name plpgsql reserves/);
+	});
+
+	const ownedLoopNameCases: ReadonlyArray<{ readonly loopName: string }> = [
+		{ loopName: "found" },
+		{ loopName: "FOUND" },
+		{ loopName: "Found" },
+		{ loopName: "tg_op" },
+		{ loopName: "TG_OP" },
+	];
+
+	it.each(ownedLoopNameCases)(
+		"a loop named $loopName -- a name plpgsql declares itself, in any letter case -- throws reserved-local-name (#748)",
+		({ loopName }) => {
+			expect(() =>
+				defineTrigger(comments, triggerConfig, (ctx, { new: row }) => {
+					ctx.forEach(
+						select(comments).where(eq(comments.parentId, row.id)),
+						() => {},
+						loopName,
+					);
+					ctx.return(row);
+				}),
+			).toThrowError(/collides with a name plpgsql reserves/);
+		},
+	);
+
+	it("a row read named found is accepted -- its locals are found_<column>, never a variable under found itself (#748 control)", () => {
+		const declaration = defineTrigger(
+			comments,
+			triggerConfig,
+			(ctx, { new: row }) => {
+				const found = ctx.row(
+					select({ postId: comments.postId }, comments).where(
+						eq(comments.id, row.parentId),
+					),
+					"found",
+				);
+				ctx.if(isNull(found.postId), () => {
+					ctx.raise("not found");
+				});
+				ctx.return(row);
+			},
+		);
+		expect(declaration.functionDeclaration.body.declarations).toEqual([
+			{
+				declKind: "scalar",
+				name: "found_post_id",
+				typeNode: { typeName: "uuid" },
+			},
+		]);
 	});
 
 	it("forEach over a derived-expression projection throws row-projection-not-column", () => {

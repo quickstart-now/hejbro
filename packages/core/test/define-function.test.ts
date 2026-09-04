@@ -418,6 +418,74 @@ describe("an argument key whose derived name is not a hejbro SQL name is refused
 	});
 });
 
+describe("a name plpgsql declares itself is refused as an argument name (#748)", () => {
+	const ownedNameCases: ReadonlyArray<{ readonly argName: string }> = [
+		{ argName: "found" },
+		{ argName: "sqlstate" },
+		{ argName: "sqlerrm" },
+		{ argName: "tg_argv" },
+		{ argName: "tg_event" },
+		{ argName: "tg_level" },
+		{ argName: "tg_name" },
+		{ argName: "tg_nargs" },
+		{ argName: "tg_op" },
+		{ argName: "tg_relid" },
+		{ argName: "tg_relname" },
+		{ argName: "tg_table_name" },
+		{ argName: "tg_table_schema" },
+		{ argName: "tg_tag" },
+		{ argName: "tg_when" },
+		{ argName: "analyse" },
+		{ argName: "analyze" },
+		{ argName: "current_catalog" },
+		{ argName: "except" },
+		{ argName: "lateral" },
+		{ argName: "system_user" },
+	];
+
+	it.each(ownedNameCases)(
+		"refuses an argument whose derived name is $argName with reserved-local-name",
+		({ argName }) => {
+			expect(
+				codeOf(() =>
+					defineFunction(
+						app,
+						"echo_owned",
+						{ args: { [argName]: uuid() }, returns: { typeName: "uuid" } },
+						(ctx) => {
+							ctx.return(sql`null`);
+						},
+					),
+				),
+			).toBe("reserved-local-name");
+		},
+	);
+
+	const lookalikeNameCases: ReadonlyArray<{ readonly argName: string }> = [
+		{ argName: "found_at" },
+		{ argName: "row_found" },
+		{ argName: "tg" },
+		{ argName: "tg_ops" },
+		{ argName: "sqlstate_code" },
+		{ argName: "state" },
+	];
+
+	it.each(lookalikeNameCases)(
+		"accepts an argument named $argName -- it only contains an owned name (control)",
+		({ argName }) => {
+			const fn = defineFunction(
+				app,
+				"echo_lookalike",
+				{ args: { [argName]: uuid() }, returns: posts },
+				(ctx) => {
+					ctx.return(select(posts));
+				},
+			);
+			expect(fn.args[0]?.argName).toBe(argName);
+		},
+	);
+});
+
 describe("a literal __proto__ key replaces the args object's prototype instead of declaring an argument (#679, D106 review B1)", () => {
 	it("a literal __proto__: key is refused with args-prototype-key, and no declaration is produced", () => {
 		expect(
