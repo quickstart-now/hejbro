@@ -39,7 +39,7 @@ const notComparedFinding = (
 		identity,
 		error: hejbroError(
 			"check-not-compared",
-			`declared check constraint "${identity}" could not be compared: ${reason}. Declared expression: "${exprTexts.declared}". Catalog expression: "${exprTexts.catalog}". Next: confirm the connected role can run EXPLAIN against this table, then rerun \`hejbro check\`.`,
+			`declared check constraint "${identity}" could not be compared: ${reason}. Declared expression: \`${exprTexts.declared}\`. Catalog expression: \`${exprTexts.catalog}\`. Next: confirm the connected role can run EXPLAIN against this table, then rerun \`hejbro check\`.`,
 		),
 	};
 };
@@ -70,7 +70,7 @@ const notComparedByTextFinding = (
 	identity,
 	error: hejbroError(
 		"check-not-compared",
-		`declared check constraint "${identity}" could not be compared: the registered preset declares this platform cannot plan a statement, and the declared and catalog texts still differ after normalization. Declared expression: "${declaredText}". Catalog expression: "${catalogText}". Next: restate the declaration to match the catalog's own spelling: ${catalogText}`,
+		`declared check constraint "${identity}" could not be compared: the registered preset declares this platform cannot plan a statement, and the declared and catalog texts still differ after normalization. Declared expression: \`${declaredText}\`. Catalog expression: \`${catalogText}\`. Next: restate the declaration to match the catalog's own spelling: ${catalogText}`,
 	),
 });
 
@@ -647,7 +647,7 @@ export const compareCheckConstraint = async (
 		findings.push(
 			differsFinding(
 				identity,
-				`declared check constraint "${identity}" renders as "${probe.declaredText}", but the database's own constraint renders as "${probe.catalogText}".`,
+				`declared check constraint "${identity}" renders as \`${probe.declaredText}\`, but the database's own constraint renders as \`${probe.catalogText}\`.`,
 				"change the declaration to match the database, or write a migration that alters the constraint to the declared expression.",
 			),
 		);

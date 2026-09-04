@@ -1362,6 +1362,174 @@ describe("normalizeCheckText / step 5 strips the whole cast the server appends t
 	});
 });
 
+/**
+ * #779: the not-compared and differs messages used to wrap each expression
+ * text in the same double quote SQL uses for identifiers, so a table-bound
+ * declared expression (which always begins `"schema"."table"."column"`
+ * under server mode, or `"table"."column"` under text mode) collided with
+ * its own delimiter. Every case below pins the replacement delimiter
+ * (backticks) at the three message sites, with the `code` and the `Next:`
+ * substring asserted unchanged against the pre-change strings (tasks.md
+ * 1.1).
+ */
+describe("compareCheckConstraint / 3.8 expression texts are delimited by backticks", () => {
+	const declaredRoleCheckExpression = (): JsonValue => {
+		const posts = table(
+			app,
+			"posts",
+			{ id: uuid().primaryKey(), role: text() },
+			(t) => ({ checks: [check("posts_role_check", eq(t.role, "owner"))] }),
+		);
+		const snapshot = buildTestSnapshot([posts]);
+		return declaredCheckExpression(snapshot, "app.posts", "posts_role_check");
+	};
+
+	describe("server-mode not-compared, carrying both texts", () => {
+		it.each([
+			{
+				label: "catalog text begins with a quoted identifier",
+				catalogText: `"posts"."role" = 'owner'`,
+			},
+			{
+				label: "catalog text carries a double quote inside a literal",
+				catalogText: `format = '"json"'`,
+			},
+			{
+				label: "catalog text carries a cast",
+				catalogText: `role = 'owner'::text`,
+			},
+		])("$label", async ({ catalogText }) => {
+			const { session } = makeFakeSession({
+				metadata: { expression: catalogText, convalidated: true },
+				explainError: Object.assign(
+					new Error("permission denied for table posts"),
+					{ code: "42501" },
+				),
+			});
+
+			const findings = await compareCheckConstraint(
+				session,
+				withPostsTable(),
+				"app",
+				"posts",
+				"posts_role_check",
+				declaredRoleCheckExpression(),
+				"server",
+			);
+
+			expect(findings).toHaveLength(1);
+			const message = findings[0]?.error.message ?? "";
+			expect(findings[0]?.error).toMatchObject({ code: "check-not-compared" });
+			// The declared side always renders `"app"."posts"."role" = ...` under
+			// server mode -- itself a quoted-identifier-starting text -- so its
+			// own delimiter is asserted generically here.
+			expect(message).toMatch(/Declared expression: `.*`\./);
+			expect(message).not.toMatch(/Declared expression: ".*"\./);
+			expect(message).toContain(`Catalog expression: \`${catalogText}\`.`);
+			expect(message).not.toContain(`Catalog expression: "${catalogText}"`);
+			expect(message).toContain(
+				"Next: confirm the connected role can run EXPLAIN against this table, then rerun `hejbro check`.",
+			);
+		});
+	});
+
+	describe("text-mode not-compared", () => {
+		it.each([
+			{
+				label: "catalog text begins with a quoted identifier",
+				catalogText: `"other"."role" = 'owner'`,
+			},
+			{
+				label: "catalog text carries a double quote inside a literal",
+				catalogText: `format = '"json"'`,
+			},
+			{
+				label: "catalog text carries a cast",
+				catalogText: `(role = 'owner'::text) and false`,
+			},
+		])("$label", async ({ catalogText }) => {
+			const { session } = makeFakeSession({
+				metadata: { expression: catalogText, convalidated: true },
+			});
+
+			const findings = await compareCheckConstraint(
+				session,
+				withPostsTable(),
+				"app",
+				"posts",
+				"posts_role_check",
+				declaredRoleCheckExpression(),
+				"text",
+			);
+
+			expect(findings).toHaveLength(1);
+			const message = findings[0]?.error.message ?? "";
+			expect(findings[0]?.error).toMatchObject({ code: "check-not-compared" });
+			// The declared side always renders `"posts"."role" = ...` under text
+			// mode -- itself quoted-identifier-starting -- asserted generically.
+			expect(message).toMatch(/Declared expression: `.*`\./);
+			expect(message).not.toMatch(/Declared expression: ".*"\./);
+			expect(message).toContain(`Catalog expression: \`${catalogText}\`.`);
+			expect(message).not.toContain(`Catalog expression: "${catalogText}"`);
+			// The restatement pointer is not itself a delimited site -- unchanged.
+			expect(message).toContain(
+				`Next: restate the declaration to match the catalog's own spelling: ${catalogText}`,
+			);
+		});
+	});
+
+	describe("differs, carrying both renderings", () => {
+		it.each([
+			{
+				label: "both renderings begin with a quoted identifier",
+				declaredText: `"posts"."role" = 'owner'`,
+				catalogText: `"posts"."role" = 'admin'`,
+			},
+			{
+				label: "a rendering carries a double quote inside a literal",
+				declaredText: `format = '"json"'`,
+				catalogText: `format = '"xml"'`,
+			},
+			{
+				label: "a rendering carries a cast",
+				declaredText: `role = 'owner'::text`,
+				catalogText: `role = 'admin'::text`,
+			},
+		])("$label", async ({ declaredText, catalogText }) => {
+			const { session } = makeFakeSession({
+				metadata: {
+					expression: "irrelevant, differs regardless",
+					convalidated: true,
+				},
+				explainOutput: [declaredText, catalogText],
+			});
+
+			const findings = await compareCheckConstraint(
+				session,
+				withPostsTable(),
+				"app",
+				"posts",
+				"posts_role_check",
+				declaredRoleCheckExpression(),
+				"server",
+			);
+
+			expect(findings).toHaveLength(1);
+			const message = findings[0]?.error.message ?? "";
+			expect(findings[0]?.error).toMatchObject({
+				code: "check-object-differs",
+			});
+			expect(message).toContain(`renders as \`${declaredText}\`,`);
+			expect(message).toContain(`renders as \`${catalogText}\`.`);
+			expect(message).not.toContain(`renders as "${declaredText}"`);
+			expect(message).not.toContain(`renders as "${catalogText}"`);
+			expect(message).toContain(
+				"Next: change the declaration to match the database, or write a migration that alters the constraint to the declared expression.",
+			);
+		});
+	});
+});
+
 describe("compareCheckConstraint / 3.7 a failed catalog read under text mode", () => {
 	const declared = () => {
 		const posts = table(
