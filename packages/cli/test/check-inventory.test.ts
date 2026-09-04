@@ -196,6 +196,29 @@ describe("the inventory's anchor is a managed table", () => {
 			expectedUnmanagedColumns: [],
 			expectedUnmanagedTables: [],
 		},
+		{
+			// D106 R3/#665: `declaredSchemaNames` does not count an
+			// `existingTable()` node as declaring its schema, so a sibling
+			// table in that same schema is out of scope for a different
+			// reason than "no declaration touches it at all" (the previous
+			// row) -- this row pins that distinct path so a later change to
+			// `declaredSchemaNames`'s existing-table exclusion cannot pass
+			// silently.
+			label: "a schema only an `existingTable()` declaration touches",
+			declarations: [
+				getTableMeta(existingTable("app", "legacy_customers", { id: uuid() })),
+			],
+			catalogTables: [
+				{ schema: "app", table: "legacy_customers", rls: false },
+				{ schema: "app", table: "sibling_table", rls: false },
+			],
+			catalogColumns: [
+				columnRow("app", "legacy_customers", "id"),
+				columnRow("app", "sibling_table", "note"),
+			],
+			expectedUnmanagedColumns: [],
+			expectedUnmanagedTables: [],
+		},
 	];
 
 	it.each(rows)(
