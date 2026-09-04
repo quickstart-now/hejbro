@@ -12,6 +12,10 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { assertInteractiveTransactions } from "../src/apply/capability";
 import type { Migration } from "../src/apply/execute";
 import type { PlanResult } from "../src/apply/plan";
+import type {
+	CheckDriverConnection,
+	CheckDriverImporter,
+} from "../src/check/driver";
 import {
 	applyFrom,
 	NOTHING_TO_APPLY_LINE,
@@ -629,5 +633,119 @@ describe("runMigrate / 7.2 connection acquisition, apply-owned codes", () => {
 		expect(result.stderr).toContain("error[apply-connection-failed]");
 		expect(result.stderr).toContain("hejbro migrate");
 		expect(result.stderr).not.toContain("hejbro check");
+	});
+});
+
+describe("runMigrate — a relation that is not the ledger at the ledger's name is refused before the bootstrap (harden-ledger-identity, 1.4)", () => {
+	let cwd: string;
+
+	beforeEach(async () => {
+		cwd = await createCliFixtureDir();
+		await writeFixtureFile(cwd, "hejbro.config.ts", CONFIG_SOURCE);
+		await writeFixtureFile(
+			cwd,
+			"migrations/0001_a.sql",
+			[
+				"-- hejbro migration",
+				"-- parent-snapshot: sha256:aaaa",
+				"-- snapshot: sha256:bbbb",
+				'create table "app"."a" (id integer);',
+			].join("\n"),
+		);
+	});
+
+	afterEach(async () => {
+		await removeCliFixtureDir(cwd);
+	});
+
+	/** One `pg_class`/`pg_attribute` row shape, as `probeLedgerIdentity`'s own statement returns it. */
+	type ProbeRow = {
+		readonly relkind: string;
+		readonly name: string | null;
+		readonly type: string | null;
+	};
+
+	/** A full pgDriver fake -- unlike `makeFakeDriver` above (`applyFrom`'s own unit-level fake), this one goes through `runMigrate`'s real connection/bootstrap/apply path, answering the identity probe with `probeRows` and every other statement (bootstrap DDL, the advisory lock, the ledger recheck, the migration's own SQL, the ledger insert) with no rows -- the happy-path answer each of those needs to let a real apply through. */
+	const makeFakeMigrateImporter = (
+		probeRows: ReadonlyArray<ProbeRow>,
+	): { readonly importer: CheckDriverImporter; readonly calls: string[] } => {
+		const calls: string[] = [];
+		const session: DriverSession = {
+			execute: async (compiled) => {
+				calls.push(compiled.sql);
+				const sql = compiled.sql.trim().toLowerCase();
+				if (sql.startsWith("select c.relkind")) {
+					return probeRows as unknown as ReadonlyArray<DriverRow>;
+				}
+				return [];
+			},
+		};
+		const driver: CheckDriverConnection = {
+			capabilities: { "interactive-transactions": true, "session-state": true },
+			execute: session.execute,
+			transaction: async (callback) => callback(session),
+			setupSession: async () => {},
+			client: { end: async () => {} },
+		};
+		const importer: CheckDriverImporter = async () => ({
+			pgDriver: () => driver,
+		});
+		return { importer, calls };
+	};
+
+	it.each<[string, ReadonlyArray<ProbeRow>, string, ReadonlyArray<string>]>([
+		[
+			"a table carrying the ledger's four column names, filename typed differently -- the worst case, the insert would otherwise succeed",
+			[
+				{ relkind: "r", name: "id", type: "bigint" },
+				{ relkind: "r", name: "filename", type: "integer" },
+				{ relkind: "r", name: "origin", type: "text" },
+				{ relkind: "r", name: "applied_at", type: "timestamp with time zone" },
+			],
+			"table",
+			["id", "filename", "origin", "applied_at"],
+		],
+		["a view", [{ relkind: "v", name: "x", type: "integer" }], "view", ["x"]],
+	])(
+		"refuses with apply-ledger-occupied, exit 2, nothing bootstrapped or written -- %s",
+		async (_label, probeRows, relationWord, columns) => {
+			const { importer, calls } = makeFakeMigrateImporter(probeRows);
+
+			const result = await runMigrate(
+				cwd,
+				["--url", "postgres://fake"],
+				importer,
+			);
+
+			expect(result.exitCode).toBe(2);
+			expect(result.stderr).toContain("error[apply-ledger-occupied]");
+			expect(result.stderr).toContain(relationWord);
+			columns.map((column) => expect(result.stderr).toContain(column));
+			const lowered = calls.map((sql) => sql.toLowerCase());
+			expect(lowered.some((sql) => sql.includes("create schema"))).toBe(false);
+			expect(lowered.some((sql) => sql.includes("create table"))).toBe(false);
+			expect(lowered.some((sql) => sql.startsWith("insert"))).toBe(false);
+			expect(
+				lowered.some((sql) => sql.includes('create table "app"."a"')),
+			).toBe(false);
+		},
+	);
+
+	it("regression: an absent ledger bootstraps and applies the pending migration as today", async () => {
+		const { importer, calls } = makeFakeMigrateImporter([]);
+
+		const result = await runMigrate(
+			cwd,
+			["--url", "postgres://fake"],
+			importer,
+		);
+
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toEqual([
+			"migrate: applied 1 migration(s):",
+			" - 0001_a.sql",
+		]);
+		const lowered = calls.map((sql) => sql.toLowerCase());
+		expect(lowered.some((sql) => sql.includes("create schema"))).toBe(true);
 	});
 });

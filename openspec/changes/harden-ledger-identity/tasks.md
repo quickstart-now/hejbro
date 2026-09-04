@@ -84,7 +84,7 @@ marks the tasks that carry them into code, not open questions.
       `packages/cli/src/commands/status.ts`,
       `packages/cli/test/status-command.test.ts`.
 
-- [ ] 1.4 (~8m) `migrate` refuses on `occupied` before `bootstrapLedger`,
+- [x] 1.4 (~8m) `migrate` refuses on `occupied` before `bootstrapLedger`,
       exit 2. `runMigrate` probes right after
       `assertInteractiveTransactions`; `absent`/`ledger` bootstrap and
       proceed as today. Red: `packages/cli/test/migrate-command.test.ts`,

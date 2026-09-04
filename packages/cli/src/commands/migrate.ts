@@ -10,6 +10,10 @@ import type { Migration } from "../apply/execute";
 import { applyMigration } from "../apply/execute";
 import type { LedgerOrigin } from "../apply/ledger";
 import { bootstrapLedger, readLedger } from "../apply/ledger";
+import {
+	assertLedgerNotOccupied,
+	probeLedgerIdentity,
+} from "../apply/ledger-identity";
 import type { PlanResult } from "../apply/plan";
 import { checkChainOffline, planApply } from "../apply/plan";
 import type { CheckDriverImporter } from "../check/driver";
@@ -351,6 +355,8 @@ export const runMigrate = async (
 			{ commandName: MIGRATE_COMMAND, codes: APPLY_CONNECTION_CODES },
 			async (driver) => {
 				assertInteractiveTransactions(driver, MIGRATE_COMMAND);
+				const identity = await probeLedgerIdentity(driver);
+				assertLedgerNotOccupied(identity, MIGRATE_COMMAND);
 				await bootstrapLedger(driver);
 				const ledgerState = await readLedger(driver);
 				const plan = planApply(chain, ledgerState, baselineFileNames);
