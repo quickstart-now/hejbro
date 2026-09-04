@@ -205,6 +205,7 @@ export type CheckReport = {
 export const EMPTY_INVENTORY: Inventory = {
 	unmanagedTables: [],
 	unmanagedColumns: [],
+	unmanagedIndexes: [],
 	extensions: [],
 };
 

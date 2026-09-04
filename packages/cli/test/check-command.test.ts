@@ -163,6 +163,7 @@ describe("renderCheckReport / 5.1 inventory section", () => {
 		const inventory: Inventory = {
 			unmanagedTables: [{ schema: "app", table: "legacy_table" }],
 			unmanagedColumns: [],
+			unmanagedIndexes: [],
 			extensions: ["pgcrypto"],
 		};
 
@@ -180,6 +181,7 @@ describe("renderCheckReport / 5.1 inventory section", () => {
 		const report = renderCheckReport([], {
 			unmanagedTables: [],
 			unmanagedColumns: [],
+			unmanagedIndexes: [],
 			extensions: [],
 		});
 

@@ -4,12 +4,14 @@ import {
 	existingTable,
 	generateMigration,
 	getTableMeta,
+	index,
 	schema,
 	table,
+	text,
 	uuid,
 } from "@hejbro/core";
 import { describe, expect, it } from "vitest";
-import type { Catalog, ColumnRow } from "../src/check/catalog";
+import type { Catalog, ColumnRow, IndexRow } from "../src/check/catalog";
 import { buildInventory } from "../src/check/inventory";
 
 const app = schema("app");
@@ -337,5 +339,128 @@ describe("unmanaged columns", () => {
 		const inventory = buildInventory(snapshot, catalog);
 
 		expect(inventory.unmanagedColumns).toEqual(expectedUnmanagedColumns);
+	});
+});
+
+describe("unmanaged indexes", () => {
+	// harden-check-inventory, task 1.4 (#707): one managed table's worth
+	// of pg_index rows, covering every axis the exclusion rule and the
+	// backed-constraint label must get right at once -- Q4 (lead ruling,
+	// design.md): only an index backing a *declared* primary key or
+	// unique column is excluded; every other backed index (including a
+	// database-only primary key or unique constraint) is reported,
+	// carrying the constraint it backs, read from the catalog's own
+	// `constraintName` (never inferred from a name match -- the last row
+	// pins that against a plain index whose name happens to collide with
+	// an unrelated foreign key on the same table).
+	const widgets = table(
+		app,
+		"widgets",
+		{ id: uuid().primaryKey(), email: text().unique(), name: text() },
+		(t) => ({ indexes: [index("widgets_name_idx").on(t.name)] }),
+	);
+	const snapshot = buildTestSnapshot([widgets]);
+
+	const indexRow = (
+		name: string,
+		constraintName: string | null,
+		overrides: Partial<IndexRow> = {},
+	): IndexRow => ({
+		schema: "app",
+		table: "widgets",
+		name,
+		predicate: null,
+		keys: [],
+		constraintName,
+		...overrides,
+	});
+
+	const catalogIndexes: ReadonlyArray<IndexRow> = [
+		// declared -- not listed.
+		indexRow("widgets_name_idx", null),
+		// backs the declared primary key -- not listed.
+		indexRow("widgets_pkey", "widgets_pkey"),
+		// backs the declared column's unique constraint -- not listed.
+		indexRow("widgets_email_key", "widgets_email_key"),
+		// database-only, plain -- listed.
+		indexRow("widgets_legacy_idx", null),
+		// database-only, partial -- listed.
+		indexRow("widgets_partial_idx", null, {
+			predicate: "(name IS NOT NULL)",
+		}),
+		// database-only, expression -- listed, constraintName null.
+		indexRow("widgets_expr_idx", null, {
+			keys: [{ text: "lower(name)", expression: true }],
+		}),
+		// database-only primary key's own index -- listed, names the
+		// constraint it backs (not the declared key, so not excluded).
+		indexRow("widgets_legacy_pkey", "widgets_legacy_pkey"),
+		// database-only unique constraint's own index -- listed, names
+		// the constraint it backs (not the declared unique, so not
+		// excluded).
+		indexRow("widgets_legacy_email_key", "widgets_legacy_email_key"),
+		// plain index whose name collides with an unrelated foreign key
+		// on the same table -- listed, carrying no constraint: the
+		// catalog's own conindid join (1.2) never linked the two, so no
+		// name-based inference should either.
+		indexRow("widgets_owner_fkey", null),
+	];
+
+	it("excludes only the indexes backing a declared key, and names the constraint every other backed index carries", () => {
+		const catalog: Catalog = {
+			...emptyCatalog(),
+			tables: [{ schema: "app", table: "widgets", rls: false }],
+			constraints: [
+				{
+					schema: "app",
+					table: "widgets",
+					name: "widgets_owner_fkey",
+					type: "f",
+					columns: ["owner_id"],
+				},
+			],
+			indexes: catalogIndexes,
+		};
+
+		const inventory = buildInventory(snapshot, catalog);
+
+		expect(inventory.unmanagedIndexes).toEqual([
+			{
+				schema: "app",
+				table: "widgets",
+				name: "widgets_legacy_idx",
+				constraintName: null,
+			},
+			{
+				schema: "app",
+				table: "widgets",
+				name: "widgets_partial_idx",
+				constraintName: null,
+			},
+			{
+				schema: "app",
+				table: "widgets",
+				name: "widgets_expr_idx",
+				constraintName: null,
+			},
+			{
+				schema: "app",
+				table: "widgets",
+				name: "widgets_legacy_pkey",
+				constraintName: "widgets_legacy_pkey",
+			},
+			{
+				schema: "app",
+				table: "widgets",
+				name: "widgets_legacy_email_key",
+				constraintName: "widgets_legacy_email_key",
+			},
+			{
+				schema: "app",
+				table: "widgets",
+				name: "widgets_owner_fkey",
+				constraintName: null,
+			},
+		]);
 	});
 });

@@ -14,6 +14,14 @@ export type UnmanagedColumn = {
 	readonly name: string;
 };
 
+/** An index the database holds on a *managed* table that no declaration covers (harden-check-inventory, #707) -- `constraintName` is the catalog's own `conindid` fact (`check/catalog.ts`'s `indexes` query, task 1.2), never inferred from a name match: an index backing a constraint no declaration names still carries that constraint here (Q4, design.md), and only an index backing a *declared* key is excluded entirely (see {@link declaredKeyConstraintNames}). */
+export type UnmanagedIndex = {
+	readonly schema: string;
+	readonly table: string;
+	readonly name: string;
+	readonly constraintName: string | null;
+};
+
 /**
  * Existence-only information (spec Req5): tables inside a declared
  * schema that no declaration covers, columns on a managed table that no
@@ -28,6 +36,7 @@ export type UnmanagedColumn = {
 export type Inventory = {
 	readonly unmanagedTables: ReadonlyArray<UnmanagedTable>;
 	readonly unmanagedColumns: ReadonlyArray<UnmanagedColumn>;
+	readonly unmanagedIndexes: ReadonlyArray<UnmanagedIndex>;
 	readonly extensions: ReadonlyArray<string>;
 };
 
@@ -38,9 +47,12 @@ type LocalTableWithExisting = {
 	readonly schema: string;
 	readonly existing?: true;
 };
-type LocalColumnNode = { readonly name: string };
-type LocalTableWithColumns = {
+type LocalColumnNode = { readonly name: string; readonly uniqueName?: string };
+type LocalIndexNode = { readonly name: string };
+type LocalManagedTableNode = {
 	readonly columns: ReadonlyArray<LocalColumnNode>;
+	readonly indexes?: ReadonlyArray<LocalIndexNode>;
+	readonly primaryKeyName?: string;
 };
 
 /**
@@ -127,15 +139,56 @@ const managedTableIdentities = (snapshot: Snapshot): ReadonlySet<string> => {
 	);
 };
 
+/** A managed table's own snapshot node, or `undefined` for an identity `managedTableIdentities` never vouches for -- the shared read every object-level axis below narrows from. */
+const managedTableNode = (
+	snapshot: Snapshot,
+	identity: string,
+): LocalManagedTableNode | undefined =>
+	snapshot.objects[`table:${identity}`] as LocalManagedTableNode | undefined;
+
 /** The column names a managed table's own declaration names, read from its snapshot node -- absent (schema no declaration touches, or the table itself unmanaged/existing) reads as no declared columns, which never matters: {@link unmanagedColumns} only calls this for an identity `managedTableIdentities` already vouches for. */
 const declaredColumnNames = (
 	snapshot: Snapshot,
 	identity: string,
+): ReadonlySet<string> =>
+	new Set(
+		(managedTableNode(snapshot, identity)?.columns ?? []).map(
+			(column) => column.name,
+		),
+	);
+
+/** The index names a managed table's own declaration names, read from its snapshot node -- {@link unmanagedIndexes}'s first exclusion. */
+const declaredIndexNames = (
+	snapshot: Snapshot,
+	identity: string,
+): ReadonlySet<string> =>
+	new Set(
+		(managedTableNode(snapshot, identity)?.indexes ?? []).map(
+			(indexNode) => indexNode.name,
+		),
+	);
+
+/**
+ * The constraint names a managed table's own declaration produces for a
+ * primary key or a unique column -- the *only* constraints whose backing
+ * index this inventory excludes (Q4, design.md: an index backing any
+ * other constraint, including a database-only primary key or unique
+ * constraint, is inventoried, carrying that constraint's name). A
+ * declared table with neither reads as an empty set, same as an
+ * identity `managedTableNode` doesn't vouch for.
+ */
+const declaredKeyConstraintNames = (
+	snapshot: Snapshot,
+	identity: string,
 ): ReadonlySet<string> => {
-	const node = snapshot.objects[`table:${identity}`] as
-		| LocalTableWithColumns
-		| undefined;
-	return new Set((node?.columns ?? []).map((column) => column.name));
+	const node = managedTableNode(snapshot, identity);
+	const uniqueNames = (node?.columns ?? [])
+		.map((column) => column.uniqueName)
+		.filter((name): name is string => typeof name === "string");
+	const primaryKeyNames = [node?.primaryKeyName].filter(
+		(name): name is string => typeof name === "string",
+	);
+	return new Set([...uniqueNames, ...primaryKeyNames]);
 };
 
 /**
@@ -163,6 +216,48 @@ const unmanagedColumns = (
 };
 
 /**
+ * Indexes the catalog has on a managed table that no declaration covers
+ * (#707) -- the index-level counterpart of {@link unmanagedColumns}.
+ * Excludes an index the declaration names outright, and an index
+ * backing a *declared* key ({@link declaredKeyConstraintNames}); every
+ * other index is reported, carrying whatever constraint the catalog's
+ * own `constraintName` says it backs (Q4, design.md) -- including one
+ * backing a database-only primary key or unique constraint, and a plain
+ * index whose name merely collides with an unrelated constraint (its
+ * `constraintName` is `null`, since that fact came from `conindid`,
+ * never from the name).
+ */
+const unmanagedIndexes = (
+	snapshot: Snapshot,
+	catalog: Catalog,
+): ReadonlyArray<UnmanagedIndex> => {
+	const managedTables = managedTableIdentities(snapshot);
+	return catalog.indexes
+		.filter((row) => managedTables.has(`${row.schema}.${row.table}`))
+		.filter(
+			(row) =>
+				!declaredIndexNames(snapshot, `${row.schema}.${row.table}`).has(
+					row.name,
+				),
+		)
+		.filter((row) => {
+			if (row.constraintName === null) {
+				return true;
+			}
+			return !declaredKeyConstraintNames(
+				snapshot,
+				`${row.schema}.${row.table}`,
+			).has(row.constraintName);
+		})
+		.map((row) => ({
+			schema: row.schema,
+			table: row.table,
+			name: row.name,
+			constraintName: row.constraintName,
+		}));
+};
+
+/**
  * Builds the report's own inventory section (task 5.1) -- pure, no I/O
  * (group 1's `readCatalog` already ran), same split as `compare.ts` and
  * `expression.ts`.
@@ -173,5 +268,6 @@ export const buildInventory = (
 ): Inventory => ({
 	unmanagedTables: unmanagedTables(snapshot, catalog),
 	unmanagedColumns: unmanagedColumns(snapshot, catalog),
+	unmanagedIndexes: unmanagedIndexes(snapshot, catalog),
 	extensions: catalog.extensions.map((row) => row.name),
 });
