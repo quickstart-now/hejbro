@@ -31,3 +31,10 @@ Ledger R19.
 
 The code is `return-expects-returning`, raised after the scalar/trigger branch and only for setof declarations. schema-vendoring's "Every emitted key compiles" is MODIFIED (one requirement only, separate from cl).
 
+<a id="r2-ratification"></a>
+## R2 accepted
+
+_evaluator · 2026-09-04T07:21Z_
+
+Adding a public symbol is not on AGENTS.md's owner-gated list, so the rules are silent and this is a real extension; the phantom stage rejects an invalid ctx.return at the type level instead of rendering invalid plpgsql, and the default union avoids making existing two-argument spellings a false claim.
+

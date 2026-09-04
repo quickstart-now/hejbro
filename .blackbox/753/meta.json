@@ -15,7 +15,12 @@
       "basis": [],
       "at": "2026-09-03T15:05Z",
       "title": "rv artifacts approved with conditions; the [design] rulings for reset ordering and verify",
-      "ratified": null
+      "ratified": {
+        "verdict": "accepted",
+        "by": "evaluator",
+        "at": "2026-09-04T07:22Z",
+        "decision": null
+      }
     },
     {
       "id": "R2",
@@ -79,7 +84,12 @@
       ],
       "at": "2026-09-03T22:00Z",
       "title": "Slugs derive from the pre-refinement order; refinement affects execution order only",
-      "ratified": null
+      "ratified": {
+        "verdict": "accepted",
+        "by": "evaluator",
+        "at": "2026-09-04T07:22Z",
+        "decision": null
+      }
     },
     {
       "id": "R8",
@@ -90,7 +100,12 @@
       ],
       "at": "2026-09-03T22:00Z",
       "title": "A live cycle witness is required (3.10); slug separation becomes 3.11",
-      "ratified": null
+      "ratified": {
+        "verdict": "accepted",
+        "by": "evaluator",
+        "at": "2026-09-04T07:22Z",
+        "decision": null
+      }
     },
     {
       "id": "R9",

@@ -53,7 +53,12 @@
       "basis": [],
       "at": "2026-09-03T11:35Z",
       "title": "With a configuration file, init creates only the configured artifacts",
-      "ratified": null
+      "ratified": {
+        "verdict": "accepted",
+        "by": "evaluator",
+        "at": "2026-09-04T07:21Z",
+        "decision": null
+      }
     },
     {
       "id": "R6",

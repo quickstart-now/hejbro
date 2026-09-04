@@ -780,19 +780,20 @@ const defaultBranch = (repo) => ghJson(`repos/${repo}`).default_branch;
 const isReleasePr = (repo, pr) =>
 	pr.base === defaultBranch(repo) && INTEGRATION_BRANCHES.includes(pr.headRef);
 
-/** Release conditions read merge state live: pins were taken before the merge. */
+/** Release conditions read merge state live: pins were taken before the
+ * merge. A folder someone set back to `open` after a merge is a decision
+ * ("this issue stays open although a PR landed") and passes; only
+ * `merged-pending` — nobody decided — blocks. */
 const validateRelease = (state, repo) => {
 	const problems = [];
 	state.folders.forEach((folder) => {
-		if (folder.meta.status !== "closed") {
+		if (folder.meta.status === "merged-pending") {
 			const merged = folder.meta.prs.filter(
 				(pr) => pr.merged || prInfo(repo, pr.number).merged,
 			);
-			if (merged.length > 0) {
-				problems.push(
-					`${folder.meta.ref} has merged PRs (${merged.map((pr) => `#${pr.number}`).join(", ")}) but is not closed (status ${folder.meta.status})`,
-				);
-			}
+			problems.push(
+				`${folder.meta.ref} is merged-pending (${merged.map((pr) => `#${pr.number}`).join(", ") || "no merged PR recorded"}): close it, or set it back to open on purpose (blackbox close <folder> --status open)`,
+			);
 		}
 		rulingsOf(folder.meta)
 			.filter(isPendingExtension)

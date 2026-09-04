@@ -24,7 +24,12 @@
       "basis": [],
       "at": "2026-09-03T07:55Z",
       "title": "Honesty on set-operation typing: the pass-through reaches the left row type only",
-      "ratified": null
+      "ratified": {
+        "verdict": "accepted",
+        "by": "evaluator",
+        "at": "2026-09-04T07:21Z",
+        "decision": null
+      }
     }
   ],
   "work": [],

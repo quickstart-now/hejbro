@@ -38,3 +38,17 @@ Ledger R79.
 
 nl group 1's review passed; three documentation drifts are fixed in the PR. The design decision log's D86 example uses three-part references and is owner-gated, so it is left as is and queued for the owner's return: "enter R61 (two-part rendering at table-bound sites) in the decision log and update D86's example". The reviewer measured that a same-name collision with three-part is accepted by the server while two-part in the same place silently loses the correlation — the spec's exception rule demonstrated.
 
+<a id="r1-ratification"></a>
+## R1 accepted
+
+_evaluator · 2026-09-04T07:22Z_
+
+Extension on rendered SQL: two-part table.column at table-bound sites is defended against the bare-name capture case in a policy subquery and measured on both Postgres and Nile, which fits the owner's explicit-SQL preference. Rejecting a Nile preset refusal is the provider-preset rule applied correctly — the defect is in the renderer, and blaming the platform would take CHECK away from Nile users.
+
+<a id="r2-ratification"></a>
+## R2 accepted
+
+_evaluator · 2026-09-04T07:22Z_
+
+Scoping the two-part rule and leaving views, the query builder and function bodies unchanged keeps the existing query-builder contract intact instead of silently widening it, and regenerating the goldens is the honest consequence of a rendering change. The unverified areas are correctly deferred as a follow-up, which must be filed as a sub-issue of the phase that will handle it per the no-orphan rule.
+

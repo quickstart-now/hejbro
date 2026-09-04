@@ -285,3 +285,122 @@ _owner · 2026-09-03T00:00Z_
 
 "Do the work and merge it. Also: is there context that a Claude update has made unnecessary? For example, suppose Claude did not support addition and subtraction, so I built a skill for it or put it in context; then an official update added addition and subtraction — there would no longer be a reason to load that skill or context. Do I have anything like that?"
 
+<a id="r1-ratification"></a>
+## R1 accepted
+
+_evaluator · 2026-09-04T07:21Z_
+
+No written rule or owner decision orders the 0.2.x queue, so this is a genuine extension; bugs-then-correctness-then-tooling puts the root fix for #673 ahead of new capabilities, which matches the owner's recorded position that the #673 timeout raise was an effect-layer stopgap.
+
+<a id="r2-ratification"></a>
+## R2 accepted
+
+_evaluator · 2026-09-04T07:21Z_
+
+openspec/config.yaml requires each top-level group to have a tracking issue that is a sub-issue of the change's issue; reusing the bug issue itself satisfies both that and CLAUDE.local's no-orphan rule while avoiding a change-only issue, and issue inflation is a cost the owner's calibration mandate names.
+
+<a id="r5-ratification"></a>
+## R5 accepted
+
+_evaluator · 2026-09-04T07:21Z_
+
+The rules bind review to the piece (dd-openspec 'Review is spec-bound') but say nothing about how often a single-PR piece is reviewed or how contended machine gates are scheduled; reviewing once at the branch tip and serialising the heavy gate slot removes a duplicated cost without weakening the spec-bound review.
+
+<a id="r7-ratification"></a>
+## R7 accepted
+
+_evaluator · 2026-09-04T07:21Z_
+
+Nothing written says what counts as evidence for a type claim; the ruling is measured (about 15 minutes lost to contradicting harness diagnostics) and restates the house standard that a claim needs a run behind it.
+
+<a id="r8-ratification"></a>
+## R8 accepted
+
+_evaluator · 2026-09-04T07:21Z_
+
+Rules are silent on mutation mechanics; applying a mutant to a committed file and reverting with git checkout makes the experiment reproducible and its undo verifiable, which is the same evidence discipline dd-thinking asks for.
+
+<a id="r9-ratification"></a>
+## R9 accepted
+
+_evaluator · 2026-09-04T07:21Z_
+
+An extension of the diagnostics idiom the query-layer rule already governs; 'state only what the check observed, never assert a cause' is exactly dd-thinking's refutable-diagnosis standard and the owner's explicit-over-implicit preference applied to user-facing text.
+
+<a id="r10-ratification"></a>
+## R10 accepted
+
+_evaluator · 2026-09-04T07:21Z_
+
+Not fully an extension: D88 already makes the lead's close-out commit the single writer of the README metric block, and this ruling agrees with it while adding the missing timing detail (after the dev rebase, right before the PR), which the measured rebase conflicts justify.
+
+<a id="r11-ratification"></a>
+## R11 accepted
+
+_evaluator · 2026-09-04T07:21Z_
+
+AGENTS.md warns about cross-worktree cache interference (#448) but not about self-interference inside one worktree; the suite's _tmp-* fixtures becoming the type check's input is the same #102 class of self-inflicted failure and the ban is the root fix, not a retry.
+
+<a id="r12-ratification"></a>
+## R12 accepted
+
+_evaluator · 2026-09-04T07:21Z_
+
+AGENTS.md requires the heavy gates to pass with output shown but never says who runs them; crediting the reviewer's single isolated run, with the source and raw numbers named in the PR body, keeps the evidence explicit and avoids paying an expensive slot twice.
+
+<a id="r14-ratification"></a>
+## R14 accepted
+
+_evaluator · 2026-09-04T07:21Z_
+
+Rules are silent on how a mutation result is reported; naming a mutant by the edit it makes rather than by a count is what stops two correct measurements from reading as a contradiction, and it is the measured-claims standard applied to review evidence.
+
+<a id="r16-ratification"></a>
+## R16 accepted
+
+_evaluator · 2026-09-04T07:21Z_
+
+Nothing written covers git behaviour under heavy parallel load; the ruling names the mechanism (a racily-clean index) and fixes it at that layer with an index refresh in a quiet window, with a bounded fallback that is safe because piece PRs squash-merge.
+
+<a id="r17-ratification"></a>
+## R17 rejected
+
+_evaluator · 2026-09-04T07:21Z_
+
+It treats a symptom — a one-line README metric block conflicting on rebase — by freezing every other merge into dev, which serialises the up-to-three parallel piece teams team-up is built for and adds process cost the owner's calibration mandate asks to reduce; the root fix is re-running the stamp after a rebase (R10 already puts the stamp last) or making the metric block merge-safe. It may stand only as the one-off, time-boxed freeze it records, not as a standing rule.
+
+<a id="r19-ratification"></a>
+## R19 accepted
+
+_evaluator · 2026-09-04T07:21Z_
+
+team-up's 'all state in files' rule already points this way and the ruling makes it concrete for teammate reports, with the batching behaviour stated as measured rather than assumed; the 'no cd, no /tmp' removal is the owner's own correction, so it is not a lead revisit.
+
+<a id="r21-ratification"></a>
+## R21 accepted
+
+_evaluator · 2026-09-04T07:21Z_
+
+D88 fixes the ledger's columns and the pure-processing definition but not what to do when no stopwatch exists; a commit-span-derived actual with its source stated in notes is honest where a sentinel row would be a fabricated number, and rejecting the sentinel is the right call. Such rows must be excluded from estimate-convergence reading, which the notes column makes possible.
+
+<a id="r22-ratification"></a>
+## R22 accepted
+
+_evaluator · 2026-09-04T07:21Z_
+
+Not a new rule so much as enforcement of AGENTS.md's existing 'Before claiming done' list, which a brief had silently truncated; naming the whole list in every brief is the root fix for a CRAP regression reaching review.
+
+<a id="r23-ratification"></a>
+## R23 accepted
+
+_evaluator · 2026-09-04T07:21Z_
+
+Part (1) restates D110's constructor-mode rule rather than extending it, and agrees with it; part (2) — fix the verdict path before measuring — is a genuine extension that keeps a measurement from being interpreted after the fact.
+
+<a id="r25-ratification"></a>
+## R25 accepted
+
+_evaluator · 2026-09-04T07:21Z_
+
+AGENTS.md's 'Before claiming done' list names three commands and omits the CI-only check:* scripts, which is why PR #784 went red; deriving the gate list from package.json is the root fix and the ruling itself flags the missing documentation line.
+

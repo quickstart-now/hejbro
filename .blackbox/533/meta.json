@@ -4,10 +4,22 @@
   "ref": "quickstart-now/hejbro#533",
   "title": "cli restore-command test flakes on first heavy parallel run after install",
   "parent": "quickstart-now/hejbro#412",
-  "status": "merged-pending",
+  "status": "open",
   "opened": "2026-09-04",
   "closed": null,
-  "decisions": [],
+  "decisions": [
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "D2"
+      ],
+      "at": "2026-09-04T07:21Z",
+      "title": "Folder stays open after its PR merged: the flake it tracks is still being sampled",
+      "ratified": null
+    }
+  ],
   "work": [],
   "prs": [
     {

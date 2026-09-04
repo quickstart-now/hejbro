@@ -20,3 +20,10 @@ Ledger R23.
 
 Core combinators do not carry the right branch's type, so the pass-through goes as far as the left row type. The corpus requirement states the current contract as MODIFIED (chain = union, core-built execute = left row). A follow-up issue for carrying the right branch's type is filed under #412 by the lead. Changeset: patch (the kit is internal surface outside exports).
 
+<a id="r2-ratification"></a>
+## R2 accepted
+
+_evaluator · 2026-09-04T07:21Z_
+
+Extension on a contract detail: stating the current pass-through honestly as MODIFIED, rather than implying a type guarantee core cannot make, matches the explicit-over-implicit preference, and a patch changeset is correct for a fix on the 0.x line per D59 and the owner's rule that a minor is a stability milestone.
+

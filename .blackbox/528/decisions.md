@@ -56,3 +56,38 @@ Ledger R49.
 
 After the third counter-example to the batch sentence: the description of batch results is deleted from the requirement and the tsdoc, leaving only the observation rule ("first whitespace-delimited word; no split on semicolons"). Rule: when the same sentence is refuted twice, the third correction is to remove it (a consequence of R34). Reinforcement: a mechanism sentence is true only with its normalisation ("trimmed, lower-cased, stripped of any trailing semicolons; never split on an interior `;`") — the reviewer refuted the lead's draft with six rows; the fragility (a pipeline description) is recorded in the PR body.
 
+<a id="r2-ratification"></a>
+## R2 accepted
+
+_evaluator · 2026-09-04T07:21Z_
+
+A product-contract detail no written rule decides; reporting the false tier as wording only and making the envelope observation a required shape keeps the kit's claim tied to what it actually observed, in line with the explicit-over-implicit preference.
+
+<a id="r3-ratification"></a>
+## R3 accepted
+
+_evaluator · 2026-09-04T07:21Z_
+
+Rules are silent on proving an instrument; requiring three killed mutants before summoning a reviewer is risk-proportional mutation applied where the instrument itself is the thing under test, and it spends review capacity only once there is evidence.
+
+<a id="r4-ratification"></a>
+## R4 accepted
+
+_evaluator · 2026-09-04T07:21Z_
+
+Extension on contract detail: a normalised leading-keyword rule with an explicit non-boundary list is stated as a requirement rather than left implicit, and correcting the set-op delta to the actual behaviour is honesty about shipped behaviour rather than a silent revisit. Routing the left-join pass-through as a comment on the same-root issue #738 respects the no-orphan rule without inflating issues.
+
+<a id="r5-ratification"></a>
+## R5 accepted
+
+_evaluator · 2026-09-04T07:21Z_
+
+Rules are silent; refusing a first-segment heuristic and documenting the limitation in the tsdoc and the delta sentence is the owner's own stance that hejbro states what it can and cannot do in its own output, and it avoids a half-fix that would read as complete.
+
+<a id="r6-ratification"></a>
+## R6 accepted
+
+_evaluator · 2026-09-04T07:21Z_
+
+A genuine extension of spec-writing discipline: after two refutations the third correction is removal, and a mechanism sentence only holds together with its normalisation. Both keep delta prose to what was actually observed, which openspec/config.yaml's specs rule already demands in spirit.
+

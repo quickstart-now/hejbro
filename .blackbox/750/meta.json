@@ -53,6 +53,36 @@
       "at": "2026-09-04T00:00Z",
       "title": "Owner input 5",
       "raw": []
+    },
+    {
+      "id": "D6",
+      "by": "owner",
+      "at": "2026-09-04T07:21Z",
+      "title": "Finish everything under #750, then release 0.2.0-pre.1",
+      "raw": [
+        "ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#34"
+      ]
+    },
+    {
+      "id": "D7",
+      "by": "owner",
+      "at": "2026-09-04T07:21Z",
+      "title": "Same delegation as before",
+      "raw": [
+        "ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#35"
+      ]
+    },
+    {
+      "id": "R2",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "D2",
+        "R1"
+      ],
+      "at": "2026-09-04T07:21Z",
+      "title": "fix-nile-findings D106 round 2 disposition: N1 repaired as an interpretation of step 5, N2/N3 repaired, N4 owner-gated (#800), archived",
+      "ratified": null
     }
   ],
   "work": [

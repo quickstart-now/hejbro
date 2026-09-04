@@ -15,7 +15,12 @@
       "basis": [],
       "at": "2026-09-03T00:00Z",
       "title": "Order of attack for the 0.2.x queue",
-      "ratified": null
+      "ratified": {
+        "verdict": "accepted",
+        "by": "evaluator",
+        "at": "2026-09-04T07:21Z",
+        "decision": null
+      }
     },
     {
       "id": "R2",
@@ -24,7 +29,12 @@
       "basis": [],
       "at": "2026-09-03T00:00Z",
       "title": "Bugs travel two to four per change and per PR; the tracking issue is the bug itself",
-      "ratified": null
+      "ratified": {
+        "verdict": "accepted",
+        "by": "evaluator",
+        "at": "2026-09-04T07:21Z",
+        "decision": null
+      }
     },
     {
       "id": "R3",
@@ -55,7 +65,12 @@
       "basis": [],
       "at": "2026-09-03T08:50Z",
       "title": "One review per piece at the branch tip; heavy gates run in a single slot",
-      "ratified": null
+      "ratified": {
+        "verdict": "accepted",
+        "by": "evaluator",
+        "at": "2026-09-04T07:21Z",
+        "decision": null
+      }
     },
     {
       "id": "R6",
@@ -73,7 +88,12 @@
       "basis": [],
       "at": "2026-09-03T11:10Z",
       "title": "Harness diagnostics after an Edit are not a compiler run",
-      "ratified": null
+      "ratified": {
+        "verdict": "accepted",
+        "by": "evaluator",
+        "at": "2026-09-04T07:21Z",
+        "decision": null
+      }
     },
     {
       "id": "R8",
@@ -82,7 +102,12 @@
       "basis": [],
       "at": "2026-09-03T11:50Z",
       "title": "Mutants are applied to committed files and reverted with git checkout",
-      "ratified": null
+      "ratified": {
+        "verdict": "accepted",
+        "by": "evaluator",
+        "at": "2026-09-04T07:21Z",
+        "decision": null
+      }
     },
     {
       "id": "R9",
@@ -91,7 +116,12 @@
       "basis": [],
       "at": "2026-09-03T12:10Z",
       "title": "Diagnostics state only what the check observed",
-      "ratified": null
+      "ratified": {
+        "verdict": "accepted",
+        "by": "evaluator",
+        "at": "2026-09-04T07:21Z",
+        "decision": null
+      }
     },
     {
       "id": "R10",
@@ -100,7 +130,12 @@
       "basis": [],
       "at": "2026-09-03T12:40Z",
       "title": "Badge and CRAP stamps are committed once, right before the PR, after the dev rebase",
-      "ratified": null
+      "ratified": {
+        "verdict": "accepted",
+        "by": "evaluator",
+        "at": "2026-09-04T07:21Z",
+        "decision": null
+      }
     },
     {
       "id": "R11",
@@ -109,7 +144,12 @@
       "basis": [],
       "at": "2026-09-03T13:05Z",
       "title": "Never run the test suite and the type check at once in one worktree",
-      "ratified": null
+      "ratified": {
+        "verdict": "accepted",
+        "by": "evaluator",
+        "at": "2026-09-04T07:21Z",
+        "decision": null
+      }
     },
     {
       "id": "R12",
@@ -118,7 +158,12 @@
       "basis": [],
       "at": "2026-09-03T13:25Z",
       "title": "The final tip's heavy gates are the reviewer's one isolated run",
-      "ratified": null
+      "ratified": {
+        "verdict": "accepted",
+        "by": "evaluator",
+        "at": "2026-09-04T07:21Z",
+        "decision": null
+      }
     },
     {
       "id": "R13",
@@ -136,7 +181,12 @@
       "basis": [],
       "at": "2026-09-03T14:10Z",
       "title": "A mutant is specified by its edit, not by a number",
-      "ratified": null
+      "ratified": {
+        "verdict": "accepted",
+        "by": "evaluator",
+        "at": "2026-09-04T07:21Z",
+        "decision": null
+      }
     },
     {
       "id": "R15",
@@ -154,7 +204,12 @@
       "basis": [],
       "at": "2026-09-03T15:20Z",
       "title": "Rebase under load: refresh the index, and after three failures merge dev instead",
-      "ratified": null
+      "ratified": {
+        "verdict": "accepted",
+        "by": "evaluator",
+        "at": "2026-09-04T07:21Z",
+        "decision": null
+      }
     },
     {
       "id": "R17",
@@ -165,7 +220,12 @@
       ],
       "at": "2026-09-03T15:55Z",
       "title": "While a PR is in its review-closing phase, no other merge moves dev",
-      "ratified": null
+      "ratified": {
+        "verdict": "rejected",
+        "by": "evaluator",
+        "at": "2026-09-04T07:21Z",
+        "decision": null
+      }
     },
     {
       "id": "R18",
@@ -185,7 +245,12 @@
       "basis": [],
       "at": "2026-09-03T17:00Z",
       "title": "Teammate reports go to a status file; messages arrive when the lead's turn ends",
-      "ratified": null
+      "ratified": {
+        "verdict": "accepted",
+        "by": "evaluator",
+        "at": "2026-09-04T07:21Z",
+        "decision": null
+      }
     },
     {
       "id": "R20",
@@ -205,7 +270,12 @@
       ],
       "at": "2026-09-03T17:00Z",
       "title": "task-times rows for a dissolved piece: derived from commit spans, source stated",
-      "ratified": null
+      "ratified": {
+        "verdict": "accepted",
+        "by": "evaluator",
+        "at": "2026-09-04T07:21Z",
+        "decision": null
+      }
     },
     {
       "id": "R22",
@@ -214,7 +284,12 @@
       "basis": [],
       "at": "2026-09-04T00:15Z",
       "title": "Every brief's task gates are AGENTS.md's whole 'before claiming done' list",
-      "ratified": null
+      "ratified": {
+        "verdict": "accepted",
+        "by": "evaluator",
+        "at": "2026-09-04T07:21Z",
+        "decision": null
+      }
     },
     {
       "id": "R23",
@@ -225,7 +300,12 @@
       ],
       "at": "2026-09-04T00:40Z",
       "title": "Two reusable rules from nl: constructor mode for foreign input, fixed verdict paths before measuring",
-      "ratified": null
+      "ratified": {
+        "verdict": "accepted",
+        "by": "evaluator",
+        "at": "2026-09-04T07:21Z",
+        "decision": null
+      }
     },
     {
       "id": "R24",
@@ -245,7 +325,12 @@
       "basis": [],
       "at": "2026-09-04T01:40Z",
       "title": "A brief's gate list is every check:* script in package.json",
-      "ratified": null
+      "ratified": {
+        "verdict": "accepted",
+        "by": "evaluator",
+        "at": "2026-09-04T07:21Z",
+        "decision": null
+      }
     },
     {
       "id": "R26",

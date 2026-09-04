@@ -24,7 +24,12 @@
       "basis": [],
       "at": "2026-09-03T07:55Z",
       "title": "Kit: report the false tier as wording only; envelope observation is the third required shape",
-      "ratified": null
+      "ratified": {
+        "verdict": "accepted",
+        "by": "evaluator",
+        "at": "2026-09-04T07:21Z",
+        "decision": null
+      }
     },
     {
       "id": "R3",
@@ -33,7 +38,12 @@
       "basis": [],
       "at": "2026-09-03T08:50Z",
       "title": "Kit changes need three mutant killers before a reviewer is summoned",
-      "ratified": null
+      "ratified": {
+        "verdict": "accepted",
+        "by": "evaluator",
+        "at": "2026-09-04T07:21Z",
+        "decision": null
+      }
     },
     {
       "id": "R4",
@@ -42,7 +52,12 @@
       "basis": [],
       "at": "2026-09-03T12:20Z",
       "title": "Boundary recognition by normalised leading keyword; set-op delta corrected to actual behaviour",
-      "ratified": null
+      "ratified": {
+        "verdict": "accepted",
+        "by": "evaluator",
+        "at": "2026-09-04T07:21Z",
+        "decision": null
+      }
     },
     {
       "id": "R5",
@@ -51,7 +66,12 @@
       "basis": [],
       "at": "2026-09-03T13:55Z",
       "title": "Transaction ends inside a batch string are not recognised; stated honestly",
-      "ratified": null
+      "ratified": {
+        "verdict": "accepted",
+        "by": "evaluator",
+        "at": "2026-09-04T07:21Z",
+        "decision": null
+      }
     },
     {
       "id": "R6",
@@ -62,7 +82,12 @@
       ],
       "at": "2026-09-03T15:35Z",
       "title": "A sentence refuted twice is removed, not corrected a third time",
-      "ratified": null
+      "ratified": {
+        "verdict": "accepted",
+        "by": "evaluator",
+        "at": "2026-09-04T07:21Z",
+        "decision": null
+      }
     }
   ],
   "work": [],

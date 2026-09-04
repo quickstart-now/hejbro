@@ -15,7 +15,12 @@
       "basis": [],
       "at": "2026-09-03T17:00Z",
       "title": "Table-bound sites render column references as two-part table.column",
-      "ratified": null
+      "ratified": {
+        "verdict": "accepted",
+        "by": "evaluator",
+        "at": "2026-09-04T07:22Z",
+        "decision": null
+      }
     },
     {
       "id": "R2",
@@ -26,7 +31,12 @@
       ],
       "at": "2026-09-03T17:00Z",
       "title": "Scope of the two-part rule; views, the query builder and function bodies are unchanged",
-      "ratified": null
+      "ratified": {
+        "verdict": "accepted",
+        "by": "evaluator",
+        "at": "2026-09-04T07:22Z",
+        "decision": null
+      }
     },
     {
       "id": "R3",
