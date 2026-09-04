@@ -201,7 +201,9 @@ skill); the conventions live in that skill and in the generated README.
 Enforcement is not this paragraph: the Claude Code hooks in
 `.claude/settings.json` save owner inputs at the keystroke, refuse a team
 brief that cites no recorded ruling, and gate `gh pr merge` on the
-record; CI's `blackbox` job runs the same check before every other job.
+record; CI's `blackbox` job runs the same check before every other job
+and, with the `BLACKBOX_TOKEN` secret present, pins the PR itself and
+commits the pins to the branch as `blackbox[bot]`.
 Read the folders only when investigating a rule's origin; never load
 them during normal work.
 
