@@ -176,6 +176,43 @@ documents everything and comes last.
       scoped handle (`client.as(context)`) as guarded alike, `as` on it
       included. Files: that reference.
 
+## 2. Review repairs
+
+- [ ] 1.2b (~4m) A savepoint rollback keeps its optional words. Found in
+      review: `rollback transaction to savepoint x` and `rollback work to
+      savepoint x` classified as ending the transaction, contradicting
+      the requirement's own "rolling back to one … counts as an ordinary
+      statement". Red: `packages/query/test/driver/conformance.test.ts`,
+      three rows added to the leading-word table as `ordinary` (`rollback
+      transaction to savepoint x`, `rollback work to savepoint x`,
+      `ROLLBACK TRANSACTION TO SAVEPOINT s`) and two as `end` controls
+      (`rollback work`, `rollback transaction` — green today). Green: the
+      leading-words reader yields the words after the first as long as
+      whitespace alone separates each from the one before; `rollback` is
+      a savepoint rollback when `to` is the second word, or the third
+      after `work`/`transaction`. Files:
+      `packages/query/src/testing/driver-conformance.ts`, that test.
+
+- [ ] 1.4c (~7m) **[design]** A transaction's own handle refuses after
+      the transaction settled. Found in review: a kept top-level `tx`
+      used after `db.transaction` committed ran its statement on the
+      next pooled connection, outside any transaction, and committed
+      it. Settles `statement-after-transaction` and its remedy (open a
+      new `transaction()`). Red: `packages/query/test/db/transaction.test.ts`,
+      one case over the settled root handle after a commit and, in a
+      second shape, after a rollback — `execute`, a chain root awaited,
+      `with`, and `transaction(cb)` each reject with that code, `cb`
+      never runs, and neither the top-level `driver.execute` nor any
+      session sees a statement. Green: the root token is marked settled
+      when the callback settles, at every site that builds a root `tx`
+      through one shared runner (`createTransactionApi`, `db.ts`'s
+      provider path, `context.ts`'s scoped path), and the settled check
+      picks this code for a root token. `skills/hejbro/references/
+      query-layer.md` gains the Errors row and one sentence in the
+      Transactions paragraph. Files: `packages/query/src/db/transaction.ts`,
+      `packages/query/src/db/db.ts`, `packages/query/src/db/context.ts`,
+      that test, the skill reference.
+
 ## Close-out (not a group)
 
 `.changeset/harden-query-guards.md` (`"@hejbro/query": patch`, one

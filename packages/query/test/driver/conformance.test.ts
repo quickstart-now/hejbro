@@ -716,6 +716,16 @@ describe("assertSessionStateConformance (task 1.4/1.5, #481)", () => {
 		{ text: "select ';'", kind: "ordinary" },
 		{ text: "-- opens\nbegin", kind: "ordinary" },
 		{ text: "/* trace */ commit", kind: "ordinary" },
+		// 1.2b (review repair): a savepoint rollback keeps its optional
+		// words -- these three must stay ordinary, exactly like the bare
+		// `rollback to savepoint x` form already does.
+		{ text: "rollback transaction to savepoint x", kind: "ordinary" },
+		{ text: "rollback work to savepoint x", kind: "ordinary" },
+		{ text: "ROLLBACK TRANSACTION TO SAVEPOINT s", kind: "ordinary" },
+		// controls: the same optional word alone, with no savepoint
+		// target, still ends the transaction.
+		{ text: "rollback work", kind: "end" },
+		{ text: "rollback transaction", kind: "end" },
 	];
 
 	const buildRecordedOnConnection = (

@@ -33,11 +33,13 @@ ending a transaction are all seen. A statement is classified by its
 leading word: the text is trimmed and lower-cased, and the leading word
 is the first run of characters that are neither whitespace nor `;`, so
 a semicolon glued to the word, and any semicolons around it, never
-become part of it. Where a control word is read together with the word
-after it (`start transaction`; `rollback to`, which excludes a savepoint
-rollback), that second word counts only when whitespace alone separates
-it from the first; a `;` between them ends the leading statement, and
-nothing past it is read. A string is never split on an interior `;`
+become part of it. Where a control word is read together with the words
+after it (`start transaction`; `rollback`, which rolls back to a
+savepoint — and so stays ordinary — when `to` follows it directly or
+after one optional `work` or `transaction`, and ends the transaction
+otherwise), each following word counts only when whitespace alone
+separates it from the one before; a `;` between them ends the leading
+statement, and nothing past it is read. A string is never split on an interior `;`
 into several statements: a string carrying several is classified by its
 first alone, and what a later statement in it does is not seen. Text
 that leads with a comment leads with the comment's own characters and
@@ -118,6 +120,15 @@ modify this requirement.
   opens nothing because its second word is past a `;`, and a semicolon
   or a control word inside a string literal is never reached — so the
   envelope conforms with that statement standing in for the settings
+
+#### Scenario: A savepoint rollback keeps its optional words
+- **WHEN** an envelope carries, between the transaction's opening and
+  the caller's own statement, any of `rollback transaction to savepoint
+  x`, `rollback work to savepoint x`, `ROLLBACK TRANSACTION TO SAVEPOINT
+  s`
+- **THEN** each counts as an ordinary statement, exactly as `rollback to
+  savepoint x` does, so the envelope conforms — while `rollback work`
+  and `rollback transaction` on their own still end the transaction
 
 #### Scenario: A comment-led statement is ordinary
 - **WHEN** an envelope carries `-- opens\nbegin` where the opening would
