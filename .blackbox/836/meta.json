@@ -45,6 +45,19 @@
       "at": "2026-09-04T22:46Z",
       "title": "ld (b) accepted at fb0003fa; reset clear failures move to the ledger code by rule (#753 intent stands); flake → #862; reviewer summoned",
       "ratified": null
+    },
+    {
+      "id": "R4",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "R1",
+        "R3",
+        "412/D13"
+      ],
+      "at": "2026-09-04T23:13Z",
+      "title": "ld review round 1: B1 read-before-bootstrap, B2 no 42P01 tolerance inside a transaction, B3 pg pool error listener (scope extension), B4 column-specific hint; group 2, narrow re-review",
+      "ratified": null
     }
   ],
   "work": [
