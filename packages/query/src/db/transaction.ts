@@ -59,6 +59,16 @@ export type Tx<TSchema = Record<string, unknown>> = ChainApi<TSchema> & {
 };
 
 /**
+ * One `tx`'s own place in its {@link TransactionTree} -- `settled` marks
+ * that this token's own nested transaction (if it was one) has released
+ * or rolled back, so its savepoint no longer exists and a statement
+ * through it would land in the enclosing transaction unbracketed
+ * (#449, task 1.4). The outermost `tx`'s own token is never marked --
+ * there is no savepoint for it to outlive.
+ */
+export type TxToken = { settled: boolean };
+
+/**
  * One transaction's whole `tx` tree shares this state (#449): `next` is
  * the savepoint counter -- monotonic, never per-depth, since depth-keyed
  * names would reuse a name after a sibling rolled back to it (`ROLLBACK
@@ -68,12 +78,18 @@ export type Tx<TSchema = Record<string, unknown>> = ChainApi<TSchema> & {
  * a nested transaction's fresh token for the span its callback is in
  * flight (before its own `SAVEPOINT` is even sent, so a statement raced
  * against it synchronously never slips through), and restored once that
- * nested transaction has settled either way.
+ * nested transaction has settled either way -- this reassignment is
+ * shared by every `tx` in the tree, not just the one that started the
+ * nested transaction, so a grandparent's own statement is refused
+ * exactly like the immediate parent's.
  */
-export type TransactionTree = { next: number; innermost: object };
+export type TransactionTree = { next: number; innermost: TxToken };
 
-/** Refuses a statement sent through `token` when it is not `tree`'s own innermost in-flight token (#449) -- only the innermost `tx` of a transaction tree may send while a nested transaction is in flight. */
-function assertInnermost(tree: TransactionTree, token: object): void {
+/** Refuses a statement sent through `token` (#449): `token.settled` -- its own nested transaction has already released or rolled back -- takes precedence and picks `statement-after-nested-transaction`, since that check is true regardless of what `tree.innermost` currently holds; otherwise `token` not being `tree`'s own innermost in-flight token picks `statement-during-nested-transaction` -- only the innermost `tx` of a transaction tree may send while a nested transaction is in flight. */
+function assertInnermost(tree: TransactionTree, token: TxToken): void {
+	if (token.settled) {
+		throwStatementAfterNestedTransaction();
+	}
 	if (tree.innermost !== token) {
 		throwStatementDuringNestedTransaction();
 	}
@@ -103,6 +119,16 @@ function throwStatementDuringNestedTransaction(): never {
 			'a statement was sent through this "tx" while a nested transaction started from it (or from a "tx" above it) is still in flight. Next: issue this statement through the nested callback\'s own "tx" when it belongs to that nested work, or await the nested transaction first when it does not.',
 		),
 		{ code: "statement-during-nested-transaction" },
+	);
+}
+
+/** Builds and throws the `statement-after-nested-transaction`-coded error (D57), the settled sibling of {@link throwStatementDuringNestedTransaction} (#449, task 1.4): a `tx` handed to a nested callback is that nested transaction and nothing else -- once its callback has settled, its savepoint no longer exists, and a statement sent through it would land in the enclosing transaction unbracketed. */
+function throwStatementAfterNestedTransaction(): never {
+	throw Object.assign(
+		new Error(
+			'a statement was sent through a "tx" whose own nested transaction has already settled (released or rolled back) -- that "tx" was that nested transaction and nothing else, and its savepoint no longer exists. Next: issue this statement through the enclosing "tx" instead.',
+		),
+		{ code: "statement-after-nested-transaction" },
 	);
 }
 
@@ -209,12 +235,12 @@ async function recoverFromFailedRelease(
 	);
 }
 
-/** Builds the `transaction` member a {@link Tx} carries — one savepoint per call, released on return and rolled back on a throw, guarded against a second nested transaction starting on this same `tx` while one is still in flight (#445/D1). `token` is this `tx`'s own place in `tree` -- restored as `tree.innermost` once the nested transaction settles, so the enclosing `tx` may send again (#449). */
+/** Builds the `transaction` member a {@link Tx} carries — one savepoint per call, released on return and rolled back on a throw, guarded against a second nested transaction starting on this same `tx` while one is still in flight (#445/D1). `token` is this `tx`'s own place in `tree` -- restored as `tree.innermost` once the nested transaction settles, so the enclosing `tx` may send again (#449); the nested transaction's own fresh token is marked `settled` in the same step, so a caller that kept that handle is refused under its own code afterward (task 1.4), not silently allowed to send into the now-unbracketed enclosing transaction. */
 const createSavepointApi = (
 	session: DriverSession,
 	tables: Declarations["tables"],
 	tree: TransactionTree,
-	token: object,
+	token: TxToken,
 ): Tx["transaction"] => {
 	const state = { active: false };
 	return (async <T>(callback: (tx: Tx) => Promise<T>): Promise<T> => {
@@ -225,8 +251,10 @@ const createSavepointApi = (
 		// Reassigned synchronously, before anything is awaited (#449): a
 		// statement racing this call via `Promise.all` runs its own guard in
 		// this same synchronous turn, so it must already see the nested
-		// transaction's token, not the old one, by the time it checks.
-		const childToken = {};
+		// transaction's token, not the old one, by the time it checks --
+		// this ordering (flip `innermost` before the SAVEPOINT is even sent)
+		// is what actually closes the race, not merely having a token.
+		const childToken: TxToken = { settled: false };
 		tree.innermost = childToken;
 		try {
 			const name = `hejbro_sp_${tree.next}`;
@@ -255,6 +283,7 @@ const createSavepointApi = (
 			}
 			return result;
 		} finally {
+			childToken.settled = true;
 			tree.innermost = token;
 			state.active = false;
 		}
@@ -276,13 +305,18 @@ const createSavepointApi = (
 export const buildTx = (
 	session: DriverSession,
 	tables: Declarations["tables"],
-	tree: TransactionTree = { next: 1, innermost: {} },
-	token: object = tree.innermost,
+	tree: TransactionTree = { next: 1, innermost: { settled: false } },
+	token: TxToken = tree.innermost,
 ): Tx => ({
 	...createChainApi(
-		() => (send) => {
+		// `async` (task 1.4, #449): a thenable whose own `.then` throws
+		// synchronously is not a refusal, it is an escape -- a `Promise.all`
+		// entry or any other direct `.then(f, r)` caller must see a
+		// rejection, never an exception thrown out of calling `.then`
+		// itself.
+		() => async (send) => {
 			assertInnermost(tree, token);
-			return send(session);
+			return await send(session);
 		},
 		tables,
 	),

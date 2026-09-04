@@ -2,6 +2,7 @@ import { schema, select, table, text, uuid } from "@hejbro/core";
 import { describe, expect, it, vi } from "vitest";
 import { db } from "../../src/db/db";
 import type { Driver, DriverSession } from "../../src/driver/contract";
+import type { Tx } from "../../src/db/transaction";
 
 const app = schema("app");
 const posts = table(app, "posts", {
@@ -664,6 +665,174 @@ describe("db().transaction (task 4.6)", () => {
 					.catch(() => {});
 				await expect(tx.execute(select(posts))).resolves.toEqual([]);
 			});
+		});
+	});
+
+	/**
+	 * task 1.4: the whole tree, not one level -- any `tx` above an in-flight
+	 * nested transaction is refused alike, and a nested handle kept past its
+	 * own callback's settling is refused under its own code, since its
+	 * savepoint no longer exists.
+	 */
+	describe("the whole tree is guarded, and a settled handle is refused under its own code (#449)", () => {
+		it("calling a chain's .then directly returns a rejection instead of throwing synchronously", async () => {
+			const { driver } = transactionalDriver(true);
+			const handle = db({ posts }, driver);
+
+			await handle.transaction(async (tx) => {
+				const chain = tx.select(posts);
+				const nestedPromise = tx.transaction(async (inner) => {
+					await inner.execute(select(posts));
+					return "a-survived";
+				});
+
+				const captured = { error: undefined as unknown, called: false };
+				expect(() =>
+					chain.then(
+						() => {},
+						(error: unknown) => {
+							captured.called = true;
+							captured.error = error;
+						},
+					),
+				).not.toThrow();
+
+				const aOutcome = await nestedPromise;
+				expect(aOutcome).toBe("a-survived");
+				expect(captured.called).toBe(true);
+				expect(captured.error).toHaveProperty(
+					"code",
+					"statement-during-nested-transaction",
+				);
+			});
+		});
+
+		it("any tx above an in-flight nested transaction is refused alike (grandparent)", async () => {
+			const { driver, sessionExecute } = transactionalDriver(true);
+			const handle = db({ posts }, driver);
+
+			await handle.transaction(async (outer) => {
+				await outer.transaction(async (mid) => {
+					const [aOutcome, outerOutcome] = await Promise.all([
+						mid.transaction(async (inner) => {
+							await inner.execute(select(posts));
+							return "a-survived";
+						}),
+						outer.execute(select(posts)).catch((error: unknown) => error),
+					]);
+
+					expect(aOutcome).toBe("a-survived");
+					expect(outerOutcome).toHaveProperty(
+						"code",
+						"statement-during-nested-transaction",
+					);
+				});
+			});
+
+			const sql = sessionExecute.mock.calls.map(
+				(call) => (call[0] as { sql: string }).sql,
+			);
+			// no select from `outer` ever reached the connection -- only `a`'s.
+			expect(sql).toEqual([
+				'savepoint "hejbro_sp_1"',
+				'savepoint "hejbro_sp_2"',
+				expect.stringContaining("select"),
+				'release savepoint "hejbro_sp_2"',
+				'release savepoint "hejbro_sp_1"',
+			]);
+		});
+
+		it("a settled (released) nested handle is refused with statement-after-nested-transaction", async () => {
+			const { driver, sessionExecute } = transactionalDriver(true);
+			const handle = db({ posts }, driver);
+
+			await handle.transaction(async (tx) => {
+				const leaked = await tx.transaction(async (inner) => inner);
+				const outcome = await leaked
+					.execute(select(posts))
+					.catch((error: unknown) => error);
+				expect(outcome).toHaveProperty(
+					"code",
+					"statement-after-nested-transaction",
+				);
+			});
+
+			const sql = sessionExecute.mock.calls.map(
+				(call) => (call[0] as { sql: string }).sql,
+			);
+			// the leaked handle's execute never reached the connection.
+			expect(sql).toEqual([
+				'savepoint "hejbro_sp_1"',
+				'release savepoint "hejbro_sp_1"',
+			]);
+		});
+
+		it("a settled (rolled back) nested handle is refused with statement-after-nested-transaction", async () => {
+			const { driver, sessionExecute } = transactionalDriver(true);
+			const handle = db({ posts }, driver);
+			const boom = new Error("inner failed");
+			const holder = { inner: undefined as Tx | undefined };
+
+			await handle.transaction(async (tx) => {
+				await tx
+					.transaction(async (inner) => {
+						holder.inner = inner;
+						throw boom;
+					})
+					.catch(() => {});
+
+				const outcome = await holder.inner
+					?.execute(select(posts))
+					.catch((error: unknown) => error);
+				expect(outcome).toHaveProperty(
+					"code",
+					"statement-after-nested-transaction",
+				);
+			});
+
+			const sql = sessionExecute.mock.calls.map(
+				(call) => (call[0] as { sql: string }).sql,
+			);
+			expect(sql).toEqual([
+				'savepoint "hejbro_sp_1"',
+				'rollback to savepoint "hejbro_sp_1"',
+				'release savepoint "hejbro_sp_1"',
+			]);
+		});
+
+		it("sequential use after a nested transaction settles keeps working, for both released and rolled-back (control)", async () => {
+			const { driver, sessionExecute } = transactionalDriver(true);
+			const handle = db({ posts }, driver);
+			const boom = new Error("inner failed");
+
+			await handle.transaction(async (tx) => {
+				await tx.transaction(async (inner) => {
+					await inner.execute(select(posts));
+				});
+				await expect(tx.execute(select(posts))).resolves.toEqual([]);
+				await expect(tx.transaction(async () => {})).resolves.toBeUndefined();
+
+				await tx
+					.transaction(async () => {
+						throw boom;
+					})
+					.catch(() => {});
+				await expect(tx.execute(select(posts))).resolves.toEqual([]);
+				await expect(tx.transaction(async () => {})).resolves.toBeUndefined();
+			});
+
+			const sql = sessionExecute.mock.calls.map(
+				(call) => (call[0] as { sql: string }).sql,
+			);
+			const savepoints = sql.filter((statement) =>
+				statement.startsWith("savepoint"),
+			);
+			expect(savepoints).toEqual([
+				'savepoint "hejbro_sp_1"',
+				'savepoint "hejbro_sp_2"',
+				'savepoint "hejbro_sp_3"',
+				'savepoint "hejbro_sp_4"',
+			]);
 		});
 	});
 
