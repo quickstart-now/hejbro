@@ -170,6 +170,152 @@ describe("triggerKind", () => {
 		expect(triggerKind.dependsOn).toEqual(["function", "table"]);
 	});
 
+	// #701/D3: events (and an update event's own column list) are
+	// set-shaped -- the database never reads their declared order, so two
+	// declarations listing the same members in a different order must
+	// serialize to byte-identical nodes, produce no diff, and render
+	// `create trigger … after …` in the one canonical order (insert,
+	// update, delete; an `update of` column list sorted by name). The
+	// control rows pin that a real membership change still reports the
+	// existing alter.
+	describe("triggerKind — canonical order of events (#701)", () => {
+		const buildTrigger = (
+			events: ReadonlyArray<
+				| { readonly event: "insert" }
+				| { readonly event: "delete" }
+				| {
+						readonly event: "update";
+						readonly columns: ReadonlyArray<string> | null;
+				  }
+			>,
+			// A hand-built TriggerSnapshot node (not triggerKind.serialize), the
+			// same way table-kind-diff.test.ts's index snapshot accessor tests
+			// build IndexSnapshot fixtures directly -- a real TriggerDeclaration
+			// also needs a full FunctionDeclaration this scenario has no use for,
+			// and triggerKind.serialize only ever copies `events` through as-is.
+		) => ({
+			schema: "app",
+			table: "comments",
+			name: "comments_single_depth",
+			timing: "before" as const,
+			events,
+			forEach: "row" as const,
+			function: "comments_single_depth_fn",
+		});
+
+		it.each([
+			{
+				name: "update/insert swapped",
+				eventsA: [
+					{ event: "update" as const, columns: null },
+					{ event: "insert" as const },
+				],
+				eventsB: [
+					{ event: "insert" as const },
+					{ event: "update" as const, columns: null },
+				],
+			},
+			{
+				name: "delete/insert/update reordered to the fixed rank",
+				eventsA: [
+					{ event: "delete" as const },
+					{ event: "insert" as const },
+					{ event: "update" as const, columns: null },
+				],
+				eventsB: [
+					{ event: "insert" as const },
+					{ event: "update" as const, columns: null },
+					{ event: "delete" as const },
+				],
+			},
+			{
+				name: "update of columns b,a vs a,b",
+				eventsA: [{ event: "update" as const, columns: ["b", "a"] }],
+				eventsB: [{ event: "update" as const, columns: ["a", "b"] }],
+			},
+		])("$name: byte-identical, no diff", ({ eventsA, eventsB }) => {
+			const previous = buildTrigger(eventsA);
+			const next = buildTrigger(eventsB);
+			const identity = "app.comments.comments_single_depth";
+			expect(triggerKind.canonicalize?.(previous)).toEqual(
+				triggerKind.canonicalize?.(next),
+			);
+			expect(
+				triggerKind.diff(
+					triggerKind.canonicalize?.(previous) ?? previous,
+					triggerKind.canonicalize?.(next) ?? next,
+					identity,
+				),
+			).toEqual([]);
+		});
+
+		it("control: an event added is still a reported alter", () => {
+			const previous =
+				triggerKind.canonicalize?.(buildTrigger([{ event: "insert" }])) ?? null;
+			const next =
+				triggerKind.canonicalize?.(
+					buildTrigger([
+						{ event: "insert" },
+						{ event: "update", columns: null },
+					]),
+				) ?? null;
+			const identity = "app.comments.comments_single_depth";
+			expect(triggerKind.diff(previous, next, identity)).toEqual([
+				{
+					kind: "trigger",
+					operation: "alter",
+					identity,
+					previous,
+					next,
+					notes: ["trigger changed; recreating"],
+				},
+			]);
+		});
+
+		it("control: a column added to update of is still a reported alter", () => {
+			const previous =
+				triggerKind.canonicalize?.(
+					buildTrigger([{ event: "update", columns: ["a"] }]),
+				) ?? null;
+			const next =
+				triggerKind.canonicalize?.(
+					buildTrigger([{ event: "update", columns: ["a", "b"] }]),
+				) ?? null;
+			const identity = "app.comments.comments_single_depth";
+			expect(triggerKind.diff(previous, next, identity)).toEqual([
+				{
+					kind: "trigger",
+					operation: "alter",
+					identity,
+					previous,
+					next,
+					notes: ["trigger changed; recreating"],
+				},
+			]);
+		});
+
+		it("renders create trigger … after … in canonical event order, update of columns sorted", () => {
+			const next = triggerKind.canonicalize?.(
+				buildTrigger([
+					{ event: "update", columns: ["title", "id"] },
+					{ event: "delete" },
+					{ event: "insert" },
+				]),
+			);
+			const statements = triggerKind.emit({
+				kind: "trigger",
+				operation: "create",
+				identity: "app.comments.comments_single_depth",
+				previous: null,
+				next: next ?? null,
+				notes: [],
+			});
+			expect(statements[1]?.sql).toContain(
+				'insert or update of "id", "title" or delete',
+			);
+		});
+	});
+
 	it("generateMigration expands a trigger input and creates the function before the trigger", () => {
 		const trigger = makeTrigger("before");
 		const result = generateMigration({

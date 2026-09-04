@@ -366,6 +366,83 @@ describe("policy recreate ordering through generateMigration", () => {
 	});
 });
 
+// #701/D3: roles are a set-shaped array -- the database never reads their
+// own order, so two declarations listing the same roles in a different
+// order must serialize to byte-identical nodes, produce no diff, and
+// render `create policy … to …` in the one canonical (sorted) order. The
+// control row pins that a real membership change still reports the
+// existing alter.
+describe("policyKind — canonical order of roles (#701)", () => {
+	const buildPolicy = (roles: ReadonlyArray<string>) =>
+		policyKind.serialize({
+			declarationKind: "policy",
+			schemaName: "app",
+			tableName: "posts",
+			policyName: "posts_read_published",
+			command: "select",
+			permissive: true,
+			roles,
+			using: null,
+			withCheck: null,
+			declaredAt: null,
+		});
+
+	it.each([
+		{ name: "two roles swapped", rolesA: ["b", "a"], rolesB: ["a", "b"] },
+		{
+			name: "three roles rotated",
+			rolesA: ["b", "c", "a"],
+			rolesB: ["a", "b", "c"],
+		},
+	])("$name: byte-identical, no diff", ({ rolesA, rolesB }) => {
+		const previous = buildPolicy(rolesA);
+		const next = buildPolicy(rolesB);
+		const identity = "app.posts.posts_read_published";
+		expect(policyKind.canonicalize?.(previous)).toEqual(
+			policyKind.canonicalize?.(next),
+		);
+		expect(
+			policyKind.diff(
+				policyKind.canonicalize?.(previous) ?? previous,
+				policyKind.canonicalize?.(next) ?? next,
+				identity,
+			),
+		).toEqual([]);
+	});
+
+	it("control: a role added is still a reported alter", () => {
+		const previous = policyKind.canonicalize?.(buildPolicy(["anon"])) ?? null;
+		const next =
+			policyKind.canonicalize?.(buildPolicy(["anon", "authenticated"])) ?? null;
+		const identity = "app.posts.posts_read_published";
+		expect(policyKind.diff(previous, next, identity)).toEqual([
+			{
+				kind: "policy",
+				operation: "alter",
+				identity,
+				previous,
+				next,
+				notes: ["policy changed; recreating"],
+			},
+		]);
+	});
+
+	it("renders create policy … to … with roles in canonical (sorted) order", () => {
+		const next = policyKind.canonicalize?.(
+			buildPolicy(["writer", "admin", "reader"]),
+		);
+		const statements = policyKind.emit({
+			kind: "policy",
+			operation: "create",
+			identity: "app.posts.posts_read_published",
+			previous: null,
+			next: next ?? null,
+			notes: [],
+		});
+		expect(statements[1]?.sql).toContain('to "admin", "reader", "writer"');
+	});
+});
+
 // Regression (review of PR #70): PolicyBothStage's chain methods used to be
 // Object.assign-ed onto the built PolicyInput under the same names as its
 // clause data fields, so ending an update/all chain after only one clause
