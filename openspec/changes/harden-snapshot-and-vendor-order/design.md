@@ -58,7 +58,10 @@ the format moves. Three mechanisms; the lead picks one:
   `canonicalizeSnapshot(snapshot, registry)`, pure. `buildSnapshot`
   writes `canonicalize(serialize(…))`, so every new snapshot is canonical
   whatever the declaration order. `diffSnapshots` canonicalizes both
-  sides before any kind's `diff`, so every `sameJson` gate keeps working
+  sides before any kind's `diff` — per key, inside its existing guarded
+  node read, so a malformed node is still reported as
+  `malformed-snapshot-node` rather than escaping as a raw error from a
+  whole-snapshot pass — so every `sameJson` gate keeps working
   unchanged and an old-order previous compares equal to a canonical
   next. `snapshotChangedFrom` compares the canonical forms, so a run
   whose only movement is a set's order writes nothing — the canonical

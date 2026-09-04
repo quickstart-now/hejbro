@@ -90,8 +90,17 @@ task line at that point.
       was written: `chain-tip-mismatch`, naming the tip and the
       snapshot). Green: `buildCheck2Outcome` renders
       `canonicalizeSnapshot(parsed disk)` against the rebuilt snapshot.
+      The four CLI pins of the superseded behaviour in
+      `packages/cli/test/generate-command.test.ts` (an index or check
+      reorder writing a `restate_<table>` migration; its slug's
+      determinism) are rewritten to the delta's own sentence — the
+      no-change line, no file written, `verify` exit zero — the
+      restate fallback itself staying in place for any other
+      statement-less movement (its core-level pins in
+      `migration-file.test.ts` are untouched).
       Files: `packages/cli/src/commands/verify.ts`,
-      `packages/cli/test/verify.test.ts`.
+      `packages/cli/test/verify.test.ts`,
+      `packages/cli/test/generate-command.test.ts`.
 - [ ] 1.3c (~8m) The committed goldens and examples carry the canonical
       order. Red: `packages/core/test/golden/golden.test.ts` and
       `examples/{postgres,supabase}/test/chain.test.ts` as they stand —
@@ -201,8 +210,12 @@ task line at that point.
       — one sentence that the client metadata lists columns in physical
       order; `skills/hejbro/references/extension-interface.md` — the
       `canonicalize` hook beside the other optional members; `.changeset/harden-snapshot-and-vendor-order.md`
-      is one `patch` naming `@hejbro/core`, one paragraph per fix.
+      is one `patch` naming `@hejbro/core`, one paragraph per fix;
+      `packages/skills/test/fixtures/preludes/polyrepo-contract.ts`,
+      which claims to match the exact shape `emitContract` writes, moves
+      to the list-shaped `columns`.
       Files: the three skill references,
+      `packages/skills/test/fixtures/preludes/polyrepo-contract.ts`,
       `.changeset/harden-snapshot-and-vendor-order.md`.
 
 Every task's green includes `pnpm biome check <touched files>` clean,
