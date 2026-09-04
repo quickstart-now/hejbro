@@ -215,6 +215,30 @@ export const rightT = table(cyc, "right_t", {
 });
 `;
 
+// [harden-ledger-identity, 1.8, 797/R1] A genuine three-table cycle --
+// cyc3.t_a -> t_b -> t_c -> t_a, each edge a column-level
+// `.references(() => ...)` for the same import-order-safety reason
+// `CYCLE_SCHEMA_SOURCE` above uses it for the two-table pair.
+const CYCLE3_SCHEMA_SOURCE = `import { schema, table, uuid } from "hejbro";
+
+export const cyc3 = schema("cyc3");
+
+export const tA = table(cyc3, "t_a", {
+	id: uuid().primaryKey().defaultRandom(),
+	bId: uuid().references(() => tB.id),
+});
+
+export const tB = table(cyc3, "t_b", {
+	id: uuid().primaryKey().defaultRandom(),
+	cId: uuid().references(() => tC.id),
+});
+
+export const tC = table(cyc3, "t_c", {
+	id: uuid().primaryKey().defaultRandom(),
+	aId: uuid().references(() => tA.id),
+});
+`;
+
 const CONFIRM_DROP_PATTERN = /--confirm-drop (\S+) to confirm/;
 
 /**
@@ -409,6 +433,67 @@ describe("hejbro reset — live witness (#753, task 1.5)", () => {
 				// Nothing dropped -- the whole transaction rolled back.
 				expect(rows[0]?.left_t).not.toBeNull();
 				expect(rows[0]?.right_t).not.toBeNull();
+			} finally {
+				await driver.client.end();
+			}
+
+			const status = await runCli(cwd, ["status", "--url", hostUrl(database)]);
+			expect(status.exitCode).toBe(0);
+			expect(status.stdout).toContain("recorded as applied:");
+			expect(status.stdout).toContain("nothing pending");
+		} finally {
+			await removeCliFixtureDir(cwd);
+		}
+	}, 60_000);
+
+	// [harden-ledger-identity, 1.8, 797/R1] The any-length cycle detector's
+	// own live witness -- the unit rows (`apply-reset.test.ts`) fake the
+	// driver; this proves a genuine three-table cycle refuses against a
+	// real server the same way the two-table pair above does, with the
+	// generalized "your declared tables ... in a cycle" wording.
+	it("fails to drop a genuine three-table cycle, states the cycle fact, and leaves status showing every migration applied", async () => {
+		const database = "reset_cycle3";
+		psqlCommand("postgres", `create database ${database};`);
+		const cwd = await createCliFixtureDir();
+		try {
+			await runCli(cwd, ["init"]);
+			await writeFixtureFile(cwd, "src/cycle3.schema.ts", CYCLE3_SCHEMA_SOURCE);
+			await runCli(cwd, ["generate"]);
+			const migrate = await runCli(cwd, [
+				"migrate",
+				"--url",
+				hostUrl(database),
+			]);
+			expect(migrate.exitCode).toBe(0);
+
+			const refused = await runCli(cwd, ["reset", "--url", hostUrl(database)]);
+			expect(refused.exitCode).toBe(1);
+			const confirmation = extractRequiredConfirmation(refused.stderr);
+
+			const result = await runCli(cwd, [
+				"reset",
+				"--url",
+				hostUrl(database),
+				"--confirm-drop",
+				confirmation,
+			]);
+			expect(result.exitCode).toBe(1);
+			expect(result.stderr).toContain("error[reset-drop-failed]");
+			expect(result.stderr).toContain("(2BP01)");
+			expect(result.stderr).toContain("your declared tables");
+			expect(result.stderr).toContain("in a cycle");
+
+			const driver = pgDriver(hostUrl(database));
+			try {
+				const rows = await driver.execute({
+					sql: "select to_regclass('cyc3.t_a') as t_a, to_regclass('cyc3.t_b') as t_b, to_regclass('cyc3.t_c') as t_c",
+					params: [],
+					kind: "sql",
+				});
+				// Nothing dropped -- the whole transaction rolled back.
+				expect(rows[0]?.t_a).not.toBeNull();
+				expect(rows[0]?.t_b).not.toBeNull();
+				expect(rows[0]?.t_c).not.toBeNull();
 			} finally {
 				await driver.client.end();
 			}

@@ -155,7 +155,7 @@ marks the tasks that carry them into code, not open questions.
       x` — same assertions, the message names "view". Files:
       `packages/cli/test/apply-reset.integration.test.ts`.
 
-- [ ] 1.8 (~6m) Live witness for the any-length cycle: a third schema
+- [x] 1.8 (~6m) Live witness for the any-length cycle: a third schema
       source with `cyc.t_a → cyc.t_b → cyc.t_c → cyc.t_a` (column-level
       `.references(() => …)`, as the existing two-table cycle source
       does), migrated, then `reset --confirm-drop` — exit 1,
