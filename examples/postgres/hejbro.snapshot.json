@@ -915,28 +915,50 @@
 			"checks": [
 				{
 					"expression": {
-						"chunks": [
-							{
-								"chunkKind": "text",
-								"text": "char_length("
+						"left": {
+							"column": "estimate_hours",
+							"nodeKind": "column-ref",
+							"schema": "app",
+							"table": "tasks"
+						},
+						"nodeKind": "comparison",
+						"operator": ">=",
+						"right": {
+							"literal": {
+								"literalKind": "number",
+								"value": 0
 							},
-							{
-								"chunkKind": "expr",
-								"expr": {
-									"column": "title",
-									"nodeKind": "column-ref",
-									"schema": "app",
-									"table": "tasks"
-								}
-							},
-							{
-								"chunkKind": "text",
-								"text": ") between 1 and 200"
-							}
-						],
-						"nodeKind": "sql-template"
+							"nodeKind": "literal"
+						}
 					},
-					"name": "tasks_title_length"
+					"name": "tasks_estimate_hours_non_negative"
+				},
+				{
+					"expression": {
+						"lowerBound": {
+							"literal": {
+								"literalKind": "number",
+								"value": 1
+							},
+							"nodeKind": "literal"
+						},
+						"negated": false,
+						"nodeKind": "between",
+						"operand": {
+							"column": "priority",
+							"nodeKind": "column-ref",
+							"schema": "app",
+							"table": "tasks"
+						},
+						"upperBound": {
+							"literal": {
+								"literalKind": "number",
+								"value": 5
+							},
+							"nodeKind": "literal"
+						}
+					},
+					"name": "tasks_priority_range"
 				},
 				{
 					"expression": {
@@ -976,50 +998,28 @@
 				},
 				{
 					"expression": {
-						"lowerBound": {
-							"literal": {
-								"literalKind": "number",
-								"value": 1
+						"chunks": [
+							{
+								"chunkKind": "text",
+								"text": "char_length("
 							},
-							"nodeKind": "literal"
-						},
-						"negated": false,
-						"nodeKind": "between",
-						"operand": {
-							"column": "priority",
-							"nodeKind": "column-ref",
-							"schema": "app",
-							"table": "tasks"
-						},
-						"upperBound": {
-							"literal": {
-								"literalKind": "number",
-								"value": 5
+							{
+								"chunkKind": "expr",
+								"expr": {
+									"column": "title",
+									"nodeKind": "column-ref",
+									"schema": "app",
+									"table": "tasks"
+								}
 							},
-							"nodeKind": "literal"
-						}
+							{
+								"chunkKind": "text",
+								"text": ") between 1 and 200"
+							}
+						],
+						"nodeKind": "sql-template"
 					},
-					"name": "tasks_priority_range"
-				},
-				{
-					"expression": {
-						"left": {
-							"column": "estimate_hours",
-							"nodeKind": "column-ref",
-							"schema": "app",
-							"table": "tasks"
-						},
-						"nodeKind": "comparison",
-						"operator": ">=",
-						"right": {
-							"literal": {
-								"literalKind": "number",
-								"value": 0
-							},
-							"nodeKind": "literal"
-						}
-					},
-					"name": "tasks_estimate_hours_non_negative"
+					"name": "tasks_title_length"
 				}
 			],
 			"columns": [
@@ -1117,6 +1117,16 @@
 				{
 					"columns": [
 						{
+							"name": "metadata",
+							"opclass": "jsonb_path_ops"
+						}
+					],
+					"method": "gin",
+					"name": "tasks_metadata_idx"
+				},
+				{
+					"columns": [
+						{
 							"name": "project_id"
 						},
 						{
@@ -1142,16 +1152,6 @@
 							"nodeKind": "literal"
 						}
 					}
-				},
-				{
-					"columns": [
-						{
-							"name": "metadata",
-							"opclass": "jsonb_path_ops"
-						}
-					],
-					"method": "gin",
-					"name": "tasks_metadata_idx"
 				}
 			],
 			"name": "tasks",

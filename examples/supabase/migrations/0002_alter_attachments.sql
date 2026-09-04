@@ -2,7 +2,7 @@
 -- ~ table app.attachments [column "content_type" added, check "attachments_content_type_allowed" added]
 -- ~ supabase-storage-bucket attachments [allowed mime types changed]
 -- parent-snapshot: sha256:5b7eca272eec78d30655af2c7cc982fce5e3f989e84b58d43d891cfa588a3448
--- snapshot: sha256:bba33a1a710365bbbff7f1e67001959517a8c1439ec8ea31e2f64ab946c761d3
+-- snapshot: sha256:3616085aa982e780353d47d9c9478bd97f3839e9f92b06452d5618034275342a
 
 alter table "app"."attachments" add column "content_type" text;
 

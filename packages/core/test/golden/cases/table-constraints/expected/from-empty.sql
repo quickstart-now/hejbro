@@ -10,8 +10,8 @@ create table "app"."posts" (
 	"status" text not null,
 	"slug" text not null,
 	constraint "posts_pkey" primary key ("id"),
-	constraint "posts_status_check" check ("posts"."status" in ('draft', 'published')),
-	constraint "posts_slug_format_check" check ("posts"."slug" ~ '^[a-z0-9-]+$')
+	constraint "posts_slug_format_check" check ("posts"."slug" ~ '^[a-z0-9-]+$'),
+	constraint "posts_status_check" check ("posts"."status" in ('draft', 'published'))
 );
 
 create table "app"."comments" (

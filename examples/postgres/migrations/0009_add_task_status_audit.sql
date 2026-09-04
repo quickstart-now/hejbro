@@ -3,8 +3,8 @@
 -- + table app.task_status_audit [new]
 -- + function app.audit_task_status_change [new]
 -- + trigger app.tasks.audit_task_status_change [new]
--- parent-snapshot: sha256:a61d294e61b274fbd7d0856e7e1581625b501e12fa39bbdb2fe420bcad83391b
--- snapshot: sha256:a6dfbf1e2dd106c7c8026f69131dd31be80610c24cbd30f170a057da8e1fe8b4
+-- parent-snapshot: sha256:bd8cf44733d36714c684932d8a182fe79fc07b0795d4ce3b847fabad19655840
+-- snapshot: sha256:c794384bce2cba28686a600c9b07db61386a1062033c35c832ae2400e4bc6575
 
 create table "app"."task_status_audit" (
 	"id" uuid not null default gen_random_uuid(),

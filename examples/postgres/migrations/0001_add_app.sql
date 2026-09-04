@@ -27,7 +27,7 @@
 -- + grant app.schema-usage.app_reader [new]
 -- + grant app.schema-usage.app_writer [new]
 -- parent-snapshot: sha256:d369ef9ab960e03f29326874197ae3d23281b0b38fa322e6e8d0b9ac9030eedb
--- snapshot: sha256:37980def9e1707c18aef17ce0cf53588f4f32e702900f3ad30c3a7dc0e2db9c5
+-- snapshot: sha256:231fbfcbae9fdecd9cf2857647e9a6cc9be6e985993fa401e27f10d798b9a016
 
 create schema "app";
 
@@ -58,9 +58,9 @@ create table "app"."tasks" (
 	"priority" smallint not null default 3,
 	"due_at" timestamp with time zone,
 	constraint "tasks_pkey" primary key ("id"),
-	constraint "tasks_title_length" check (char_length("tasks"."title") between 1 and 200),
+	constraint "tasks_priority_range" check ("tasks"."priority" between 1 and 5),
 	constraint "tasks_status_valid" check ("tasks"."status" in ('todo', 'in_progress', 'done')),
-	constraint "tasks_priority_range" check ("tasks"."priority" between 1 and 5)
+	constraint "tasks_title_length" check (char_length("tasks"."title") between 1 and 200)
 );
 
 create index "tasks_project_id_due_at_idx" on "app"."tasks" ("project_id", "due_at" desc) where "tasks"."status" <> 'done';

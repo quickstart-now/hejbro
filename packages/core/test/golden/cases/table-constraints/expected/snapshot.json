@@ -104,6 +104,31 @@
 			"checks": [
 				{
 					"expression": {
+						"chunks": [
+							{
+								"chunkKind": "text",
+								"text": ""
+							},
+							{
+								"chunkKind": "expr",
+								"expr": {
+									"column": "slug",
+									"nodeKind": "column-ref",
+									"schema": "app",
+									"table": "posts"
+								}
+							},
+							{
+								"chunkKind": "text",
+								"text": " ~ '^[a-z0-9-]+$'"
+							}
+						],
+						"nodeKind": "sql-template"
+					},
+					"name": "posts_slug_format_check"
+				},
+				{
+					"expression": {
 						"negated": false,
 						"nodeKind": "in-list",
 						"operand": {
@@ -137,31 +162,6 @@
 						]
 					},
 					"name": "posts_status_check"
-				},
-				{
-					"expression": {
-						"chunks": [
-							{
-								"chunkKind": "text",
-								"text": ""
-							},
-							{
-								"chunkKind": "expr",
-								"expr": {
-									"column": "slug",
-									"nodeKind": "column-ref",
-									"schema": "app",
-									"table": "posts"
-								}
-							},
-							{
-								"chunkKind": "text",
-								"text": " ~ '^[a-z0-9-]+$'"
-							}
-						],
-						"nodeKind": "sql-template"
-					},
-					"name": "posts_slug_format_check"
 				}
 			],
 			"columns": [
