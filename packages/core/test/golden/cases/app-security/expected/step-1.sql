@@ -4,6 +4,6 @@
 
 drop policy "posts_read_published" on "app"."posts";
 
-create policy "posts_read_published" on "app"."posts" for select to "anon" using ("app"."posts"."status" = 'published');
+create policy "posts_read_published" on "app"."posts" for select to "anon" using ("posts"."status" = 'published');
 
 grant insert on all tables in schema "app" to "anon";

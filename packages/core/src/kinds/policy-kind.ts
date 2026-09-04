@@ -1,7 +1,7 @@
 import type { PolicyCommand, PolicyDeclaration } from "../dsl/rls";
 import type { ExprNode, TableRefNode } from "../expr/ast";
 import { decodeExprNode, encodeExprNode } from "../expr/codec";
-import { renderExpr } from "../expr/render-sql";
+import { renderTableBoundExpr } from "../expr/render-sql";
 import { createOrDropDiff, sameJson } from "../kind/diff-helpers";
 import {
 	dispatchEmit,
@@ -30,10 +30,12 @@ import { tableIdentity } from "./table-snapshot";
  * encoded by the expression codec (`expr/codec.ts`) — not pre-rendered
  * SQL text (that was D16's original shape; D67 amended it so a rename
  * can retarget the identifiers inside them exactly). The accessors decode
- * and render back to SQL text on demand, using this policy's own
- * `schema`/`table` as the `renderExpr` outer scope (an `exists()`
- * subquery's correlation needs it) — so every caller is unaffected by
- * this shape change.
+ * and render back to SQL text on demand, table-bound (fix-nile-findings,
+ * table-declaration spec) through `renderTableBoundExpr`, using this
+ * policy's own `schema`/`table` as the outer scope (an `exists()`
+ * subquery's correlation needs it, and the table-bound marker alone
+ * grants no column access) — so every caller is unaffected by this shape
+ * change.
  */
 export type PolicySnapshot = {
 	readonly schema: string;
@@ -61,7 +63,10 @@ export const policyUsing = (snapshot: PolicySnapshot): string | null => {
 	if (snapshot.using === undefined || snapshot.using === null) {
 		return null;
 	}
-	return renderExpr(decodeExprNode(snapshot.using), outerScopeOf(snapshot));
+	return renderTableBoundExpr(
+		decodeExprNode(snapshot.using),
+		outerScopeOf(snapshot),
+	);
 };
 
 /** `snapshot.withCheck` decoded and rendered back to SQL text, defaulting to `null` when absent (compact snapshot). */
@@ -69,7 +74,10 @@ export const policyWithCheck = (snapshot: PolicySnapshot): string | null => {
 	if (snapshot.withCheck === undefined || snapshot.withCheck === null) {
 		return null;
 	}
-	return renderExpr(decodeExprNode(snapshot.withCheck), outerScopeOf(snapshot));
+	return renderTableBoundExpr(
+		decodeExprNode(snapshot.withCheck),
+		outerScopeOf(snapshot),
+	);
 };
 
 // Internal invariant: this shape is exactly what policyKind.serialize below produces.

@@ -35,9 +35,7 @@ describe("authUid()", () => {
 			declarations: [app, accounts],
 			previousSnapshot: emptySnapshot,
 		});
-		expect(result.sql).toContain(
-			'using ("app"."accounts"."user_id" = auth.uid())',
-		);
+		expect(result.sql).toContain('using ("accounts"."user_id" = auth.uid())');
 	});
 });
 
@@ -78,7 +76,7 @@ describe("authUidCached()", () => {
 			previousSnapshot: emptySnapshot,
 		});
 		expect(result.sql).toContain(
-			'using ("app"."accounts"."user_id" = (select auth.uid()))',
+			'using ("accounts"."user_id" = (select auth.uid()))',
 		);
 	});
 

@@ -646,7 +646,7 @@ describe("tableKind.emit — checks", () => {
 			),
 		);
 		expect(tableKind.emit(change)[0]?.sql).toBe(
-			'create table "app"."posts" (\n\t"id" uuid not null,\n\t"status" text not null,\n\tconstraint "posts_pkey" primary key ("id"),\n\tconstraint "posts_status_check" check ("app"."posts"."status" in (\'draft\', \'published\'))\n);',
+			'create table "app"."posts" (\n\t"id" uuid not null,\n\t"status" text not null,\n\tconstraint "posts_pkey" primary key ("id"),\n\tconstraint "posts_status_check" check ("posts"."status" in (\'draft\', \'published\'))\n);',
 		);
 	});
 
@@ -678,7 +678,7 @@ describe("tableKind.emit — checks", () => {
 			'alter table "app"."posts" drop constraint "posts_legacy_check";',
 			'alter table "app"."posts" drop column "legacy";',
 			'alter table "app"."posts" add column "status" text;',
-			'alter table "app"."posts" add constraint "posts_status_check" check ("app"."posts"."status" is not null);',
+			'alter table "app"."posts" add constraint "posts_status_check" check ("posts"."status" is not null);',
 		]);
 	});
 });
@@ -714,7 +714,7 @@ describe("tableKind.emit — index ordering and where (D51)", () => {
 			'create index "posts_recent_idx" on "app"."posts" ("created_at", "published_at" desc nulls first);',
 		);
 		expect(sql).toContain(
-			'create unique index "posts_slug_published_uidx" on "app"."posts" ("slug") where "app"."posts"."published_at" is not null;',
+			'create unique index "posts_slug_published_uidx" on "app"."posts" ("slug") where "posts"."published_at" is not null;',
 		);
 	});
 
@@ -846,7 +846,7 @@ describe("tableKind.emit — index ordering and where (D51)", () => {
 			),
 		);
 		expect(tableKind.emit(change).map((s) => s.sql)).toContain(
-			'create index "users_email_lower_idx" on "app"."users" ((lower("app"."users"."email")));',
+			'create index "users_email_lower_idx" on "app"."users" ((lower("users"."email")));',
 		);
 	});
 
@@ -858,7 +858,7 @@ describe("tableKind.emit — index ordering and where (D51)", () => {
 			tableKind.diff(null, tableKind.serialize(getTableMeta(docs)), "app.docs"),
 		);
 		expect(tableKind.emit(change).map((s) => s.sql)).toContain(
-			`create index "docs_data_status_idx" on "app"."docs" (("app"."docs"."data" ->> 'status'));`,
+			`create index "docs_data_status_idx" on "app"."docs" (("docs"."data" ->> 'status'));`,
 		);
 	});
 
@@ -884,7 +884,7 @@ describe("tableKind.emit — index ordering and where (D51)", () => {
 			),
 		);
 		expect(tableKind.emit(change).map((s) => s.sql)).toContain(
-			'create unique index "users_email_lower_uidx" on "app"."users" ((lower("app"."users"."email"))) where "app"."users"."deleted_at" is not null;',
+			'create unique index "users_email_lower_uidx" on "app"."users" ((lower("users"."email"))) where "users"."deleted_at" is not null;',
 		);
 	});
 
@@ -906,7 +906,7 @@ describe("tableKind.emit — index ordering and where (D51)", () => {
 		);
 		expect(tableKind.emit(change).map((s) => s.sql)).toEqual([
 			'drop index "app"."users_email_lower_idx";',
-			'create index "users_email_lower_idx" on "app"."users" ((lower(btrim("app"."users"."email"))));',
+			'create index "users_email_lower_idx" on "app"."users" ((lower(btrim("users"."email"))));',
 		]);
 	});
 });

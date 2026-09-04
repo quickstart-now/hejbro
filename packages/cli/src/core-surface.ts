@@ -149,6 +149,7 @@ export const ENGINE = [
 	"renderSelectInto",
 	"renderSetOp",
 	"renderSnapshot",
+	"renderTableBoundExpr",
 	"renderTableRef",
 	"renderTriggerSql",
 	"renderTypeNode",

@@ -806,7 +806,7 @@ const assertNoGeneratedWindowFunction = (
 };
 
 /**
- * `array_position("<schema>"."<table>"."<column>", null) is null`, as a
+ * `array_position("<table>"."<column>", null) is null`, as a
  * structured expression (a `columnRef` + `functionCall` + null `literal`,
  * wrapped in the existing `isNull` operator's `nullTest`) — never a
  * `rawSql`/`sqlTemplate` fragment: `retarget.ts`'s rename machinery only

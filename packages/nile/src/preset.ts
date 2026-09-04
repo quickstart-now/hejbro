@@ -50,8 +50,17 @@ const nileValidators: ReadonlyArray<Validator> = [
  * bundle is a real, usable `Preset` value from the moment the package
  * ships, before group 4 gives it anything to refuse.
  */
+/**
+ * Declares that Nile's platform cannot plan a statement -- `EXPLAIN` is
+ * not available on it (fix-nile-findings, #755). Fixed data, never
+ * discovered by probing the server; `check` reads it from the presets the
+ * configuration registers and falls back to comparing a check
+ * constraint's expression by normalized text instead of the server's own
+ * rendering.
+ */
 export const nilePreset: Preset = {
 	name: "nile",
 	kinds: nileKinds,
 	validators: nileValidators,
+	explainUnavailable: true,
 };

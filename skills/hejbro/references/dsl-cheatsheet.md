@@ -229,6 +229,12 @@ the reader/writer role-split policies in
 RLS-protected table so the view runs under the querying role, not its
 owner's. See `packages/core/src/dsl/define-view.ts`.
 
+A table-bound expression's column reference — a CHECK constraint, a
+partial index predicate, an index expression, a generated column's
+expression, or a policy's `using`/`with check` — renders `"table"."column"`,
+not schema-qualified; a view body and a query-builder statement render
+schema-qualified, as before.
+
 ## Functions & triggers
 
 `defineFunction`/`defineTrigger` signatures live in

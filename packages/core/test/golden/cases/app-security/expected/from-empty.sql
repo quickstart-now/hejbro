@@ -48,19 +48,19 @@ alter table "app"."posts" enable row level security;
 
 drop policy if exists "comments_read_visible" on "app"."comments";
 
-create policy "comments_read_visible" on "app"."comments" for select to "anon" using (("app"."comments"."deleted_at" is null) and exists (select 1 from "app"."posts" where ("app"."posts"."id" = "app"."comments"."post_id") and ("app"."posts"."status" = 'published') and ("app"."posts"."published_at" <= now())));
+create policy "comments_read_visible" on "app"."comments" for select to "anon" using (("comments"."deleted_at" is null) and exists (select 1 from "app"."posts" where ("posts"."id" = "comments"."post_id") and ("posts"."status" = 'published') and ("posts"."published_at" <= now())));
 
 drop policy if exists "post_translations_read_published" on "app"."post_translations";
 
-create policy "post_translations_read_published" on "app"."post_translations" for select to "anon" using (exists (select 1 from "app"."posts" where ("app"."posts"."id" = "app"."post_translations"."post_id") and ("app"."posts"."status" = 'published') and ("app"."posts"."published_at" <= now())));
+create policy "post_translations_read_published" on "app"."post_translations" for select to "anon" using (exists (select 1 from "app"."posts" where ("posts"."id" = "post_translations"."post_id") and ("posts"."status" = 'published') and ("posts"."published_at" <= now())));
 
 drop policy if exists "posts_insert_draft_only" on "app"."posts";
 
-create policy "posts_insert_draft_only" on "app"."posts" for insert to "authenticated" with check ("app"."posts"."status" = 'draft');
+create policy "posts_insert_draft_only" on "app"."posts" for insert to "authenticated" with check ("posts"."status" = 'draft');
 
 drop policy if exists "posts_read_published" on "app"."posts";
 
-create policy "posts_read_published" on "app"."posts" for select to "anon" using (("app"."posts"."status" = 'published') and ("app"."posts"."published_at" <= now()));
+create policy "posts_read_published" on "app"."posts" for select to "anon" using (("posts"."status" = 'published') and ("posts"."published_at" <= now()));
 
 grant select on all tables in schema "app" to "anon";
 

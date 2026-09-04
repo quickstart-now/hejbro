@@ -1,6 +1,7 @@
 import type {
 	JsonValue,
 	KindRegistry,
+	Preset,
 	RegisteredObjectKind,
 	Snapshot,
 } from "@hejbro/core";
@@ -19,6 +20,7 @@ import type { Finding } from "../check/compare";
 import { compareCatalog } from "../check/compare";
 import type { CheckDriverImporter } from "../check/driver";
 import { withCheckConnection } from "../check/driver";
+import type { CheckComparisonMode } from "../check/expression";
 import { compareCheckConstraint } from "../check/expression";
 import type { Inventory } from "../check/inventory";
 import { buildInventory } from "../check/inventory";
@@ -71,6 +73,39 @@ const COVERAGE_BOUNDARY_LINES: ReadonlyArray<string> = [
 	"a declared object is checked for existence even where its contents are not otherwise compared.",
 	"check's reads are not a single snapshot: opening no transaction is what keeps this command free of any driver capability, and a schema changing while check runs can produce a torn report.",
 ];
+
+/** The coverage-boundary line added for a `"text"` run only (fix-nile-findings, #755, design.md: "The coverage boundary gains one line for the run"). */
+const TEXT_MODE_BOUNDARY_LINE =
+	"check-constraint expressions were compared by normalized text on this run, because a registered preset declares this platform cannot plan a statement -- a spelling difference the server would treat as equal is reported as not compared.";
+
+/**
+ * Derives the check-constraint comparison mode from the presets the
+ * configuration registers, and from nowhere else (fix-nile-findings,
+ * #755, cli-commands spec: "SHALL read the declaration from the presets
+ * the configuration registers, and from nowhere else") -- this function's
+ * own signature makes that structural: it takes presets, never a driver,
+ * a connection, or anything a server probe could produce. Absence on
+ * every preset means the platform can plan (`"server"`, unchanged
+ * meaning); any preset declaring `explainUnavailable` means `"text"`.
+ */
+export const checkComparisonMode = (
+	presets: ReadonlyArray<Preset>,
+): CheckComparisonMode => {
+	if (presets.some((preset) => preset.explainUnavailable === true)) {
+		return "text";
+	}
+	return "server";
+};
+
+/** `[]` for `"server"`, {@link TEXT_MODE_BOUNDARY_LINE} for `"text"` -- the `flatMap` callback below stays a guard clause, house style bans ternaries. */
+const textModeBoundaryLines = (
+	mode: CheckComparisonMode,
+): ReadonlyArray<string> => {
+	if (mode === "text") {
+		return [TEXT_MODE_BOUNDARY_LINE];
+	}
+	return [];
+};
 
 /** `[]` when `kind` has no declared reason, its one boundary line otherwise -- the `flatMap` callback below stays a guard clause, house style bans ternaries. */
 const boundaryLineFor = (kind: RegisteredObjectKind): ReadonlyArray<string> => {
@@ -243,16 +278,21 @@ const summaryLine = (
  * additive, same reasoning as `registry`: an existing call site that
  * passes no snapshot sees the same boundary lines it always did, and
  * omitting it only drops the existing-table boundary lines, never the
- * exit code.
+ * exit code. `mode` (fix-nile-findings, #755, task 2.3) defaults to
+ * `"server"`, so an existing call site sees the same boundary lines it
+ * always did; `"text"` appends {@link TEXT_MODE_BOUNDARY_LINE}, printed
+ * on every run regardless of outcome, same as every other boundary line.
  */
 export const renderCheckReport = (
 	findings: ReadonlyArray<Finding>,
 	inventory: Inventory,
 	registry: KindRegistry = createDefaultRegistry(),
 	snapshot: Snapshot = emptySnapshot,
+	mode: CheckComparisonMode = "server",
 ): CheckReport => {
 	const boundaryLines = [
 		...COVERAGE_BOUNDARY_LINES,
+		...textModeBoundaryLines(mode),
 		...kindCoverageBoundaryLines(registry),
 		...existingTableBoundaryLines(snapshot),
 	];
@@ -332,13 +372,18 @@ export const declaredCheckConstraints = (
  * satisfies `DriverSession`). `registry`'s default forwards straight to
  * `compareCatalog`'s own -- same optional-and-safe reasoning documented
  * there (task 2.4 turns a forgotten registry into a loud
- * `check-not-compared`, never a silent skip).
+ * `check-not-compared`, never a silent skip). `mode` (fix-nile-findings,
+ * #755, task 2.3) defaults to `"server"`, so an existing call site that
+ * never registers a preset declaring `explainUnavailable` behaves exactly
+ * as before -- `runCheck` derives the real value from `config.presets`
+ * via {@link checkComparisonMode} and threads it here.
  */
 export const compareCheckAgainstCatalog = async (
 	snapshot: Snapshot,
 	catalog: Catalog,
 	session: DriverSession,
 	registry: KindRegistry = createDefaultRegistry(),
+	mode: CheckComparisonMode = "server",
 ): Promise<ReadonlyArray<Finding>> => {
 	const tableFindings = compareCatalog(snapshot, catalog, registry);
 	const expressionFindingLists = await Promise.all(
@@ -350,6 +395,7 @@ export const compareCheckAgainstCatalog = async (
 				constraint.table,
 				constraint.name,
 				constraint.expression,
+				mode,
 			),
 		),
 	);
@@ -426,6 +472,7 @@ export const runCheck = async (
 		requireConfigFields(config, "check", ["snapshotPath"]);
 		const declarations = await loadDeclarations(configPath, config);
 		const registry = buildRegistry(config);
+		const mode = checkComparisonMode(config.presets);
 		const diskSnapshot = parseSnapshot(
 			readSnapshotFileText(cwd, config, "check"),
 			requiredKeysByKind(registry),
@@ -453,9 +500,10 @@ export const runCheck = async (
 					catalog,
 					driver,
 					registry,
+					mode,
 				);
 				const inventory = buildInventory(snapshot, catalog);
-				return renderCheckReport(findings, inventory, registry, snapshot);
+				return renderCheckReport(findings, inventory, registry, snapshot, mode);
 			},
 			importer,
 		);

@@ -78,6 +78,59 @@ from the platform at runtime:
   which is not an execution surface and which the corpus already exempts,
   so the mandatory-context refusal never applies to it.
 
+## Table-bound column references render two-part
+
+A tenant-aware table lives internally under a `<database-id>_<schema>`
+name subject to the platform's 12-byte schema-name limit, so a
+schema-qualified column reference in a check constraint, a partial index
+predicate, an index expression, a generated column's expression, or a
+policy's `using`/`with check` fails at apply time with `42622`; hejbro
+renders every such table-bound column reference two-part
+(`"table"."column"`) instead.
+
+## `hejbro check` compares check constraints by text, not `EXPLAIN`
+
+Nile has no `EXPLAIN`, so `hejbro check` never issues one against it:
+`nilePreset` declares `explainUnavailable: true`, and `check` reads that
+declaration from `config.presets` alone (never a driver, a connection, or
+anything a server probe could produce) to switch every check-constraint
+comparison in the run from the server's own rendering to a fixed,
+six-step text normalization instead — collapsing whitespace outside
+string literals, stripping one enclosing parenthesis pair, stripping the
+declaring table's own qualifier from a column reference, unquoting a
+plain lower-case identifier, stripping a `::type` cast the server
+appended to a string literal, and folding letter case outside quoted
+identifiers and string literals. Two spellings that normalize to the same
+text agree, silently, exactly as on a platform that can plan.
+
+Two spellings that still differ after normalization are reported
+`check-not-compared`, carrying both texts and a `Next:` that names
+restating the declaration in the catalog's own spelling — never
+`check-constraint-differs`: a textual difference is not evidence of a
+different meaning, only evidence that this run couldn't settle the
+question. The declaration commonly outlives an equivalent rewrite the
+server performs at parse or storage time, e.g.:
+
+- `role in ('owner', 'admin')` is stored as
+  `role = ANY (ARRAY['owner'::text, 'admin'::text])` — a set membership
+  test rewritten to an array comparison.
+- `priority between 1 and 5` is stored as
+  `((priority >= 1) AND (priority <= 5))` — a range test rewritten to two
+  comparisons.
+
+Both are `check-not-compared` under this mode (the normalization pipeline
+never rewrites operators, on purpose — doing so risks equating two
+expressions that actually differ). The `Next:` line never asks the reader
+to run or be granted `EXPLAIN` on such a platform — the whole reason this
+mode exists is that no role could satisfy that request here. See
+`packages/cli/src/check/expression.ts` for the exact normalization order
+and `openspec/changes/fix-nile-findings/design.md`'s "`check` without
+EXPLAIN" section for the full rationale.
+
+Whether a view body or a query-builder statement referencing a
+tenant-aware table's three-part column references is itself accepted by
+Nile is unmeasured — tracked in #772, not by this preset.
+
 ## What this preset refuses, and why
 
 Every refusal fails `hejbro generate` with an explicit error naming the

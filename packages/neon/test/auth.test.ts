@@ -35,9 +35,7 @@ describe("authUid()", () => {
 			declarations: [app, accounts],
 			previousSnapshot: emptySnapshot,
 		});
-		expect(result.sql).toContain(
-			'using ("app"."accounts"."user_id" = auth.uid())',
-		);
+		expect(result.sql).toContain('using ("accounts"."user_id" = auth.uid())');
 	});
 
 	it("builds a uuid auth.uid() expression node -- the extension's identity function", () => {

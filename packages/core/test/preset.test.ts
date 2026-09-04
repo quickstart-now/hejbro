@@ -55,3 +55,12 @@ describe("presetValidators", () => {
 		expect(presetValidators([toyPreset])).toEqual([toyValidator]);
 	});
 });
+
+// fix-nile-findings, #755, task 2.1: a preset declares data, on the preset
+// value itself, fixed before any connection exists -- see
+// packages/nile/test/preset.test.ts for the declaring side.
+describe("Preset.explainUnavailable", () => {
+	it("a preset without the field is still a Preset -- silence means the platform can plan", () => {
+		expect(toyPreset.explainUnavailable).toBeUndefined();
+	});
+});

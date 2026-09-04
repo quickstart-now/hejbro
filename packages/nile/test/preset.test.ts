@@ -22,3 +22,13 @@ describe("nilePreset is a registrable bundle from the public entry (task 1.2/4.1
 		expect(presetValidators([nilePreset])).toHaveLength(6);
 	});
 });
+
+// fix-nile-findings, #755, task 2.1: the declaration is data on the preset
+// value, readable before any connection exists -- nothing here opens a
+// socket, so "readable as data" is proven by construction, not by mocking
+// a driver.
+describe("nilePreset declares explainUnavailable (fix-nile-findings, #755)", () => {
+	it("declares explainUnavailable", () => {
+		expect(nilePreset.explainUnavailable).toBe(true);
+	});
+});
