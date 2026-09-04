@@ -6,7 +6,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 
 | Item | Title | Status | PRs | Owner decisions | Rulings |
 |---|---|---|---|---|---|
-| [#785](785/) | blackbox v2: per-issue folders under .blackbox, hooks + CI-first gate, shipped by the dd-blackbox script | open |  | 4 | 2 (0 pending) |
+| [#785](785/) | blackbox v2: per-issue folders under .blackbox, hooks + CI-first gate, shipped by the dd-blackbox script | closed | #786 | 4 | 2 (0 pending) |
 
 ## Totals
 

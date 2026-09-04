@@ -4,9 +4,9 @@
   "ref": "quickstart-now/hejbro#785",
   "title": "blackbox v2: per-issue folders under .blackbox, hooks + CI-first gate, shipped by the dd-blackbox script",
   "parent": "quickstart-now/hejbro#412",
-  "status": "open",
+  "status": "closed",
   "opened": "2026-09-04",
-  "closed": null,
+  "closed": "2026-09-04",
   "decisions": [
     {
       "id": "D1",
@@ -68,7 +68,40 @@
       "decisions": []
     }
   ],
-  "prs": [],
+  "prs": [
+    {
+      "number": 786,
+      "ref": "quickstart-now/hejbro#786",
+      "title": "chore(blackbox): folder-form recorder under .blackbox with the vendored tool, hooks and a CI-first gate",
+      "head": "b2e7449c7425ec122a7fc45c5789dad21a94b752",
+      "headRef": "blackbox-v2",
+      "base": "dev",
+      "merged": null,
+      "pinnedAt": "2026-09-04T04:21Z",
+      "refs": [
+        {
+          "path": ".claude/settings.json",
+          "blob": "fefacfc0f7afbc90fd0ba2450e86e0620319f8f8"
+        },
+        {
+          "path": ".github/workflows/ci.yml",
+          "blob": "494190e5a4e4cd93be6864d8c1d155f18b316b68"
+        },
+        {
+          "path": "AGENTS.md",
+          "blob": "74a24e02b87437a2eb38f401b3e44fd43578dbc9"
+        },
+        {
+          "path": "biome.json",
+          "blob": "0da3ca975934ffc3e0ce14fbbc83520a4812141a"
+        },
+        {
+          "path": "package.json",
+          "blob": "8f8b8cdf612c775c195010d89b939b0946280ad7"
+        }
+      ]
+    }
+  ],
   "origin": null,
   "followUps": []
 }
