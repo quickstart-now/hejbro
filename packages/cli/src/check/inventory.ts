@@ -22,6 +22,13 @@ export type UnmanagedIndex = {
 	readonly constraintName: string | null;
 };
 
+/** A CHECK constraint the database holds on a *managed* table that no declaration covers (harden-check-inventory, #707) -- a primary key, unique or foreign key constraint is never one of these, whatever its own catalog `type`: a database-only constraint of one of those other kinds is #859's own reported kind, not this change's. */
+export type UnmanagedCheckConstraint = {
+	readonly schema: string;
+	readonly table: string;
+	readonly name: string;
+};
+
 /**
  * Existence-only information (spec Req5): tables inside a declared
  * schema that no declaration covers, columns on a managed table that no
@@ -37,6 +44,7 @@ export type Inventory = {
 	readonly unmanagedTables: ReadonlyArray<UnmanagedTable>;
 	readonly unmanagedColumns: ReadonlyArray<UnmanagedColumn>;
 	readonly unmanagedIndexes: ReadonlyArray<UnmanagedIndex>;
+	readonly unmanagedCheckConstraints: ReadonlyArray<UnmanagedCheckConstraint>;
 	readonly extensions: ReadonlyArray<string>;
 };
 
@@ -49,10 +57,12 @@ type LocalTableWithExisting = {
 };
 type LocalColumnNode = { readonly name: string; readonly uniqueName?: string };
 type LocalIndexNode = { readonly name: string };
+type LocalCheckNode = { readonly name: string };
 type LocalManagedTableNode = {
 	readonly columns: ReadonlyArray<LocalColumnNode>;
 	readonly indexes?: ReadonlyArray<LocalIndexNode>;
 	readonly primaryKeyName?: string;
+	readonly checks?: ReadonlyArray<LocalCheckNode>;
 };
 
 /**
@@ -191,6 +201,17 @@ const declaredKeyConstraintNames = (
 	return new Set([...uniqueNames, ...primaryKeyNames]);
 };
 
+/** The CHECK constraint names a managed table's own declaration names, read from its snapshot node -- {@link unmanagedCheckConstraints}'s exclusion. */
+const declaredCheckNames = (
+	snapshot: Snapshot,
+	identity: string,
+): ReadonlySet<string> =>
+	new Set(
+		(managedTableNode(snapshot, identity)?.checks ?? []).map(
+			(checkNode) => checkNode.name,
+		),
+	);
+
 /**
  * Columns the catalog has on a managed table that no declaration
  * covers (#726) -- the column-level counterpart of {@link
@@ -258,6 +279,31 @@ const unmanagedIndexes = (
 };
 
 /**
+ * CHECK constraints the catalog has on a managed table that no
+ * declaration covers (#707) -- filtered to `type === "c"` first, so a
+ * database-only primary key, unique or foreign key constraint on the
+ * same table never reaches this axis at all (#859's own reported kind,
+ * not this change's), then to the ones a managed table's declaration
+ * does not already name.
+ */
+const unmanagedCheckConstraints = (
+	snapshot: Snapshot,
+	catalog: Catalog,
+): ReadonlyArray<UnmanagedCheckConstraint> => {
+	const managedTables = managedTableIdentities(snapshot);
+	return catalog.constraints
+		.filter((row) => row.type === "c")
+		.filter((row) => managedTables.has(`${row.schema}.${row.table}`))
+		.filter(
+			(row) =>
+				!declaredCheckNames(snapshot, `${row.schema}.${row.table}`).has(
+					row.name,
+				),
+		)
+		.map((row) => ({ schema: row.schema, table: row.table, name: row.name }));
+};
+
+/**
  * Builds the report's own inventory section (task 5.1) -- pure, no I/O
  * (group 1's `readCatalog` already ran), same split as `compare.ts` and
  * `expression.ts`.
@@ -269,5 +315,6 @@ export const buildInventory = (
 	unmanagedTables: unmanagedTables(snapshot, catalog),
 	unmanagedColumns: unmanagedColumns(snapshot, catalog),
 	unmanagedIndexes: unmanagedIndexes(snapshot, catalog),
+	unmanagedCheckConstraints: unmanagedCheckConstraints(snapshot, catalog),
 	extensions: catalog.extensions.map((row) => row.name),
 });

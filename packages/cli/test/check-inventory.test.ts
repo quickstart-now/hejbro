@@ -1,11 +1,13 @@
 import type { HejbroInput, Snapshot } from "@hejbro/core";
 import {
+	check,
 	emptySnapshot,
 	existingTable,
 	generateMigration,
 	getTableMeta,
 	index,
 	schema,
+	sql,
 	table,
 	text,
 	uuid,
@@ -461,6 +463,73 @@ describe("unmanaged indexes", () => {
 				name: "widgets_owner_fkey",
 				constraintName: null,
 			},
+		]);
+	});
+});
+
+describe("unmanaged check constraints", () => {
+	// harden-check-inventory, task 1.5 (#707): a database-only CHECK
+	// constraint on a managed table is listed the same way a
+	// database-only column or index is; a primary key, unique or foreign
+	// key constraint is never listed here regardless of anything else
+	// about it -- that's #859's own kind, not this change's.
+	const widgets = table(
+		app,
+		"widgets",
+		{ id: uuid().primaryKey(), email: text().unique(), name: text() },
+		(t) => ({
+			checks: [check("widgets_name_ck", sql`length(${t.name}) > 0`)],
+		}),
+	);
+	const snapshot = buildTestSnapshot([widgets]);
+
+	it("lists only the database-only check, never a p/u/f constraint on the same table", () => {
+		const catalog: Catalog = {
+			...emptyCatalog(),
+			tables: [{ schema: "app", table: "widgets", rls: false }],
+			constraints: [
+				{
+					schema: "app",
+					table: "widgets",
+					name: "widgets_name_ck",
+					type: "c",
+					columns: ["name"],
+				},
+				{
+					schema: "app",
+					table: "widgets",
+					name: "widgets_legacy_ck",
+					type: "c",
+					columns: ["name"],
+				},
+				{
+					schema: "app",
+					table: "widgets",
+					name: "widgets_pkey",
+					type: "p",
+					columns: ["id"],
+				},
+				{
+					schema: "app",
+					table: "widgets",
+					name: "widgets_email_key",
+					type: "u",
+					columns: ["email"],
+				},
+				{
+					schema: "app",
+					table: "widgets",
+					name: "widgets_owner_fkey",
+					type: "f",
+					columns: ["owner_id"],
+				},
+			],
+		};
+
+		const inventory = buildInventory(snapshot, catalog);
+
+		expect(inventory.unmanagedCheckConstraints).toEqual([
+			{ schema: "app", table: "widgets", name: "widgets_legacy_ck" },
 		]);
 	});
 });

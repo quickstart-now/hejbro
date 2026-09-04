@@ -164,6 +164,7 @@ describe("renderCheckReport / 5.1 inventory section", () => {
 			unmanagedTables: [{ schema: "app", table: "legacy_table" }],
 			unmanagedColumns: [],
 			unmanagedIndexes: [],
+			unmanagedCheckConstraints: [],
 			extensions: ["pgcrypto"],
 		};
 
@@ -182,6 +183,7 @@ describe("renderCheckReport / 5.1 inventory section", () => {
 			unmanagedTables: [],
 			unmanagedColumns: [],
 			unmanagedIndexes: [],
+			unmanagedCheckConstraints: [],
 			extensions: [],
 		});
 

@@ -206,6 +206,7 @@ export const EMPTY_INVENTORY: Inventory = {
 	unmanagedTables: [],
 	unmanagedColumns: [],
 	unmanagedIndexes: [],
+	unmanagedCheckConstraints: [],
 	extensions: [],
 };
 
