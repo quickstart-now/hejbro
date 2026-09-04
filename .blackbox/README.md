@@ -45,7 +45,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | [#374](374/) | adversarial spec-only review stage in the opsx cycle | closed | #539 | 1 | 0 (0 pending) |
 | [#377](377/) | snapshot format stability policy for 1.0 | closed | #383 | 1 | 0 (0 pending) |
 | [#378](378/) | defect-leakage metric over escaped defects | closed | #384 | 1 | 0 (0 pending) |
-| [#412](412/) | 0.2.x: post-release commitments | open | #715 #808 #824 #835 | 12 | 26 (0 pending) |
+| [#412](412/) | 0.2.x: post-release commitments | open | #715 #808 #824 #835 | 15 | 26 (0 pending) |
 | ↳ [#528](528/) | driver-conformance kit mis-observes transaction-wrapping session-state:false drivers | closed | #737 #760 | 0 | 6 (0 pending) |
 | ↳ [#531](531/) | pg checkout reads its own setupSession; the spec's late-binding scenario fails for spread decorators | closed | #737 | 0 | 3 (0 pending) |
 | ↳ [#533](533/) | cli restore-command test flakes on first heavy parallel run after install | open | #773 | 0 | 1 (0 pending) |
@@ -56,6 +56,8 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#686](686/) | ctx.return accepts a mutation with no returning() and renders invalid plpgsql | closed | #733 | 0 | 3 (0 pending) |
 | ↳ [#687](687/) | init ignores the configured migrationsDir and snapshotPath | closed | #739 #759 #770 | 0 | 8 (0 pending) |
 | ↳ [#697](697/) | vendored fn guard is count-only and a __proto__ column key loses its column | closed | #739 | 0 | 4 (0 pending) |
+| ↳ [#741](741/) | `hejbro init --config <path>` is ignored and scaffolds a competing project | open |  | 0 | 1 (0 pending) |
+| ↳ [#743](743/) | `init` and `generate` name the same file two different ways | open |  | 0 | 0 (0 pending) |
 | ↳ [#744](744/) | `docker-rm-hygiene` can fail on a temporary file another test is deleting | closed | #773 | 0 | 1 (0 pending) |
 | ↳ [#748](748/) | core: "found" is missing from the plpgsql reserved-name list and shadows PL/pgSQL's FOUND silently | closed | #824 #833 | 0 | 6 (1 pending) |
 | ↳ [#750](750/) | 0.2.0-pre.0: five findings from applying one declaration to Postgres 18, Neon, Nile and Supabase | closed | #784 #802 | 7 | 2 (0 pending) |
@@ -64,6 +66,8 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#753](753/) | reset drops a referenced table before the table that references it, and the ledger hides the half-reset state | closed | #775 #784 | 0 | 14 (0 pending) |
 | ↳ [#754](754/) | Nile rejects the schema-qualified column references rendered inside CHECK and partial-index predicates (42622) | closed | #780 #795 #802 | 0 | 4 (0 pending) |
 | ↳ [#755](755/) | check cannot compare CHECK constraints on Nile because Nile has no EXPLAIN | closed | #780 #795 | 0 | 6 (0 pending) |
+| ↳ [#766](766/) | init: nested migrationsDir/snapshotPath pass the duplicate check, then generate crashes EISDIR | open |  | 0 | 0 (0 pending) |
+| ↳ [#768](768/) | init: stat-failure refusal's Next: names the missing leaf, not the blocking ancestor | open |  | 0 | 0 (0 pending) |
 | ↳ [#774](774/) | core: diff-engine byIdentity reassembly drops a second same-identity, same-direction change from one kind | closed | #824 #833 | 0 | 1 (1 pending) |
 | ↳ [#783](783/) | reset: a table that merely shares the ledger's name has all its rows deleted and is reported as the cleared ledger | closed | #835 #838 | 0 | 6 (2 pending) |
 | ↳ [#785](785/) | blackbox v2: per-issue folders under .blackbox, hooks + CI-first gate, shipped by the dd-blackbox script | closed | #786 | 5 | 2 (0 pending) |
@@ -103,7 +107,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 
 ## Totals
 
-Owner decisions 77 · rulings 119 (interpretation 73, extension 44, stop 2) · pending extensions 6 · rejected 2
+Owner decisions 80 · rulings 120 (interpretation 74, extension 44, stop 2) · pending extensions 6 · rejected 2
 
 ## Conventions
 

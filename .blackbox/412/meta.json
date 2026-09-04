@@ -437,13 +437,40 @@
       "raw": [
         "ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#112"
       ]
+    },
+    {
+      "id": "D39",
+      "by": "owner",
+      "at": "2026-09-04T12:52Z",
+      "title": "Process the queue in parallel where the batches are independent",
+      "raw": [
+        "ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#117"
+      ]
+    },
+    {
+      "id": "D40",
+      "by": "owner",
+      "at": "2026-09-04T13:50Z",
+      "title": "Owner steps away: the queue run continues under delegation, owner gates untouched",
+      "raw": [
+        "ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#118"
+      ]
+    },
+    {
+      "id": "D41",
+      "by": "owner",
+      "at": "2026-09-04T13:52Z",
+      "title": "The whole #412 queue is delegated, decisions included; the lead judges and records",
+      "raw": [
+        "ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#120"
+      ]
     }
   ],
   "work": [
     {
       "id": "W1",
       "at": "2026-09-03T00:00Z",
-      "title": "2026-09-03 — Three process amendments after the round-5 review (D110)",
+      "title": "2026-09-03 \u2014 Three process amendments after the round-5 review (D110)",
       "pr": null,
       "decisions": []
     }

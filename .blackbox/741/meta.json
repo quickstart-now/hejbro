@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#741",
+  "title": "`hejbro init --config <path>` is ignored and scaffolds a competing project",
+  "parent": "quickstart-now/hejbro#412",
+  "status": "open",
+  "opened": "2026-09-04",
+  "closed": null,
+  "decisions": [
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "D1"
+      ],
+      "at": "2026-09-04T12:52Z",
+      "title": "Batch ip = #741 #743 #766 #768 as one change harden-init-paths, parallel to li; #745 #767 follow on the same files",
+      "ratified": null
+    }
+  ],
+  "work": [],
+  "prs": [],
+  "origin": null,
+  "followUps": []
+}
