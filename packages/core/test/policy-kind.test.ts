@@ -4,11 +4,12 @@ import { schema } from "../src/dsl/schema";
 import { getTableMeta, table } from "../src/dsl/table";
 import { generateMigration } from "../src/engine/generate";
 import { encodeExprNode } from "../src/expr/codec";
-import { eq } from "../src/expr/operators";
+import { eq, literal } from "../src/expr/operators";
 import { createDefaultRegistry } from "../src/kind/registry";
 import { policyKind, policyUsing } from "../src/kinds/policy-kind";
 import { exists, select } from "../src/query/select";
 import { buildSnapshot, emptySnapshot } from "../src/snapshot/snapshot";
+import { stableJson } from "../src/snapshot/stable-json";
 import { text, timestamptz, uuid } from "../src/types/column-builder-factories";
 
 // #110: using/withCheck are now structured expression nodes (D67/D70), not
@@ -440,6 +441,38 @@ describe("policyKind — canonical order of roles (#701)", () => {
 			notes: [],
 		});
 		expect(statements[1]?.sql).toContain('to "admin", "reader", "writer"');
+	});
+
+	// snapshot-format's own delta scenario ("Declarations differing only in
+	// a set's order serialize identically") is stated over *declarations*,
+	// not a hand-built node -- proven end to end through the declaration ->
+	// buildSnapshot path (generateMigration, since resolveDeclarations is
+	// private), not just canonicalizePolicy called directly.
+	it("a declaration whose roles are listed in another order serializes identically through the declaration path (snapshot-format)", () => {
+		const buildPostsWithRoles = (roles: ReadonlyArray<string>) =>
+			table(app, "posts", { id: uuid().primaryKey() }, () => ({
+				rls: rls.enabled({
+					read: rls
+						.policy("posts_read")
+						.for("select")
+						.to(...roles)
+						.using(literal(true)),
+				}),
+			}));
+		const before = generateMigration({
+			declarations: [app, buildPostsWithRoles(["writer", "reader"])],
+			previousSnapshot: emptySnapshot,
+		}).snapshot;
+		const after = generateMigration({
+			declarations: [app, buildPostsWithRoles(["reader", "writer"])],
+			previousSnapshot: emptySnapshot,
+		}).snapshot;
+		const beforeNode = before.objects["policy:app.posts.posts_read"];
+		const afterNode = after.objects["policy:app.posts.posts_read"];
+		if (beforeNode === undefined || afterNode === undefined) {
+			throw new Error("expected policy:app.posts.posts_read in both snapshots");
+		}
+		expect(stableJson(beforeNode)).toBe(stableJson(afterNode));
 	});
 });
 

@@ -5,6 +5,7 @@ import {
 	emptySnapshot,
 	generateMigration,
 	schema,
+	stableJson,
 	table,
 	triggerKind,
 	uuid,
@@ -313,6 +314,47 @@ describe("triggerKind", () => {
 			expect(statements[1]?.sql).toContain(
 				'insert or update of "id", "title" or delete',
 			);
+		});
+
+		// snapshot-format's own delta scenario ("Declarations differing only
+		// in a set's order serialize identically") is stated over
+		// *declarations*, not a hand-built node -- proven end to end through
+		// the declaration -> buildSnapshot path (generateMigration), not just
+		// canonicalizeTrigger called directly.
+		it("a declaration whose events are listed in another order serializes identically through the declaration path (snapshot-format)", () => {
+			const buildCommentsTrigger = (
+				events: ReadonlyArray<"insert" | "update">,
+			) =>
+				defineTrigger(
+					comments,
+					{
+						name: "comments_single_depth",
+						timing: "before",
+						events,
+						forEach: "row",
+					},
+					(ctx, { new: row }) => {
+						ctx.return(row);
+					},
+				);
+			const before = generateMigration({
+				declarations: [comments, buildCommentsTrigger(["update", "insert"])],
+				previousSnapshot: emptySnapshot,
+			}).snapshot;
+			const after = generateMigration({
+				declarations: [comments, buildCommentsTrigger(["insert", "update"])],
+				previousSnapshot: emptySnapshot,
+			}).snapshot;
+			const beforeNode =
+				before.objects["trigger:app.comments.comments_single_depth"];
+			const afterNode =
+				after.objects["trigger:app.comments.comments_single_depth"];
+			if (beforeNode === undefined || afterNode === undefined) {
+				throw new Error(
+					"expected trigger:app.comments.comments_single_depth in both snapshots",
+				);
+			}
+			expect(stableJson(beforeNode)).toBe(stableJson(afterNode));
 		});
 	});
 
