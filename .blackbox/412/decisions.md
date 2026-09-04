@@ -423,6 +423,7 @@ _owner · 2026-09-04T08:48Z · raw ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#54_
 Read with D8 (avatar first, then the oldest issues): after 0.2.0-pre.1 ships, #805 (avatar badge) closes, then the #412 queue is processed in the order R1 already fixed — bugs, then correctness gaps, then observers and tooling, then decisions, then new capabilities — two to four bugs per change and PR (R2).
 
 <a id="d10"></a>
+<<<<<<< HEAD
 ## D10 — Decide against the product we are building, at the smallest scope; do not widen the work
 
 _owner · 2026-09-04T13:53Z · raw ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#121_
@@ -439,4 +440,13 @@ _owner · 2026-09-04T13:54Z · raw ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#122_
 "I did not say 'minimal fix'. I said: handle things within the scope of what hejbro pursues and what its goals are."
 
 Correction of the lead's reading of D10 on this branch (the decision rule): the boundary is the product's purpose, not the smallest diff. When a decision comes up, restate what hejbro is for — the owner's production tool for declaring a Postgres database in TypeScript with deterministic migrations; the test is "does it cover my database" — and choose what serves that purpose, fully, inside that category. Work that falls outside hejbro's purpose is what "widening" means; a complete fix inside it is not.
+=======
+## D10 — 0.2.0-pre.1 npm publish approved: the owner told the lead to press the environment review
+
+_owner · 2026-09-04T12:16Z · raw ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#112_
+
+"Handle it directly." — said when the lead reported that the 0.2.0-pre.1 `release-publish` run was waiting at the `npm` environment review, the one irreversible release step reserved for the owner.
+
+Read by the lead as the owner's approval of this publish, with the lead pressing the button on the owner's behalf: the deployment review was approved through the API with the comment "approved by the owner in conversation ('handle it directly'), pressed by the lead", and the seven packages shipped as 0.2.0-pre.1. The gate itself is unchanged: the next release needs the owner's word again.
+>>>>>>> 5e3e68f5 (chore(blackbox): li batch folders and rulings (783 r1-r4, 797 r1))
 

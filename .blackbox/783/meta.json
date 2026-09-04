@@ -1,0 +1,63 @@
+{
+  "version": 1,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#783",
+  "title": "reset: a table that merely shares the ledger's name has all its rows deleted and is reported as the cleared ledger",
+  "parent": "quickstart-now/hejbro#412",
+  "status": "open",
+  "opened": "2026-09-04",
+  "closed": null,
+  "decisions": [
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "D1"
+      ],
+      "at": "2026-09-04T12:18Z",
+      "title": "Batch li = #783 #796 #797 as one change; lead approves under delegation; reviewer in constructor mode",
+      "ratified": null
+    },
+    {
+      "id": "R2",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "D1",
+        "R1"
+      ],
+      "at": "2026-09-04T12:33Z",
+      "title": "harden-ledger-identity approved; D1 ledger identity = ordinary table + four typed bootstrap columns, superset tolerated, partitioned table excluded; D5 no cli-commands delta",
+      "ratified": null
+    },
+    {
+      "id": "R3",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "D1",
+        "R1"
+      ],
+      "at": "2026-09-04T12:33Z",
+      "title": "D2: code apply-ledger-occupied; reset refuses before the confirmation check",
+      "ratified": null
+    },
+    {
+      "id": "R4",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "D1",
+        "R1"
+      ],
+      "at": "2026-09-04T12:33Z",
+      "title": "D4: every ledger-touching command (migrate, status, reset, raise) uses the one judgement, not only status and reset",
+      "ratified": null
+    }
+  ],
+  "work": [],
+  "prs": [],
+  "origin": null,
+  "followUps": []
+}
