@@ -27,3 +27,10 @@ _lead · extension · basis D1, R1 · 2026-09-04T13:05Z · ratified: pending_
 
 Q2 — the `tg_*` variables are refused in every function, trigger or not (option a). One list, one check, one message; the cost is that a plain function cannot name an argument `tg_op`, which no reader would want anyway. Threading a trigger context through `assertValidLocalName` (option b) adds a branch to buy a name nobody should use. This is stricter than Postgres for a non-trigger function, hence an extension, not an interpretation.
 
+<a id="r4"></a>
+## R4 — Review: category-T keywords are added now that they are measured; the sentence stands
+
+_lead · interpretation · basis D1, R2 · 2026-09-04T13:51Z · ratified: pending_
+
+Review finding (co-reviewer, constructor mode, Postgres 17.11): the added requirement defines the refused class by a property — a name that cannot stand unquoted in a body at all — and every one of the 23 type_func_name (category T) keywords has that property: `left, is, join, full, like, binary, inner, similar, …` each fail at `create function` when rendered as a bare local. R2's Q1 withheld them only "without a measurement"; the measurement now exists, and its basis ("reject what was measured to break") points one way. Ruling: add the 23 category-T keywords to the reserved list, keep the requirement sentence as written, extend the input table with the measured rows (source: `pg_get_keywords()` category T on PG 17). Narrowing the sentence instead would leave a measured, noisy failure in place to protect a scope line. The three non-blocking sentence items are repaired in the same rework: scenario 5 states the projection condition under which a row named `tg` succeeds; "the first pair" is defined as the first key, in declaration order, whose derived name repeats an earlier key's — reported with that earlier key; the case-sensitive `duplicate-local-name` sibling is pre-existing and outside the delta — filed as a follow-up. README CRAP restamp is the lead's, before the PR.
+
