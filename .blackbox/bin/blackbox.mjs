@@ -24,8 +24,10 @@ import {
 	mkdirSync,
 	readdirSync,
 	readFileSync,
+	rmSync,
 	writeFileSync,
 } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -85,6 +87,36 @@ const ghJson = (path, extra = []) => JSON.parse(gh(["api", path, ...extra]));
 
 const ghPaginated = (path) =>
 	JSON.parse(gh(["api", "--paginate", "--slurp", path])).flat();
+
+/** A JSON-bodied request (POST/PATCH) through `gh api --input`. */
+const ghSend = (method, path, body) => {
+	const file = join(tmpdir(), `blackbox-${process.pid}-${Date.now()}.json`);
+	writeFileSync(file, JSON.stringify(body));
+	// Writes go out with the App's token when CI provides one; reads keep
+	// the workflow token, so the App needs no permission beyond contents.
+	// biome-ignore lint/suspicious/noUndeclaredEnvVars: CI configuration, not a turbo task input
+	const appToken = String(process.env.BLACKBOX_APP_TOKEN ?? "");
+	const env = (() => {
+		if (appToken === "") {
+			return process.env;
+		}
+		return {
+			...process.env,
+			// biome-ignore lint/style/useNamingConvention: environment variable
+			GH_TOKEN: appToken,
+			// biome-ignore lint/style/useNamingConvention: environment variable
+			GITHUB_TOKEN: appToken,
+		};
+	})();
+	const result = run("gh", ["api", "-X", method, "--input", file, path], {
+		env,
+	});
+	rmSync(file, { force: true });
+	if (!result.ok) {
+		fail(`gh api ${method} ${path}: ${result.err || result.out}`);
+	}
+	return JSON.parse(result.out);
+};
 
 // ------------------------------------------------------------------- git
 
@@ -825,7 +857,7 @@ const checkPins = ({ state, reader, holders, number, changed, problems }) => {
 	});
 };
 
-const checkPr = ({ root, repo, number, release, head }) => {
+const checkPr = ({ root, repo, number, release, head, readerOverride }) => {
 	const pr = prInfo(repo, number);
 	if (pr.bot) {
 		return {
@@ -834,7 +866,7 @@ const checkPr = ({ root, repo, number, release, head }) => {
 		};
 	}
 	const releaseMode = release || isReleasePr(repo, pr);
-	const reader = commitReader(root, repo, head ?? pr.head);
+	const reader = readerOverride ?? commitReader(root, repo, head ?? pr.head);
 	const state = loadState(reader);
 	const problems = validateState(state, reader, repo);
 	const holders = state.folders.filter(
@@ -1104,31 +1136,8 @@ const lookupParent = (ref) => {
 	return `${ref.repo}#${JSON.parse(result.out).number}`;
 };
 
-const cmdNew = (positional, opts) => {
-	const cwd = process.cwd();
-	const root = repoRoot(cwd);
-	const codeRepo = repoSlug(root);
-	const ref = parseRef(
-		positional[0] ?? fail("usage: blackbox new <ref>"),
-		codeRepo,
-	);
-	const state = loadState(fsReader(root));
-	const itemDir = (() => {
-		if (opts.item) {
-			return resolve(opts.item);
-		}
-		return nearestItemDir(state, root, cwd);
-	})();
-	if (!existsSync(join(itemDir, ".blackbox"))) {
-		fail(`${itemDir} has no .blackbox/ — run blackbox init there first`);
-	}
-	const itemRel = relative(root, itemDir);
-	const duplicate = state.folders.find(
-		(folder) => folder.meta.ref === refString(ref) && folder.item === itemRel,
-	);
-	if (duplicate) {
-		fail(`${refString(ref)} already recorded at ${duplicate.dir}`);
-	}
+/** Create a work-item folder for `ref` inside `itemDir`; returns its repo-relative dir. */
+const createFolder = ({ root, codeRepo, itemDir, ref, opts = {} }) => {
 	const issue = ghJson(`repos/${ref.repo}/issues/${ref.number}`);
 	const kind =
 		opts.kind ??
@@ -1176,9 +1185,38 @@ const cmdNew = (positional, opts) => {
 		join(dir, "work.md"),
 		`# Work — ${meta.ref}\n\nWhat was built, measured and reversed under the decisions, one entry per PR or group (\`W#\`). Managed by \`blackbox add work\`; append-only.\n\n`,
 	);
+	return { dir: relative(root, dir), meta };
+};
+
+const cmdNew = (positional, opts) => {
+	const cwd = process.cwd();
+	const root = repoRoot(cwd);
+	const codeRepo = repoSlug(root);
+	const ref = parseRef(
+		positional[0] ?? fail("usage: blackbox new <ref>"),
+		codeRepo,
+	);
+	const state = loadState(fsReader(root));
+	const itemDir = (() => {
+		if (opts.item) {
+			return resolve(opts.item);
+		}
+		return nearestItemDir(state, root, cwd);
+	})();
+	if (!existsSync(join(itemDir, ".blackbox"))) {
+		fail(`${itemDir} has no .blackbox/ — run blackbox init there first`);
+	}
+	const itemRel = relative(root, itemDir);
+	const duplicate = state.folders.find(
+		(folder) => folder.meta.ref === refString(ref) && folder.item === itemRel,
+	);
+	if (duplicate) {
+		fail(`${refString(ref)} already recorded at ${duplicate.dir}`);
+	}
+	const created = createFolder({ root, codeRepo, itemDir, ref, opts });
 	writeIndex(root, codeRepo);
 	process.stdout.write(
-		`created ${relative(root, dir)} for ${meta.ref} (${kind}${iff(parent !== null, `, parent ${parent}`)})\n`,
+		`created ${created.dir} for ${created.meta.ref} (${created.meta.kind}${iff(created.meta.parent !== null, `, parent ${created.meta.parent}`)})\n`,
 	);
 };
 
@@ -1470,15 +1508,86 @@ const foldersForPr = (state, repo, number, body) => {
 	});
 };
 
+// `--untracked-files=all` lists the files of a freshly opened folder, not
+// the folder itself — a directory is not a blob.
 const dirtyRecordPaths = (root) =>
-	run("git", ["status", "--porcelain", "-z"], { cwd: root })
+	run("git", ["status", "--porcelain", "-z", "--untracked-files=all"], {
+		cwd: root,
+	})
 		.out.split("\0")
 		.filter(Boolean)
 		.map((line) => line.slice(3))
 		.filter(isBlackboxPath);
 
-/** CI entry point: pin every folder the PR belongs to, commit and push the
- * pins when a token that triggers workflows is available, then check. */
+/** Commit the dirty record files through the Git Data API: GitHub signs a
+ * commit it creates for a GitHub App, and an App-authenticated ref update
+ * triggers workflows, so the pin lands verified and CI re-runs on it. */
+const apiCommit = ({ root, repo, branch, paths, message }) => {
+	const head = git(["rev-parse", "HEAD"], root);
+	const baseTree = git(["rev-parse", "HEAD^{tree}"], root);
+	const tree = paths.map((path) => ({
+		path,
+		mode: "100644",
+		type: "blob",
+		sha: ghSend("POST", `repos/${repo}/git/blobs`, {
+			content: readFileSync(join(root, path), "utf8"),
+			encoding: "utf-8",
+		}).sha,
+	}));
+	const treeSha = ghSend("POST", `repos/${repo}/git/trees`, {
+		// biome-ignore lint/style/useNamingConvention: GitHub API field name
+		base_tree: baseTree,
+		tree,
+	}).sha;
+	const commit = ghSend("POST", `repos/${repo}/git/commits`, {
+		message,
+		tree: treeSha,
+		parents: [head],
+	});
+	ghSend("PATCH", `repos/${repo}/git/refs/heads/${branch}`, {
+		sha: commit.sha,
+		force: false,
+	});
+	return commit.sha;
+};
+
+const gitCommitAndPush = ({ root, branch, paths, message }) => {
+	git(["add", "-A", "--", ...paths], root);
+	git(
+		[
+			"-c",
+			"user.name=blackbox[bot]",
+			"-c",
+			"user.email=blackbox-bot@users.noreply.github.com",
+			"commit",
+			"-q",
+			"-m",
+			message,
+		],
+		root,
+	);
+	git(["push", "origin", `HEAD:refs/heads/${branch}`], root);
+	return git(["rev-parse", "HEAD"], root);
+};
+
+/** How CI may land pins: "api" (GitHub App token, signed), "git" (a PAT
+ * that triggers workflows), or "" (verify only). BLACKBOX_TOKEN alone
+ * still means "git" for workflows written before BLACKBOX_PUSH existed. */
+const pushMode = () => {
+	// biome-ignore lint/suspicious/noUndeclaredEnvVars: CI configuration, not a turbo task input
+	const explicit = String(process.env.BLACKBOX_PUSH ?? "").trim();
+	if (explicit === "api" || explicit === "git") {
+		return explicit;
+	}
+	// biome-ignore lint/suspicious/noUndeclaredEnvVars: CI configuration, not a turbo task input
+	if (String(process.env.BLACKBOX_TOKEN ?? "") !== "") {
+		return "git";
+	}
+	return "";
+};
+
+/** CI entry point: pin every folder the PR belongs to, land the pins when a
+ * credential that triggers workflows is available, then check. */
 const cmdCi = (_positional, opts) => {
 	const root = repoRoot();
 	const repo = opts.repo ?? repoSlug(root);
@@ -1490,9 +1599,48 @@ const cmdCi = (_positional, opts) => {
 		);
 		return;
 	}
+	const changed = localChangedFiles(root, pr.baseSha);
+	// A PR that touches an item with no folder for its linked issue gets one
+	// opened here, so the lead never has to pre-create a folder per item.
+	const opened = (() => {
+		const before = loadState(fsReader(root));
+		const rels = before.items.map((item) => item.rel);
+		const linked = referencedIssues(pr.body).map((entry) => entry.number);
+		const touched = [
+			...new Set(
+				changed
+					.map((file) => ownerItemOf(file.path, rels))
+					.filter((rel) => rel !== undefined),
+			),
+		];
+		return touched.flatMap((rel) =>
+			linked
+				.filter(
+					(issueNumber) =>
+						!before.folders.some(
+							(folder) =>
+								folder.item === rel &&
+								folder.meta.ref === `${repo}#${issueNumber}`,
+						),
+				)
+				.map(
+					(issueNumber) =>
+						createFolder({
+							root,
+							codeRepo: repo,
+							itemDir: join(root, rel),
+							ref: { repo, number: issueNumber },
+						}).dir,
+				),
+		);
+	})();
+	if (opened.length > 0) {
+		process.stdout.write(
+			`blackbox: opened ${opened.join(", ")} for the issues this PR links\n`,
+		);
+	}
 	const state = loadState(fsReader(root));
 	const holders = foldersForPr(state, repo, number, pr.body);
-	const changed = localChangedFiles(root, pr.baseSha);
 	const at = nowIso();
 	const pinned = holders.filter(
 		(folder) =>
@@ -1500,46 +1648,52 @@ const cmdCi = (_positional, opts) => {
 	);
 	writeIndex(root, repo);
 	const dirty = dirtyRecordPaths(root);
-	// biome-ignore lint/suspicious/noUndeclaredEnvVars: a CI secret read by this tool, not a turbo task input
-	const token = process.env.BLACKBOX_TOKEN ?? "";
-	if (dirty.length > 0 && token === "") {
+	const mode = pushMode();
+	if (dirty.length > 0 && mode === "") {
 		process.stdout.write(
-			`blackbox: ${pinned.length} folder(s) need pinning (${dirty.length} record file(s) differ). No BLACKBOX_TOKEN secret: CI cannot commit them — run \`blackbox pin <folder> --pr ${number}\` locally, or register a fine-grained PAT (contents: write) as BLACKBOX_TOKEN to let CI do it.\n`,
+			`blackbox: ${pinned.length} folder(s) need pinning (${dirty.length} record file(s) differ). No credential for CI to land them — run \`blackbox pin <folder> --pr ${number}\` locally, or give the workflow a GitHub App (BLACKBOX_APP_ID + BLACKBOX_APP_PRIVATE_KEY) or a PAT (BLACKBOX_TOKEN).\n`,
 		);
 	}
-	// CI has the PR branch checked out: the local HEAD is what gets merged,
-	// whether or not the API has caught up with a push made moments ago.
-	const head = (() => {
-		if (dirty.length === 0 || token === "") {
-			return git(["rev-parse", "HEAD"], root);
+	const landed = (() => {
+		if (dirty.length === 0 || mode === "") {
+			return null;
 		}
-		git(["add", "-A", "--", ...dirty], root);
-		git(
-			[
-				"-c",
-				"user.name=blackbox[bot]",
-				"-c",
-				"user.email=blackbox-bot@users.noreply.github.com",
-				"commit",
-				"-q",
-				"-m",
-				`chore(blackbox): pin PR #${number} (${pinned.map((folder) => folder.meta.ref).join(", ")})`,
-			],
+		const message = `chore(blackbox): pin PR #${number} (${pinned.map((folder) => folder.meta.ref).join(", ")})`;
+		if (mode === "api") {
+			return apiCommit({
+				root,
+				repo,
+				branch: pr.headRef,
+				paths: dirty,
+				message,
+			});
+		}
+		return gitCommitAndPush({
 			root,
-		);
-		git(["push", "origin", `HEAD:refs/heads/${pr.headRef}`], root);
-		const sha = git(["rev-parse", "HEAD"], root);
-		process.stdout.write(
-			`blackbox: pinned ${pinned.map((folder) => folder.dir).join(", ")} and pushed ${sha.slice(0, 8)} to ${pr.headRef}; the new commit re-runs CI.\n`,
-		);
-		return sha;
+			branch: pr.headRef,
+			paths: dirty,
+			message,
+		});
 	})();
+	if (landed !== null) {
+		process.stdout.write(
+			`blackbox: pinned ${pinned.map((folder) => folder.dir).join(", ")} and landed ${landed.slice(0, 8)} on ${pr.headRef} (${mode}); the new commit re-runs CI.\n`,
+		);
+	}
+	// After an API commit the working tree is exactly the committed tree, and
+	// the commit may not exist locally yet; after a git push HEAD is it.
 	const result = checkPr({
 		root,
 		repo,
 		number,
 		release: Boolean(opts.release),
-		head,
+		head: git(["rev-parse", "HEAD"], root),
+		readerOverride: (() => {
+			if (mode === "api" && landed !== null) {
+				return fsReader(root);
+			}
+			return undefined;
+		})(),
 	});
 	if (!report(result, (text) => process.stdout.write(text))) {
 		process.exitCode = 1;
@@ -1828,13 +1982,15 @@ const VALUE_FLAGS = new Set([
 
 /** The PR selector and repo of a `gh pr merge …` / `gh api …/pulls/N/merge` command, or null. */
 export const parseMergeCommand = (command) => {
+	// Only a `gh` in command position counts: the phrase inside a heredoc or
+	// a quoted string (documentation being written) must not trip the gate.
 	const api = command.match(
-		/\bgh\s+api\b[^|;&]*?(?:\s|\/)repos\/([^/\s]+\/[^/\s]+)\/pulls\/(\d+)\/merge\b/,
+		/(?:^|[;&|(]|\n)\s*gh\s+api\b[^|;&\n]*?(?:\s|\/)repos\/([^/\s]+\/[^/\s]+)\/pulls\/(\d+)\/merge\b/,
 	);
 	if (api) {
 		return { repo: api[1], selector: api[2] };
 	}
-	const merge = command.match(/\bgh\s+pr\s+merge\b([^|;&]*)/);
+	const merge = command.match(/(?:^|[;&|(]|\n)\s*gh\s+pr\s+merge\b([^|;&\n]*)/);
 	if (!merge) {
 		return null;
 	}
@@ -2015,14 +2171,18 @@ const snippets = (
   }
 
 CI (GitHub Actions) — run first, make every other job \`needs: blackbox\`, and mark it a required status check.
-With a fine-grained PAT (contents: write) registered as the BLACKBOX_TOKEN secret, CI pins the PR itself and
-commits the pins to the branch; without it, CI only verifies and the lead pins locally.
+Bot mode: with a GitHub App (secrets BLACKBOX_APP_ID + BLACKBOX_APP_PRIVATE_KEY) CI commits the pins through the
+Git Data API — signed by GitHub, attributed to the App — and the ref update re-runs CI; with only a PAT
+(BLACKBOX_TOKEN) it pushes with git, unsigned; with neither it verifies and the lead pins locally.
 
   blackbox:
     runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: read
+      issues: read
+    env:
+      HAS_APP: \${{ secrets.BLACKBOX_APP_ID != '' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -2031,11 +2191,18 @@ commits the pins to the branch; without it, CI only verifies and the lead pins l
           token: \${{ secrets.BLACKBOX_TOKEN || github.token }}
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
+      - uses: actions/create-github-app-token@v2
+        id: app
+        if: env.HAS_APP == 'true'
+        with:
+          app-id: \${{ secrets.BLACKBOX_APP_ID }}
+          private-key: \${{ secrets.BLACKBOX_APP_PRIVATE_KEY }}
       - if: github.event_name == 'pull_request'
         run: node ${script} ci --pr \${{ github.event.pull_request.number }}
         env:
           GH_TOKEN: \${{ github.token }}
-          BLACKBOX_TOKEN: \${{ secrets.BLACKBOX_TOKEN }}
+          BLACKBOX_APP_TOKEN: \${{ steps.app.outputs.token }}
+          BLACKBOX_PUSH: \${{ steps.app.outputs.token && 'api' || (secrets.BLACKBOX_TOKEN && 'git' || '') }}
       - if: github.event_name != 'pull_request'
         run: node ${script} check
         env:
