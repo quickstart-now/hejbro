@@ -1,6 +1,8 @@
 import {
 	existsSync,
+	lstatSync,
 	mkdirSync,
+	readlinkSync,
 	type Stats,
 	statSync,
 	writeFileSync,
@@ -210,7 +212,10 @@ function throwNestedPathConflict(
  * non-permission failure, which keeps today's one-sentence wording;
  * different from it only when a permission failure was traced to an
  * ancestor, which adds the sentence naming that ancestor. `stat`'s
- * `EACCES` is always a directory on the way, never the leaf. */
+ * `EACCES` is always a directory on the way, never the leaf. The
+ * non-permission branch's own `Next:` names what the failing node
+ * *points at*, not its permissions (#767 review, D8 non-blocking 3): a
+ * loop (`ELOOP`) is never a permission problem. */
 function throwStatFailed(
 	label: string,
 	fieldName: string,
@@ -220,12 +225,46 @@ function throwStatFailed(
 	if (culprit === label) {
 		return throwHejbroError(
 			"init-path-conflict",
-			`"${label}" could not be checked for ${fieldName} (${code}). Next: check permissions on "${label}", then rerun \`hejbro init\`.`,
+			`"${label}" could not be checked for ${fieldName} (${code}). Next: check what "${label}" points at, then rerun \`hejbro init\`.`,
 		);
 	}
 	return throwHejbroError(
 		"init-path-conflict",
 		`"${label}" could not be checked for ${fieldName} (${code}): "${culprit}" does not let this process look inside it. Next: check permissions on "${culprit}", then rerun \`hejbro init\`.`,
+	);
+}
+
+/** Builds and throws the `init-path-conflict`-coded, enriched plain
+ * `HejbroError` for a dangling symbolic link at an artifact's own leaf
+ * (#767 review, D8): `statSync` follows a link, so a dangling one reads
+ * as absent and a write would go straight through it to a target the
+ * report never named. Judged by what it points at, not treated as
+ * absent. */
+function throwDanglingLink(
+	label: string,
+	fieldName: string,
+	expectedKind: NodeKind,
+	target: string,
+): never {
+	return throwHejbroError(
+		"init-path-conflict",
+		`"${label}" was expected to be a ${expectedKind} for ${fieldName}, but a dangling symbolic link is there, pointing at "${target}". Next: remove the link or create its target, then rerun \`hejbro init\`.`,
+	);
+}
+
+/** Builds and throws the `init-path-conflict`-coded, enriched plain
+ * `HejbroError` for a dangling symbolic link sitting in a planned
+ * artifact's own ancestor chain (#767 review, D8) -- distinct wording
+ * from {@link throwDanglingLink}, same reasoning as
+ * {@link throwAncestorConflict} vs {@link throwPathConflict}. */
+function throwAncestorDanglingLink(
+	label: string,
+	fieldName: string,
+	target: string,
+): never {
+	return throwHejbroError(
+		"init-path-conflict",
+		`"${label}" was expected to be a directory to hold ${fieldName}, but a dangling symbolic link is there, pointing at "${target}". Next: remove the link or create its target, then rerun \`hejbro init\`.`,
 	);
 }
 
@@ -239,19 +278,49 @@ const errorCode = (error: unknown): string => {
 	return "unknown";
 };
 
+/** `readlinkSync(path)`'s own target, printed relative to `cwd` when the
+ * link was written as an absolute path (D57 -- this CLI's diagnostics
+ * never print an absolute path); a relative target is printed exactly
+ * as the link spells it, which is also how POSIX resolves it (from the
+ * link's own directory, not `cwd`). */
+const symlinkTargetLabel = (cwd: string, path: string): string => {
+	const target = readlinkSync(path);
+	if (isAbsolute(target)) {
+		return relative(cwd, target);
+	}
+	return target;
+};
+
 type StatOutcome =
 	| { readonly kind: "absent" }
 	| { readonly kind: "present"; readonly actualKind: NodeKind }
+	| { readonly kind: "dangling"; readonly target: string }
 	| { readonly kind: "stat-failed"; readonly code: string };
 
-/** `stat`'s own three outcomes at `path` (already trailing-separator-
- * stripped by the caller, D106 R1 B1): the node's kind, "nothing is
- * there" (`ENOENT` only), or any other failure, carried as data instead
- * of being decided by a bare `existsSync` that a trailing separator can
- * make silently `false` for a file that is really there. */
-const statOutcomeAt = (path: string): StatOutcome => {
+/** `stat`'s own outcomes at `path` (already trailing-separator-stripped
+ * by the caller, D106 R1 B1): the node's kind, "nothing is there"
+ * (`ENOENT` only), a dangling symbolic link (#767 review, D8 -- `stat`
+ * follows a link and a dangling one also fails `ENOENT`, indistinguish-
+ * able from "nothing there" without `lstat`ing first), or any other
+ * failure. `lstat`s first: a non-link node's `lstat` already carries its
+ * kind, so only a link needs the second, following `stat`. Carried as
+ * data instead of being decided by a bare `existsSync` that a trailing
+ * separator can make silently `false` for a file that is really there. */
+const statOutcomeAt = (cwd: string, path: string): StatOutcome => {
 	try {
-		return { kind: "present", actualKind: kindOfStat(statSync(path)) };
+		const lstat = lstatSync(path);
+		if (!lstat.isSymbolicLink()) {
+			return { kind: "present", actualKind: kindOfStat(lstat) };
+		}
+		try {
+			return { kind: "present", actualKind: kindOfStat(statSync(path)) };
+		} catch (error) {
+			const code = errorCode(error);
+			if (code === "ENOENT") {
+				return { kind: "dangling", target: symlinkTargetLabel(cwd, path) };
+			}
+			return { kind: "stat-failed", code };
+		}
 	} catch (error) {
 		const code = errorCode(error);
 		if (code === "ENOENT") {
@@ -261,12 +330,34 @@ const statOutcomeAt = (path: string): StatOutcome => {
 	}
 };
 
+/** A dangling symbolic link at `path`, or `null` when `path` isn't one
+ * (including "nothing there at all") -- {@link walkAncestors}'s own
+ * probe for the same fault {@link statOutcomeAt} detects at a leaf,
+ * since `statSync` alone can't tell "dangling link" from "absent"
+ * (#767 review, D8). */
+const danglingLinkTargetAt = (cwd: string, path: string): string | null => {
+	try {
+		const lstat = lstatSync(path);
+		if (!lstat.isSymbolicLink()) {
+			return null;
+		}
+		return symlinkTargetLabel(cwd, path);
+	} catch {
+		return null;
+	}
+};
+
 type AncestorOutcome =
 	| { readonly kind: "ok" }
 	| {
 			readonly kind: "conflict";
 			readonly path: string;
 			readonly actualKind: NodeKind;
+	  }
+	| {
+			readonly kind: "dangling";
+			readonly path: string;
+			readonly target: string;
 	  }
 	| {
 			readonly kind: "stat-failed";
@@ -279,11 +370,15 @@ type AncestorOutcome =
 			readonly code: string;
 	  };
 
+/** `path`'s own chain of parents, one level up (never `path` itself). */
+const parentOf = (path: string): string => dirname(path);
+
 /** Walks `path`'s own chain of parents upward (never `path` itself --
  * callers pass an artifact's `dirname`), continuing past `ENOENT`
- * ("nothing there yet"), `ENOTDIR` (a `stat` below a file ancestor
- * fails this way too, D106 R1 N1 -- stopping there instead of
- * continuing up would name the deepest segment tried, not the file
+ * ("nothing there yet", unless a dangling symbolic link sits there --
+ * #767 review, D8, which conflicts instead), `ENOTDIR` (a `stat` below a
+ * file ancestor fails this way too, D106 R1 N1 -- stopping there instead
+ * of continuing up would name the deepest segment tried, not the file
  * actually blocking the chain) and `EACCES`/`EPERM` (#768, D4 -- `stat`
  * fails this way for a directory it cannot search into, never for the
  * leaf itself, so the node it finally does stat successfully is the one
@@ -295,6 +390,7 @@ type AncestorOutcome =
  * the filesystem root is itself, which ends the recursion even when
  * nothing on the way up ever exists. */
 const walkAncestors = (
+	cwd: string,
 	path: string,
 	permissionCode?: string,
 ): AncestorOutcome => {
@@ -309,22 +405,36 @@ const walkAncestors = (
 		return { kind: "conflict", path, actualKind: "file" };
 	} catch (error) {
 		const code = errorCode(error);
-		if (code === "ENOENT" || code === "ENOTDIR") {
-			const parent = dirname(path);
+		if (code === "ENOENT") {
+			const danglingTarget = danglingLinkTargetAt(cwd, path);
+			if (danglingTarget !== null) {
+				return { kind: "dangling", path, target: danglingTarget };
+			}
+			const parent = parentOf(path);
 			if (parent === path) {
 				if (permissionCode !== undefined) {
 					return { kind: "blocked", culprit: path, code: permissionCode };
 				}
 				return { kind: "ok" };
 			}
-			return walkAncestors(parent, permissionCode);
+			return walkAncestors(cwd, parent, permissionCode);
+		}
+		if (code === "ENOTDIR") {
+			const parent = parentOf(path);
+			if (parent === path) {
+				if (permissionCode !== undefined) {
+					return { kind: "blocked", culprit: path, code: permissionCode };
+				}
+				return { kind: "ok" };
+			}
+			return walkAncestors(cwd, parent, permissionCode);
 		}
 		if (code === "EACCES" || code === "EPERM") {
-			const parent = dirname(path);
+			const parent = parentOf(path);
 			if (parent === path) {
 				return { kind: "blocked", culprit: path, code };
 			}
-			return walkAncestors(parent, code);
+			return walkAncestors(cwd, parent, code);
 		}
 		return { kind: "stat-failed", path, code };
 	}
@@ -344,7 +454,7 @@ const walkAncestors = (
  * preserve -- it is derived from a nested field's own value, so both
  * the quote and the `Next:` clause name the one real path. */
 const checkAncestors = (cwd: string, artifact: Artifact): void => {
-	const outcome = walkAncestors(dirname(artifact.path));
+	const outcome = walkAncestors(cwd, dirname(artifact.path));
 	if (outcome.kind === "ok") {
 		return;
 	}
@@ -359,6 +469,9 @@ const checkAncestors = (cwd: string, artifact: Artifact): void => {
 	const label = fileLabel(cwd, outcome.path);
 	if (outcome.kind === "conflict") {
 		throwAncestorConflict(label, artifact.fieldName, outcome.actualKind);
+	}
+	if (outcome.kind === "dangling") {
+		throwAncestorDanglingLink(label, artifact.fieldName, outcome.target);
 	}
 	throwStatFailed(label, artifact.fieldName, outcome.code, label);
 };
@@ -463,7 +576,7 @@ const culpritFor = (cwd: string, artifact: Artifact, code: string): string => {
 	if (code !== "EACCES" && code !== "EPERM") {
 		return artifact.label;
 	}
-	const outcome = walkAncestors(dirname(artifact.path), code);
+	const outcome = walkAncestors(cwd, dirname(artifact.path), code);
 	if (outcome.kind === "blocked") {
 		return fileLabel(cwd, outcome.culprit);
 	}
@@ -487,9 +600,17 @@ const checkPathKind = (cwd: string, artifact: Artifact): void => {
 		// trailing slash the message needs to show; `dirLabel` keeps it.
 		throwSpelledAsDirectory(dirLabel(cwd, artifact.path), artifact.fieldName);
 	}
-	const outcome = statOutcomeAt(stripTrailingSeparators(artifact.path));
+	const outcome = statOutcomeAt(cwd, stripTrailingSeparators(artifact.path));
 	if (outcome.kind === "absent") {
 		return;
+	}
+	if (outcome.kind === "dangling") {
+		throwDanglingLink(
+			artifact.label,
+			artifact.fieldName,
+			expectedKind,
+			outcome.target,
+		);
 	}
 	if (outcome.kind === "stat-failed") {
 		throwStatFailed(

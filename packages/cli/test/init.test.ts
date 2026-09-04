@@ -802,8 +802,12 @@ describe.skipIf(process.getuid?.() === 0)(
 				},
 				assert: (result) => {
 					expect(result.exitCode).toBe(1);
+					// D8 (#767 review, non-blocking 3, approved): a loop is not
+					// a permission -- the non-permission branch of
+					// throwStatFailed's Next: now says "check what ... points
+					// at", not "check permissions on".
 					expect(result.stderr).toBe(
-						'error[init-path-conflict]: loop\n  "loop" could not be checked for migrationsDir (ELOOP). Next: check permissions on "loop", then rerun `hejbro init`.',
+						'error[init-path-conflict]: loop\n  "loop" could not be checked for migrationsDir (ELOOP). Next: check what "loop" points at, then rerun `hejbro init`.',
 					);
 				},
 			},
@@ -853,6 +857,190 @@ describe.skipIf(process.getuid?.() === 0)(
 		});
 	},
 );
+
+// #767 review round 1, D8: `statSync` follows a symbolic link -- a
+// dangling one stats ENOENT and reads as absent, so init used to write
+// straight through it instead of refusing. `lstatSync` sees the link
+// itself; a link to a real node keeps today's behaviour, judged by the
+// target's kind.
+describe("runInit / a dangling symbolic link at an artifact path (#767, D8)", () => {
+	type DanglingLinkRow = {
+		readonly label: string;
+		readonly configContent: string;
+		readonly setup: (fixtureCwd: string) => Promise<void>;
+		readonly assert: (
+			result: Awaited<ReturnType<typeof runInit>>,
+			fixtureCwd: string,
+		) => Promise<void> | void;
+	};
+
+	const rows: ReadonlyArray<DanglingLinkRow> = [
+		{
+			label: 'snapshotPath: "state.json" -> nowhere (absent)',
+			configContent:
+				'export default { entry: ["src/**/*.schema.ts"], snapshotPath: "state.json" };\n',
+			setup: async (fixtureCwd) => {
+				await symlink("nowhere", join(fixtureCwd, "state.json"));
+			},
+			assert: (result, fixtureCwd) => {
+				expect(result.exitCode).toBe(1);
+				expect(result.stderr).toContain("error[init-path-conflict]");
+				expect(result.stderr).toContain("state.json");
+				expect(result.stderr).toContain("nowhere");
+				expect(result.report).toEqual([]);
+				expect(existsSync(join(fixtureCwd, "nowhere"))).toBe(false);
+			},
+		},
+		{
+			label: 'migrationsDir: "mig" -> nowhere',
+			configContent:
+				'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "mig" };\n',
+			setup: async (fixtureCwd) => {
+				await symlink("nowhere", join(fixtureCwd, "mig"));
+			},
+			assert: (result, fixtureCwd) => {
+				expect(result.exitCode).toBe(1);
+				expect(result.stderr).toContain("error[init-path-conflict]");
+				expect(result.stderr).toContain("mig/");
+				expect(result.stderr).toContain("nowhere");
+				expect(existsSync(join(fixtureCwd, "nowhere"))).toBe(false);
+			},
+		},
+		{
+			label: 'snapshotPath: "lnk/state.json", lnk -> nowhere (ancestor)',
+			configContent:
+				'export default { entry: ["src/**/*.schema.ts"], snapshotPath: "lnk/state.json" };\n',
+			setup: async (fixtureCwd) => {
+				await symlink("nowhere", join(fixtureCwd, "lnk"));
+			},
+			assert: (result, fixtureCwd) => {
+				expect(result.exitCode).toBe(1);
+				expect(result.stderr).toContain("error[init-path-conflict]");
+				expect(result.stderr).toContain("lnk");
+				expect(result.stderr).toContain("nowhere");
+				expect(existsSync(join(fixtureCwd, "nowhere"))).toBe(false);
+			},
+		},
+		{
+			label:
+				'snapshotPath: "state.json" -> real.json (control: a link to a regular file is honoured)',
+			configContent:
+				'export default { entry: ["src/**/*.schema.ts"], snapshotPath: "state.json" };\n',
+			setup: async (fixtureCwd) => {
+				await writeFile(join(fixtureCwd, "real.json"), "pre-existing content");
+				await symlink("real.json", join(fixtureCwd, "state.json"));
+			},
+			assert: async (result, fixtureCwd) => {
+				expect(result.exitCode).toBe(0);
+				expect(result.report).toContain("skipped state.json (exists)");
+				expect(await readFile(join(fixtureCwd, "real.json"), "utf8")).toBe(
+					"pre-existing content",
+				);
+			},
+		},
+		{
+			label:
+				'snapshotPath: "state.json" -> realdir/ (control: wrong-kind refusal unchanged)',
+			configContent:
+				'export default { entry: ["src/**/*.schema.ts"], snapshotPath: "state.json" };\n',
+			setup: async (fixtureCwd) => {
+				await mkdir(join(fixtureCwd, "realdir"), { recursive: true });
+				await symlink("realdir", join(fixtureCwd, "state.json"));
+			},
+			assert: (result) => {
+				expect(result.exitCode).toBe(1);
+				expect(result.stderr).toContain(
+					"was expected to be a file for snapshotPath, but a directory is there.",
+				);
+			},
+		},
+		{
+			label:
+				'migrationsDir: "mig" -> realdir/ (control: a link to a real directory is honoured)',
+			configContent:
+				'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "mig" };\n',
+			setup: async (fixtureCwd) => {
+				await mkdir(join(fixtureCwd, "realdir"), { recursive: true });
+				await symlink("realdir", join(fixtureCwd, "mig"));
+			},
+			assert: (result) => {
+				expect(result.exitCode).toBe(0);
+				expect(result.report).toContain("skipped mig/ (exists)");
+			},
+		},
+		{
+			label:
+				'migrationsDir: "mig" -> real.json (control: wrong-kind refusal unchanged)',
+			configContent:
+				'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "mig" };\n',
+			setup: async (fixtureCwd) => {
+				await writeFile(join(fixtureCwd, "real.json"), "not a directory");
+				await symlink("real.json", join(fixtureCwd, "mig"));
+			},
+			assert: (result) => {
+				expect(result.exitCode).toBe(1);
+				expect(result.stderr).toContain(
+					"was expected to be a directory for migrationsDir, but a file is there.",
+				);
+			},
+		},
+		{
+			label:
+				'migrationsDir: "loop", loop -> loop (control: a loop is not a permission)',
+			configContent:
+				'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "loop" };\n',
+			setup: async (fixtureCwd) => {
+				await symlink("loop", join(fixtureCwd, "loop"));
+			},
+			assert: (result) => {
+				expect(result.exitCode).toBe(1);
+				expect(result.stderr).toContain("(ELOOP)");
+				expect(result.stderr).toContain('Next: check what "loop/" points at');
+				expect(result.stderr).not.toContain("permissions");
+			},
+		},
+	];
+
+	it.each(rows)(
+		"refuses a dangling symbolic link at an artifact path instead of writing through it ($label)",
+		async ({ configContent, setup, assert }) => {
+			await writeFile(configPath(), configContent);
+			await setup(cwd);
+
+			const result = await runInit(cwd);
+
+			await assert(result, cwd);
+		},
+	);
+
+	it("pins the exact message for a dangling link at the artifact's own leaf", async () => {
+		await writeFile(
+			configPath(),
+			'export default { entry: ["src/**/*.schema.ts"], snapshotPath: "state.json" };\n',
+		);
+		await symlink("nowhere", join(cwd, "state.json"));
+
+		const result = await runInit(cwd);
+
+		expect(result.stderr).toBe(
+			'error[init-path-conflict]: state.json\n  "state.json" was expected to be a file for snapshotPath, but a dangling symbolic link is there, pointing at "nowhere". Next: remove the link or create its target, then rerun `hejbro init`.',
+		);
+	});
+
+	it("pins the exact message for a dangling link sitting in the ancestor chain", async () => {
+		await writeFile(
+			configPath(),
+			'export default { entry: ["src/**/*.schema.ts"], snapshotPath: "lnk/state.json" };\n',
+		);
+		await symlink("nowhere", join(cwd, "lnk"));
+
+		const result = await runInit(cwd);
+
+		expect(result.stderr).toBe(
+			'error[init-path-conflict]: lnk\n  "lnk" was expected to be a directory to hold snapshotPath, but a dangling symbolic link is there, pointing at "nowhere". Next: remove the link or create its target, then rerun `hejbro init`.',
+		);
+	});
+});
 
 // D106 R1 N2: two configured fields resolving to the same path let the
 // run create one artifact and then report the other as already present
