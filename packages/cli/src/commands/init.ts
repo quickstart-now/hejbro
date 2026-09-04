@@ -11,12 +11,37 @@ import { defineCommand } from "citty";
 import type { HejbroConfig } from "../config";
 import { fromHejbroError, renderDiagnostics } from "../diagnostics";
 import { asHejbroError } from "../errors";
+import { normalizeEqualsFlags } from "../flags";
 import { identityFromMessage } from "../identity";
-import { loadConfig } from "../loader";
+import { loadConfig, resolveConfigPath } from "../loader";
 
 const CONFIG_FILE_NAME = "hejbro.config.ts";
 const DEFAULT_MIGRATIONS_DIR = "migrations";
 const DEFAULT_SNAPSHOT_PATH = "hejbro.snapshot.json";
+
+const INIT_ARGS = {
+	config: {
+		type: "string",
+		description: "path to hejbro.config.ts (default: ./hejbro.config.ts)",
+	},
+} as const;
+
+const lastFlagValue = (
+	rawArgs: ReadonlyArray<string>,
+	flagName: string,
+): string | undefined => {
+	const values = rawArgs.flatMap((token, index) => {
+		if (token !== flagName) {
+			return [];
+		}
+		const value = rawArgs[index + 1];
+		if (value === undefined) {
+			return [];
+		}
+		return [value];
+	});
+	return values.at(-1);
+};
 
 const CONFIG_FILE_CONTENT = `import { defineConfig } from "hejbro";
 
@@ -410,15 +435,20 @@ const resolveField = (
 	return { kind: "resolved", path: join(cwd, value) };
 };
 
-/** `null` when no `hejbro.config.ts` sits at `cwd` -- the only case `runInit` scaffolds at the default paths (D3). */
+/** `null` when nothing sits at `configFilePath` -- the only case `runInit`
+ * scaffolds at the default paths (D3). `configFlag` is passed through to
+ * `loadConfig` unchanged (#741, D1): it resolves the same path a second
+ * time internally, which is the one resolver (`resolveConfigPath`) every
+ * command shares, never a second one. */
 const readExistingConfig = async (
 	cwd: string,
 	configFilePath: string,
+	configFlag: string | undefined,
 ): Promise<HejbroConfig | null> => {
 	if (!existsSync(configFilePath)) {
 		return null;
 	}
-	const { config } = await loadConfig(cwd, undefined);
+	const { config } = await loadConfig(cwd, configFlag);
 	return config;
 };
 
@@ -483,15 +513,19 @@ const reportLineFor = (
  * exits 0 on success, so it doubles as a safe "repair missing pieces"
  * command.
  */
-export const runInit = async (cwd: string): Promise<InitResult> => {
+export const runInit = async (
+	cwd: string,
+	rawArgs: ReadonlyArray<string> = [],
+): Promise<InitResult> => {
 	const fallbackIdentity = "init";
-	const configFilePath = join(cwd, CONFIG_FILE_NAME);
+	const configFlag = lastFlagValue(normalizeEqualsFlags(rawArgs), "--config");
+	const configFilePath = resolveConfigPath(cwd, configFlag);
 	const configArtifact: Artifact = {
 		kind: "file",
-		label: CONFIG_FILE_NAME,
+		label: fileLabel(cwd, configFilePath),
 		path: configFilePath,
 		content: CONFIG_FILE_CONTENT,
-		fieldName: "hejbro.config.ts",
+		fieldName: CONFIG_FILE_NAME,
 	};
 	try {
 		// The configuration's own kind is checked before it is loaded
@@ -500,7 +534,7 @@ export const runInit = async (cwd: string): Promise<InitResult> => {
 		// the loader would otherwise answer first, with a config-load-
 		// failed diagnostic about import resolution instead of this one.
 		checkPathKind(cwd, configArtifact);
-		const config = await readExistingConfig(cwd, configFilePath);
+		const config = await readExistingConfig(cwd, configFilePath, configFlag);
 		const configPresent = config !== null;
 		const migrationsField = resolveField(
 			cwd,
@@ -565,8 +599,9 @@ export const initCommand = defineCommand({
 		description:
 			"Scaffold hejbro.config.ts, the migrations directory, and an empty snapshot file.",
 	},
-	run: async () => {
-		const result = await runInit(process.cwd());
+	args: INIT_ARGS,
+	run: async (ctx) => {
+		const result = await runInit(process.cwd(), ctx.rawArgs);
 		result.report.map((line) => console.log(line));
 		if (result.stderr !== null) {
 			console.error(result.stderr);

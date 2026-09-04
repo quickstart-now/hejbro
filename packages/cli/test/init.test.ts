@@ -1,5 +1,12 @@
 import { existsSync, statSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+	mkdir,
+	mkdtemp,
+	readdir,
+	readFile,
+	rm,
+	writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -8,6 +15,7 @@ import {
 	assertBuiltCli,
 	createCliFixtureDir,
 	removeCliFixtureDir,
+	runCli,
 } from "./support/cli-runner";
 
 let cwd: string;
@@ -788,5 +796,256 @@ describe("runInit / a directory sitting where the configuration file belongs (D1
 
 		expect(result.exitCode).toBe(0);
 		expect(result.report).toContain("created hejbro.config.ts");
+	});
+});
+
+// #741, D1: init honours --config exactly as generate does -- the file it
+// names is the one init reads (or writes), and the migrations directory
+// and the snapshot stay resolved from the working directory regardless of
+// where that file lives.
+describe("runInit / --config (#741)", () => {
+	it("honours --config: reads the configuration it names and scaffolds where its fields say (omitted, hejbro.config.ts present -- control)", async () => {
+		await writeFile(
+			configPath(),
+			'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "migrations", snapshotPath: "hejbro.snapshot.json" };\n',
+		);
+
+		const result = await runInit(cwd);
+
+		expect(result.exitCode).toBe(0);
+		expect(result.report).toEqual([
+			"skipped hejbro.config.ts (exists)",
+			"created migrations/",
+			"created hejbro.snapshot.json",
+		]);
+	});
+
+	it("honours --config: --config hejbro.config.ts is identical to the omitted flag", async () => {
+		await writeFile(
+			configPath(),
+			'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "migrations", snapshotPath: "hejbro.snapshot.json" };\n',
+		);
+
+		const result = await runInit(cwd, ["--config", "hejbro.config.ts"]);
+
+		expect(result.exitCode).toBe(0);
+		expect(result.report).toEqual([
+			"skipped hejbro.config.ts (exists)",
+			"created migrations/",
+			"created hejbro.snapshot.json",
+		]);
+	});
+
+	it("honours --config: reads the configuration named by --config and scaffolds its fields under cwd, not under the flag's own directory", async () => {
+		await mkdir(join(cwd, "sub"), { recursive: true });
+		await writeFile(
+			join(cwd, "sub", "hejbro.config.ts"),
+			'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "db/mig", snapshotPath: "db/state.json" };\n',
+		);
+
+		const result = await runInit(cwd, ["--config", "sub/hejbro.config.ts"]);
+
+		expect(result.exitCode).toBe(0);
+		expect(result.report).toEqual([
+			"skipped sub/hejbro.config.ts (exists)",
+			"created db/mig/",
+			"created db/state.json",
+		]);
+		expect(existsSync(join(cwd, "db", "mig"))).toBe(true);
+		expect(existsSync(join(cwd, "db", "state.json"))).toBe(true);
+		expect(existsSync(join(cwd, "sub", "migrations"))).toBe(false);
+		expect(existsSync(join(cwd, "sub", "db"))).toBe(false);
+		expect(existsSync(join(cwd, "migrations"))).toBe(false);
+		expect(existsSync(join(cwd, "hejbro.snapshot.json"))).toBe(false);
+	});
+
+	it("honours --config: writes the configuration at the named path when nothing sits there, and scaffolds the defaults under cwd", async () => {
+		const result = await runInit(cwd, ["--config", "sub/hejbro.config.ts"]);
+
+		expect(result.exitCode).toBe(0);
+		expect(result.report).toEqual([
+			"created sub/hejbro.config.ts",
+			"created migrations/",
+			"created hejbro.snapshot.json",
+		]);
+		expect(existsSync(join(cwd, "sub", "hejbro.config.ts"))).toBe(true);
+		expect(existsSync(configPath())).toBe(false);
+	});
+
+	it("honours --config: a relative --config that escapes cwd is read from there and reported by its own spelling", async () => {
+		const otherDir = join(cwd, "..", "other");
+		try {
+			await mkdir(otherDir, { recursive: true });
+			await writeFile(
+				join(otherDir, "hejbro.config.ts"),
+				'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "mig" };\n',
+			);
+
+			const result = await runInit(cwd, [
+				"--config",
+				"../other/hejbro.config.ts",
+			]);
+
+			expect(result.exitCode).toBe(0);
+			expect(result.report).toContain(
+				"skipped ../other/hejbro.config.ts (exists)",
+			);
+			expect(result.report).toContain("created mig/");
+			expect(existsSync(join(cwd, "mig"))).toBe(true);
+		} finally {
+			await rm(otherDir, { recursive: true, force: true });
+		}
+	});
+
+	it("honours --config: an escaping --config path with nothing there is written there, and the defaults still land under cwd", async () => {
+		const otherDir = join(cwd, "..", "other");
+		try {
+			const result = await runInit(cwd, [
+				"--config",
+				"../other/hejbro.config.ts",
+			]);
+
+			expect(result.exitCode).toBe(0);
+			expect(result.report).toEqual([
+				"created ../other/hejbro.config.ts",
+				"created migrations/",
+				"created hejbro.snapshot.json",
+			]);
+			expect(existsSync(join(otherDir, "hejbro.config.ts"))).toBe(true);
+		} finally {
+			await rm(otherDir, { recursive: true, force: true });
+		}
+	});
+
+	it("honours --config: an absolute --config path is honoured, and every report line names it relative to cwd", async () => {
+		await mkdir(join(cwd, "sub"), { recursive: true });
+		const absoluteConfigPath = join(cwd, "sub", "hejbro.config.ts");
+		await writeFile(
+			absoluteConfigPath,
+			'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "mig" };\n',
+		);
+
+		const result = await runInit(cwd, ["--config", absoluteConfigPath]);
+
+		expect(result.exitCode).toBe(0);
+		expect(result.report).toContain("skipped sub/hejbro.config.ts (exists)");
+		expect(result.report.join("\n")).not.toContain(cwd);
+	});
+
+	it("honours --config: a directory at the named path refuses with init-path-conflict, naming it, nothing created", async () => {
+		await mkdir(join(cwd, "sub", "hejbro.config.ts"), { recursive: true });
+
+		const result = await runInit(cwd, ["--config", "sub/hejbro.config.ts"]);
+
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain("error[init-path-conflict]");
+		expect(result.stderr).toContain("sub/hejbro.config.ts");
+		expect(existsSync(join(cwd, "migrations"))).toBe(false);
+		expect(existsSync(join(cwd, "hejbro.snapshot.json"))).toBe(false);
+	});
+
+	describe("subprocess rows (built CLI)", () => {
+		beforeAll(assertBuiltCli);
+
+		it("honours --config: matches generate's config-load-failed stderr byte-for-byte for the same unreadable file", async () => {
+			await mkdir(join(cwd, "sub"), { recursive: true });
+			await writeFile(
+				join(cwd, "sub", "hejbro.config.ts"),
+				'import "a-package-that-does-not-exist";\nexport default { entry: ["src/**/*.schema.ts"] };\n',
+			);
+
+			const initRun = await runCli(cwd, [
+				"init",
+				"--config",
+				"sub/hejbro.config.ts",
+			]);
+			const generateRun = await runCli(cwd, [
+				"generate",
+				"--config",
+				"sub/hejbro.config.ts",
+			]);
+
+			expect(initRun.exitCode).toBe(1);
+			expect(initRun.stderr).toContain("error[config-load-failed]");
+			expect(initRun.stderr).toBe(generateRun.stderr);
+		});
+
+		it("honours --config: --config=<path> is identical to the space form", async () => {
+			await mkdir(join(cwd, "sub"), { recursive: true });
+			await writeFile(
+				join(cwd, "sub", "hejbro.config.ts"),
+				'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "db/mig" };\n',
+			);
+
+			const equalsRun = await runCli(cwd, [
+				"init",
+				"--config=sub/hejbro.config.ts",
+			]);
+
+			expect(equalsRun.exitCode).toBe(0);
+			expect(equalsRun.stdout).toContain(
+				"skipped sub/hejbro.config.ts (exists)",
+			);
+			expect(equalsRun.stdout).toContain("created db/mig/");
+		});
+
+		it("honours --config: init then generate --config act on the same files (round-trip pin)", async () => {
+			const fixtureCwd = await createCliFixtureDir();
+			try {
+				await mkdir(join(fixtureCwd, "sub"), { recursive: true });
+				// `entry` resolves from the configuration file's own directory
+				// (unaffected by this change, D1 fact -- #819), so the
+				// declaration file lives beside it, in sub/.
+				await writeFile(
+					join(fixtureCwd, "sub", "hejbro.config.ts"),
+					`import { defineConfig } from "hejbro";
+
+export default defineConfig({
+	entry: ["*.schema.ts"],
+	migrationsDir: "db/mig",
+	snapshotPath: "db/state.json",
+	prefixStrategy: "timestamp",
+	presets: [],
+});
+`,
+				);
+				await writeFile(
+					join(fixtureCwd, "sub", "app.schema.ts"),
+					`import { schema, table, uuid, text } from "hejbro";
+
+export const app = schema("app");
+
+export const posts = table(app, "posts", {
+	id: uuid().primaryKey().defaultRandom(),
+	title: text().notNull(),
+});
+`,
+				);
+
+				const initRun = await runCli(fixtureCwd, [
+					"init",
+					"--config",
+					"sub/hejbro.config.ts",
+				]);
+				expect(initRun.exitCode).toBe(0);
+
+				const generateRun = await runCli(fixtureCwd, [
+					"generate",
+					"--config",
+					"sub/hejbro.config.ts",
+				]);
+				expect(generateRun.exitCode).toBe(0);
+
+				const migFiles = await readdir(join(fixtureCwd, "db", "mig"));
+				expect(migFiles.length).toBeGreaterThan(0);
+				const snapshotContent = await readFile(
+					join(fixtureCwd, "db", "state.json"),
+					"utf8",
+				);
+				expect(snapshotContent).toContain('"formatVersion"');
+			} finally {
+				await removeCliFixtureDir(fixtureCwd);
+			}
+		});
 	});
 });
