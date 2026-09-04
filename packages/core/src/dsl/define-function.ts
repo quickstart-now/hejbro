@@ -218,6 +218,61 @@ const assertArgsPrototypeNotReplaced = (
 	);
 };
 
+/**
+ * The first pair of resolved args whose `argName` collides, in
+ * declaration order — `null` when every `argName` is unique. Mirrors
+ * `buildColumnEntries`'s duplicate-column search, but a column only ever
+ * needs the shared name, while an argument's message names both
+ * declaration-order keys behind it.
+ */
+const findDuplicateArgName = (
+	resolved: ReadonlyArray<{ readonly key: string; readonly argName: string }>,
+): { readonly firstKey: string; readonly secondKey: string; readonly argName: string } | null => {
+	const duplicateIndex = resolved.findIndex((entry, index) =>
+		resolved
+			.slice(0, index)
+			.some((earlier) => earlier.argName === entry.argName),
+	);
+	if (duplicateIndex === -1) {
+		return null;
+	}
+	const duplicate = resolved[duplicateIndex] as {
+		key: string;
+		argName: string;
+	};
+	const firstIndex = resolved.findIndex(
+		(entry) => entry.argName === duplicate.argName,
+	);
+	const first = resolved[firstIndex] as { key: string; argName: string };
+	return {
+		firstKey: first.key,
+		secondKey: duplicate.key,
+		argName: duplicate.argName,
+	};
+};
+
+/**
+ * Throws `duplicate-argument` when two `args` keys derive to the same SQL
+ * name — the argument-side counterpart of `buildColumnEntries`'s
+ * `duplicate-column` refusal, over the whole list at once, after every
+ * key's own per-key refusals already ran.
+ */
+const assertNoDuplicateArgName = (
+	identity: string,
+	declaredAt: string | null,
+	resolved: ReadonlyArray<{ readonly key: string; readonly argName: string }>,
+): void => {
+	const duplicate = findDuplicateArgName(resolved);
+	if (duplicate === null) {
+		return;
+	}
+	throwHejbroError(
+		"duplicate-argument",
+		`defineFunction() "${identity}" declares arguments "${duplicate.firstKey}" and "${duplicate.secondKey}" that both derive to the SQL name "${duplicate.argName}". Next: rename one of the two keys so their snake_case names differ.`,
+		declaredAt,
+	);
+};
+
 const resolveArgs = <TArgs extends Record<string, ColumnBuilder>>(
 	identity: string,
 	declaredAt: string | null,
@@ -243,6 +298,7 @@ const resolveArgs = <TArgs extends Record<string, ColumnBuilder>>(
 			family: familyOfTypeNode(builder.columnState.typeNode),
 		};
 	});
+	assertNoDuplicateArgName(identity, declaredAt, resolved);
 
 	const declarations = resolved.map((entry) => ({
 		key: entry.key,

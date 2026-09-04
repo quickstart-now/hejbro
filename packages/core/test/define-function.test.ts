@@ -486,6 +486,152 @@ describe("a name plpgsql declares itself is refused as an argument name (#748)",
 	);
 });
 
+describe("two argument keys deriving to one SQL name are refused (#751)", () => {
+	const collidingCases: ReadonlyArray<{
+		readonly label: string;
+		readonly args: Record<string, ColumnBuilder>;
+		readonly firstKey: string;
+		readonly secondKey: string;
+		readonly sharedName: string;
+	}> = [
+		{
+			label: "camelCase beside snake_case",
+			args: { userId: uuid(), user_id: uuid() },
+			firstKey: "userId",
+			secondKey: "user_id",
+			sharedName: "user_id",
+		},
+		{
+			label: "snake_case beside camelCase (declaration order reversed)",
+			args: { user_id: uuid(), userId: uuid() },
+			firstKey: "user_id",
+			secondKey: "userId",
+			sharedName: "user_id",
+		},
+		{
+			label: "a digit boundary",
+			args: { v2Id: uuid(), v2_id: uuid() },
+			firstKey: "v2Id",
+			secondKey: "v2_id",
+			sharedName: "v2_id",
+		},
+		{
+			label: "a single-letter segment",
+			args: { aB: uuid(), a_b: uuid() },
+			firstKey: "aB",
+			secondKey: "a_b",
+			sharedName: "a_b",
+		},
+		{
+			label: "a trailing underscore",
+			args: { userId_: uuid(), user_id_: uuid() },
+			firstKey: "userId_",
+			secondKey: "user_id_",
+			sharedName: "user_id_",
+		},
+		{
+			label: "two of three keys collide",
+			// biome-ignore lint/style/useNamingConvention: adversarial near-duplicate key under test.
+			args: { userId: uuid(), userID: uuid(), user_id: uuid() },
+			firstKey: "userId",
+			secondKey: "user_id",
+			sharedName: "user_id",
+		},
+	];
+
+	it.each(collidingCases)(
+		"refuses $label with duplicate-argument, naming both keys and the shared name",
+		({ args, firstKey, secondKey, sharedName }) => {
+			let caught: unknown;
+			try {
+				defineFunction(
+					app,
+					"echo_dup",
+					{ args, returns: { typeName: "uuid" } },
+					(ctx) => {
+						ctx.return(sql`null`);
+					},
+				);
+			} catch (error) {
+				caught = error;
+			}
+			expect((caught as { code?: string } | undefined)?.code).toBe(
+				"duplicate-argument",
+			);
+			expect((caught as { message?: string } | undefined)?.message).toContain(
+				`"${firstKey}" and "${secondKey}"`,
+			);
+			expect((caught as { message?: string } | undefined)?.message).toContain(
+				`"${sharedName}"`,
+			);
+		},
+	);
+
+	it("keeps two distinct argNames when keys only look alike -- postID/postId (control)", () => {
+		const fn = defineFunction(
+			app,
+			"echo_postid",
+			{
+				// biome-ignore lint/style/useNamingConvention: adversarial near-duplicate key under test.
+				args: { postID: uuid(), postId: uuid() },
+				returns: { typeName: "uuid" },
+			},
+			(ctx) => {
+				ctx.return(sql`null`);
+			},
+		);
+		expect(fn.args.map((arg) => arg.argName)).toEqual(["post_i_d", "post_id"]);
+	});
+
+	it("keeps two distinct argNames when keys only look alike -- id/id_ (control)", () => {
+		const fn = defineFunction(
+			app,
+			"echo_id",
+			{ args: { id: uuid(), id_: uuid() }, returns: { typeName: "uuid" } },
+			(ctx) => {
+				ctx.return(sql`null`);
+			},
+		);
+		expect(fn.args.map((arg) => arg.argName)).toEqual(["id", "id_"]);
+	});
+
+	it("a reserved-name refusal precedes the duplicate-argument refusal", () => {
+		expect(
+			codeOf(() =>
+				defineFunction(
+					app,
+					"echo_precedence_reserved",
+					{
+						args: { order: uuid(), userId: uuid(), user_id: uuid() },
+						returns: { typeName: "uuid" },
+					},
+					(ctx) => {
+						ctx.return(sql`null`);
+					},
+				),
+			),
+		).toBe("reserved-local-name");
+	});
+
+	it("an invalid-sql-name refusal precedes the duplicate-argument refusal", () => {
+		expect(
+			codeOf(() =>
+				defineFunction(
+					app,
+					"echo_precedence_invalid",
+					{
+						args: { "my-arg": uuid(), userId: uuid(), user_id: uuid() },
+						returns: { typeName: "uuid" },
+					},
+					(ctx) => {
+						ctx.return(sql`null`);
+					},
+				),
+			),
+		).toBe("invalid-sql-name");
+	});
+});
+
 describe("a literal __proto__ key replaces the args object's prototype instead of declaring an argument (#679, D106 review B1)", () => {
 	it("a literal __proto__: key is refused with args-prototype-key, and no declaration is produced", () => {
 		expect(
