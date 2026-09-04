@@ -902,6 +902,127 @@ describe("db().transaction (task 4.6)", () => {
 		});
 	});
 
+	/**
+	 * task 1.4c (#449, review repair): the `tx` a `transaction()` callback
+	 * itself received is that transaction and nothing else -- once it has
+	 * settled, its connection has gone back to the pool, and a statement
+	 * through the kept handle would otherwise run on whatever connection
+	 * the driver hands out next, outside any transaction, committing on
+	 * its own with no error.
+	 */
+	describe("a transaction's own handle is refused after it settled (#449)", () => {
+		it("committed: execute, a chain root, with, and transaction() all refuse with statement-after-transaction", async () => {
+			const { driver, sessionExecute } = transactionalDriver(true);
+			const handle = db({ posts }, driver);
+			const holder = { tx: undefined as Tx | undefined };
+			const ran = vi.fn();
+
+			await handle.transaction(async (tx) => {
+				holder.tx = tx;
+			});
+
+			const settled = holder.tx;
+			if (settled === undefined) {
+				throw new Error("beforeAll did not capture tx");
+			}
+
+			const executeOutcome = await settled
+				.execute(select(posts))
+				.catch((error: unknown) => error);
+			expect(executeOutcome).toHaveProperty(
+				"code",
+				"statement-after-transaction",
+			);
+
+			const chainOutcome = await Promise.resolve(settled.select(posts)).catch(
+				(error: unknown) => error,
+			);
+			expect(chainOutcome).toHaveProperty("code", "statement-after-transaction");
+
+			const withChain = settled.with((w) => {
+				const ranked = w.as("ranked", select(posts));
+				return select({ id: ranked.id, status: ranked.status }, ranked);
+			});
+			const withOutcome = await Promise.resolve(withChain).catch(
+				(error: unknown) => error,
+			);
+			expect(withOutcome).toHaveProperty("code", "statement-after-transaction");
+
+			const transactionOutcome = await settled
+				.transaction(async () => {
+					ran();
+				})
+				.catch((error: unknown) => error);
+			expect(transactionOutcome).toHaveProperty(
+				"code",
+				"statement-after-transaction",
+			);
+			expect(ran).not.toHaveBeenCalled();
+
+			// nothing any of the four refused calls attempted ever reached the
+			// top-level driver.execute or a session -- exactly the one send
+			// (none) the settled transaction itself made after committing.
+			expect(driver.execute).not.toHaveBeenCalled();
+			expect(sessionExecute).not.toHaveBeenCalled();
+		});
+
+		it("rolled back: execute, a chain root, with, and transaction() all refuse with statement-after-transaction", async () => {
+			const { driver, sessionExecute } = transactionalDriver(true);
+			const handle = db({ posts }, driver);
+			const holder = { tx: undefined as Tx | undefined };
+			const ran = vi.fn();
+			const boom = new Error("callback failed");
+
+			await handle
+				.transaction(async (tx) => {
+					holder.tx = tx;
+					throw boom;
+				})
+				.catch(() => {});
+
+			const settled = holder.tx;
+			if (settled === undefined) {
+				throw new Error("beforeAll did not capture tx");
+			}
+
+			const executeOutcome = await settled
+				.execute(select(posts))
+				.catch((error: unknown) => error);
+			expect(executeOutcome).toHaveProperty(
+				"code",
+				"statement-after-transaction",
+			);
+
+			const chainOutcome = await Promise.resolve(settled.select(posts)).catch(
+				(error: unknown) => error,
+			);
+			expect(chainOutcome).toHaveProperty("code", "statement-after-transaction");
+
+			const withChain = settled.with((w) => {
+				const ranked = w.as("ranked", select(posts));
+				return select({ id: ranked.id, status: ranked.status }, ranked);
+			});
+			const withOutcome = await Promise.resolve(withChain).catch(
+				(error: unknown) => error,
+			);
+			expect(withOutcome).toHaveProperty("code", "statement-after-transaction");
+
+			const transactionOutcome = await settled
+				.transaction(async () => {
+					ran();
+				})
+				.catch((error: unknown) => error);
+			expect(transactionOutcome).toHaveProperty(
+				"code",
+				"statement-after-transaction",
+			);
+			expect(ran).not.toHaveBeenCalled();
+
+			expect(driver.execute).not.toHaveBeenCalled();
+			expect(sessionExecute).not.toHaveBeenCalled();
+		});
+	});
+
 	it("a nested transaction() call fails fast with nested-transaction-unsupported, before any further send", async () => {
 		const { driver } = transactionalDriver(true);
 		const handle = db({ posts }, driver);

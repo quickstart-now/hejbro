@@ -178,7 +178,7 @@ documents everything and comes last.
 
 ## 2. Review repairs
 
-- [ ] 1.2b (~4m) A savepoint rollback keeps its optional words. Found in
+- [x] 1.2b (~4m, actual ~1m) A savepoint rollback keeps its optional words. Found in
       review: `rollback transaction to savepoint x` and `rollback work to
       savepoint x` classified as ending the transaction, contradicting
       the requirement's own "rolling back to one … counts as an ordinary

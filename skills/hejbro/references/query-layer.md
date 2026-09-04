@@ -828,7 +828,13 @@ new nested transaction started from it — fails with
 `statement-after-nested-transaction` instead, naming the enclosing `tx`
 as where the statement belongs. Sequential use is unaffected either way:
 once a nested transaction has released or rolled back, the `tx` that
-started it accepts statements, and new nested transactions, again.
+started it accepts statements, and new nested transactions, again. The
+same rule reaches the top: the `tx` a `transaction()` callback itself
+received is that transaction and nothing else, so a statement through it,
+a chain awaited on it, or a nested transaction started from it, after
+that transaction committed or rolled back fails with
+`statement-after-transaction`, naming a new `transaction()` call as the
+way to run more work.
 
 Calling `transaction()` on the **handle** from inside an already-open
 callback of that same member still fails fast with
@@ -1081,6 +1087,7 @@ concrete next step.
 | `concurrent-nested-transaction` | A second nested transaction was started on the same `tx` while the first was still in flight — await one before starting the next. |
 | `statement-during-nested-transaction` | A statement was sent through a `tx` that isn't the innermost one in flight — the `tx` that started a still-open nested transaction, or any `tx` above it. Issue it through the nested callback's own `tx` when it belongs to that work, or await the nested transaction first when it does not. |
 | `statement-after-nested-transaction` | A statement, or a new nested transaction, was sent through a `tx` a nested callback received, after that callback settled — that `tx` was that nested transaction only, and its savepoint no longer exists. Issue it through the enclosing `tx` instead. |
+| `statement-after-transaction` | A statement, a chain await, or a nested transaction, was sent through the `tx` a `transaction()` callback itself received, after that transaction committed or rolled back — its connection has gone back to the pool. Open a new `transaction()` call for further work. |
 | `savepoint-release-failed` | A nested transaction's callback returned normally, but its `RELEASE SAVEPOINT` failed (a statement error was swallowed inside the callback instead of rethrown, leaving the subtransaction aborted) — the release failure is on `cause`. |
 | `savepoint-rollback-failed` | A `ROLLBACK TO SAVEPOINT` itself failed. Its trigger differs by path, so the fact that triggered it lands on a differently-named property: after a callback threw, on `callbackError`; while recovering from a failing release (above), on `releaseError`. The rollback failure itself is always on `cause`. |
 | `undeclared-role` | `db.as({ role, ... })`'s role isn't in the declared whitelist. |

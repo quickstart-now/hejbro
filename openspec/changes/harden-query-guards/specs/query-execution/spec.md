@@ -25,6 +25,16 @@ started from it — would land in the enclosing transaction unbracketed.
 Either SHALL be refused with `statement-after-nested-transaction`,
 before anything is sent, naming the enclosing `tx` as where it belongs.
 
+The `tx` a transaction callback itself received is that transaction and
+nothing else, by the same rule: once the callback has settled — the
+transaction committed or rolled back — its connection has gone back to
+the pool, and a statement issued through the kept handle would run on
+whatever connection the driver hands out next, outside any transaction,
+committing on its own with no error. Such a statement, a chain awaited
+through that handle, or a nested transaction started from it, SHALL be
+refused with `statement-after-transaction`, before anything is sent,
+naming a new `transaction()` call as the way to run more work.
+
 Sequential use stays unaffected: once a nested transaction has settled —
 released or rolled back — the `tx` that started it accepts statements
 again. Starting a second nested transaction beside one in flight keeps
@@ -58,6 +68,15 @@ its own refusal, `concurrent-nested-transaction`.
   through it, or a nested transaction is started from it
 - **THEN** each is refused with `statement-after-nested-transaction` and
   nothing reaches the connection — no statement, no savepoint
+
+#### Scenario: A transaction's own handle used after it settled is refused
+- **WHEN** the `tx` a `transaction()` callback received is kept and, after
+  that transaction committed — or rolled back on a thrown error — a
+  statement is issued through it, a chain built on it is awaited, or a
+  nested transaction is started from it
+- **THEN** each is refused with `statement-after-transaction`, nothing
+  reaches any connection, and no row the refused statement would have
+  written exists in the database afterwards
 
 #### Scenario: Sequential use after a settled nested transaction still works
 - **WHEN** a nested transaction settles — by releasing, or by rolling

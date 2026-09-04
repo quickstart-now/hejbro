@@ -60,13 +60,15 @@ export type Tx<TSchema = Record<string, unknown>> = ChainApi<TSchema> & {
 
 /**
  * One `tx`'s own place in its {@link TransactionTree} -- `settled` marks
- * that this token's own nested transaction (if it was one) has released
- * or rolled back, so its savepoint no longer exists and a statement
- * through it would land in the enclosing transaction unbracketed
- * (#449, task 1.4). The outermost `tx`'s own token is never marked --
- * there is no savepoint for it to outlive.
+ * that this token's own transaction has ended (released/rolled back for
+ * a nested one, committed/rolled back for the root), so a statement
+ * through it would land somewhere it does not belong: inside the
+ * enclosing transaction unbracketed for a nested token (#449, task 1.4),
+ * or on whatever connection the pool hands out next, outside any
+ * transaction, for the root token (#449, task 1.4c). `kind` picks which
+ * of those two truths the settled refusal states.
  */
-export type TxToken = { settled: boolean };
+export type TxToken = { settled: boolean; readonly kind: "root" | "nested" };
 
 /**
  * One transaction's whole `tx` tree shares this state (#449): `next` is
@@ -85,11 +87,20 @@ export type TxToken = { settled: boolean };
  */
 export type TransactionTree = { next: number; innermost: TxToken };
 
-/** Refuses a statement sent through `token` (#449): `token.settled` -- its own nested transaction has already released or rolled back -- takes precedence and picks `statement-after-nested-transaction`, since that check is true regardless of what `tree.innermost` currently holds; otherwise `token` not being `tree`'s own innermost in-flight token picks `statement-during-nested-transaction` -- only the innermost `tx` of a transaction tree may send while a nested transaction is in flight. */
-function assertInnermost(tree: TransactionTree, token: TxToken): void {
-	if (token.settled) {
-		throwStatementAfterNestedTransaction();
+/** Refuses `token` outright once its own transaction has settled (#449): `statement-after-transaction` for the root token, `statement-after-nested-transaction` for a nested one (task 1.4c) -- shared by every surface a settled token can still be reached through: `execute`, a chain member, `with`, and `token`'s own `transaction()` member alike (task 1.4b/1.4c), so a settled root handle's `transaction()` call is refused under its own code, not the nested one. */
+function assertNotSettled(token: TxToken): void {
+	if (!token.settled) {
+		return;
 	}
+	if (token.kind === "root") {
+		throwStatementAfterTransaction();
+	}
+	throwStatementAfterNestedTransaction();
+}
+
+/** Refuses a statement sent through `token` (#449): {@link assertNotSettled} takes precedence, since that check is true regardless of what `tree.innermost` currently holds; otherwise `token` not being `tree`'s own innermost in-flight token picks `statement-during-nested-transaction` -- only the innermost `tx` of a transaction tree may send while a nested transaction is in flight. */
+function assertInnermost(tree: TransactionTree, token: TxToken): void {
+	assertNotSettled(token);
 	if (tree.innermost !== token) {
 		throwStatementDuringNestedTransaction();
 	}
@@ -129,6 +140,16 @@ function throwStatementAfterNestedTransaction(): never {
 			'a statement was sent through a "tx" whose own nested transaction has already settled (released or rolled back) -- that "tx" was that nested transaction and nothing else, and its savepoint no longer exists. Next: issue this statement through the enclosing "tx" instead.',
 		),
 		{ code: "statement-after-nested-transaction" },
+	);
+}
+
+/** Builds and throws the `statement-after-transaction`-coded error (D57), the root-token sibling of {@link throwStatementAfterNestedTransaction} (#449, task 1.4c review repair): the `tx` a `transaction()` callback itself received is that transaction and nothing else -- once the callback has settled (committed or rolled back), its connection has gone back to the pool, and a statement sent through the kept handle would run on whatever connection the driver hands out next, outside any transaction, committing on its own with no error. */
+function throwStatementAfterTransaction(): never {
+	throw Object.assign(
+		new Error(
+			'a statement was sent through a "tx" whose own transaction() callback has already settled (committed or rolled back) -- its connection has gone back to the pool, and a statement sent through it now would run outside any transaction. Next: open a new transaction() call for further work.',
+		),
+		{ code: "statement-after-transaction" },
 	);
 }
 
@@ -244,9 +265,7 @@ const createSavepointApi = (
 ): Tx["transaction"] => {
 	const state = { active: false };
 	return (async <T>(callback: (tx: Tx) => Promise<T>): Promise<T> => {
-		if (token.settled) {
-			throwStatementAfterNestedTransaction();
-		}
+		assertNotSettled(token);
 		if (state.active) {
 			throwConcurrentNestedTransaction();
 		}
@@ -257,7 +276,7 @@ const createSavepointApi = (
 		// transaction's token, not the old one, by the time it checks --
 		// this ordering (flip `innermost` before the SAVEPOINT is even sent)
 		// is what actually closes the race, not merely having a token.
-		const childToken: TxToken = { settled: false };
+		const childToken: TxToken = { settled: false, kind: "nested" };
 		tree.innermost = childToken;
 		try {
 			const name = `hejbro_sp_${tree.next}`;
@@ -308,7 +327,10 @@ const createSavepointApi = (
 export const buildTx = (
 	session: DriverSession,
 	tables: Declarations["tables"],
-	tree: TransactionTree = { next: 1, innermost: { settled: false } },
+	tree: TransactionTree = {
+		next: 1,
+		innermost: { settled: false, kind: "root" },
+	},
 	token: TxToken = tree.innermost,
 ): Tx => ({
 	...createChainApi(
@@ -333,6 +355,35 @@ export const buildTx = (
 	}) as Tx["execute"],
 	transaction: createSavepointApi(session, tables, tree, token),
 });
+
+/**
+ * Builds a fresh root `tx` and hands it to `callback`, marking the root
+ * token settled once the callback has settled either way -- committed,
+ * or rolled back on a thrown error (#449, task 1.4c review repair). The
+ * one place a root {@link TransactionTree} is created, shared by every
+ * site that opens a transaction and hands its callback a root `tx`:
+ * `createTransactionApi` below, `db.ts`'s provider path
+ * (`transactionWithProvider`), and `context.ts`'s scoped path
+ * (`scopedTransaction`) -- so settling has one site, never three that
+ * could drift apart on when they mark it. A caller who kept the handle
+ * past this callback's own return is refused with
+ * `statement-after-transaction` afterward, instead of quietly running
+ * its next statement on whatever connection the pool hands out next,
+ * outside any transaction.
+ */
+export const runCallbackWithTx = async <T>(
+	session: DriverSession,
+	tables: Declarations["tables"],
+	callback: (tx: Tx) => Promise<T>,
+): Promise<T> => {
+	const token: TxToken = { settled: false, kind: "root" };
+	const tree: TransactionTree = { next: 1, innermost: token };
+	try {
+		return await callback(buildTx(session, tables, tree, token));
+	} finally {
+		token.settled = true;
+	}
+};
 
 /** Builds and throws the `nested-transaction-unsupported`-coded, enriched plain `Error` (D57) — a `function` declaration, not `const f = (): never => …` (handoff note, g2/g3). */
 function throwNestedTransactionUnsupported(): never {
@@ -410,7 +461,7 @@ export const createTransactionApi = (
 		},
 	);
 	return async <T>(callback: (tx: Tx) => Promise<T>): Promise<T> =>
-		guardedOpen((session) => callback(buildTx(session, tables)));
+		guardedOpen((session) => runCallbackWithTx(session, tables, callback));
 };
 
 /**
