@@ -118,7 +118,7 @@ export const runHistory = async (
 			);
 		}
 		const migrationsDirPath = join(cwd, config.migrationsDir);
-		const fileNames = listMigrationFiles(migrationsDirPath);
+		const fileNames = listMigrationFiles(cwd, config.migrationsDir);
 		const addedCommits = migrationAddedCommits(cwd, config.migrationsDir);
 		const rows: ReadonlyArray<HistoryRow> = fileNames.map((fileName, index) => {
 			const fileContent = readFileSync(

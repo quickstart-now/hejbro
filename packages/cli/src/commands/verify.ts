@@ -894,7 +894,7 @@ export const runVerify = async (
 
 		const check1 = runCheck1(cwd, config, registry);
 		const migrationsDirPath = join(cwd, config.migrationsDir);
-		const initialFileNames = listMigrationFiles(migrationsDirPath);
+		const initialFileNames = listMigrationFiles(cwd, config.migrationsDir);
 		const fixOutcome = applyDuplicateVersionFixesIfRequested(
 			fix,
 			migrationsDirPath,

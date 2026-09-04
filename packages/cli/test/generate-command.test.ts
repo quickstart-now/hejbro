@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import {
 	chmod,
@@ -19,6 +20,7 @@ import {
 	runCli,
 	writeFixtureFile,
 } from "./support/cli-runner";
+import { GIT_TEST_ENV } from "./support/git-fixture";
 
 beforeAll(assertBuiltCli);
 
@@ -1501,5 +1503,290 @@ export default defineConfig({
 
 		expect(result.exitCode).toBe(0);
 		expect(result.stderr).not.toContain("error[");
+	});
+});
+
+// #820, D4: `listMigrationFiles` used to `readdirSync` a configured
+// `migrationsDir` directly -- a file there crashed every command that
+// lists it with a raw `ENOTDIR`. `probePath` (#846 D2) judges the same
+// tree `hejbro init` does before listing.
+describe("hejbro generate/verify/baseline/history/status/migrate / migrationsDir judged as init does (#820, #846 D4)", () => {
+	const git = (fixtureCwd: string, args: ReadonlyArray<string>): string =>
+		execFileSync("git", args, {
+			cwd: fixtureCwd,
+			encoding: "utf8",
+			env: GIT_TEST_ENV,
+		});
+
+	const commandArgsFor = (command: string): ReadonlyArray<string> => {
+		if (command === "status" || command === "migrate") {
+			return [command, "--url", "postgres://127.0.0.1:1/x"];
+		}
+		return [command];
+	};
+
+	const envWithoutDatabaseUrl = (): NodeJS.ProcessEnv => {
+		const { DATABASE_URL, ...rest } = process.env;
+		return rest;
+	};
+
+	type RunCliResult = Awaited<ReturnType<typeof runCli>>;
+
+	type MigrationsDirRow = {
+		readonly label: string;
+		readonly commands: ReadonlyArray<string>;
+		readonly setup: (fixtureCwd: string) => Promise<void>;
+		readonly assert: (
+			result: RunCliResult,
+			fixtureCwd: string,
+			command: string,
+		) => Promise<void> | void;
+	};
+
+	// `migrate`'s own convention (unrelated to this change): every
+	// precondition refusal before a statement is sent answers `2`, never
+	// `1` -- neither is the database refusing a migration.
+	const expectedExitCodeFor = (command: string): number => {
+		if (command === "migrate") {
+			return 2;
+		}
+		return 1;
+	};
+
+	const initWithSchemaAndGit = async (fixtureCwd: string): Promise<void> => {
+		await runCli(fixtureCwd, ["init"]);
+		await writeFixtureFile(fixtureCwd, "src/app.schema.ts", SCHEMA_SOURCE);
+		git(fixtureCwd, ["init", "-q", "-b", "main"]);
+	};
+
+	const replaceMigrationsDirWithFile = async (
+		fixtureCwd: string,
+	): Promise<void> => {
+		await rm(join(fixtureCwd, "migrations"), {
+			recursive: true,
+			force: true,
+		});
+		await writeFixtureFile(fixtureCwd, "migrations", "not a directory");
+	};
+
+	const rows: ReadonlyArray<MigrationsDirRow> = [
+		{
+			label: "a regular file at migrationsDir",
+			commands: [
+				"generate",
+				"verify",
+				"baseline",
+				"history",
+				"status",
+				"migrate",
+			],
+			setup: async (fixtureCwd) => {
+				await initWithSchemaAndGit(fixtureCwd);
+				await replaceMigrationsDirWithFile(fixtureCwd);
+			},
+			assert: async (result, fixtureCwd, command) => {
+				expect(result.exitCode).toBe(expectedExitCodeFor(command));
+				expect(result.stderr).toContain(
+					"error[migrations-dir-not-a-directory]",
+				);
+				expect(result.stderr).toContain("migrations");
+				expect(result.stderr).toContain("Next:");
+				expect(result.stderr).not.toContain("ENOTDIR");
+				expect(result.stderr).not.toContain(fixtureCwd);
+				const snapshotContent = await readFile(
+					join(fixtureCwd, "hejbro.snapshot.json"),
+					"utf8",
+				);
+				expect(snapshotContent).toContain('"formatVersion"');
+			},
+		},
+		{
+			label: "a dangling link at migrationsDir",
+			commands: ["generate"],
+			setup: async (fixtureCwd) => {
+				await runCli(fixtureCwd, ["init"]);
+				await writeFixtureFile(fixtureCwd, "src/app.schema.ts", SCHEMA_SOURCE);
+				await rm(join(fixtureCwd, "migrations"), {
+					recursive: true,
+					force: true,
+				});
+				await symlink("nowhere", join(fixtureCwd, "migrations"));
+			},
+			assert: (result, fixtureCwd) => {
+				expect(result.exitCode).toBe(1);
+				expect(result.stderr).toContain(
+					"error[migrations-dir-not-a-directory]",
+				);
+				expect(result.stderr).toContain("migrations");
+				expect(result.stderr).toContain("nowhere");
+				expect(existsSync(join(fixtureCwd, "nowhere"))).toBe(false);
+			},
+		},
+		{
+			label: "nx/mig, nx mode 000",
+			commands: ["generate", "verify"],
+			setup: async (fixtureCwd) => {
+				await writeFixtureFile(
+					fixtureCwd,
+					"hejbro.config.ts",
+					`import { defineConfig } from "hejbro";
+
+export default defineConfig({
+	entry: ["src/**/*.schema.ts"],
+	migrationsDir: "nx/mig",
+	snapshotPath: "hejbro.snapshot.json",
+	prefixStrategy: "timestamp",
+});
+`,
+				);
+				await writeFixtureFile(fixtureCwd, "src/app.schema.ts", SCHEMA_SOURCE);
+				await writeFixtureFile(
+					fixtureCwd,
+					"hejbro.snapshot.json",
+					'{ "dialect": "postgres", "formatVersion": 8, "objects": {} }',
+				);
+				await mkdir(join(fixtureCwd, "nx"), { recursive: true });
+				await chmod(join(fixtureCwd, "nx"), 0o000);
+			},
+			assert: (result) => {
+				expect(result.exitCode).toBe(1);
+				expect(result.stderr).toContain("error[migrations-dir-unreadable]");
+				expect(result.stderr).toContain("(EACCES)");
+				expect(result.stderr).toContain('Next: check permissions on "nx"');
+			},
+		},
+		{
+			label: "f/mig, f a regular file",
+			commands: ["generate"],
+			setup: async (fixtureCwd) => {
+				await writeFixtureFile(
+					fixtureCwd,
+					"hejbro.config.ts",
+					`import { defineConfig } from "hejbro";
+
+export default defineConfig({
+	entry: ["src/**/*.schema.ts"],
+	migrationsDir: "f/mig",
+	snapshotPath: "hejbro.snapshot.json",
+	prefixStrategy: "timestamp",
+});
+`,
+				);
+				await writeFixtureFile(fixtureCwd, "src/app.schema.ts", SCHEMA_SOURCE);
+				await writeFixtureFile(
+					fixtureCwd,
+					"hejbro.snapshot.json",
+					'{ "dialect": "postgres", "formatVersion": 8, "objects": {} }',
+				);
+				await writeFixtureFile(fixtureCwd, "f", "not a directory");
+			},
+			assert: (result) => {
+				expect(result.exitCode).toBe(1);
+				expect(result.stderr).toContain("error[migrations-dir-unreadable]");
+				expect(result.stderr).toContain('"f" is a file');
+				expect(result.stderr).toContain('Next: move or remove the file at "f"');
+			},
+		},
+		{
+			label: "the migrations directory itself, mode 000",
+			commands: ["generate"],
+			setup: async (fixtureCwd) => {
+				await runCli(fixtureCwd, ["init"]);
+				await writeFixtureFile(fixtureCwd, "src/app.schema.ts", SCHEMA_SOURCE);
+				await chmod(join(fixtureCwd, "migrations"), 0o000);
+			},
+			assert: (result) => {
+				expect(result.exitCode).toBe(1);
+				expect(result.stderr).toContain("error[migrations-dir-unreadable]");
+				expect(result.stderr).toContain("(EACCES)");
+				expect(result.stderr).toContain("cannot list it");
+				expect(result.stderr).toContain('"migrations"');
+			},
+		},
+	];
+
+	const expandedRows = rows.flatMap((row) =>
+		row.commands.map((command) => ({ ...row, command })),
+	);
+
+	afterEach(async () => {
+		await Promise.all(
+			["nx", "migrations"].map(async (name) => {
+				const candidate = join(cwd, name);
+				if (!existsSync(candidate)) {
+					return;
+				}
+				await chmod(candidate, 0o755);
+			}),
+		);
+	});
+
+	const runOptionsFor = (
+		command: string,
+	): { readonly env: NodeJS.ProcessEnv } | Record<string, never> => {
+		if (command === "status" || command === "migrate") {
+			return {};
+		}
+		return { env: envWithoutDatabaseUrl() };
+	};
+
+	it.each(expandedRows)(
+		"refuses a migrations directory that is not a directory with its own code, never ENOTDIR ($label, $command)",
+		async ({ setup, assert, command }) => {
+			await setup(cwd);
+
+			const result = await runCli(
+				cwd,
+				commandArgsFor(command),
+				runOptionsFor(command),
+			);
+
+			await assert(result, cwd, command);
+		},
+	);
+
+	it("still lists through a link to a directory holding migrations (control)", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(SCHEMA_SOURCE);
+		const firstGenerate = await runCli(cwd, ["generate"]);
+		expect(firstGenerate.exitCode).toBe(0);
+		await rm(join(cwd, "migrations"), { recursive: true, force: true });
+		await mkdir(join(cwd, "realmig"), { recursive: true });
+		await symlink("realmig", join(cwd, "migrations"));
+		await writeSchema(SCHEMA_WITH_NOT_NULL_COLUMN_SOURCE);
+
+		const result = await runCli(cwd, ["generate"]);
+
+		expect(result.exitCode).toBe(0);
+		const migFiles = await readdir(join(cwd, "realmig"));
+		expect(migFiles.filter((name) => name.endsWith(".sql")).length).toBe(1);
+	});
+
+	it("nothing at migrationsDir still writes a migration, creating the directory (control)", async () => {
+		await writeFixtureFile(cwd, "hejbro.config.ts", CONFIG_SOURCE);
+		await writeSchema(SCHEMA_SOURCE);
+		await writeFixtureFile(
+			cwd,
+			"hejbro.snapshot.json",
+			'{ "dialect": "postgres", "formatVersion": 8, "objects": {} }',
+		);
+
+		const result = await runCli(cwd, ["generate"]);
+
+		expect(result.exitCode).toBe(0);
+		expect(existsSync(join(cwd, "migrations"))).toBe(true);
+	});
+
+	it("nothing at migrationsDir still proceeds to the connection for status (control: absent is not a fault)", async () => {
+		await writeFixtureFile(cwd, "hejbro.config.ts", CONFIG_SOURCE);
+
+		const result = await runCli(cwd, [
+			"status",
+			"--url",
+			"postgres://127.0.0.1:1/x",
+		]);
+
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).not.toContain("migrations-dir");
 	});
 });

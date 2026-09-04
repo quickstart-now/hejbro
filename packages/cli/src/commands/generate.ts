@@ -714,7 +714,7 @@ export const runGenerate = async (
 
 			if (mode === "baseline") {
 				assertBaselineIsFirst(
-					listMigrationFiles(join(cwd, config.migrationsDir)).length,
+					listMigrationFiles(cwd, config.migrationsDir).length,
 					Object.keys(previousSnapshot.objects).length === 0,
 					config.migrationsDir,
 				);
@@ -826,7 +826,10 @@ export const runGenerate = async (
 			}
 
 			const migrationsDirPath = join(cwd, config.migrationsDir);
-			const previousCount = listMigrationFiles(migrationsDirPath).length;
+			const previousCount = listMigrationFiles(
+				cwd,
+				config.migrationsDir,
+			).length;
 
 			const finalPass = generateMigrations({
 				declarations,

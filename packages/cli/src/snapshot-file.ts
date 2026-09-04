@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { throwHejbroError } from "@hejbro/core";
 import type { HejbroConfig } from "./config";
@@ -6,16 +6,76 @@ import type { ConfigCommand } from "./config-required";
 import { requireConfigFields } from "./config-required";
 import { errorCode, probePath, stripTrailingSeparators } from "./path-probe";
 
-/** Every `.sql` filename in `migrationsDirPath`, sorted — `[]` if the directory doesn't exist. */
+/**
+ * Every `.sql` filename in the configured `migrationsDir`, sorted — `[]`
+ * when nothing is there yet (absent is not a fault: the commands that
+ * write into it create it). A regular file or a dangling link there
+ * stops every caller with `migrations-dir-not-a-directory` (#820) —
+ * the directory-snapshot refusal's mirror — instead of a raw `ENOTDIR`
+ * from `readdirSync`. What can't even be inspected or listed — a file or
+ * dangling link on the way, a blocked ancestor, a directory this process
+ * may not list — stops the run with `migrations-dir-unreadable`, judged
+ * by the same `probePath` (#846 D2) `init` uses for the same path.
+ */
 export const listMigrationFiles = (
-	migrationsDirPath: string,
+	cwd: string,
+	migrationsDir: string,
 ): ReadonlyArray<string> => {
-	if (!existsSync(migrationsDirPath)) {
+	const migrationsDirPath = stripTrailingSeparators(join(cwd, migrationsDir));
+	const outcome = probePath(cwd, migrationsDirPath);
+	if (outcome.kind === "absent") {
 		return [];
 	}
-	return readdirSync(migrationsDirPath)
-		.filter((name) => name.endsWith(".sql"))
-		.sort();
+	if (outcome.kind === "present" && outcome.actualKind === "directory") {
+		try {
+			return readdirSync(migrationsDirPath)
+				.filter((name) => name.endsWith(".sql"))
+				.sort();
+		} catch (error) {
+			return throwHejbroError(
+				"migrations-dir-unreadable",
+				`"${migrationsDir}" is named by migrationsDir, but this process cannot list it (${errorCode(error)}). Next: check permissions on "${migrationsDir}", then rerun.`,
+			);
+		}
+	}
+	if (outcome.kind === "present") {
+		return throwHejbroError(
+			"migrations-dir-not-a-directory",
+			`"${migrationsDir}" is named by migrationsDir, but a file is there — the migrations directory holds the migration files hejbro writes. Next: move or remove that file, then rerun \`hejbro init\` to create the directory.`,
+		);
+	}
+	if (outcome.kind === "dangling") {
+		return throwHejbroError(
+			"migrations-dir-not-a-directory",
+			`"${migrationsDir}" is named by migrationsDir, but a dangling symbolic link is there, pointing at "${outcome.target}" — the migrations directory holds the migration files hejbro writes. Next: remove the link or create its target, then rerun.`,
+		);
+	}
+	if (outcome.kind === "ancestor-file") {
+		const culprit = relative(cwd, outcome.path);
+		return throwHejbroError(
+			"migrations-dir-unreadable",
+			`"${migrationsDir}" is named by migrationsDir, but "${culprit}" is a file and cannot hold it. Next: move or remove the file at "${culprit}", then rerun.`,
+		);
+	}
+	if (outcome.kind === "ancestor-dangling") {
+		const culprit = relative(cwd, outcome.path);
+		return throwHejbroError(
+			"migrations-dir-unreadable",
+			`"${migrationsDir}" is named by migrationsDir, but "${culprit}" is a dangling symbolic link, pointing at "${outcome.target}". Next: remove the link or create its target, then rerun.`,
+		);
+	}
+	if (outcome.kind === "blocked") {
+		const culprit = relative(cwd, outcome.culprit);
+		return throwHejbroError(
+			"migrations-dir-unreadable",
+			`"${migrationsDir}" is named by migrationsDir, but it could not be checked (${outcome.code}): "${culprit}" does not let this process look inside it. Next: check permissions on "${culprit}", then rerun.`,
+		);
+	}
+	const failedPath = relative(cwd, outcome.path);
+	return throwHejbroError(
+		"migrations-dir-unreadable",
+		`"${migrationsDir}" is named by migrationsDir, but it could not be checked (${outcome.code}). Next: check what "${failedPath}" points at, then rerun.`,
+	);
 };
 
 /**
@@ -95,8 +155,10 @@ export const readSnapshotFileText = (
 		}
 	}
 	requireConfigFields(config, command, ["migrationsDir"]);
-	const migrationsDirPath = join(cwd, config.migrationsDir);
-	const priorMigrationCount = listMigrationFiles(migrationsDirPath).length;
+	const priorMigrationCount = listMigrationFiles(
+		cwd,
+		config.migrationsDir,
+	).length;
 	if (priorMigrationCount === 0) {
 		return throwHejbroError(
 			"snapshot-not-found",
