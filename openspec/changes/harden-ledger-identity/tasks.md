@@ -13,7 +13,7 @@ marks the tasks that carry them into code, not open questions.
 
 ## 1. The ledger is judged by identity; the cycle advice covers any length
 
-- [ ] 1.1 (~9m) **[design]** The shared probe. A new module
+- [x] 1.1 (~9m) **[design]** The shared probe. A new module
       `packages/cli/src/apply/ledger-identity.ts` exports
       `probeLedgerIdentity(driver): Promise<LedgerIdentity>` — one
       catalog statement over `pg_class`/`pg_namespace`/`pg_attribute`
@@ -42,7 +42,7 @@ marks the tasks that carry them into code, not open questions.
       `packages/cli/src/apply/ledger.ts`,
       `packages/cli/test/apply-ledger-identity.test.ts` (new).
 
-- [ ] 1.2 (~9m) **[design]** `reset` refuses on `occupied` before the
+- [x] 1.2 (~9m) **[design]** `reset` refuses on `occupied` before the
       confirmation check, clears on `ledger`, proceeds without clearing
       on `absent`. `assertLedgerNotOccupied(identity, commandName)` in
       `ledger-identity.ts` throws `apply-ledger-occupied` with the

@@ -35,13 +35,21 @@ const managedSnapshot = buildSnapshot(
 	emptySnapshot,
 );
 
+/** The four bootstrap columns, exactly as `bootstrapLedger` creates them -- the fake's answer to the identity probe when `ledgerExists` is true. */
+const LEDGER_PROBE_ROWS = [
+	{ relkind: "r", name: "id", type: "bigint" },
+	{ relkind: "r", name: "filename", type: "text" },
+	{ relkind: "r", name: "origin", type: "text" },
+	{ relkind: "r", name: "applied_at", type: "timestamp with time zone" },
+];
+
 /**
- * `ledgerExists` (D106 R1, B1, #753 reopened): answers `select
- * to_regclass('hejbro.migration_ledger')` -- `false` (the default) mirrors
- * a database whose migrations were all applied without `hejbro migrate`
- * ever running, so `applyReset` reports `ledgerCleared: false` and
- * `commands/reset.ts`'s own success line drops its "and cleared the
- * ledger" clause.
+ * `ledgerExists` (D106 R1, B1, #753 reopened; harden-ledger-identity, 1.2):
+ * answers `probeLedgerIdentity`'s own catalog statement -- `false` (the
+ * default) mirrors a database whose migrations were all applied without
+ * `hejbro migrate` ever running, so `applyReset` reports `ledgerCleared:
+ * false` and `commands/reset.ts`'s own success line drops its "and
+ * cleared the ledger" clause.
  */
 const makeFakeDriver = (
 	databaseName = "testdb",
@@ -56,11 +64,11 @@ const makeFakeDriver = (
 			if (sql.startsWith("select current_database()")) {
 				return [{ name: databaseName }];
 			}
-			if (sql.startsWith("select to_regclass(")) {
+			if (sql.startsWith("select c.relkind")) {
 				if (ledgerExists) {
-					return [{ reg: "hejbro.migration_ledger" }];
+					return LEDGER_PROBE_ROWS;
 				}
-				return [{ reg: null }];
+				return [];
 			}
 			return [];
 		},

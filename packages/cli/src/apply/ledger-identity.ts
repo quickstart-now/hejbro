@@ -1,3 +1,4 @@
+import { throwHejbroError } from "@hejbro/core";
 import type { CompileResult, Driver, DriverRow } from "@hejbro/query";
 import { LEDGER_SCHEMA, LEDGER_TABLE } from "./ledger";
 
@@ -96,4 +97,31 @@ export const probeLedgerIdentity = async (
 		return { kind: "ledger" };
 	}
 	return { kind: "occupied", relation: relationWord(relkind), columns };
+};
+
+const columnsClause = (columns: ReadonlyArray<string>): string => {
+	if (columns.length === 0) {
+		return "no columns";
+	}
+	return `columns: ${columns.join(", ")}`;
+};
+
+/**
+ * [design.md, 783/R3] Refuses with `apply-ledger-occupied` when `identity`
+ * is `occupied`; a no-op for `absent`/`ledger` -- every one of the four
+ * ledger-touching commands calls this right after {@link probeLedgerIdentity},
+ * before any other read or write of the ledger, so an occupied name is
+ * refused the same way regardless of which command found it.
+ */
+export const assertLedgerNotOccupied = (
+	identity: LedgerIdentity,
+	commandName: string,
+): void => {
+	if (identity.kind !== "occupied") {
+		return;
+	}
+	throwHejbroError(
+		"apply-ledger-occupied",
+		`"${LEDGER_SCHEMA}"."${LEDGER_TABLE}" is held by a ${identity.relation} that is not hejbro's ledger (${columnsClause(identity.columns)}). hejbro reads, writes and clears only the ledger it created, so this database is not one hejbro has applied to. Next: move or drop that ${identity.relation} yourself (hejbro will not touch it), or point --url at the database hejbro manages, then rerun \`${commandName}\`.`,
+	);
 };

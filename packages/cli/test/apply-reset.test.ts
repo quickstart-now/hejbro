@@ -95,6 +95,21 @@ const buildCycleSnapshot = (): Snapshot => {
 	};
 };
 
+/** One `pg_class`/`pg_attribute` row shape, as `probeLedgerIdentity`'s own statement returns it. */
+type ProbeRow = {
+	readonly relkind: string;
+	readonly name: string | null;
+	readonly type: string | null;
+};
+
+/** The four bootstrap columns, exactly as `bootstrapLedger` creates them -- the fake's default "ledger" answer when a caller does not override the probe. */
+const LEDGER_PROBE_ROWS: ReadonlyArray<ProbeRow> = [
+	{ relkind: "r", name: "id", type: "bigint" },
+	{ relkind: "r", name: "filename", type: "text" },
+	{ relkind: "r", name: "origin", type: "text" },
+	{ relkind: "r", name: "applied_at", type: "timestamp with time zone" },
+];
+
 /**
  * A fake `Driver` whose `transaction()` hands the callback one in-memory
  * ledger-and-recording session -- the ledger half actually stores rows
@@ -116,17 +131,22 @@ const buildCycleSnapshot = (): Snapshot => {
  * `ledgerDeleteFailure` (D106 R1, B1, #753 reopened): when set, the
  * ledger's own `delete from` statement throws `ledgerDeleteFailure.thrown`
  * instead of succeeding, independent of `dropFailure` -- standing in for
- * the ledger delete failing even though `select to_regclass(...)` already
- * answered "this table exists" (the exact edge the fix must not swallow).
- * `ledgerBootstrapped` tracks whether `create schema`/`create table` ever
- * ran (mirroring `bootstrapLedger`'s own two statements), so the fake's
- * `select to_regclass(...)` branch can answer honestly instead of always
- * claiming the ledger exists.
+ * the ledger delete failing even though the identity probe already found
+ * the real ledger (the exact edge the fix must not swallow).
+ *
+ * `probeRows` (harden-ledger-identity, 1.2): when set, answers
+ * `probeLedgerIdentity`'s own statement with exactly these rows,
+ * regardless of bootstrap state -- how the occupied-name scenarios are
+ * built. When unset, the probe answers honestly from `ledgerState`
+ * (`bootstrapped`, tracking `create schema`/`create table` the same way
+ * the old `select to_regclass(...)` branch did): the real ledger's four
+ * columns once bootstrapped, no row before that.
  */
 const makeFakeDriver = (
 	databaseName = "testdb",
 	dropFailure?: { readonly thrown: unknown },
 	ledgerDeleteFailure?: { readonly thrown: unknown },
+	probeRows?: ReadonlyArray<ProbeRow>,
 ): {
 	readonly driver: Driver;
 	readonly calls: CompileResult[];
@@ -142,11 +162,14 @@ const makeFakeDriver = (
 			if (sql.startsWith("select current_database()")) {
 				return [{ name: databaseName }];
 			}
-			if (sql.startsWith("select to_regclass(")) {
-				if (ledgerState.bootstrapped) {
-					return [{ reg: "hejbro.migration_ledger" }];
+			if (sql.startsWith("select c.relkind")) {
+				if (probeRows !== undefined) {
+					return probeRows as unknown as ReadonlyArray<DriverRow>;
 				}
-				return [{ reg: null }];
+				if (ledgerState.bootstrapped) {
+					return LEDGER_PROBE_ROWS as unknown as ReadonlyArray<DriverRow>;
+				}
+				return [];
 			}
 			if (sql.startsWith("create schema") || sql.startsWith("create table")) {
 				ledgerState.bootstrapped = true;
@@ -378,14 +401,147 @@ describe("applyReset / 5.3", () => {
 		await expect(
 			applyReset(driver, managedSnapshot, registry, undefined),
 		).rejects.toMatchObject({ code: "reset-not-confirmed" });
-		// The one call that IS allowed through is the read-only
-		// current_database() probe -- refusing still has to know which
-		// database it is refusing to drop.
+		// The two calls that ARE allowed through are the read-only identity
+		// probe and current_database() -- refusing still has to know the
+		// ledger is really the ledger and which database it is refusing to
+		// drop.
 		expect(
-			calls.filter(
-				(call) => !call.sql.toLowerCase().startsWith("select current_database"),
-			),
+			calls.filter((call) => {
+				const sql = call.sql.toLowerCase();
+				return (
+					!sql.startsWith("select current_database") &&
+					!sql.startsWith("select c.relkind")
+				);
+			}),
 		).toHaveLength(0);
+	});
+});
+
+describe("applyReset — a relation that is not the ledger at the ledger's name is refused before any confirmation is asked (harden-ledger-identity, 1.2)", () => {
+	it.each<[string, ReadonlyArray<ProbeRow>, string, ReadonlyArray<string>]>([
+		["a view", [{ relkind: "v", name: "x", type: "integer" }], "view", ["x"]],
+		[
+			"a table holding rows (name, payload)",
+			[
+				{ relkind: "r", name: "name", type: "text" },
+				{ relkind: "r", name: "payload", type: "jsonb" },
+			],
+			"table",
+			["name", "payload"],
+		],
+		[
+			"a table (id, filename)",
+			[
+				{ relkind: "r", name: "id", type: "bigint" },
+				{ relkind: "r", name: "filename", type: "text" },
+			],
+			"table",
+			["id", "filename"],
+		],
+	])(
+		"refuses with apply-ledger-occupied, confirmed undefined -- %s",
+		async (_label, probeRows, relationWord, columns) => {
+			const { driver, calls } = makeFakeDriver(
+				"testdb",
+				undefined,
+				undefined,
+				probeRows,
+			);
+
+			const error: unknown = await applyReset(
+				driver,
+				managedSnapshot,
+				registry,
+				undefined,
+			).catch((caught: unknown) => caught);
+
+			expect(error).toBeInstanceOf(HejbroError);
+			expect((error as HejbroError).code).toBe("apply-ledger-occupied");
+			const message = (error as HejbroError).message;
+			expect(message).toContain(relationWord);
+			columns.map((column) => expect(message).toContain(column));
+			expect(message).toContain("Next:");
+			expect(
+				calls.some((call) =>
+					call.sql.toLowerCase().startsWith("select current_database"),
+				),
+			).toBe(false);
+			expect(
+				calls.some((call) => call.sql.toLowerCase().startsWith("drop")),
+			).toBe(false);
+			expect(
+				calls.some((call) => call.sql.toLowerCase().startsWith("delete from")),
+			).toBe(false);
+		},
+	);
+
+	it("regression: an absent ledger with confirmation drops and clears nothing, ledgerCleared false", async () => {
+		const { driver, calls } = makeFakeDriver(
+			"testdb",
+			undefined,
+			undefined,
+			[],
+		);
+
+		const result = await applyReset(
+			driver,
+			managedSnapshot,
+			registry,
+			"testdb:2",
+		);
+
+		expect(result).toEqual({ ledgerCleared: false });
+		expect(
+			calls.some((call) => call.sql.toLowerCase().startsWith("delete from")),
+		).toBe(false);
+	});
+
+	it("regression: an absent ledger without confirmation still refuses reset-not-confirmed, not apply-ledger-occupied", async () => {
+		const { driver } = makeFakeDriver("testdb", undefined, undefined, []);
+
+		await expect(
+			applyReset(driver, managedSnapshot, registry, undefined),
+		).rejects.toMatchObject({ code: "reset-not-confirmed" });
+	});
+
+	it("regression: the exact ledger drops and clears, ledgerCleared true", async () => {
+		const { driver, calls } = makeFakeDriver(
+			"testdb",
+			undefined,
+			undefined,
+			LEDGER_PROBE_ROWS,
+		);
+
+		const result = await applyReset(
+			driver,
+			managedSnapshot,
+			registry,
+			"testdb:2",
+		);
+
+		expect(result).toEqual({ ledgerCleared: true });
+		expect(
+			calls.some((call) => call.sql.toLowerCase().startsWith("delete from")),
+		).toBe(true);
+	});
+
+	it("regression: the ledger with an extra column drops and clears the same as the exact ledger", async () => {
+		const { driver, calls } = makeFakeDriver("testdb", undefined, undefined, [
+			...LEDGER_PROBE_ROWS,
+			{ relkind: "r", name: "note", type: "text" },
+		]);
+
+		const result = await applyReset(
+			driver,
+			managedSnapshot,
+			registry,
+			"testdb:2",
+		);
+
+		expect(result).toEqual({ ledgerCleared: true });
+		expect(
+			calls.some((call) => call.sql.toLowerCase().startsWith("delete from")),
+		).toBe(true);
 	});
 });
 

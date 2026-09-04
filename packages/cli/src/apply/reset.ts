@@ -20,7 +20,11 @@ import {
 	driverErrorDetail,
 	driverErrorReason,
 } from "./execute";
-import { clearLedgerRows, ledgerTableExists } from "./ledger";
+import { clearLedgerRows } from "./ledger";
+import {
+	assertLedgerNotOccupied,
+	probeLedgerIdentity,
+} from "./ledger-identity";
 
 /**
  * [task 5.1] Every object `reset` would drop, in dependency order --
@@ -451,12 +455,13 @@ export type ResetOutcome = { readonly ledgerCleared: boolean };
  * the "nothing to drop needs no confirmation" carve-out above is a
  * genuine no-op rather than a silent, unconfirmed ledger clear.
  *
- * [D106 R1, B1, #753 reopened] `ledgerTableExists` is read once, through
- * `driver` directly, before the transaction even opens -- a database
- * whose migrations were all applied outside hejbro (`psql -f`, an
- * external pipeline) never bootstraps the ledger, and the transaction
- * below now only ever attempts `clearLedgerRows` when this read already
- * confirmed the table is there. Nothing inside the transaction swallows an
+ * [D106 R1, B1, #753 reopened; harden-ledger-identity, 783/R2] The
+ * ledger's identity is probed once, through `driver` directly, before the
+ * transaction even opens -- a database whose migrations were all applied
+ * outside hejbro (`psql -f`, an external pipeline) never bootstraps the
+ * ledger, and the transaction below now only ever attempts
+ * `clearLedgerRows` when that probe already found the real ledger.
+ * Nothing inside the transaction swallows an
  * error (a caught branch that returns or carries on): each statement's own
  * catch ({@link throwPhaseTagged}, D106 R1, NB1) only tags which phase
  * failed and rethrows immediately, so a ledger-delete failure that happens
@@ -481,6 +486,12 @@ export const applyReset = async (
 ): Promise<ResetOutcome> => {
 	assertDeclarationsNotEmpty(currentSnapshot);
 	const changes = planReset(currentSnapshot, registry);
+	// [harden-ledger-identity, 783/R3] Before the confirmation check: asking
+	// for a `<database>:<count>` token on a run that is refused anyway is
+	// wasted and misleading, and this catalog read opens no transaction, so
+	// nothing the confirmation protects is touched by running it first.
+	const identity = await probeLedgerIdentity(driver);
+	assertLedgerNotOccupied(identity, "hejbro reset");
 	const databaseName = await currentDatabaseName(driver);
 	assertResetConfirmed(databaseName, changes, confirmed);
 	// [task 3.8, #753] Computed here, not inside the transaction below: a
@@ -492,7 +503,7 @@ export const applyReset = async (
 	if (sql === null) {
 		return { ledgerCleared: false };
 	}
-	const ledgerExists = await ledgerTableExists(driver);
+	const ledgerExists = identity.kind === "ledger";
 	try {
 		return await driver.transaction(async (session) => {
 			try {
