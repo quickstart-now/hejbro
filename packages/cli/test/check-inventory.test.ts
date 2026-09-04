@@ -17,6 +17,7 @@ import type { Catalog, ColumnRow, IndexRow } from "../src/check/catalog";
 import { buildInventory } from "../src/check/inventory";
 
 const app = schema("app");
+const shop = schema("shop");
 
 const buildTestSnapshot = (
 	declarations: ReadonlyArray<HejbroInput>,
@@ -260,9 +261,12 @@ describe("unmanaged columns", () => {
 	// column on a managed table is listed by identity alone -- existence
 	// only, by construction (spec Req5): `unmanagedColumns` never reads a
 	// row's `catalogType`, `catalogDefault` or `catalogGenerated`, so a
-	// generated or identity column is exactly as reportable as a plain
-	// one, and an undeclarable name (#706's own loss-report subject)
-	// passes through unchanged.
+	// generated column is exactly as reportable as a plain one. An
+	// identity column is not a separate row here: the columns query
+	// (check/catalog.ts) carries no identity-specific field, so its row
+	// is byte-identical to a plain database-only column's at this
+	// layer -- this axis keys on identity alone either way, so no
+	// special case is needed or testable.
 	type ColumnKindRow = {
 		readonly label: string;
 		readonly catalogColumns: ReadonlyArray<ColumnRow>;
@@ -305,21 +309,6 @@ describe("unmanaged columns", () => {
 			],
 		},
 		{
-			// The columns query (check/catalog.ts) carries no identity-specific
-			// field -- an identity column's row is indistinguishable from a
-			// plain one at this level, which is exactly why no special case
-			// is needed: `unmanagedColumns` never looks past the name either
-			// way.
-			label: "a database-only identity column",
-			catalogColumns: [
-				columnRow("app", "posts", "id"),
-				columnRow("app", "posts", "legacy_seq"),
-			],
-			expectedUnmanagedColumns: [
-				{ schema: "app", table: "posts", name: "legacy_seq" },
-			],
-		},
-		{
 			label: "a column whose name no declaration could carry",
 			catalogColumns: [
 				columnRow("app", "posts", "id"),
@@ -341,6 +330,65 @@ describe("unmanaged columns", () => {
 		const inventory = buildInventory(snapshot, catalog);
 
 		expect(inventory.unmanagedColumns).toEqual(expectedUnmanagedColumns);
+	});
+
+	// harden-check-inventory, task 1.10: the rows above vary only the
+	// column kind on one table -- a declared-name set gathered globally
+	// (rather than per table) or a table identity taken without its
+	// schema would still pass every one of them. These two rows can
+	// actually fail.
+	it("keys a declared column name to its own table, not globally (app.users.note declared, app.orders.note is not)", () => {
+		const declarations = [
+			table(app, "users", { id: uuid().primaryKey(), note: text() }),
+			table(app, "orders", { id: uuid().primaryKey() }),
+		];
+		const twoTableSnapshot = buildTestSnapshot(declarations);
+		const catalog: Catalog = {
+			...emptyCatalog(),
+			tables: [
+				{ schema: "app", table: "users", rls: false },
+				{ schema: "app", table: "orders", rls: false },
+			],
+			columns: [
+				columnRow("app", "users", "id"),
+				columnRow("app", "users", "note"),
+				columnRow("app", "orders", "id"),
+				columnRow("app", "orders", "note"),
+			],
+		};
+
+		const inventory = buildInventory(twoTableSnapshot, catalog);
+
+		expect(inventory.unmanagedColumns).toEqual([
+			{ schema: "app", table: "orders", name: "note" },
+		]);
+	});
+
+	it('keys a managed table\'s identity to its schema, not its bare name (app.users and shop.users both named "users")', () => {
+		const declarations = [
+			table(app, "users", { id: uuid().primaryKey(), legacy: text() }),
+			table(shop, "users", { id: uuid().primaryKey() }),
+		];
+		const twoSchemaSnapshot = buildTestSnapshot(declarations);
+		const catalog: Catalog = {
+			...emptyCatalog(),
+			tables: [
+				{ schema: "app", table: "users", rls: false },
+				{ schema: "shop", table: "users", rls: false },
+			],
+			columns: [
+				columnRow("app", "users", "id"),
+				columnRow("app", "users", "legacy"),
+				columnRow("shop", "users", "id"),
+				columnRow("shop", "users", "legacy"),
+			],
+		};
+
+		const inventory = buildInventory(twoSchemaSnapshot, catalog);
+
+		expect(inventory.unmanagedColumns).toEqual([
+			{ schema: "shop", table: "users", name: "legacy" },
+		]);
 	});
 });
 
@@ -394,9 +442,14 @@ describe("unmanaged indexes", () => {
 		indexRow("widgets_expr_idx", null, {
 			keys: [{ text: "lower(name)", expression: true }],
 		}),
-		// database-only primary key's own index -- listed, names the
-		// constraint it backs (not the declared key, so not excluded).
-		indexRow("widgets_legacy_pkey", "widgets_legacy_pkey"),
+		// An adopted database's own primary key, carrying a name hejbro's
+		// own convention never derives (`widgets_pk`, not `widgets_pkey`) --
+		// listed, names the constraint it backs. That the declaration's own
+		// `widgets_pkey` is missing is `compare.ts`'s own finding, not this
+		// axis's -- a real, buildable database (one primary key, one name),
+		// unlike a second `widgets_pkey`-named one on the same table, which
+		// no database can hold.
+		indexRow("widgets_pk", "widgets_pk"),
 		// database-only unique constraint's own index -- listed, names
 		// the constraint it backs (not the declared unique, so not
 		// excluded).
@@ -448,8 +501,8 @@ describe("unmanaged indexes", () => {
 			{
 				schema: "app",
 				table: "widgets",
-				name: "widgets_legacy_pkey",
-				constraintName: "widgets_legacy_pkey",
+				name: "widgets_pk",
+				constraintName: "widgets_pk",
 			},
 			{
 				schema: "app",
