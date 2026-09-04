@@ -246,7 +246,13 @@ stale skill is a broken user contract").
   this module cannot tell which one the server actually refused over
   (the driver names an object, not an edge); N2's own `DETAIL` line is
   what names the real dependent. Live-witnessed against the cycle
-  scenario.
+  scenario. Reviewer-measured (review round 2, C10): a real Postgres
+  `2BP01` always carries a `DETAIL` on the path this tool's own
+  dependency-drop failures reach, so the sibling property — the
+  detail-pointer clause never appears when there is no detail — has no
+  reachable live input and is pinned by a unit case only (the fake
+  driver's own thrown error carrying no `.detail`); this is expected,
+  not a coverage gap to chase with a live witness.
 - **N4** (`verify` is silent about warnings `generate` prints for the
   same declarations) — not a contradiction of this delta (which promises
   refusal parity only, not warning parity); filed as its own follow-up,

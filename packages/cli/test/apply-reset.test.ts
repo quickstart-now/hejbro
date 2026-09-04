@@ -952,10 +952,9 @@ describe("applyReset — reset-drop-failed names the phase that actually failed 
 			// only wraps the two statements inside the callback), so this
 			// is exactly `resetPhaseOf`'s "unknown" fallback.
 			transaction: async () => {
-				throw Object.assign(
-					new Error("connection terminated unexpectedly"),
-					{ code: "08006" },
-				);
+				throw Object.assign(new Error("connection terminated unexpectedly"), {
+					code: "08006",
+				});
 			},
 			setupSession: async () => {},
 		};
