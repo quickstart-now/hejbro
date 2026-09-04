@@ -295,11 +295,25 @@ const refineByDependsOnIdentities = (
 	if (dependsOnIdentities === undefined || changes.length <= 1) {
 		return changes;
 	}
-	const identities = changes.map((change) => change.identity);
-	const identitySet = new Set(identities);
-	const byIdentity = new Map(
-		changes.map((change) => [change.identity, change] as const),
+	// A kind may report more than one change for the same identity (#774);
+	// they travel as one unit, adjacent and in reported order, keyed by
+	// their shared identity rather than collapsed to it (`.push` into a
+	// local accumulator, never `Map` spread — `groupContiguousByKind`'s
+	// own quadratic-cost precedent).
+	const changesByIdentity = changes.reduce<Map<string, Array<KindChange>>>(
+		(groups, change) => {
+			const group = groups.get(change.identity);
+			if (group !== undefined) {
+				group.push(change);
+				return groups;
+			}
+			groups.set(change.identity, [change]);
+			return groups;
+		},
+		new Map(),
 	);
+	const identities = Array.from(changesByIdentity.keys());
+	const identitySet = new Set(identities);
 	const predecessorsOf = buildPredecessors(
 		dependsOnIdentities,
 		changes,
@@ -310,8 +324,8 @@ const refineByDependsOnIdentities = (
 		placed: new Set(),
 		ordered: [],
 	});
-	return refined.ordered.map(
-		(identity) => byIdentity.get(identity) as KindChange,
+	return refined.ordered.flatMap(
+		(identity) => changesByIdentity.get(identity) as ReadonlyArray<KindChange>,
 	);
 };
 

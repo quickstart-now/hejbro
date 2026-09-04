@@ -418,6 +418,280 @@ describe("an argument key whose derived name is not a hejbro SQL name is refused
 	});
 });
 
+describe("a name plpgsql declares itself is refused as an argument name (#748)", () => {
+	const ownedNameCases: ReadonlyArray<{ readonly argName: string }> = [
+		{ argName: "found" },
+		{ argName: "sqlstate" },
+		{ argName: "sqlerrm" },
+		{ argName: "tg_argv" },
+		{ argName: "tg_event" },
+		{ argName: "tg_level" },
+		{ argName: "tg_name" },
+		{ argName: "tg_nargs" },
+		{ argName: "tg_op" },
+		{ argName: "tg_relid" },
+		{ argName: "tg_relname" },
+		{ argName: "tg_table_name" },
+		{ argName: "tg_table_schema" },
+		{ argName: "tg_tag" },
+		{ argName: "tg_when" },
+		{ argName: "analyse" },
+		{ argName: "analyze" },
+		{ argName: "current_catalog" },
+		{ argName: "except" },
+		{ argName: "lateral" },
+		{ argName: "system_user" },
+	];
+
+	it.each(ownedNameCases)(
+		"refuses an argument whose derived name is $argName with reserved-local-name",
+		({ argName }) => {
+			expect(
+				codeOf(() =>
+					defineFunction(
+						app,
+						"echo_owned",
+						{ args: { [argName]: uuid() }, returns: { typeName: "uuid" } },
+						(ctx) => {
+							ctx.return(sql`null`);
+						},
+					),
+				),
+			).toBe("reserved-local-name");
+		},
+	);
+
+	const lookalikeNameCases: ReadonlyArray<{ readonly argName: string }> = [
+		{ argName: "found_at" },
+		{ argName: "row_found" },
+		{ argName: "tg" },
+		{ argName: "tg_ops" },
+		{ argName: "sqlstate_code" },
+		{ argName: "state" },
+	];
+
+	it.each(lookalikeNameCases)(
+		"accepts an argument named $argName -- it only contains an owned name (control)",
+		({ argName }) => {
+			const fn = defineFunction(
+				app,
+				"echo_lookalike",
+				{ args: { [argName]: uuid() }, returns: posts },
+				(ctx) => {
+					ctx.return(select(posts));
+				},
+			);
+			expect(fn.args[0]?.argName).toBe(argName);
+		},
+	);
+});
+
+describe("a keyword reserved for function and type names is refused as an argument name (#748, review round)", () => {
+	const categoryTNameCases: ReadonlyArray<{ readonly argName: string }> = [
+		{ argName: "authorization" },
+		{ argName: "binary" },
+		{ argName: "collation" },
+		{ argName: "concurrently" },
+		{ argName: "cross" },
+		{ argName: "current_schema" },
+		{ argName: "freeze" },
+		{ argName: "full" },
+		{ argName: "ilike" },
+		{ argName: "inner" },
+		{ argName: "is" },
+		{ argName: "isnull" },
+		{ argName: "join" },
+		{ argName: "left" },
+		{ argName: "like" },
+		{ argName: "natural" },
+		{ argName: "notnull" },
+		{ argName: "outer" },
+		{ argName: "overlaps" },
+		{ argName: "right" },
+		{ argName: "similar" },
+		{ argName: "tablesample" },
+		{ argName: "verbose" },
+	];
+
+	it.each(categoryTNameCases)(
+		"refuses an argument whose derived name is $argName with reserved-local-name",
+		({ argName }) => {
+			expect(
+				codeOf(() =>
+					defineFunction(
+						app,
+						"echo_category_t",
+						{ args: { [argName]: uuid() }, returns: { typeName: "uuid" } },
+						(ctx) => {
+							ctx.return(sql`null`);
+						},
+					),
+				),
+			).toBe("reserved-local-name");
+		},
+	);
+});
+
+describe("two argument keys deriving to one SQL name are refused (#751)", () => {
+	const collidingCases: ReadonlyArray<{
+		readonly label: string;
+		readonly args: Record<string, ColumnBuilder>;
+		readonly firstKey: string;
+		readonly secondKey: string;
+		readonly sharedName: string;
+	}> = [
+		{
+			label: "camelCase beside snake_case",
+			// biome-ignore lint/style/useNamingConvention: adversarial snake_case key under test.
+			args: { userId: uuid(), user_id: uuid() },
+			firstKey: "userId",
+			secondKey: "user_id",
+			sharedName: "user_id",
+		},
+		{
+			label: "snake_case beside camelCase (declaration order reversed)",
+			// biome-ignore lint/style/useNamingConvention: adversarial snake_case key under test.
+			args: { user_id: uuid(), userId: uuid() },
+			firstKey: "user_id",
+			secondKey: "userId",
+			sharedName: "user_id",
+		},
+		{
+			label: "a digit boundary",
+			// biome-ignore lint/style/useNamingConvention: adversarial snake_case key under test.
+			args: { v2Id: uuid(), v2_id: uuid() },
+			firstKey: "v2Id",
+			secondKey: "v2_id",
+			sharedName: "v2_id",
+		},
+		{
+			label: "a single-letter segment",
+			// biome-ignore lint/style/useNamingConvention: adversarial snake_case key under test.
+			args: { aB: uuid(), a_b: uuid() },
+			firstKey: "aB",
+			secondKey: "a_b",
+			sharedName: "a_b",
+		},
+		{
+			label: "a trailing underscore",
+			// biome-ignore lint/style/useNamingConvention: adversarial snake_case key under test.
+			args: { userId_: uuid(), user_id_: uuid() },
+			firstKey: "userId_",
+			secondKey: "user_id_",
+			sharedName: "user_id_",
+		},
+		{
+			label: "two of three keys collide",
+			// biome-ignore lint/style/useNamingConvention: adversarial near-duplicate key under test.
+			args: { userId: uuid(), userID: uuid(), user_id: uuid() },
+			firstKey: "userId",
+			secondKey: "user_id",
+			sharedName: "user_id",
+		},
+		{
+			label: "four keys forming two pairs -- the second pair is reported",
+			// biome-ignore lint/style/useNamingConvention: adversarial snake_case key under test.
+			args: { aB: uuid(), xY: uuid(), x_y: uuid(), a_b: uuid() },
+			firstKey: "xY",
+			secondKey: "x_y",
+			sharedName: "x_y",
+		},
+	];
+
+	it.each(collidingCases)(
+		"refuses $label with duplicate-argument, naming both keys and the shared name",
+		({ args, firstKey, secondKey, sharedName }) => {
+			let caught: unknown;
+			try {
+				defineFunction(
+					app,
+					"echo_dup",
+					{ args, returns: { typeName: "uuid" } },
+					(ctx) => {
+						ctx.return(sql`null`);
+					},
+				);
+			} catch (error) {
+				caught = error;
+			}
+			expect((caught as { code?: string } | undefined)?.code).toBe(
+				"duplicate-argument",
+			);
+			expect((caught as { message?: string } | undefined)?.message).toContain(
+				`"${firstKey}" and "${secondKey}"`,
+			);
+			expect((caught as { message?: string } | undefined)?.message).toContain(
+				`"${sharedName}"`,
+			);
+		},
+	);
+
+	it("keeps two distinct argNames when keys only look alike -- postID/postId (control)", () => {
+		const fn = defineFunction(
+			app,
+			"echo_postid",
+			{
+				args: { postID: uuid(), postId: uuid() },
+				returns: { typeName: "uuid" },
+			},
+			(ctx) => {
+				ctx.return(sql`null`);
+			},
+		);
+		expect(fn.args.map((arg) => arg.argName)).toEqual(["post_i_d", "post_id"]);
+	});
+
+	it("keeps two distinct argNames when keys only look alike -- id/id_ (control)", () => {
+		const fn = defineFunction(
+			app,
+			"echo_id",
+			{ args: { id: uuid(), id_: uuid() }, returns: { typeName: "uuid" } },
+			(ctx) => {
+				ctx.return(sql`null`);
+			},
+		);
+		expect(fn.args.map((arg) => arg.argName)).toEqual(["id", "id_"]);
+	});
+
+	it("a reserved-name refusal precedes the duplicate-argument refusal", () => {
+		expect(
+			codeOf(() =>
+				defineFunction(
+					app,
+					"echo_precedence_reserved",
+					{
+						// biome-ignore lint/style/useNamingConvention: adversarial snake_case key under test.
+						args: { order: uuid(), userId: uuid(), user_id: uuid() },
+						returns: { typeName: "uuid" },
+					},
+					(ctx) => {
+						ctx.return(sql`null`);
+					},
+				),
+			),
+		).toBe("reserved-local-name");
+	});
+
+	it("an invalid-sql-name refusal precedes the duplicate-argument refusal", () => {
+		expect(
+			codeOf(() =>
+				defineFunction(
+					app,
+					"echo_precedence_invalid",
+					{
+						// biome-ignore lint/style/useNamingConvention: adversarial snake_case key under test.
+						args: { "my-arg": uuid(), userId: uuid(), user_id: uuid() },
+						returns: { typeName: "uuid" },
+					},
+					(ctx) => {
+						ctx.return(sql`null`);
+					},
+				),
+			),
+		).toBe("invalid-sql-name");
+	});
+});
+
 describe("a literal __proto__ key replaces the args object's prototype instead of declaring an argument (#679, D106 review B1)", () => {
 	it("a literal __proto__: key is refused with args-prototype-key, and no declaration is produced", () => {
 		expect(

@@ -44,6 +44,14 @@ const trickyTriggerConfig = {
 	forEach: "row" as const,
 };
 
+// #748/task 2.1: a row read's locals depend on its projection -- `id`
+// derives no owned name, `op` derives the owned `tg_op` under a row named
+// `tg`.
+const events = table(app, "events", {
+	id: uuid().primaryKey(),
+	op: uuid(),
+});
+
 describe("body-context recording", () => {
 	it("records rowOrNull as non-strict selectInto with derived scalar names", () => {
 		const declaration = defineTrigger(
@@ -234,7 +242,9 @@ describe("body-context recording", () => {
 				{ args: { when: uuid() }, returns: comments },
 				() => {},
 			),
-		).toThrowError(/reserved word/);
+		).toThrowError(
+			/collides with a name Postgres reserves or plpgsql declares itself/,
+		);
 	});
 
 	it("derived-expression projection throws row-projection-not-column", () => {
@@ -435,7 +445,99 @@ describe("body-context recording", () => {
 				);
 				ctx.return(row);
 			}),
-		).toThrowError(/reserved word/);
+		).toThrowError(
+			/collides with a name Postgres reserves or plpgsql declares itself/,
+		);
+	});
+
+	const ownedLoopNameCases: ReadonlyArray<{ readonly loopName: string }> = [
+		{ loopName: "found" },
+		{ loopName: "FOUND" },
+		{ loopName: "Found" },
+		{ loopName: "tg_op" },
+		{ loopName: "TG_OP" },
+	];
+
+	it.each(ownedLoopNameCases)(
+		"a loop named $loopName -- a name plpgsql declares itself, in any letter case -- throws reserved-local-name (#748)",
+		({ loopName }) => {
+			expect(() =>
+				defineTrigger(comments, triggerConfig, (ctx, { new: row }) => {
+					ctx.forEach(
+						select(comments).where(eq(comments.parentId, row.id)),
+						() => {},
+						loopName,
+					);
+					ctx.return(row);
+				}),
+			).toThrowError(
+				/collides with a name Postgres reserves or plpgsql declares itself/,
+			);
+		},
+	);
+
+	it("a row read named found is accepted -- its locals are found_<column>, never a variable under found itself (#748 control)", () => {
+		const declaration = defineTrigger(
+			comments,
+			triggerConfig,
+			(ctx, { new: row }) => {
+				const found = ctx.row(
+					select({ postId: comments.postId }, comments).where(
+						eq(comments.id, row.parentId),
+					),
+					"found",
+				);
+				ctx.if(isNull(found.postId), () => {
+					ctx.raise("not found");
+				});
+				ctx.return(row);
+			},
+		);
+		expect(declaration.functionDeclaration.body.declarations).toEqual([
+			{
+				declKind: "scalar",
+				name: "found_post_id",
+				typeNode: { typeName: "uuid" },
+			},
+		]);
+	});
+
+	it("a row read named tg is accepted when its projection derives no owned name (#748/task 2.1 control)", () => {
+		const declaration = defineTrigger(
+			comments,
+			triggerConfig,
+			(ctx, { new: row }) => {
+				const tg = ctx.row(
+					select({ id: events.id }, events).where(eq(events.id, row.id)),
+					"tg",
+				);
+				ctx.if(isNull(tg.id), () => {
+					ctx.raise("not found");
+				});
+				ctx.return(row);
+			},
+		);
+		expect(declaration.functionDeclaration.body.declarations).toEqual([
+			{
+				declKind: "scalar",
+				name: "tg_id",
+				typeNode: { typeName: "uuid" },
+			},
+		]);
+	});
+
+	it("a row read named tg is refused when its projection derives an owned name -- tg_op (#748/task 2.1)", () => {
+		expect(() =>
+			defineTrigger(comments, triggerConfig, (ctx, { new: row }) => {
+				ctx.row(
+					select({ op: events.op }, events).where(eq(events.id, row.id)),
+					"tg",
+				);
+				ctx.return(row);
+			}),
+		).toThrowError(
+			/collides with a name Postgres reserves or plpgsql declares itself/,
+		);
 	});
 
 	it("forEach over a derived-expression projection throws row-projection-not-column", () => {
