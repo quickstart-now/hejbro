@@ -30,3 +30,16 @@ Constructor-mode review of 51c0d7d5 found the relkind-to-word map covered only `
 
 Commits: dcf0506b (2.1), d06fa93f (2.2).
 
+<a id="w3"></a>
+## W3 — review repair: article before the relation word
+
+_2026-09-04T14:42Z_
+
+Constructor-mode review of 8f44e927 found the `apply-ledger-occupied` message template hardcoded the article `a` before the relation word (`ledger-identity.ts:188`), producing ungrammatical output for every vowel-initial word 2.1 and 2.2 introduced -- measured across all four commands: "a index", "a unlogged table", "a unlogged partitioned table", "a unlogged sequence", "a unlogged index". The `Next:` line's own `that ${relation}` carries no article and was already correct.
+
+Fixed with `article(word)`: `"an"` when the word's first letter (lowercased) is a vowel, `"a"` otherwise -- exact for the closed set of relation words this module produces. The template now reads `is held by ${article(identity.relation)} ${identity.relation}`.
+
+Unit tests: `"is held by an index"`, `"is held by an unlogged table"`, and a consonant control `"is held by a partitioned index"`.
+
+Commit: c0c2b124.
+

@@ -70,6 +70,13 @@
       "title": "review repairs: relkind words, columns clause, unlogged",
       "pr": null,
       "decisions": []
+    },
+    {
+      "id": "W3",
+      "at": "2026-09-04T14:42Z",
+      "title": "review repair: article before the relation word",
+      "pr": null,
+      "decisions": []
     }
   ],
   "prs": [],
