@@ -1,7 +1,7 @@
 import type { RenameSpec } from "../engine/rename-plan";
 import { throwHejbroError } from "../error";
 import type { HejbroDeclaration, SerializeContext } from "../kind/object-kind";
-import type { KindRegistry } from "../kind/registry";
+import type { KindRegistry, RegisteredObjectKind } from "../kind/registry";
 import { compareKeys } from "../sort";
 import { computeColumnOrder } from "./column-order";
 import type { JsonValue } from "./stable-json";
@@ -110,14 +110,16 @@ const buildEntry = (
 		);
 	}
 	const rawNode = kind.serialize(declaration, context);
-	// #701/D3: canonicalize before identify, so every downstream reader
-	// (identify, diff, snapshot-moved, verify's check 2) sees the same
-	// byte form a declaration's set-shaped arrays produce, whatever order
-	// they were declared in.
-	const node = kind.canonicalize?.(rawNode) ?? rawNode;
+	const node = applyCanonicalize(kind, rawNode);
 	const identity = kind.identify(node);
 	return { key: `${kind.kind}:${identity}`, node, declarationIndex };
 };
+
+/** #701/D3: canonicalize before identify, so every downstream reader (identify, diff, snapshot-moved, verify's check 2) sees the same byte form a declaration's set-shaped arrays produce, whatever order they were declared in. A kind that doesn't implement `canonicalize` is unaffected. Split out of {@link buildEntry} to keep its own branch count under the CRAP gate. */
+const applyCanonicalize = (
+	kind: RegisteredObjectKind,
+	rawNode: JsonValue,
+): JsonValue => kind.canonicalize?.(rawNode) ?? rawNode;
 
 const findDuplicateKey = (
 	entries: ReadonlyArray<BuiltEntry>,

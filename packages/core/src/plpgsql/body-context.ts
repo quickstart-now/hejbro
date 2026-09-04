@@ -6,6 +6,7 @@ import type {
 	Condition,
 	Expr,
 	QueryNode,
+	SelectNode,
 	TableRefNode,
 } from "../expr/ast";
 import { expr, isExpr } from "../expr/ast";
@@ -565,26 +566,20 @@ const namesDeclaredTable = (
 	ref.schemaName === declaredTable.schemaName &&
 	ref.tableName === declaredTable.tableName;
 
-/**
- * `true` when `query`'s own rows are exactly the declared table's whole
- * row (#749/D6/D7) — a select whose projection is `allColumns` and whose
- * `from` is that table (a `cteName` source is never a table), or a
- * mutation whose `returning` is `allColumns` and whose own `table` is
- * that table. Every other shape — a projection (complete, reordered, or
- * partial), an aliased column, or a query over a different table — is
- * not whole-row, even when nothing is technically missing.
- */
-const isWholeRowQuery = (
-	query: QueryNode,
+/** `true` when a select's projection is `allColumns` and its `from` is the declared table (a `cteName` source is never a table) -- split out of {@link isWholeRowQuery} to keep each predicate's own branch count under the CRAP gate. */
+const isWholeRowSelect = (
+	query: SelectNode,
+	declaredTable: NonNullable<SetofTableIdentity>,
+): boolean =>
+	query.projection.projectionKind === "allColumns" &&
+	"schemaName" in query.from &&
+	namesDeclaredTable(query.from, declaredTable);
+
+/** `true` when a mutation's `returning` is `allColumns` and its own `table` is the declared table -- split out of {@link isWholeRowQuery}, mirroring {@link isWholeRowSelect}. */
+const isWholeRowMutation = (
+	query: Exclude<QueryNode, SelectNode>,
 	declaredTable: NonNullable<SetofTableIdentity>,
 ): boolean => {
-	if (query.queryKind === "select") {
-		return (
-			query.projection.projectionKind === "allColumns" &&
-			"schemaName" in query.from &&
-			namesDeclaredTable(query.from, declaredTable)
-		);
-	}
 	// `ReturnableQuery`'s own shape excludes a set operation and a with
 	// statement (neither ever reaches `ctx.return()`) -- this mirrors
 	// `assertReturnHasReturning`'s own `"returning" in query` narrowing,
@@ -597,6 +592,24 @@ const isWholeRowQuery = (
 		query.returning.returningKind === "allColumns" &&
 		namesDeclaredTable(query.table, declaredTable)
 	);
+};
+
+/**
+ * `true` when `query`'s own rows are exactly the declared table's whole
+ * row (#749/D6/D7) — see {@link isWholeRowSelect}/{@link isWholeRowMutation}
+ * for the two accepted shapes. Every other shape — a projection
+ * (complete, reordered, or partial), an aliased column, or a query over a
+ * different table — is not whole-row, even when nothing is technically
+ * missing.
+ */
+const isWholeRowQuery = (
+	query: QueryNode,
+	declaredTable: NonNullable<SetofTableIdentity>,
+): boolean => {
+	if (query.queryKind === "select") {
+		return isWholeRowSelect(query, declaredTable);
+	}
+	return isWholeRowMutation(query, declaredTable);
 };
 
 /**
