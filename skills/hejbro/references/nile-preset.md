@@ -115,7 +115,7 @@ server performs at parse or storage time, e.g.:
   `role = ANY (ARRAY['owner'::text, 'admin'::text])` — a set membership
   test rewritten to an array comparison.
 - `priority between 1 and 5` is stored as
-  `(priority >= 1) and (priority <= 5)` — a range test rewritten to two
+  `((priority >= 1) AND (priority <= 5))` — a range test rewritten to two
   comparisons.
 
 Both are `check-not-compared` under this mode (the normalization pipeline
