@@ -1506,6 +1506,7 @@ const apiCommit = ({ root, repo, branch, paths, message }) => {
 		}).sha,
 	}));
 	const treeSha = ghSend("POST", `repos/${repo}/git/trees`, {
+		// biome-ignore lint/style/useNamingConvention: GitHub API field name
 		base_tree: baseTree,
 		tree,
 	}).sha;
