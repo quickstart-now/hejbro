@@ -34,16 +34,20 @@
     {
       "number": 808,
       "ref": "quickstart-now/hejbro#808",
-      "title": "ci: run pull_request checks only for prs into dev (#807)",
-      "head": "48397f0f90a4a79bb72951bc27f276d11ac4c5c0",
+      "title": "ci: one run per commit, and verify waits for the owner's approval (#807, #809)",
+      "head": "c64df026efe3ea828c1ca050381bdbcacb7401b8",
       "headRef": "fix-ci-duplicate-runs",
       "base": "dev",
       "merged": null,
-      "pinnedAt": "2026-09-04T08:48Z",
+      "pinnedAt": "2026-09-04T08:54Z",
       "refs": [
         {
           "path": ".github/workflows/ci.yml",
-          "blob": "c323e72688972c9902ad6c16224a60d32d00e3f4"
+          "blob": "08a4c260e7faa530d1bc0f2aafb7d4a8f609f2a3"
+        },
+        {
+          "path": "AGENTS.md",
+          "blob": "0744eef045a5ae5b9920703f7aaa5f60f238cfaa"
         }
       ]
     }
