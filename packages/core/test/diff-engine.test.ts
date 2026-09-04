@@ -8,6 +8,11 @@ import { getTableMeta, table } from "../src/dsl/table";
 import { diffSnapshots, rankKinds } from "../src/engine/diff-engine";
 import { generateMigration } from "../src/engine/generate";
 import { isNull } from "../src/expr/operators";
+import type {
+	ChangeOperation,
+	HejbroDeclaration,
+	ObjectKind,
+} from "../src/kind/object-kind";
 import {
 	createDefaultRegistry,
 	createKindRegistry,
@@ -23,6 +28,7 @@ import type {
 import { select } from "../src/query/select";
 import type { Snapshot } from "../src/snapshot/snapshot";
 import { buildSnapshot, emptySnapshot } from "../src/snapshot/snapshot";
+import type { JsonValue } from "../src/snapshot/stable-json";
 import { serial, uuid } from "../src/types/column-builder-factories";
 
 const app = schema("app");
@@ -490,4 +496,247 @@ describe("diffSnapshots — malformed snapshot node (#26)", () => {
 			}),
 		);
 	});
+});
+
+// #774: a kind reporting more than one change for the same identity in the
+// same direction must not lose any of them through the same-kind
+// refinement's byIdentity reassembly. This kind is a bare `ObjectKind`
+// literal, not `tableKind` -- the refinement is generic over any kind's
+// `dependsOnIdentities`, and no built-in kind ever reports two
+// same-identity, same-direction changes, so exercising the real gap needs
+// a purpose-built kind. `identify` is never called on this path
+// (`diffSnapshots` derives identity from the snapshot key itself), so it
+// is a stub.
+type TestKindNode = {
+	readonly dependsOn: ReadonlyArray<string>;
+	readonly reports: ReadonlyArray<{
+		readonly operation: ChangeOperation;
+		readonly note: string;
+	}>;
+};
+
+const asTestKindNode = (node: JsonValue): TestKindNode =>
+	node as unknown as TestKindNode;
+
+/** A create/alter's own change carries the node under `next`; a drop's under `previous` -- never both null, since `nodeForOrdering` (diff-engine.ts) reads whichever side a given operation carries. */
+const sideForOperation = (
+	operation: ChangeOperation,
+	node: TestKindNode,
+): { readonly previous: JsonValue | null; readonly next: JsonValue | null } => {
+	if (operation === "create") {
+		return { previous: null, next: node as unknown as JsonValue };
+	}
+	if (operation === "drop") {
+		return { previous: node as unknown as JsonValue, next: null };
+	}
+	return {
+		previous: node as unknown as JsonValue,
+		next: node as unknown as JsonValue,
+	};
+};
+
+/** `withDependsOnIdentities` toggles whether the registered kind takes part in the same-kind refinement at all -- the control row (#774) needs a kind that doesn't. */
+const makeTestKind = (
+	kindName: string,
+	withDependsOnIdentities: boolean,
+): ObjectKind<HejbroDeclaration> => {
+	const base: ObjectKind<HejbroDeclaration> = {
+		kind: kindName,
+		dependsOn: [],
+		owns: (declaration: HejbroDeclaration): declaration is HejbroDeclaration =>
+			declaration !== null && false,
+		serialize: (declaration) => declaration as unknown as JsonValue,
+		identify: () => "unused",
+		diff: (previousNode, nextNode, identity) => {
+			const node = asTestKindNode((nextNode ?? previousNode) as JsonValue);
+			return node.reports.map((report) => ({
+				kind: kindName,
+				operation: report.operation,
+				identity,
+				...sideForOperation(report.operation, node),
+				notes: [report.note],
+			}));
+		},
+		emit: () => [],
+	};
+	if (!withDependsOnIdentities) {
+		return base;
+	}
+	return {
+		...base,
+		dependsOnIdentities: (node) => asTestKindNode(node).dependsOn,
+	};
+};
+
+describe("diffSnapshots — every change a kind reports for one identity survives the same-kind refinement (#774)", () => {
+	type Row = {
+		readonly label: string;
+		readonly kindName: string;
+		readonly withDependsOnIdentities: boolean;
+		readonly nodes: ReadonlyArray<{
+			readonly identity: string;
+			readonly dependsOn?: ReadonlyArray<string>;
+			readonly reports: ReadonlyArray<{
+				readonly operation: ChangeOperation;
+				readonly note: string;
+			}>;
+		}>;
+		readonly expected: ReadonlyArray<{
+			readonly identity: string;
+			readonly operation: ChangeOperation;
+			readonly notes: ReadonlyArray<string>;
+		}>;
+	};
+
+	const rows: ReadonlyArray<Row> = [
+		{
+			label: "two creates for one identity",
+			kindName: "test-kind",
+			withDependsOnIdentities: true,
+			nodes: [
+				{
+					identity: "app.b",
+					reports: [
+						{ operation: "create", note: "b#1" },
+						{ operation: "create", note: "b#2" },
+					],
+				},
+			],
+			expected: [
+				{ identity: "app.b", operation: "create", notes: ["b#1"] },
+				{ identity: "app.b", operation: "create", notes: ["b#2"] },
+			],
+		},
+		{
+			label: "three alters for one identity",
+			kindName: "test-kind",
+			withDependsOnIdentities: true,
+			nodes: [
+				{
+					identity: "app.b",
+					reports: [
+						{ operation: "alter", note: "b#1" },
+						{ operation: "alter", note: "b#2" },
+						{ operation: "alter", note: "b#3" },
+					],
+				},
+			],
+			expected: [
+				{ identity: "app.b", operation: "alter", notes: ["b#1"] },
+				{ identity: "app.b", operation: "alter", notes: ["b#2"] },
+				{ identity: "app.b", operation: "alter", notes: ["b#3"] },
+			],
+		},
+		{
+			label: "two drops for one identity",
+			kindName: "test-kind",
+			withDependsOnIdentities: true,
+			nodes: [
+				{
+					identity: "app.b",
+					reports: [
+						{ operation: "drop", note: "b#1" },
+						{ operation: "drop", note: "b#2" },
+					],
+				},
+			],
+			expected: [
+				{ identity: "app.b", operation: "drop", notes: ["b#1"] },
+				{ identity: "app.b", operation: "drop", notes: ["b#2"] },
+			],
+		},
+		{
+			label: "a create and a drop for one identity",
+			kindName: "test-kind",
+			withDependsOnIdentities: true,
+			nodes: [
+				{
+					identity: "app.b",
+					reports: [
+						{ operation: "create", note: "b-create" },
+						{ operation: "drop", note: "b-drop" },
+					],
+				},
+			],
+			expected: [
+				{ identity: "app.b", operation: "create", notes: ["b-create"] },
+				{ identity: "app.b", operation: "drop", notes: ["b-drop"] },
+			],
+		},
+		{
+			label:
+				"two creates for app.b, which depends on app.c -- app.c first though app.b sorts first alphabetically",
+			kindName: "test-kind",
+			withDependsOnIdentities: true,
+			nodes: [
+				{
+					identity: "app.b",
+					dependsOn: ["app.c"],
+					reports: [
+						{ operation: "create", note: "b#1" },
+						{ operation: "create", note: "b#2" },
+					],
+				},
+				{
+					identity: "app.c",
+					reports: [{ operation: "create", note: "c#1" }],
+				},
+			],
+			expected: [
+				{ identity: "app.c", operation: "create", notes: ["c#1"] },
+				{ identity: "app.b", operation: "create", notes: ["b#1"] },
+				{ identity: "app.b", operation: "create", notes: ["b#2"] },
+			],
+		},
+		{
+			label:
+				"control: a kind without dependsOnIdentities reporting two creates for one identity",
+			kindName: "control-kind",
+			withDependsOnIdentities: false,
+			nodes: [
+				{
+					identity: "app.b",
+					reports: [
+						{ operation: "create", note: "b#1" },
+						{ operation: "create", note: "b#2" },
+					],
+				},
+			],
+			expected: [
+				{ identity: "app.b", operation: "create", notes: ["b#1"] },
+				{ identity: "app.b", operation: "create", notes: ["b#2"] },
+			],
+		},
+	];
+
+	it.each(rows)(
+		"$label",
+		({ kindName, withDependsOnIdentities, nodes, expected }) => {
+			const testRegistry = createKindRegistry();
+			testRegistry.register(makeTestKind(kindName, withDependsOnIdentities));
+			const next: Snapshot = {
+				...emptySnapshot,
+				objects: Object.fromEntries(
+					nodes.map((node) => {
+						const value: TestKindNode = {
+							dependsOn: node.dependsOn ?? [],
+							reports: node.reports,
+						};
+						return [
+							`${kindName}:${node.identity}`,
+							value as unknown as JsonValue,
+						] as const;
+					}),
+				),
+			};
+			const changes = diffSnapshots(emptySnapshot, next, testRegistry)
+				.filter((change) => change.kind === kindName)
+				.map((change) => ({
+					identity: change.identity,
+					operation: change.operation,
+					notes: change.notes,
+				}));
+			expect(changes).toEqual(expected);
+		},
+	);
 });

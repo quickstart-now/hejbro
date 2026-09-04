@@ -30,7 +30,7 @@ definition of done, never a task.
       Files: `packages/core/src/plpgsql/reserved.ts`,
       `packages/core/test/define-function.test.ts`,
       `packages/core/test/plpgsql/body-context.test.ts`.
-- [ ] 1.2 (~7m) `[design]` Two argument keys deriving to one SQL name
+- [x] 1.2 (~7m) `[design]` Two argument keys deriving to one SQL name
       are refused. Red: `packages/core/test/define-function.test.ts` —
       "two argument keys deriving to one SQL name are refused", an input
       table: `{ userId, user_id }`, `{ user_id, userId }`, `{ v2Id,
