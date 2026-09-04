@@ -32,6 +32,19 @@
       "at": "2026-09-04T21:13Z",
       "title": "scope: migrate's raw bootstrap failure is covered by the write code; 1.9 integration witness stays",
       "ratified": null
+    },
+    {
+      "id": "R3",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R1",
+        "R2",
+        "412/D13"
+      ],
+      "at": "2026-09-04T22:46Z",
+      "title": "ld (b) accepted at fb0003fa; reset clear failures move to the ledger code by rule (#753 intent stands); flake → #862; reviewer summoned",
+      "ratified": null
     }
   ],
   "work": [
