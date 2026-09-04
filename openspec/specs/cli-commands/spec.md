@@ -411,6 +411,19 @@ the same declarations against the same snapshot SHALL produce
 byte-identical migration SQL, byte-identical snapshot bytes, and the same
 number of migration files, run anywhere, with no database connection.
 
+Within a kind, the statements a run emits SHALL follow the declarations'
+own dependency order: a declared object is created — or altered — after
+the declared objects it references, so a table carrying a foreign key to
+another declared table comes after that table, whichever order their
+identities sort in, and a mutually referencing pair — which no order
+satisfies — keeps its existing identity order. A reset's drops run in
+reverse *dependency* order — a dependent before what it depends on,
+computed from the same references (migration-apply) — never the literal
+reverse of the statement sequence this run emits. The migration's own name SHALL
+NOT follow it: the name is derived from the change list as it stands
+before this dependency refinement — kind order, then identity — so that
+refining the order a run emits never renames the file a run writes.
+
 A run whose declarations produce a snapshot identical to the previous
 one SHALL write neither a migration nor a snapshot, report "no changes
 — snapshot already matches your declarations", and exit zero. A run
@@ -515,6 +528,13 @@ line SHALL NOT collapse them into one file.
 - **THEN** both runs produce byte-identical migration SQL and
   byte-identical snapshot bytes
 
+#### Scenario: A referencing table is created after the table it references
+- **WHEN** two declared tables in one schema are generated from an empty
+  snapshot, one carrying a foreign key to the other, and the referencing
+  table's identity sorts first
+- **THEN** the migration creates the referenced table before the
+  referencing one
+
 #### Scenario: No difference writes nothing
 - **WHEN** `hejbro generate` runs and the snapshot already matches the
   declarations
@@ -602,6 +622,16 @@ one body edit hejbro does catch — a transaction-control statement — is
 refused at apply time (migration-apply); detecting other body edits
 needs a record of what was applied, which is a separate capability.
 
+`verify` SHALL also run every validator a registered preset provides —
+the same check `generate` runs before writing anything — over the
+declarations against the snapshot its own snapshot-parity check already
+builds, and SHALL refuse with the identical coded error `generate` would
+raise for the same declaration, so a declaration `generate` refuses
+never passes `verify` silently. Where the active configuration registers
+no preset validator — including a configuration with no preset at all —
+this check does not run at all, and `verify`'s report is unaffected by
+its existence.
+
 #### Scenario: An untouched chain passes
 - **WHEN** `hejbro verify` runs over migrations and a snapshot that
   hejbro wrote and nothing edited
@@ -640,6 +670,20 @@ needs a record of what was applied, which is a separate capability.
   snapshot's own hash differ
 - **THEN** the report names that migration file and the snapshot path,
   and states the observation only — never a cause
+
+#### Scenario: A preset-refused declaration is refused by verify too
+- **WHEN** a registered preset's validator would refuse a declaration at
+  `hejbro generate` time, and `hejbro verify` runs against the same
+  declarations and its checked-in snapshot
+- **THEN** `verify` fails with the identical coded error `generate`
+  would raise for that declaration
+
+#### Scenario: A configuration with no preset runs unaffected
+- **WHEN** the active configuration registers no preset validator — no
+  preset at all, or a preset that provides kinds but no validator — and
+  `hejbro verify` runs on declarations that pass every other check
+- **THEN** it passes exactly as it would without this capability
+  existing, and its report never mentions a preset-validator check
 
 ### Requirement: An external tool is an optional dependency
 The vendoring commands and `check` reach outside the process — `git`
