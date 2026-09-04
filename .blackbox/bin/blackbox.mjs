@@ -1508,8 +1508,12 @@ const foldersForPr = (state, repo, number, body) => {
 	});
 };
 
+// `--untracked-files=all` lists the files of a freshly opened folder, not
+// the folder itself — a directory is not a blob.
 const dirtyRecordPaths = (root) =>
-	run("git", ["status", "--porcelain", "-z"], { cwd: root })
+	run("git", ["status", "--porcelain", "-z", "--untracked-files=all"], {
+		cwd: root,
+	})
 		.out.split("\0")
 		.filter(Boolean)
 		.map((line) => line.slice(3))
