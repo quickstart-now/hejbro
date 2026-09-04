@@ -32,10 +32,10 @@ on:
   # and useful for a manual re-run of this workflow against an arbitrary
   # branch without needing a new commit.
   workflow_dispatch: {}
-# #809: a newer head on the same PR cancels a run still waiting for the
-# owner's approval below, so each PR costs one approval, on its final
-# head (the bot's pin commit lands within seconds of the PR opening).
-# Pushes to dev/main are never cancelled: each SHA there is a merge.
+# #809: a newer head on the same PR (the bot's pin commit lands within
+# seconds of the PR opening) cancels the run on the superseded head, so
+# a PR costs one verify run, on its final head. Pushes to dev/main are
+# never cancelled: each SHA there is a merge.
 concurrency:
   group: ci-${{ github.event_name }}-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -96,13 +96,6 @@ jobs:
     # (#804): without the status function a skipped `needs` skips this
     # job too, and the Version Packages PR would never get its CI.
     if: ${{ !cancelled() && needs.blackbox.result != 'failure' }}
-    # #809 (owner, 2026-09-04): the heavy checks on a PR run only when the
-    # owner approves them -- environment `ci-pr` has the owner as its
-    # required reviewer, so the job waits at the deployment review. A push
-    # to dev/main (the squash or merge commit the owner already approved
-    # through the PR) and a bot PR (already held by the Actions
-    # first-contributor approval) run under `ci-push`, which has no rules.
-    environment: ${{ github.event_name == 'pull_request' && github.event.pull_request.user.type != 'Bot' && 'ci-pr' || 'ci-push' }}
     runs-on: ubuntu-latest
     strategy:
       matrix:

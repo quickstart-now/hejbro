@@ -27,6 +27,26 @@
       "at": "2026-09-04T08:52Z",
       "title": "Environment gate on verify, cheap blackbox job free, one approval per PR through concurrency cancellation",
       "ratified": null
+    },
+    {
+      "id": "D2",
+      "by": "owner",
+      "at": "2026-09-04T08:55Z",
+      "title": "The approval applies to the release PR only, not to every PR",
+      "raw": [
+        "ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#71"
+      ]
+    },
+    {
+      "id": "R2",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "D2"
+      ],
+      "at": "2026-09-04T08:55Z",
+      "title": "Gate withdrawn: after #807 the release PR runs nothing of its own; concurrency dedupe kept",
+      "ratified": null
     }
   ],
   "work": [],

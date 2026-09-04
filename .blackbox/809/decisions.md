@@ -22,3 +22,19 @@ _lead · interpretation · basis D1 · 2026-09-04T08:52Z · ratified: pending_
 - A PR into `main` has no PR run at all after #807, so the release path is unchanged: push run on `dev`, owner merge, push run on `main`.
 - Recorded in AGENTS.md "Git workflow" so the approval is part of the flow, not a surprise on the first PR.
 
+<a id="d2"></a>
+## D2 — The approval applies to the release PR only, not to every PR
+
+_owner · 2026-09-04T08:55Z · raw ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#71_
+
+"You do know that applies only to the release PR, not to every PR, right?"
+
+Correction of the lead's reading of D1: the approval-gated run is the release PR's, not every PR's. The environment gate on feature PRs (R1) was an over-application and is withdrawn.
+
+<a id="r2"></a>
+## R2 — Gate withdrawn: after #807 the release PR runs nothing of its own; concurrency dedupe kept
+
+_lead · interpretation · basis D2 · 2026-09-04T08:55Z · ratified: pending_
+
+R1 withdrawn. With #807 (`pull_request: branches: [dev]`) the release PR has no PR-event run at all: its required checks are satisfied by the push run on `dev` at the same SHA, and that run is the squash-commit validation every feature PR needs regardless — so there is no release-PR run left to gate, and nothing for the owner to approve before the merge itself, which is the owner's own step. The `verify` environment and the AGENTS.md line are removed; the `ci-pr` and `ci-push` environments are deleted. Kept: the per-PR `concurrency` group with `cancel-in-progress` on PR events — not an approval, only the removal of the run on a superseded head (the bot's pin commit), which the owner's "resource waste" covers. #809 closes as resolved by #807 plus this dedupe.
+
