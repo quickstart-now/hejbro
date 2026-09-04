@@ -21,7 +21,9 @@
 				"noTernary": "error",
 				"useNamingConvention": {
 					"level": "error",
-					"options": { "strictCase": false }
+					"options": {
+						"strictCase": false
+					}
 				}
 			}
 		}
@@ -41,19 +43,43 @@
 	},
 	"overrides": [
 		{
+			"includes": ["**/.blackbox/**/meta.json"],
+			"formatter": {
+				"enabled": false
+			},
+			"linter": {
+				"enabled": false
+			},
+			"assist": {
+				"enabled": false
+			}
+		},
+		{
 			"includes": ["**/test/golden/**/expected/**"],
-			"formatter": { "enabled": false },
-			"linter": { "enabled": false },
-			"assist": { "enabled": false }
+			"formatter": {
+				"enabled": false
+			},
+			"linter": {
+				"enabled": false
+			},
+			"assist": {
+				"enabled": false
+			}
 		},
 		{
 			"includes": [
 				"examples/*/hejbro.snapshot.json",
 				"examples/*/migrations/**"
 			],
-			"formatter": { "enabled": false },
-			"linter": { "enabled": false },
-			"assist": { "enabled": false }
+			"formatter": {
+				"enabled": false
+			},
+			"linter": {
+				"enabled": false
+			},
+			"assist": {
+				"enabled": false
+			}
 		},
 		{
 			"includes": [
@@ -69,11 +95,15 @@
 								"strictCase": false,
 								"conventions": [
 									{
-										"selector": { "kind": "objectLiteralProperty" },
+										"selector": {
+											"kind": "objectLiteralProperty"
+										},
 										"match": ".*"
 									},
 									{
-										"selector": { "kind": "typeProperty" },
+										"selector": {
+											"kind": "typeProperty"
+										},
 										"match": ".*"
 									}
 								]
@@ -98,11 +128,15 @@
 								"strictCase": false,
 								"conventions": [
 									{
-										"selector": { "kind": "objectLiteralProperty" },
+										"selector": {
+											"kind": "objectLiteralProperty"
+										},
 										"match": ".*"
 									},
 									{
-										"selector": { "kind": "typeProperty" },
+										"selector": {
+											"kind": "typeProperty"
+										},
 										"match": ".*"
 									}
 								]
@@ -125,7 +159,9 @@
 								"strictCase": false,
 								"conventions": [
 									{
-										"selector": { "kind": "typeMember" },
+										"selector": {
+											"kind": "typeMember"
+										},
 										"match": ".*"
 									}
 								]

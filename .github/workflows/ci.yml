@@ -27,7 +27,39 @@ on:
   # branch without needing a new commit.
   workflow_dispatch: {}
 jobs:
+  # #785 (D89, folder form): the blackbox record is checked before anything
+  # else runs -- a PR whose record is missing or whose pins are stale is
+  # not entitled to a test run, so every other job `needs` this one. On a
+  # PR the check reads the record at the PR head and verifies pins both
+  # ways; on a push it verifies the record's structure and generated
+  # READMEs. The same script serves the pre-merge Claude Code hook
+  # (.claude/settings.json), so the two cannot disagree.
+  blackbox:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
+          token: ${{ secrets.BLACKBOX_TOKEN || github.token }}
+      - uses: actions/setup-node@v7
+        with: { node-version: 24 }
+      # Bot mode when the BLACKBOX_TOKEN secret exists (pins are committed
+      # to the PR branch and CI re-runs on that commit); verify-only otherwise.
+      - if: github.event_name == 'pull_request'
+        run: node .blackbox/bin/blackbox.mjs ci --pr ${{ github.event.pull_request.number }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BLACKBOX_TOKEN: ${{ secrets.BLACKBOX_TOKEN }}
+      - if: github.event_name != 'pull_request'
+        run: node .blackbox/bin/blackbox.mjs check
+        env:
+          GH_TOKEN: ${{ github.token }}
   verify:
+    needs: blackbox
     runs-on: ubuntu-latest
     strategy:
       matrix:
