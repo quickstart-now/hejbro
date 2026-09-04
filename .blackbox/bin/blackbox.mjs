@@ -1117,31 +1117,8 @@ const lookupParent = (ref) => {
 	return `${ref.repo}#${JSON.parse(result.out).number}`;
 };
 
-const cmdNew = (positional, opts) => {
-	const cwd = process.cwd();
-	const root = repoRoot(cwd);
-	const codeRepo = repoSlug(root);
-	const ref = parseRef(
-		positional[0] ?? fail("usage: blackbox new <ref>"),
-		codeRepo,
-	);
-	const state = loadState(fsReader(root));
-	const itemDir = (() => {
-		if (opts.item) {
-			return resolve(opts.item);
-		}
-		return nearestItemDir(state, root, cwd);
-	})();
-	if (!existsSync(join(itemDir, ".blackbox"))) {
-		fail(`${itemDir} has no .blackbox/ — run blackbox init there first`);
-	}
-	const itemRel = relative(root, itemDir);
-	const duplicate = state.folders.find(
-		(folder) => folder.meta.ref === refString(ref) && folder.item === itemRel,
-	);
-	if (duplicate) {
-		fail(`${refString(ref)} already recorded at ${duplicate.dir}`);
-	}
+/** Create a work-item folder for `ref` inside `itemDir`; returns its repo-relative dir. */
+const createFolder = ({ root, codeRepo, itemDir, ref, opts = {} }) => {
 	const issue = ghJson(`repos/${ref.repo}/issues/${ref.number}`);
 	const kind =
 		opts.kind ??
@@ -1189,9 +1166,38 @@ const cmdNew = (positional, opts) => {
 		join(dir, "work.md"),
 		`# Work — ${meta.ref}\n\nWhat was built, measured and reversed under the decisions, one entry per PR or group (\`W#\`). Managed by \`blackbox add work\`; append-only.\n\n`,
 	);
+	return { dir: relative(root, dir), meta };
+};
+
+const cmdNew = (positional, opts) => {
+	const cwd = process.cwd();
+	const root = repoRoot(cwd);
+	const codeRepo = repoSlug(root);
+	const ref = parseRef(
+		positional[0] ?? fail("usage: blackbox new <ref>"),
+		codeRepo,
+	);
+	const state = loadState(fsReader(root));
+	const itemDir = (() => {
+		if (opts.item) {
+			return resolve(opts.item);
+		}
+		return nearestItemDir(state, root, cwd);
+	})();
+	if (!existsSync(join(itemDir, ".blackbox"))) {
+		fail(`${itemDir} has no .blackbox/ — run blackbox init there first`);
+	}
+	const itemRel = relative(root, itemDir);
+	const duplicate = state.folders.find(
+		(folder) => folder.meta.ref === refString(ref) && folder.item === itemRel,
+	);
+	if (duplicate) {
+		fail(`${refString(ref)} already recorded at ${duplicate.dir}`);
+	}
+	const created = createFolder({ root, codeRepo, itemDir, ref, opts });
 	writeIndex(root, codeRepo);
 	process.stdout.write(
-		`created ${relative(root, dir)} for ${meta.ref} (${kind}${iff(parent !== null, `, parent ${parent}`)})\n`,
+		`created ${created.dir} for ${created.meta.ref} (${created.meta.kind}${iff(created.meta.parent !== null, `, parent ${created.meta.parent}`)})\n`,
 	);
 };
 
@@ -1570,9 +1576,48 @@ const cmdCi = (_positional, opts) => {
 		);
 		return;
 	}
+	const changed = localChangedFiles(root, pr.baseSha);
+	// A PR that touches an item with no folder for its linked issue gets one
+	// opened here, so the lead never has to pre-create a folder per item.
+	const opened = (() => {
+		const before = loadState(fsReader(root));
+		const rels = before.items.map((item) => item.rel);
+		const linked = referencedIssues(pr.body).map((entry) => entry.number);
+		const touched = [
+			...new Set(
+				changed
+					.map((file) => ownerItemOf(file.path, rels))
+					.filter((rel) => rel !== undefined),
+			),
+		];
+		return touched.flatMap((rel) =>
+			linked
+				.filter(
+					(issueNumber) =>
+						!before.folders.some(
+							(folder) =>
+								folder.item === rel &&
+								folder.meta.ref === `${repo}#${issueNumber}`,
+						),
+				)
+				.map(
+					(issueNumber) =>
+						createFolder({
+							root,
+							codeRepo: repo,
+							itemDir: join(root, rel),
+							ref: { repo, number: issueNumber },
+						}).dir,
+				),
+		);
+	})();
+	if (opened.length > 0) {
+		process.stdout.write(
+			`blackbox: opened ${opened.join(", ")} for the issues this PR links\n`,
+		);
+	}
 	const state = loadState(fsReader(root));
 	const holders = foldersForPr(state, repo, number, pr.body);
-	const changed = localChangedFiles(root, pr.baseSha);
 	const at = nowIso();
 	const pinned = holders.filter(
 		(folder) =>
