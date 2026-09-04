@@ -205,15 +205,27 @@ function throwNestedPathConflict(
  * `HejbroError` for a `stat` failure other than "nothing is there"
  * (D106 R1 B1) -- an `EACCES`/`ELOOP`/etc, named by the operating
  * system's own code instead of the raw Node stack this CLI's
- * diagnostics never print (D57). */
+ * diagnostics never print (D57). `culprit` is the node whose permissions
+ * actually block the check (#768, D4) -- equal to `label` for every
+ * non-permission failure, which keeps today's one-sentence wording;
+ * different from it only when a permission failure was traced to an
+ * ancestor, which adds the sentence naming that ancestor. `stat`'s
+ * `EACCES` is always a directory on the way, never the leaf. */
 function throwStatFailed(
 	label: string,
 	fieldName: string,
 	code: string,
+	culprit: string,
 ): never {
+	if (culprit === label) {
+		return throwHejbroError(
+			"init-path-conflict",
+			`"${label}" could not be checked for ${fieldName} (${code}). Next: check permissions on "${label}", then rerun \`hejbro init\`.`,
+		);
+	}
 	return throwHejbroError(
 		"init-path-conflict",
-		`"${label}" could not be checked for ${fieldName} (${code}). Next: check permissions on "${label}", then rerun \`hejbro init\`.`,
+		`"${label}" could not be checked for ${fieldName} (${code}): "${culprit}" does not let this process look inside it. Next: check permissions on "${culprit}", then rerun \`hejbro init\`.`,
 	);
 }
 
@@ -260,21 +272,38 @@ type AncestorOutcome =
 			readonly kind: "stat-failed";
 			readonly path: string;
 			readonly code: string;
+	  }
+	| {
+			readonly kind: "blocked";
+			readonly culprit: string;
+			readonly code: string;
 	  };
 
 /** Walks `path`'s own chain of parents upward (never `path` itself --
- * callers pass an artifact's `dirname`), continuing past both `ENOENT`
- * ("nothing there yet") and `ENOTDIR` (a `stat` below a file ancestor
+ * callers pass an artifact's `dirname`), continuing past `ENOENT`
+ * ("nothing there yet"), `ENOTDIR` (a `stat` below a file ancestor
  * fails this way too, D106 R1 N1 -- stopping there instead of
  * continuing up would name the deepest segment tried, not the file
- * actually blocking the chain) until a `stat` succeeds. Recursive,
- * never a loop (`check:bans`); `dirname` of the filesystem root is
- * itself, which ends the recursion even in the case nothing on the way
- * up ever exists. */
-const walkAncestors = (path: string): AncestorOutcome => {
+ * actually blocking the chain) and `EACCES`/`EPERM` (#768, D4 -- `stat`
+ * fails this way for a directory it cannot search into, never for the
+ * leaf itself, so the node it finally does stat successfully is the one
+ * that blocks the lookup) until a `stat` succeeds. `permissionCode`
+ * carries the first permission failure seen on the way up (or is seeded
+ * by a caller that already knows its own leaf failed that way); once a
+ * `stat` succeeds while carrying one, that node is the blocking one, not
+ * an "ok" ancestor. Recursive, never a loop (`check:bans`); `dirname` of
+ * the filesystem root is itself, which ends the recursion even when
+ * nothing on the way up ever exists. */
+const walkAncestors = (
+	path: string,
+	permissionCode?: string,
+): AncestorOutcome => {
 	try {
 		const stat = statSync(path);
 		if (stat.isDirectory()) {
+			if (permissionCode !== undefined) {
+				return { kind: "blocked", culprit: path, code: permissionCode };
+			}
 			return { kind: "ok" };
 		}
 		return { kind: "conflict", path, actualKind: "file" };
@@ -283,9 +312,19 @@ const walkAncestors = (path: string): AncestorOutcome => {
 		if (code === "ENOENT" || code === "ENOTDIR") {
 			const parent = dirname(path);
 			if (parent === path) {
+				if (permissionCode !== undefined) {
+					return { kind: "blocked", culprit: path, code: permissionCode };
+				}
 				return { kind: "ok" };
 			}
-			return walkAncestors(parent);
+			return walkAncestors(parent, permissionCode);
+		}
+		if (code === "EACCES" || code === "EPERM") {
+			const parent = dirname(path);
+			if (parent === path) {
+				return { kind: "blocked", culprit: path, code };
+			}
+			return walkAncestors(parent, code);
 		}
 		return { kind: "stat-failed", path, code };
 	}
@@ -293,10 +332,12 @@ const walkAncestors = (path: string): AncestorOutcome => {
 
 /** Refuses before creating anything: a file sitting somewhere in a
  * planned artifact's own directory chain, not just at its leaf
- * (D106 R1 N1). Runs before {@link checkPathKind}: a leaf whose own
- * `stat` also fails with `ENOTDIR` (because an ancestor, not the leaf,
- * is the file) is named here by the ancestor that actually blocks it,
- * instead of by the leaf with a bare OS code. Labelled with
+ * (D106 R1 N1), or a directory on the way that denies this process
+ * permission to look inside it (#768, D4). Runs before
+ * {@link checkPathKind}: a leaf whose own `stat` also fails with
+ * `ENOTDIR`/`EACCES` (because an ancestor, not the leaf, is the file or
+ * the blocked directory) is named here by the ancestor that actually
+ * blocks it, instead of by the leaf with a bare OS code. Labelled with
  * {@link fileLabel} (no trailing separator, D106 R1 lead-approved
  * option A extended to ancestors): unlike a leaf's own field, no user
  * ever spelled this path with a trailing slash for this function to
@@ -307,11 +348,19 @@ const checkAncestors = (cwd: string, artifact: Artifact): void => {
 	if (outcome.kind === "ok") {
 		return;
 	}
+	if (outcome.kind === "blocked") {
+		throwStatFailed(
+			artifact.label,
+			artifact.fieldName,
+			outcome.code,
+			fileLabel(cwd, outcome.culprit),
+		);
+	}
 	const label = fileLabel(cwd, outcome.path);
 	if (outcome.kind === "conflict") {
 		throwAncestorConflict(label, artifact.fieldName, outcome.actualKind);
 	}
-	throwStatFailed(label, artifact.fieldName, outcome.code);
+	throwStatFailed(label, artifact.fieldName, outcome.code, label);
 };
 
 type ArtifactPair = readonly [Artifact, Artifact];
@@ -403,6 +452,24 @@ const checkNoNestedPaths = (
 	);
 };
 
+/** The node whose permissions actually block a leaf's own failed `stat`
+ * (#768, D4): for `EACCES`/`EPERM`, walk upward from the artifact's own
+ * directory, seeded with the leaf's own code, to find the ancestor that
+ * blocks it -- `stat`'s `EACCES` is always a directory on the way,
+ * never the leaf, so the leaf's own failure means some ancestor above
+ * it denies the lookup. `artifact.label` itself for any other code, or
+ * on the (untested) chance the seeded walk doesn't resolve to one. */
+const culpritFor = (cwd: string, artifact: Artifact, code: string): string => {
+	if (code !== "EACCES" && code !== "EPERM") {
+		return artifact.label;
+	}
+	const outcome = walkAncestors(dirname(artifact.path), code);
+	if (outcome.kind === "blocked") {
+		return fileLabel(cwd, outcome.culprit);
+	}
+	return artifact.label;
+};
+
 /** Refuses before creating anything (checked for every planned artifact
  * before any of them is created): a file artifact whose own path is
  * spelled as a directory, or an existing path that is the wrong kind
@@ -425,7 +492,12 @@ const checkPathKind = (cwd: string, artifact: Artifact): void => {
 		return;
 	}
 	if (outcome.kind === "stat-failed") {
-		throwStatFailed(artifact.label, artifact.fieldName, outcome.code);
+		throwStatFailed(
+			artifact.label,
+			artifact.fieldName,
+			outcome.code,
+			culpritFor(cwd, artifact, outcome.code),
+		);
 	}
 	if (outcome.kind === "present" && outcome.actualKind !== expectedKind) {
 		throwPathConflict(

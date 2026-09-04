@@ -1,10 +1,12 @@
 import { existsSync, statSync } from "node:fs";
 import {
+	chmod,
 	mkdir,
 	mkdtemp,
 	readdir,
 	readFile,
 	rm,
+	symlink,
 	writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -688,6 +690,169 @@ describe("runInit / a file in a configured path's ancestor chain stops the run (
 		}
 	});
 });
+
+// #768, D4: `stat`'s EACCES/EPERM is always a directory on the way, never
+// the leaf a mode-000 node can still be stat'd. The refusal used to name
+// the leaf (or the first ancestor segment walked), which for a deeper
+// path (nx/a/mig, nx mode 000) named nx/a -- an innocent, existing
+// directory -- instead of nx, the one whose permissions actually block
+// the look-up.
+describe.skipIf(process.getuid?.() === 0)(
+	"runInit / names the ancestor whose permissions block the check, never the missing leaf (#768)",
+	() => {
+		// Registered in this describe so it runs before the file-level
+		// afterEach's `rm(cwd, ...)` (vitest unwinds afterEach hooks
+		// inside-out) -- a still-mode-000 `nx` would otherwise make its own
+		// removal fail.
+		afterEach(async () => {
+			await Promise.all(
+				["nx", "ro", "mig"].map(async (name) => {
+					const candidate = join(cwd, name);
+					if (!existsSync(candidate)) {
+						return;
+					}
+					await chmod(candidate, 0o755);
+				}),
+			);
+		});
+
+		type PermissionRow = {
+			readonly label: string;
+			readonly configContent: string;
+			readonly setup: (fixtureCwd: string) => Promise<void>;
+			readonly assert: (result: Awaited<ReturnType<typeof runInit>>) => void;
+		};
+
+		const expectBlockedRefusal = (
+			result: Awaited<ReturnType<typeof runInit>>,
+			culprit: string,
+		): void => {
+			expect(result.exitCode).toBe(1);
+			expect(result.stderr).toContain("error[init-path-conflict]");
+			expect(result.stderr).toContain(`(EACCES): "${culprit}" does not`);
+			expect(result.stderr).toContain(
+				`Next: check permissions on "${culprit}", then rerun \`hejbro init\`.`,
+			);
+		};
+
+		const rows: ReadonlyArray<PermissionRow> = [
+			{
+				label: 'migrationsDir: "nx/mig", nx mode 000',
+				configContent:
+					'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "nx/mig" };\n',
+				setup: async (fixtureCwd) => {
+					await mkdir(join(fixtureCwd, "nx"), { recursive: true });
+					await chmod(join(fixtureCwd, "nx"), 0o000);
+				},
+				assert: (result) => expectBlockedRefusal(result, "nx"),
+			},
+			{
+				label:
+					'migrationsDir: "nx/a/mig", nx mode 000 (the walk continues past the EACCES at nx/a)',
+				configContent:
+					'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "nx/a/mig" };\n',
+				setup: async (fixtureCwd) => {
+					await mkdir(join(fixtureCwd, "nx", "a"), { recursive: true });
+					await chmod(join(fixtureCwd, "nx"), 0o000);
+				},
+				assert: (result) => expectBlockedRefusal(result, "nx"),
+			},
+			{
+				label: 'snapshotPath: "nx/state.json", nx mode 000',
+				configContent:
+					'export default { entry: ["src/**/*.schema.ts"], snapshotPath: "nx/state.json" };\n',
+				setup: async (fixtureCwd) => {
+					await mkdir(join(fixtureCwd, "nx"), { recursive: true });
+					await chmod(join(fixtureCwd, "nx"), 0o000);
+				},
+				assert: (result) => expectBlockedRefusal(result, "nx"),
+			},
+			{
+				label:
+					'migrationsDir: "nx/mig", nx/mig created then nx mode 000 (an existing leaf is no different)',
+				configContent:
+					'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "nx/mig" };\n',
+				setup: async (fixtureCwd) => {
+					await mkdir(join(fixtureCwd, "nx", "mig"), { recursive: true });
+					await chmod(join(fixtureCwd, "nx"), 0o000);
+				},
+				assert: (result) => expectBlockedRefusal(result, "nx"),
+			},
+			{
+				label:
+					'migrationsDir: "ro/mig", ro mode 555 holding mig (control: read-only is inspectable)',
+				configContent:
+					'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "ro/mig" };\n',
+				setup: async (fixtureCwd) => {
+					await mkdir(join(fixtureCwd, "ro", "mig"), { recursive: true });
+					await chmod(join(fixtureCwd, "ro"), 0o555);
+				},
+				assert: (result) => {
+					expect(result.exitCode).toBe(0);
+					expect(result.report).toContain("skipped ro/mig/ (exists)");
+				},
+			},
+			{
+				label:
+					'migrationsDir: "loop/mig", loop a symlink to itself (control: a non-permission code keeps the failing node)',
+				configContent:
+					'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "loop/mig" };\n',
+				setup: async (fixtureCwd) => {
+					await symlink("loop", join(fixtureCwd, "loop"));
+				},
+				assert: (result) => {
+					expect(result.exitCode).toBe(1);
+					expect(result.stderr).toBe(
+						'error[init-path-conflict]: loop\n  "loop" could not be checked for migrationsDir (ELOOP). Next: check permissions on "loop", then rerun `hejbro init`.',
+					);
+				},
+			},
+			{
+				label:
+					'migrationsDir: "mig", a regular file at mig, mode 000 (control: stat needs no permission on the node itself)',
+				configContent:
+					'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "mig" };\n',
+				setup: async (fixtureCwd) => {
+					await writeFile(join(fixtureCwd, "mig"), "not a directory");
+					await chmod(join(fixtureCwd, "mig"), 0o000);
+				},
+				assert: (result) => {
+					expect(result.exitCode).toBe(1);
+					expect(result.stderr).toContain(
+						'"mig/" was expected to be a directory for migrationsDir, but a file is there.',
+					);
+				},
+			},
+		];
+
+		it.each(rows)(
+			"names the ancestor whose permissions block the check, never the missing leaf ($label)",
+			async ({ configContent, setup, assert }) => {
+				await writeFile(configPath(), configContent);
+				await setup(cwd);
+
+				const result = await runInit(cwd);
+
+				assert(result);
+			},
+		);
+
+		it("pins the exact message for the canonical case (nx/a/mig, nx mode 000)", async () => {
+			await writeFile(
+				configPath(),
+				'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "nx/a/mig" };\n',
+			);
+			await mkdir(join(cwd, "nx", "a"), { recursive: true });
+			await chmod(join(cwd, "nx"), 0o000);
+
+			const result = await runInit(cwd);
+
+			expect(result.stderr).toBe(
+				'error[init-path-conflict]: nx/a/mig/\n  "nx/a/mig/" could not be checked for migrationsDir (EACCES): "nx" does not let this process look inside it. Next: check permissions on "nx", then rerun `hejbro init`.',
+			);
+		});
+	},
+);
 
 // D106 R1 N2: two configured fields resolving to the same path let the
 // run create one artifact and then report the other as already present
