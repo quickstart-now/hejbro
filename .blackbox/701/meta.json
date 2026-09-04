@@ -30,6 +30,19 @@
       "at": "2026-09-04T16:21Z",
       "title": "harden-snapshot-and-vendor-order approved; D1 set-array table; D2 canonicalize hook, canonical compare, byte-exact hash chain, formatVersion 8 kept; D3 rendering order",
       "ratified": null
+    },
+    {
+      "id": "R3",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R1",
+        "R2",
+        "412/D13"
+      ],
+      "at": "2026-09-04T21:29Z",
+      "title": "so (b) accepted at 1c8fb17f: restate pins rewritten per the approved delta; per-key canonicalization; reviewer summoned",
+      "ratified": null
     }
   ],
   "work": [

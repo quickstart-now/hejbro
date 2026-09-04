@@ -19,3 +19,16 @@ D1 — the set arrays: `policy.roles` (sorted by name), `trigger.events` (fixed 
 D2 — option (2): an optional `ObjectKind.canonicalize` hook (additive, like `requiredKeys`) and a core `canonicalizeSnapshot`; `buildSnapshot` applies it when writing, and `diffSnapshots`, `snapshotChangedFrom` and verify's check 2 compare canonical forms; `parseSnapshot` and the hash chain (check 1) stay byte-exact, so a hand edit — even a reordering — is still caught by the tip hash; formatVersion stays 8; a project outside this repository sees no movement. Option (1) (bump to 9) forces pin-or-reset on every v8 project for a change that is not a format change; option (3) produces the zero-statement migration and the red verify the owner rejected in J17. In-repo goldens and the two examples are regenerated once (same procedure as the v7 → v8 bump).
 D3 — the rendering order after canonicalization (`to <sorted roles>`, `after insert or update`) applies to objects created or recreated from now on; committed migrations are history.
 
+<a id="r3"></a>
+## R3 — so (b) accepted at 1c8fb17f: restate pins rewritten per the approved delta; per-key canonicalization; reviewer summoned
+
+_lead · interpretation · basis R1, R2, 412/D13 · 2026-09-04T21:29Z · ratified: pending_
+
+Group 1 (b) accepted at 1c8fb17f: 9/9 tasks, every gate green (test 18/18 with hejbro 92 files / 1066 tests, examples' chains and verify green, cli-smoke real tsc 5/5). Rulings on the facts reported:
+1. Tripwire — the four restate pins in `generate-command.test.ts` (D106 R5/J17: a set reorder produced a zero-statement `restate_<table>` migration) contradicted the approved cli-commands delta's first scenario; rewriting three to "no changes, no file, verify 0" and dropping the slug-determinism pin is the approved contract applied, not drift. The core `migration-file.test.ts` restate pin stays: the fallback remains reachable by other statement-less moves and its spec sentence stands.
+2. Plan deviation — per-key canonicalization inside `diffSnapshots` so the `malformed-snapshot-node` guard is not bypassed (whole-snapshot canonicalization leaked a raw TypeError). Intent unchanged; recorded in design.md 93077cb7.
+3. The 1.3c replay procedure (goldens by `UPDATE_GOLDEN=1`, examples by the built CLI step by step, banner hash lines only moved) is the accepted way to move committed artefacts: no hand edits.
+4. The stray `init` files in the main checkout were removed; the absolute-path rule stands.
+5. Out-of-piece observations: (a) "`blackbox index` does not regenerate the root README" — not reproduced by the lead (index rewrote `.blackbox/README.md` at 3437086a during the ck rebase; the conflict case needs the markers removed first) — no issue; (b) the restate fallback's CLI reachability shrank by design — no issue.
+Reviewer summoned: spec-bound over the five deltas, constructor mode for #740 (hand-written vendored contracts, list form and legacy object form, rendered through `createDb`) and #749 (real `create function` and calls on postgres:17-alpine), detached worktree at 1c8fb17f.
+
