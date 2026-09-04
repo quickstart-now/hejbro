@@ -334,9 +334,44 @@ so a declaration set that survives the refusal above can never diff to
 zero changes. The ledger is therefore cleared only together with the
 drops it records, so no unconfirmed destructive path remains.
 
+Where more than one declared object would be dropped, the order SHALL be
+the reverse of the dependency order the snapshot itself describes — never
+`cascade`, which could remove an object the declarations do not describe
+and so would break the first paragraph's own promise. This order SHALL
+hold both across kinds (a view, a policy, a trigger, and a sequence, all
+before their own table — for the sequence at the statement level, since
+the column default it backs is dropped by a statement of its own; a table
+before its own schema) and within a kind,
+for a foreign key from one declared table to another: a table that
+references another declared table SHALL drop before the table it
+references, so a declared object is never dropped while another object
+this same run is also dropping still depends on it existing. Where two
+declared tables reference each other, no order satisfies both, so they
+SHALL drop in their existing identity order instead, and a resulting
+refusal from the database is reported through the coded failure the next
+paragraph states.
+
+This is the same dependency graph generation computes (cli-commands),
+read in the opposite direction — a dependent before what it depends on —
+never the literal reverse of whatever statement sequence one specific
+generation run happened to emit.
+
+A drop that fails SHALL leave the database and the ledger exactly as
+they were: the drops and the ledger's own clearing run inside one
+transaction, so a failure partway through rolls all of it back, and the
+failure SHALL be reported as a hejbro-coded error carrying the
+database's own reason — never surfaced as an unclassified, uncaught
+failure.
+
 After a reset, the ledger SHALL hold no row for a migration whose
 objects were dropped, so the next run applies the chain from its
 beginning.
+
+A database whose declared objects were applied outside hejbro — `psql
+-f`, an external pipeline, both apply paths this product documents —
+has no ledger table at all, and a reset there SHALL still drop every
+object the declarations manage. A reset SHALL report what it did: one
+that cleared no ledger SHALL NOT say it cleared one.
 
 #### Scenario: An unmanaged table survives a reset
 - **WHEN** a database holds a declared table and a table no declaration
@@ -358,6 +393,29 @@ beginning.
 #### Scenario: A reset clears the ledger for what it dropped
 - **WHEN** reset completes and `migrate` runs afterwards
 - **THEN** the chain is applied from its first migration
+
+#### Scenario: A referencing table drops before the table it references
+- **WHEN** a database holds two declared tables in their own declared
+  schema, one carrying a foreign key to the other, and `reset` runs with
+  the confirmation it requires
+- **THEN** all three objects — both tables and the schema — are gone
+  afterward and the run exits zero, whichever order their names would
+  otherwise sort in
+
+#### Scenario: A failed drop leaves the ledger and status telling the truth
+- **WHEN** a drop `reset` sends fails — for example, an object outside
+  the declarations still depends on the one being dropped
+- **THEN** `reset` exits non-zero with a coded error carrying the
+  database's own reason, the database is unchanged, and `hejbro status`
+  run afterward still reports every previously-applied migration as
+  applied
+
+#### Scenario: A reset drops the declared objects on a database with no ledger table
+- **WHEN** a database holds the declared objects, they were applied
+  without hejbro so the ledger table was never created, and `reset`
+  runs with the confirmation it requires
+- **THEN** the declared objects are gone afterward, the run exits zero,
+  and the report does not claim a ledger was cleared
 
 ### Requirement: A database can be raised from a snapshot SQL file
 The CLI SHALL provide a command that takes a snapshot SQL file and an

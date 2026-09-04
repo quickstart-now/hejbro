@@ -23,6 +23,11 @@ This refusal is a property of the preset, not of the core DSL. The same
 declaration remains valid for platforms that accept it, and adding a
 preset SHALL NOT change what any other preset generates.
 
+This refusal SHALL be the same whichever of `hejbro generate` or `hejbro
+verify` the caller runs: both run every registered validator over the
+same declared snapshot, so a declaration one refuses the other refuses
+too, with the same error.
+
 #### Scenario: A refused declaration fails generation with an explicit error
 - **WHEN** a schema declares something the active preset's platform
   rejects, and migration SQL is generated
@@ -44,6 +49,12 @@ preset SHALL NOT change what any other preset generates.
   registered
 - **THEN** the refusal does not apply and that preset's output is
   unchanged by this capability existing
+
+#### Scenario: generate and verify agree on the same refusal
+- **WHEN** a schema declares something the active preset's platform
+  rejects, and separately `hejbro generate` and `hejbro verify` each run
+  against it
+- **THEN** both refuse, and both name the same coded error
 
 ### Requirement: A refusal states the evidence behind it
 Where a preset refuses a declaration because the platform was **measured**
