@@ -70,10 +70,10 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#801](801/) | make the README metric-block stamp merge-safe instead of freezing dev merges | closed | #802 | 0 | 0 (0 pending) |
 | ↳ [#804](804/) | blackbox CI: release PRs run only the release conditions, bot PRs skip the job | closed | #806 | 1 | 0 (0 pending) |
 | ↳ [#805](805/) | bot and org avatars: no white badge ring around a square photo | open | #806 | 1 | 0 (0 pending) |
-| ↳ [#807](807/) | ci: a dev → main PR runs every check twice (push + pull_request on the same sha) | closed | #808 | 1 | 2 (0 pending) |
-| ↳ [#809](809/) | ci: verify on a pr waits for the owner's environment approval | closed |  | 3 | 3 (0 pending) |
+| ↳ [#807](807/) | ci: a dev → main PR runs every check twice (push + pull_request on the same sha) | closed | #808 #813 | 1 | 2 (0 pending) |
+| ↳ [#809](809/) | ci: verify on a pr waits for the owner's environment approval | closed | #813 | 3 | 3 (0 pending) |
 | ↳ [#810](810/) | ci: comment the ci-approval link on a gated pr so the owner can find the review | closed | #811 | 1 | 0 (0 pending) |
-| ↳ [#812](812/) | ci: drop the push run on dev; the pr merge-ref run and the approved release run cover it | open |  | 1 | 1 (0 pending) |
+| ↳ [#812](812/) | ci: drop the push run on dev; the pr merge-ref run and the approved release run cover it | closed | #813 | 1 | 1 (0 pending) |
 | [#415](415/) | add-set-operations: union/intersect/except | closed | #418 | 1 | 0 (0 pending) |
 | [#416](416/) | add-window-and-aggregates: over(), aggregate functions, group by | closed | #462 | 1 | 0 (0 pending) |
 | [#417](417/) | add-ctes: with, named row sources, recursive | closed | #492 | 0 | 0 (0 pending) |
