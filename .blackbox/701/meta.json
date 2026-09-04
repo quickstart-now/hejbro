@@ -350,6 +350,134 @@
           "blob": "0680f1beb8fea7a929cca09959b50b07ec7ee340"
         }
       ]
+    },
+    {
+      "number": 861,
+      "ref": "quickstart-now/hejbro#861",
+      "title": "chore(openspec): archive harden-snapshot-and-vendor-order after d106 round 1",
+      "head": "b3b30b531e417fc13645a601c43fe6829deacd64",
+      "headRef": "archive-snapshot-order",
+      "base": "dev",
+      "merged": null,
+      "pinnedAt": "2026-09-04T22:45Z",
+      "refs": [
+        {
+          "path": ".changeset/harden-snapshot-and-vendor-order.md",
+          "blob": "4c1d48afac99ba4fbf139b59cb030ed44d8bffe4"
+        },
+        {
+          "path": "README.md",
+          "blob": "7ec22e7b7a096b2868105bb5b6a63660d07c89e5"
+        },
+        {
+          "path": "openspec/changes/archive/2026-09-05-harden-snapshot-and-vendor-order/.openspec.yaml",
+          "blob": "34f54d2e6ce21c1e2a51ccf1f07d6210960ef329"
+        },
+        {
+          "path": "openspec/changes/harden-snapshot-and-vendor-order/.openspec.yaml",
+          "blob": null
+        },
+        {
+          "path": "openspec/changes/archive/2026-09-05-harden-snapshot-and-vendor-order/design.md",
+          "blob": "ad6fb6f8230ce6e25a58022f069d44472cd36200"
+        },
+        {
+          "path": "openspec/changes/harden-snapshot-and-vendor-order/design.md",
+          "blob": null
+        },
+        {
+          "path": "openspec/changes/archive/2026-09-05-harden-snapshot-and-vendor-order/evaluation.md",
+          "blob": "4726af136c840495434ea2e4aa911b4b7386098e"
+        },
+        {
+          "path": "openspec/changes/archive/2026-09-05-harden-snapshot-and-vendor-order/proposal.md",
+          "blob": "a974efedb6cef2d8a53359912fee3c3d926920d6"
+        },
+        {
+          "path": "openspec/changes/harden-snapshot-and-vendor-order/proposal.md",
+          "blob": null
+        },
+        {
+          "path": "openspec/changes/archive/2026-09-05-harden-snapshot-and-vendor-order/specs/cli-commands/spec.md",
+          "blob": "b28c999e00ea9b3bbb12bc45ca676e6654d13a2f"
+        },
+        {
+          "path": "openspec/changes/harden-snapshot-and-vendor-order/specs/cli-commands/spec.md",
+          "blob": null
+        },
+        {
+          "path": "openspec/changes/archive/2026-09-05-harden-snapshot-and-vendor-order/specs/plpgsql-function-bodies/spec.md",
+          "blob": "d62a02f2976f4c98b7585cf4e142f7a22c517fb8"
+        },
+        {
+          "path": "openspec/changes/harden-snapshot-and-vendor-order/specs/plpgsql-function-bodies/spec.md",
+          "blob": null
+        },
+        {
+          "path": "openspec/changes/archive/2026-09-05-harden-snapshot-and-vendor-order/specs/schema-vendoring/spec.md",
+          "blob": "7399744047d30947edf19fd87a116b322c791b89"
+        },
+        {
+          "path": "openspec/changes/harden-snapshot-and-vendor-order/specs/schema-vendoring/spec.md",
+          "blob": null
+        },
+        {
+          "path": "openspec/changes/archive/2026-09-05-harden-snapshot-and-vendor-order/specs/snapshot-diff/spec.md",
+          "blob": "2e65a6ee25a80095d3f6f32b379637af572f3b48"
+        },
+        {
+          "path": "openspec/changes/harden-snapshot-and-vendor-order/specs/snapshot-diff/spec.md",
+          "blob": null
+        },
+        {
+          "path": "openspec/changes/archive/2026-09-05-harden-snapshot-and-vendor-order/specs/snapshot-format/spec.md",
+          "blob": "4079396c59e54fd21d0d4f5c65aeabafca1c73b4"
+        },
+        {
+          "path": "openspec/changes/harden-snapshot-and-vendor-order/specs/snapshot-format/spec.md",
+          "blob": null
+        },
+        {
+          "path": "openspec/changes/archive/2026-09-05-harden-snapshot-and-vendor-order/tasks.md",
+          "blob": "5525b3c85ca96f890e519473021fb7b025bdb739"
+        },
+        {
+          "path": "openspec/changes/harden-snapshot-and-vendor-order/tasks.md",
+          "blob": null
+        },
+        {
+          "path": "openspec/specs/cli-commands/spec.md",
+          "blob": "7b581654c958e8e9f108317120fb4c85125da7b6"
+        },
+        {
+          "path": "openspec/specs/plpgsql-function-bodies/spec.md",
+          "blob": "8fddbcfd51b236a767baff53111dbde9cc823205"
+        },
+        {
+          "path": "openspec/specs/schema-vendoring/spec.md",
+          "blob": "74281e05a45c64bcd864577156da71e941c657cb"
+        },
+        {
+          "path": "openspec/specs/snapshot-diff/spec.md",
+          "blob": "7c28765f694a69ae5150d759a10ab73aa3acb00a"
+        },
+        {
+          "path": "openspec/specs/snapshot-format/spec.md",
+          "blob": "758b9beeda3c3b8263f01556005700453b7c063d"
+        },
+        {
+          "path": "openspec/task-times.csv",
+          "blob": "6b291273595903b90c7ae84a13d0683b971b518f"
+        },
+        {
+          "path": "packages/core/src/plpgsql/body-context.ts",
+          "blob": "8326fc8b80711edd03e68382d9f1c150e39452fa"
+        },
+        {
+          "path": "packages/core/test/plpgsql/body-context.test.ts",
+          "blob": "6feb8134f9b8dc6a418ad9f2eadc232d894318f0"
+        }
+      ]
     }
   ],
   "origin": null,
