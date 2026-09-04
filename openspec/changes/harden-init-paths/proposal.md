@@ -1,4 +1,4 @@
-# Proposal: harden-init-paths (#741, #743, #766, #768)
+# Proposal: harden-init-paths (#741, #743, #766, #768, #767)
 
 ## Why
 
@@ -65,23 +65,28 @@ with the wrong words:
   `skills/hejbro/references/generate-verify-workflow.md` for `init
   --config`.
 
+- The piece review's constructed inputs (folded in by ruling, with #767):
+  a parent the process cannot write into is refused before anything is
+  created, and a creation that still fails is reported coded and undone
+  so the tree is as the run found it; a snapshot file the process cannot
+  read is refused with `snapshot-unreadable` by every read-side command;
+  a dangling symbolic link at an artifact path is refused as the wrong
+  kind instead of being written through.
+
 Out of scope, on the same files, deliberately left for the next batch:
-the absolute configuration path inside `invalid-config` messages (#745)
-and the raw `EACCES` stack at create time (#767). The diagnostic helpers
-this change shapes (a stat-failure refusal that carries the blocking
-node) are the ones #767 will reuse.
+the absolute configuration path inside `invalid-config` messages (#745).
 
 ## Capabilities
 
 - `cli-commands` — MODIFIED: `init` scaffolds what is missing, where the
   configuration says (`--config`, nested-path refusal, blocking-ancestor
   naming); ADDED: a configured artifact path is relative to the working
-  directory; ADDED: a directory at the snapshot path is refused before it
-  is read.
+  directory; ADDED: a snapshot that cannot be read as a file is refused
+  before it is read.
 - `diagnostics` — no delta: `init-path-conflict`, `invalid-config` and
-  `config-load-failed` are reused, and the one new code
-  (`snapshot-not-a-file`) is governed by the existing requirement (a code
-  plus a `Next:`).
+  `config-load-failed` are reused, and the two new codes
+  (`snapshot-not-a-file`, `snapshot-unreadable`) are governed by the
+  existing requirement (a code plus a `Next:`).
 
 ## Impact
 
@@ -95,4 +100,4 @@ node) are the ones #767 will reuse.
   `packages/cli/test/help.test.ts` (`init --help` lists `--config`).
 - `skills/hejbro/references/generate-verify-workflow.md`;
   `.changeset/harden-init-paths.md` (`patch`).
-- Refs #741, #743, #766, #768.
+- Refs #741, #743, #766, #768, #767.

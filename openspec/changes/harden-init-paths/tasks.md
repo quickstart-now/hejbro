@@ -164,6 +164,112 @@ no behaviour change), `packages/cli/src/snapshot-file.ts`,
       public surface). Files: `help.test.ts`, that reference, the
       changeset.
 
+## 2. The review's constructed inputs (#767 folded in; review round 1)
+
+Group 1 is complete, so this group shares a file with nothing running.
+Files this group owns: `packages/cli/src/commands/init.ts`,
+`packages/cli/src/snapshot-file.ts`, `packages/cli/test/init.test.ts`,
+`packages/cli/test/generate-command.test.ts`,
+`skills/hejbro/references/generate-verify-workflow.md`,
+`.changeset/harden-init-paths.md`. Every permission row skips under
+`process.getuid?.() === 0` and restores modes (and the umask) in an
+inner `afterEach` before the fixture is removed.
+
+- [ ] 2.1 (~8m) `[design]` A dangling symbolic link is refused as the
+      wrong kind, and a loop is not a permission (D8). Red:
+      `packages/cli/test/init.test.ts` — "refuses a dangling symbolic
+      link at an artifact path instead of writing through it". Input
+      table (link created with `symlink`, target as written):
+
+      | field | link at the path → target | expected |
+      |---|---|---|
+      | `snapshotPath: "state.json"` | `→ nowhere` (absent) | `init-path-conflict` naming `state.json` and `nowhere`, exit 1, nothing created, **no file at `nowhere`** |
+      | `migrationsDir: "mig"` | `→ nowhere` | the same refusal naming `mig/` and `nowhere` |
+      | `snapshotPath: "lnk/state.json"` | `lnk → nowhere` | the ancestor refusal naming `lnk` and `nowhere`, nothing created |
+      | `snapshotPath: "state.json"` | `→ real.json` (a regular file) | `skipped state.json (exists)`, both byte-untouched (control) |
+      | `snapshotPath: "state.json"` | `→ realdir/` | the wrong-kind refusal as today, message unchanged (control) |
+      | `migrationsDir: "mig"` | `→ realdir/` | `skipped mig/ (exists)` (control) |
+      | `migrationsDir: "mig"` | `→ real.json` | the wrong-kind refusal as today (control) |
+      | `migrationsDir: "loop"` | `loop → loop` | `(ELOOP)` refusal naming `loop/`, `Next: check what "loop/" points at` — no "permissions" |
+
+      Green: `statOutcomeAt` lstats first; a link whose target stats
+      `ENOENT` → `{ kind: "dangling", target }` → `throwPathConflict`'s
+      code with design D8's sentence; `walkAncestors` treats a dangling
+      link on the way as a conflict naming it; `throwStatFailed`'s
+      non-permission `Next:` reworded. Files: `init.ts`, `init.test.ts`.
+
+- [ ] 2.2 (~9m) `[design]` A parent that cannot be written into stops
+      the run before anything is created (D6, check side). Red:
+      `packages/cli/test/init.test.ts` — "refuses a parent the process
+      cannot write into, and creates nothing". Input table:
+
+      | config | on disk | expected |
+      |---|---|---|
+      | `migrationsDir: "mig"`, `snapshotPath: "ro/state.json"` | `ro` mode 555 | refusal naming `ro` with `(EACCES)`, exit 1, no `mig/`, no absolute path in stderr |
+      | `migrationsDir: "nx/a/mig"` | `nx` mode 555 | refusal naming `nx` (the deepest existing directory) |
+      | `snapshotPath: "ro/state.json"` | `ro` 555 **and** `ro/state.json` present | `skipped ro/state.json (exists)` (control: nothing to create) |
+      | no config, cwd mode 555 | — | refusal naming `./`, nothing created |
+      | `migrationsDir: "rw/mig"` | `rw` 755 | created (control) |
+
+      Green: after the kind/ancestor pass, for each absent artifact
+      `accessSync(deepestExistingDir, W_OK)`; failure → the create-side
+      sentence of `throwStatFailed`'s shape (design D6). `walkAncestors`
+      returns the directory it stopped at as data. Files: `init.ts`,
+      `init.test.ts`.
+
+- [ ] 2.3 (~9m) `[design]` A creation that fails after the checks is
+      coded and undone (D6, create side). Red:
+      `packages/cli/test/init.test.ts` — "undoes what it created when a
+      creation fails part-way, and reports it coded". Input table (each
+      row sets `process.umask(0o277)` so a directory `mkdirSync`
+      creates is not writable by the owner; restored in `afterEach`):
+
+      | config | expected |
+      |---|---|
+      | `migrationsDir: "x/mig"` (nothing exists) | `x` is created then `x/mig` fails → `init-path-conflict` naming `x` with `(EACCES)`, exit 1, **`x` no longer exists** |
+      | `migrationsDir: "mig"`, `snapshotPath: "y/state.json"` | `mig/` created fine, `y` created, `y/state.json` fails → refusal, **neither `mig` nor `y` remains** |
+      | `migrationsDir: "mig"` already present, `snapshotPath: "y/state.json"` | refusal; `mig` (found present) is untouched, `y` removed |
+      | umask 0o022, `migrationsDir: "x/mig"` | created (control) |
+
+      Green: the apply pass computes each absent artifact's first node
+      to be created before creating it, applies sequentially via
+      `reduce`, and on a throw removes the recorded nodes deepest-first
+      (`rmSync(recursive)`) then throws the coded failure naming
+      `error.path` relative to cwd and its code. Files: `init.ts`,
+      `init.test.ts`.
+
+- [ ] 2.4 (~10m) `[design]` An unreadable snapshot file is
+      `snapshot-unreadable` on every read-side command, and the skill
+      names the codes (D7; review non-blocking 5). Red:
+      `packages/cli/test/generate-command.test.ts` — "refuses an
+      unreadable snapshot file with snapshot-unreadable, never a raw
+      EACCES" (subprocess, skipped under uid 0):
+
+      | command | at `snapshotPath` | expected |
+      |---|---|---|
+      | `generate` | regular file, mode 000 | exit 1, `error[snapshot-unreadable]`, names the configured path and `(EACCES)`, `Next:`, no `EACCES: permission denied, open` raw line, no absolute path |
+      | `verify` | same | same |
+      | `check` (no `--url`, no `DATABASE_URL`) | same | same refusal, reached before any connection is attempted |
+      | `baseline` | same | same |
+      | `generate` | regular file, mode 444 | reads as today (control) |
+
+      Green: `readSnapshotFileText` wraps the read; a non-`ENOENT` failure
+      → `snapshot-unreadable` with design D7's sentence. Close:
+      `skills/hejbro/references/generate-verify-workflow.md` gains the
+      three codes a path can now raise — `invalid-config` for an
+      absolute-looking `migrationsDir`/`snapshotPath` (a behaviour
+      change for a configuration that used to be honoured),
+      `snapshot-not-a-file`, `snapshot-unreadable` — in the file's own
+      code-in-prose style; `.changeset/harden-init-paths.md` gains the
+      three review fixes and `#767`. Files: `snapshot-file.ts`,
+      `generate-command.test.ts`, that reference, the changeset.
+
+Group close (group 2): `openspec validate --strict` and `show --diff`
+(ADDED 2, MODIFIED 1, no scenario dropped); full gate sweep with
+`TURBO_FORCE=1`; `task-times.csv` rows 2.1–2.4 and the badge restamp;
+blackbox `W2` on #741 and `W1` on #767; then the reviewer re-checks the
+new tip against the changed items only.
+
 Group close: `openspec validate harden-init-paths --strict` and
 `show --diff` with the MODIFIED requirement classified MODIFIED and no
 scenario dropped or renamed; the CI-derived gate sweep with

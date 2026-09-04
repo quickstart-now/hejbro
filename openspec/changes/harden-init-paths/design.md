@@ -104,12 +104,72 @@ takes. Measured facts come from reading `packages/cli/src` at `eb340e73`.
   `stat`'s `EACCES` is always a directory on the way, never the leaf. Tests
   skip under `process.getuid?.() === 0`.
 
+## D6 — A creation is checked for permission first, and undone if it still fails (#767, folded in by ruling 741/R3)
+
+- **Fact.** The check stage stats; the create stage (`createArtifact`)
+  has no diagnostic at all. A parent with mode 555 passes every stat and
+  `writeFileSync` throws a raw `EACCES` — after `mig/` was already made.
+  `mkdirSync(recursive)` that fails part-way leaves the segments it made.
+- **Shape, check side.** For each planned artifact that is absent, the
+  deepest existing directory on its path (the node `walkAncestors` stops
+  at — return it as data) is tested with `accessSync(dir, W_OK)`; a
+  failure refuses through `throwStatFailed`'s shape with a create-side
+  sentence: `"ro/state.json" cannot be created for snapshotPath (EACCES):
+  "ro" does not let this process write into it. Next: check permissions
+  on "ro", then rerun \`hejbro init\`.` Runs inside the pre-creation pass,
+  so a refused run has created nothing.
+- **Shape, create side.** `access` can be wrong (ACLs, immutable flags, a
+  disk that fills, a race), so the apply pass records, per artifact, the
+  first node it will create (`join(existingAncestor, firstMissingSegment)`
+  — computed before creating, since a failed recursive `mkdir` reports
+  nothing) and, on any throw, removes those nodes deepest-first with
+  `rmSync(recursive)` before rethrowing as the same coded failure naming
+  the node the OS refused (`error.path`, relative) and its code. An
+  artifact found present is never in that list. Sequential apply via
+  `reduce` over the artifacts; no loop.
+- **Deterministic red for the rollback.** `process.umask(0o277)` makes
+  `mkdirSync` create intermediate directories the owner cannot write
+  into: `migrationsDir: "x/mig"` — `x` is created, `x/mig` then fails
+  `EACCES`; the pre-check saw only the writable cwd. Restore the umask in
+  `afterEach`; skip under uid 0.
+
+## D7 — An unreadable snapshot file is `snapshot-unreadable` (#767 class, ruled in)
+
+- **Shape.** In `readSnapshotFileText`, after the directory guard, the
+  read itself is wrapped: a `readFileSync` failure whose code is not
+  `ENOENT` becomes `snapshot-unreadable`: `"state.json" is named by
+  snapshotPath, but this process cannot read it (EACCES). Next: check
+  permissions on "state.json", then rerun.` Path printed as configured,
+  never absolute. Shared by `generate`, `baseline`, `verify`, `check` by
+  construction (one reader).
+
+## D8 — A dangling symbolic link is refused as the wrong kind
+
+- **Fact.** `statSync` follows links; a dangling link stats `ENOENT`,
+  reads as absent, and the write goes through the link to its target.
+  `lstatSync` sees the link itself.
+- **Shape.** `statOutcomeAt` lstats first; a symbolic link whose
+  `statSync` fails `ENOENT` yields `{ kind: "dangling", target }`
+  (`readlinkSync`, printed relative to cwd when absolute); `checkPathKind`
+  refuses through `throwPathConflict`'s code with: `"state.json" was
+  expected to be a file for snapshotPath, but a dangling symbolic link is
+  there, pointing at "nowhere". Next: remove the link or create its
+  target, then rerun \`hejbro init\`.` A link to a real node keeps
+  today's behaviour (judged by the target's kind). `walkAncestors` does
+  the same for a link on the way (a dangling ancestor is a conflict
+  naming that ancestor).
+- **ELOOP wording (non-blocking 3, approved).** The non-permission branch
+  of `throwStatFailed` keeps naming the failing node but its `Next:`
+  becomes `check what "<label>" points at` — a loop is not a permission.
+
 ## D5 — No diagnostics delta
 
 `init-path-conflict`, `invalid-config`, `config-load-failed` are reused;
-`snapshot-not-a-file` is new but governed by the diagnostics capability's
-existing requirement (a code plus a `Next:`); its contract lands in
-`cli-commands`.
+`snapshot-not-a-file` and `snapshot-unreadable` are new but governed by
+the diagnostics capability's existing requirement (a code plus a
+`Next:`); their contract lands in `cli-commands`, and the skill names all
+three codes this change introduces or newly raises (`invalid-config` for
+an absolute-looking path included).
 
 ## Foreign input
 

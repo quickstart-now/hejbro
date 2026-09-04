@@ -30,17 +30,21 @@ that leaves the working directory.
 - **THEN** the directory is created at that path under the working
   directory, and the run does not refuse the spelling
 
-### Requirement: A directory at the snapshot path is refused before it is read
+### Requirement: A snapshot that cannot be read as a file is refused before it is read
 Every command that reads the snapshot file — `generate`, `baseline`,
 `verify`, `check` — SHALL check what sits at the configured snapshot
 path before reading it. A directory there SHALL stop the run with the
 error code `snapshot-not-a-file`, naming the configured path and the
 kind expected there, with a `Next:` that names the way back to a
-snapshot file — never a raw read failure. The commands that consume the
-snapshot resolve the same path `init` scaffolds, so a directory there is
-a project `init` would refuse to create; the read side SHALL say so in
-the same terms rather than fail inside a read that was never going to
-succeed.
+snapshot file. A file there that the process cannot read SHALL stop the
+run with the error code `snapshot-unreadable`, naming the configured
+path and the operating system's own code, with a `Next:` naming the
+permissions to check. Neither SHALL surface as a raw read failure, and
+neither message SHALL carry an absolute path. The commands that consume
+the snapshot resolve the same path `init` scaffolds, so a directory
+there is a project `init` would refuse to create; the read side SHALL
+say so in the same terms rather than fail inside a read that was never
+going to succeed.
 
 #### Scenario: A directory at the snapshot path is refused with its own code
 - **WHEN** a directory sits at the configured `snapshotPath` and
@@ -48,6 +52,15 @@ succeed.
 - **THEN** it fails with the error code `snapshot-not-a-file` naming
   that path and a `Next:` line, before any migration is read or
   written, and no raw filesystem error reaches the output
+
+#### Scenario: A snapshot file the process cannot read is refused with its own code
+- **WHEN** a regular file sits at the configured `snapshotPath` with no
+  read permission for the process, and `hejbro generate`, `hejbro
+  baseline`, `hejbro verify` or `hejbro check` runs
+- **THEN** it fails with the error code `snapshot-unreadable` naming
+  that path and the operating system's own code, with a `Next:` line,
+  before any migration is read or written, and no raw filesystem error
+  and no absolute path reaches the output
 
 ## MODIFIED Requirements
 
@@ -65,7 +78,15 @@ snapshot and the configuration. A path holding the other kind SHALL stop
 the run with a coded failure naming that path and the kind expected
 there, creating nothing — reporting it as present would tell a repair
 run that a broken project is whole, and replacing it would be the
-overwrite this command never does. The same refusal SHALL cover a path
+overwrite this command never does. A symbolic link at such a path is
+judged by what it points at: a link to a node of the expected kind is
+that node, present and left untouched; a link whose target does not
+exist is neither kind, and SHALL be refused the same way, naming the
+path and the target the link points at — writing through it would
+create the artifact somewhere the report never named, and reporting it
+as absent would be the same lie one step later. A link that sits where
+an artifact would have to be created inside SHALL be judged the same
+way. The same refusal SHALL cover a path
 an artifact would have to be created inside, and a configuration that
 names one path for two artifacts: neither can be satisfied, and one of
 them would otherwise be reported as already present. It SHALL equally
@@ -85,6 +106,18 @@ the artifact is a file: the commands that read that file resolve the
 same spelling and look inside a directory that cannot hold it, so
 creating anything for such a value would produce a file none of them
 reads.
+
+Whether an artifact *can* be created is one of those checks: for every
+artifact the run would create, the deepest directory that already
+exists on its path SHALL be checked for permission to write into before
+anything is created, and a directory that refuses SHALL stop the run
+with the same coded failure, naming that directory and the operating
+system's own code. A creation that still fails — a permission the check
+could not see, a device that filled — SHALL surface as the same coded
+failure, never a raw stack, and everything this run created before the
+failure SHALL be removed again, deepest first, so that a refused run
+leaves the project as it found it; an artifact the run found already
+present is never removed.
 
 Where a check cannot be made at all — the operating system refuses to
 say what sits at a path — the run SHALL stop with the same coded
@@ -187,8 +220,9 @@ from `generate`.
 
 #### Scenario: The configuration named by --config is the one read
 - **WHEN** `hejbro init --config sub/hejbro.config.ts` runs in a
-  directory whose only configuration sits at `sub/hejbro.config.ts`
-  and names `db/migrations` and `db/state.json`, neither existing
+  directory whose only configuration sits at `sub/hejbro.config.ts`,
+  whose declarations sit beside that configuration, and which names
+  `db/migrations` and `db/state.json`, neither existing
 - **THEN** the configuration is reported as skipped by the path
   `sub/hejbro.config.ts`, the directory and the snapshot are created at
   `db/migrations` and `db/state.json` under the working directory —
@@ -224,3 +258,29 @@ from `generate`.
   directory `nx` exists with no permission to look inside it
 - **THEN** the run fails with a coded refusal whose message and `Next:`
   line name `nx` — not `nx/a`, not `nx/a/mig` — and nothing is created
+
+#### Scenario: A parent that cannot be written into stops the run before anything is created
+- **WHEN** `hejbro init` runs with `migrationsDir: "mig"` and
+  `snapshotPath: "ro/state.json"`, the directory `ro` exists and can be
+  read but not written into, and nothing else exists
+- **THEN** the run fails with a coded refusal whose message and `Next:`
+  line name `ro` and the operating system's own code, no raw stack and
+  no absolute path reach the output, and nothing is created — `mig`
+  included
+
+#### Scenario: A creation that fails after the checks leaves nothing behind
+- **WHEN** `hejbro init` runs where every check passes and creating an
+  artifact still fails part-way — a directory this run itself created
+  turns out not to admit the next node
+- **THEN** the run fails with the same coded refusal naming the node
+  that refused, and every directory and file this run created is
+  removed again, so the tree is as the run found it
+
+#### Scenario: A dangling symbolic link at an artifact path is refused
+- **WHEN** `hejbro init` runs where the configured snapshot path, the
+  configured migrations directory, or a directory one of them would
+  have to be created inside, is a symbolic link whose target does not
+  exist
+- **THEN** the run fails with the wrong-kind refusal naming that path
+  and the target the link points at, nothing is created, and nothing
+  is written through the link
