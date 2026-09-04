@@ -134,7 +134,7 @@ documents everything and comes last.
       marked so the refusal picks the second code; nothing else changes.
       Files: those two.
 
-- [ ] 1.4b (~3m) A settled nested handle refuses to start a nested
+- [x] 1.4b (~3m, actual ~1m) A settled nested handle refuses to start a nested
       transaction too, under the same code. Found in 1.4: `leaked
       .transaction(cb)` sent a fresh savepoint with no error, and its
       exit restored the tree's innermost token to the settled handle,
@@ -161,7 +161,7 @@ documents everything and comes last.
       `packages/pg/src` is not edited. Files:
       `packages/pg/test/integration.test.ts`.
 
-- [ ] 1.6 (~5m) The skill states the new refusals. No red test observes
+- [x] 1.6 (~5m, actual ~1m) The skill states the new refusals. No red test observes
       prose; the observer is `pnpm --filter @hejbro/skills test`, which
       type-checks every code block in the reference against its prelude,
       so the one added example must compile. Edits to

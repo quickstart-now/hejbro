@@ -32,7 +32,15 @@
       "ratified": null
     }
   ],
-  "work": [],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-04T16:00Z",
+      "title": "Statements beside or after a nested transaction are refused",
+      "pr": null,
+      "decisions": []
+    }
+  ],
   "prs": [],
   "origin": null,
   "followUps": []
