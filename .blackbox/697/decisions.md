@@ -38,3 +38,10 @@ Ledger R16.
 
 The fn guard's rejection code is `function-argument-unknown` (sibling of the count code); only the first unknown key is named; the count check runs first and its wording is unchanged.
 
+<a id="r2-ratification"></a>
+## R2 accepted
+
+_evaluator · 2026-09-04T07:21Z_
+
+Rules are silent on the guard's shape; rejecting unknown argument keys as well as a wrong count closes a silent-null path where a typo would otherwise be sent as data, which is the no-silent-defect standard the owner applies elsewhere.
+

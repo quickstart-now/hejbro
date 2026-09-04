@@ -31,3 +31,10 @@ fd review round 1: (1) an `args: { __proto__: … }` literal was dropped silentl
 
 Reinforcement (21:10 KST): B1 gets a new code `args-prototype-key` (a literal `__proto__:` key detected as prototype setting), with the scenario split (computed key → `invalid-sql-name`, literal → the new code). B3: fd rebases after cl's PR merges and the reviewer re-observes. N2 is one sentence in skills; N3 (`found` missing from reserved local names) becomes a Bug issue; brownfield candidates join cl's corpus issue. Merge order: cl → fd (rebased); qc independent.
 
+<a id="r3-ratification"></a>
+## R3 accepted
+
+_evaluator · 2026-09-04T07:21Z_
+
+Refusing an args object whose prototype is neither Object.prototype nor null turns a silent drop into a stated error, which is the explicit-over-implicit and no-silent-defect standard; correcting the claim about when Postgres rejects such a body is a measured-claims fix, and the new code args-prototype-key is kebab-case per D57.
+

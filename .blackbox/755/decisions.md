@@ -54,3 +54,24 @@ _lead · extension · basis hejbro#785/D3 · 2026-09-04T06:43Z · ratified: pend
 
 Four mechanical tasks (two normalization scopes, one Next wording, one document line), each with its red test written from the round-1 finding, do not justify summoning a planner, an implementer and a reviewer; the lead ran them with TDD in `fix-nile-d106-r1` and lets the D106 round-2 evaluator be the independent check. This extends the team-up rule "one group = one team summon" for correction rounds of this size; the owner said "the way of working is the same delegation as before" and ratifies or rejects this at the release gate.
 
+<a id="r2-ratification"></a>
+## R2 accepted
+
+_evaluator · 2026-09-04T07:22Z_
+
+Rules are silent on a text fallback where EXPLAIN is unavailable; gating it on a declaring preset and reporting a mismatch as check-not-compared rather than differs refuses to turn a spelling difference into a semantic claim, which is the measured-claims standard and consistent with the spec's 'a false pass is worse'. The honest report of the in (...) rewrite is the same principle.
+
+<a id="r3-ratification"></a>
+## R3 accepted
+
+_evaluator · 2026-09-04T07:22Z_
+
+A mechanical extension of the normalisation the same ruling family established, driven by a measured symptom (every is not null check came back not-compared) rather than a guess. It touches design.md prose, not the owner-gated decision log, so no revisit is involved; the spec must state the folding boundary precisely, since folding must leave quoted identifiers and string literals alone.
+
+<a id="r6-ratification"></a>
+## R6 accepted
+
+_evaluator · 2026-09-04T07:22Z_
+
+team-up's 'one group, one team' rule is written for a tasks.md group, and a post-merge D106 correction round is not one, so the rules are silent; running four mechanical, test-first tasks in the lead session while leaving the independent check to the D106 round-2 evaluator preserves the gate and removes a summon the work does not justify, which the owner's cost mandate asks for.
+

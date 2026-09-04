@@ -24,7 +24,12 @@
       "basis": [],
       "at": "2026-09-03T00:00Z",
       "title": "The vendored fn guard rejects unknown keys, not just a wrong count",
-      "ratified": null
+      "ratified": {
+        "verdict": "accepted",
+        "by": "evaluator",
+        "at": "2026-09-04T07:21Z",
+        "decision": null
+      }
     },
     {
       "id": "R3",

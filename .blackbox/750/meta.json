@@ -4,9 +4,9 @@
   "ref": "quickstart-now/hejbro#750",
   "title": "0.2.0-pre.0: five findings from applying one declaration to Postgres 18, Neon, Nile and Supabase",
   "parent": "quickstart-now/hejbro#412",
-  "status": "open",
+  "status": "closed",
   "opened": "2026-09-04",
-  "closed": null,
+  "closed": "2026-09-04",
   "decisions": [
     {
       "id": "R1",
@@ -53,6 +53,36 @@
       "at": "2026-09-04T00:00Z",
       "title": "Owner input 5",
       "raw": []
+    },
+    {
+      "id": "D6",
+      "by": "owner",
+      "at": "2026-09-04T07:21Z",
+      "title": "Finish everything under #750, then release 0.2.0-pre.1",
+      "raw": [
+        "ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#34"
+      ]
+    },
+    {
+      "id": "D7",
+      "by": "owner",
+      "at": "2026-09-04T07:21Z",
+      "title": "Same delegation as before",
+      "raw": [
+        "ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#35"
+      ]
+    },
+    {
+      "id": "R2",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "D2",
+        "R1"
+      ],
+      "at": "2026-09-04T07:21Z",
+      "title": "fix-nile-findings D106 round 2 disposition: N1 repaired as an interpretation of step 5, N2/N3 repaired, N4 owner-gated (#800), archived",
+      "ratified": null
     }
   ],
   "work": [
@@ -119,6 +149,102 @@
         {
           "path": "openspec/changes/fix-nile-findings/specs/table-declaration/spec.md",
           "blob": "def0fad116ffefb104b656ad3d26b37f62676fa6"
+        }
+      ]
+    },
+    {
+      "number": 802,
+      "ref": "quickstart-now/hejbro#802",
+      "title": "fix(cli): strip the whole literal cast; archive fix-nile-findings (#750)",
+      "head": "a6b5aab96ab1fb7a0ce50454fa6fc9732be56592",
+      "headRef": "archive-fix-nile-findings",
+      "base": "dev",
+      "merged": null,
+      "pinnedAt": "2026-09-04T07:28Z",
+      "refs": [
+        {
+          "path": ".changeset/fix-nile-d106-r1.md",
+          "blob": "92e42baaf3a85945b8c14bb3e8295a093c1d0745"
+        },
+        {
+          "path": "README.md",
+          "blob": "40c3aea0aa613cc83d4d2f5fc915c6ba1e567d2c"
+        },
+        {
+          "path": "openspec/changes/archive/2026-09-04-fix-nile-findings/design.md",
+          "blob": "82dc58781f5b28a7bb61c19b19b7e76ed92a30d7"
+        },
+        {
+          "path": "openspec/changes/fix-nile-findings/design.md",
+          "blob": null
+        },
+        {
+          "path": "openspec/changes/archive/2026-09-04-fix-nile-findings/evaluation.md",
+          "blob": "7e7f1e3b40eef673e0c10e089d6c010df66c1b35"
+        },
+        {
+          "path": "openspec/changes/archive/2026-09-04-fix-nile-findings/proposal.md",
+          "blob": "ae6762bad36a33d14ad8b916a09079a6b64b3d43"
+        },
+        {
+          "path": "openspec/changes/fix-nile-findings/proposal.md",
+          "blob": null
+        },
+        {
+          "path": "openspec/changes/archive/2026-09-04-fix-nile-findings/specs/cli-commands/spec.md",
+          "blob": "608aef756cebf6b05bbf8e87ad7b1f64908cd75e"
+        },
+        {
+          "path": "openspec/changes/fix-nile-findings/specs/cli-commands/spec.md",
+          "blob": null
+        },
+        {
+          "path": "openspec/changes/archive/2026-09-04-fix-nile-findings/specs/table-declaration/spec.md",
+          "blob": "def0fad116ffefb104b656ad3d26b37f62676fa6"
+        },
+        {
+          "path": "openspec/changes/fix-nile-findings/specs/table-declaration/spec.md",
+          "blob": null
+        },
+        {
+          "path": "openspec/changes/archive/2026-09-04-fix-nile-findings/tasks.md",
+          "blob": "348a7a2c6a076f9d73160286654a5ccc94c7c8c2"
+        },
+        {
+          "path": "openspec/changes/fix-nile-findings/tasks.md",
+          "blob": null
+        },
+        {
+          "path": "openspec/changes/fix-nile-findings/evaluation.md",
+          "blob": null
+        },
+        {
+          "path": "openspec/specs/cli-commands/spec.md",
+          "blob": "174bd3eea85a645a762b942af713b7a649c733eb"
+        },
+        {
+          "path": "openspec/specs/table-declaration/spec.md",
+          "blob": "bf0b121191288f0cce490522b3a9b785cc76f57c"
+        },
+        {
+          "path": "openspec/task-times.csv",
+          "blob": "b6aa3e92a8c18355e24907b0edc91b3e890378c8"
+        },
+        {
+          "path": "packages/cli/src/check/expression.ts",
+          "blob": "809496f4b5a79750f2fb2d9fc41441f6d82d9015"
+        },
+        {
+          "path": "packages/cli/test/check-expression.test.ts",
+          "blob": "45739caa0b0dc5a780fe6c394b8b8cad5ce9ab71"
+        },
+        {
+          "path": "packages/skills/test/nile-preset-doc.test.ts",
+          "blob": "8c8b389723ca80d15ecd3d96cf1b2f253d3733cc"
+        },
+        {
+          "path": "skills/hejbro/references/nile-preset.md",
+          "blob": "ba7fe704f70f0f6607e61b64df23e42ee235cb9c"
         }
       ]
     }

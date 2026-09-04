@@ -140,3 +140,26 @@ of `openspec show fix-nile-findings --diff` hold.
   Files: `skills/hejbro/references/nile-preset.md`, the test,
   `openspec/changes/fix-nile-findings/evaluation.md`, `.changeset/`.
 
+
+## 4. D106 round-2 correction (N1 · N2 · N3)
+
+- [x] 4.1 ~8m — Red: `packages/cli/test/check-expression.test.ts` "step 5
+  strips the whole cast the server appends to a literal" with an input
+  table spanning the server's spellings: `text[]`, `character varying`,
+  `character varying(20)`, `timestamp with time zone`, `timestamp(3)
+  without time zone`, `numeric(10,2)`, `double precision`, a
+  schema-qualified name, a quoted name, a cast followed by `and b` (must
+  keep `and b`), two casts in one text, and `null::text[]` (not a string
+  literal, untouched). Green: `CAST_TYPE_NAME` grammar in
+  `stripStringLiteralCast` (R2-N1).
+  Files: `packages/cli/src/check/expression.ts`, the test.
+- [x] 4.2 ~5m — Red: "3.7 a failed catalog read under text mode" asserts
+  the `Next:` names `pg_get_expr` and never `pg_get_constraintdef`
+  (R2-N2); `nile-preset-doc.test.ts` reads the cited `cli-commands`
+  requirement heading out of `nile-preset.md` and asserts the main spec
+  carries it (R2-N3). Green: the wording and the citation; plus the
+  round-2 disposition in `evaluation.md` (N4 → #800) and the changeset
+  sentence.
+  Files: `packages/cli/src/check/expression.ts`,
+  `skills/hejbro/references/nile-preset.md`, both tests,
+  `openspec/changes/fix-nile-findings/evaluation.md`, `.changeset/`.

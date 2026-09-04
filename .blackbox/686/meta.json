@@ -24,7 +24,12 @@
       "basis": [],
       "at": "2026-09-03T07:50Z",
       "title": "Type-level rejection through a phantom mutation stage; one new public symbol pending ratification",
-      "ratified": null
+      "ratified": {
+        "verdict": "accepted",
+        "by": "evaluator",
+        "at": "2026-09-04T07:21Z",
+        "decision": null
+      }
     },
     {
       "id": "R3",

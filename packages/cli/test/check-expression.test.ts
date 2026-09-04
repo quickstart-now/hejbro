@@ -1337,6 +1337,31 @@ describe("normalizeCheckText / step 4 unquotes only what the server would render
 	});
 });
 
+describe("normalizeCheckText / step 5 strips the whole cast the server appends to a literal", () => {
+	it.each([
+		{ input: "tags <> '{}'::text[]", expected: "tags <> '{}'" },
+		{ input: "name <> 'x'::character varying", expected: "name <> 'x'" },
+		{ input: "name <> 'x'::character varying(20)", expected: "name <> 'x'" },
+		{
+			input: "at > '2020-01-01'::timestamp with time zone",
+			expected: "at > '2020-01-01'",
+		},
+		{
+			input: "at > '2020-01-01'::timestamp(3) without time zone",
+			expected: "at > '2020-01-01'",
+		},
+		{ input: "price > '1'::numeric(10,2)", expected: "price > '1'" },
+		{ input: "ratio > '1'::double precision", expected: "ratio > '1'" },
+		{ input: "state = 'a'::app.status", expected: "state = 'a'" },
+		{ input: "state = 'a'::\"MyType\"", expected: "state = 'a'" },
+		{ input: "kind = 'a'::text and b", expected: "kind = 'a' and b" },
+		{ input: "s = 'x'::text || 'y'::text[]", expected: "s = 'x' || 'y'" },
+		{ input: "tags <> null::text[]", expected: "tags <> null::text[]" },
+	])("$input → $expected", ({ input, expected }) => {
+		expect(normalizeCheckText(input, "app", "posts")).toBe(expected);
+	});
+});
+
 describe("compareCheckConstraint / 3.7 a failed catalog read under text mode", () => {
 	const declared = () => {
 		const posts = table(
@@ -1373,6 +1398,8 @@ describe("compareCheckConstraint / 3.7 a failed catalog read under text mode", (
 		);
 		expect(findings[0]?.error.message).not.toMatch(/explain/i);
 		expect(findings[0]?.error.message).toMatch(/Next: .*pg_constraint/);
+		expect(findings[0]?.error.message).toMatch(/Next: .*pg_get_expr/);
+		expect(findings[0]?.error.message).not.toContain("pg_get_constraintdef");
 	});
 
 	it("keeps asking for EXPLAIN under server mode, where it is the remedy", async () => {

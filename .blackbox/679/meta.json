@@ -37,7 +37,12 @@
       "basis": [],
       "at": "2026-09-03T12:05Z",
       "title": "A __proto__ args literal is refused; the body-rejection sentence is corrected; emit.ts stays with cl",
-      "ratified": null
+      "ratified": {
+        "verdict": "accepted",
+        "by": "evaluator",
+        "at": "2026-09-04T07:21Z",
+        "decision": null
+      }
     }
   ],
   "work": [],

@@ -86,7 +86,7 @@ const notComparedCatalogReadFinding = (
 	identity,
 	error: hejbroError(
 		"check-not-compared",
-		`declared check constraint "${identity}" could not be compared: ${reason}. Next: confirm the connected role can read this table's constraint from pg_constraint (pg_get_constraintdef), then rerun \`hejbro check\`.`,
+		`declared check constraint "${identity}" could not be compared: ${reason}. Next: confirm the connected role can read this table's constraint from pg_constraint (pg_get_expr over conbin), then rerun \`hejbro check\`.`,
 	),
 });
 
@@ -310,9 +310,23 @@ const unquotePlainIdentifiers = (text: string): string =>
 		segment.replace(/"([^"]+)"/g, unquoteIfPlain),
 	);
 
-/** Strips a `::type` cast the server appended directly to a string literal (design.md, normalization step 5) -- `'x'::text` and `'x'` compare equal, nothing else does. */
+/**
+ * The type name the server spells after `::` when it appends a cast to a
+ * literal (`format_type` output, D106 round 2 N1): an optionally
+ * schema-qualified or quoted name, the SQL-standard two-word spellings
+ * (`character varying`, `double precision`), a typmod, the `with[out]
+ * time zone` suffix, and any number of array brackets -- and no other
+ * word, so `'a'::text and b` keeps its `and b`.
+ */
+const CAST_TYPE_NAME =
+	/(?:"[^"]+"|[a-zA-Z_][a-zA-Z0-9_]*)(?:\.(?:"[^"]+"|[a-zA-Z_][a-zA-Z0-9_]*))?(?: (?:varying|precision))?(?:\(\d+(?:, ?\d+)?\))?(?: with(?:out)? time zone)?(?:\[\])*/;
+
+/** Strips a `::type` cast the server appended directly to a string literal (design.md, normalization step 5) -- `'x'::text` and `'x'` compare equal, nothing else does. Runs after step 1, so the type name's own spaces are single. */
 const stripStringLiteralCast = (text: string): string =>
-	text.replace(/('(?:[^']|'')*')::[a-zA-Z_][a-zA-Z0-9_]*/g, "$1");
+	text.replace(
+		new RegExp(`('(?:[^']|'')*')::${CAST_TYPE_NAME.source}`, "g"),
+		"$1",
+	);
 
 /**
  * Folds letter case to lower-case outside both quoted identifiers and

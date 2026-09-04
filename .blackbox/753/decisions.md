@@ -128,3 +128,24 @@ Ledger R90.
 
 The lead's first diagnosis was wrong: reset.ts:504/514 are `throwPhaseTagged(phase, error)`, a code-less phase-tag helper, and `check-next-marker.mjs`'s `findLocalThrowerNames` over-matched the `Object.assign(new Error(` shape as a thrower. Option B adopted: refine the gate (a helper counts only when its declaration body attaches a code) with a mutant proof, as a separate `chore(ci)` commit.
 
+<a id="r1-ratification"></a>
+## R1 accepted
+
+_evaluator · 2026-09-04T07:22Z_
+
+Extends the ObjectKind extension interface rather than special-casing core for a provider, which is exactly what .claude/rules/provider-preset.md asks for; refusing a cyclic-object-dependency error code keeps a legal mutual-FK declaration working and surfaces the database's own refusal as a coded reset-drop-failed, matching the owner's detect-and-report stance over prevention features. Point 5 (verify reports every refusal, same code as generate) is consistent with D34's purpose, and nile as a cli devDependency is allowed by the preset rule's runtime-only prohibition and required by D110's input-table rule.
+
+<a id="r7-ratification"></a>
+## R7 accepted
+
+_evaluator · 2026-09-04T07:22Z_
+
+Rules are silent on the relationship between execution order and migration slugs; separating them at the source — slugs from the pre-refinement order, refinement affecting execution only — is a root-level fix that keeps committed example filenames stable instead of accepting a rename after the fact.
+
+<a id="r8-ratification"></a>
+## R8 accepted
+
+_evaluator · 2026-09-04T07:22Z_
+
+A tasks.md amendment no written rule governs; requiring a live cycle witness turns the cycle claim into something measured against a real server rather than asserted, and the renumbering is bookkeeping.
+

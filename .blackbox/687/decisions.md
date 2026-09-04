@@ -74,3 +74,10 @@ Ledger R48.
 
 The `Next:` clause of `init-path-conflict` names the actual node path (trailing separator removed); the first line and the expectation sentence keep the user's spelling. Extended later: ancestor messages are unified without a trailing slash.
 
+<a id="r5-ratification"></a>
+## R5 accepted
+
+_evaluator · 2026-09-04T07:21Z_
+
+D35 fixes init's three artifacts for the no-config case, which this ruling preserves; it decides the case D35 never contemplated — a config that configures only some paths — and 'a consumer-only repository never grows migration artifacts' follows the owner's rule that hejbro never prescribes how a user's repository is laid out. Because it narrows D35's wording, it should be recorded as an amendment rather than left in a ruling.
+

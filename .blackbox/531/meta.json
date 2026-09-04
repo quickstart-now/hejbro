@@ -24,7 +24,12 @@
       "basis": [],
       "at": "2026-09-03T13:00Z",
       "title": "A type pin's expected value comes from an independent path",
-      "ratified": null
+      "ratified": {
+        "verdict": "accepted",
+        "by": "evaluator",
+        "at": "2026-09-04T07:21Z",
+        "decision": null
+      }
     },
     {
       "id": "R3",
@@ -35,7 +40,12 @@
       ],
       "at": "2026-09-03T13:50Z",
       "title": "qc #737 merges on green CI without the reviewer's final light pass",
-      "ratified": null
+      "ratified": {
+        "verdict": "accepted",
+        "by": "evaluator",
+        "at": "2026-09-04T07:21Z",
+        "decision": null
+      }
     }
   ],
   "work": [],

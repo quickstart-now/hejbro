@@ -15,7 +15,12 @@
       "basis": [],
       "at": "2026-09-03T14:47Z",
       "title": "rv's planner is re-summoned on sonnet — a deviation from the team model rule",
-      "ratified": null
+      "ratified": {
+        "verdict": "rejected",
+        "by": "evaluator",
+        "at": "2026-09-04T07:22Z",
+        "decision": null
+      }
     },
     {
       "id": "R2",

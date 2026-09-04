@@ -811,3 +811,5 @@ date,change-id,task-id,group,est_min,actual_min,waited_user_min,notes
 2026-09-04,fix-nile-findings,3.2,3,6,5,0,reserved-keyword predicate; normalizeCheckText exported
 2026-09-04,fix-nile-findings,3.3,3,7,7,0,text-mode catalog-read Next; delta scenario added
 2026-09-04,fix-nile-findings,3.4,3,5,6,0,skill doc + disposition + changeset
+2026-09-04,fix-nile-findings,4.1,4,8,7,0,step-5 cast grammar (format_type spellings); 12-row table
+2026-09-04,fix-nile-findings,4.2,4,5,5,0,Next names pg_get_expr; skill cites real heading; disposition

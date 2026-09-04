@@ -20,3 +20,10 @@ Ledger R73.
 
 S2's sentence widens to "created or altered" (implementation unchanged); S1 is made precise with "at the statement level". The byIdentity reassembly loss is filed as an issue under #412 by the lead (became #774).
 
+<a id="r1-ratification"></a>
+## R1 rejected
+
+_evaluator · 2026-09-04T07:22Z_
+
+The rules are not silent here: team-up hard rule 1 allows a piece planner to be opus with an explicit fable override only, and the owner's 2026-08-22 team model policy sets the allocation directly, so substituting sonnet is a unilateral deviation from an owner decision rather than an extension. A provider outage is a real constraint, but the correct output is an owner-written fallback clause (wait, requeue the piece, or a named degraded mode), not a ruling that stands in for one.
+
