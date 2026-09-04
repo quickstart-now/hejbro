@@ -1,34 +1,14 @@
 {
   "version": 1,
   "kind": "issue",
-  "ref": "quickstart-now/hejbro#743",
-  "title": "`init` and `generate` name the same file two different ways",
-  "parent": "quickstart-now/hejbro#412",
-  "status": "closed",
+  "ref": "quickstart-now/hejbro#820",
+  "title": "cli: a migrationsDir that is a file crashes generate with a raw ENOTDIR",
+  "parent": "quickstart-now/hejbro#815",
+  "status": "open",
   "opened": "2026-09-04",
-  "closed": "2026-09-04",
-  "decisions": [
-    {
-      "id": "R1",
-      "by": "lead",
-      "kind": "extension",
-      "basis": [
-        "D1"
-      ],
-      "at": "2026-09-04T13:07Z",
-      "title": "D2: an absolute-looking artifact path is refused with invalid-config; the re-rooting scenario is retired as REMOVED + ADDED",
-      "ratified": null
-    }
-  ],
-  "work": [
-    {
-      "id": "W1",
-      "at": "2026-09-04T14:11Z",
-      "title": "absolute-looking artifact paths refused at parse",
-      "pr": null,
-      "decisions": []
-    }
-  ],
+  "closed": null,
+  "decisions": [],
+  "work": [],
   "prs": [
     {
       "number": 840,
