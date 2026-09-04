@@ -14,7 +14,13 @@ import type {
 	DriverSession,
 } from "@hejbro/query";
 import { describe, expect, it } from "vitest";
-import { applyResetReport } from "../src/commands/reset";
+import { applyResetReport, runReset } from "../src/commands/reset";
+import {
+	createCliFixtureDir,
+	removeCliFixtureDir,
+	runCli,
+	writeFixtureFile,
+} from "./support/cli-runner";
 
 // Declarations and the fake driver are built directly from `@hejbro/core`
 // (no `loadDeclarations`/jiti fixture) -- exactly `apply-reset.test.ts`'s
@@ -199,5 +205,149 @@ describe("applyResetReport / 18.1 (D106 M6)", () => {
 				call.sql.toLowerCase().includes('delete from "hejbro"'),
 			),
 		).toBe(false);
+	});
+});
+
+const RX_SCHEMA_SOURCE = `import { schema, table, uuid } from "hejbro";
+
+export const rx = schema("rx");
+
+export const items = table(rx, "items", {
+	id: uuid().primaryKey().defaultRandom(),
+});
+`;
+
+const CONFIRM_DROP_PATTERN = /--confirm-drop (\S+)/;
+
+/**
+ * [task 2.4, harden-ledger-diagnostics review repair] `runReset`'s own
+ * catch (`preconditionResult`) is the one place that picks the header
+ * identity -- `applyResetReport` above never renders anything, it only
+ * throws, so proving the header names the ledger needs the full
+ * disk-reading path. `init`/`generate` (real, subprocess) build a valid
+ * config/snapshot/migration on disk; `runReset` then runs in-process
+ * against a fake driver that refuses the ledger clear.
+ */
+describe("runReset — a ledger diagnostic's header names the ledger, not the command / 2.4 (harden-ledger-diagnostics review repair)", () => {
+	it('a refused ledger clear\'s header is error[apply-ledger-unwritable]: "hejbro"."migration_ledger"', async () => {
+		const cwd = await createCliFixtureDir();
+		try {
+			await runCli(cwd, ["init"]);
+			await writeFixtureFile(cwd, "src/a.schema.ts", RX_SCHEMA_SOURCE);
+			await runCli(cwd, ["generate"]);
+
+			const makeImporter = (failClear: boolean) => async () => ({
+				pgDriver: () => ({
+					capabilities: {
+						"interactive-transactions": true,
+						"session-state": true,
+					},
+					execute: async (compiled: CompileResult) => {
+						const sql = compiled.sql.trim().toLowerCase();
+						if (sql.startsWith("select current_database()")) {
+							return [{ name: "testdb" }];
+						}
+						if (sql.startsWith("select c.relkind")) {
+							return LEDGER_PROBE_ROWS;
+						}
+						return [];
+					},
+					transaction: async <T>(
+						callback: (session: DriverSession) => Promise<T>,
+					): Promise<T> =>
+						callback({
+							execute: async (compiled: CompileResult) => {
+								const sql = compiled.sql.trim().toLowerCase();
+								if (failClear && sql.startsWith("delete from")) {
+									throw Object.assign(
+										new Error("permission denied for table migration_ledger"),
+										{ code: "42501" },
+									);
+								}
+								if (sql.startsWith("select current_user")) {
+									return [{ currentUser: "ld_role" }];
+								}
+								return [];
+							},
+						}),
+					setupSession: async () => {},
+					client: { end: async () => {} },
+				}),
+			});
+
+			const refused = await runReset(
+				cwd,
+				["--url", "postgres://fake"],
+				makeImporter(false),
+			);
+			const match = CONFIRM_DROP_PATTERN.exec(refused.stderr ?? "");
+			if (match === null) {
+				throw new Error(
+					`could not find the required --confirm-drop value in: ${refused.stderr}`,
+				);
+			}
+			const confirmation = match[1] as string;
+
+			const result = await runReset(
+				cwd,
+				["--url", "postgres://fake", "--confirm-drop", confirmation],
+				makeImporter(true),
+			);
+
+			expect(result.exitCode).toBe(1);
+			expect(result.stderr).toContain(
+				'error[apply-ledger-unwritable]: "hejbro"."migration_ledger"',
+			);
+		} finally {
+			await removeCliFixtureDir(cwd);
+		}
+	});
+
+	// Regression: reset-not-confirmed is not one of the two ledger codes --
+	// its header still names the command, unchanged.
+	it("regression: reset-not-confirmed's header still names the command", async () => {
+		const cwd = await createCliFixtureDir();
+		try {
+			await runCli(cwd, ["init"]);
+			await writeFixtureFile(cwd, "src/a.schema.ts", RX_SCHEMA_SOURCE);
+			await runCli(cwd, ["generate"]);
+
+			const importer = async () => ({
+				pgDriver: () => ({
+					capabilities: {
+						"interactive-transactions": true,
+						"session-state": true,
+					},
+					execute: async (compiled: CompileResult) => {
+						const sql = compiled.sql.trim().toLowerCase();
+						if (sql.startsWith("select current_database()")) {
+							return [{ name: "testdb" }];
+						}
+						if (sql.startsWith("select c.relkind")) {
+							return LEDGER_PROBE_ROWS;
+						}
+						return [];
+					},
+					transaction: async <T>(
+						callback: (session: DriverSession) => Promise<T>,
+					): Promise<T> => callback({ execute: async () => [] }),
+					setupSession: async () => {},
+					client: { end: async () => {} },
+				}),
+			});
+
+			const result = await runReset(
+				cwd,
+				["--url", "postgres://fake"],
+				importer,
+			);
+
+			expect(result.exitCode).toBe(1);
+			expect(result.stderr).toContain(
+				"error[reset-not-confirmed]: hejbro reset",
+			);
+		} finally {
+			await removeCliFixtureDir(cwd);
+		}
 	});
 });

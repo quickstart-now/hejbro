@@ -347,6 +347,12 @@ describe("runStatus / 7.6, database unchanged", () => {
 				sql.trim().toLowerCase().startsWith('select "filename"'),
 			),
 		).toBe(false);
+		// [task 2.4, harden-ledger-diagnostics review repair] Regression:
+		// apply-ledger-occupied is not one of the two codes this task
+		// unifies -- its header still names the command, unchanged.
+		expect(result.stderr).toContain(
+			"error[apply-ledger-occupied]: hejbro status",
+		);
 	});
 });
 
@@ -442,6 +448,13 @@ describe("runStatus — a ledger the role may not read is a coded diagnostic, ne
 		// A raw failure prints a stack trace line ("at " followed by a file
 		// path/function) -- this diagnostic's own body never does.
 		expect(result.stderr).not.toMatch(/\bat .*\.(ts|js):\d+/);
+		// [task 2.4, harden-ledger-diagnostics review repair] The header
+		// names the ledger, not `hejbro status` -- the same identity
+		// `migrate` already used for this code, so one code never prints two
+		// different headers depending on which command raised it.
+		expect(result.stderr).toContain(
+			'error[apply-ledger-unreadable]: "hejbro"."migration_ledger"',
+		);
 	});
 
 	it("regression: a successful read still reports today's output byte-for-byte", async () => {

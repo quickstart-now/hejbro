@@ -19,6 +19,33 @@ import { asLedgerAccessFailure, LEDGER_SCHEMA, LEDGER_TABLE } from "./ledger";
 const QUALIFIED_LEDGER_TABLE = `"${LEDGER_SCHEMA}"."${LEDGER_TABLE}"`;
 
 /**
+ * [task 2.4, harden-ledger-diagnostics review repair] The one identity
+ * every ledger diagnostic's header names, regardless of which command
+ * raised it -- the artifact that failed, not the command that happened
+ * to be running. Measured by the reviewer: `migrate` already used this,
+ * `status`/`raise`/`reset` each used their own command name instead, so
+ * the same code printed two different headers depending on which command
+ * hit it. Exported so every command-layer renderer shares the one
+ * spelling, never a second one assembled locally (mirrors `ledger.ts`'s
+ * own `QUALIFIED_LEDGER_TABLE` reasoning).
+ */
+export const LEDGER_DIAGNOSTIC_IDENTITY = QUALIFIED_LEDGER_TABLE;
+
+const LEDGER_DIAGNOSTIC_CODES = new Set([
+	"apply-ledger-unreadable",
+	"apply-ledger-unwritable",
+]);
+
+/**
+ * [task 2.4] `true` for the two codes {@link LEDGER_DIAGNOSTIC_IDENTITY}
+ * applies to -- never `apply-ledger-occupied` (the identity probe's own
+ * code, already command-named consistently everywhere and unaffected by
+ * this task) or any other code a command's own precondition path renders.
+ */
+export const isLedgerDiagnosticCode = (code: string): boolean =>
+	LEDGER_DIAGNOSTIC_CODES.has(code);
+
+/**
  * [design.md D2] `select current_user` on `driver`'s own top-level
  * `execute` -- never inside a transaction. A statement sent on a
  * transaction that has already failed is itself refused (`25P02`,

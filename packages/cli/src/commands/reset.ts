@@ -10,6 +10,10 @@ import {
 	APPLY_CONNECTION_CODES,
 	assertInteractiveTransactions,
 } from "../apply/capability";
+import {
+	isLedgerDiagnosticCode,
+	LEDGER_DIAGNOSTIC_IDENTITY,
+} from "../apply/ledger-diagnostics";
 import { applyReset } from "../apply/reset";
 import type { CheckDriverImporter } from "../check/driver";
 import { withCheckConnection } from "../check/driver";
@@ -69,13 +73,21 @@ const successLine = (ledgerCleared: boolean): string => {
 	return "reset: dropped every object your declarations manage. There was no hejbro ledger to clear.";
 };
 
+/** [task 2.4, harden-ledger-diagnostics review repair] The two ledger codes name the ledger; every other precondition (`reset-not-confirmed`, `reset-declarations-empty`, `reset-drop-failed`, `apply-ledger-occupied`, a connection failure, ...) keeps naming `hejbro reset`, unchanged. */
+const diagnosticIdentity = (code: string): string => {
+	if (isLedgerDiagnosticCode(code)) {
+		return LEDGER_DIAGNOSTIC_IDENTITY;
+	}
+	return RESET_COMMAND;
+};
+
 const preconditionResult = (error: unknown): ResetResult => {
 	const hejbroErr = asHejbroError(error);
 	return {
 		exitCode: 1,
 		stdout: [],
 		stderr: renderDiagnostics(
-			[fromHejbroError(hejbroErr, RESET_COMMAND)],
+			[fromHejbroError(hejbroErr, diagnosticIdentity(hejbroErr.code))],
 			null,
 		),
 	};

@@ -4,7 +4,10 @@ import { defineCommand } from "citty";
 import { APPLY_CONNECTION_CODES } from "../apply/capability";
 import type { LedgerState } from "../apply/ledger";
 import { asLedgerAccessFailure, readLedger } from "../apply/ledger";
-import { throwLedgerReadFailure } from "../apply/ledger-diagnostics";
+import {
+	LEDGER_DIAGNOSTIC_IDENTITY,
+	throwLedgerReadFailure,
+} from "../apply/ledger-diagnostics";
 import {
 	assertLedgerNotOccupied,
 	probeLedgerIdentity,
@@ -176,6 +179,12 @@ export const renderPlanFailure = (
  * failure becomes `apply-ledger-unreadable` -- `status` never writes, so
  * this is the only ledger classification it ever needs (unlike
  * `migrate`/`raise`, which also classify a write).
+ *
+ * [task 2.4, harden-ledger-diagnostics review repair] The header names
+ * the ledger (`LEDGER_DIAGNOSTIC_IDENTITY`), never `STATUS_COMMAND` --
+ * `migrate` already used the ledger's own identity for this code; every
+ * command now agrees, so the same code never prints two different
+ * headers depending on which one raised it.
  */
 const readFailureResult = async (
 	driver: Driver,
@@ -188,7 +197,12 @@ const readFailureResult = async (
 			exitCode: 1,
 			stdout: [],
 			stderr: renderDiagnostics(
-				[fromHejbroError(asHejbroError(classified), STATUS_COMMAND)],
+				[
+					fromHejbroError(
+						asHejbroError(classified),
+						LEDGER_DIAGNOSTIC_IDENTITY,
+					),
+				],
 				null,
 			),
 		};
