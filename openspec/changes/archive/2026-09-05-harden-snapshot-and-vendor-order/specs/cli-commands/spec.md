@@ -14,9 +14,10 @@ qualifies "identical" in the generation rule and "matches your
 declarations" in the verification rule, and nothing else in either.
 
 The hash chain is untouched by this: the tip migration's recorded hash
-is still compared against the snapshot file as stored, so a hand edit of
-the snapshot — a reordered set included — is still reported as a tip
-mismatch. What changes is only the comparison of the file against the
+is still compared against the snapshot file's canonical serialization —
+every value and every order, though not its formatting — so a hand edit
+of the snapshot that changes a value or reorders a set is still reported
+as a tip mismatch. What changes is only the comparison of the file against the
 declarations, which reads both through the canonical form.
 
 #### Scenario: A reorder-only difference writes nothing and verifies
@@ -29,8 +30,8 @@ declarations, which reads both through the canonical form.
 
 #### Scenario: A hand-reordered snapshot is still a tip mismatch
 - **WHEN** the snapshot file's own roles array is reordered by hand, so
-  the file's bytes no longer hash to the tip migration's `snapshot:`
-  line, and `hejbro verify` runs
+  its canonical serialization no longer hashes to the tip migration's
+  `snapshot:` line, and `hejbro verify` runs
 - **THEN** it fails naming the tip migration and the snapshot path, as
   it does for any hand edit
 

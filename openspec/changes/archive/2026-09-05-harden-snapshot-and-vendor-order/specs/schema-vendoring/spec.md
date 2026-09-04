@@ -3,11 +3,13 @@
 ### Requirement: The client metadata lists columns in physical order
 A vendored contract's client metadata SHALL carry each table's columns
 as an ordered list in the snapshot's physical column order — the same
-order the emitted `Row` interface and the owning repository's own client
-use — never as a structure whose iteration order the runtime decides. The
-name-keyed client SHALL build its statements from that order, so the
-explicit column list a consumer sends is the one the owning repository
-would send, whatever the columns are named: a name that looks like an
+order the emitted `Row` interface carries and the catalog stores — never
+as a structure whose iteration order the runtime decides. The name-keyed
+client SHALL build its statements from that order, so the explicit column
+list a consumer sends follows the catalog, whatever the columns are named
+(the owning repository's own client, built from declarations, sends the
+declaration's literal order — the two agree by name, not by position): a
+name that looks like an
 integer, a name that carries meaning in an object literal, an upper-case
 name, or a name that needs quoting keeps its physical position.
 
