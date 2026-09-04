@@ -394,7 +394,11 @@ the database refuses that statement, the failure SHALL be reported with
 `apply-ledger-unwritable` as the first requirement of this capability
 states, naming the ledger rather than any declared object, since a
 reader sent to look for a dependency on a table that dropped cleanly is
-sent to the wrong place.
+sent to the wrong place. Which statement failed decides this, never which
+code the server gave it: every refusal of the clearing statement is the
+ledger's — including the race in which the relation at the ledger's name
+disappears between the identity judgement and the clearing, which is a
+ledger write that found no ledger, not a drop that failed.
 
 After a reset, the ledger SHALL hold no row for a migration whose
 objects were dropped, so the next run applies the chain from its

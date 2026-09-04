@@ -124,7 +124,7 @@ makes `migrate` exit two; the failing statement is identified by the tag
       `packages/cli/src/apply/execute.ts`,
       `packages/cli/test/apply-execute.test.ts`.
 
-- [ ] 1.5 (~9m) **[design]** `migrate` reports a ledger failure as its
+- [x] 1.5 (~9m) **[design]** `migrate` reports a ledger failure as its
       own artifact and exits two (D5). `applyFrom`'s failure path passes a
       tagged failure to 1.2/1.3's classifier (the driver is usable again:
       `driver.transaction` has already rolled back by the time this catch
@@ -144,7 +144,7 @@ makes `migrate` exit two; the failing statement is identified by the tag
       1, `apply-failed`, regression row). Files:
       `packages/cli/src/commands/migrate.ts`, the test.
 
-- [ ] 1.6 (~8m) `status` and `raise` report a ledger they may not read.
+- [x] 1.6 (~8m) `status` and `raise` report a ledger they may not read.
       Each classifies a tagged failure through 1.2/1.3's classifier at the
       one place it touches the ledger, and its existing precondition path
       renders the resulting `HejbroError` unchanged: `status` exits 1 with
@@ -160,11 +160,15 @@ makes `migrate` exit two; the failing statement is identified by the tag
       byte-for-byte), and `packages/cli/test/apply-raise.test.ts`, case
       *"a ledger raise may not read refuses before the bootstrap"* (no
       `create schema` and no file statement sent). Files:
-      `packages/cli/src/commands/status.ts` (if the render needs it),
+      `packages/cli/src/commands/status.ts`,
+      `packages/cli/src/apply/raise.ts` (added during implementation:
+      `raise`'s four ledger statements live there, not in the thin
+      `commands/raise.ts`, which needs no change because `applyRaise` now
+      throws only classified errors),
       `packages/cli/test/status-command.test.ts`,
       `packages/cli/test/apply-raise.test.ts`.
 
-- [ ] 1.7 (~7m) **[design]** `reset`'s refused clearing names the ledger
+- [x] 1.7 (~7m) **[design]** `reset`'s refused clearing names the ledger
       (D6). `applyReset` tells a tagged ledger failure from a drop
       failure, classifies the first through 1.2/1.3's classifier after its
       own transaction has rolled back, and never wraps it in
@@ -176,9 +180,18 @@ makes `migrate` exit two; the failing statement is identified by the tag
       neither the cycle advice nor the dependency advice appears; the
       driver refuses a drop with 2BP01 → `reset-drop-failed` unchanged
       (regression row); both succeed → `ledgerCleared: true` (regression
-      row). Files: `packages/cli/src/apply/reset.ts`, the test.
+      row). Measured during implementation: the rule reaches **every**
+      refusal of the clearing statement, not only `42501` — `ledger.ts`
+      tags by statement, never by SQLSTATE, so the `55000` and the `42P01`
+      TOCTOU rows that `harden-reset-and-verify` pinned to
+      `reset-drop-failed` move to the ledger code too. That is the rule
+      working, not a widening of it, and it is now stated in the delta.
+      `clearLedgerRows`'s own doc comment (which still names
+      `reset-drop-failed` for the race) is corrected in the same task.
+      Files: `packages/cli/src/apply/reset.ts`,
+      `packages/cli/src/apply/ledger.ts` (comment only), the test.
 
-- [ ] 1.8 (~6m) **[design]** The identity probe's own failure takes the
+- [x] 1.8 (~6m) **[design]** The identity probe's own failure takes the
       read code (D8). `probeLedgerIdentity`'s catalog read is wrapped the
       same way, naming the catalog read as what was refused. Red:
       `packages/cli/test/apply-ledger-identity.test.ts`, case *"a refused
@@ -186,9 +199,17 @@ makes `migrate` exit two; the failing statement is identified by the tag
       probe with 42501 and with a bare `Error` → `apply-ledger-unreadable`
       carrying the server's reason and a `Next:` line, and the four
       commands' existing probe rows still answer as today (regression).
-      Files: `packages/cli/src/apply/ledger-identity.ts`, the test.
+      `probeLedgerIdentity` takes a `commandName` the same way
+      `assertLedgerNotOccupied` already does — a diagnostic that names the
+      command to rerun cannot be built without it — so its four callers
+      move with it. Files: `packages/cli/src/apply/ledger-identity.ts`,
+      `packages/cli/src/apply/ledger-diagnostics.ts` (the probe's own
+      opening clause), `packages/cli/src/commands/status.ts`,
+      `packages/cli/src/commands/migrate.ts`,
+      `packages/cli/src/apply/reset.ts`, `packages/cli/src/apply/raise.ts`,
+      `packages/cli/test/apply-ledger-identity.test.ts`.
 
-- [ ] 1.9 (~10m) Live witness, in
+- [x] 1.9 (~10m) Live witness, in
       `packages/cli/test/apply-ledger-diagnostics.integration.test.ts`
       (new). It follows `apply-reset.integration.test.ts` exactly:
       `assertBuiltCli()` then `dockerAvailable()` in `beforeAll` (which
@@ -215,7 +236,7 @@ makes `migrate` exit two; the failing statement is identified by the tag
       declares does not exist afterwards, and the ledger holds the same
       rows it held before. Files: the new integration test.
 
-- [ ] 1.10 (~6m) `skills/hejbro/references/generate-verify-workflow.md`:
+- [x] 1.10 (~6m) `skills/hejbro/references/generate-verify-workflow.md`:
       one paragraph on the two codes beside the existing
       `apply-ledger-occupied` paragraph — what each means, that hejbro
       never grants or alters anything itself, and that a ledger failure

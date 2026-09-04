@@ -22,7 +22,17 @@
       "ratified": null
     }
   ],
-  "work": [],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-04T22:29Z",
+      "title": "group 1: a ledger write failure is the ledger's, never the migration's",
+      "pr": null,
+      "decisions": [
+        "R1"
+      ]
+    }
+  ],
   "prs": [
     {
       "number": 835,

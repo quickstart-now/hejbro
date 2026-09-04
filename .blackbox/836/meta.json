@@ -34,7 +34,18 @@
       "ratified": null
     }
   ],
-  "work": [],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-04T22:29Z",
+      "title": "group 1: ledger reads, and the bootstrap write, are coded rather than raw",
+      "pr": null,
+      "decisions": [
+        "R1",
+        "R2"
+      ]
+    }
+  ],
   "prs": [
     {
       "number": 838,
