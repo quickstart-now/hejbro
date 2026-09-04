@@ -86,12 +86,14 @@ const COVERAGE_BOUNDARY_LINES: ReadonlyArray<string> = [
  * (fix-nile-findings, #755, design.md: "The coverage boundary gains one
  * line for the run") -- names every expression surface this text-mode
  * fallback covers (task 1.6, #778: a check constraint's expression, an
- * index's predicate and its expression columns, a generated column's
- * expression), not only check constraints, since 1.4/1.5 extended the
- * same fallback to all four.
+ * index's predicate and its keys, a generated column's expression), not
+ * only check constraints, since 1.4/1.5 extended the same fallback to
+ * all four. "Keys", not "expression columns" (review round 2 B4): an
+ * index is compared as its whole ordered key list, not a filtered
+ * expression-column subset.
  */
 const TEXT_MODE_BOUNDARY_LINE =
-	"expressions (check constraints, index predicates and expression columns, generated columns) were compared by normalized text on this run, because a registered preset declares this platform cannot plan a statement -- a spelling difference the server would treat as equal is reported as not compared.";
+	"expressions (check constraints, index predicates and keys, generated columns) were compared by normalized text on this run, because a registered preset declares this platform cannot plan a statement -- a spelling difference the server would treat as equal is reported as not compared.";
 
 /**
  * Derives the check-constraint comparison mode from the presets the

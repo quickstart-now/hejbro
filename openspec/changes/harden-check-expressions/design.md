@@ -88,7 +88,9 @@ grew an expression or a predicate pass as present.
   ` collate <quote_ident(collname)>` appended where `indcollation[n-1]`
   is neither 0 nor the plain column's own `attcollation` (for an
   expression key: neither 0 nor the database default collation);
-  `expression` = `indkey[n-1] = 0`. Plus `predicate` as before. Measured:
+  `expression` = `indkey[n-1] = 0`, over key positions only
+  (`n <= indnkeyatts` — `indkey` also lists `INCLUDE` columns, which are
+  not keys; review round 2). Plus `predicate` as before. Measured:
   `((email))` is stored as a plain key (`indkey ≠ 0`); `pg_get_indexdef`
   with a column number omits `COLLATE` (the full form shows it); and
   `EXPLAIN`'s `Output` renders `email collate "C"` and `email` identically

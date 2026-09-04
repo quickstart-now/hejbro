@@ -980,3 +980,128 @@ export default defineConfig({
 		expect(logDelta.toLowerCase()).not.toContain("explain");
 	});
 });
+
+// Review round 2 B4: `indkey` also lists a covering index's `INCLUDE`
+// columns after the last key position -- hejbro's own DSL cannot declare
+// `INCLUDE` (there is nothing to round-trip), so the covering column is
+// added directly with `psql`, matching the database-only shape the review
+// measured.
+describe("hejbro check / a covering index's INCLUDE column is not a key (review round 2 B4)", () => {
+	const IncludeAgreeDb = "include_agree";
+	const IncludeDiffersDb = "include_differs";
+	let agreeProjectDir = "";
+	let differsProjectDir = "";
+
+	const oneKeySchemaSource = `import { index, schema, table, text, uuid } from "hejbro";
+
+export const app = schema("app");
+
+export const widgets = table(
+	app,
+	"widgets",
+	{ id: uuid().primaryKey().defaultRandom(), a: text().notNull(), b: text().notNull() },
+	(t) => ({
+		indexes: [index("widgets_a_idx").on(t.a)],
+	}),
+);
+`;
+
+	const twoKeySchemaSource = `import { index, schema, table, text, uuid } from "hejbro";
+
+export const app = schema("app");
+
+export const widgets = table(
+	app,
+	"widgets",
+	{ id: uuid().primaryKey().defaultRandom(), a: text().notNull(), b: text().notNull() },
+	(t) => ({
+		indexes: [index("widgets_a_idx").on(t.a, t.b)],
+	}),
+);
+`;
+
+	const includeConfigSource = `import { defineConfig } from "hejbro";
+
+export default defineConfig({
+	entry: ["src/**/*.schema.ts"],
+	migrationsDir: "migrations",
+	snapshotPath: "hejbro.snapshot.json",
+	prefixStrategy: "timestamp",
+	presets: [],
+});
+`;
+
+	const buildApplyAndCover = async (
+		projectDir: string,
+		schemaSource: string,
+		database: string,
+	): Promise<void> => {
+		await runCli(projectDir, ["init"]);
+		await writeFixtureFile(projectDir, "hejbro.config.ts", includeConfigSource);
+		await writeFixtureFile(projectDir, "src/app.schema.ts", schemaSource);
+		const generated = await runCli(projectDir, ["generate"]);
+		expect(generated.exitCode).toBe(0);
+		const migrationsDir = resolve(projectDir, "migrations");
+		const [migrationFile] = readdirSync(migrationsDir).filter((name) =>
+			name.endsWith(".sql"),
+		);
+		if (migrationFile === undefined) {
+			throw new Error("generate did not write a migration file");
+		}
+		psqlFile(
+			database,
+			readFileSync(resolve(migrationsDir, migrationFile), "utf-8"),
+		);
+		psqlCommand(
+			database,
+			"drop index app.widgets_a_idx; create index widgets_a_idx on app.widgets (a) include (b);",
+		);
+	};
+
+	beforeAll(async () => {
+		psqlCommand("postgres", `create database ${IncludeAgreeDb};`);
+		psqlCommand("postgres", `create database ${IncludeDiffersDb};`);
+		agreeProjectDir = await createCliFixtureDir();
+		differsProjectDir = await createCliFixtureDir();
+		await buildApplyAndCover(
+			agreeProjectDir,
+			oneKeySchemaSource,
+			IncludeAgreeDb,
+		);
+		await buildApplyAndCover(
+			differsProjectDir,
+			twoKeySchemaSource,
+			IncludeDiffersDb,
+		);
+	}, 120_000);
+
+	afterAll(async () => {
+		await removeCliFixtureDir(agreeProjectDir);
+		await removeCliFixtureDir(differsProjectDir);
+	});
+
+	it("agrees when the declared key list matches the covering index's real keys, the INCLUDE column excluded", async () => {
+		const result = await runCli(agreeProjectDir, [
+			"check",
+			"--url",
+			hostUrl("postgres", IncludeAgreeDb),
+		]);
+
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("check: no differences.");
+	});
+
+	it("reports a differing key count, one against two, when a declared key is only ever the covering index's INCLUDE column", async () => {
+		const result = await runCli(differsProjectDir, [
+			"check",
+			"--url",
+			hostUrl("postgres", IncludeDiffersDb),
+		]);
+
+		expect(result.exitCode).toBe(1);
+		const differsCount = (result.stderr.match(/check-object-differs/g) ?? [])
+			.length;
+		expect(differsCount).toBe(1);
+		expect(result.stderr).toContain("widgets_a_idx");
+	});
+});

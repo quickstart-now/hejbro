@@ -122,8 +122,10 @@ be compared. An expression `check` knows how to compare on one surface
 and leaves uncompared on another would report as present what it never
 looked at.
 
-An index is compared as an ordered key list. The declared keys and the
-database's keys are paired by position, and every position at which
+An index is compared as an ordered key list. A database index's
+`INCLUDE` columns are not keys — they carry no ordering and cannot be
+declared — so they are neither counted nor compared. The declared keys
+and the database's keys are paired by position, and every position at which
 either side is an expression is compared through the rendering — a plain
 column renders as itself, so a declared expression the server stores as a
 plain key (a bare column reference, a parenthesized column, a column with
@@ -268,6 +270,13 @@ claims, and its expression matches all the same.
   name has three, or the reverse
 - **THEN** `check` reports that index as differing, stating both key
   counts, and no rendering is probed for it
+
+#### Scenario: A database index's INCLUDE columns are not keys
+- **WHEN** a declared index is on `a` and the database's index of that
+  name is on `a` with `include (b)` — or the declared index is on `a, b`
+  and the database's index of that name is on `a` with `include (b)`
+- **THEN** the first reports no difference, and the second reports the
+  index as differing on its key count, one against two
 
 #### Scenario: A declared expression the server stores as a plain key is not a difference
 - **WHEN** a declaration's index key is a bare column reference, a

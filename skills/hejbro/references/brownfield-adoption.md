@@ -100,17 +100,18 @@ the other.
 `check` does not compare everything. View bodies are never compared
 (only that a declared view exists). Primary keys, unique constraints
 and foreign keys are checked for existence only, not their exact shape.
-An index is compared as its whole **ordered key list** (review round 1,
-`.blackbox/778/` R3), not as a filtered "expression columns" subset:
-Postgres stores a bare column reference, a parenthesized column, or a
-column with an explicit collation as a *plain* key, so a position where
-both the declaration and the database hold a plain column is never
-compared beyond the index's existence — only a position at which
-*either* side is an expression is matched by rendering, so a declared
-plain column against a database expression key is caught, and the
-reverse too. A key's sort direction, `NULLS FIRST`/`LAST`, operator
-class, an index's uniqueness, and its access method stay existence-only
-regardless. Check constraints and generated columns get their
+An index is compared as its whole **ordered key list**, not as a filtered
+"expression columns" subset: Postgres stores a bare column reference, a
+parenthesized column, or a column with an explicit collation as a
+*plain* key, so a position where both the declaration and the database
+hold a plain column is never compared beyond the index's existence —
+only a position at which *either* side is an expression is matched by
+rendering, so a declared plain column against a database expression key
+is caught, and the reverse too. A covering index's `INCLUDE` columns are
+not keys — they carry no ordering and cannot be declared — so they are
+neither counted nor compared. A key's sort direction, `NULLS FIRST`/
+`LAST`, operator class, an index's uniqueness, and its access method
+stay existence-only regardless. Check constraints and generated columns get their
 expression compared too — a check constraint's expression (plus
 whether the database enforces it) and a generated column's expression
 (compared as its own axis, never as a default — a generated column

@@ -1128,7 +1128,7 @@ describe("compareCheckAgainstCatalog / 1.6 every expression surface reaches the 
 		expect(
 			report.stdout.some((line) =>
 				line.includes(
-					"expressions (check constraints, index predicates and expression columns, generated columns) were compared by normalized text",
+					"expressions (check constraints, index predicates and keys, generated columns) were compared by normalized text",
 				),
 			),
 		).toBe(true);

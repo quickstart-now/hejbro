@@ -2317,6 +2317,75 @@ describe("compareIndexKeys / 4.2 an index's predicate and ordered key list", () 
 		},
 	);
 
+	// review round 2 B4: a database index's INCLUDE columns are read out of
+	// `keys` at the catalog boundary (catalog.ts, indnkeyatts) -- these two
+	// rows pin that `compareIndexKeys` itself never sees them, so a
+	// covering column neither forces a false count mismatch nor hides a
+	// genuinely missing declared key.
+	it("a covering index's INCLUDE column is absent from catalog keys, so a declared key list of the same length agrees", async () => {
+		const widgets = table(
+			app,
+			"widgets",
+			{ id: uuid().primaryKey(), a: text(), b: text() },
+			(t) => ({
+				indexes: [index("widgets_a_idx").on(t.a)],
+			}),
+		);
+		const snapshot = buildTestSnapshot([widgets]);
+		const { session, calls } = makeIndexFakeSession({});
+
+		const findings = await compareIndexKeys(
+			session,
+			catalogWithIndex({
+				name: "widgets_a_idx",
+				predicate: null,
+				keys: [plainKey("a")],
+			}),
+			"app",
+			"widgets",
+			declaredIndexNode(snapshot, "app.widgets", "widgets_a_idx"),
+			"server",
+		);
+
+		expect(findings).toHaveLength(0);
+		expect(calls).toHaveLength(0);
+	});
+
+	it("a declared key the database only carries as an INCLUDE column reports a differing count, one against two", async () => {
+		const widgets = table(
+			app,
+			"widgets",
+			{ id: uuid().primaryKey(), a: text(), b: text() },
+			(t) => ({
+				indexes: [index("widgets_ab_idx").on(t.a, t.b)],
+			}),
+		);
+		const snapshot = buildTestSnapshot([widgets]);
+		const { session, calls } = makeIndexFakeSession({});
+
+		const findings = await compareIndexKeys(
+			session,
+			catalogWithIndex({
+				name: "widgets_ab_idx",
+				predicate: null,
+				keys: [plainKey("a")],
+			}),
+			"app",
+			"widgets",
+			declaredIndexNode(snapshot, "app.widgets", "widgets_ab_idx"),
+			"server",
+		);
+
+		expect(findings).toHaveLength(1);
+		expect(findings[0]?.error).toMatchObject({ code: "check-object-differs" });
+		expect(findings[0]?.error.message).toContain("has 2 key");
+		expect(findings[0]?.error.message).toContain("has 1");
+		const explainCalls = calls.filter((call) =>
+			call.sql.trim().toLowerCase().startsWith("explain"),
+		);
+		expect(explainCalls).toHaveLength(0);
+	});
+
 	it("reports a predicate declared on only one side (declared has one, catalog has none), probing nothing", async () => {
 		const widgets = table(
 			app,

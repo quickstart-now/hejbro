@@ -239,6 +239,15 @@ describe("readCatalog / 1.2 columns and indexes carry expression texts", () => {
 	});
 });
 
+describe("readCatalog / 1.11 INCLUDE columns are not keys", () => {
+	// review round 2 B4: indkey also lists INCLUDE columns after the last
+	// key position -- indnkeyatts bounds the walk to keys only, or a
+	// covering column is counted (and rendered) as if it were a key.
+	it("pins the indexes query text to indnkeyatts bounding the key walk", () => {
+		expect(CHECK_CATALOG_QUERIES.indexes).toContain("indnkeyatts");
+	});
+});
+
 describe("CHECK_CATALOG_QUERIES.tableGrants / 1.4", () => {
 	// information_schema.role_table_grants shows only the grants the
 	// connected role is party to (grantor/grantee/membership) -- a
