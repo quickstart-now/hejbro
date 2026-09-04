@@ -9,13 +9,6 @@ on:
   # queue (owner, 2026-09-04, on the 0.2.0-pre.1 release PR).
   pull_request:
     branches: [dev]
-# #809: a newer head on the same PR cancels a run still waiting for the
-# owner's approval below, so each PR costs one approval, on its final
-# head (the bot's pin commit lands within seconds of the PR opening).
-# Pushes to dev/main are never cancelled: each SHA there is a merge.
-concurrency:
-  group: ci-${{ github.event_name }}-${{ github.event.pull_request.number || github.sha }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
   # #180 added this trigger so release-version.yml could
   # `gh workflow run ci.yml --ref changeset-release/dev` after pushing
   # the "Version Packages" PR's branch, on the theory that a GITHUB_TOKEN
@@ -39,6 +32,13 @@ concurrency:
   # and useful for a manual re-run of this workflow against an arbitrary
   # branch without needing a new commit.
   workflow_dispatch: {}
+# #809: a newer head on the same PR cancels a run still waiting for the
+# owner's approval below, so each PR costs one approval, on its final
+# head (the bot's pin commit lands within seconds of the PR opening).
+# Pushes to dev/main are never cancelled: each SHA there is a merge.
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   # #785 (D89, folder form): the blackbox record is checked before anything
   # else runs -- a PR whose record is missing or whose pins are stale is
