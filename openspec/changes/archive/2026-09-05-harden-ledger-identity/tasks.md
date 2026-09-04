@@ -241,3 +241,18 @@ marks the tasks that carry them into code, not open questions.
 `openspec/task-times.csv` rows, the README stamps (`pnpm
 check:tasktime`, `pnpm check:crap`), and the `.blackbox/783|796|797`
 work entries land in one close-out commit at PR time.
+
+## 3. D106 round-1 correction (NB1 · NB2)
+
+- [x] 3.1 ~8m — Red: `packages/cli/test/apply-ledger-identity.test.ts`
+  rows "a leaf partition carrying the four bootstrap columns", "an
+  inheritance child carrying the four bootstrap columns", "an unlogged
+  inheritance child" (all `occupied`, named in words) and "a relation
+  kind this version does not name" (no catalog letter in the word).
+  Green: the probe reads `relispartition` and a `pg_inherits` existence
+  check; `isLedgerShape` requires neither; the lineage word wins over the
+  relkind word; the unmapped-kind fallback carries no letter. Delta
+  sentence and scenario inputs extended.
+  Files: `packages/cli/src/apply/ledger-identity.ts`, the test,
+  `openspec/changes/harden-ledger-identity/specs/migration-apply/spec.md`.
+
