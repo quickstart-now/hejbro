@@ -137,7 +137,7 @@ marks the tasks that carry them into code, not open questions.
       Files: `packages/cli/src/apply/reset.ts`,
       `packages/cli/test/apply-reset.test.ts`.
 
-- [ ] 1.7 (~10m) Live witness for the identity refusal, in
+- [x] 1.7 (~10m) Live witness for the identity refusal, in
       `packages/cli/test/apply-reset.integration.test.ts` against the
       same container and gating: (a) declared objects applied with
       `psql` (no ledger ever bootstrapped), then `create table
