@@ -83,6 +83,9 @@ level, and hejbro's own `import` output promises it is not.
   omitted-index and omitted-check consequence sentences).
 - Tests: `packages/cli/test/check-inventory.test.ts`,
   `check-command.test.ts`, `check-live.integration.test.ts` (Docker),
-  `infer-loss-report.test.ts`.
+  `infer-loss-report.test.ts`, and the brownfield corpus witness
+  `examples/brownfield/test/brownfield.integration.test.ts`, whose
+  `// the column line's own check promise is not asserted -- #726`
+  becomes an assertion.
 - `skills/hejbro/references/brownfield-adoption.md`;
   `.changeset/harden-check-inventory.md`.

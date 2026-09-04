@@ -85,3 +85,15 @@ delta scenarios of `openspec show harden-check-inventory --diff` hold.
   confirm rather than assume).
   Files: `packages/cli/test/check-live.integration.test.ts`,
   `skills/hejbro/references/brownfield-adoption.md`.
+- [ ] 1.8 ~8m — Red: `examples/brownfield/test/brownfield.integration.test.ts`
+  — the corpus witness that today stops at
+  `// the column line's own check promise is not asserted -- #726`
+  asserts it instead: after the corpus `import`, `check` still exits 0
+  with `check: no differences.` and no `error[` line, still names
+  `shop.Widgets` and still never names `Marketing`, and now also names
+  each column the loss report said it would (`catalog.products."a*/b"`,
+  `people.accounts._id`) — while naming no object *inside*
+  `shop.Widgets`, the unmanaged table. Green: nothing new in `src` if
+  1.1–1.5 are right; a corpus-level disagreement is a finding to report,
+  not to patch here.
+  Files: `examples/brownfield/test/brownfield.integration.test.ts`.
