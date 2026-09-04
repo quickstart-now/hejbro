@@ -52,7 +52,7 @@ const indexRow = z.object({
 	name: z.string(),
 	/** `pg_get_expr(ix.indpred, ix.indrelid)` -- `null` for a non-partial index (#778's index-predicate surface). */
 	predicate: z.string().nullable(),
-	/** `pg_get_indexdef(ix.indexrelid, n, true)` for every column position the index's own `indkey` marks as an expression (`0`), in index-column order -- empty for an index with none (#778's index-expression-column surface). */
+	/** `pg_get_indexdef(ix.indexrelid, n, true)` for every column position the index's own `indkey` marks as an expression (`0`), in index-column order -- empty for an index with none (#778's index-expression-column surface). `n` is cast to `int`: `unnest(...) with ordinality` always yields a `bigint` ordinality column, and `pg_get_indexdef`'s own column-number parameter is `int` with no bigint overload -- measured directly (docker postgres:17-alpine, task 1.7): the uncast form fails outright with "function pg_get_indexdef(oid, bigint, boolean) does not exist". */
 	expressions: z.array(z.string()),
 });
 export type IndexRow = z.infer<typeof indexRow>;
@@ -148,7 +148,7 @@ export const CHECK_CATALOG_QUERIES = {
 		select n.nspname as schema, c.relname as "table", ic.relname as name,
 			pg_get_expr(ix.indpred, ix.indrelid) as predicate,
 			coalesce((
-				select json_agg(pg_get_indexdef(ix.indexrelid, ord.n, true) order by ord.n)
+				select json_agg(pg_get_indexdef(ix.indexrelid, ord.n::int, true) order by ord.n)
 				from unnest(ix.indkey) with ordinality as ord(attnum, n)
 				where ord.attnum = 0
 			), '[]'::json) as expressions

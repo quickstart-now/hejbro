@@ -734,3 +734,187 @@ export const widgets = table(
 		expect(logDelta.toLowerCase()).not.toContain("explain");
 	});
 });
+
+/**
+ * #778/#781, task 1.7: the live witness for the three surfaces group 3-5
+ * added -- a partial index, an expression index and a generated column,
+ * each declared and applied for real, then each altered underneath by
+ * `psql` so the report can only be right by actually asking the server.
+ * Two project directories share the identical schema (`generate`'s own
+ * emitted SQL is presets-independent for a declaration set no validator
+ * refuses): one plain (server mode), one registering a local
+ * `explainUnavailable` preset (text mode) -- the same split the
+ * text-comparison witness above uses, generalized to every surface this
+ * change added.
+ */
+describe("hejbro check / expression surfaces live witness (#778/#781, task 1.7)", () => {
+	const ServerDb = "expr_surfaces_server";
+	const TextDb = "expr_surfaces_text";
+	let serverProjectDir = "";
+	let textProjectDir = "";
+
+	const surfacesSchemaSource = `import { index, integer, ne, numeric, schema, sql, table, text, uuid } from "hejbro";
+
+export const app = schema("app");
+
+export const widgets = table(
+	app,
+	"widgets",
+	{
+		id: uuid().primaryKey().defaultRandom(),
+		email: text().notNull(),
+		status: text().notNull(),
+		price: numeric().notNull(),
+		// A mismatched sibling type (integer, not numeric) is deliberate: it is
+		// what makes Postgres append the "::numeric" cast this fixture's
+		// text-mode witness needs (measured, task 1.7) -- two numeric()
+		// columns produce no cast at all, and the generated column agrees
+		// even under text mode, which this fixture is not testing.
+		qty: integer().notNull(),
+		total: numeric().generatedAlwaysAs(sql\`price * qty\`),
+	},
+	(t) => ({
+		indexes: [
+			index("widgets_active_idx").on(t.id).where(ne(t.status, "archived")),
+			index("widgets_email_idx").on(sql\`lower(\${t.email})\`),
+		],
+	}),
+);
+`;
+
+	const plainConfigSource = `import { defineConfig } from "hejbro";
+
+export default defineConfig({
+	entry: ["src/**/*.schema.ts"],
+	migrationsDir: "migrations",
+	snapshotPath: "hejbro.snapshot.json",
+	prefixStrategy: "timestamp",
+	presets: [],
+});
+`;
+
+	const explainUnavailableConfigSource = `import { defineConfig } from "hejbro";
+
+export default defineConfig({
+	entry: ["src/**/*.schema.ts"],
+	migrationsDir: "migrations",
+	snapshotPath: "hejbro.snapshot.json",
+	prefixStrategy: "timestamp",
+	presets: [
+		{
+			name: "explain-unavailable-witness",
+			kinds: [],
+			validators: [],
+			explainUnavailable: true,
+		},
+	],
+});
+`;
+
+	/** `generate` under `projectDir` (already `init`-ed), applying the resulting migration to `database` -- shared by both project dirs below, since the emitted SQL never depends on which preset a config registers for a declaration set no validator refuses. */
+	const buildAndApply = async (
+		projectDir: string,
+		configSource: string,
+		database: string,
+	): Promise<void> => {
+		await runCli(projectDir, ["init"]);
+		await writeFixtureFile(projectDir, "hejbro.config.ts", configSource);
+		await writeFixtureFile(
+			projectDir,
+			"src/app.schema.ts",
+			surfacesSchemaSource,
+		);
+		const generated = await runCli(projectDir, ["generate"]);
+		expect(generated.exitCode).toBe(0);
+		const migrationsDir = resolve(projectDir, "migrations");
+		const [migrationFile] = readdirSync(migrationsDir).filter((name) =>
+			name.endsWith(".sql"),
+		);
+		if (migrationFile === undefined) {
+			throw new Error("generate did not write a migration file");
+		}
+		psqlFile(
+			database,
+			readFileSync(resolve(migrationsDir, migrationFile), "utf-8"),
+		);
+	};
+
+	beforeAll(async () => {
+		psqlCommand("postgres", `create database ${ServerDb};`);
+		psqlCommand("postgres", `create database ${TextDb};`);
+		serverProjectDir = await createCliFixtureDir();
+		textProjectDir = await createCliFixtureDir();
+		await buildAndApply(serverProjectDir, plainConfigSource, ServerDb);
+		await buildAndApply(textProjectDir, explainUnavailableConfigSource, TextDb);
+	}, 120_000);
+
+	afterAll(async () => {
+		await removeCliFixtureDir(serverProjectDir);
+		await removeCliFixtureDir(textProjectDir);
+	});
+
+	const serverUrl = (): string => hostUrl("postgres", ServerDb);
+	const textUrl = (): string => hostUrl("postgres", TextDb);
+
+	it("exits 0 for the fixture's own unaltered declarations (control)", async () => {
+		const result = await runCli(serverProjectDir, [
+			"check",
+			"--url",
+			serverUrl(),
+		]);
+
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("check: no differences.");
+	});
+
+	it("reports exactly the altered predicate, expression index and generated column, never as not-compared", async () => {
+		psqlCommand(
+			ServerDb,
+			"drop index app.widgets_active_idx; create index widgets_active_idx on app.widgets (id) where status <> 'done';",
+		);
+		psqlCommand(
+			ServerDb,
+			"drop index app.widgets_email_idx; create index widgets_email_idx on app.widgets (upper(email));",
+		);
+		psqlCommand(
+			ServerDb,
+			"alter table app.widgets drop column total; alter table app.widgets add column total numeric generated always as (price + qty) stored;",
+		);
+
+		const result = await runCli(serverProjectDir, [
+			"check",
+			"--url",
+			serverUrl(),
+		]);
+
+		expect(result.exitCode).toBe(1);
+		const differsCount = (result.stderr.match(/check-object-differs/g) ?? [])
+			.length;
+		expect(differsCount).toBe(3);
+		expect(result.stderr).not.toContain("check-not-compared");
+		expect(result.stderr).toContain("widgets_active_idx");
+		expect(result.stderr).toContain("widgets_email_idx");
+		expect(result.stderr).toContain("app.widgets.total");
+	});
+
+	it("under an explainUnavailable preset, agrees on both indexes and reports the generated column not-compared, exit 2, issuing zero explain", async () => {
+		const before = execFileSync("docker", ["logs", CONTAINER], {
+			encoding: "utf-8",
+		});
+
+		const result = await runCli(textProjectDir, ["check", "--url", textUrl()]);
+
+		const after = execFileSync("docker", ["logs", CONTAINER], {
+			encoding: "utf-8",
+		});
+		const logDelta = after.slice(before.length);
+
+		expect(result.exitCode).toBe(2);
+		expect(result.stderr).not.toContain("widgets_active_idx");
+		expect(result.stderr).not.toContain("widgets_email_idx");
+		expect(result.stderr).toContain("check-not-compared");
+		expect(result.stderr).toContain("app.widgets.total");
+		expect(result.stderr).not.toContain("check-object-differs");
+		expect(logDelta.toLowerCase()).not.toContain("explain");
+	});
+});
