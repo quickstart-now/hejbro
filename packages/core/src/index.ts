@@ -377,6 +377,7 @@ export { computeColumnOrder, noColumnOrder } from "./snapshot/column-order";
 export type { Snapshot } from "./snapshot/snapshot";
 export {
 	buildSnapshot,
+	canonicalizeSnapshot,
 	emptySnapshot,
 	HEJBRO_SNAPSHOT_VERSION,
 	parseSnapshot,

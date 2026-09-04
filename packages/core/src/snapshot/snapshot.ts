@@ -190,6 +190,40 @@ export const buildSnapshot = (
 export const renderSnapshot = (snapshot: Snapshot): string =>
 	stableJson(snapshot);
 
+/**
+ * Rewrites every object in `snapshot.objects` through its own kind's
+ * `canonicalize` (#701, D3) — so a set-shaped array reaching this from any
+ * source (a hand-written previous, a snapshot on disk written before the
+ * canonical order existed, or one `buildSnapshot` already canonicalized)
+ * compares equal to the same declarations' canonical form. Pure: never
+ * writes the file, never mutates `snapshot`. A key with no `kind:identity`
+ * separator, or naming a kind `registry` doesn't have registered, passes
+ * through unchanged here — `diffSnapshots`'s own per-key resolution
+ * (`engine/diff-engine.ts`) is what reports either shape as a real error,
+ * not this pure rewrite.
+ */
+export const canonicalizeSnapshot = (
+	snapshot: Snapshot,
+	registry: KindRegistry,
+): Snapshot => ({
+	...snapshot,
+	objects: Object.fromEntries(
+		Object.entries(snapshot.objects).map(([key, node]) => {
+			const kindName = kindOfObjectKey(key);
+			if (kindName === null) {
+				return [key, node];
+			}
+			const kind = registry
+				.list()
+				.find((candidate) => candidate.kind === kindName);
+			if (kind === undefined) {
+				return [key, node];
+			}
+			return [key, kind.canonicalize?.(node) ?? node];
+		}),
+	),
+});
+
 /** A short, human-readable name for why an `objects` entry isn't a valid
  * snapshot node (#26) — every real node is a JSON object, so `null`, an
  * array, or a JSON primitive all indicate a corrupted or hand-edited

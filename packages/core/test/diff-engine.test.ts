@@ -7,7 +7,7 @@ import { schema } from "../src/dsl/schema";
 import { getTableMeta, table } from "../src/dsl/table";
 import { diffSnapshots, rankKinds } from "../src/engine/diff-engine";
 import { generateMigration } from "../src/engine/generate";
-import { isNull } from "../src/expr/operators";
+import { isNull, literal } from "../src/expr/operators";
 import type {
 	ChangeOperation,
 	HejbroDeclaration,
@@ -471,6 +471,74 @@ describe("diffSnapshots — no-op", () => {
 			emptySnapshot,
 		);
 		expect(diffSnapshots(snapshot, snapshot, registry)).toEqual([]);
+	});
+});
+
+// #701/D3: diffSnapshots canonicalizes both sides before any kind's own
+// diff runs, so a set-shaped array in a non-canonical order -- whichever
+// side carries it, a hand-written previous or a snapshot on disk written
+// before this order was canonical -- never surfaces as a change. A real
+// member added is still reported, on either side.
+describe("diffSnapshots — canonicalizes both sides before comparing (#701)", () => {
+	const buildPolicySnapshot = (roles: ReadonlyArray<string>): Snapshot => {
+		const posts = table(app, "posts", { id: uuid().primaryKey() }, () => ({
+			rls: rls.enabled({
+				read: rls
+					.policy("posts_read")
+					.for("select")
+					.to(...roles)
+					.using(literal(true)),
+			}),
+		}));
+		const meta = getTableMeta(posts);
+		if (meta.rls === null) {
+			throw new Error("expected rls declaration");
+		}
+		return buildSnapshot(
+			[app, meta, meta.rls, ...meta.rls.policies],
+			registry,
+			emptySnapshot,
+		);
+	};
+
+	const withUncanonicalRoles = (
+		snapshot: Snapshot,
+		roles: ReadonlyArray<string>,
+	): Snapshot => ({
+		...snapshot,
+		objects: {
+			...snapshot.objects,
+			"policy:app.posts.posts_read": {
+				...(snapshot.objects["policy:app.posts.posts_read"] as Record<
+					string,
+					unknown
+				>),
+				roles,
+			},
+		},
+	});
+
+	it("an uncanonical previous against a canonical next is not a change", () => {
+		const canonical = buildPolicySnapshot(["a", "b"]);
+		const uncanonicalPrevious = withUncanonicalRoles(canonical, ["b", "a"]);
+		expect(diffSnapshots(uncanonicalPrevious, canonical, registry)).toEqual([]);
+	});
+
+	it("a canonical previous against an uncanonical next is not a change", () => {
+		const canonical = buildPolicySnapshot(["a", "b"]);
+		const uncanonicalNext = withUncanonicalRoles(canonical, ["b", "a"]);
+		expect(diffSnapshots(canonical, uncanonicalNext, registry)).toEqual([]);
+	});
+
+	it("a role added is still a reported alter, whichever side started uncanonical", () => {
+		const before = withUncanonicalRoles(buildPolicySnapshot(["a", "b"]), [
+			"b",
+			"a",
+		]);
+		const after = buildPolicySnapshot(["a", "b", "c"]);
+		const changes = diffSnapshots(before, after, registry);
+		expect(changes).toHaveLength(1);
+		expect(changes[0]).toMatchObject({ kind: "policy", operation: "alter" });
 	});
 });
 

@@ -13,7 +13,7 @@ import type { SequenceDeclaration } from "../kinds/sequence-kind";
 import { deriveSequenceName } from "../kinds/table-kind";
 import { tableIdentity } from "../kinds/table-snapshot";
 import type { Snapshot } from "../snapshot/snapshot";
-import { buildSnapshot } from "../snapshot/snapshot";
+import { buildSnapshot, canonicalizeSnapshot } from "../snapshot/snapshot";
 import { compareKeys } from "../sort";
 import type { BannerHashes } from "../sql/migration-file";
 import { renderBanner } from "../sql/migration-file";
@@ -298,11 +298,25 @@ export type GenerateMigrationsResult = {
 	readonly warnings: ReadonlyArray<Diagnostic>;
 };
 
-/** Structural equality of two snapshots' declared objects — the one fact {@link GenerateMigrationsResult.snapshotChanged} states, computed identically at every return site rather than three separately-reasoned comparisons. */
+/**
+ * Structural equality of two snapshots' declared objects — the one fact
+ * {@link GenerateMigrationsResult.snapshotChanged} states, computed
+ * identically at every return site rather than three separately-reasoned
+ * comparisons. Both sides go through {@link canonicalizeSnapshot} first
+ * (#701, D3): a `previousSnapshot` written before a set-shaped array's
+ * order was canonical (or read straight off disk, never canonicalized)
+ * must compare equal to the freshly-built `snapshot`'s canonical form, so
+ * upgrading to this order alone is never itself a reported movement.
+ */
 const snapshotChangedFrom = (
 	snapshot: Snapshot,
 	previousSnapshot: Snapshot,
-): boolean => !sameJson(snapshot.objects, previousSnapshot.objects);
+	registry: KindRegistry,
+): boolean =>
+	!sameJson(
+		canonicalizeSnapshot(snapshot, registry).objects,
+		canonicalizeSnapshot(previousSnapshot, registry).objects,
+	);
 
 /**
  * Builds the `declaredAt`-by-table-identity map `planRenames` attaches to
@@ -509,6 +523,7 @@ type Pipeline =
 			readonly errors: ReadonlyArray<HejbroError>;
 			readonly ambiguities: ReadonlyArray<RenameAmbiguity>;
 			readonly warnings: ReadonlyArray<Diagnostic>;
+			readonly registry: KindRegistry;
 	  }
 	| {
 			readonly blocked: false;
@@ -558,6 +573,7 @@ const runPipeline = (options: GenerateMigrationsOptions): Pipeline => {
 			errors: [...plan.errors, ...validatorErrors],
 			ambiguities: plan.ambiguities,
 			warnings,
+			registry: resolved.registry,
 		};
 	}
 
@@ -630,6 +646,7 @@ export const generateMigrations = (
 			snapshotChanged: snapshotChangedFrom(
 				pipeline.snapshot,
 				options.previousSnapshot,
+				pipeline.registry,
 			),
 			errors: pipeline.errors,
 			ambiguities: pipeline.ambiguities,
@@ -653,6 +670,7 @@ export const generateMigrations = (
 		const snapshotChanged = snapshotChangedFrom(
 			pipeline.snapshot,
 			options.previousSnapshot,
+			pipeline.registry,
 		);
 		if (!snapshotChanged) {
 			return {
@@ -725,6 +743,7 @@ export const generateMigrations = (
 		snapshotChanged: snapshotChangedFrom(
 			pipeline.snapshot,
 			options.previousSnapshot,
+			pipeline.registry,
 		),
 		errors: [],
 		ambiguities: [],
