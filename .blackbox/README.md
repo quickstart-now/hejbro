@@ -112,10 +112,10 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | [#603](603/) | Apply engine (D12 revised): hejbro owns migrate and reset, production included | closed | #628 | 0 | 0 (0 pending) |
 | [#714](714/) | add a brownfield corpus: a database hejbro did not create, with a standing import→baseline→check witness | open | #851 #858 | 0 | 0 (0 pending) |
 | [#819](819/) | cli: --config is honoured by every command and one root resolves every configured path | open | #840 | 0 | 0 (0 pending) |
-| [#820](820/) | cli: a migrationsDir that is a file crashes generate with a raw ENOTDIR | open | #840 | 0 | 0 (0 pending) |
+| [#820](820/) | cli: a migrationsDir that is a file crashes generate with a raw ENOTDIR | open | #840 | 0 | 1 (1 pending) |
 | [#823](823/) | migrate: a failed ledger insert is reported as the migration's failure | open | #835 | 0 | 0 (0 pending) |
-| [#830](830/) | cli: config-not-found Next names hejbro.config.ts even when --config pointed elsewhere | open | #840 | 0 | 0 (0 pending) |
-| [#831](831/) | cli: the directory-at-config-path refusal repeats the file name twice | open | #840 | 0 | 0 (0 pending) |
+| [#830](830/) | cli: config-not-found Next names hejbro.config.ts even when --config pointed elsewhere | open | #840 | 0 | 1 (1 pending) |
+| [#831](831/) | cli: the directory-at-config-path refusal repeats the file name twice | open | #840 | 0 | 1 (0 pending) |
 | [#832](832/) | core: category-C keywords fail as argument names but are not refused; the stated class does not match the list | open | #833 | 0 | 0 (0 pending) |
 | [#836](836/) | status: a permission error on a real ledger reaches the user as a raw node-postgres object | open | #838 | 0 | 0 (0 pending) |
 | [#837](837/) | raise --file with an absolute path is joined onto the cwd and dies with a raw ENOENT | open | #838 | 0 | 0 (0 pending) |
@@ -124,7 +124,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | [#843](843/) | check: a not-compared outcome folds into exit 1 with real differences | open | #851 | 0 | 0 (0 pending) |
 | [#844](844/) | check: plain index key columns, uniqueness and method are still compared for existence only | open | #851 | 0 | 0 (0 pending) |
 | [#845](845/) | vendor: a table named fn or as is unreachable behind the client's own members | open | #849 #850 | 0 | 0 (0 pending) |
-| [#846](846/) | init/config paths round 2: read-side trailing separator, config ancestor order, nesting wording, dangling link on read, empty --config | open | #847 | 0 | 1 (0 pending) |
+| [#846](846/) | init/config paths round 2: read-side trailing separator, config ancestor order, nesting wording, dangling link on read, empty --config | open | #847 | 0 | 2 (0 pending) |
 | [#848](848/) | query: a nested transaction the root callback never awaited commits alone after the root commit | open | #849 #850 | 0 | 0 (0 pending) |
 | [#852](852/) | check: the column-default axis still delimits expression text with double quotes | open | #855 | 0 | 0 (0 pending) |
 | [#853](853/) | check: a not-compared Next: blames EXPLAIN privilege for a non-privilege server reason | open | #855 | 0 | 0 (0 pending) |
@@ -134,7 +134,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 
 ## Totals
 
-Owner decisions 80 · rulings 151 (interpretation 100, extension 49, stop 2) · pending extensions 11 · rejected 2
+Owner decisions 80 · rulings 155 (interpretation 102, extension 51, stop 2) · pending extensions 13 · rejected 2
 
 ## Conventions
 

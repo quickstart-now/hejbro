@@ -18,6 +18,18 @@
       "at": "2026-09-04T16:53Z",
       "title": "Batch cp = #846 #820 #830 #831 as one change harden-config-paths-2, parallel to ck and so; #819 and #837 wait for ck",
       "ratified": null
+    },
+    {
+      "id": "R2",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "D1",
+        "R1"
+      ],
+      "at": "2026-09-04T20:16Z",
+      "title": "harden-config-paths-2 approved; OD1 spelling refused at parse (invalid-config, stated code exception); OD3 two read-side codes via probePath; nesting wording",
+      "ratified": null
     }
   ],
   "work": [],

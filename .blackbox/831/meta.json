@@ -7,7 +7,19 @@
   "status": "open",
   "opened": "2026-09-04",
   "closed": null,
-  "decisions": [],
+  "decisions": [
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "D1"
+      ],
+      "at": "2026-09-04T20:16Z",
+      "title": "OD6: the configuration-path refusal names the path once and offers --config",
+      "ratified": null
+    }
+  ],
   "work": [],
   "prs": [
     {
