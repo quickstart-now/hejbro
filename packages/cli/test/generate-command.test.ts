@@ -6,6 +6,7 @@ import {
 	readdir,
 	readFile,
 	rm,
+	symlink,
 	writeFile,
 } from "node:fs/promises";
 import { join } from "node:path";
@@ -1305,3 +1306,200 @@ export default defineConfig({
 		});
 	},
 );
+
+// #846 D2/D3, NB2/NB6: the read side used to stat the separator-stripped
+// snapshot path but read the unstripped one, and a dangling link or a
+// file/link ancestor on the way to it surfaced as an unrelated
+// permissions failure or a false "not found" -- one configuration, two
+// answers. `readSnapshotFileText` now judges the same tree `hejbro init`
+// does, through the shared `probePath` (#846 D2): a link by its target,
+// an ancestor by its own kind.
+describe("hejbro generate/verify/check/baseline / the snapshot path judged as init does (#846 D2/D3)", () => {
+	const customConfig = (
+		snapshotPathValue: string,
+	): string => `import { defineConfig } from "hejbro";
+
+export default defineConfig({
+	entry: ["src/**/*.schema.ts"],
+	migrationsDir: "migrations",
+	snapshotPath: "${snapshotPathValue}",
+	prefixStrategy: "timestamp",
+});
+`;
+
+	const envWithoutDatabaseUrl = (): NodeJS.ProcessEnv => {
+		const { DATABASE_URL, ...rest } = process.env;
+		return rest;
+	};
+
+	type RunCliResult = Awaited<ReturnType<typeof runCli>>;
+
+	type SnapshotAncestorRow = {
+		readonly label: string;
+		readonly commands: ReadonlyArray<string>;
+		readonly setup: (fixtureCwd: string) => Promise<void>;
+		readonly assert: (
+			result: RunCliResult,
+			fixtureCwd: string,
+		) => Promise<void> | void;
+		readonly compareInit?: (initResult: RunCliResult) => void;
+	};
+
+	const noRawLeaks = (result: RunCliResult, fixtureCwd: string): void => {
+		expect(result.stderr).not.toContain(fixtureCwd);
+		expect(result.stderr).not.toContain("ENOENT");
+		expect(result.stderr).not.toContain("ENOTDIR");
+	};
+
+	const rows: ReadonlyArray<SnapshotAncestorRow> = [
+		{
+			label:
+				"a dangling link at the default snapshotPath, never read as absent",
+			commands: ["generate", "baseline", "verify", "check"],
+			setup: async (fixtureCwd) => {
+				await writeFixtureFile(fixtureCwd, "hejbro.config.ts", CONFIG_SOURCE);
+				await writeFixtureFile(fixtureCwd, "src/app.schema.ts", SCHEMA_SOURCE);
+				await symlink("nowhere", join(fixtureCwd, "hejbro.snapshot.json"));
+			},
+			assert: (result, fixtureCwd) => {
+				expect(result.exitCode).toBe(1);
+				expect(result.stderr).toContain("error[snapshot-not-a-file]");
+				expect(result.stderr).toContain("hejbro.snapshot.json");
+				expect(result.stderr).toContain("nowhere");
+				expect(result.stderr).not.toContain("snapshot-not-found");
+				expect(existsSync(join(fixtureCwd, "nowhere"))).toBe(false);
+				noRawLeaks(result, fixtureCwd);
+			},
+			compareInit: (initResult) => {
+				expect(initResult.stderr).toContain("error[init-path-conflict]");
+				expect(initResult.stderr).toContain("hejbro.snapshot.json");
+				expect(initResult.stderr).toContain("nowhere");
+			},
+		},
+		{
+			label: "f/state.json, f a regular file",
+			commands: ["generate", "verify"],
+			setup: async (fixtureCwd) => {
+				await writeFixtureFile(
+					fixtureCwd,
+					"hejbro.config.ts",
+					customConfig("f/state.json"),
+				);
+				await writeFixtureFile(fixtureCwd, "src/app.schema.ts", SCHEMA_SOURCE);
+				await writeFixtureFile(fixtureCwd, "f", "not a directory");
+			},
+			assert: (result, fixtureCwd) => {
+				expect(result.exitCode).toBe(1);
+				expect(result.stderr).toContain("error[snapshot-unreadable]");
+				expect(result.stderr).toContain('"f" is a file');
+				expect(result.stderr).toContain('Next: move or remove the file at "f"');
+				expect(result.stderr).not.toContain(
+					'check permissions on "f/state.json"',
+				);
+				noRawLeaks(result, fixtureCwd);
+			},
+			compareInit: (initResult) => {
+				expect(initResult.stderr).toContain("error[init-path-conflict]");
+				expect(initResult.stderr).toContain('"f"');
+			},
+		},
+		{
+			label: "lnk/state.json, lnk -> nowhere (ancestor dangling link)",
+			commands: ["generate"],
+			setup: async (fixtureCwd) => {
+				await writeFixtureFile(
+					fixtureCwd,
+					"hejbro.config.ts",
+					customConfig("lnk/state.json"),
+				);
+				await writeFixtureFile(fixtureCwd, "src/app.schema.ts", SCHEMA_SOURCE);
+				await symlink("nowhere", join(fixtureCwd, "lnk"));
+			},
+			assert: (result, fixtureCwd) => {
+				expect(result.exitCode).toBe(1);
+				expect(result.stderr).toContain("error[snapshot-unreadable]");
+				expect(result.stderr).toContain("lnk");
+				expect(result.stderr).toContain("nowhere");
+				noRawLeaks(result, fixtureCwd);
+			},
+			compareInit: (initResult) => {
+				expect(initResult.stderr).toContain("error[init-path-conflict]");
+				expect(initResult.stderr).toContain("lnk");
+				expect(initResult.stderr).toContain("nowhere");
+			},
+		},
+		{
+			label: "loop/state.json, loop -> loop (a non-permission ancestor code)",
+			commands: ["generate"],
+			setup: async (fixtureCwd) => {
+				await writeFixtureFile(
+					fixtureCwd,
+					"hejbro.config.ts",
+					customConfig("loop/state.json"),
+				);
+				await writeFixtureFile(fixtureCwd, "src/app.schema.ts", SCHEMA_SOURCE);
+				await symlink("loop", join(fixtureCwd, "loop"));
+			},
+			assert: (result, fixtureCwd) => {
+				expect(result.exitCode).toBe(1);
+				expect(result.stderr).toContain("error[snapshot-unreadable]");
+				expect(result.stderr).toContain("(ELOOP)");
+				expect(result.stderr).toContain('Next: check what "loop" points at');
+				expect(result.stderr).not.toContain("permissions");
+				noRawLeaks(result, fixtureCwd);
+			},
+		},
+	];
+
+	const expandedRows = rows.flatMap((row) =>
+		row.commands.map((command) => ({ ...row, command })),
+	);
+
+	it.each(expandedRows)(
+		"judges the snapshot path as init does: a link by its target, an ancestor by its kind ($label, $command)",
+		async ({ setup, assert, compareInit, command }) => {
+			await setup(cwd);
+
+			const result = await runCli(cwd, [command], {
+				env: envWithoutDatabaseUrl(),
+			});
+
+			await assert(result, cwd);
+
+			if (compareInit !== undefined) {
+				const initResult = await runCli(cwd, ["init"]);
+				compareInit(initResult);
+			}
+		},
+	);
+
+	it("reads through a link to a directory as snapshot-not-a-file (control)", async () => {
+		await writeFixtureFile(cwd, "hejbro.config.ts", CONFIG_SOURCE);
+		await writeSchema(SCHEMA_SOURCE);
+		await mkdir(join(cwd, "realdir"), { recursive: true });
+		await symlink("realdir", join(cwd, "hejbro.snapshot.json"));
+
+		const result = await runCli(cwd, ["generate"]);
+
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain("error[snapshot-not-a-file]");
+	});
+
+	it("reads through a link to a regular snapshot file as today (control)", async () => {
+		const initResult = await runCli(cwd, ["init"]);
+		expect(initResult.exitCode).toBe(0);
+		await writeSchema(SCHEMA_SOURCE);
+		const snapshotContent = await readFile(
+			join(cwd, "hejbro.snapshot.json"),
+			"utf8",
+		);
+		await rm(join(cwd, "hejbro.snapshot.json"));
+		await writeFixtureFile(cwd, "real.json", snapshotContent);
+		await symlink("real.json", join(cwd, "hejbro.snapshot.json"));
+
+		const result = await runCli(cwd, ["generate"]);
+
+		expect(result.exitCode).toBe(0);
+		expect(result.stderr).not.toContain("error[");
+	});
+});

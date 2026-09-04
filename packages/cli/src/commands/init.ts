@@ -18,7 +18,6 @@ import { loadConfig, resolveConfigPath } from "../loader";
 import {
 	errorCode,
 	type NodeKind,
-	permissionCulpritFor,
 	probePath,
 	stripTrailingSeparators,
 } from "../path-probe";
@@ -381,20 +380,6 @@ const checkNoNestedPaths = (
 	);
 };
 
-/** The node whose permissions actually block a leaf's own failed `stat`
- * (#768, D4), labelled -- the walk itself is `path-probe`'s
- * {@link permissionCulpritFor} (#767 review, D7: shared with
- * `snapshot-file.ts`); `artifact.label` itself when there is no walked
- * culprit (a non-permission code, or the untested chance the walk
- * doesn't resolve to one). */
-const culpritFor = (cwd: string, artifact: Artifact, code: string): string => {
-	const culpritPath = permissionCulpritFor(cwd, artifact.path, code);
-	if (culpritPath === null) {
-		return artifact.label;
-	}
-	return fileLabel(cwd, culpritPath);
-};
-
 /** Refuses before creating anything (checked for every planned artifact,
  * the configuration artifact included, before any of them is created):
  * ancestors first -- a file, a dangling link or a blocked directory on
@@ -462,15 +447,17 @@ const checkArtifactPath = (cwd: string, artifact: Artifact): void => {
 	}
 	// "stat-failed" is shared by the ancestor walk and the leaf's own
 	// stat (#846 D2): the leaf when its own path is the one that failed,
-	// an ancestor otherwise -- an ancestor's stat-failed never carries an
-	// EACCES/EPERM code (walkAncestors reports those as "blocked",
-	// above), so it never needs `culpritFor`'s own walk.
+	// an ancestor otherwise. `probePath` itself already resolves an
+	// `EACCES`/`EPERM` to "blocked" (above, #846 D2 step 0), so every
+	// outcome that reaches here is a non-permission code (`ELOOP` and the
+	// rest) -- its culprit is always the same node the message names,
+	// never a walked one.
 	if (outcome.path === strippedPath) {
 		throwStatFailed(
 			artifact.label,
 			artifact.fieldName,
 			outcome.code,
-			culpritFor(cwd, artifact, outcome.code),
+			artifact.label,
 		);
 	}
 	const label = fileLabel(cwd, outcome.path);

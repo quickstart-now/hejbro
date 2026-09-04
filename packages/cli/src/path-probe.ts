@@ -159,31 +159,6 @@ export const walkAncestors = (
 	}
 };
 
-/** The raw path of the node whose permissions actually block a leaf's
- * own failed `stat` (#768, D4; shared by `commands/init.ts` and
- * `snapshot-file.ts`, #767 review D7 -- "one fact, one answer on both
- * sides"): for `EACCES`/`EPERM`, walk upward from `dirname(leafPath)`,
- * seeded with the leaf's own code, to find the ancestor that blocks it
- * -- `stat`'s `EACCES` is always a directory on the way, never the
- * leaf. `null` for any other code, or on the (untested) chance the
- * seeded walk doesn't resolve to a blocked ancestor; callers fall back
- * to naming the leaf itself in that case. Returns the raw filesystem
- * path -- never a label -- so every caller renders it in its own style. */
-export const permissionCulpritFor = (
-	cwd: string,
-	leafPath: string,
-	code: string,
-): string | null => {
-	if (code !== "EACCES" && code !== "EPERM") {
-		return null;
-	}
-	const outcome = walkAncestors(cwd, dirname(leafPath), code);
-	if (outcome.kind === "blocked") {
-		return outcome.culprit;
-	}
-	return null;
-};
-
 /** One judgement of a configured path (#846 D2), shared by every module
  * that scaffolds or reads a configured artifact: ancestors first (a
  * file, a dangling link, or a blocked directory on the way is named as
@@ -245,6 +220,37 @@ const leafOutcomeAt = (
 	}
 };
 
+/** The leaf's own `EACCES`/`EPERM` resolved to the ancestor that actually
+ * blocks it (#768, D4), or `outcome` unchanged when it isn't one of
+ * those two codes -- `dirname(leafPath)` is already known to exist (the
+ * caller's own ancestor walk already succeeded), so seeding a fresh walk
+ * from there with the leaf's own code finds that same node again and
+ * reports it `blocked`, never a second, deeper walk. Folded into
+ * {@link probePath} itself (#846 D2) so every caller gets one outcome
+ * kind for "a permission blocks this", whether the permission failure
+ * was the leaf's own or an ancestor's. */
+const resolveLeafPermission = (
+	cwd: string,
+	leafPath: string,
+	outcome: PathOutcome,
+): PathOutcome => {
+	if (outcome.kind !== "stat-failed") {
+		return outcome;
+	}
+	if (outcome.code !== "EACCES" && outcome.code !== "EPERM") {
+		return outcome;
+	}
+	const permissionOutcome = walkAncestors(cwd, dirname(leafPath), outcome.code);
+	if (permissionOutcome.kind !== "blocked") {
+		return outcome;
+	}
+	return {
+		kind: "blocked",
+		culprit: permissionOutcome.culprit,
+		code: permissionOutcome.code,
+	};
+};
+
 /** Judges `leafPath` (already trailing-separator-stripped by the caller,
  * D106 R1 B1) by its ancestors, then by itself (#846 D2): the one
  * judgement `commands/init.ts` applies to every planned artifact,
@@ -276,5 +282,9 @@ export const probePath = (cwd: string, leafPath: string): PathOutcome => {
 			code: ancestorOutcome.code,
 		};
 	}
-	return leafOutcomeAt(cwd, leafPath, ancestorOutcome.path);
+	return resolveLeafPermission(
+		cwd,
+		leafPath,
+		leafOutcomeAt(cwd, leafPath, ancestorOutcome.path),
+	);
 };
