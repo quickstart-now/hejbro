@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#791",
+  "title": "blackbox: vendor the tool with the harness wake-up fix (agent-skills #18)",
+  "parent": "quickstart-now/hejbro#412",
+  "status": "open",
+  "opened": "2026-09-04",
+  "closed": null,
+  "decisions": [],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-04T05:20Z",
+      "title": "Vendored tool refreshed from agent-skills main (e93fda5)",
+      "pr": null,
+      "decisions": []
+    }
+  ],
+  "prs": [],
+  "origin": null,
+  "followUps": []
+}

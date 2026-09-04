@@ -1764,6 +1764,13 @@ const readStdinJson = () => {
 	}
 };
 
+/** Slash commands and harness-generated wake-ups are stored but never counted as owner inputs. */
+const isHarnessInput = (prompt) =>
+	prompt.startsWith("/") ||
+	/^(<system-reminder>|<task-notification>|\[SYSTEM NOTIFICATION|<teammate-message)/.test(
+		prompt,
+	);
+
 const hookPrompt = (input) => {
 	const cwd = input.cwd ?? process.cwd();
 	const session = input.session_id ?? "unknown";
@@ -1778,7 +1785,7 @@ const hookPrompt = (input) => {
 		n: count + 1,
 		at: nowIso(),
 		cwd,
-		command: prompt.startsWith("/"),
+		command: isHarnessInput(prompt),
 		prompt,
 	});
 	const line = statusLine(cwd, session);
