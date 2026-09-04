@@ -674,4 +674,88 @@ describe("assertSessionStateConformance (task 1.4/1.5, #481)", () => {
 		});
 		expect(trueCapabilities["session-state"]).toBe(true);
 	});
+
+	/**
+	 * The classifier strips only the final run of `;`, so a semicolon glued
+	 * to the leading word survives inside the token (#761): `commit;` stays
+	 * a single token `commit;`, never matching `BARE_END_WORDS`' bare
+	 * `commit`. Each row is observed through the envelope obligation, since
+	 * that is the one check whose fold actually reads a statement's class
+	 * -- an `open` row stands in for the transaction's own opener
+	 * (`[row, settings, caller]`, conforms when correctly read), an `end`
+	 * row is spliced between the settings and the caller
+	 * (`[begin, settings, row, caller]`, the caller then sent outside any
+	 * open transaction when correctly read), and an `ordinary` row stands
+	 * in for the settings themselves (`[begin, row, caller]`, conforms
+	 * either way -- these rows exist to show the rule does *not* open or
+	 * close on them).
+	 */
+	const SETTINGS_STATEMENT = {
+		sql: "set intervalstyle to 'postgres'",
+		params: [],
+	} as const;
+	const CALLER_STATEMENT = { sql: "select 1", params: [] } as const;
+	const BEGIN_STATEMENT = { sql: "begin", params: [] } as const;
+
+	type LeadingWordRow = {
+		readonly text: string;
+		readonly kind: "open" | "end" | "ordinary";
+	};
+
+	const LEADING_WORD_ROWS: ReadonlyArray<LeadingWordRow> = [
+		{ text: "commit;", kind: "end" },
+		{ text: "commit; ;", kind: "end" },
+		{ text: "COMMIT;;", kind: "end" },
+		{ text: ";commit", kind: "end" },
+		{ text: "rollback; to savepoint x", kind: "end" },
+		{ text: "  BEGIN ;", kind: "open" },
+		{ text: "begin; set local x", kind: "open" },
+		{ text: "start; transaction", kind: "ordinary" },
+		{ text: "savepoint x;", kind: "ordinary" },
+		{ text: "select 'begin; commit'", kind: "ordinary" },
+		{ text: "select ';'", kind: "ordinary" },
+		{ text: "-- opens\nbegin", kind: "ordinary" },
+		{ text: "/* trace */ commit", kind: "ordinary" },
+	];
+
+	const buildRecordedOnConnection = (
+		row: LeadingWordRow,
+	): ReadonlyArray<{ readonly sql: string; readonly params: ReadonlyArray<unknown> }> => {
+		const rowStatement = { sql: row.text, params: [] };
+		if (row.kind === "open") {
+			return [rowStatement, SETTINGS_STATEMENT, CALLER_STATEMENT];
+		}
+		if (row.kind === "end") {
+			return [
+				BEGIN_STATEMENT,
+				SETTINGS_STATEMENT,
+				rowStatement,
+				CALLER_STATEMENT,
+			];
+		}
+		return [BEGIN_STATEMENT, rowStatement, CALLER_STATEMENT];
+	};
+
+	describe.each(LEADING_WORD_ROWS)(
+		"the leading word is read past a glued semicolon, and nothing past the leading statement -- $text ($kind)",
+		(row) => {
+			it(`classifies as ${row.kind}`, () => {
+				const run = () =>
+					assertSessionStateConformance(
+						capabilitiesWithSessionState(false, true),
+						{
+							recordedOnConnection: buildRecordedOnConnection(row),
+							callerStatement: CALLER_STATEMENT,
+						},
+					);
+				if (row.kind === "end") {
+					expect(run).toThrowError(
+						/was not sent inside an open transaction/,
+					);
+					return;
+				}
+				expect(run).not.toThrow();
+			});
+		},
+	);
 });

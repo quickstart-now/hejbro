@@ -108,9 +108,8 @@ const assertFalseTierConformance = (
 };
 
 /**
- * SQL's own transaction-control vocabulary, recognized by the keyword a
- * normalized statement (trimmed, lower-cased, one or more trailing
- * semicolons dropped) leads with — never a substring, so a function
+ * SQL's own transaction-control vocabulary, recognized by the leading
+ * word a statement's text leads with — never a substring, so a function
  * body's own `do $$ begin … end $$` or a caller statement carrying one
  * of these words inside a string literal reads as an ordinary
  * statement. The kit still reads no driver's own settings text; this is
@@ -120,19 +119,50 @@ const assertFalseTierConformance = (
  * the bare `rollback` closer by name, so a savepoint rollback is never
  * mistaken for ending the enclosing transaction. Observation limit:
  * this still can't see a driver-decorated opener or closer whose own
- * leading word isn't in this vocabulary. A statement is classified by
- * the word its text leads with once that text is trimmed, lower-cased,
- * and stripped of any trailing semicolons; a string is never split on
- * an interior `;`.
+ * leading word isn't in this vocabulary.
+ *
+ * A statement is classified by its leading word: the text is trimmed
+ * and lower-cased, and the leading word is the first run of characters
+ * that are neither whitespace nor `;`, so a semicolon glued to the
+ * word, and any semicolons around it, never become part of it. Where a
+ * control word is read together with the word after it (`start
+ * transaction`; `rollback to`, which excludes a savepoint rollback),
+ * that second word counts only when whitespace alone separates it from
+ * the first; a `;` between them ends the leading statement, and nothing
+ * past it is read. A string is never split on an interior `;` into
+ * several statements: a string carrying several is classified by its
+ * first alone, and what a later statement in it does is not seen. Text
+ * that leads with a comment leads with the comment's own characters and
+ * is classified as an ordinary statement; the check reads no SQL
+ * lexical structure beyond the leading word.
  */
 type TransactionControlKind = "open" | "end" | undefined;
 
-const normalizeStatement = (sql: string): string =>
-	sql
-		.trim()
-		.toLowerCase()
-		.replace(/;+\s*$/, "")
-		.trim();
+/**
+ * The leading word and, when one immediately follows it separated by
+ * whitespace alone, the second -- never when a `;` sits between them,
+ * which ends the leading statement before the second word is reached
+ * (#761: the previous reader stripped only the final run of `;`, so a
+ * semicolon glued to the word, as in `commit;` or `begin; set local x`,
+ * stayed part of the token and matched neither word list).
+ */
+const leadingWords = (
+	sql: string,
+): {
+	readonly first: string | undefined;
+	readonly second: string | undefined;
+} => {
+	const normalized = sql.trim().toLowerCase();
+	const match = /^[\s;]*([^\s;]+)(\s+)?([^\s;]+)?/.exec(normalized);
+	if (match === null) {
+		return { first: undefined, second: undefined };
+	}
+	const [, first, gapIsWhitespace, second] = match;
+	if (gapIsWhitespace === undefined) {
+		return { first, second: undefined };
+	}
+	return { first, second };
+};
 
 /** Bare closers -- a single-word statement leading with one of these always ends the transaction; `rollback` is handled separately in {@link isTransactionEnd} since `rollback to …` (a savepoint rollback) does not. */
 const BARE_END_WORDS = new Set(["commit", "abort", "end"]);
@@ -152,11 +182,11 @@ const isTransactionEnd = (
 	(leadingWord === "rollback" && secondWord !== "to");
 
 const transactionControlKind = (sql: string): TransactionControlKind => {
-	const [leadingWord, secondWord] = normalizeStatement(sql).split(/\s+/);
-	if (isTransactionOpen(leadingWord, secondWord)) {
+	const { first, second } = leadingWords(sql);
+	if (isTransactionOpen(first, second)) {
 		return "open";
 	}
-	if (isTransactionEnd(leadingWord, secondWord)) {
+	if (isTransactionEnd(first, second)) {
 		return "end";
 	}
 	return undefined;
