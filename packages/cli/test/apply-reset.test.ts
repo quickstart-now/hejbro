@@ -776,7 +776,7 @@ describe("applyReset — reset-drop-failed names the phase that actually failed 
 		expect((error as HejbroError).code).toBe("reset-drop-failed");
 		const message = (error as HejbroError).message;
 		expect(message).toContain(
-			"hejbro reset dropped your declared objects, but then failed to clear the ledger",
+			"hejbro reset failed while clearing the ledger, after its drops had already run",
 		);
 		expect(message).not.toContain("failed to drop your declared objects");
 		expect(message).not.toContain("resolve what the error above describes (");
@@ -827,7 +827,7 @@ describe("applyReset — reset-drop-failed names the phase that actually failed 
 		expect((error as HejbroError).code).toBe("reset-drop-failed");
 		const message = (error as HejbroError).message;
 		expect(message).toContain(
-			"hejbro reset dropped your declared objects, but then failed to clear the ledger",
+			"hejbro reset failed while clearing the ledger, after its drops had already run",
 		);
 		expect(message).not.toContain("failed to drop your declared objects");
 		expect(message).not.toContain("resolve what the error above describes (");

@@ -323,9 +323,18 @@ const resetDropFailedAdvice = (
  */
 type ResetFailurePhase = "drop" | "ledger" | "unknown";
 
+/**
+ * [D106 R1, NB1, C9, #753 reopened] The ledger-phase clause names the
+ * order things ran in (drops, then the ledger clear), never claims the
+ * drops survived -- the rolled-back sentence right after this clause
+ * already states the true final fact ("nothing was dropped"), and a
+ * clause reading "dropped your declared objects" just before that would
+ * contradict it in the same message, the exact self-inconsistency this
+ * review round exists to close.
+ */
 const phaseOpening = (phase: ResetFailurePhase): string => {
 	if (phase === "ledger") {
-		return "hejbro reset dropped your declared objects, but then failed to clear the ledger";
+		return "hejbro reset failed while clearing the ledger, after its drops had already run";
 	}
 	if (phase === "unknown") {
 		return "hejbro reset's transaction failed";
