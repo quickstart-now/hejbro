@@ -199,3 +199,97 @@ full gate sweep with `TURBO_FORCE=1` in the worktree after `pnpm build
 (`pnpm check:tasktime`, `pnpm check:crap`); blackbox `W1` on each of
 #846, #820, #830, #831; then the reviewer is requested (constructor mode,
 #412/R3).
+
+## 2. The review's constructed inputs (round 1)
+
+Group 1 is complete, so this group shares its files with nothing
+running. Files this group owns: `packages/cli/src/identity.ts`,
+`packages/cli/src/loader.ts`, `packages/cli/src/snapshot-file.ts`,
+`packages/cli/src/commands/init.ts`, `packages/cli/test/identity.test.ts`
+(or the file that pins `identityFromMessage`), `packages/cli/test/init.test.ts`,
+`packages/cli/test/generate-command.test.ts`,
+`packages/cli/test/loader.test.ts`.
+
+- [x] 2.1 (~6m) The diagnostic header names `snapshotPath` for a `.`
+      value on every command (review B1). Red: the test that pins
+      `identityFromMessage` — "does not read a quoted dot between two
+      quoted words as a schema.table pair"; then
+      `generate-command.test.ts` — the `snapshotPath: "."` row asserts
+      the header line is exactly `error[invalid-config]: snapshotPath`
+      for `init`, `generate`, `verify`, `history`. Input table for the
+      identity function:
+
+      | message | identity |
+      |---|---|
+      | `"app"."posts" …` | `app.posts` (control) |
+      | `config field "snapshotPath" names a directory ("."), but … (e.g. "hejbro.snapshot.json").` | `snapshotPath` |
+      | `"x" and "y"."z"` | `y.z` (control: the pair is found wherever it sits) |
+      | `"a b"."c"` | `a b.c` today — keep whatever the tightened pattern yields, pinned as a fact |
+
+      Green: `ADJACENT_QUOTED_PAIR` no longer lets a group span
+      whitespace or parentheses (`[^"\s()]+`), so the pair is two bare
+      identifiers only. Files: `identity.ts`, its test,
+      `generate-command.test.ts`.
+
+- [ ] 2.2 (~6m) `[design]` The `Next:` of `config-not-found` echoes the
+      `--config` value as the user typed it (review B3; the ruling: a
+      path the user supplied is never re-spelled — relativization is
+      for paths hejbro discovered). Review B2 moved the other way: the
+      ancestor-file sentence carries no code, and the delta now says so
+      — no code change. Red: `loader.test.ts` — "echoes the --config
+      value as typed in Next:, from any working directory". Input table
+      (`loadConfig` called with two different `cwd`s, one nested four
+      levels deeper; nothing at the path):
+
+      | `--config` value | `Next:` contains |
+      |---|---|
+      | `/abs/hejbro.config.ts` | `hejbro init --config /abs/hejbro.config.ts` from both cwds |
+      | `sub/hejbro.config.ts` | `--config sub/hejbro.config.ts` (as typed, control) |
+      | `./sub/hejbro.config.ts` | `--config ./sub/hejbro.config.ts` — the `./` kept |
+      | `../shared/hejbro.config.ts` | `--config ../shared/hejbro.config.ts` |
+      | absolute value, subprocess `generate` | header and message label stay relative to cwd (the report rule), `Next:` carries the absolute value as typed |
+
+      Green: `loadConfig` keeps the typed flag beside the resolved path
+      and the not-found builder takes it for the `Next:`; every label
+      keeps `relLabel`. The `no absolute path` leak-sweep assertions in
+      existing tests exclude the `Next:` clause's echoed flag only where
+      the test itself typed an absolute value. Files: `loader.ts`,
+      `loader.test.ts`, `generate-command.test.ts` (one row).
+
+- [ ] 2.3 (~8m) The `check:next-marker` gate passes without an
+      exemption (review B4). Red: `pnpm check:next-marker` — the two
+      `init.ts` sites (the config artifact's directory and dangling-link
+      refusals) reported as carrying no `Next:`. Green: read the
+      scanner first (`package.json` → its script) and restructure the
+      shared builders in `loader.ts` so every throw site — the loader's
+      and `init`'s — carries a literal `Next:` in its own template
+      (builders return the reason and the `Next:` clause as two
+      strings, each site composes `` `${reason} Next: ${next}` ``);
+      rendered output byte-unchanged (the parity pins from 1.6 are the
+      guard). An exemption entry only if the scanner cannot be
+      satisfied that way — then with the reproduction in its reasoning.
+      Files: `loader.ts`, `init.ts`.
+
+- [ ] 2.4 (~6m) The configuration path is named once on every `init`
+      branch, and `invalid-config-flag` names the flag (review N1, N2).
+      Red: `init.test.ts` — "names the configuration path once on the
+      write-permission and create-failure branches" with rows: cwd mode
+      500 + default path → message reads `"hejbro.config.ts" cannot be
+      created as the configuration file (EACCES): "./" …`, never `for
+      hejbro.config.ts`; `--config ro/my.config.ts`, `ro` mode 500 →
+      names `ro/my.config.ts` and never `hejbro.config.ts`; a
+      field artifact row unchanged (control). `loader.test.ts` — the
+      empty-flag rows assert the message opens with `"--config"` so the
+      header reads `error[invalid-config-flag]: --config` on every
+      command (subprocess pin for `generate` and `history`). Green:
+      `throwNotWritable`/`throwCreateFailed`/`throwCreateDiskFailed`
+      take the artifact's subject the way `throwStatFailed` already
+      does; the flag message quotes the flag name. Files: `init.ts`,
+      `loader.ts`, the two tests.
+
+Group close (group 2): `openspec validate --strict` and `show --diff`
+unchanged (ADDED 2, MODIFIED 3); the full gate sweep with `TURBO_FORCE=1`
+after `pnpm build --force`, `pnpm check:next-marker` included;
+`task-times.csv` rows 2.1–2.4 and the badge restamp; blackbox `W2` on
+#846; then the reviewer re-checks the new tip against B1, B2, B4, N1, N2
+and the B3 sentence only.

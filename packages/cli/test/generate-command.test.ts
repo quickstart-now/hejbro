@@ -1813,3 +1813,33 @@ describe("hejbro generate / --config names a file (#846 D5)", () => {
 		expect(result.stderr).not.toContain(cwd);
 	});
 });
+
+// #846 review B1: identityFromMessage's own accidental quoted-pair match
+// broke the diagnostic header for every command that reports this
+// field's directory-spelling refusal -- the header read as a fragment of
+// the message body instead of "snapshotPath".
+describe('hejbro / snapshotPath: "." reports a clean header on every command (#846 review B1)', () => {
+	const configWithDotSnapshot = `import { defineConfig } from "hejbro";
+
+export default defineConfig({
+	entry: ["src/**/*.schema.ts"],
+	migrationsDir: "migrations",
+	snapshotPath: ".",
+	prefixStrategy: "timestamp",
+});
+`;
+
+	it.each(["init", "generate", "verify", "history"])(
+		"reports error[invalid-config]: snapshotPath as the header (%s)",
+		async (command) => {
+			await writeFixtureFile(cwd, "hejbro.config.ts", configWithDotSnapshot);
+
+			const result = await runCli(cwd, [command]);
+
+			expect(result.exitCode).toBe(1);
+			expect(result.stderr.split("\n")[0]).toBe(
+				"error[invalid-config]: snapshotPath",
+			);
+		},
+	);
+});
