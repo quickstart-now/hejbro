@@ -43,6 +43,18 @@
       "at": "2026-09-04T15:55Z",
       "title": "Review disposition: three blockers fixed here, #767 absorbed, undo by this run's record, shared path-probe; round 2 passed",
       "ratified": null
+    },
+    {
+      "id": "R4",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "D1",
+        "R3"
+      ],
+      "at": "2026-09-04T16:36Z",
+      "title": "D106 round 1 disposition: wording NB1/NB4/NB7 repaired at archive; NB2/NB3/NB5/NB6/NB8 → #846 next batch; archived",
+      "ratified": null
     }
   ],
   "work": [

@@ -56,7 +56,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#686](686/) | ctx.return accepts a mutation with no returning() and renders invalid plpgsql | closed | #733 | 0 | 3 (0 pending) |
 | ↳ [#687](687/) | init ignores the configured migrationsDir and snapshotPath | closed | #739 #759 #770 | 0 | 8 (0 pending) |
 | ↳ [#697](697/) | vendored fn guard is count-only and a __proto__ column key loses its column | closed | #739 | 0 | 4 (0 pending) |
-| ↳ [#741](741/) | `hejbro init --config <path>` is ignored and scaffolds a competing project | closed | #840 | 0 | 3 (0 pending) |
+| ↳ [#741](741/) | `hejbro init --config <path>` is ignored and scaffolds a competing project | closed | #840 | 0 | 4 (0 pending) |
 | ↳ [#743](743/) | `init` and `generate` name the same file two different ways | closed | #840 | 0 | 1 (1 pending) |
 | ↳ [#744](744/) | `docker-rm-hygiene` can fail on a temporary file another test is deleting | closed | #773 | 0 | 1 (0 pending) |
 | ↳ [#748](748/) | core: "found" is missing from the plpgsql reserved-name list and shadows PL/pgSQL's FOUND silently | closed | #824 #833 | 0 | 6 (1 pending) |
@@ -112,7 +112,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 
 ## Totals
 
-Owner decisions 80 · rulings 125 (interpretation 77, extension 46, stop 2) · pending extensions 8 · rejected 2
+Owner decisions 80 · rulings 126 (interpretation 78, extension 46, stop 2) · pending extensions 8 · rejected 2
 
 ## Conventions
 
