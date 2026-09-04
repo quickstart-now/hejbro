@@ -1,7 +1,11 @@
 import { hejbroError, throwHejbroError } from "@hejbro/core";
 import type { CompileResult, Driver } from "@hejbro/query";
 import type { LedgerOrigin } from "./ledger";
-import { isMigrationRecorded, recordAppliedMigration } from "./ledger";
+import {
+	asLedgerAccessFailure,
+	isMigrationRecorded,
+	recordAppliedMigration,
+} from "./ledger";
 
 /**
  * One migration ready to apply -- the filename the ledger keys on (G1)
@@ -402,6 +406,18 @@ export const applyMigration = async (
 			return "applied";
 		});
 	} catch (error) {
+		// [task 1.4, harden-ledger-diagnostics, design.md D4] Which half of
+		// the transaction failed decides which artifact is named: a tagged
+		// ledger-statement failure (the row this call tried to record, or
+		// the in-transaction recheck) escapes untouched, never becomes
+		// `apply-failed` -- it is not the migration's own failure, and
+		// classifying it into `apply-ledger-unreadable`/`apply-ledger-
+		// unwritable` happens one level up, at a caller that holds a usable
+		// driver again (this module never imports `ledger-diagnostics.ts`;
+		// doing so would make the two modules circular).
+		if (asLedgerAccessFailure(error) !== null) {
+			throw error;
+		}
 		return throwApplyFailure(migration.fileName, nextCommand, error);
 	}
 };
