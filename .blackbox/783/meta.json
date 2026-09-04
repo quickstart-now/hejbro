@@ -54,6 +54,19 @@
       "at": "2026-09-04T12:33Z",
       "title": "D4: every ledger-touching command (migrate, status, reset, raise) uses the one judgement, not only status and reset",
       "ratified": null
+    },
+    {
+      "id": "R5",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "D1",
+        "R2",
+        "R3"
+      ],
+      "at": "2026-09-04T14:55Z",
+      "title": "Review disposition: relkind words, unlogged excluded, columns clause by kind, article repaired; #823 filed",
+      "ratified": null
     }
   ],
   "work": [
