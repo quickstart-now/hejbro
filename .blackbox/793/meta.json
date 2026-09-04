@@ -33,15 +33,15 @@
       "number": 794,
       "ref": "quickstart-now/hejbro#794",
       "title": "docs(blackbox): record the bot-pin credential ruling; CI pins this PR itself",
-      "head": "5bd2b9ed29318418fd03934b0dbfd64b873c58e3",
+      "head": "c6fccda2669562b09c724faa437265c55c962a01",
       "headRef": "bot-pin-witness",
       "base": "dev",
       "merged": null,
-      "pinnedAt": "2026-09-04T06:10Z",
+      "pinnedAt": "2026-09-04T06:19Z",
       "refs": [
         {
           "path": ".github/workflows/ci.yml",
-          "blob": "7c07a77c4c0fe7071439b23f0bd6115d58f62f24"
+          "blob": "6bb81fc25a43cb88bdd0ce9e618310a38a88a6f2"
         },
         {
           "path": "AGENTS.md",
