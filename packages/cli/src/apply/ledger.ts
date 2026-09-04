@@ -38,6 +38,20 @@ import type { CompileResult, DriverRow, DriverSession } from "@hejbro/query";
  *   `migrate`, `status`, `reset` and `raise` all raise it for the same
  *   one operation (judging the ledger's identity), thrown by
  *   `ledger-identity.ts`'s own `assertLedgerNotOccupied`.
+ * - `apply-ledger-unreadable` (harden-ledger-diagnostics, task 1.2) -- a
+ *   read `exec` sent to the ledger failed for any reason other than the
+ *   table not existing yet. `apply-*`: `status`, `migrate` and `raise`
+ *   all read the ledger, and `execute.ts`'s in-transaction recheck
+ *   (`isMigrationRecorded`) shares the same code (design.md D4). Thrown
+ *   by `ledger-diagnostics.ts`'s own `throwLedgerReadFailure` -- this
+ *   module tags a read's failure (below) but never classifies it, the
+ *   same "sends statements, sibling owns the refusal's text" split
+ *   `apply-ledger-occupied` already sets with `ledger-identity.ts`.
+ * - `apply-ledger-unwritable` (harden-ledger-diagnostics, task 1.3) -- a
+ *   write `exec` sent to the ledger failed: its bootstrap, a row it
+ *   tried to record, or the clearing of its rows. `apply-*`: `migrate`
+ *   and `raise` both bootstrap and record rows, `reset` clears them.
+ *   Thrown by `ledger-diagnostics.ts`'s own `throwLedgerWriteFailure`.
  * - `apply-ledger-orphan-row` (group 2, task 2.2) -- the ledger records
  *   a migration the repository does not contain. `apply-*`, not
  *   `migrate-*`: `status` reports this same fact and `migrate` refuses
