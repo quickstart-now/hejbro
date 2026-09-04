@@ -4,12 +4,7 @@ import { throwHejbroError } from "@hejbro/core";
 import type { HejbroConfig } from "./config";
 import type { ConfigCommand } from "./config-required";
 import { requireConfigFields } from "./config-required";
-
-/** A configured path's trailing `/`s dropped before it is stat'd -- same
- * regex as `commands/init.ts`'s own helper, kept local rather than
- * imported: a command module is not a library for a shared helper. */
-const stripTrailingSeparators = (path: string): string =>
-	path.replace(/\/+$/, "");
+import { stripTrailingSeparators } from "./path-probe";
 
 type SnapshotFsOutcome = "present" | "directory" | "absent";
 
