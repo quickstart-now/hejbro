@@ -1,9 +1,37 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { throwHejbroError } from "@hejbro/core";
 import type { HejbroConfig } from "./config";
 import type { ConfigCommand } from "./config-required";
 import { requireConfigFields } from "./config-required";
+
+/** A configured path's trailing `/`s dropped before it is stat'd -- same
+ * regex as `commands/init.ts`'s own helper, kept local rather than
+ * imported: a command module is not a library for a shared helper. */
+const stripTrailingSeparators = (path: string): string =>
+	path.replace(/\/+$/, "");
+
+type SnapshotFsOutcome = "present" | "directory" | "absent";
+
+/** `statSync`'s three outcomes at `path` -- a directory kept separate from
+ * "present" (#766 second ask): `existsSync` alone is `true` for a
+ * directory too, and the `readFileSync` that used to follow it died with
+ * a raw `EISDIR`. Any stat failure other than `ENOENT` rethrows raw, same
+ * as today (#767's class -- not coded here). */
+const snapshotFsOutcome = (path: string): SnapshotFsOutcome => {
+	try {
+		const stat = statSync(path);
+		if (stat.isDirectory()) {
+			return "directory";
+		}
+		return "present";
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+			return "absent";
+		}
+		throw error;
+	}
+};
 
 /** Every `.sql` filename in `migrationsDirPath`, sorted — `[]` if the directory doesn't exist. */
 export const listMigrationFiles = (
@@ -40,7 +68,14 @@ export const readSnapshotFileText = (
 	command: ConfigCommand,
 ): string => {
 	const snapshotFsPath = join(cwd, config.snapshotPath);
-	if (existsSync(snapshotFsPath)) {
+	const outcome = snapshotFsOutcome(stripTrailingSeparators(snapshotFsPath));
+	if (outcome === "directory") {
+		return throwHejbroError(
+			"snapshot-not-a-file",
+			`"${config.snapshotPath}" is named by snapshotPath, but a directory is there — the snapshot is a file hejbro writes. Next: move or remove that directory, then rerun \`hejbro init\` to scaffold an empty snapshot (or restore the file from version control if migrations already exist).`,
+		);
+	}
+	if (outcome === "present") {
 		return readFileSync(snapshotFsPath, "utf8");
 	}
 	requireConfigFields(config, command, ["migrationsDir"]);

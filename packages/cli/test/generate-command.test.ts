@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { readdir, readFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { CLI_VERSION } from "../src/version";
@@ -533,6 +533,137 @@ export default defineConfig({
 		expect(result.stderr).toContain("migrationsDir");
 		expect(result.stderr).not.toContain(cwd);
 		expect(existsSync(join(cwd, "db"))).toBe(false);
+	});
+
+	// #766 second ask, D3b: readSnapshotFileText tested existsSync then
+	// read -- a directory passes that test and the read that followed
+	// died with a raw EISDIR. It now stats first and refuses by name.
+	describe("refuses a directory at the snapshot path with snapshot-not-a-file, never EISDIR (#766)", () => {
+		type SnapshotNotAFileRow = {
+			readonly label: string;
+			readonly command: "generate" | "verify";
+			readonly setup: (fixtureCwd: string) => Promise<void>;
+			readonly outcome: "refused" | "reads-as-today" | "snapshot-not-found";
+			readonly expectedPathSubstring?: string;
+		};
+
+		const initWithSchema = async (fixtureCwd: string): Promise<void> => {
+			await runCli(fixtureCwd, ["init"]);
+			await writeFixtureFile(fixtureCwd, "src/app.schema.ts", SCHEMA_SOURCE);
+		};
+
+		const directoryAtDefaultSnapshotPath = async (
+			fixtureCwd: string,
+		): Promise<void> => {
+			await initWithSchema(fixtureCwd);
+			await rm(join(fixtureCwd, "hejbro.snapshot.json"));
+			await mkdir(join(fixtureCwd, "hejbro.snapshot.json"));
+		};
+
+		const rows: ReadonlyArray<SnapshotNotAFileRow> = [
+			{
+				label: "generate, a directory at the default snapshotPath",
+				command: "generate",
+				setup: directoryAtDefaultSnapshotPath,
+				outcome: "refused",
+				expectedPathSubstring: "hejbro.snapshot.json",
+			},
+			{
+				label: "verify, a directory at the default snapshotPath",
+				command: "verify",
+				setup: directoryAtDefaultSnapshotPath,
+				outcome: "refused",
+				expectedPathSubstring: "hejbro.snapshot.json",
+			},
+			{
+				label:
+					'generate, a directory at snapshotPath: "db/state.json/" (trailing separator stripped before the stat)',
+				command: "generate",
+				setup: async (fixtureCwd) => {
+					await writeFixtureFile(
+						fixtureCwd,
+						"hejbro.config.ts",
+						`import { defineConfig } from "hejbro";
+
+export default defineConfig({
+	entry: ["src/**/*.schema.ts"],
+	migrationsDir: "migrations",
+	snapshotPath: "db/state.json/",
+	prefixStrategy: "timestamp",
+});
+`,
+					);
+					await writeFixtureFile(
+						fixtureCwd,
+						"src/app.schema.ts",
+						SCHEMA_SOURCE,
+					);
+					await mkdir(join(fixtureCwd, "db", "state.json"), {
+						recursive: true,
+					});
+				},
+				outcome: "refused",
+				expectedPathSubstring: "db/state.json",
+			},
+			{
+				label:
+					"generate, a regular file at the snapshot path (control: reads as today)",
+				command: "generate",
+				setup: initWithSchema,
+				outcome: "reads-as-today",
+			},
+			{
+				label:
+					"generate, nothing and no prior migrations (control: snapshot-not-found unchanged)",
+				command: "generate",
+				setup: async (fixtureCwd) => {
+					await writeFixtureFile(fixtureCwd, "hejbro.config.ts", CONFIG_SOURCE);
+					await writeFixtureFile(
+						fixtureCwd,
+						"src/app.schema.ts",
+						SCHEMA_SOURCE,
+					);
+				},
+				outcome: "snapshot-not-found",
+			},
+		];
+
+		const hasNoSqlFilesWritten = async (
+			fixtureCwd: string,
+		): Promise<boolean> => {
+			if (!existsSync(join(fixtureCwd, "migrations"))) {
+				return true;
+			}
+			const entries = await readdir(join(fixtureCwd, "migrations"));
+			return entries.filter((name) => name.endsWith(".sql")).length === 0;
+		};
+
+		it.each(rows)(
+			"refuses a directory at the snapshot path with snapshot-not-a-file, never EISDIR ($label)",
+			async ({ command, setup, outcome, expectedPathSubstring }) => {
+				await setup(cwd);
+
+				const result = await runCli(cwd, [command]);
+
+				if (outcome === "reads-as-today") {
+					expect(result.exitCode).toBe(0);
+					return;
+				}
+				if (outcome === "snapshot-not-found") {
+					expect(result.exitCode).toBe(1);
+					expect(result.stderr).toContain("error[snapshot-not-found]");
+					expect(result.stderr).toContain("hejbro.snapshot.json");
+					return;
+				}
+				expect(result.exitCode).toBe(1);
+				expect(result.stderr).toContain("error[snapshot-not-a-file]");
+				expect(result.stderr).toContain(expectedPathSubstring);
+				expect(result.stderr).toContain("Next:");
+				expect(result.stderr).not.toContain("EISDIR");
+				expect(result.stderr).not.toContain(cwd);
+				expect(await hasNoSqlFilesWritten(cwd)).toBe(true);
+			},
+		);
 	});
 
 	// Regression guard for a defect introduced (and caught before shipping)

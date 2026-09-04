@@ -58,11 +58,14 @@ takes. Measured facts come from reading `packages/cli/src` at `eb340e73`.
   same `artifactPairs`, after the duplicate check and before the ancestor
   walk: refuse when `a.kind === "file"` and `relative(strip(a.path),
   strip(b.path))` is non-empty, not absolute and does not start with `..`
-  (`strip` = `stripTrailingSeparators`). Message: `"mig" is named by
-  snapshotPath, and migrationsDir ("mig/sub") would have to be created
-  inside it — a snapshot is a file and cannot hold a directory. Next: point
-  snapshotPath at a file outside migrationsDir, then rerun \`hejbro
-  init\`.` Both labels via `fileLabel`.
+  (`strip` = `stripTrailingSeparators`). Message, worded from the fields
+  so the configuration artifact (also a file) reads correctly if it ever
+  pairs: `"mig" is named by snapshotPath, and migrationsDir ("mig/sub")
+  would have to be created inside it — a file cannot hold a directory.
+  Next: point snapshotPath at a file outside migrationsDir, then rerun
+  \`hejbro init\`.` Both labels via `fileLabel`. Order: after the
+  duplicate check, before the ancestor/kind walk — a configuration fault
+  answers before the node that happens to sit where it points.
 
 ### D3b — `generate` refuses a directory at the snapshot path (#766, second ask)
 
