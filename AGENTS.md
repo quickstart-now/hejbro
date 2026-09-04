@@ -123,6 +123,11 @@ same `assertBuiltCli` dist-freshness guard (`packages/cli/test/loader-cycle.test
   PR body lists the commits to be squashed and references the related
   issue.
 - Releases: `dev` → `main` PR, **merge commit** (never squash/rebase).
+  A long-lived PR -- the release PR and the Version Packages PR -- runs
+  its heavy checks only when the owner approves them (#809): `verify`
+  waits at the `ci-approval` environment review, and every dev merge
+  that moves the PR's head cancels the wait instead of re-running.
+  Feature PRs run immediately.
 - Conventional commits, enforced by commitlint (husky):
   `<type>(<scope>): <subject>` — lower-case subject, ≤72 chars.
 - **Every PR that changes a published package carries exactly one

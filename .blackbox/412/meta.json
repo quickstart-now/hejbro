@@ -401,6 +401,15 @@
       "raw": [
         "ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#47"
       ]
+    },
+    {
+      "id": "D9",
+      "by": "owner",
+      "at": "2026-09-04T08:48Z",
+      "title": "After the release, process the #412 queue",
+      "raw": [
+        "ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#54"
+      ]
     }
   ],
   "work": [
@@ -435,6 +444,26 @@
         {
           "path": "openspec/config.yaml",
           "blob": "ac06240b67e82b06b92df55cda0985017b1e57c9"
+        }
+      ]
+    },
+    {
+      "number": 808,
+      "ref": "quickstart-now/hejbro#808",
+      "title": "ci: approval-gated verify on long-lived prs, one run per head (#807, #809)",
+      "head": "edd67cafbad895bec80816bd60a1ee2f5e87b92e",
+      "headRef": "fix-ci-duplicate-runs",
+      "base": "dev",
+      "merged": null,
+      "pinnedAt": "2026-09-04T08:58Z",
+      "refs": [
+        {
+          "path": ".github/workflows/ci.yml",
+          "blob": "542c664a547c064ad9bd795c026ff58c0cec5052"
+        },
+        {
+          "path": "AGENTS.md",
+          "blob": "e665d68453e0fc66a9bc90fbb23832edb03105aa"
         }
       ]
     }

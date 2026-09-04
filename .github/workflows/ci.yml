@@ -26,6 +26,15 @@ on:
   # and useful for a manual re-run of this workflow against an arbitrary
   # branch without needing a new commit.
   workflow_dispatch: {}
+# #807/#809: a newer head on the same PR cancels the run on the
+# superseded head -- the bot's pin commit that lands seconds after a
+# feature PR opens, and every dev merge that moves a long-lived PR's head
+# (the release PR, the Version Packages PR) while its verify is still
+# waiting for approval below. Pushes to dev/main are never cancelled:
+# each SHA there is a merge.
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   # #785 (D89, folder form): the blackbox record is checked before anything
   # else runs -- a PR whose record is missing or whose pins are stale is
@@ -83,6 +92,16 @@ jobs:
     # (#804): without the status function a skipped `needs` skips this
     # job too, and the Version Packages PR would never get its CI.
     if: ${{ !cancelled() && needs.blackbox.result != 'failure' }}
+    # #809 (owner, 2026-09-04): a long-lived PR -- the release PR (head
+    # `dev`) and the Version Packages PR (head `changeset-release/*`) --
+    # has its head moved by every small merge into dev, and re-running
+    # the heavy checks each time is waste. Those PRs run `verify` under
+    # environment `ci-approval`, whose required reviewer is the owner:
+    # the job waits at the deployment review (no runner time) until the
+    # owner approves the release, and the concurrency group above drops
+    # the wait when dev moves again. Every other PR and every push runs
+    # under `ci-open`, which has no rules.
+    environment: ${{ (github.event_name == 'pull_request' && (github.head_ref == 'dev' || startsWith(github.head_ref, 'changeset-release/'))) && 'ci-approval' || 'ci-open' }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
