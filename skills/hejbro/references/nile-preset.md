@@ -88,22 +88,30 @@ policy's `using`/`with check` fails at apply time with `42622`; hejbro
 renders every such table-bound column reference two-part
 (`"table"."column"`) instead.
 
-## `hejbro check` compares check constraints by text, not `EXPLAIN`
+## `hejbro check` compares every expression surface by text, not `EXPLAIN`
 
 Nile has no `EXPLAIN`, so `hejbro check` never issues one against it:
 `nilePreset` declares `explainUnavailable: true`, and `check` reads that
 declaration from `config.presets` alone (never a driver, a connection, or
-anything a server probe could produce) to switch every check-constraint
-comparison in the run from the server's own rendering to a fixed,
-six-step text normalization instead — collapsing whitespace outside
-string literals, stripping one enclosing parenthesis pair, stripping the
-declaring table's own qualifier from a column reference, unquoting a
-plain lower-case identifier, stripping a `::type` cast the server
-appended to a string literal, and folding letter case outside quoted
-identifiers and string literals. Two spellings that normalize to the same
-text agree. No step ever rewrites anything inside a string literal — a quoted
-word or a table-like name inside a literal is content, so a difference the
-literal carries is always reported, never normalized away.
+anything a server probe could produce) to switch every expression
+comparison in the run — a check constraint's expression, an index's
+predicate, an index's own expression columns, and a generated column's
+expression, all four by the same rule — from the server's own rendering
+to a fixed, six-step text normalization instead — collapsing whitespace
+outside string literals, stripping one enclosing parenthesis pair,
+stripping the declaring table's own qualifier from a column reference,
+unquoting a plain lower-case identifier, stripping a `::type` cast the
+server appended to a string literal, and folding letter case outside
+quoted identifiers and string literals. Two spellings that normalize to
+the same text agree. No step ever rewrites anything inside a string literal
+— a quoted word or a table-like name inside a literal is content, so a
+difference the literal carries is always reported, never normalized
+away. A generated column's catalog text commonly carries a `::type`
+cast the server appends to a *column reference*, not a string
+literal (e.g. `(price * (qty)::numeric)`) — normalization never strips
+that (only a literal's own cast, above), so that column is reported
+`check-not-compared` under this mode even when the two expressions mean
+the same thing.
 
 Two spellings that still differ after normalization are reported
 `check-not-compared`, carrying both texts and a `Next:` that names

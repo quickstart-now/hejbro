@@ -88,7 +88,7 @@ The exit code answers three separate questions, not one:
 |------|---------|
 | `0`  | every declared object was compared and agreed |
 | `1`  | at least one declared object is missing or differs from the database |
-| `2`  | the run could not answer — something could not be compared (e.g. a role without EXPLAIN privilege on a table it owns no policy on, or — on a platform whose preset declares `explainUnavailable`, e.g. Nile — a check constraint whose declared and catalog text still differ after the fixed text normalization), or the declaration set was empty |
+| `2`  | the run could not answer — something could not be compared (e.g. a role without EXPLAIN privilege on a table it owns no policy on, or — on a platform whose preset declares `explainUnavailable`, e.g. Nile — an expression whose declared and catalog text still differ after the fixed text normalization), or the declaration set was empty |
 
 `2` is never a pass and is never folded into `0` or `1`: a CI pipeline
 running `check` under a limited role should treat `1` (real drift) and
@@ -98,13 +98,18 @@ rerun") as different answers, not one red build indistinguishable from
 the other.
 
 `check` does not compare everything. View bodies are never compared
-(only that a declared view exists). Primary keys, unique constraints,
-foreign keys, and indexes are checked for existence only, not their
-exact shape; check constraints get both — existence, and their
-expression, matched by running the declared and the catalog's own
-rendering through the server in the same statement (Postgres often
-rewrites an expression on write, so comparing rendered text directly
-would false-positive). The report states this coverage boundary on
+(only that a declared view exists). Primary keys, unique constraints
+and foreign keys are checked for existence only, not their exact shape;
+an index's plain columns, its uniqueness and its access method are the
+same — existence only. Four expression-bearing surfaces get both —
+existence, and the expression itself, matched by running the declared
+and the catalog's own rendering through the server in the same
+statement (Postgres often rewrites an expression on write, so comparing
+rendered text directly would false-positive): a check constraint's
+expression (plus whether the database enforces it), a partial index's
+predicate, an index's own expression columns, and a generated column's
+expression (compared as its own axis, never as a default — a generated
+column cannot carry one). The report states this coverage boundary on
 every run, pass or fail. It also prints an **inventory** section —
 tables inside your declared schemas that no declaration covers, and the
 database's installed extensions — informational only, never a `check`
