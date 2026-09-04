@@ -65,7 +65,7 @@ definition of done, never a task.
       error.
       Files: `packages/core/src/engine/diff-engine.ts`,
       `packages/core/test/diff-engine.test.ts`.
-- [ ] 1.4 (~6m) The new refusal and the widened reserved set reach the
+- [x] 1.4 (~6m) The new refusal and the widened reserved set reach the
       user-facing skill, and the release carries all three fixes. Red:
       `pnpm check:diagnostic-xref` and `pnpm check:next-marker` over the
       new code's site, plus `changeset status` with no changeset

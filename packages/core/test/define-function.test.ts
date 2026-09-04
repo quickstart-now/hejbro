@@ -496,6 +496,7 @@ describe("two argument keys deriving to one SQL name are refused (#751)", () => 
 	}> = [
 		{
 			label: "camelCase beside snake_case",
+			// biome-ignore lint/style/useNamingConvention: adversarial snake_case key under test.
 			args: { userId: uuid(), user_id: uuid() },
 			firstKey: "userId",
 			secondKey: "user_id",
@@ -503,6 +504,7 @@ describe("two argument keys deriving to one SQL name are refused (#751)", () => 
 		},
 		{
 			label: "snake_case beside camelCase (declaration order reversed)",
+			// biome-ignore lint/style/useNamingConvention: adversarial snake_case key under test.
 			args: { user_id: uuid(), userId: uuid() },
 			firstKey: "user_id",
 			secondKey: "userId",
@@ -510,6 +512,7 @@ describe("two argument keys deriving to one SQL name are refused (#751)", () => 
 		},
 		{
 			label: "a digit boundary",
+			// biome-ignore lint/style/useNamingConvention: adversarial snake_case key under test.
 			args: { v2Id: uuid(), v2_id: uuid() },
 			firstKey: "v2Id",
 			secondKey: "v2_id",
@@ -517,6 +520,7 @@ describe("two argument keys deriving to one SQL name are refused (#751)", () => 
 		},
 		{
 			label: "a single-letter segment",
+			// biome-ignore lint/style/useNamingConvention: adversarial snake_case key under test.
 			args: { aB: uuid(), a_b: uuid() },
 			firstKey: "aB",
 			secondKey: "a_b",
@@ -524,6 +528,7 @@ describe("two argument keys deriving to one SQL name are refused (#751)", () => 
 		},
 		{
 			label: "a trailing underscore",
+			// biome-ignore lint/style/useNamingConvention: adversarial snake_case key under test.
 			args: { userId_: uuid(), user_id_: uuid() },
 			firstKey: "userId_",
 			secondKey: "user_id_",
@@ -572,7 +577,6 @@ describe("two argument keys deriving to one SQL name are refused (#751)", () => 
 			app,
 			"echo_postid",
 			{
-				// biome-ignore lint/style/useNamingConvention: adversarial near-duplicate key under test.
 				args: { postID: uuid(), postId: uuid() },
 				returns: { typeName: "uuid" },
 			},
@@ -602,6 +606,7 @@ describe("two argument keys deriving to one SQL name are refused (#751)", () => 
 					app,
 					"echo_precedence_reserved",
 					{
+						// biome-ignore lint/style/useNamingConvention: adversarial snake_case key under test.
 						args: { order: uuid(), userId: uuid(), user_id: uuid() },
 						returns: { typeName: "uuid" },
 					},
@@ -620,6 +625,7 @@ describe("two argument keys deriving to one SQL name are refused (#751)", () => 
 					app,
 					"echo_precedence_invalid",
 					{
+						// biome-ignore lint/style/useNamingConvention: adversarial snake_case key under test.
 						args: { "my-arg": uuid(), userId: uuid(), user_id: uuid() },
 						returns: { typeName: "uuid" },
 					},

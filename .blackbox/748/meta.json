@@ -44,7 +44,15 @@
       "ratified": null
     }
   ],
-  "work": [],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-04T13:25Z",
+      "title": "harden-core-derivations 1.1: plpgsql-declared variables and missing reserved keywords refused",
+      "pr": null,
+      "decisions": []
+    }
+  ],
   "prs": [],
   "origin": null,
   "followUps": []

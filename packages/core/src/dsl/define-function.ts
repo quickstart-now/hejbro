@@ -227,7 +227,11 @@ const assertArgsPrototypeNotReplaced = (
  */
 const findDuplicateArgName = (
 	resolved: ReadonlyArray<{ readonly key: string; readonly argName: string }>,
-): { readonly firstKey: string; readonly secondKey: string; readonly argName: string } | null => {
+): {
+	readonly firstKey: string;
+	readonly secondKey: string;
+	readonly argName: string;
+} | null => {
 	const duplicateIndex = resolved.findIndex((entry, index) =>
 		resolved
 			.slice(0, index)
