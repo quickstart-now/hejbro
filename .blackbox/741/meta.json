@@ -18,6 +18,18 @@
       "at": "2026-09-04T12:52Z",
       "title": "Batch ip = #741 #743 #766 #768 as one change harden-init-paths, parallel to li; #745 #767 follow on the same files",
       "ratified": null
+    },
+    {
+      "id": "R2",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "D1",
+        "R1"
+      ],
+      "at": "2026-09-04T13:07Z",
+      "title": "harden-init-paths approved; D1: root = cwd, --config names the file only; every-command config-relative goes to a follow-up",
+      "ratified": null
     }
   ],
   "work": [],

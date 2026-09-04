@@ -7,7 +7,19 @@
   "status": "open",
   "opened": "2026-09-04",
   "closed": null,
-  "decisions": [],
+  "decisions": [
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "D1"
+      ],
+      "at": "2026-09-04T13:07Z",
+      "title": "D2: an absolute-looking artifact path is refused with invalid-config; the re-rooting scenario is retired as REMOVED + ADDED",
+      "ratified": null
+    }
+  ],
   "work": [],
   "prs": [],
   "origin": null,

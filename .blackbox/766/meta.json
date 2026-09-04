@@ -7,7 +7,19 @@
   "status": "open",
   "opened": "2026-09-04",
   "closed": null,
-  "decisions": [],
+  "decisions": [
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "D1"
+      ],
+      "at": "2026-09-04T13:07Z",
+      "title": "D3: nesting refused under init-path-conflict; D3b: generate refuses a directory snapshot with snapshot-not-a-file",
+      "ratified": null
+    }
+  ],
   "work": [],
   "prs": [],
   "origin": null,
