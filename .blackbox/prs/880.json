@@ -1,0 +1,12 @@
+{
+  "version": 3,
+  "number": 880,
+  "ref": "quickstart-now/hejbro#880",
+  "title": "chore(blackbox): record owner inputs d20-d22 and refresh merge state",
+  "head": "a1fbe1d71a7267591f9c4b94d80712609d7452c7",
+  "headRef": "chore-412-record",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-05T04:01Z",
+  "refs": []
+}
