@@ -1,0 +1,65 @@
+{
+  "version": 3,
+  "number": 924,
+  "ref": "quickstart-now/hejbro#924",
+  "title": "chore(openspec): archive harden-function-locals after d106 round 1 (#832)",
+  "head": "6c82f954866e3e836875a705fdac3b18e72da391",
+  "headRef": "archive-harden-function-locals",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-05T12:33Z",
+  "refs": [
+    {
+      "path": "openspec/changes/archive/2026-09-05-harden-function-locals/design.md",
+      "blob": "8fcc5d679540bca25a6e923368da29605d6856bd"
+    },
+    {
+      "path": "openspec/changes/harden-function-locals/design.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-05-harden-function-locals/evaluation.md",
+      "blob": "000a0d792a216c7f06ebaae954171401f563ba3d"
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-05-harden-function-locals/proposal.md",
+      "blob": "fbe624d0b45344cec3411b315663afbc95438ed3"
+    },
+    {
+      "path": "openspec/changes/harden-function-locals/proposal.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-05-harden-function-locals/specs/plpgsql-function-bodies/spec.md",
+      "blob": "292506c007aca4702c82ce206d1be8d82743fd95"
+    },
+    {
+      "path": "openspec/changes/harden-function-locals/specs/plpgsql-function-bodies/spec.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-05-harden-function-locals/specs/table-declaration/spec.md",
+      "blob": "ecd51ca72bc70c32d36277d30f4dc5ba23fd50df"
+    },
+    {
+      "path": "openspec/changes/harden-function-locals/specs/table-declaration/spec.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-05-harden-function-locals/tasks.md",
+      "blob": "c2d4ca5062a49d8cfb4ff9e47b44d3acafbe7a2e"
+    },
+    {
+      "path": "openspec/changes/harden-function-locals/tasks.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/specs/plpgsql-function-bodies/spec.md",
+      "blob": "8642f882494c3f82adc34268fd9ae90df505ac2e"
+    },
+    {
+      "path": "openspec/specs/table-declaration/spec.md",
+      "blob": "9f50770acea81d6c0308a08056b40b83d59776d0"
+    }
+  ]
+}
