@@ -23,3 +23,10 @@ _lead · interpretation · basis 412/D24, D25; 486/R1, R2; bt (a) report (tasks.
 
 Q1 the lead's file names were shorthand — errors.ts and test/driver/{contract,errors}.test.ts are the files, tasks.md corrected in place. Q2 assertCapability takes keys (any-of), single-key message byte-identical, multi-key message in the N-general form, error gains a `capabilities` field. Q3 the batched path hands `send` a batch-per-execute session so the change stays inside context.ts; the one-statement invariant is pinned. Q5 order 1.1 → 1.3 → 1.5 → 1.6 → 1.2 → 1.4, neon untouched until PR #909 merges and the lead rebases. Ratification: owner on return.
 
+<a id="r4"></a>
+## R4 — 1.6: a multi-command text folds by Array.isArray to the last command's rows, in one @hejbro/query function both drivers call
+
+_lead · extension · basis 412/D24, D25; 486/R2; #891's own reasoning (no shared point but @hejbro/query); bt measurement on postgres 17 / pg 8.23 (array result per command, 42601 when params accompany a multi-command text) · 2026-09-05T11:24Z · ratified: pending_
+
+Detection by Array.isArray(result) (the driver library's own signal), never by a missing rows field; the fold lives in one exported function beside statement-name.ts so the vanilla and Neon WebSocket drivers are alike by construction, tasks.md 1.6 file list amended; the handle/tx path's uncoded TypeError is one input row. The zero-length array case is ruled after the reachability measurement (empty text, comment-only, trailing semicolon). Ratification: owner on return.
+

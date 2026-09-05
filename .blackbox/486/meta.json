@@ -47,6 +47,19 @@
       "at": "2026-09-05T11:20Z",
       "title": "Kick-off rulings: existing error/test files, an any-of assertCapability with an N-key message, a batch-per-execute session inside context.ts, and 1.2 deferred until #458 lands",
       "ratified": null
+    },
+    {
+      "id": "R4",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "412/D24",
+        "D25; 486/R2; #891's own reasoning (no shared point but @hejbro/query); bt measurement on postgres 17 / pg 8.23 (array result per command",
+        "42601 when params accompany a multi-command text)"
+      ],
+      "at": "2026-09-05T11:24Z",
+      "title": "1.6: a multi-command text folds by Array.isArray to the last command's rows, in one @hejbro/query function both drivers call",
+      "ratified": null
     }
   ],
   "work": [],
