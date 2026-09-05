@@ -138,3 +138,20 @@ delta scenarios of `openspec show harden-check-inventory --diff` hold.
   is a real defect and is fixed in `inventory.ts` here.
   Files: `packages/cli/src/check/inventory.ts`,
   `packages/cli/test/check-inventory.test.ts`.
+- [ ] 1.11 ~7m — The omitted-column line's own exit condition, after the
+  review (lead ruling `.blackbox/707/` R3): renaming a column whose name
+  no declaration could carry makes the name carryable, and `check` goes
+  on naming it until a declaration carries it — so "until it is renamed
+  in the database" is the same over-promise this change exists to end,
+  in the very line #726 was filed about. Red:
+  `packages/cli/test/infer-loss-report.test.ts`, the two column-line
+  pins (`import` and `pull` variants, both `toBe` on the whole string):
+  the `import` line ends "renamed in the database and declared", the
+  `pull` line is unchanged (its way out is linking the schema
+  repository, which does carry the column). Green: the one clause in
+  `undeclarableNameLineForImport` (`infer/loss-report.ts`). Same task:
+  `infer-omitted-names.integration.test.ts` and any brownfield witness
+  asserting that string, run explicitly.
+  Files: `packages/cli/src/infer/loss-report.ts`,
+  `packages/cli/test/infer-loss-report.test.ts`,
+  `packages/cli/test/infer-omitted-names.integration.test.ts`.
