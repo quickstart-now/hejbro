@@ -19,6 +19,17 @@
       "at": "2026-09-05T08:12Z",
       "title": "The vendored client gains .related() typed from a contract-emitted Relations map",
       "ratified": null
+    },
+    {
+      "id": "R2",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "R1"
+      ],
+      "at": "2026-09-05T21:14Z",
+      "title": "the snippet prelude and the guide join the files; the no-member scenario is a type-layer claim",
+      "ratified": null
     }
   ],
   "work": [],
