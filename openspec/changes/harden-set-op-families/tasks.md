@@ -14,8 +14,8 @@ src/query/with.ts`, `packages/core/test/query/*set-op*-types.test.ts`
 and the recursive-term type test, `packages/core/test/query/
 select.test.ts` (1.2a — the one call site the new rule refuses);
 `packages/query/src/db/chain.ts`, the new `packages/query/src/db/
-chain-projection.ts`, `packages/query/src/index.ts`, `packages/query/
-test/types/*.test.ts` (1.2b, 1.2c); `skills/hejbro/references/
+chain-projection.ts`, `packages/query/test/types/*.test.ts` (1.2b,
+1.2c); `packages/core/src/index.ts` (1.2c); `skills/hejbro/references/
 query-layer.md`, one `.changeset/*.md` (1.3). A task that tightens a
 type also repairs the existing call sites the new rule refuses; the
 repo-wide `check-types` run is that list, and each such file is named
@@ -80,7 +80,8 @@ planner, not into the diff.
       never in place of it. Mutation: removing the brand from
       `SelectChainLimited` turns the chain's refusal row green and
       nothing else. Files: `packages/query/src/db/chain.ts`,
-      `packages/query/test/types/*.test.ts`.
+      `packages/query/test/types/*.test.ts`, `packages/core/src/query/
+      select.ts`, `packages/core/src/index.ts`.
 
 - [ ] 1.3 (~5m) Reference and changeset. `query-layer.md`'s
       set-operation and recursive-CTE sections state the family rule,
