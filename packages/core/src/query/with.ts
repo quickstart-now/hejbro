@@ -116,6 +116,44 @@ export type CteReference<
 > = CteRowEnvironment<TProjection> & { readonly [cteRowMeta]: CteRowMeta };
 
 /**
+ * Phantom marker (the `columnOriginBrand`/`readAsBrand` precedent), never
+ * assigned at runtime — carries the recursive term's own projected value
+ * for one key onto that key's OUTWARD reference (#500/R2). Nullability
+ * itself is not decided here: `@hejbro/query`'s `ProjectedColumnResult` is
+ * the one place that already resolves a projected value's null dimension,
+ * left joins included, and reads this brand to union it with the anchor's
+ * own. A second, core-side rule would be a proper subset of that
+ * knowledge and would widen too little.
+ *
+ * Public: `@hejbro/query`'s type tests `infer` against this exact
+ * symbol-keyed property across the package boundary, the same reason
+ * `leftJoinedBrand` is public.
+ */
+export const widenedByBrand: unique symbol = Symbol("hejbro:widened-by");
+
+/** The brand's shape — see {@link widenedByBrand}. */
+export type WidenedBy<TRecursiveValue> = {
+	readonly [widenedByBrand]?: TRecursiveValue;
+};
+
+/**
+ * `asRecursive`'s own outward reference (#500/R2): every key of the
+ * anchor's row environment, each intersected with {@link WidenedBy} the
+ * recursive term's own projected value for that same key — every key,
+ * never a selected subset, since which keys actually widen is
+ * `@hejbro/query`'s decision, not this builder's. The reference the
+ * recursive callback itself receives stays a plain {@link CteReference}
+ * (Q2: written before its own type exists, typed from the anchor alone).
+ */
+export type RecursiveCteReference<
+	TProjection extends SelectProjection,
+	TRecursiveProjection extends SelectProjection,
+> = {
+	readonly [K in keyof CteRowEnvironment<TProjection>]: CteRowEnvironment<TProjection>[K] &
+		WidenedBy<TRecursiveProjection[K & keyof TRecursiveProjection]>;
+} & { readonly [cteRowMeta]: CteRowMeta };
+
+/**
  * Guards that `value` is a {@link CteReference} — the counterpart to
  * `dsl/table.ts`'s `isTable`.
  *
@@ -239,7 +277,7 @@ export type CteBuilder = {
 			| SetOpStage<TRecursiveProjection>) &
 			CompatibleRecursiveTerm<TProjection, TRecursiveProjection>,
 		options?: RecursiveCteEntryOptions,
-	) => CteReference<TProjection>;
+	) => RecursiveCteReference<TProjection, TRecursiveProjection>;
 };
 
 /**

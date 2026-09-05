@@ -33,7 +33,7 @@ file, that goes back to the planner, not into the diff.
 
 ## 1. Outward nullability
 
-- [ ] 1.1 (~6m) **[design]** The core builder carries the recursive
+- [x] 1.1 (~6m) **[design]** The core builder carries the recursive
       term's projection outward. Settles the carrier type
       (`WidenedBy<TRecursiveValue>`: a phantom brand, never assigned at
       runtime, intersected per key onto the outward reference's field —
