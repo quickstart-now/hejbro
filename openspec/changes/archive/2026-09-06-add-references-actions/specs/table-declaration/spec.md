@@ -94,7 +94,9 @@ the next read folds again.
 
 #### Scenario: A repeated reference replaces target and actions together
 - **WHEN** a column declares `.references(() => a.id, { onDelete: "cascade" })` and then `.references(() => b.id)`, or a second call naming different actions
-- **THEN** the emitted foreign key targets the last call's column and carries exactly the last call's actions — none in the first case — matching the `extras` form written from the last call alone; whether a repeated call should be refused instead is open in #972
+- **THEN** the emitted foreign key targets the last call's column and carries exactly the last call's actions — none in the first case — matching the `extras` form written from the last call alone
+
+Whether a repeated call should be refused instead of replacing is an open question (#972); this scenario states today's behaviour.
 
 #### Scenario: The example's foreign keys convert without moving a byte
 - **WHEN** `examples/postgres` declares its single-column foreign keys

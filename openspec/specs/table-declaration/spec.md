@@ -121,10 +121,17 @@ snapshot fields, same diff behavior — so the two declaration forms are
 interchangeable for the database. A column-level reference SHALL
 additionally carry its target at the TypeScript type level, so the
 query layer can derive relations from it without any second
-declaration. `.references()` takes no options; self-referencing foreign
-keys, composite (multi-column) foreign keys, and `onDelete`/`onUpdate`
-actions live on the `extras` path, and a declaration needing them uses
-`extras`. Declaring `.references()` and an `extras` foreign key over
+declaration. `.references()` SHALL accept an optional second argument
+naming the referential actions — `{ onDelete?, onUpdate? }`, over the
+same action vocabulary the `extras` form accepts — and SHALL fold them
+into the same declaration, so a column-level foreign key with actions
+generates, snapshots and diffs exactly as the `extras` form with the
+same actions does. A later `.references()` call on the same column
+SHALL replace the reference as a whole — target and actions together —
+so a second call naming no actions leaves the column with none.
+Self-referencing foreign keys and composite
+(multi-column) foreign keys live on the `extras` path, and a
+declaration needing them uses `extras`. Declaring `.references()` and an `extras` foreign key over
 the same column SHALL fail at declaration time with an explicit error
 naming the column, never a silent double-emit. A table's foreign keys
 SHALL emit and snapshot in one canonical, declaration-form-independent
@@ -187,6 +194,27 @@ the next read folds again.
 #### Scenario: table() itself never resolves a reference thunk
 - **WHEN** `table()` returns
 - **THEN** no `.references()` thunk on that table has run yet
+
+#### Scenario: A column-level reference carries referential actions
+- **WHEN** a column declares `.references(() => users.id, { onDelete,
+  onUpdate })` for every action of the vocabulary on either key, both
+  keys, or neither, and an otherwise-identical table declares the same
+  edge with the same actions through `extras.foreignKeys`
+- **THEN** both generate identical foreign-key DDL — the `on delete`
+  and `on update` clauses included — identical snapshot content, and an
+  action changed on either form diffs as the same drop-and-add
+
+#### Scenario: A repeated reference replaces target and actions together
+- **WHEN** a column declares `.references(() => a.id, { onDelete: "cascade" })` and then `.references(() => b.id)`, or a second call naming different actions
+- **THEN** the emitted foreign key targets the last call's column and carries exactly the last call's actions — none in the first case — matching the `extras` form written from the last call alone
+
+Whether a repeated call should be refused instead of replacing is an open question (#972); this scenario states today's behaviour.
+
+#### Scenario: The example's foreign keys convert without moving a byte
+- **WHEN** `examples/postgres` declares its single-column foreign keys
+  through `.references()` with their actions instead of `extras`
+- **THEN** the committed snapshot and migration chain are unchanged,
+  `hejbro verify` passes, and the round trip passes
 
 ### Requirement: Declaration-site expressions refuse window functions
 A window function SHALL be refused where a declaration stores an
