@@ -17,6 +17,7 @@ import { collectFlagValues, normalizeEqualsFlags } from "../flags";
 import type { InferCatalogOptions, InferCatalogResult } from "../infer/compose";
 import { inferFromCatalog } from "../infer/compose";
 import { withReportLinesBeforeWayOut } from "../infer/loss-report";
+import { loadConfigIfPresent } from "../loader";
 
 const IMPORT_DESCRIPTION =
 	"Write one starter declaration file per schema from a live database's catalog.";
@@ -349,6 +350,11 @@ export const runImport = async (
 		const out = lastFlagValue(normalized, "--out") ?? throwMissingOut();
 		const outDir = resolve(cwd, out);
 		const inferCatalog = deps.inferCatalog ?? inferFromCatalog;
+		// import never read hejbro.config.ts before this field existed
+		// (add-config-driver, #458, lead ruling 458/R2): a project with none
+		// yet still runs through the vanilla driver, so absence is never a
+		// refusal here.
+		const loaded = await loadConfigIfPresent(cwd);
 		return await withCheckConnection(
 			urlFlag,
 			process.env,
@@ -389,6 +395,7 @@ export const runImport = async (
 				};
 			},
 			deps.importer,
+			loaded?.config.driver,
 		);
 	} catch (error) {
 		return errorReport(error);

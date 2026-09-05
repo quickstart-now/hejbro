@@ -156,6 +156,7 @@ export const runReset = async (
 			(driver) =>
 				applyResetReport(driver, currentSnapshot, registry, confirmFlag),
 			importer,
+			config.driver,
 		);
 	} catch (error) {
 		return preconditionResult(error);

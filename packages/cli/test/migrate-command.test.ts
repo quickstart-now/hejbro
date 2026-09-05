@@ -1127,3 +1127,155 @@ describe("runMigrate — a ledger that exists but cannot be read is not reported
 		).toBe(false);
 	});
 });
+
+// add-config-driver, #458, task 1.4: mirrors check-command.test.ts's own
+// seam (a fixture config runs in-process through jiti, so a per-test
+// recording driver reaches it only through globalThis).
+const FACTORY_SEAM_KEY = "__hejbroMigrateConfigDriverFactorySeam458__";
+
+type FactorySeam = {
+	readonly calls: string[];
+	readonly driver: CheckDriverConnection;
+};
+
+const globalRecord = globalThis as Record<string, unknown>;
+
+const installFactorySeam = (seam: FactorySeam): void => {
+	globalRecord[FACTORY_SEAM_KEY] = seam;
+};
+
+const clearFactorySeam = (): void => {
+	delete globalRecord[FACTORY_SEAM_KEY];
+};
+
+const FACTORY_CONFIG_SOURCE = `import { defineConfig } from "hejbro";
+
+export default defineConfig({
+	entry: ["src/**/*.schema.ts"],
+	migrationsDir: "migrations",
+	snapshotPath: "hejbro.snapshot.json",
+	prefixStrategy: "timestamp",
+	driver: (connectionString) => {
+		const seam = globalThis[${JSON.stringify(FACTORY_SEAM_KEY)}];
+		seam.calls.push(connectionString);
+		return seam.driver;
+	},
+});
+`;
+
+/** Same happy-path answer this file's own harden-ledger-identity fixture
+ * uses for an absent ledger (empty probe rows -> `42P01` on the ledger
+ * select -> `bootstrapLedger` runs) -- the one shape that lets a real
+ * apply through a fake driver. */
+const buildRecordingMigrateDriver = (
+	capabilities: DriverCapabilities = {
+		"interactive-transactions": true,
+		"session-state": true,
+	},
+): {
+	readonly driver: CheckDriverConnection;
+	readonly executed: number[];
+	readonly closed: number[];
+} => {
+	const executed: number[] = [];
+	const closed: number[] = [];
+	const session: DriverSession = {
+		execute: async (compiled) => {
+			executed.push(1);
+			const sql = compiled.sql.trim().toLowerCase();
+			if (sql.startsWith("select c.relkind")) {
+				return [];
+			}
+			if (sql.startsWith('select "filename"')) {
+				throw Object.assign(
+					new Error('relation "hejbro.migration_ledger" does not exist'),
+					{ code: "42P01" },
+				);
+			}
+			return [];
+		},
+	};
+	const driver: CheckDriverConnection = {
+		capabilities,
+		execute: session.execute,
+		transaction: async (callback) => callback(session),
+		setupSession: async () => {},
+		client: {
+			end: async () => {
+				closed.push(1);
+			},
+		},
+	};
+	return { driver, executed, closed };
+};
+
+describe("hejbro migrate / the configured driver factory threads through (#458 task 1.4)", () => {
+	let cwd: string;
+
+	beforeEach(async () => {
+		cwd = await createCliFixtureDir();
+		await writeFixtureFile(cwd, "hejbro.config.ts", FACTORY_CONFIG_SOURCE);
+		await writeFixtureFile(
+			cwd,
+			"migrations/0001_a.sql",
+			[
+				"-- hejbro migration",
+				"-- parent-snapshot: sha256:aaaa",
+				"-- snapshot: sha256:bbbb",
+				'create table "app"."a" (id integer);',
+			].join("\n"),
+		);
+	});
+
+	afterEach(async () => {
+		clearFactorySeam();
+		await removeCliFixtureDir(cwd);
+	});
+
+	it("calls the factory exactly once with --url's string, sends migrate's statements to the recording driver, closes it, and never imports @hejbro/pg", async () => {
+		const { driver, executed, closed } = buildRecordingMigrateDriver();
+		const calls: string[] = [];
+		installFactorySeam({ calls, driver });
+		const importerCalls: string[] = [];
+		const importer: CheckDriverImporter = async () => {
+			importerCalls.push("called");
+			throw new Error("the importer must not run when a factory is configured");
+		};
+
+		const result = await runMigrate(
+			cwd,
+			["--url", "postgres://factory-test"],
+			importer,
+		);
+
+		expect(result.exitCode).toBe(0);
+		expect(calls).toEqual(["postgres://factory-test"]);
+		expect(importerCalls).toHaveLength(0);
+		expect(executed.length).toBeGreaterThan(0);
+		expect(closed).toHaveLength(1);
+	});
+
+	// The refusal is unchanged by this whole change (design.md, "Capability
+	// requirements are unchanged"): a factory-built driver declaring no
+	// interactive transactions is refused exactly as an imported one
+	// would be, before any migration statement is sent.
+	it("refuses a factory-built driver with no interactive transactions, exactly as an imported one would be", async () => {
+		const { driver } = buildRecordingMigrateDriver({
+			"interactive-transactions": false,
+			"session-state": true,
+		});
+		installFactorySeam({ calls: [], driver });
+		const importer: CheckDriverImporter = async () => {
+			throw new Error("the importer must not run when a factory is configured");
+		};
+
+		const result = await runMigrate(
+			cwd,
+			["--url", "postgres://factory-test"],
+			importer,
+		);
+
+		expect(result.exitCode).toBe(2);
+		expect(result.stderr).toContain("apply-missing-capability");
+	});
+});

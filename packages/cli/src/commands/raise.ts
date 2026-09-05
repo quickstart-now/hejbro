@@ -17,6 +17,7 @@ import { withCheckConnection } from "../check/driver";
 import { fromHejbroError, renderDiagnostics } from "../diagnostics";
 import { asHejbroError } from "../errors";
 import { normalizeEqualsFlags } from "../flags";
+import { loadConfigIfPresent } from "../loader";
 
 const RAISE_DESCRIPTION =
 	"Stand an empty database up from a vendored snapshot SQL file.";
@@ -119,6 +120,11 @@ export const runRaise = async (
 		const sql = readFileSync(join(cwd, fileName), "utf8");
 		const snapshotFile: SnapshotFile = { fileName, sql, origin: "raised" };
 
+		// raise never read hejbro.config.ts before this field existed
+		// (add-config-driver, #458, lead ruling 458/R2): a project with none
+		// yet still runs through the vanilla driver, so absence is never a
+		// refusal here.
+		const loaded = await loadConfigIfPresent(cwd);
 		return await withCheckConnection(
 			urlFlag,
 			process.env,
@@ -129,6 +135,7 @@ export const runRaise = async (
 				return { exitCode: 0, stdout: [successLine(fileName)], stderr: null };
 			},
 			importer,
+			loaded?.config.driver,
 		);
 	} catch (error) {
 		return preconditionResult(error);

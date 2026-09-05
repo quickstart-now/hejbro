@@ -3,6 +3,7 @@ import {
 	createDefaultRegistry,
 	emptySnapshot,
 	getTableMeta,
+	renderSnapshot,
 	schema,
 	table,
 	uuid,
@@ -13,7 +14,7 @@ import type {
 	DriverCapabilities,
 	DriverSession,
 } from "@hejbro/query";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { applyResetReport, runReset } from "../src/commands/reset";
 import {
 	createCliFixtureDir,
@@ -353,5 +354,105 @@ describe("runReset — a ledger diagnostic's header names the ledger, not the co
 		} finally {
 			await removeCliFixtureDir(cwd);
 		}
+	});
+});
+
+// add-config-driver, #458, task 1.4: mirrors check-command.test.ts's own
+// seam (a fixture config runs in-process through jiti, so a per-test
+// recording driver reaches it only through globalThis). The run is left
+// unconfirmed on purpose -- `assertResetConfirmed` still queries
+// `current_database()` through the driver before it refuses, so this
+// proves the wiring without needing this suite's own two-call
+// confirm-drop dance.
+const FACTORY_SEAM_KEY = "__hejbroResetConfigDriverFactorySeam458__";
+
+type FactorySeam = {
+	readonly calls: string[];
+	readonly driver: Driver & { readonly client: { end(): Promise<void> } };
+};
+
+const globalRecord = globalThis as Record<string, unknown>;
+
+const installFactorySeam = (seam: FactorySeam): void => {
+	globalRecord[FACTORY_SEAM_KEY] = seam;
+};
+
+const clearFactorySeam = (): void => {
+	delete globalRecord[FACTORY_SEAM_KEY];
+};
+
+const FACTORY_CONFIG_SOURCE = `import { defineConfig } from "hejbro";
+
+export default defineConfig({
+	entry: ["src/**/*.schema.ts"],
+	snapshotPath: "hejbro.snapshot.json",
+	driver: (connectionString) => {
+		const seam = globalThis[${JSON.stringify(FACTORY_SEAM_KEY)}];
+		seam.calls.push(connectionString);
+		return seam.driver;
+	},
+});
+`;
+
+describe("hejbro reset / the configured driver factory threads through (#458 task 1.4)", () => {
+	let cwd: string;
+
+	beforeEach(async () => {
+		cwd = await createCliFixtureDir();
+		await writeFixtureFile(cwd, "hejbro.config.ts", FACTORY_CONFIG_SOURCE);
+		await writeFixtureFile(
+			cwd,
+			"src/app.schema.ts",
+			`import { schema, table, uuid } from "hejbro";
+
+export const app = schema("app");
+
+export const posts = table(app, "posts", {
+	id: uuid().primaryKey().defaultRandom(),
+});
+`,
+		);
+		await writeFixtureFile(
+			cwd,
+			"hejbro.snapshot.json",
+			renderSnapshot(emptySnapshot),
+		);
+	});
+
+	afterEach(async () => {
+		clearFactorySeam();
+		await removeCliFixtureDir(cwd);
+	});
+
+	it("calls the factory exactly once with --url's string, sends reset's statements to the recording driver, closes it, and never imports @hejbro/pg", async () => {
+		const executed: number[] = [];
+		const closed: number[] = [];
+		const { driver: fakeDriver } = makeFakeDriver();
+		const driver: FactorySeam["driver"] = {
+			...fakeDriver,
+			execute: async (compiled) => {
+				executed.push(1);
+				return fakeDriver.execute(compiled);
+			},
+			client: {
+				end: async () => {
+					closed.push(1);
+				},
+			},
+		};
+		const calls: string[] = [];
+		installFactorySeam({ calls, driver });
+		const importerCalls: string[] = [];
+		const importer = async (): Promise<never> => {
+			importerCalls.push("called");
+			throw new Error("the importer must not run when a factory is configured");
+		};
+
+		await runReset(cwd, ["--url", "postgres://factory-test"], importer);
+
+		expect(calls).toEqual(["postgres://factory-test"]);
+		expect(importerCalls).toHaveLength(0);
+		expect(executed.length).toBeGreaterThan(0);
+		expect(closed).toHaveLength(1);
 	});
 });
