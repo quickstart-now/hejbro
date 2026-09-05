@@ -94,6 +94,18 @@
         "R1",
         "R2"
       ]
+    },
+    {
+      "id": "W2",
+      "at": "2026-09-05T00:41Z",
+      "title": "group 2: review repairs — the reads, the probe, and the driver that killed the process",
+      "pr": null,
+      "decisions": [
+        "R3",
+        "R4",
+        "R5",
+        "R6"
+      ]
     }
   ],
   "prs": [

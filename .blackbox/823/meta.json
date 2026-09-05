@@ -31,6 +31,16 @@
       "decisions": [
         "R1"
       ]
+    },
+    {
+      "id": "W2",
+      "at": "2026-09-05T00:42Z",
+      "title": "group 2: attribution holds when the ledger vanishes mid-transaction",
+      "pr": null,
+      "decisions": [
+        "R4",
+        "R6"
+      ]
     }
   ],
   "prs": [

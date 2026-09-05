@@ -23,3 +23,27 @@ The identity probe's own catalog read is coded too. Live witness on
 postgres:17-alpine: status, raise and migrate against a privilege-starved
 role print a coded diagnostic with no stack frame, and migrate exits two.
 
+<a id="w2"></a>
+## W2 — group 2: review repairs — the reads, the probe, and the driver that killed the process
+
+_2026-09-05T00:41Z · per R3, R4, R5, R6_
+
+Constructor-mode review of 1351d507 returned four blocking findings, all
+of them the code disagreeing with the delta. migrate now reads the ledger
+before it bootstraps one, the order raise already used: a ledger that
+exists but cannot be read was answering "the ledger's own bootstrap",
+because create ... if not exists checks the ACL before existence, so
+which code a database got depended on which grant happened to be
+missing. The identity probe's own catalog read was already coded in
+group 1 and stays so. @hejbro/pg's pool had no error listener, so a
+connection lost mid-read killed the process before any catch could run;
+the scope widened to that package by lead ruling (836/R4, R5) and this
+work closes #864. Two listeners were needed, not one, and the plan said
+one: the pool's own event covers idle clients, while a checked-out client
+raises its own, so a per-checkout listener joins it. The reviewer's
+reproduction also turned out not to be the code-less path it was assumed
+to be: the server answers the waiting query with 57P01 first, and the
+crash came from a second, duplicate client error event after the socket
+closed. Both corrections were measured, not reasoned, and the task
+document was rewritten to say what the server does.
+

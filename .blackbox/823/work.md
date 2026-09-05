@@ -23,3 +23,23 @@ rows #753 pinned there moved with it — a ledger write that found no ledger
 is not a failed drop. The rollback is still surfaced, never swallowed,
 which was that decision's own point.
 
+<a id="w2"></a>
+## W2 — group 2: attribution holds when the ledger vanishes mid-transaction
+
+_2026-09-05T00:42Z · per R4, R6_
+
+The in-transaction recheck was swallowing Postgres's own 42P01 as "not
+recorded", so a ledger dropped while migrate held its transaction turned
+into 25P02 on the migration's own statement and was billed to that file
+with exit one — both halves of this issue's rule breaking at once. The
+leniency is gone from that recheck; readLedger keeps its own, because
+outside a transaction an absent ledger is still the state "hejbro has
+never applied here" (D9). Which code the escaped failure takes is settled
+by the statement, not by the operation in progress (836/R6, correcting
+R4): the recheck is a read, so a ledger that vanishes before it answers
+is apply-ledger-unreadable, while one that vanishes before the row is
+written is apply-ledger-unwritable. Both exit two, both roll back, both
+name the ledger. The witness reproduces the race in its real order:
+hold migrate's advisory lock from psql, poll pg_locks until the run is
+demonstrably waiting, drop the ledger, release the lock.
+

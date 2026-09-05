@@ -408,9 +408,18 @@ text that says something untrue. Every repair keeps the delta as approved.
       still a failure hejbro reports. The pool gains an `error` listener,
       so an idle client's failure surfaces as the rejection of the query
       that was waiting rather than as process death, and the ledger
-      classifier renders it from the driver's own message with no
-      SQLSTATE clause (the `no code at all` row 1.1 and 1.2 already carry
-      in their input tables). This is not a driver-contract change: the
+      classifier renders whatever that failure carries.
+      **Measured, correcting this task's own first reading:** terminating
+      a backend that holds a waiting query does *not* produce a
+      code-less failure. The server answers the waiting query properly
+      first, with `57P01 terminating connection due to administrator
+      command`, and the crash came from a *second, duplicate* `'error'`
+      the client emits when the socket then closes — by which point the
+      query already has its answer. So the witness asserts that `57P01`
+      and its message are rendered, not that a SQLSTATE clause is absent.
+      The code-less path is real (an idle client whose socket simply
+      drops) and stays covered by the `no code at all` rows 1.1 and 1.2
+      carry in their input tables; this reproduction is not it. This is not a driver-contract change: the
       contract never promised a crash. **Measured during implementation:
       one listener is not enough.** `pool.on("error")` covers idle
       clients only — with just that, the reviewer's reproduction still
