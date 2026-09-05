@@ -4,9 +4,9 @@
   "ref": "quickstart-now/hejbro#375",
   "title": "run the d49 round-trip witness in ci",
   "parent": "quickstart-now/hejbro#412",
-  "status": "open",
+  "status": "closed",
   "opened": "2026-09-05",
-  "closed": null,
+  "closed": "2026-09-05",
   "decisions": [
     {
       "id": "R1",
@@ -32,7 +32,13 @@
       "decisions": []
     }
   ],
-  "prs": [],
+  "prs": [
+    {
+      "number": 881,
+      "role": "closes",
+      "pinnedAt": "2026-09-05T04:34Z"
+    }
+  ],
   "origin": null,
   "followUps": []
 }
