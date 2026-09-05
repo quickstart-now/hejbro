@@ -447,3 +447,8 @@ text that says something untrue. Every repair keeps the delta as approved.
       `packages/pg/test/driver.test.ts`,
       `packages/cli/test/apply-ledger-diagnostics.integration.test.ts`,
       `.changeset/harden-ledger-diagnostics.md`.
+
+## 3. D106 round-1 correction (B1 · N1 · N2 · N3 · N5)
+
+- [x] 3.1 ~10m — Red: `packages/pg/test/driver.test.ts` "keeps the pool honest after a checkout" (one `error` listener per client object across three checkouts; a statement that failed with 57P01 / 08006 / a code-less driver loss releases the client with `true` so the pool discards it; an ordinary 42501 returns it as it is) and `packages/cli/test/apply-ledger-diagnostics.test.ts` "a ledger read that failed for a reason no grant can fix gets a rerun remedy" (57P01 / 57014 / 08006 / no code → `Next:` says rerun, never grant, role still named). Green: `silenceUnhandledClientError` guards with a `WeakSet`; `execute` discards a client whose connection died; `readRemedy` branches on the reason class; the bootstrap rollback sentence says "no statement from any file was sent" and the row sentence "records nothing for that file". Delta: the read requirement names the role as read on a fresh connection and the remedy as fitting the reason. Files: `packages/pg/src/driver.ts`, `apply/ledger-diagnostics.ts`, the two tests, the migration-apply delta.
+

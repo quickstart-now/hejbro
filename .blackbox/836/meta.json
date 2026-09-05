@@ -96,6 +96,18 @@
       "at": "2026-09-05T01:09Z",
       "title": "ld (c) accepted at fde2aea0: re-review 6/6; role-name omission on dead connections stays; #870 filed; corpus to #714; PR by the lead",
       "ratified": null
+    },
+    {
+      "id": "R8",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R7",
+        "412/D13"
+      ],
+      "at": "2026-09-05T01:58Z",
+      "title": "D106 round 1: B1 (dead client discarded, role on a fresh connection), N1 (listener once per client), N2 (remedy by reason class), N3/N5 sentences repaired; N4 = #865; archived",
+      "ratified": null
     }
   ],
   "work": [

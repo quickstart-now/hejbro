@@ -223,8 +223,47 @@ const silenceUnhandledPoolError = (pool: Pool): void => {
  * `transaction` -- the client object is different every time `pool.connect()`
  * resolves, so there is no one place to attach it once.
  */
+const silencedClients = new WeakSet<PoolClient>();
+
 const silenceUnhandledClientError = (client: PoolClient): void => {
+	// Once per client object, not per checkout: the pool hands the same
+	// physical connection back many times, and Node warns past ten
+	// listeners on one emitter (measured: a healthy five-migration run
+	// printed MaxListenersExceededWarning, D106 R1 N1).
+	if (silencedClients.has(client)) {
+		return;
+	}
+	silencedClients.add(client);
 	client.on("error", () => {});
+};
+
+/**
+ * A statement failure that means the connection itself is gone: a
+ * connection-class SQLSTATE (08xxx), the server's own shutdown /
+ * termination codes (57P01-57P03), or a driver-level error carrying no
+ * server code at all ("Connection terminated unexpectedly"). Such a
+ * client is discarded on release so the next checkout -- the ledger
+ * classifier's own `select current_user` among them -- gets a live
+ * connection (D106 R1 B1). An ordinary statement error leaves the
+ * connection usable and the client goes back as it is.
+ */
+const connectionLost = (error: unknown): boolean => {
+	const code = (error as { readonly code?: unknown } | null)?.code;
+	if (typeof code !== "string") {
+		return true;
+	}
+	return code.startsWith("08") || ["57P01", "57P02", "57P03"].includes(code);
+};
+
+const releaseAfterFailedStatement = (
+	client: PoolClient,
+	error: unknown,
+): void => {
+	if (connectionLost(error)) {
+		client.release(true);
+		return;
+	}
+	client.release();
 };
 
 /**
@@ -247,12 +286,15 @@ const buildDriver = (pool: Pool): Driver & { readonly client: Pool } => {
 		execute: async (compiled) => {
 			const client = await pool.connect();
 			silenceUnhandledClientError(client);
-			try {
+			const rows = await (async () => {
 				await ensurePinned(client);
 				return await makeSession(client).execute(compiled);
-			} finally {
-				client.release();
-			}
+			})().catch((error: unknown) => {
+				releaseAfterFailedStatement(client, error);
+				throw error;
+			});
+			client.release();
+			return rows;
 		},
 		transaction: async (callback) => {
 			const client = await pool.connect();

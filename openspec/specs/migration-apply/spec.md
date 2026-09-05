@@ -54,6 +54,47 @@ SHALL exit two, the answer for a run that could not act at all. What
 `status`, `reset` and `raise` do with the judgement is stated in their
 own requirements below.
 
+The judgement above needs no privilege beyond reading the catalog, so
+answering "this is hejbro's ledger" says nothing about whether this
+connection may read or write it. **Reading the ledger SHALL fail in
+hejbro's own terms or not at all.** The relation's absence is a state and
+not a failure — a ledger that does not exist is a database hejbro has
+never applied to, reported as the paragraph on absent-versus-empty below
+states, and it stays that state whether the relation was absent all along
+or vanished between the judgement and the read; the server gives one
+answer for a missing table and for a missing schema alike, so hejbro
+reads one answer for both. Every other answer the server gives to a read
+hejbro sends to the ledger — a role that may connect but may not select
+from the table, a schema whose `usage` is withheld, a failure carrying no
+server code at all — SHALL be reported with the one shared code
+`apply-ledger-unreadable`, naming the ledger by its qualified name, the
+role the connection authenticated as (read on a fresh connection once
+the failing one is discarded, omitted only when no connection can answer
+for it), and the server's own code and message unsummarized, ending
+with a `Next:` line whose remedy fits the reason: a refused permission
+offers both ways out — grant that role what the read needs, or connect
+as the role that applied — while a connection that died, a cancelled
+statement or a failure carrying no server code offers a rerun once the
+server answers, since no grant fixes those. No error the server raised on the ledger SHALL reach the user as
+a driver object or a stack trace, on any command that reads it —
+`status`, `migrate` and `raise` — and the rule is one rule, made where
+the read is sent rather than at each command that sends one.
+
+**Writing the ledger SHALL fail in hejbro's own terms too**, under its
+own code `apply-ledger-unwritable`, naming the ledger, the role, the
+server's own code and message, and which write was refused: the bootstrap
+that creates the ledger, the row that records a migration, or the
+clearing of its rows. Read and write carry different codes because they
+send the reader to different places — a read is answered by a grant or by
+another role, a write is answered by that *and* by the shape of the
+ledger itself, which a database may have altered under hejbro (a `id`
+column left without the identity the bootstrap gave it is the measured
+case). A refused write is never charged to whatever the run was doing at
+the time: a migration whose statements the database accepted and whose
+ledger row it refused has applied nothing, because the two are one
+transaction and it rolled back, and the report SHALL say the rollback
+happened rather than name that migration as the migration that failed.
+
 Each row's **origin** column SHALL record how it entered the ledger, as
 `origin text not null check (origin in ('applied', 'registered',
 'raised'))`, with no default — every writer states its own origin,
@@ -86,8 +127,11 @@ behind.
 `migrate`'s exit code SHALL distinguish three answers: zero when there
 was nothing pending or every pending migration applied, one when the
 database refused a migration, and two when the run could not act at all
-— an unverifiable chain, a ledger disagreement, or a missing connection,
-driver or capability. Its report SHALL name, in their own buckets, the
+— an unverifiable chain, a ledger disagreement, a ledger it may not read
+or write, or a missing connection, driver or capability. A ledger
+failure is two and not one: one is reserved for the database refusing a
+*migration*, which is the one thing a ledger failure proves did not
+happen. Its report SHALL name, in their own buckets, the
 migrations this run applied, the baseline migrations this run
 registered without running, the migrations another concurrent run
 already applied while this one waited, and the baseline migrations
@@ -143,6 +187,29 @@ connection string carries a secret.
   statement is sent, nothing is written into that relation, and it is
   left exactly as it was
 
+#### Scenario: A ledger the connected role may not read is reported in hejbro's own terms
+- **WHEN** hejbro's own ledger sits at the ledger's name and the server
+  refuses hejbro's read of it — the role's `select` on the table
+  withheld, or the schema's `usage` withheld — and `status`, `migrate` or
+  `raise` runs
+- **THEN** each fails with `apply-ledger-unreadable`, naming the ledger,
+  the role the connection authenticated as, and the server's own code and
+  message, ending with a `Next:` line, and no driver object and no stack
+  frame reaches the user
+
+#### Scenario: A ledger write the database refuses is attributed to the ledger
+- **WHEN** the ledger's own write is refused — the bootstrap's `create`
+  refused to a role without it, a recorded row refused because the
+  ledger's `id` carries neither identity nor default, because the role's
+  `insert` is withheld, because the filename is already recorded, or
+  because a constraint or trigger on the ledger rejects the row, or the
+  clearing of its rows refused — and the command that sent it was
+  `migrate`, `raise` or `reset`
+- **THEN** each fails with `apply-ledger-unwritable`, naming the ledger,
+  the role, which write was refused and the server's own code and
+  message, ending with a `Next:` line, and no migration file and no
+  declared object is named as the thing that failed
+
 ### Requirement: A migration is applied atomically with its own ledger row
 Each migration SHALL be applied inside one transaction that also writes
 its ledger row, so that a database never holds a migration the ledger
@@ -159,6 +226,17 @@ migrations before it applied and recorded. Partial application *within*
 a migration does not occur and SHALL NOT be modelled: there is no state
 in which some of a migration's statements are applied.
 
+The two halves of that transaction fail under different codes. Neither
+leaves anything behind — that is what the one transaction is for — but
+each sends the reader somewhere the other does not, so the migration's
+own statements failing SHALL be reported as `apply-failed` naming that
+file, and the ledger row failing SHALL be reported as
+`apply-ledger-unwritable` naming the ledger, with the rollback stated so
+a reader knows the migration is not half-applied. Which half failed SHALL
+be established structurally — by which statement the failure came back
+from — never by matching the failure's message or by reading the SQL text
+back.
+
 #### Scenario: A failed migration leaves nothing behind
 - **WHEN** a migration whose second statement fails is applied
 - **THEN** the object its first statement created does not exist
@@ -174,6 +252,16 @@ in which some of a migration's statements are applied.
 - **THEN** its text goes to the database as one parameterless statement,
   and the ledger row is written by a separate statement in the same
   transaction
+
+#### Scenario: The half that failed decides which artifact is named
+- **WHEN** a migration whose own statement the database refuses is
+  applied, and separately a migration whose statements the database
+  accepts but whose ledger row it refuses
+- **THEN** the first is reported with `apply-failed` naming that
+  migration file and the second with `apply-ledger-unwritable` naming the
+  ledger and stating the rollback, and after either the objects that
+  migration would have created do not exist and the ledger holds no row
+  for it
 
 ### Requirement: An applied file carries no transaction control of its own
 A migration hejbro applies SHALL NOT contain `begin`, `commit` or
@@ -324,9 +412,14 @@ SHALL refuse with `apply-ledger-occupied`, the code every ledger-touching
 command uses for the same finding, naming the kind of object found and,
 where it carries columns, the columns found, ending with a `Next:` line,
 and SHALL exit non-zero. No
-error the database raised on that object SHALL reach the user raw: the
-finding is what sits at the name, not the failure of a read hejbro
-should never have attempted.
+error the database raised at the ledger's name SHALL reach the user raw,
+whichever of the two findings produced it: for a relation that is not the
+ledger, the finding is what sits at the name, not the failure of a read
+hejbro should never have attempted; for the ledger itself, when the
+server refuses hejbro's read of it, `status` SHALL report
+`apply-ledger-unreadable` as the first requirement states and SHALL exit
+non-zero. A read-only command is the one a user reaches for to find out
+what is wrong, so it is the last place a raw driver failure may surface.
 
 #### Scenario: Pending migrations are reported without being applied
 - **WHEN** `status` runs against a database whose ledger records the
@@ -347,6 +440,13 @@ should never have attempted.
   kind of object it found and, where it carries columns, the columns
   found, gives a `Next:` line, and prints no raw database error and no
   stack trace
+
+#### Scenario: status reports a ledger it may not read
+- **WHEN** hejbro's own ledger sits at the ledger's name, the connected
+  role may not read it, and `status` runs
+- **THEN** it exits non-zero with `apply-ledger-unreadable`, names the
+  ledger, the role and the server's own code and message, gives a `Next:`
+  line, and prints no raw database error and no stack trace
 
 ### Requirement: A failure names the file, the database's own reason, and the next command
 When applying fails, the report SHALL name the migration that failed,
@@ -458,7 +558,16 @@ they were: the drops and the ledger's own clearing run inside one
 transaction, so a failure partway through rolls all of it back, and the
 failure SHALL be reported as a hejbro-coded error carrying the
 database's own reason — never surfaced as an unclassified, uncaught
-failure.
+failure. Clearing the ledger's rows is a ledger write, not a drop: when
+the database refuses that statement, the failure SHALL be reported with
+`apply-ledger-unwritable` as the first requirement of this capability
+states, naming the ledger rather than any declared object, since a
+reader sent to look for a dependency on a table that dropped cleanly is
+sent to the wrong place. Which statement failed decides this, never which
+code the server gave it: every refusal of the clearing statement is the
+ledger's — including the race in which the relation at the ledger's name
+disappears between the identity judgement and the clearing, which is a
+ledger write that found no ledger, not a drop that failed.
 
 After a reset, the ledger SHALL hold no row for a migration whose
 objects were dropped, so the next run applies the chain from its
@@ -530,6 +639,14 @@ that cleared no ledger SHALL NOT say it cleared one.
   tables themselves form a cycle, exactly as it does for two tables
   referencing each other, and still names the outside-the-declarations
   possibility beside it
+
+#### Scenario: A refused clearing of the ledger names the ledger
+- **WHEN** the drops `reset` sends are accepted but the database refuses
+  the statement that clears the ledger's rows
+- **THEN** it exits non-zero with `apply-ledger-unwritable` naming the
+  ledger and carrying the server's own reason, no declared object is
+  named as the failure, and the transaction's rollback leaves every
+  declared object standing and every ledger row in place
 
 ### Requirement: A database can be raised from a snapshot SQL file
 The CLI SHALL provide a command that takes a snapshot SQL file and an

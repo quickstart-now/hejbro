@@ -78,6 +78,33 @@ const currentRole = async (driver: Driver): Promise<string | null> => {
  * both halves branch on together so they never disagree (a role clause
  * naming someone the `Next:` line then tells a stranger to grant).
  */
+/**
+ * [D106 R1 N2] The read remedy follows the reason class: a permission
+ * refusal is answered with the grant (or the applying role); a
+ * connection that died (08xxx, 57P01-57P03), a cancelled statement
+ * (57014) or a driver-level loss carrying no server code is answered
+ * with a rerun -- no grant and no role change fixes those.
+ */
+const isTransientReadFailure = (code: string | null): boolean => {
+	if (code === null || code === "") {
+		return true;
+	}
+	return (
+		code.startsWith("08") || ["57P01", "57P02", "57P03", "57014"].includes(code)
+	);
+};
+
+const readRemedy = (
+	code: string | null,
+	role: string | null,
+	commandName: string,
+): string => {
+	if (isTransientReadFailure(code)) {
+		return `Next: the connection or the statement did not survive -- nothing about the ledger's permissions changed; rerun \`${commandName}\` once the server answers again.`;
+	}
+	return `Next: grant ${grantSubject(role)} \`select\` on \`${QUALIFIED_LEDGER_TABLE}\` and \`usage\` on the \`"${LEDGER_SCHEMA}"\` schema, or connect as the role that applied, then rerun \`${commandName}\`.`;
+};
+
 const roleClause = (role: string | null): string => {
 	if (role === null) {
 		return "";
@@ -138,7 +165,7 @@ export const throwLedgerReadFailure = async (
 	throw Object.assign(
 		hejbroError(
 			"apply-ledger-unreadable",
-			`${readOpeningClause(context)}${roleClause(role)}${codeSuffix(code)}: ${reason}. hejbro reads its own ledger before it can say what this database has applied. Next: grant ${grantSubject(role)} \`select\` on \`${QUALIFIED_LEDGER_TABLE}\` and \`usage\` on the \`"${LEDGER_SCHEMA}"\` schema, or connect as the role that applied, then rerun \`${commandName}\`.`,
+			`${readOpeningClause(context)}${roleClause(role)}${codeSuffix(code)}: ${reason}. hejbro reads its own ledger before it can say what this database has applied. ${readRemedy(code, role, commandName)}`,
 		),
 		{ cause },
 	);
@@ -170,12 +197,12 @@ const writeRollbackSentence = (
 	rowFilename: string | undefined,
 ): string => {
 	if (site === "bootstrap") {
-		return "no migration statement was sent.";
+		return "no statement from any file was sent.";
 	}
 	if (site === "clear") {
 		return "the drops ran in the same transaction and rolled back with it, so every declared object is still standing.";
 	}
-	return `the statements from that file ran in the same transaction and rolled back with it, so nothing from "${rowFilename}" is applied and the ledger records nothing new.`;
+	return `the statements from that file ran in the same transaction and rolled back with it, so nothing from "${rowFilename}" is applied and the ledger records nothing for that file.`;
 };
 
 /** Postgres's own code for a not-null violation -- the one SQLSTATE design.md D3 gives its own sentence, the #823 shape: the ledger's own row insert refused because a bootstrap column lost the value `bootstrapLedger` declares for it. */
