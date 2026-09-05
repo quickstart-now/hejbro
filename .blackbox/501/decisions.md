@@ -60,3 +60,14 @@ Basis: R1.
 
 filter is the user-facing wrapper this change ships, so it belongs to the hejbro package's vocabulary: packages/cli/src/index.ts re-exports values by hand alongside export type * from @hejbro/core, and a new core value export missing from that list exists in hejbro as a type only -- a user cannot import the function at all. The barrel curation gate (packages/cli/test/exports.test.ts, #471) and the skill's snippet compile test were both red from task 1.1 onward and went unseen because verification ran package by package. packages/cli/src/{index,core-surface}.ts join task 1.5's files; packages/cli/test/exports.test.ts is touched only if it asks for a change. This is the fourth site the proposal's Impact list failed to enumerate, corrected there together with window.ts, expr-children.ts and the supabase traversal table.
 
+<a id="r7"></a>
+## R7 — filter's refusal names the target it got, and its condition refuses window functions
+
+_lead · interpretation · 2026-09-05T14:43Z · ratified: pending_
+
+Basis: R2.
+
+B1. describeFilterTarget must name a functionCall node that is not a builder aggregate as a declared function call -- "<schema>.<name>" when the node carries a schema, the bare name when it does not -- and reserve "a window function" for window nodes and the window-only constructors. Every functionCall the repository's own constructors build carries schemaName: null, so the schema-qualified phrase was unreachable through the public surface and its test passed only against a hand-built node, while the input class the delta names (a db.fn call) received the wrong phrase. R2's requirement that the diagnostic name what it got was therefore false for real input.
+
+B2. The equivalence with where lived in the skill reference and the proposal, not in the delta, so the user-facing contract promised more than the spec stated; that promise together with where's actual build-time refusal is what makes this a defect. The delta now states it and carries its own scenario. The nested-aggregate case (42803) stays out and narrows issue #931.
+

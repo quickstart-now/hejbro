@@ -66,6 +66,15 @@
       "at": "2026-09-05T13:50Z",
       "title": "filter belongs to the hejbro package vocabulary",
       "ratified": null
+    },
+    {
+      "id": "R7",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [],
+      "at": "2026-09-05T14:43Z",
+      "title": "filter's refusal names the target it got, and its condition refuses window functions",
+      "ratified": null
     }
   ],
   "work": [

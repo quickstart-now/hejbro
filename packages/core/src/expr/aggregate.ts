@@ -239,6 +239,25 @@ const throwFilterNotAggregate = (target: object): never =>
 	);
 
 /**
+ * Rejects a `filter()` condition containing a window function (#501/R7
+ * B2, design.md: the condition takes exactly what `where` takes, so a
+ * placement `where` refuses is refused here too) -- the same diagnostic
+ * `query/select.ts`'s own `where`/`groupBy`/`having` guard uses for the
+ * same input, `42P20`, Postgres evaluates window functions after `FILTER
+ * (WHERE …)` runs. A separate, local check rather than importing that
+ * guard: `expr/` never depends on `query/` (D-layering; `query/` depends
+ * on `expr/` throughout this package, never the reverse).
+ */
+const assertNoWindowFunctionInCondition = (condition: Condition): void => {
+	if (someExprNode(condition.exprNode, (node) => node.nodeKind === "window")) {
+		throwHejbroError(
+			"window-function-not-allowed",
+			"filter()'s condition cannot reference a window function -- Postgres evaluates window functions after FILTER (WHERE …) runs, so its result isn't available there yet. Next: move the window function into the select list instead, or filter on it from an outer query.",
+		);
+	}
+};
+
+/**
  * `filter(aggregate, condition)` — Postgres's own `FILTER (WHERE …)`
  * clause (#501/R2), applying to any of the five builder aggregates and
  * keeping the aggregate's own result type and conversion (`Aggregated`,
@@ -246,7 +265,8 @@ const throwFilterNotAggregate = (target: object): never =>
  * `sqlName`, keep the symbol-keyed read brand). `condition` takes what
  * `where` takes -- a runtime value inside it is lifted to a bind
  * parameter like any other condition (`@hejbro/query`'s `params.ts`, a
- * later task).
+ * later task), and a window function inside it is refused the same way
+ * `where` refuses one (#501/R7 B2).
  */
 export const filter = <TExpr extends Expr>(
 	target: TExpr,
@@ -256,6 +276,7 @@ export const filter = <TExpr extends Expr>(
 	if (fn === undefined) {
 		return throwFilterNotAggregate(target);
 	}
+	assertNoWindowFunctionInCondition(condition);
 	const {
 		sqlName: _sqlName,
 		exprNode: _exprNode,

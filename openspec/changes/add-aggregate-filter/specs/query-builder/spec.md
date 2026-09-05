@@ -22,7 +22,10 @@ filtered-count constructor. `filter` over anything that is not a builder
 aggregate — a column, a computed expression, a declared function call, a
 window-only function, a windowed expression — SHALL be refused at build
 time with `filter-not-aggregate`, naming the five constructors it
-accepts.
+accepts and the target it was given. The condition SHALL accept exactly
+what `where` accepts, so a placement `where` refuses is refused here too
+— a window function inside the condition, which Postgres rejects inside
+`FILTER`, fails at build time with the same diagnostic `where` gives.
 
 #### Scenario: Grouping with a group filter
 - **WHEN** a select projects a column and `count()`, filters rows with
@@ -49,6 +52,14 @@ accepts.
   condition's values as bind parameters, the windowed one appends
   `over (…)` after the filter clause, and each projected field keeps
   the aggregate's own result type
+
+#### Scenario: A window function inside the filter condition is refused
+- **WHEN** a select projects `filter(count(), gt(over(rowNumber(), spec),
+  1))` — a window function inside the condition, which Postgres rejects
+  inside `FILTER`
+- **THEN** it fails immediately with `window-function-not-allowed`, the
+  same diagnostic `where` gives for the same input, and nothing is
+  rendered
 
 #### Scenario: filter over a non-aggregate is refused at build time
 - **WHEN** `filter` wraps a column reference, `sql\`1\``, a `db.fn`

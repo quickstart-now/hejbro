@@ -1,14 +1,17 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 import type { Aggregated, Expr, ExprNode, ReadAs } from "../../src/index";
 import {
+	and,
 	avg,
 	columnRef,
 	count,
 	expr,
 	filter,
+	gt,
 	isNotNull,
 	max,
 	min,
+	not,
 	now,
 	over,
 	rowNumber,
@@ -255,6 +258,25 @@ describe("filter() refuses anything that is not a builder aggregate, task 1.1 (#
 				code: "filter-not-aggregate",
 				message: expect.stringContaining('a declared function call "now"'),
 			}),
+		);
+	});
+});
+
+// add-aggregate-filter, review B2 (#501/R7): filter's condition takes
+// exactly what where takes (design.md), so a window function inside it
+// is refused the same way, through the same diagnostic where/groupBy/
+// having already use -- table over where a window function can hide in
+// the condition, not just the direct case.
+describe("filter() refuses a window function inside its condition, same diagnostic as where (#501/R7 B2)", () => {
+	const windowedRank = over(rowNumber(), {});
+
+	it.each([
+		["directly", () => gt(windowedRank, 1)],
+		["nested inside and(...)", () => and(condition, gt(windowedRank, 1))],
+		["nested inside not(...)", () => not(gt(windowedRank, 1))],
+	])("%s", (_label, buildCondition) => {
+		expect(() => filter(count(), buildCondition())).toThrowError(
+			expect.objectContaining({ code: "window-function-not-allowed" }),
 		);
 	});
 });
