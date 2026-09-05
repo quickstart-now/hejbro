@@ -19,6 +19,10 @@ raised snapshot — so the ledger can later say whether the file on disk
 is the file that ran. The bootstrap SHALL create the checksum column and
 SHALL add it to a ledger written before the column existed; a row
 recorded then carries no checksum and is never compared.
+Reading a ledger that predates the column SHALL succeed with every row's
+checksum null; the first command that writes to such a ledger SHALL add
+the column before its write, and a read-only command SHALL leave the
+ledger as it is.
 
 The ledger is recognized by identity, never by existence alone. The
 relation at that name is hejbro's ledger only when it is an ordinary,

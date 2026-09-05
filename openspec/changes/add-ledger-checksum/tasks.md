@@ -60,7 +60,12 @@ file, that goes back to the planner, not into the diff.
       the first's body, `migrate` refuses before sending (the third's
       objects are absent), `status` reports it; a ledger created without
       the column is upgraded by the bootstrap and the next apply records
-      a checksum. Files: the integration test.
+      a checksum. Files: the integration test. This task's own live
+      witness found a defect in the old-ledger path (every ledger-
+      touching command reads before it bootstraps, so a pre-column ledger
+      failed the read and never reached the alter); the read fallback and
+      the idempotent alter before a write, both settled by 631/R13, are
+      repaired inside this same task.
 
 - [ ] 1.6 (~8m) A filtered ledger is refused. Red: the ledger identity
       tests — a fake catalog row with `relrowsecurity` true, with
