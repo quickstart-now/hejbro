@@ -54,6 +54,17 @@
       "at": "2026-09-05T13:19Z",
       "title": "The widening is verified at the layer that decides nullability, not through the chain surface",
       "ratified": null
+    },
+    {
+      "id": "R5",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R2"
+      ],
+      "at": "2026-09-05T13:49Z",
+      "title": "A new runtime export of core is classified where the barrel curation demands it, as engine",
+      "ratified": null
     }
   ],
   "work": [

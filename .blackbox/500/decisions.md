@@ -108,3 +108,28 @@ change's work; making the chain surface show it is the separate change
 that narrows the absorption, tracked as #942 under #815, a sibling of
 #932.
 
+<a id="r5"></a>
+## R5 — A new runtime export of core is classified where the barrel curation demands it, as engine
+
+_lead · interpretation · basis R2 · 2026-09-05T13:49Z · ratified: pending_
+
+The barrel curation (#471) requires every runtime export of
+`@hejbro/core` to be classified vocabulary or engine, exactly once,
+before it ships, so this change's `widenedByBrand` forces
+`packages/cli/src/core-surface.ts` open. It is classified engine: the
+type layer's phantom carrier between `asRecursive` and
+`ProjectedColumnResult`, never assigned at run time, and nothing a
+schema author or query writer types, so `hejbro` has no reason to
+re-export it. `leftJoinedBrand` is vocabulary because a shipped spec
+names it as reaching users through `hejbro`; no such sentence exists
+for this brand, in the delta or in the skill.
+
+The type-only presence table in `packages/cli/test/exports.test.ts` is
+NOT extended: it is a selective smoke check, not a completeness
+requirement, and no spec names `WidenedBy` or `RecursiveCteReference`
+as a user surface. That file is not edited by this change.
+
+This is not a contract change; it is a file the tests force open, the
+same shape as 486/R8 on the bt piece. The classification's reason lives
+as a one-line constraint comment beside the entry.
+
