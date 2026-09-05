@@ -10,9 +10,12 @@ the constraint only).
 **Files edited**: `packages/cli/src/apply/{ledger,execute,raise}.ts`,
 `packages/cli/src/apply/ledger-identity.ts`,
 `packages/cli/src/commands/{migrate,status}.ts` and their tests
-(1.1–1.4, 1.6); `packages/cli/test/apply-reset.test.ts`, whose fake
-gains one `alter table` branch because the bootstrap now sends a third
-statement (1.1, 631/R5);
+(1.1–1.4, 1.6) — `raise.ts` needs no change in 1.2, because `raise`
+reuses `execute.ts`'s `applyMigration`;
+`packages/cli/test/apply-reset.test.ts`, whose fake gains one
+`alter table` branch because the bootstrap now sends a third statement
+(1.1, 631/R5); `packages/cli/test/apply-plan.test.ts`, whose `LedgerRow`
+literals gain the new required field (1.2, 631/R8);
 `packages/cli/test/apply-live.integration.test.ts` (1.5, 1.6);
 `skills/hejbro/references/generate-verify-workflow.md` and one
 `.changeset/*.md` (1.7). If a task appears to need any other file, that

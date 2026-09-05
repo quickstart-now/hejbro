@@ -12,6 +12,7 @@ import {
 	isMigrationRecorded,
 	readLedger,
 	recordAppliedMigration,
+	wholeFileChecksum,
 } from "../src/apply/ledger";
 import { sha256Hex } from "../src/hash";
 
@@ -54,8 +55,11 @@ const makeUnbootstrappedSession = (): DriverSession => ({
  */
 const makeInMemoryLedgerSession = (): { readonly session: DriverSession } => {
 	let bootstrapped = false;
-	const rows: Array<{ readonly filename: string; readonly origin: string }> =
-		[];
+	const rows: Array<{
+		readonly filename: string;
+		readonly origin: string;
+		readonly checksum: string;
+	}> = [];
 	const session: DriverSession = {
 		execute: async (compiled): Promise<ReadonlyArray<DriverRow>> => {
 			const sql = compiled.sql.trim().toLowerCase();
@@ -82,6 +86,7 @@ const makeInMemoryLedgerSession = (): { readonly session: DriverSession } => {
 				rows.push({
 					filename: String(compiled.params[0]),
 					origin: String(compiled.params[1]),
+					checksum: String(compiled.params[2]),
 				});
 				return [];
 			}
@@ -238,7 +243,9 @@ describe("a failed ledger statement says which statement failed / 1.1 (harden-le
 
 			await expect(readLedger(session)).resolves.toEqual({
 				exists: true,
-				applied: [{ filename: "0001_init.sql", origin: "applied" }],
+				applied: [
+					{ filename: "0001_init.sql", origin: "applied", checksum: null },
+				],
 			});
 		});
 	});
@@ -351,7 +358,12 @@ describe("a failed ledger statement says which statement failed / 1.1 (harden-le
 			const { session } = makeScriptedSession([{ throws: error }]);
 
 			await expect(
-				recordAppliedMigration(session, "0001_init.sql", "applied"),
+				recordAppliedMigration(
+					session,
+					"0001_init.sql",
+					"applied",
+					"a".repeat(64),
+				),
 			).rejects.toSatisfy((thrown: unknown) => {
 				const tag = asLedgerAccessFailure(thrown);
 				return (
@@ -367,7 +379,12 @@ describe("a failed ledger statement says which statement failed / 1.1 (harden-le
 			const { session } = makeScriptedSession([{ rows: [] }]);
 
 			await expect(
-				recordAppliedMigration(session, "0001_init.sql", "applied"),
+				recordAppliedMigration(
+					session,
+					"0001_init.sql",
+					"applied",
+					"a".repeat(64),
+				),
 			).resolves.toBeUndefined();
 		});
 	});
@@ -529,15 +546,33 @@ describe("recordAppliedMigration / 1.4", () => {
 		const { session } = makeInMemoryLedgerSession();
 		await bootstrapLedger(session);
 
-		await recordAppliedMigration(session, "0001_init.sql", "applied");
-		await recordAppliedMigration(session, "0002_add_column.sql", "applied");
+		await recordAppliedMigration(
+			session,
+			"0001_init.sql",
+			"applied",
+			"a".repeat(64),
+		);
+		await recordAppliedMigration(
+			session,
+			"0002_add_column.sql",
+			"applied",
+			"b".repeat(64),
+		);
 		const state = await readLedger(session);
 
 		expect(state).toEqual({
 			exists: true,
 			applied: [
-				{ filename: "0001_init.sql", origin: "applied" },
-				{ filename: "0002_add_column.sql", origin: "applied" },
+				{
+					filename: "0001_init.sql",
+					origin: "applied",
+					checksum: "a".repeat(64),
+				},
+				{
+					filename: "0002_add_column.sql",
+					origin: "applied",
+					checksum: "b".repeat(64),
+				},
 			],
 		});
 	});
@@ -545,14 +580,48 @@ describe("recordAppliedMigration / 1.4", () => {
 	it("registers a baseline without executing its statements", async () => {
 		const { session, calls } = makeRecordingSession();
 
-		await recordAppliedMigration(session, "0001_adopt.sql", "registered");
+		await recordAppliedMigration(
+			session,
+			"0001_adopt.sql",
+			"registered",
+			"c".repeat(64),
+		);
 
 		// The ledger has no facility to send a migration's own DDL -- the
 		// baseline path (spec: "A baseline is registered rather than run")
 		// is exactly this one insert and nothing else, at this layer.
 		expect(calls).toHaveLength(1);
 		expect(calls[0]?.sql.toLowerCase()).toMatch(/^insert into/);
-		expect(calls[0]?.params).toEqual(["0001_adopt.sql", "registered"]);
+		expect(calls[0]?.params).toEqual([
+			"0001_adopt.sql",
+			"registered",
+			"c".repeat(64),
+		]);
+	});
+});
+
+describe("recordAppliedMigration / 1.2, 631/R6 (checksum required)", () => {
+	it("the insert declares filename, origin and checksum in that order, with three params", async () => {
+		const { session, calls } = makeRecordingSession();
+
+		await recordAppliedMigration(
+			session,
+			"0001_init.sql",
+			"applied",
+			"a".repeat(64),
+		);
+
+		const insertStatement = calls.find((call) =>
+			call.sql.toLowerCase().startsWith("insert into"),
+		);
+		expect(insertStatement?.sql).toMatch(
+			/\(\s*"filename"\s*,\s*"origin"\s*,\s*"checksum"\s*\)/i,
+		);
+		expect(insertStatement?.params).toEqual([
+			"0001_init.sql",
+			"applied",
+			"a".repeat(64),
+		]);
 	});
 });
 
@@ -561,17 +630,44 @@ describe("recordAppliedMigration / 16.1 (D106 M7)", () => {
 		const { session } = makeInMemoryLedgerSession();
 		await bootstrapLedger(session);
 
-		await recordAppliedMigration(session, "0001_init.sql", "applied");
-		await recordAppliedMigration(session, "0002_baseline.sql", "registered");
-		await recordAppliedMigration(session, "snapshot.sql", "raised");
+		await recordAppliedMigration(
+			session,
+			"0001_init.sql",
+			"applied",
+			"a".repeat(64),
+		);
+		await recordAppliedMigration(
+			session,
+			"0002_baseline.sql",
+			"registered",
+			"b".repeat(64),
+		);
+		await recordAppliedMigration(
+			session,
+			"snapshot.sql",
+			"raised",
+			"c".repeat(64),
+		);
 		const state = await readLedger(session);
 
 		expect(state).toEqual({
 			exists: true,
 			applied: [
-				{ filename: "0001_init.sql", origin: "applied" },
-				{ filename: "0002_baseline.sql", origin: "registered" },
-				{ filename: "snapshot.sql", origin: "raised" },
+				{
+					filename: "0001_init.sql",
+					origin: "applied",
+					checksum: "a".repeat(64),
+				},
+				{
+					filename: "0002_baseline.sql",
+					origin: "registered",
+					checksum: "b".repeat(64),
+				},
+				{
+					filename: "snapshot.sql",
+					origin: "raised",
+					checksum: "c".repeat(64),
+				},
 			],
 		});
 	});
@@ -600,8 +696,18 @@ describe("clearLedgerRows / 5.3, D106 R1 B1", () => {
 	it("clears every row in the ledger", async () => {
 		const { session } = makeInMemoryLedgerSession();
 		await bootstrapLedger(session);
-		await recordAppliedMigration(session, "0001_init.sql", "applied");
-		await recordAppliedMigration(session, "0002_add_column.sql", "applied");
+		await recordAppliedMigration(
+			session,
+			"0001_init.sql",
+			"applied",
+			"a".repeat(64),
+		);
+		await recordAppliedMigration(
+			session,
+			"0002_add_column.sql",
+			"applied",
+			"b".repeat(64),
+		);
 
 		await clearLedgerRows(session);
 		const state = await readLedger(session);
@@ -703,5 +809,110 @@ describe("bodyChecksum / 1.1, 631/R2", () => {
 
 	it("banner only, no blank-line separator anywhere -- the empty body", () => {
 		expect(bodyChecksum(banner)).toBe(sha256Hex(""));
+	});
+});
+
+/**
+ * [task 1.2, 631/R6] `raise` hashes the whole file, banner or not -- the
+ * one difference from `bodyChecksum`, which strips a banner when the
+ * first line matches it. The two share only line-ending normalization
+ * (`\r\n` -> `\n`).
+ */
+describe("wholeFileChecksum / 1.2, 631/R6", () => {
+	const noBannerSnapshot = 'create table "public"."t" ("id" bigint);\n';
+	const bannerText = "-- hejbro migration\n-- hejbro: 0.1.0\n";
+	const bodyText = 'create table "public"."t" ("id" bigint);\n';
+	const bannerFile = `${bannerText}\n${bodyText}`;
+
+	it("a snapshot file with no banner hashes the whole text", () => {
+		expect(wholeFileChecksum(noBannerSnapshot)).toBe(
+			sha256Hex(noBannerSnapshot),
+		);
+	});
+
+	it("the same file with every \\n written as \\r\\n -- equal to LF", () => {
+		expect(wholeFileChecksum(noBannerSnapshot.replace(/\n/g, "\r\n"))).toBe(
+			sha256Hex(noBannerSnapshot),
+		);
+	});
+
+	it("a file whose first line is the banner is still hashed whole -- unlike bodyChecksum, which strips it", () => {
+		expect(wholeFileChecksum(bannerFile)).toBe(sha256Hex(bannerFile));
+		expect(bodyChecksum(bannerFile)).toBe(sha256Hex(bodyText));
+	});
+});
+
+/**
+ * [task 1.2, 631/R6] `readLedger` reads the checksum column back exactly
+ * as recorded; a row from before this column existed (the key absent, not
+ * merely `null`) folds to `null` the same as an explicit `null` -- neither
+ * becomes the string `"null"` or `"undefined"`, which would make an
+ * uncompared old row look like a mismatch against every other row.
+ */
+describe("readLedger / 1.2, 631/R6 (checksum column)", () => {
+	it("a row with a checksum string reads that string back", async () => {
+		const { session } = makeScriptedSession([
+			{
+				rows: [
+					{
+						filename: "0001_init.sql",
+						origin: "applied",
+						checksum: "a".repeat(64),
+					},
+				],
+			},
+		]);
+
+		await expect(readLedger(session)).resolves.toEqual({
+			exists: true,
+			applied: [
+				{
+					filename: "0001_init.sql",
+					origin: "applied",
+					checksum: "a".repeat(64),
+				},
+			],
+		});
+	});
+
+	it("a row with an explicit null checksum reads null", async () => {
+		const { session } = makeScriptedSession([
+			{
+				rows: [
+					{ filename: "0001_init.sql", origin: "applied", checksum: null },
+				],
+			},
+		]);
+
+		await expect(readLedger(session)).resolves.toEqual({
+			exists: true,
+			applied: [
+				{ filename: "0001_init.sql", origin: "applied", checksum: null },
+			],
+		});
+	});
+
+	it('a row with no checksum key at all (an older row) reads null, not the string "undefined"', async () => {
+		const { session } = makeScriptedSession([
+			{ rows: [{ filename: "0001_init.sql", origin: "applied" }] },
+		]);
+
+		await expect(readLedger(session)).resolves.toEqual({
+			exists: true,
+			applied: [
+				{ filename: "0001_init.sql", origin: "applied", checksum: null },
+			],
+		});
+	});
+
+	it("the select statement reads the checksum column", async () => {
+		const { session, calls } = makeRecordingSession();
+
+		await readLedger(session);
+
+		const selectStatement = calls.find((call) =>
+			call.sql.toLowerCase().startsWith("select"),
+		);
+		expect(selectStatement?.sql).toMatch(/"checksum"/i);
 	});
 });

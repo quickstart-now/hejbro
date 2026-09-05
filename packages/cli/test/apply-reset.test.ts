@@ -442,7 +442,12 @@ describe("applyReset / 5.3", () => {
 		// Seed the ledger as if migrations had already run.
 		await driver.transaction(async (session) => {
 			await bootstrapLedger(session);
-			await recordAppliedMigration(session, "0001_add_managed.sql", "applied");
+			await recordAppliedMigration(
+				session,
+				"0001_add_managed.sql",
+				"applied",
+				"a".repeat(64),
+			);
 		});
 
 		await applyReset(driver, managedSnapshot, registry, "testdb:2");
@@ -605,7 +610,12 @@ describe("applyReset — a failed drop is reported as a coded error, not an unca
 	const seedLedger = async (driver: Driver): Promise<void> => {
 		await driver.transaction(async (session) => {
 			await bootstrapLedger(session);
-			await recordAppliedMigration(session, "0001_add_managed.sql", "applied");
+			await recordAppliedMigration(
+				session,
+				"0001_add_managed.sql",
+				"applied",
+				"a".repeat(64),
+			);
 		});
 	};
 
@@ -691,7 +701,12 @@ describe("applyReset — a hejbro-coded failure inside the transaction keeps its
 	const seedLedger = async (driver: Driver): Promise<void> => {
 		await driver.transaction(async (session) => {
 			await bootstrapLedger(session);
-			await recordAppliedMigration(session, "0001_add_managed.sql", "applied");
+			await recordAppliedMigration(
+				session,
+				"0001_add_managed.sql",
+				"applied",
+				"a".repeat(64),
+			);
 		});
 	};
 
@@ -790,7 +805,12 @@ describe("applyReset — a ledger that was never bootstrapped still lets every d
 		// 42P01 turn into a false success (B1's own root cause).
 		await driver.transaction(async (session) => {
 			await bootstrapLedger(session);
-			await recordAppliedMigration(session, "0001_add_managed.sql", "applied");
+			await recordAppliedMigration(
+				session,
+				"0001_add_managed.sql",
+				"applied",
+				"a".repeat(64),
+			);
 		});
 
 		const error: unknown = await applyReset(
@@ -809,7 +829,12 @@ describe("applyReset — reset-drop-failed carries the server's detail and picks
 	const seedLedger = async (driver: Driver): Promise<void> => {
 		await driver.transaction(async (session) => {
 			await bootstrapLedger(session);
-			await recordAppliedMigration(session, "0001_add_managed.sql", "applied");
+			await recordAppliedMigration(
+				session,
+				"0001_add_managed.sql",
+				"applied",
+				"a".repeat(64),
+			);
 		});
 	};
 
@@ -880,7 +905,12 @@ describe("applyReset — reset-drop-failed carries the server's detail and picks
 		});
 		await driver.transaction(async (session) => {
 			await bootstrapLedger(session);
-			await recordAppliedMigration(session, "0001_add_cycle.sql", "applied");
+			await recordAppliedMigration(
+				session,
+				"0001_add_cycle.sql",
+				"applied",
+				"a".repeat(64),
+			);
 		});
 
 		const error: unknown = await applyReset(
@@ -945,7 +975,12 @@ describe("applyReset — reset-drop-failed carries the server's detail and picks
 		});
 		await driver.transaction(async (session) => {
 			await bootstrapLedger(session);
-			await recordAppliedMigration(session, "0001_add_cycle.sql", "applied");
+			await recordAppliedMigration(
+				session,
+				"0001_add_cycle.sql",
+				"applied",
+				"a".repeat(64),
+			);
 		});
 
 		const error: unknown = await applyReset(
@@ -1033,7 +1068,12 @@ describe("applyReset — reset-drop-failed names the phase that actually failed 
 	const seedLedger = async (driver: Driver): Promise<void> => {
 		await driver.transaction(async (session) => {
 			await bootstrapLedger(session);
-			await recordAppliedMigration(session, "0001_add_managed.sql", "applied");
+			await recordAppliedMigration(
+				session,
+				"0001_add_managed.sql",
+				"applied",
+				"a".repeat(64),
+			);
 		});
 	};
 
@@ -1191,7 +1231,12 @@ describe("applyReset — reset-drop-failed names the phase that actually failed 
 		});
 		await driver.transaction(async (session) => {
 			await bootstrapLedger(session);
-			await recordAppliedMigration(session, "0001_add_cycle.sql", "applied");
+			await recordAppliedMigration(
+				session,
+				"0001_add_cycle.sql",
+				"applied",
+				"a".repeat(64),
+			);
 		});
 
 		const error: unknown = await applyReset(

@@ -79,8 +79,8 @@ describe("renderStatusReport / 16.3 (D106 M1)", () => {
 		const ledger: LedgerState = {
 			exists: true,
 			applied: [
-				{ filename: "0001_a.sql", origin: "applied" },
-				{ filename: "0002_b.sql", origin: "applied" },
+				{ filename: "0001_a.sql", origin: "applied", checksum: null },
+				{ filename: "0002_b.sql", origin: "applied", checksum: null },
 			],
 		};
 
@@ -104,7 +104,9 @@ describe("renderStatusReport / 16.4 (D106 M7)", () => {
 		};
 		const ledger: LedgerState = {
 			exists: true,
-			applied: [{ filename: "vendor/schema.sql", origin: "raised" }],
+			applied: [
+				{ filename: "vendor/schema.sql", origin: "raised", checksum: null },
+			],
 		};
 
 		const result = renderStatusReport(plan, ledger);

@@ -3,8 +3,10 @@ import type { CompileResult, Driver } from "@hejbro/query";
 import type { LedgerOrigin } from "./ledger";
 import {
 	asLedgerAccessFailure,
+	bodyChecksum,
 	isMigrationRecorded,
 	recordAppliedMigration,
+	wholeFileChecksum,
 } from "./ledger";
 
 /**
@@ -383,6 +385,20 @@ export type ApplyOutcome = "applied" | "already-applied";
  * through to {@link recordAppliedMigration} -- the one place that origin
  * actually reaches the ledger row.
  */
+/**
+ * [task 1.2, 631/R2, R7] Only a raised row's file lacks a banner to strip
+ * -- everything else (`applied`, `registered`) records the body below it.
+ * Both read `migration.sql`, the file's own full text already read from
+ * disk; 1.3's own re-read of that same file through the same function is
+ * what a body comparison rests on.
+ */
+const migrationChecksum = (migration: Migration): string => {
+	if (migration.origin === "raised") {
+		return wholeFileChecksum(migration.sql);
+	}
+	return bodyChecksum(migration.sql);
+};
+
 export const applyMigration = async (
 	driver: Driver,
 	migration: Migration,
@@ -402,6 +418,7 @@ export const applyMigration = async (
 				session,
 				migration.fileName,
 				migration.origin,
+				migrationChecksum(migration),
 			);
 			return "applied";
 		});

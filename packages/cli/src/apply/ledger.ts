@@ -339,15 +339,19 @@ export const bootstrapLedger = async (
 /** [task 1.1, 631/R2] `@hejbro/core`'s `renderBanner` writes this as a migration file's first line; kept in sync by hand, not imported (core is outside this change's file boundary) -- if the two spellings ever drift, a banner is hashed into the body instead of stripped from it. */
 const BANNER_FIRST_LINE = "-- hejbro migration";
 
+/** [task 1.2, 631/R7] `\r\n` -> `\n` only, nothing else -- the one normalization `bodyChecksum` and `wholeFileChecksum` share, so a checkout the platform rewrote never differs from the file that was hashed on either path. */
+const normalizeLineEndings = (text: string): string =>
+	text.replace(/\r\n/g, "\n");
+
 /**
  * [task 1.1, 631/R2] SHA-256 hex of a migration file's body: the file with
- * `\r\n` normalized to `\n` (no other normalization), then everything
- * after the first `"\n\n"` -- that separator excluded. A file whose first
- * line is not exactly {@link BANNER_FIRST_LINE} carries no banner and is
- * hashed whole; a banner with no `"\n\n"` anywhere hashes the empty body.
+ * line endings normalized, then everything after the first `"\n\n"` --
+ * that separator excluded. A file whose first line is not exactly
+ * {@link BANNER_FIRST_LINE} carries no banner and is hashed whole; a
+ * banner with no `"\n\n"` anywhere hashes the empty body.
  */
 export const bodyChecksum = (fileText: string): string => {
-	const normalized = fileText.replace(/\r\n/g, "\n");
+	const normalized = normalizeLineEndings(fileText);
 	const firstLineEnd = normalized.indexOf("\n");
 	if (firstLineEnd === -1) {
 		if (normalized !== BANNER_FIRST_LINE) {
@@ -366,10 +370,28 @@ export const bodyChecksum = (fileText: string): string => {
 	return sha256Hex(normalized.slice(separatorStart + "\n\n".length));
 };
 
-/** [task 16.1, D106 M7] One ledger row, as `readLedger` reads it back: the filename it identifies its migration by, and how it entered the ledger. */
+/**
+ * [task 1.2, 631/R7] SHA-256 hex of the whole file, line endings
+ * normalized -- never consults the banner. A raised row records this, not
+ * {@link bodyChecksum}: the requirement states the whole file
+ * unconditionally, not "unless the file happens to carry a banner".
+ */
+export const wholeFileChecksum = (text: string): string =>
+	sha256Hex(normalizeLineEndings(text));
+
+/** [task 16.1, D106 M7] One ledger row, as `readLedger` reads it back: the filename it identifies its migration by, and how it entered the ledger. `checksum` (task 1.2, 631/R6) is `null` for a row written before this column existed -- a fact about the past, never compared, not the string `"null"`. */
 export type LedgerRow = {
 	readonly filename: string;
 	readonly origin: LedgerOrigin;
+	readonly checksum: string | null;
+};
+
+/** [task 1.2, 631/R6] `null` and `undefined` both fold to `null` -- `String(...)` would turn either into the literal text `"null"`/`"undefined"`, which compares unequal to every real checksum and would make an old row look like a mismatch instead of "not compared". */
+const foldChecksum = (value: unknown): string | null => {
+	if (typeof value === "string") {
+		return value;
+	}
+	return null;
 };
 
 /**
@@ -397,7 +419,7 @@ export const readLedger = async (
 	try {
 		const rows = await exec(
 			session,
-			`select "filename", "origin" from ${QUALIFIED_LEDGER_TABLE} order by "id"`,
+			`select "filename", "origin", "checksum" from ${QUALIFIED_LEDGER_TABLE} order by "id"`,
 			[],
 			"read",
 			"read",
@@ -407,6 +429,7 @@ export const readLedger = async (
 			applied: rows.map((row) => ({
 				filename: String(row.filename),
 				origin: String(row.origin) as LedgerOrigin,
+				checksum: foldChecksum(row.checksum),
 			})),
 		};
 	} catch (error) {
@@ -463,26 +486,30 @@ export const isMigrationRecorded = async (
  * Records one migration as applied, identified by its full filename --
  * never its version prefix alone (spec: `verify`'s own duplicate message
  * is why; a tool keyed on the prefix can only ever apply one of a
- * colliding pair). `origin` (task 16.1, D106 M7) is required, never
- * defaulted: a caller SHALL say how this row entered the ledger, the
- * same reasoning that keeps this column itself `not null` with no
- * default at the database layer.
+ * colliding pair). `origin` (task 16.1, D106 M7) and `checksum` (task 1.2,
+ * 631/R6) are both required, never defaulted: a caller SHALL say how this
+ * row entered the ledger and what it recorded as the file's own hash --
+ * there is no value a caller may assume on a new row, the same reasoning
+ * that keeps both columns `not null` with no default at the database
+ * layer (a pre-existing row's `checksum` can be `null`; a new one may not
+ * choose to leave it unstated).
  *
  * This is also the whole of the baseline path (spec: "A baseline is
  * registered rather than run"): this function has no parameter for a
  * migration's own SQL, so calling it can never send that SQL. Registering
  * a baseline is calling this once, with the baseline migration's
- * filename, `origin: "registered"`, and nothing else.
+ * filename, `origin: "registered"`, its checksum, and nothing else.
  */
 export const recordAppliedMigration = async (
 	session: DriverSession,
 	filename: string,
 	origin: LedgerOrigin,
+	checksum: string,
 ): Promise<void> => {
 	await exec(
 		session,
-		`insert into ${QUALIFIED_LEDGER_TABLE} ("filename", "origin") values ($1, $2)`,
-		[filename, origin],
+		`insert into ${QUALIFIED_LEDGER_TABLE} ("filename", "origin", "checksum") values ($1, $2, $3)`,
+		[filename, origin, checksum],
 		"write",
 		"row",
 	);

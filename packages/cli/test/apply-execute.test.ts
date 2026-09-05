@@ -10,7 +10,7 @@ import {
 	applyMigration,
 	stripQuotedAndCommentedText,
 } from "../src/apply/execute";
-import { asLedgerAccessFailure } from "../src/apply/ledger";
+import { asLedgerAccessFailure, bodyChecksum } from "../src/apply/ledger";
 
 type FailWhen = (compiled: CompileResult) => boolean;
 type RowsWhen = (
@@ -110,6 +110,32 @@ describe("applyMigration / 3.1", () => {
 		expect(ledgerCall?.params).toEqual([
 			okMigration.fileName,
 			okMigration.origin,
+			bodyChecksum(okMigration.sql),
+		]);
+	});
+});
+
+describe("applyMigration / 1.2, 631/R6 (checksum)", () => {
+	it("records the body checksum of a registered baseline too, even though its SQL is never sent", async () => {
+		const baselineMigration: Migration = {
+			fileName: "0001_adopt.sql",
+			sql: '-- hejbro migration\n-- hejbro: 0.1.0\n\ncreate table "app"."adopted" (id integer);\n',
+			origin: "registered",
+		};
+		const { driver, calls } = makeFakeDriver();
+
+		await applyMigration(driver, baselineMigration, NEXT_COMMAND);
+
+		expect(calls.some((call) => call.sql === baselineMigration.sql)).toBe(
+			false,
+		);
+		const ledgerCall = calls.find((call) =>
+			call.sql.toLowerCase().includes("insert into"),
+		);
+		expect(ledgerCall?.params).toEqual([
+			baselineMigration.fileName,
+			baselineMigration.origin,
+			bodyChecksum(baselineMigration.sql),
 		]);
 	});
 });

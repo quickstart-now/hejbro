@@ -11,6 +11,7 @@ import type {
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { assertInteractiveTransactions } from "../src/apply/capability";
 import type { Migration } from "../src/apply/execute";
+import { bodyChecksum } from "../src/apply/ledger";
 import type { PlanResult } from "../src/apply/plan";
 import type {
 	CheckDriverConnection,
@@ -236,6 +237,7 @@ describe("applyFrom / 12.2 (#624)", () => {
 		expect(ledgerInsertCall?.params).toEqual([
 			baselineMigration.fileName,
 			baselineMigration.origin,
+			bodyChecksum(baselineMigration.sql),
 		]);
 	});
 
