@@ -133,3 +133,67 @@ This is not a contract change; it is a file the tests force open, the
 same shape as 486/R8 on the bt piece. The classification's reason lives
 as a one-line constraint comment beside the entry.
 
+<a id="r6"></a>
+## R6 — A set-operation recursive term stays untracked; the contract states the exception
+
+_lead · interpretation · basis R3, R4 · 2026-09-05T15:02Z · ratified: pending_
+
+Review B1 found the delta's universal sentence -- a key non-null in
+both branches stays non-null -- broken when the recursive term is a set
+operation: every key of such a term reads nullable. The code is right
+and the sentence was incomplete. A `SetOpStage` carries no left-joined
+brand, so its set is UNKNOWN, and this repository's frozen contract
+reads an untracked position as nullable; `never` would assert an empty
+set nobody measured and would drop a real left join hiding inside a
+set-op branch.
+
+The delta's THEN clause and the skill's CTE sentence therefore carry
+the exception explicitly, and the reviewer's B1 input is pinned as a
+row of the query table with that sentence quoted beside it. The
+lead's first instruction (carry `never`) is withdrawn on the
+reviewer's soundness warning.
+
+Review N1 is settled with it: "the same per-key union a plain set
+operation's result already has" was false -- a plain set operation
+keeps the left branch's projection -- and is corrected in the delta,
+the proposal, the design ruling and the skill. The gap that comparison
+accidentally revealed (a plain set operation's own result type never
+carries the right branch's nullability) is the lead's new issue,
+sibling of #932 and #942.
+
+<a id="r7"></a>
+## R7 — A nested-read key widens too; the widening is unioned where the nested read resolves
+
+_lead · interpretation · basis R2, R6 · 2026-09-05T15:02Z · ratified: pending_
+
+Review B2 and review E7/E8 are two ends of one asymmetry, and this
+ruling closes both inside `packages/query/src/types/select-result.ts`.
+Where `NestedOrExprResult` resolves a `NestedReadMarker` it returns
+before `ProjectedColumnResult` is consulted, so a nested-read key never
+read the `WidenedBy` brand: a recursive term projecting a nullable
+value left the outward key non-null while the server delivered `null`
+(measured) -- the narrowing the delta's SHALL exists to remove. The
+widening is therefore unioned at that branch too.
+
+The same type must not answer the other half. `ProjectedColumnResult`
+does not know the nested-read rule and calls a `jsonArrayFrom` value
+nullable, though it renders as `coalesce(json_agg(...), '[]')` and
+cannot be null; resolving the recursive term's own value through
+`NestedOrExprResult` instead keeps `jsonArrayFrom` non-null,
+`jsonObjectFrom` nullable by its own rule, and ordinary columns on the
+`ProjectedColumnResult` path. One layer only: the widening never
+re-enters itself. Nullability keeps one source of truth (R2) --
+`NestedOrExprResult` is that type's dispatcher, not a second rule.
+
+The current SHA already violates the delta for the E11a shape (a
+`notNull` non-json anchor value with a `jsonArrayFrom` recursive value
+reads `| null`), so the fix closes a live defect, not only a predicted
+one. The regression table carries rows in both directions, since a
+table of null expectations alone cannot catch over-widening; and a
+non-null row is never stated over a json column, whose read type is
+`unknown` regardless of `notNull`.
+
+The evidence first cited (an E8 shape over a json column) was a
+measurement artifact -- a json column reads `unknown` regardless of
+`notNull` -- and is replaced by E11a; the reviewer caught this himself.
+

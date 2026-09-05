@@ -65,6 +65,30 @@
       "at": "2026-09-05T13:49Z",
       "title": "A new runtime export of core is classified where the barrel curation demands it, as engine",
       "ratified": null
+    },
+    {
+      "id": "R6",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R3",
+        "R4"
+      ],
+      "at": "2026-09-05T15:02Z",
+      "title": "A set-operation recursive term stays untracked; the contract states the exception",
+      "ratified": null
+    },
+    {
+      "id": "R7",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R2",
+        "R6"
+      ],
+      "at": "2026-09-05T15:02Z",
+      "title": "A nested-read key widens too; the widening is unioned where the nested read resolves",
+      "ratified": null
     }
   ],
   "work": [
