@@ -3,15 +3,15 @@
   "number": 881,
   "ref": "quickstart-now/hejbro#881",
   "title": "ci: run the d49 round-trip witness on every pr (#375)",
-  "head": "28818622b507cc8bd4a6951f025d75772f9ae15d",
+  "head": "846c1acdcbd9b4ae2646ca39c1139ce3e8940283",
   "headRef": "ci-roundtrip",
   "base": "dev",
   "merged": null,
-  "pinnedAt": "2026-09-05T04:38Z",
+  "pinnedAt": "2026-09-05T07:46Z",
   "refs": [
     {
       "path": ".github/workflows/ci.yml",
-      "blob": "9e017d6fee5edfdb359825e82110a5abfd9d4d8f"
+      "blob": "ea94396bc9eb6dbf775d84e2a49233e82bef6ac3"
     },
     {
       "path": "docs/specs/2026-08-19-hejbro-design.md",
@@ -19,7 +19,7 @@
     },
     {
       "path": "examples/postgres/package.json",
-      "blob": "c1999018f255b9bb42da70c6757f9180665ab9a8"
+      "blob": "90e90a0cec2d4253c60959bb01fefbdc90d792fc"
     },
     {
       "path": "examples/supabase/package.json",
