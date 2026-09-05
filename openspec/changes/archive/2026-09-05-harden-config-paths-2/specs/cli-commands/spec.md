@@ -386,7 +386,8 @@ from `generate`.
 - **WHEN** `hejbro init` runs with `snapshotPath:
   "hejbro.config.ts/state.json"`, or with `migrationsDir:
   "hejbro.config.ts/mig"`, or with `--config state.json/hejbro.config.ts`
-  and `snapshotPath: "state.json"`, nothing existing
+  where that configuration file already exists and names `snapshotPath:
+  "state.json"`, nothing else existing
 - **THEN** the run fails with the one-path-for-two code, its message
   says a file cannot hold a file in the first case and a directory in
   the second, its `Next:` names the configured field to move — and

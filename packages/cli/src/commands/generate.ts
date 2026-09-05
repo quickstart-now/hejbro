@@ -728,6 +728,14 @@ export const runGenerate = async (
 			// learns each migration's own `changes`/`snapshot` (one entry, or
 			// two where `engine/split.ts`'s own condition needs a transaction
 			// boundary), which is what hashing the chain below needs.
+			// The migrations directory is judged before anything decides there is
+			// nothing to do: one tree must answer the same way on every command
+			// (D106 R1 B1 — `generate` used to exit 0 on "no changes" past a file
+			// sitting where the directory belongs, while `verify` refused it).
+			const previousCount = listMigrationFiles(
+				cwd,
+				config.migrationsDir,
+			).length;
 			const firstPass = generateMigrations({
 				declarations,
 				previousSnapshot,
@@ -831,10 +839,6 @@ export const runGenerate = async (
 			}
 
 			const migrationsDirPath = join(cwd, config.migrationsDir);
-			const previousCount = listMigrationFiles(
-				cwd,
-				config.migrationsDir,
-			).length;
 
 			const finalPass = generateMigrations({
 				declarations,

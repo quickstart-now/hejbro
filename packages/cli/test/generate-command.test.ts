@@ -1569,6 +1569,46 @@ describe("hejbro generate/verify/baseline/history/status/migrate / migrationsDir
 		await writeFixtureFile(fixtureCwd, "migrations", "not a directory");
 	};
 
+	// D106 round 1 B1: the judgement must run before the "no changes" exit,
+	// or one tree answers two ways (`generate` exit 0, `verify` exit 1).
+	describe("migrationsDir is judged even when the snapshot already matches (D106 R1 B1)", () => {
+		it.each([
+			{
+				label: "a regular file at migrationsDir",
+				break_: async (fixtureCwd: string) => {
+					await replaceMigrationsDirWithFile(fixtureCwd);
+				},
+				code: "migrations-dir-not-a-directory",
+			},
+			{
+				label: "a dangling link at migrationsDir",
+				break_: async (fixtureCwd: string) => {
+					await rm(join(fixtureCwd, "migrations"), {
+						recursive: true,
+						force: true,
+					});
+					await symlink("nowhere", join(fixtureCwd, "migrations"));
+				},
+				code: "migrations-dir-not-a-directory",
+			},
+		])(
+			"refuses $label after a generate that left nothing to do",
+			async ({ break_, code }) => {
+				await initWithSchemaAndGit(cwd);
+				const first = await runCli(cwd, ["generate"]);
+				expect(first.exitCode).toBe(0);
+				const quiet = await runCli(cwd, ["generate"]);
+				expect(quiet.stdout).toContain("no changes");
+				await break_(cwd);
+				const result = await runCli(cwd, ["generate"]);
+				expect(result.exitCode).toBe(1);
+				expect(result.stderr).toContain(`error[${code}]`);
+				expect(result.stdout).not.toContain("no changes");
+				expect(result.stderr).not.toContain(cwd);
+			},
+		);
+	});
+
 	const rows: ReadonlyArray<MigrationsDirRow> = [
 		{
 			label: "a regular file at migrationsDir",
