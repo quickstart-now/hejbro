@@ -1,0 +1,58 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#375",
+  "title": "run the d49 round-trip witness in ci",
+  "parent": "quickstart-now/hejbro#412",
+  "status": "closed",
+  "opened": "2026-09-05",
+  "closed": "2026-09-05",
+  "decisions": [
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "412/D24",
+        "412/D25 (oldest-first",
+        "no deferral); the owner's 2026-08-28 ruling on #375 (adopted",
+        "revision gated on the owner merging the PR carrying the amended row); D49's own rationale (\"the same script can be called from a CI job later\"); ci.yml carries no Docker leg today (read 2026-09-05)"
+      ],
+      "at": "2026-09-05T04:33Z",
+      "title": "The round-trip witness runs in CI; D49 is amended by this PR, which the owner merges",
+      "ratified": null
+    }
+  ],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-05T04:33Z",
+      "title": "Both example round-trips pass on dev fffea4dc under colima",
+      "pr": null,
+      "decisions": []
+    },
+    {
+      "id": "W2",
+      "at": "2026-09-05T04:38Z",
+      "title": "First CI run failed: dash refuses set -o pipefail; the script is invoked as sh",
+      "pr": null,
+      "decisions": []
+    },
+    {
+      "id": "W3",
+      "at": "2026-09-05T07:58Z",
+      "title": "roundtrip readiness probe races the postgres image's init restart",
+      "pr": null,
+      "decisions": []
+    }
+  ],
+  "prs": [
+    {
+      "number": 881,
+      "role": "closes",
+      "pinnedAt": "2026-09-05T07:59Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

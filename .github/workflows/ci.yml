@@ -132,6 +132,29 @@ jobs:
           else
             gh api -X POST "repos/$REPO/issues/$PR/comments" -f body="$body" --jq .id
           fi
+  # #375 (D49, amended 2026-09-05): the D48/D49 round-trip witness -- the
+  # committed migration chain and one fresh migration applied to two
+  # databases, both checked against the declared snapshot, then their
+  # dumps compared -- runs here as well as locally, so a generated-SQL
+  # regression cannot merge on the strength of a skipped local run. Docker
+  # is preinstalled on the ubuntu runner and the script is Docker-CLI-only
+  # (psql/pg_dump run inside the container); `pnpm test` stays DB-free.
+  # One Node version: the witness compares SQL text, not runtime behaviour.
+  # Gated like `verify` (#809): a long-lived PR runs it only on approval.
+  roundtrip:
+    needs: blackbox
+    if: ${{ !cancelled() && needs.blackbox.result != 'failure' }}
+    environment: ${{ (github.event_name == 'pull_request' && (github.head_ref == 'dev' || startsWith(github.head_ref, 'changeset-release/'))) && 'ci-approval' || 'ci-open' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with: { node-version: 24, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm --filter example-postgres roundtrip
+      - run: pnpm --filter example-supabase roundtrip
   verify:
     needs: blackbox
     # Runs past a skipped blackbox job (bot PR), never past a failed one

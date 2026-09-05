@@ -8,7 +8,7 @@
 		"check-types": "tsc --noEmit",
 		"test": "vitest run",
 		"test:integration": "vitest run --config vitest.integration.config.ts",
-		"roundtrip": "sh ../../scripts/roundtrip.sh . seed/roles.sql"
+		"roundtrip": "bash ../../scripts/roundtrip.sh . seed/roles.sql"
 	},
 	"dependencies": {
 		"@hejbro/core": "workspace:*",
