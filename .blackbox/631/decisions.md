@@ -381,38 +381,36 @@ judgement applies only to a relation that has the ledger's shape, the
 delta's own premise.
 
 <a id="r15"></a>
-## R15 — the banner ends where the leading comment block ends; status never lists a changed body as applied; reset upgrades too
+## R15 — the banner is the leading run of comment and blank lines; status never lists a changed body as applied; the column is added by the first command that records a row
 
 _lead · extension · basis R2 · 2026-09-05T22:48Z · ratified: pending_
 
-The constructor-mode review built 36 inputs against postgres:17.11 and
-found three contradictions. (B3, the serious one) R2 defined the body as
-the text after the first blank line. A hand-written migration whose
-banner is not followed by a blank line therefore had its executed
-statements *outside* the checksum -- an edit to `create table` after
-apply was invisible to both `migrate` and `status`. R2's predicate is
-replaced: the file's first line must still be exactly
-`-- hejbro migration` (otherwise the whole file is hashed, as before);
-after it, the banner is the maximal leading run of lines that are comment
-lines (`--` prefix) or blank, and the body is everything from the first
-line that is neither. Blank lines and comment lines inside the body
-remain body. This keeps every R2 property the tests pin (CRLF folded,
-lone CR is an edit, `-- upgraded-from:` growth is not, banner prose is
-not) and closes the gap: a statement can never sit in the banner because
-a statement is never a comment line. `raise` (whole file) is unchanged.
-(B1) `status` printed a changed-body file in its "recorded as applied"
-bucket as well as on its own diagnostic; the delta says "never as
-applied". The applied bucket excludes files reported as changed; they
-appear once, as the diagnostic. (B2) `reset` writes to the ledger (it
-deletes rows) and did not add the column on an old ledger; R13's sentence
-is "the first command that writes". `reset` calls the shared
-`upgradeLedgerColumns` before its first write, through the same
-`exec(..., "write", "bootstrap")` path, so an unwritable role still lands
-on `apply-ledger-unwritable`. That is one call site plus its test:
-`packages/cli/src/apply/reset.ts` (or `commands/reset.ts`, whichever
-holds the write) and `apply-reset.test.ts` join the Files-edited header
-for this call only. Rejected: narrowing R13's sentence to
-`migrate`/`raise` (the ledger would then hold two kinds of writer), and
-treating B3 as documentation (the executed text must be inside the hash
-or the change has no meaning).
+The constructor-mode review built 36 inputs on postgres:17.11 (90 CLI
+runs, 914 server statements observed) and found three contradictions.
+(B3) R2 defined the body as the text after the first blank line; a
+hand-written migration whose banner is not followed by a blank line
+therefore had its executed statements outside the checksum, invisible to
+`migrate` and `status` after an edit. The predicate is replaced: the
+first line must be exactly `-- hejbro migration` (otherwise the whole
+file is hashed), the banner is the leading run of comment and blank
+lines, and the body begins at the first statement. A statement can never
+fall into the banner because a statement is never a comment line, and
+every generated file's hash is unchanged, so no recorded checksum moves.
+The spec's "banner of comment lines" is kept and the boundary is stated.
+A comment before the first statement is banner; a comment inside the body
+is body. Every property the tests pin survives: CRLF folded, a lone CR is
+an edit, banner growth is not, banner prose is not. `raise` (whole file)
+is unchanged. (B1) `status` printed a changed-body file in its applied
+bucket as well as on its diagnostic; the delta says never as applied. The
+applied bucket excludes files reported as changed; they appear once, as
+the diagnostic. (B2) R13 said "the first command that writes"; `reset`
+writes (it deletes rows) and did not add the column. The true invariant
+is narrower and the sentence is corrected to it: the first command that
+records a row adds the column before that write; clearing rows needs no
+column; a read-only command leaves the ledger as it is. `reset` stays
+outside the piece, and the reviewer's input (an old ledger under `reset`)
+becomes a live witness that the sentence is true: `reset` succeeds and
+the column is still absent. N1, N3 and N4 add the sentences the review
+found missing (the exit-2 enumeration, "may be hidden", the `raised`
+exclusion); N2 corrects the reference's "byte-for-byte".
 
