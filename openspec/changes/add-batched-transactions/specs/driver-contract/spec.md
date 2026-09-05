@@ -91,7 +91,10 @@ transaction, in one round trip where the path allows it: the members
 run in order, the result is one row list per member in that order, a
 failing member fails the whole call, and nothing of a failed batch is
 visible afterwards. A driver declaring session state `false` SHALL
-carry its own session settings as the batch's first members. The
+carry its own session settings as the batch's first members. An empty
+member list SHALL send nothing — not even those session settings — and
+yield an empty list: nothing was asked for, so nothing reaches the
+database. The
 capability says nothing about sessions or interactivity: no state
 survives from one batch to the next, and a member cannot depend on a
 prior member's rows. A driver declaring the capability `false` SHALL
