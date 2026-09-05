@@ -1,26 +1,20 @@
 import type {
-	AggregateFilterNode,
-	BetweenNode,
-	ComparisonNode,
 	ExistsNode,
 	ExprNode,
-	FunctionCallNode,
-	InListNode,
 	LiteralNode,
-	LogicalNode,
-	NotNode,
-	NullTestNode,
 	OrderByTerm,
 	SelectExprNode,
 	SelectNode,
 	SetOpNode,
-	SqlTemplateChunk,
-	SqlTemplateNode,
-	WindowNode,
 	WithEntryNode,
 	WithNode,
 } from "@hejbro/core";
-import { replaceSelectChildExprs, selectChildExprs } from "@hejbro/core";
+import {
+	exprChildren,
+	replaceExprChildren,
+	replaceSelectChildExprs,
+	selectChildExprs,
+} from "@hejbro/core";
 
 // This file stays one module on purpose, past the ~300-line guideline:
 // `liftExprNode` and `liftSelectNode` below are mutually recursive by
@@ -123,28 +117,7 @@ const liftLiteralNode = (
 	};
 };
 
-// `rawSql` must stay verbatim: it is either `sql.raw()` (the one documented
-// injection point) or core's internal multi-row-insert `default` marker;
-// parameterizing either would corrupt the statement. `columnRef`/
-// `plpgsqlRef` simply carry no literal.
-const liftUnchangedNode = (node: ExprNode): Lifted<ExprNode> => ({
-	node,
-	params: [],
-});
-
-const liftComparisonNode = (
-	node: ComparisonNode,
-	startIndex: number,
-): Lifted<ExprNode> => {
-	const left = liftExprNode(node.left, startIndex);
-	const right = liftExprNode(node.right, startIndex + left.params.length);
-	return {
-		node: { ...node, left: left.node, right: right.node },
-		params: [...left.params, ...right.params],
-	};
-};
-
-/** Lifts an ordered list of expressions, threading `$n` numbering left to right. Exported for `mutation.ts`'s row/set-entry walkers. */
+/** Lifts an ordered list of expressions, threading `$n` numbering left to right. Exported for `mutation.ts`'s row/set-entry walkers, and for {@link liftExprNode}'s own generic child-list branch below. */
 export const liftExprSequence = (
 	nodes: ReadonlyArray<ExprNode>,
 	startIndex: number,
@@ -159,148 +132,6 @@ export const liftExprSequence = (
 		},
 		{ node: [], params: [] },
 	);
-
-const liftLogicalNode = (
-	node: LogicalNode,
-	startIndex: number,
-): Lifted<ExprNode> => {
-	const operands = liftExprSequence(node.operands, startIndex);
-	return {
-		node: { ...node, operands: operands.node },
-		params: operands.params,
-	};
-};
-
-const liftNotNode = (node: NotNode, startIndex: number): Lifted<ExprNode> => {
-	const operand = liftExprNode(node.operand, startIndex);
-	return { node: { ...node, operand: operand.node }, params: operand.params };
-};
-
-const liftNullTestNode = (
-	node: NullTestNode,
-	startIndex: number,
-): Lifted<ExprNode> => {
-	const operand = liftExprNode(node.operand, startIndex);
-	return { node: { ...node, operand: operand.node }, params: operand.params };
-};
-
-const liftInListNode = (
-	node: InListNode,
-	startIndex: number,
-): Lifted<ExprNode> => {
-	const operand = liftExprNode(node.operand, startIndex);
-	const values = liftExprSequence(
-		node.values,
-		startIndex + operand.params.length,
-	);
-	return {
-		node: { ...node, operand: operand.node, values: values.node },
-		params: [...operand.params, ...values.params],
-	};
-};
-
-const liftBetweenNode = (
-	node: BetweenNode,
-	startIndex: number,
-): Lifted<ExprNode> => {
-	const operand = liftExprNode(node.operand, startIndex);
-	const lowerBound = liftExprNode(
-		node.lowerBound,
-		startIndex + operand.params.length,
-	);
-	const upperBound = liftExprNode(
-		node.upperBound,
-		startIndex + operand.params.length + lowerBound.params.length,
-	);
-	return {
-		node: {
-			...node,
-			operand: operand.node,
-			lowerBound: lowerBound.node,
-			upperBound: upperBound.node,
-		},
-		params: [...operand.params, ...lowerBound.params, ...upperBound.params],
-	};
-};
-
-const liftFunctionCallNode = (
-	node: FunctionCallNode,
-	startIndex: number,
-): Lifted<ExprNode> => {
-	const args = liftExprSequence(node.args, startIndex);
-	return { node: { ...node, args: args.node }, params: args.params };
-};
-
-const liftTextChunk = (
-	chunk: Extract<SqlTemplateChunk, { readonly chunkKind: "text" }>,
-): Lifted<SqlTemplateChunk> => ({ node: chunk, params: [] });
-
-const liftExprChunk = (
-	chunk: Extract<SqlTemplateChunk, { readonly chunkKind: "expr" }>,
-	startIndex: number,
-): Lifted<SqlTemplateChunk> => {
-	const lifted = liftExprNode(chunk.expr, startIndex);
-	return {
-		node: { chunkKind: "expr", expr: lifted.node },
-		params: lifted.params,
-	};
-};
-
-const chunkLiftHandlers: {
-	readonly [K in SqlTemplateChunk["chunkKind"]]: (
-		chunk: Extract<SqlTemplateChunk, { readonly chunkKind: K }>,
-		startIndex: number,
-	) => Lifted<SqlTemplateChunk>;
-} = {
-	text: liftTextChunk,
-	expr: liftExprChunk,
-};
-
-const liftTemplateChunks = (
-	chunks: ReadonlyArray<SqlTemplateChunk>,
-	startIndex: number,
-): Lifted<ReadonlyArray<SqlTemplateChunk>> =>
-	chunks.reduce<Lifted<ReadonlyArray<SqlTemplateChunk>>>(
-		(acc, chunk) => {
-			const handler = chunkLiftHandlers[chunk.chunkKind] as (
-				chunk: SqlTemplateChunk,
-				startIndex: number,
-			) => Lifted<SqlTemplateChunk>;
-			const lifted = handler(chunk, startIndex + acc.params.length);
-			return {
-				node: [...acc.node, lifted.node],
-				params: [...acc.params, ...lifted.params],
-			};
-		},
-		{ node: [], params: [] },
-	);
-
-const liftSqlTemplateNode = (
-	node: SqlTemplateNode,
-	startIndex: number,
-): Lifted<ExprNode> => {
-	const chunks = liftTemplateChunks(node.chunks, startIndex);
-	return { node: { ...node, chunks: chunks.node }, params: chunks.params };
-};
-
-/**
- * Lifts a filtered aggregate's two child positions in render order
- * (#501/R2, the same left-to-right discipline `liftWindowNode` below
- * already applies to `over(...)`): the aggregate's own args first, then
- * its condition -- matching `render-sql.ts`'s `<fn>(…) filter (where …)`
- * text.
- */
-const liftAggregateFilterNode = (
-	node: AggregateFilterNode,
-	startIndex: number,
-): Lifted<ExprNode> => {
-	const fn = liftFunctionCallNode(node.fn, startIndex);
-	const where = liftExprNode(node.where, startIndex + fn.params.length);
-	return {
-		node: { ...node, fn: fn.node as FunctionCallNode, where: where.node },
-		params: [...fn.params, ...where.params],
-	};
-};
 
 const liftExistsNode = (
 	node: ExistsNode,
@@ -319,82 +150,36 @@ const liftSelectExprNode = (
 };
 
 /**
- * Lifts a window function's three child positions in render order (#444
- * F1's own discipline, applied to the one clause shape it predates): `fn`'s
- * own args first, then `partitionBy`, then `orderBy` — matching
- * `render-sql.ts`'s `<fn>(…) over (partition by … order by …)` text, so
- * `$n` numbering follows the same left-to-right order a literal appears
- * in. `liftOrderBy` is declared further down this file; referenced here
- * the same way `liftSelectExprNode` above already forward-references
- * `liftSelectNode`. `fn` dispatches through the generic {@link
- * liftExprNode} rather than {@link liftFunctionCallNode} directly
- * (#501/R3): the widened slot admits a filtered aggregate too, and
- * `liftAggregateFilterNode`'s own args-then-condition order nests inside
- * this one exactly as `render-sql.ts` renders it.
+ * Lifts every {@link LiteralNode} inside `node` to a `$n` bind parameter.
+ * Three branches, not a per-kind table (#515): a node kind's own child
+ * positions are core's registry to own, not this file's — `literal` is
+ * the base case (the node itself becomes the placeholder), `exists`/
+ * `selectExpr` recurse into their embedded {@link SelectNode} through
+ * {@link liftSelectNode} (their `query` is a `SelectNode`, not an
+ * `ExprNode`, so {@link exprChildren} never reports it), and every other
+ * kind walks {@link exprChildren} left to right and rebuilds through
+ * {@link replaceExprChildren} — the left-to-right order this used to
+ * restate per kind (#444, #501/R2, #501/R3) now comes from that registry's
+ * own `read` order instead.
  */
-const liftWindowNode = (
-	node: WindowNode,
-	startIndex: number,
-): Lifted<ExprNode> => {
-	const fn = liftExprNode(node.fn, startIndex);
-	const partitionBy = liftExprSequence(
-		node.partitionBy,
-		startIndex + fn.params.length,
-	);
-	const orderBy = liftOrderBy(
-		node.orderBy,
-		startIndex + fn.params.length + partitionBy.params.length,
-	);
-	return {
-		node: {
-			...node,
-			fn: fn.node as FunctionCallNode | AggregateFilterNode,
-			partitionBy: partitionBy.node,
-			orderBy: orderBy.node,
-		},
-		params: [...fn.params, ...partitionBy.params, ...orderBy.params],
-	};
-};
-
-// One handler per `ExprNode["nodeKind"]` — a mapped type over the full
-// union, so a missing handler is a `tsc` error (same technique as core's
-// `renderExprHandlers`). Every handler is O(1) branch-free, keeping its
-// CRAP score low independent of test coverage; only `liftExprNode` itself
-// dispatches, and its body is a single lookup-and-call.
-const exprLiftHandlers: {
-	readonly [K in ExprNode["nodeKind"]]: (
-		node: Extract<ExprNode, { readonly nodeKind: K }>,
-		startIndex: number,
-	) => Lifted<ExprNode>;
-} = {
-	literal: liftLiteralNode,
-	columnRef: liftUnchangedNode,
-	plpgsqlRef: liftUnchangedNode,
-	comparison: liftComparisonNode,
-	logical: liftLogicalNode,
-	not: liftNotNode,
-	nullTest: liftNullTestNode,
-	inList: liftInListNode,
-	between: liftBetweenNode,
-	functionCall: liftFunctionCallNode,
-	sqlTemplate: liftSqlTemplateNode,
-	rawSql: liftUnchangedNode,
-	exists: liftExistsNode,
-	selectExpr: liftSelectExprNode,
-	window: liftWindowNode,
-	aggregateFilter: liftAggregateFilterNode,
-};
-
-/** Lifts every {@link LiteralNode} inside `node` to a `$n` bind parameter, dispatching by `nodeKind`. */
 export const liftExprNode = (
 	node: ExprNode,
 	startIndex: number,
 ): Lifted<ExprNode> => {
-	const handler = exprLiftHandlers[node.nodeKind] as (
-		node: ExprNode,
-		startIndex: number,
-	) => Lifted<ExprNode>;
-	return handler(node, startIndex);
+	if (node.nodeKind === "literal") {
+		return liftLiteralNode(node, startIndex);
+	}
+	if (node.nodeKind === "exists") {
+		return liftExistsNode(node, startIndex);
+	}
+	if (node.nodeKind === "selectExpr") {
+		return liftSelectExprNode(node, startIndex);
+	}
+	const children = liftExprSequence(exprChildren(node), startIndex);
+	return {
+		node: replaceExprChildren(node, children.node),
+		params: children.params,
+	};
 };
 
 const liftOrderBy = (
