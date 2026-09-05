@@ -41,9 +41,28 @@
       "at": "2026-09-05T19:06Z",
       "title": "the five exports: a new core exports pin, five barrel-absence lines, engine placement, values only, tsdoc rewrite, two-stage red",
       "ratified": null
+    },
+    {
+      "id": "R4",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "R1"
+      ],
+      "at": "2026-09-05T19:50Z",
+      "title": "the #473 pin that kept the registry internal is inverted, not deleted",
+      "ratified": null
     }
   ],
-  "work": [],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-05T19:46Z",
+      "title": "the four sites fold onto core's exported traversal and guards",
+      "pr": null,
+      "decisions": []
+    }
+  ],
   "prs": [],
   "origin": null,
   "followUps": []
