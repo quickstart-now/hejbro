@@ -640,6 +640,106 @@ describe("a category-C keyword is refused as an argument name (#832)", () => {
 	);
 });
 
+describe("next and query are refused as body locals (#832/R6, review-born)", () => {
+	const setofStatementWordCases: ReadonlyArray<{ readonly argName: string }> = [
+		{ argName: "next" },
+		{ argName: "query" },
+	];
+
+	it.each(setofStatementWordCases)(
+		"refuses an argument whose derived name is $argName with reserved-local-name",
+		({ argName }) => {
+			expect(
+				codeOf(() =>
+					defineFunction(
+						app,
+						"echo_setof_word",
+						{ args: { [argName]: uuid() }, returns: { typeName: "uuid" } },
+						(ctx) => {
+							ctx.return(sql`null`);
+						},
+					),
+				),
+			).toBe("reserved-local-name");
+		},
+	);
+
+	it("the reviewer's exact repro -- args: { next } + ctx.return(a.next) -- fails at declaration time, so no migration is ever produced", () => {
+		expect(
+			codeOf(() =>
+				defineFunction(
+					app,
+					"echo_next_repro",
+					{ args: { next: text() }, returns: { typeName: "text" } },
+					(ctx, a) => {
+						ctx.return(a.next);
+					},
+				),
+			),
+		).toBe("reserved-local-name");
+	});
+
+	it("a row read named next is accepted -- row names take no reserved check (control)", () => {
+		const fn = defineFunction(
+			app,
+			"echo_next_row",
+			{ returns: posts },
+			(ctx) => {
+				ctx.row(
+					select({ id: posts.id }, posts).where(eq(posts.id, posts.id)),
+					"next",
+				);
+				ctx.return(select(posts));
+			},
+		);
+		expect(fn.body.declarations).toEqual([
+			{ declKind: "scalar", name: "next_id", typeNode: { typeName: "uuid" } },
+		]);
+	});
+
+	// Measured harmless as an argument, a loop name and a row read's own
+	// name (reviewer sweep, #832/R6) -- the same "plpgsql opens a
+	// statement with this word" family as `next`/`query`, but never
+	// refused, so kept out of the class (reserved.ts's doc comment names
+	// all nineteen).
+	const harmlessStatementWordCases: ReadonlyArray<{ readonly name: string }> = [
+		{ name: "exit" },
+		{ name: "elsif" },
+		{ name: "elseif" },
+		{ name: "continue" },
+		{ name: "assert" },
+		{ name: "open" },
+		{ name: "move" },
+		{ name: "close" },
+		{ name: "call" },
+		{ name: "set" },
+		{ name: "reset" },
+		{ name: "commit" },
+		{ name: "rollback" },
+		{ name: "alias" },
+		{ name: "constant" },
+		{ name: "reverse" },
+		{ name: "slice" },
+		{ name: "diagnostics" },
+		{ name: "stacked" },
+	];
+
+	it.each(harmlessStatementWordCases)(
+		"accepts an argument named $name -- measured harmless in every rendered position (control)",
+		({ name }) => {
+			const fn = defineFunction(
+				app,
+				"echo_harmless_word_arg",
+				{ args: { [name]: uuid() }, returns: { typeName: "uuid" } },
+				(ctx) => {
+					ctx.return(sql`null`);
+				},
+			);
+			expect(fn.args[0]?.argName).toBe(name);
+		},
+	);
+});
+
 describe("two argument keys deriving to one SQL name are refused (#751)", () => {
 	const collidingCases: ReadonlyArray<{
 		readonly label: string;

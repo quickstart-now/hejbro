@@ -969,6 +969,131 @@ describe("loop and row names are hejbro SQL names, checked before duplicate (#81
 	});
 });
 
+describe("next and query are refused as loop names; the wider plpgsql-statement family stays accepted (#832/R6, review-born)", () => {
+	const setofStatementWordCases: ReadonlyArray<{ readonly loopName: string }> =
+		[{ loopName: "next" }, { loopName: "query" }];
+
+	it.each(setofStatementWordCases)(
+		"a loop named $loopName -- plpgsql's own SETOF-returning statement word -- throws reserved-local-name",
+		({ loopName }) => {
+			expect(() =>
+				defineTrigger(comments, triggerConfig, (ctx, { new: row }) => {
+					ctx.forEach(
+						select(comments).where(eq(comments.parentId, row.id)),
+						() => {},
+						loopName,
+					);
+					ctx.return(row);
+				}),
+			).toThrowError(
+				/collides with a name Postgres reserves or plpgsql declares itself/,
+			);
+		},
+	);
+
+	it.each(setofStatementWordCases)(
+		"a row read named $loopName is accepted -- row names take no reserved check (control)",
+		({ loopName }) => {
+			const declaration = defineTrigger(
+				comments,
+				triggerConfig,
+				(ctx, { new: row }) => {
+					ctx.row(
+						select({ postId: comments.postId }, comments).where(
+							eq(comments.id, row.parentId),
+						),
+						loopName,
+					);
+					ctx.return(row);
+				},
+			);
+			expect(declaration.functionDeclaration.body.declarations).toEqual([
+				{
+					declKind: "scalar",
+					name: `${loopName}_post_id`,
+					typeNode: { typeName: "uuid" },
+				},
+			]);
+		},
+	);
+
+	// Measured harmless as an argument, a loop name and a row read's own
+	// name (reviewer sweep, #832/R6) -- the same "plpgsql opens a
+	// statement with this word" family as `next`/`query`, but never
+	// refused, so kept out of the class (reserved.ts's doc comment names
+	// all nineteen).
+	const harmlessStatementWordCases: ReadonlyArray<{ readonly name: string }> = [
+		{ name: "exit" },
+		{ name: "elsif" },
+		{ name: "elseif" },
+		{ name: "continue" },
+		{ name: "assert" },
+		{ name: "open" },
+		{ name: "move" },
+		{ name: "close" },
+		{ name: "call" },
+		{ name: "set" },
+		{ name: "reset" },
+		{ name: "commit" },
+		{ name: "rollback" },
+		{ name: "alias" },
+		{ name: "constant" },
+		{ name: "reverse" },
+		{ name: "slice" },
+		{ name: "diagnostics" },
+		{ name: "stacked" },
+	];
+
+	it.each(harmlessStatementWordCases)(
+		"a loop named $name is accepted -- measured harmless in every rendered position (control)",
+		({ name }) => {
+			const declaration = defineTrigger(
+				comments,
+				triggerConfig,
+				(ctx, { new: row }) => {
+					ctx.forEach(
+						select(comments).where(eq(comments.parentId, row.id)),
+						() => {},
+						name,
+					);
+					ctx.return(row);
+				},
+			);
+			const [forEachStmt] = declaration.functionDeclaration.body.statements;
+			expect(forEachStmt).toMatchObject({
+				stmtKind: "forEach",
+				loopName: name,
+			});
+		},
+	);
+
+	it.each(harmlessStatementWordCases)(
+		"a row read named $name is accepted -- measured harmless in every rendered position (control)",
+		({ name }) => {
+			const declaration = defineTrigger(
+				comments,
+				triggerConfig,
+				(ctx, { new: row }) => {
+					ctx.row(
+						select({ postId: comments.postId }, comments).where(
+							eq(comments.id, row.parentId),
+						),
+						name,
+					);
+					ctx.return(row);
+				},
+			);
+			expect(declaration.functionDeclaration.body.declarations).toEqual([
+				{
+					declKind: "scalar",
+					name: `${name}_post_id`,
+					typeNode: { typeName: "uuid" },
+				},
+			]);
+		},
+	);
+});
+
 const MOCK_ID = "00000000-0000-0000-0000-000000000000";
 
 /**

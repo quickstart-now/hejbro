@@ -17,3 +17,16 @@ Change `harden-function-locals`, group 1, tasks 1.1, 1.2, 1.5 (commits 7c8e7aa8,
 
 1.5 (commits 7e67636e docs, 16dea9c7 skill+changeset) updates `function-builder-pitfalls.md`'s reserved-name paragraph to state the three sources and the reserved-before-SQL-name-before-duplicate check order, and adds a `.changeset/harden-function-locals.md` (patch, `@hejbro/core`, the fixed group of seven) describing the four user-visible refusals this change adds. Pure work ~7 min against a 6 min estimate (implementer-stamped).
 
+<a id="w2"></a>
+## W2 — harden-function-locals 1.6: next and query refused after the piece review's server-side witness
+
+_2026-09-05T11:17Z_
+
+Change `harden-function-locals`, group 1, task 1.6, review-born (branch `harden-function-locals`).
+
+The spec-bound reviewer put every accepted rendered SQL from the group's implementation (3,328 renders) onto a live `postgres:17` and found the one shape hejbro accepted that the server refuses: an argument (or a loop) named `next` or `query` renders as the first token after `return` in a scalar-returning function's body -- `return next;` -- which plpgsql reads as its own `RETURN NEXT`/`RETURN QUERY` statement, not an identifier read, so a non-`setof` function using the name fails at creation with 42804. `hejbro generate` wrote a migration that could not be applied. The break is lexical and holds only at that exact position: the same argument inside `return coalesce(next, 'd')`, or in a `returns setof` body (`return query <select>` never puts the name there), is created and runs correctly -- the refusal is still by name, in every rendered position, because a name-based refusal is what makes the guarantee uniform.
+
+The lead's ruling (832/R6) added `next`/`query` to `reservedPlpgsqlNames` (195 -> 197) and required the doc comment's third source to stay an explicit list rather than broaden to "plpgsql statement syntax" -- broadening the description, rather than naming the two words, would have silently pulled in nineteen more of plpgsql's own words that the reviewer separately measured harmless in every rendered position (`exit`, `elsif`, `elseif`, `continue`, `assert`, `open`, `move`, `close`, `call`, `set`, `reset`, `commit`, `rollback`, `alias`, `constant`, `reverse`, `slice`, `diagnostics`, `stacked`) and refused nineteen working programs. The doc comment now names all nineteen as the family the source excludes, not just the two it includes.
+
+Measured: red first -- `next`/`query` refused as an argument and as a loop name; the reviewer's exact repro (`args: { next }` + `ctx.return(a.next)`) refused at declaration time; a row read named `next` accepted (row names take no reserved check); the nineteen-name control table accepted in all three positions (argument, loop, row read) -- five failures, all controls green. Genuinely verified red by `git stash`-ing `reserved.ts` alone and re-running the new tests before restoring it. Green after the two-entry addition. Full `pnpm test` green afterward, no collateral against the wider set. Pure work ~12 min against an 8 min estimate (implementer-stamped).
+

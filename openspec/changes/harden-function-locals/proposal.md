@@ -13,10 +13,10 @@ say which two things collided.
    63 of them on `postgres:17`, 61 new to the list since `between` and
    `exists` already sit in it — is left out: `int`, `row`, `values`,
    `time`, `timestamp`, `json`, `out`, `trim`, … fail as argument names,
-   63 of 63 measured — 60 a syntax error (`create function
-   "app"."c_int"(int text)`), and `inout`, `out` and `setof` a 42P13
-   refusal, the argument list parsed as a parameter mode or a set
-   argument that the return type then contradicts. Those
+   63 of 63 measured in the shape hejbro renders — 60 a syntax error
+   (`create function "app"."c_int"(int text)`), `inout` and `out` a
+   42804 (`return <name>` contradicts the parameter mode the argument
+   list was parsed as), `setof` a 42P13. Those
    two already-listed C names show that the requirement's stated class
    does not reconstruct the shipped list either — and neither does R ∪ T
    ∪ C: 16 further names in the set are plpgsql's own statement words
@@ -24,7 +24,12 @@ say which two things collided.
    the stated class covers under no source at all. `exit` and `elsif`,
    which the requirement's "plpgsql reserves for its own statements"
    phrase seems to cover, are harmless in every rendered position and
-   rightly absent.
+   rightly absent. Two more of plpgsql's own words are missing from the
+   set and are not harmless: an argument named `next` or `query` renders
+   as `return next;` / `return query;`, which plpgsql reads as its own
+   statement, so `hejbro generate` writes a migration that fails to
+   apply (42804, non-SETOF function). Found by the piece review, in the
+   one sweep that put every accepted rendering on a live server.
 2. **Loop and row names bypass the SQL-name rule (#817).**
    `ctx.forEach(q, fn, name)` and `ctx.row(name)` render the name
    unquoted without the D36 check an argument key gets, so `"my-loop"`
@@ -50,11 +55,15 @@ say which two things collided.
   live server as an argument name, a loop name and a row-declared local;
   the requirement states the class as the three keyword categories, the
   variables plpgsql declares itself (`new`/`old` among them), and the
-  words plpgsql opens its own statements with, named one by one — nine
-  measured failing as a local, five measured harmless and refused since
-  before this change — and names `exit`/`elsif` as measured harmless and
-  never refused. The three sources reconstruct the set as measured; a
-  name measured harmless stays in it, since the refusal is uniform and
+  words of plpgsql's own statement syntax that measurement shows
+  failing, named one by one — eleven measured failing (`next` and
+  `query` among them) and five measured harmless but refused since
+  before this change. The third source is a list, not a phrase: the
+  nineteen words of the same family that measure harmless (`exit`,
+  `elsif`, `elseif`, `continue`, `assert`, `call`, `commit`, …) are
+  named as outside the class, so no reader takes the phrase for the
+  definition. The three sources reconstruct the set as measured; a name
+  measured harmless stays in it, since the refusal is uniform and
   relaxing one is a change of its own.
 - **Loop and row names are hejbro SQL names.** They go through the same
   `invalid-sql-name` refusal an argument key does, before the reserved

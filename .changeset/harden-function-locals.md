@@ -28,3 +28,9 @@ sharing one name are refused the same way, naming both constructs.
 `duplicate-column` now names both colliding TypeScript keys and their
 shared derived SQL name, the same way `duplicate-argument` already does,
 instead of naming only the derived name (#818).
+
+An argument named `next` or `query`, or a loop named either, is now
+refused with `reserved-local-name` too — plpgsql reads `return next;`/
+`return query;` as its own `RETURN NEXT`/`RETURN QUERY`, so a
+non-`setof` function using one previously generated a migration that
+failed to apply at creation (42804) (#832).

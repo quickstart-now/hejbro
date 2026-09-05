@@ -12,15 +12,26 @@ import { throwHejbroError } from "../error";
  * 2. a variable plpgsql declares on its own: `found`, the exception
  *    block's `sqlstate`/`sqlerrm`, a trigger body's `new` and `old`, and
  *    a trigger function's twelve `tg_*` variables.
- * 3. the fourteen words plpgsql opens its own statements with, named one
- *    by one because the keyword table does not carry them: nine fail as
- *    a local (`begin`, `by`, `declare`, `execute`, `foreach`, `if`,
- *    `loop`, `strict`, `while`) and five stand without failing but are
- *    refused on the same footing (`exception`, `get`, `perform`,
- *    `raise`, `return`) — this change only widens refusal, so a name
- *    already refused stays refused even where it is measured harmless.
- *    `exit` and `elsif` are the same family and are not in the set: they
- *    have never been refused, so leaving them out relaxes nothing.
+ * 3. sixteen words plpgsql opens its own statements with, named one by
+ *    one because the keyword table does not carry them — the list is
+ *    what defines this source, not a broader "plpgsql statement syntax"
+ *    description, since most of plpgsql's own vocabulary renders fine:
+ *    eleven fail as a local (`begin`, `by`, `declare`, `execute`,
+ *    `foreach`, `if`, `loop`, `next`, `query`, `strict`, `while` —
+ *    `return next`/`return query` are plpgsql's own SETOF-returning
+ *    statements, so an argument or loop named `next`/`query` renders
+ *    `return next;`/`return query;` and either fails at creation
+ *    (non-SETOF) or returns the wrong thing) and five stand without
+ *    failing but are refused on the same footing (`exception`, `get`,
+ *    `perform`, `raise`, `return`) — this change only widens refusal, so
+ *    a name already refused stays refused even where it is measured
+ *    harmless. Nineteen more of plpgsql's own words are the same family
+ *    but measured harmless in every rendered position and stay out of
+ *    the class (`exit`, `elsif`, `elseif`, `continue`, `assert`, `open`,
+ *    `move`, `close`, `call`, `set`, `reset`, `commit`, `rollback`,
+ *    `alias`, `constant`, `reverse`, `slice`, `diagnostics`, `stacked`):
+ *    they have never been refused, so leaving them out relaxes nothing,
+ *    and refusing them would refuse a working program.
  *
  * Where the failure lands varies by name and by position — a keyword
  * breaks at creation, at an assignment, or at a read; a shadowed name is
@@ -138,6 +149,7 @@ export const reservedPlpgsqlNames: ReadonlySet<string> = new Set([
 	"natural",
 	"nchar",
 	"new",
+	"next",
 	"none",
 	"normalize",
 	"not",
@@ -160,6 +172,7 @@ export const reservedPlpgsqlNames: ReadonlySet<string> = new Set([
 	"position",
 	"precision",
 	"primary",
+	"query",
 	"raise",
 	"real",
 	"references",

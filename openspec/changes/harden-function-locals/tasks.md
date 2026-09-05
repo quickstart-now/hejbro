@@ -18,8 +18,11 @@ core's tests stay pure); `packages/core/src/plpgsql/reserved.ts`,
 table.ts`, their tests (1.3); `packages/core/src/dsl/define-function.ts`,
 `packages/core/src/plpgsql/body-context.ts`, tests (1.4);
 `skills/hejbro/references/function-builder-pitfalls.md`, one
-`.changeset/*.md` (1.5). If a task appears to need any other file, that
-goes back to the planner, not into the diff.
+`.changeset/*.md` (1.5); `packages/core/src/plpgsql/reserved.ts` and the
+same two core test files (1.6 — review-born; its delta sentences are
+already written, so `openspec/` is not edited by that task). If a task
+appears to need any other file, that goes back to the planner, not into
+the diff.
 
 **Ordering.** 1.1 first (its measured table is what 1.2 imports); 1.2
 before 1.3 (the reserved check runs inside the name rule); 1.3 then 1.4
@@ -103,3 +106,28 @@ before 1.3 (the reserved check runs inside the name rule); 1.3 then 1.4
       including arguments) and that a row name is judged by the locals
       it declares; `pnpm changeset` → `patch`. Files: the reference,
       `.changeset/*.md`.
+
+- [x] 1.6 (~8m) **[review-born]** `next` and `query`. The piece review
+      found the one rendering hejbro accepts that the server refuses: an
+      argument named `next` or `query` renders `return next;`, plpgsql
+      reads its own `RETURN NEXT`, and a non-SETOF function fails at
+      creation (42804) — `hejbro generate` writes a migration that cannot
+      be applied. Red: `define-function.test.ts` and
+      `plpgsql/body-context.test.ts` — `next` and `query` refused with
+      `reserved-local-name` as an argument and as a loop name (neither
+      name carries an underscore, so neither can be a `<row>_<col>`
+      derived local — the table says so, as it does for the 52
+      category-C names in the same position); and a row read *named*
+      `next` accepted, since a row name is not reserved-checked. Add the
+      shape the review reproduced as its own row: `args: { next }` with
+      `ctx.return(a.next)` refused at declaration, so no migration is
+      written. And a control table over the nineteen measured-harmless
+      siblings (`exit`, `elsif`, `elseif`, `continue`, `assert`, `open`,
+      `move`, `close`, `call`, `set`, `reset`, `commit`, `rollback`,
+      `alias`, `constant`, `reverse`, `slice`, `diagnostics`, `stacked`)
+      **accepted** in all three positions — that table is the guard
+      against the refusal widening past the two names. Green: two entries
+      in `reserved.ts`, alphabetically, and its doc comment's third
+      source restated as a list of sixteen with the harmless siblings
+      named. Files: `reserved.ts`, those two test files. The delta
+      sentences are already written; do not edit `openspec/`.

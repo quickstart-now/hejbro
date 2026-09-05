@@ -17,23 +17,36 @@ class is defined by its source, not by how it fails:
   function receives: `tg_name`, `tg_when`,
   `tg_level`, `tg_op`, `tg_relid`, `tg_relname`, `tg_table_name`,
   `tg_table_schema`, `tg_nargs`, `tg_argv`, `tg_event`, `tg_tag`;
-- a word plpgsql opens one of its own statements with, named one by one
-  because Postgres's keyword table accounts for none of them — it lists
-  some as unreserved and the rest not at all, while plpgsql's own parser
-  takes them as the start of a statement. Measured as a loop record and
-  as a row-declared local, nine fail: `begin`, `by`, `declare`,
-  `execute`, `foreach`, `if`, `loop`, `strict`, `while`. Five more —
-  `exception`, `get`, `perform`, `raise`, `return` — stand in every
-  rendered position and are refused all the same: they have been refused
-  since before this change, and relaxing a refusal is a change of its
-  own, decided on its own evidence.
+- a word from plpgsql's own statement syntax that measurement shows
+  failing in a rendered position — **the list below is the definition**,
+  not the phrase above it. Postgres's keyword table accounts for none of
+  these: it lists some as unreserved and the rest not at all, while
+  plpgsql's own parser reads them as syntax. Eleven fail: `begin`, `by`,
+  `declare`, `execute`, `foreach`, `if`, `loop`, `strict`, `while` break
+  as a loop record and as a row-declared local; `next` and `query` break
+  as an argument of a scalar-returning function, where the name renders
+  as the first token after `return` — `return next;`, `return next ||
+  'x';` — and plpgsql reads its own `return next` / `return query`, so a
+  non-SETOF function is refused at creation (42804). The break is
+  lexical, at that one position: `return coalesce(next, 'd')` and
+  `return (next)` are created, and in a `returns setof` body the
+  argument is harmless altogether, since `return query <select>` never
+  puts the name there. Both are refused in every position all the same,
+  because the refusal is uniform and by name. Five more — `exception`,
+  `get`, `perform`, `raise`,
+  `return` — stand in every rendered position and are refused all the
+  same: they have been refused since before this change, and relaxing a
+  refusal is a change of its own, decided on its own evidence.
 
-The three sources reconstruct the shipped set as measured. `exit` and
-`elsif` belong to that last family and are still not in the class:
-measured, they stand as an argument, a loop name and a local in every
-rendered position, and — unlike the five above — no release ever
-refused them, so leaving them out relaxes nothing and refusing them
-would refuse a working program.
+The three sources reconstruct the shipped set as measured. The third is
+written as a list because its family is not the class: `exit`, `elsif`,
+`elseif`, `continue`, `assert`, `open`, `move`, `close`, `call`, `set`,
+`reset`, `commit`, `rollback`, `alias`, `constant`, `reverse`, `slice`,
+`diagnostics` and `stacked` are plpgsql's syntax too and are **not** in
+it — measured, each stands as an argument, a loop name and a local in
+every rendered position, and no release ever refused them, so leaving
+them out relaxes nothing while refusing them would refuse a working
+program.
 
 A local by such a name either fails somewhere in the body or silently
 changes what the name means, so hejbro refuses it before the body
@@ -104,19 +117,48 @@ refused the same way.
   argument
 
 #### Scenario: A column-name keyword is refused in every rendered position
-- **WHEN** a function declares an argument, names a loop, or names a
-  row read whose derived local is any keyword of category `C` — `int`,
-  `row`, `values`, `time`, `timestamp`, `json`, `out`, `trim`,
-  `between`, `exists` and the rest of the category, every one of them
+- **WHEN** a function declares an argument, or names a loop, by any
+  keyword of category `C` — `int`, `row`, `values`, `time`, `timestamp`,
+  `json`, `out`, `trim`, `between`, `exists` and the rest of the
+  category, every one of the 63 — or names a row read whose derived
+  local is one of the eleven that a `<row>_<col>` name can produce
+  (`json_array`, `json_table`, `merge_action` and their kind; the other
+  52 carry no underscore and cannot be derived at all)
 - **THEN** the declaration fails with `reserved-local-name`. Measured on
-  `postgres:17`: as an argument all 63 fail at creation — 60 with a
-  syntax error (`(int text)`), and `inout`, `out` and `setof` with
-  42P13, the argument list parsed as a parameter mode or a set argument
-  that the return type then contradicts. As a loop record or a
-  row-declared local the server accepts them; hejbro refuses them there
-  too, because the refusal is uniform — one list, one check, one
-  message, wherever a body would render the name. `exit` and `elsif` are
-  accepted in all three positions and stay accepted
+  PostgreSQL 17.11, in the shape hejbro renders — the body reads the
+  argument and returns a scalar — all 63 fail at creation as an
+  argument: 60 with a syntax error (`(int text)`), `inout` and `out`
+  with 42804 (the argument list is parsed as a parameter mode, and
+  `return <name>` then contradicts it), `setof` with 42P13 (a function
+  cannot accept a set argument). Other body shapes fail differently or
+  not at all — `create function f(out text) returns text as $$ begin
+  return; end $$` is created — which is why the refusal is by name, not
+  by observed failure. As a loop record or a row-declared local the
+  server accepts every one of them; hejbro refuses them there too,
+  because the refusal is uniform — one list, one check, one message,
+  wherever a body would render the name. `exit` and `elsif` are accepted
+  in all three positions and stay accepted
+
+#### Scenario: A word plpgsql reads as statement syntax is refused where it breaks
+- **WHEN** a function declares an argument, or names a loop, `next` or
+  `query` (neither name can be a row read's derived local: those always
+  carry the joining underscore)
+- **THEN** the declaration fails with `reserved-local-name`. Measured:
+  an argument named `next` renders as `return next;`, which plpgsql
+  reads as its own `RETURN NEXT`, and a non-SETOF function is refused at
+  creation with 42804 (`query` likewise) — so without this refusal
+  `hejbro generate` writes a migration that cannot be applied. The break
+  is lexical and holds only at that position: the same argument inside
+  `return coalesce(next, 'd')`, or in a `returns setof` body (rendered
+  `return query <select>`), is created and runs correctly. hejbro
+  refuses the name in every one of those shapes and as a loop name too —
+  one list, one check, one message — accepting that a working
+  `returns setof` declaration is refused with them; a row read *named*
+  `next` is accepted, as any row name is — while `exit`,
+  `elsif`, `elseif`, `continue`, `assert`, `open`, `move`, `close`,
+  `call`, `set`, `reset`, `commit`, `rollback`, `alias`, `constant`,
+  `reverse`, `slice`, `diagnostics` and `stacked`, plpgsql's syntax
+  every one, are accepted in all three positions
 
 #### Scenario: A name that merely contains an owned name is accepted
 - **WHEN** a function declares an argument, or names a loop,

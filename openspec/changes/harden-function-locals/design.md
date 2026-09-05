@@ -33,7 +33,8 @@ recorded as rulings on the change's issues.
   refused — this change only widens refusal; relaxing one is a change of
   its own, on its own evidence — and naming all fourteen is what makes
   the class reconstruct the set. `exit`/`elsif` are the same family and
-  were never refused, so leaving them out relaxes nothing.
+  were never refused, so leaving them out relaxes nothing. (Q5 adds
+  `next` and `query` to the failing side, taking the list to sixteen.)
 
 ## Q2 — One rule for a local's spelling
 
@@ -90,6 +91,48 @@ local.
 
 Message only: the table refusal names both colliding keys and the shared
 derived name, in the order `duplicate-argument` uses. Code unchanged.
+
+## Q5 — `next` and `query` (review-born)
+
+The piece review put every rendering hejbro accepts on a live server —
+3,328 of them — and found exactly one the server refuses: an argument
+named `next` or `query`, whose body renders `return next;` and is read
+as plpgsql's own `RETURN NEXT`, so a non-SETOF function fails at
+creation (42804). The whole path was reproduced through the CLI:
+`hejbro generate` writes the migration and `psql -f` cannot apply it.
+
+- (i) Leave it to a follow-up issue and narrow the requirement's
+  exclusion sentence to "within what this change measured".
+- (ii) Add the two names here.
+- **Ruling (ii).** A generated migration that cannot be applied is the
+  worst grade of defect this capability has; the fix is two entries in
+  the same set, behind the same check and the same message; and it is
+  the same defect family the change already exists for.
+
+The review then measured what the break is worth: it is lexical, at one
+position. `return coalesce(next, 'd')` and `return (next)` are created,
+and a `returns setof` body — rendered `return query <select>` — never
+puts the argument after `return` at all, so `args: { next }` works there
+end to end. Refusing the two names therefore does refuse some working
+declarations. That is the same trade the requirement already states as
+uniform refusal (one list, one check, one message, wherever a body would
+render the name), taken with its cost visible: a name whose safety
+depends on which expression the author writes next is not a name a
+declaration can promise. The requirement says so in place of implying
+it, so that a reader who measures the setof case does not read the
+sentence as false.
+
+How the third source is written matters more than the two names.
+Widening its *phrase* from "a word plpgsql opens a statement with" to "a
+word of plpgsql's statement syntax" would swallow `exit` and `elsif` —
+which the same requirement names as outside the class — and would put
+seventeen more measured-harmless words (`continue`, `assert`, `open`,
+`call`, `commit`, `rollback`, …) in line to be refused, which is the
+mirror image of the relaxation this change forbids. So the phrase stays
+descriptive and **the list is the definition**: sixteen refused, and the
+nineteen harmless siblings named in the requirement so that no reader
+mistakes the phrase for the rule. The review's regression sweep, not the
+sentence, is what confirms the set moved by exactly `{next, query}`.
 
 ## Measurement (1.1)
 
