@@ -263,6 +263,15 @@ confirmation. None of the four commands reads, writes or clears that
 object: it's left exactly as it was, and the error says to move or drop
 it yourself, or point `--url` at the database hejbro actually manages.
 
+That same check also catches a relation that *is* the ledger's own
+shape but has row-level security turned on — hejbro never enables it on
+its own ledger, so a role that check filters would read a ledger that
+recorded nothing and re-apply the whole chain from the start. This is
+refused with the coded `apply-ledger-filtered` error, naming the
+ledger, whether security is enabled, forced, or both, the connecting
+role, and the policies found on it (or that it carries none at all) —
+same timing as `apply-ledger-occupied`, before anything else is read.
+
 Once that check passes, the ledger's own reads and writes can still be
 refused by the server: `status`'s and `migrate`'s own read of it,
 `raise`'s bootstrap and the row it records, `reset`'s clearing of its

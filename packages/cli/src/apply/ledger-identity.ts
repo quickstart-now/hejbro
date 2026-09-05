@@ -10,6 +10,13 @@ import { throwLedgerReadFailure } from "./ledger-diagnostics";
  * is not the ledger -- `relation` is the kind word a caller's diagnostic
  * names, `columns` the attribute names the catalog read found (empty for
  * a zero-column table).
+ *
+ * [1.6, 631/R14] `filtered`: the relation has the ledger's own shape, but
+ * row-level security is on -- hejbro never enables it on its own ledger,
+ * so this is a ledger someone else changed, not a different one. `state`
+ * names which of `relrowsecurity`/`relforcerowsecurity` the catalog
+ * reported; `role`/`policies` come from a second statement, sent only for
+ * this case (R14(b)/(c)).
  */
 export type LedgerIdentity =
 	| { readonly kind: "absent" }
@@ -18,6 +25,12 @@ export type LedgerIdentity =
 			readonly kind: "occupied";
 			readonly relation: string;
 			readonly columns: ReadonlyArray<string>;
+	  }
+	| {
+			readonly kind: "filtered";
+			readonly state: "enabled" | "forced" | "enabled and forced";
+			readonly role: string;
+			readonly policies: ReadonlyArray<string>;
 	  };
 
 /**
@@ -119,7 +132,17 @@ const withoutPersistencePrefix = (relation: string): string => {
  * properties of the relation itself, so every attribute row carries the
  * identical pair.
  */
-const PROBE_SQL = `select c.relkind as "relkind", c.relpersistence as "persistence", c.relispartition as "partition", exists (select 1 from pg_inherits i where i.inhrelid = c.oid) as "inherited", a.attname as "name", format_type(a.atttypid, a.atttypmod) as "type" from pg_class c join pg_namespace n on n.oid = c.relnamespace left join pg_attribute a on a.attrelid = c.oid and a.attnum > 0 and not a.attisdropped where n.nspname = '${LEDGER_SCHEMA}' and c.relname = '${LEDGER_TABLE}' order by a.attnum`;
+const PROBE_SQL = `select c.relkind as "relkind", c.relpersistence as "persistence", c.relispartition as "partition", exists (select 1 from pg_inherits i where i.inhrelid = c.oid) as "inherited", c.relrowsecurity as "rls", c.relforcerowsecurity as "forcedRls", a.attname as "name", format_type(a.atttypid, a.atttypmod) as "type" from pg_class c join pg_namespace n on n.oid = c.relnamespace left join pg_attribute a on a.attrelid = c.oid and a.attnum > 0 and not a.attisdropped where n.nspname = '${LEDGER_SCHEMA}' and c.relname = '${LEDGER_TABLE}' order by a.attnum`;
+
+/**
+ * [1.6, 631/R14] Sent only when the probe reports row-level security --
+ * `(select 1)` on the left guarantees exactly one row per policy and one
+ * row with `policy: null` when there is none, the same left-join shape
+ * `PROBE_SQL` already uses to keep the relation's own row when it has no
+ * columns (never an aggregate: a text-mode driver can hand an array back
+ * as a string, and a quoted policy name can itself contain a comma).
+ */
+const POLICY_SQL = `select current_user as "role", p.policyname as "policy" from (select 1) as one left join pg_policies p on p.schemaname = '${LEDGER_SCHEMA}' and p.tablename = '${LEDGER_TABLE}'`;
 
 /** A boolean column as node-postgres hands it back (`true`) and as a text-mode driver might (`"t"`); anything else, including an absent column, reads false. */
 const isTrue = (value: unknown): boolean => value === true || value === "t";
@@ -169,6 +192,58 @@ const probeRows = async (
 	}
 };
 
+/** [1.6, 631/R14] `null` for neither flag (never called then), `"enabled"`/`"forced"`/`"enabled and forced"` otherwise -- the exact three words {@link assertLedgerNotOccupied}'s message names. */
+const rlsState = (
+	rls: boolean,
+	forcedRls: boolean,
+): "enabled" | "forced" | "enabled and forced" | null => {
+	if (rls && forcedRls) {
+		return "enabled and forced";
+	}
+	if (rls) {
+		return "enabled";
+	}
+	if (forcedRls) {
+		return "forced";
+	}
+	return null;
+};
+
+/** [1.6, 631/R14] `false` for the one row {@link POLICY_SQL}'s left join answers when the ledger carries no policy at all -- `policy` is null there, the same convention {@link isColumnRow} already uses for a zero-column relation. */
+const isPolicyRow = (
+	row: DriverRow,
+): row is DriverRow & { readonly policy: string } =>
+	row.policy !== null && row.policy !== undefined;
+
+/**
+ * [1.6, 631/R14] Sent only when {@link probeLedgerIdentity} finds RLS on a
+ * ledger-shaped relation -- classified through the same
+ * `apply-ledger-unreadable` path as {@link probeRows}'s own failure,
+ * since this statement judges the same identity, never the ledger table.
+ */
+const readPolicies = async (
+	driver: Driver,
+	commandName: string,
+): Promise<{
+	readonly role: string;
+	readonly policies: ReadonlyArray<string>;
+}> => {
+	try {
+		const rows = await driver.execute({
+			sql: POLICY_SQL,
+			params: [],
+			kind: "sql",
+		} satisfies CompileResult);
+		return {
+			role: String(rows[0]?.role),
+			policies: rows.filter(isPolicyRow).map((row) => row.policy),
+		};
+	} catch (error) {
+		await throwLedgerReadFailure(driver, error, commandName, "probe");
+		throw error;
+	}
+};
+
 /**
  * [design.md, 783/R2] `migrate`, `status`, `reset` and `raise` each call
  * this once, before any other read or write of the ledger -- the one
@@ -200,14 +275,23 @@ export const probeLedgerIdentity = async (
 	const columnTypes = new Map(
 		columnRows.map((row) => [String(row.name), String(row.type)]),
 	);
-	if (isLedgerShape(relkind, persistence, partition, inherited, columnTypes)) {
+	// [1.6, 631/R14(e)] The shape judgement wins: a relation that is not
+	// the ledger's shape is `occupied` regardless of its RLS flags -- the
+	// filtered judgement only ever applies to a relation this probe has
+	// already found to be the ledger.
+	if (!isLedgerShape(relkind, persistence, partition, inherited, columnTypes)) {
+		return {
+			kind: "occupied",
+			relation: relationWord(relkind, persistence, partition, inherited),
+			columns,
+		};
+	}
+	const state = rlsState(isTrue(rows[0]?.rls), isTrue(rows[0]?.forcedRls));
+	if (state === null) {
 		return { kind: "ledger" };
 	}
-	return {
-		kind: "occupied",
-		relation: relationWord(relkind, persistence, partition, inherited),
-		columns,
-	};
+	const { role, policies } = await readPolicies(driver, commandName);
+	return { kind: "filtered", state, role, policies };
 };
 
 /** [2.1, 783/R5] `null` when `relation`'s kind carries no columns worth naming (a sequence, an index, a partitioned index, a TOAST table) -- the clause is omitted entirely, never rendered empty. `"no columns"` is reserved for a column-bearing kind that happens to have none (a zero-column table). */
@@ -247,17 +331,38 @@ const article = (word: string): string => {
 	return "a";
 };
 
+/** [1.6, 631/R14(d)] The default-deny sentence when the catalog held no policy at all, or the quoted, comma-joined list otherwise -- row-level security with no policy hides every row, which is worth saying rather than leaving `policies` looking accidentally empty. */
+const filteredPoliciesClause = (policies: ReadonlyArray<string>): string => {
+	if (policies.length === 0) {
+		return "it carries no policy at all, so every row is hidden from that role";
+	}
+	return `the policies on it are ${policies.map((policy) => `"${policy}"`).join(", ")}`;
+};
+
 /**
  * [design.md, 783/R3] Refuses with `apply-ledger-occupied` when `identity`
- * is `occupied`; a no-op for `absent`/`ledger` -- every one of the four
+ * is `occupied`, `apply-ledger-filtered` (1.6, 631/R14) when it is
+ * `filtered`; a no-op for `absent`/`ledger` -- every one of the four
  * ledger-touching commands calls this right after {@link probeLedgerIdentity},
- * before any other read or write of the ledger, so an occupied name is
- * refused the same way regardless of which command found it.
+ * before any other read or write of the ledger, so an occupied or
+ * filtered ledger is refused the same way regardless of which command
+ * found it.
+ *
+ * [631/R14(a)] This function now throws two codes, not one -- its name
+ * still names only the first. A rename touches all four call sites
+ * (`migrate`, `status`, `raise`, and `reset`, the last outside this
+ * piece), so it is a separate piece, not folded into this one.
  */
 export const assertLedgerNotOccupied = (
 	identity: LedgerIdentity,
 	commandName: string,
 ): void => {
+	if (identity.kind === "filtered") {
+		throwHejbroError(
+			"apply-ledger-filtered",
+			`"${LEDGER_SCHEMA}"."${LEDGER_TABLE}" has row-level security ${identity.state}, and hejbro never turns it on for its own ledger. Rows this role cannot see read as a ledger that recorded nothing, and the next \`migrate\` would re-apply the chain from the start. The connecting role is "${identity.role}"; ${filteredPoliciesClause(identity.policies)}. Next: disable row-level security on the ledger, or connect as the role that applied the chain, then rerun \`${commandName}\`.`,
+		);
+	}
 	if (identity.kind !== "occupied") {
 		return;
 	}

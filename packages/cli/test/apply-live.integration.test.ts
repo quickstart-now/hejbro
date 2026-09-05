@@ -1483,4 +1483,94 @@ describe.each(PG_IMAGES)("apply engine live witness / %s", (image) => {
 			}, 60_000);
 		});
 	});
+
+	/**
+	 * [task 1.6, 631/R14] Setup follows the same principle 1.5's own
+	 * witnesses do -- hejbro builds the ledger itself (a real `migrate`),
+	 * and only then does `psqlCommand` turn on what hejbro never turns on
+	 * itself (row-level security, forced, with one named policy). The
+	 * second migration is generated but deliberately left pending, so
+	 * `migrate`'s refusal (before sending anything) is witnessed by its
+	 * absence from the catalog, not by an error alone.
+	 */
+	describe("1.6 the filtered ledger against a real server, 631/R14", () => {
+		const database = "checksum_filtered_ledger";
+		let cwd = "";
+		const policyName = "ld_deny_all";
+
+		beforeAll(async () => {
+			cwd = await createCliFixtureDir();
+			psqlCommand(container, "postgres", `create database ${database};`);
+			await runCli(cwd, ["init"]);
+			await writeFixtureFile(
+				cwd,
+				"src/app.schema.ts",
+				CHECKSUM_WITNESS_V1_SOURCE,
+			);
+			await runCli(cwd, ["generate"]);
+			const first = await runCli(cwd, ["migrate", "--url", hostUrl(database)]);
+			if (first.exitCode !== 0) {
+				throw new Error(
+					`fixture setup's own first migrate failed: ${first.stderr}`,
+				);
+			}
+
+			await writeFixtureFile(
+				cwd,
+				"src/app.schema.ts",
+				CHECKSUM_WITNESS_V2_SOURCE,
+			);
+			await runCli(cwd, ["generate"]);
+
+			psqlCommand(
+				container,
+				database,
+				'alter table "hejbro"."migration_ledger" enable row level security;',
+			);
+			psqlCommand(
+				container,
+				database,
+				'alter table "hejbro"."migration_ledger" force row level security;',
+			);
+			psqlCommand(
+				container,
+				database,
+				`create policy "${policyName}" on "hejbro"."migration_ledger" using (false);`,
+			);
+		}, 60_000);
+
+		afterAll(async () => {
+			await removeCliFixtureDir(cwd);
+		});
+
+		it("status exits non-zero with apply-ledger-filtered naming the ledger, role and policy", async () => {
+			const result = await runCli(cwd, ["status", "--url", hostUrl(database)]);
+
+			expect(result.exitCode).toBe(1);
+			expect(result.stderr).toContain("error[apply-ledger-filtered]");
+			expect(result.stderr).toContain('"hejbro"."migration_ledger"');
+			expect(result.stderr).toContain("enabled and forced");
+			expect(result.stderr).toContain(policyName);
+		});
+
+		it("migrate refuses with apply-ledger-filtered and sends no migration statement", async () => {
+			const result = await runCli(cwd, ["migrate", "--url", hostUrl(database)]);
+
+			expect(result.exitCode).toBe(2);
+			expect(result.stderr).toContain("error[apply-ledger-filtered]");
+			expect(result.stderr).toContain(policyName);
+
+			const driver = pgDriver(hostUrl(database));
+			try {
+				const catalogRows = await driver.execute({
+					sql: "select to_regclass('app.second') as second",
+					params: [],
+					kind: "sql",
+				});
+				expect(catalogRows[0]?.second).toBeNull();
+			} finally {
+				await driver.client.end();
+			}
+		});
+	});
 });

@@ -39,6 +39,13 @@ import { sha256Hex } from "../hash";
  *   `migrate`, `status`, `reset` and `raise` all raise it for the same
  *   one operation (judging the ledger's identity), thrown by
  *   `ledger-identity.ts`'s own `assertLedgerNotOccupied`.
+ * - `apply-ledger-filtered` (1.6, 631/R14) -- the relation at the
+ *   ledger's name has the ledger's own shape, but row-level security is
+ *   on; hejbro never enables it, so a role this filters would silently
+ *   read a ledger that recorded nothing. `apply-*` for the same reason
+ *   as `apply-ledger-occupied`: `migrate`, `status`, `reset` and `raise`
+ *   all raise it for the same identity judgement, thrown by the same
+ *   `assertLedgerNotOccupied`.
  * - `apply-ledger-unreadable` (harden-ledger-diagnostics, task 1.2) -- a
  *   read `exec` sent to the ledger failed for any reason other than the
  *   table not existing yet. `apply-*`: `status`, `migrate` and `raise`
