@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { defineFunction } from "../../src/dsl/define-function";
+import { defineTrigger } from "../../src/dsl/define-trigger";
 import { schema } from "../../src/dsl/schema";
+import { table } from "../../src/dsl/table";
 import { generateMigration } from "../../src/engine/generate";
 import { HejbroError } from "../../src/error";
 import { sql } from "../../src/expr/sql-template";
 import { emptySnapshot } from "../../src/snapshot/snapshot";
-import { bigint } from "../../src/types/column-builder-factories";
+import { bigint, uuid } from "../../src/types/column-builder-factories";
 import { buildUsageFunction } from "../support/usage-function";
 
 const app = schema("app");
@@ -68,5 +70,35 @@ describe("refuses a function that carries no migration authority (#587/G3)", () 
 			previousSnapshot: emptySnapshot,
 		});
 		expect(result.errors).toEqual([]);
+	});
+
+	// #695 (R2-NB4): the trigger half of "Ordinary declarations are
+	// untouched" -- a trigger definition synthesizes its own function
+	// declaration, and that one carries no authority marker either.
+	it("a trigger definition's synthesized function is unaffected", () => {
+		const comments = table(app, "comments", {
+			id: uuid().primaryKey(),
+			parentId: uuid(),
+		});
+		const trigger = defineTrigger(
+			comments,
+			{
+				name: "comments_touch",
+				timing: "before",
+				events: ["insert"],
+				forEach: "row",
+			},
+			(ctx, { new: row }) => {
+				ctx.return(row);
+			},
+		);
+		const result = generateMigration({
+			declarations: [comments, trigger],
+			previousSnapshot: emptySnapshot,
+		});
+		expect(result.errors).toEqual([]);
+		expect(result.sql).toContain(
+			'create or replace function "app"."comments_touch_fn"',
+		);
 	});
 });

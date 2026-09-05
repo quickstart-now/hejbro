@@ -166,6 +166,44 @@ describe("renderFunctionSql", () => {
 		);
 	});
 
+	// #695 (R2-NB5): `ReturnableQuery` covers all three mutation stages; the
+	// refusal above pinned only insert. Update and delete take the same
+	// narrowing (#749/D6).
+	it("refuses a projected returning on update and on delete alike", () => {
+		expect(() =>
+			defineFunction(
+				"app",
+				"publish_returning_id",
+				{ args: {}, returns: posts, security: "definer" },
+				(ctx) => {
+					const projected = update(posts)
+						.set({ publishedAt: now() })
+						.returning({ id: posts.id });
+					// @ts-expect-error a projected returning is not "posts"'s whole row (#749/D6)
+					ctx.return(projected);
+				},
+			),
+		).toThrowError(
+			expect.objectContaining({ code: "return-expects-whole-row" }),
+		);
+		expect(() =>
+			defineFunction(
+				"app",
+				"remove_returning_id",
+				{ args: {}, returns: posts, security: "definer" },
+				(ctx) => {
+					const projected = deleteFrom(posts)
+						.where(isNull(posts.publishedAt))
+						.returning({ id: posts.id });
+					// @ts-expect-error a projected returning is not "posts"'s whole row (#749/D6)
+					ctx.return(projected);
+				},
+			),
+		).toThrowError(
+			expect.objectContaining({ code: "return-expects-whole-row" }),
+		);
+	});
+
 	it("renders a definer function with a delete-returning-query statement", () => {
 		const declaration = defineFunction(
 			"app",

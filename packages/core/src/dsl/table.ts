@@ -1301,8 +1301,8 @@ const assertNoDoublyDeclaredReference = (
 	);
 };
 
-/** Folds every column-level `.references()` declaration (add-relational-reads, D102) into the extras-equivalent `ForeignKeyDeclaration`. The built target ref carries its full identity, so the fold needs no lookup; a column without `.references()` contributes nothing. Exported for `memoizedForeignKeys` (this file) — its only caller — to call from the declaration's `foreignKeys` getter, not from `table()` itself (#669). */
-export const foldColumnReferences = (
+/** Folds every column-level `.references()` declaration (add-relational-reads, D102) into the extras-equivalent `ForeignKeyDeclaration`. The built target ref carries its full identity, so the fold needs no lookup; a column without `.references()` contributes nothing. Called only from `memoizedForeignKeys` (this file), on the declaration's `foreignKeys` getter — never from `table()` itself, so a cross-file cycle's thunk resolves after every module body has run (#669). */
+const foldColumnReferences = (
 	tableName: string,
 	columnEntries: ReadonlyArray<ColumnEntry>,
 ): ReadonlyArray<ForeignKeyDeclaration> =>
