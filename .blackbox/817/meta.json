@@ -4,9 +4,9 @@
   "ref": "quickstart-now/hejbro#817",
   "title": "core: loop and row names in a function body bypass the D36 SQL-name check",
   "parent": "quickstart-now/hejbro#815",
-  "status": "open",
+  "status": "closed",
   "opened": "2026-09-05",
-  "closed": null,
+  "closed": "2026-09-05",
   "decisions": [],
   "work": [
     {
@@ -17,7 +17,13 @@
       "decisions": []
     }
   ],
-  "prs": [],
+  "prs": [
+    {
+      "number": 910,
+      "role": "closes",
+      "pinnedAt": "2026-09-05T12:05Z"
+    }
+  ],
   "origin": null,
   "followUps": []
 }

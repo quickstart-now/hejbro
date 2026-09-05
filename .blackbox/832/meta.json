@@ -4,9 +4,9 @@
   "ref": "quickstart-now/hejbro#832",
   "title": "core: category-C keywords fail as argument names but are not refused; the stated class does not match the list",
   "parent": "quickstart-now/hejbro#815",
-  "status": "open",
+  "status": "closed",
   "opened": "2026-09-04",
-  "closed": null,
+  "closed": "2026-09-05",
   "decisions": [
     {
       "id": "R1",
@@ -127,6 +127,11 @@
       "number": 833,
       "role": "refs",
       "pinnedAt": "2026-09-04T14:49Z"
+    },
+    {
+      "number": 910,
+      "role": "closes",
+      "pinnedAt": "2026-09-05T12:05Z"
     }
   ],
   "origin": null,

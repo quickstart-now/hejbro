@@ -1,0 +1,81 @@
+{
+  "version": 3,
+  "number": 910,
+  "ref": "quickstart-now/hejbro#910",
+  "title": "fix(core): harden function body local names -- class C keywords, loop/row names, argument shadowing (#816, #817, #818, #821, #832)",
+  "head": "4d0f3b03ca7502d32323e84eece2359e68f11d66",
+  "headRef": "harden-function-locals",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-05T12:05Z",
+  "refs": [
+    {
+      "path": ".changeset/harden-function-locals.md",
+      "blob": "f436d114ef75e85086f537cca55bd80f946420e2"
+    },
+    {
+      "path": "README.md",
+      "blob": "ef2de9370513da5938712ac32095daf8ab9f898a"
+    },
+    {
+      "path": "openspec/changes/harden-function-locals/design.md",
+      "blob": "8fcc5d679540bca25a6e923368da29605d6856bd"
+    },
+    {
+      "path": "openspec/changes/harden-function-locals/proposal.md",
+      "blob": "fbe624d0b45344cec3411b315663afbc95438ed3"
+    },
+    {
+      "path": "openspec/changes/harden-function-locals/specs/plpgsql-function-bodies/spec.md",
+      "blob": "292506c007aca4702c82ce206d1be8d82743fd95"
+    },
+    {
+      "path": "openspec/changes/harden-function-locals/specs/table-declaration/spec.md",
+      "blob": "ecd51ca72bc70c32d36277d30f4dc5ba23fd50df"
+    },
+    {
+      "path": "openspec/changes/harden-function-locals/tasks.md",
+      "blob": "c2d4ca5062a49d8cfb4ff9e47b44d3acafbe7a2e"
+    },
+    {
+      "path": "openspec/task-times.csv",
+      "blob": "ed887da1cc4e524e7427f34f612992f68531a6b0"
+    },
+    {
+      "path": "packages/core/src/dsl/define-function.ts",
+      "blob": "fd1c9856000dfb8eb5fc26f938033b748a768c82"
+    },
+    {
+      "path": "packages/core/src/dsl/define-trigger.ts",
+      "blob": "32e7d3459c387bedaafa2efc8fab61fe63f2cf38"
+    },
+    {
+      "path": "packages/core/src/dsl/table.ts",
+      "blob": "fc5ed2274c2b961a587b1b26a819ad7c43bb8c14"
+    },
+    {
+      "path": "packages/core/src/plpgsql/body-context.ts",
+      "blob": "e165e6816d20ee10c97b389053e66386bcbee5f5"
+    },
+    {
+      "path": "packages/core/src/plpgsql/reserved.ts",
+      "blob": "ed6b68bcdc253910f6bf63ed6f9b9e8fc3e42ab7"
+    },
+    {
+      "path": "packages/core/test/define-function.test.ts",
+      "blob": "5dfcfd6af1391e0a743ec7427faeec25f83238d6"
+    },
+    {
+      "path": "packages/core/test/plpgsql/body-context.test.ts",
+      "blob": "4b66b27c89720faf757af0e9b15fb6a2e05af928"
+    },
+    {
+      "path": "packages/core/test/table-surface.test.ts",
+      "blob": "87c4bfade7eeffff79ce7837dec2031f0bf2ea1d"
+    },
+    {
+      "path": "skills/hejbro/references/function-builder-pitfalls.md",
+      "blob": "513f807963702c5d5b6b604d9b9e2629a74823c9"
+    }
+  ]
+}
