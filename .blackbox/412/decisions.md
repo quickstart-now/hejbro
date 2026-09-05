@@ -634,3 +634,17 @@ pinned or ratified, any addition is a new R# with the old one as basis
 append-only begins. Basis: 500/R2's O1c rejection (commit 5ab173cd),
 412/D24; owner ratification pending.
 
+<a id="r35"></a>
+## R35 — No git stash inside a worktree: the stash stack is shared by every worktree of the repository
+
+_lead · extension · 2026-09-05T13:25Z · ratified: pending_
+
+git stash keeps one stack per repository, so every worktree sees and
+can pop every other team's entries (measured: two foreign WIP entries
+visible from the main checkout while three pieces ran). Teams never
+stash inside a worktree; a red reconstruction or a temporary set-aside
+is a patch file (`git diff > /private/tmp/<team>-wip.patch && git
+checkout -- <files>`, then `git apply`) or a WIP commit, which the
+squash merge folds away. Basis: rn implementer's report during 1.2
+(#500), 412/D24; owner ratification pending.
+
