@@ -1,0 +1,49 @@
+{
+  "version": 3,
+  "number": 897,
+  "ref": "quickstart-now/hejbro#897",
+  "title": "chore(examples): declare auth.users as existing in the supabase example (#674)",
+  "head": "afc0e8166ffe4b0f7451e0fe94bdf94d51214438",
+  "headRef": "examples-existing-table",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-05T08:45Z",
+  "refs": [
+    {
+      "path": "examples/supabase/hejbro.snapshot.json",
+      "blob": "deadc95504426f8ee9fb7267340c19b227fd5afd"
+    },
+    {
+      "path": "examples/supabase/migrations/0005_record_users.sql",
+      "blob": "90f7a9c22ee1119e09f310e1583ce3b170046866"
+    },
+    {
+      "path": "examples/supabase/package.json",
+      "blob": "0f14c65f41922917a8302a6d8103236f4ed09452"
+    },
+    {
+      "path": "examples/supabase/seed/supabase.sql",
+      "blob": "7bf85de93b84ab93801f0a75c27bd0fa3f6bedfe"
+    },
+    {
+      "path": "examples/supabase/src/app.schema.ts",
+      "blob": "ce345ca91070eb1ea3ba1b6e1fdd79da3eb13ac2"
+    },
+    {
+      "path": "examples/supabase/src/steps/step-5.schema.ts",
+      "blob": "ce345ca91070eb1ea3ba1b6e1fdd79da3eb13ac2"
+    },
+    {
+      "path": "examples/supabase/test/chain.test.ts",
+      "blob": "570a56dbb6d3a7e2c3559c2997c0679bafd5d296"
+    },
+    {
+      "path": "examples/supabase/test/cli.test.ts",
+      "blob": "6b1606eb48b0c5e69a557c63b7def36c8ac8c817"
+    },
+    {
+      "path": "scripts/check-declared-vs-catalog.mjs",
+      "blob": "82154095a8b057a5af463407d777c8679b092f73"
+    }
+  ]
+}

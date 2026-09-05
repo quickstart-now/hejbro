@@ -40,9 +40,10 @@ create table if not exists storage.buckets (
 create unique index if not exists bname
 	on storage.buckets (name);                  -- 0002-storage-schema.sql
 
--- auth.users stub: only the column `authUsers` (D41) references as an FK target.
+-- auth.users stub: the two columns the preset's `authUsers` declares (D41,
+-- #674) -- `id` as the FK target, `email` as the shape a consumer reads.
 create schema if not exists auth;
-create table if not exists auth.users (id uuid not null primary key);
+create table if not exists auth.users (id uuid not null primary key, email text);
 
 -- auth.uid() stub: the RLS policies built with authUid() call this at
 -- policy-creation time (it just needs to exist with the right signature —

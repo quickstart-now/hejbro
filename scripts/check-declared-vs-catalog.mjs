@@ -613,6 +613,22 @@ const checkObject = (kind, identity, node) => {
 				`declared schema "${node.name}" not found in catalog`,
 			);
 		case "table":
+			// #674: a table declared with `existingTable()` is owned by the
+			// platform, not by this chain -- the migrations never create it,
+			// and `hejbro check`'s own coverage rule keeps its presence or
+			// absence out of the exit code. Presence is still asserted here
+			// (the seed must provide it, or every FK onto it is vacuous);
+			// its columns are the declaration's own reading of a shape it
+			// does not manage, so they are not compared against the seed.
+			if (node.existing === true) {
+				console.log(
+					`check-declared-vs-catalog: skip: "${node.schema}.${node.name}" is declared with existingTable() -- presence checked, columns not compared (platform-owned)`,
+				);
+				return missing(
+					findTable(node.schema, node.name) !== undefined,
+					`declared existing table "${node.schema}.${node.name}" not found in catalog -- the seed must create it`,
+				);
+			}
 			return checkTable(node.schema, node.name, node);
 		case "enum":
 			return missing(
