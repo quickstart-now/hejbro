@@ -60,6 +60,42 @@
       "at": "2026-09-05T11:24Z",
       "title": "1.6: a multi-command text folds by Array.isArray to the last command's rows, in one @hejbro/query function both drivers call",
       "ratified": null
+    },
+    {
+      "id": "R5",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [],
+      "at": "2026-09-05T11:49Z",
+      "title": "R5 — split task 1.2 into 1.2a (pg, supabase, nile) and 1.2b (neon, after #458)",
+      "ratified": null
+    },
+    {
+      "id": "R6",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [],
+      "at": "2026-09-05T11:49Z",
+      "title": "R6 — a zero-length batch result array is an internal-invariant error, not an empty row list",
+      "ratified": null
+    },
+    {
+      "id": "R7",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [],
+      "at": "2026-09-05T11:49Z",
+      "title": "R7 — nile and supabase declare batched-transactions differently because they own different obligations",
+      "ratified": null
+    },
+    {
+      "id": "R8",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [],
+      "at": "2026-09-05T11:49Z",
+      "title": "R8 — 1.2a/1.2b admit their own test fixture sweeps, not a separate task",
+      "ratified": null
     }
   ],
   "work": [],
