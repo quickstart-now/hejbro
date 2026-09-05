@@ -59,10 +59,13 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#551](551/) | execute() of a core-built set operation loses per-key result typing | closed | #737 | 0 | 2 (0 pending) |
 | ↳ [#552](552/) | whole-table projection renders unqualified columns under a join | closed | #737 | 0 | 3 (0 pending) |
 | ↳ [#652](652/) | ci: changeset gate never checks the PR itself while unreleased changesets cover the fixed group | closed | #886 | 0 | 0 (0 pending) |
+| ↳ [#663](663/) | test: the scoped vendored fn observer never asserts the context SQL | open |  | 0 | 0 (0 pending) |
+| ↳ [#667](667/) | test: the vendored read of an existing table is witnessed only under Docker | open |  | 0 | 0 (0 pending) |
 | ↳ [#673](673/) | test: subprocess-spawning suites time out under a full parallel pnpm test and pass in isolation | closed | #773 | 0 | 7 (0 pending) |
 | ↳ [#679](679/) | core: function argument names bypass D36 and are emitted unquoted in DDL | closed | #733 #758 | 0 | 3 (0 pending) |
 | ↳ [#686](686/) | ctx.return accepts a mutation with no returning() and renders invalid plpgsql | closed | #733 | 0 | 3 (0 pending) |
 | ↳ [#687](687/) | init ignores the configured migrationsDir and snapshotPath | closed | #739 #759 #770 | 0 | 8 (0 pending) |
+| ↳ [#695](695/) | harden-verify-and-dsl D106 round-2 follow-ups: loader guard and three missing observers | open |  | 0 | 0 (0 pending) |
 | ↳ [#697](697/) | vendored fn guard is count-only and a __proto__ column key loses its column | closed | #739 | 0 | 4 (0 pending) |
 | ↳ [#701](701/) | array order in kind snapshots can produce a semantically empty alter | closed | #858 #861 | 0 | 5 (0 pending) |
 | ↳ [#707](707/) | check is silent about undeclared indexes and check constraints on managed tables | closed | #878 #879 | 0 | 5 (0 pending) |

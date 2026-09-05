@@ -90,7 +90,7 @@ describe("the client's fn (#587/G3)", () => {
 	});
 
 	it(".as(context).fn calls the same vendored function inside that context's transaction", async () => {
-		const { driver } = recordingTransactionalDriver({
+		const { driver, sentPerTransaction } = recordingTransactionalDriver({
 			rows: [{ result: "7" }],
 			contributedRoles: ["app_reader"],
 		});
@@ -102,6 +102,22 @@ describe("the client's fn (#587/G3)", () => {
 
 		expect(value).toBe(7n);
 		expect(driver.transaction).toHaveBeenCalledTimes(1);
+
+		// #663: the context SQL itself, observed at the vendored surface --
+		// the role statement first, then the very invocation the unscoped
+		// call sends, inside the one transaction.
+		const { driver: unscopedDriver, topLevelSent } =
+			recordingTransactionalDriver({ rows: [{ result: "7" }] });
+		await createNameKeyedDb<TestDatabase>(
+			unscopedDriver,
+			METADATA,
+		).fn.totalPosts({});
+		const inTransaction = sentPerTransaction[0] ?? [];
+		expect(inTransaction.map((statement) => statement.sql)).toEqual([
+			'set local role "app_reader"',
+			topLevelSent[0]?.sql,
+		]);
+		expect(inTransaction[1]?.params).toEqual(topLevelSent[0]?.params);
 	});
 });
 

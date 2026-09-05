@@ -1,6 +1,11 @@
 import { join } from "node:path";
 import type { HejbroInput, Table } from "@hejbro/core";
-import { getTableMeta, isTable } from "@hejbro/core";
+import {
+	emptySnapshot,
+	generateMigration,
+	getTableMeta,
+	isTable,
+} from "@hejbro/core";
 import { beforeAll, describe, expect, it } from "vitest";
 import { loadConfig, loadDeclarations } from "../src/loader";
 import { assertBuiltCli } from "./support/cli-runner";
@@ -106,5 +111,33 @@ describe("loadDeclarations: cross-file .references() cycles (#669)", () => {
 				onUpdate: null,
 			},
 		]);
+	});
+});
+
+// #695 (R2-NB3): the "and generate" half of the cross-file cycle scenario
+// -- both edges reach the migration, and the SQL is byte-identical
+// whichever file the loader met first.
+describe("generate over a cross-file .references() cycle (#695)", () => {
+	const generateFrom = async (fixture: string): Promise<string> => {
+		const cwd = join(fixturesDir, fixture);
+		const { config, configPath } = await loadConfig(cwd, undefined);
+		const declarations = await loadDeclarations(configPath, config);
+		const result = generateMigration({
+			declarations,
+			previousSnapshot: emptySnapshot,
+		});
+		expect(result.errors).toEqual([]);
+		return result.sql;
+	};
+
+	it("emits both foreign-key edges, identically in either file order", async () => {
+		const forward = await generateFrom("reference-cycle-forward");
+		const reverse = await generateFrom("reference-cycle-reverse");
+
+		expect(forward).toMatch(
+			/"latest_comment_id".*references "blog"\."comments"/s,
+		);
+		expect(forward).toMatch(/"author_id".*references "app"\."authors"/s);
+		expect(reverse).toBe(forward);
 	});
 });

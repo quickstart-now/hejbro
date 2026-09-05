@@ -10,8 +10,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { HejbroInput } from "@hejbro/core";
 import { isTable } from "@hejbro/core";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { loadConfig, loadDeclarations } from "../src/loader";
+import { assertBuiltCli } from "./support/cli-runner";
+
+// #695 (R2-NB1): this file's fixtures import "hejbro" through jiti, which
+// resolves to packages/cli/dist, not the source under test (AGENTS.md,
+// the loader-cycle precedent) -- a stale dist would surface here as an
+// import failure, not as "stale build".
+beforeAll(assertBuiltCli);
 
 const schemaNameOf = (declaration: HejbroInput): string | null => {
 	if (typeof declaration !== "object" || declaration === null) {
