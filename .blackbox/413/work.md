@@ -131,3 +131,19 @@ Result 3 (out-of-sample survey, answering "did the 1.1 oracle simply never have 
 
 Conclusion for the lead's ruling: option (a) -- extending canonicalizeTable itself -- measures as both safe (no current-format file changes) and sufficient (closes the exact gap the 0.1.1 project fixture exposed, without breaking any existing oracle row). This also completes #701/D3's own stated intent (generate.ts:305-309's comment: canonicalizeSnapshot exists so a snapshot "read straight off disk, never canonicalized" compares equal after being brought to canonical form) for the one field (foreignKeys) it did not yet cover.
 
+<a id="w10"></a>
+## W10 — 1.1c: canonicalizeTable sorts foreignKeys into D1 canonical order
+
+_2026-09-05T09:14Z_
+
+Root cause (one line, per su-planner): the writer always emits foreignKeys already in D1 canonical order (dsl/table.ts's declaration.foreignKeys getter sorts via compareForeignKeys/foreignKeySortKey before serialize ever runs), so canonicalizeTable's own doc comment treated foreignKeys as "already canonical" and left them untouched -- true for anything a post-D1 writer produced, false for a snapshot written before D1 existed (0.1.1, format 5-6).
+
+Fix: canonicalizeTable now sorts foreignKeys by the same local-columns-then-target-identity key dsl/table.ts's foreignKeySortKey already uses, reimplemented at the snapshot shape (referencesTable is that same declaration's schemaName+tableName already combined into one identity string, so sorting by it alone is equivalent). Never diverged into a second, independently-invented order -- the risk su-planner flagged.
+
+Tests (1.1c's 4 required rows):
+1. packages/core/test/kinds/table-kind.test.ts (new): a table node with the same 2 FK edges in each of the two possible declared orders canonicalizes to the identical result. Verified red by reverting the sort to a no-op: exactly the "declared task-then-parent" row failed (the "parent-then-task" row already happened to match by construction), confirming genuine discrimination.
+2. packages/core/test/snapshot/upgrade.test.ts, new describe "every table's foreignKeys are in canonical order after upgrading": a STRUCTURAL assertion (not byte comparison) over all 12 format-5 fixtures -- every table entry's foreignKeys, post-upgrade, satisfies the canonical order predicate, reimplemented independently in the test (not calling table-kind.ts's own private key) so this checks the CONTRACT, not the implementation. Verified red by the same revert: exactly example-postgres's app.comments table failed, byte-for-byte matching the spike's own finding (comments_task_id_fk, comments_parent_id_fk in that non-canonical order) -- this is precisely the assertion whose ABSENCE let the gap through 1.1's original oracle.
+3+4. Rows 3 (16 current-format files byte-unchanged) and 4 (10 golden byte-oracle rows) needed no new tests -- 1.1/1.1b's own existing "the current format is a fixed point" and "a golden case with unchanged declarations..." describes in upgrade.test.ts already cover exactly this scope and continued passing unchanged (spike W9 had already measured this safety property; these tests now pin it as a permanent regression check, not just a one-off spike).
+
+Full core suite: 102 files (101 + this task's own new table-kind.test.ts), 1756 passed + 1 todo (was 1742 + 1 todo -- +14 = 12 new structural rows in upgrade.test.ts + 2 new declared-order rows in table-kind.test.ts).
+

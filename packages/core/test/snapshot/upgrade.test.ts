@@ -94,6 +94,35 @@ const CURRENT_FORMAT_GOLDEN_CASES: ReadonlyArray<string> = [
 const objectKeys = (raw: string): ReadonlySet<string> =>
 	new Set(Object.keys((JSON.parse(raw) as { objects: object }).objects));
 
+/** #413, 1.1c: the delta's own required shape for a table's `foreignKeys` entry -- just enough fields to check the canonical order independently of table-kind.ts's own (private) sort key. */
+type ForeignKeySnapshotLike = {
+	readonly name: string;
+	readonly columns: ReadonlyArray<string>;
+	readonly referencesTable: string;
+	readonly referencesColumns: ReadonlyArray<string>;
+};
+
+/** The delta's own canonical key (D1): local columns, then target identity -- reimplemented here, independently of `table-kind.ts`'s private `foreignKeySortKey`, so this test checks the *contract*, not the implementation. */
+const foreignKeyCanonicalKey = (foreignKey: ForeignKeySnapshotLike): string =>
+	[
+		foreignKey.columns.join(""),
+		foreignKey.referencesTable,
+		foreignKey.referencesColumns.join(""),
+	].join("");
+
+const isSortedByCanonicalForeignKeyOrder = (
+	foreignKeys: ReadonlyArray<ForeignKeySnapshotLike>,
+): boolean =>
+	foreignKeys.every((foreignKey, index) => {
+		const previous = foreignKeys[index - 1];
+		if (previous === undefined) {
+			return true;
+		}
+		return (
+			foreignKeyCanonicalKey(previous) <= foreignKeyCanonicalKey(foreignKey)
+		);
+	});
+
 /** Runs `fn`, returning the `HejbroError` it throws — fails the test outright if it throws anything else or returns normally, so a mismatched assertion never silently passes. */
 const captureHejbroError = (fn: () => unknown): HejbroError => {
 	try {
@@ -198,6 +227,38 @@ describe("upgradeSnapshot", () => {
 				expect(twice.text).toBe(once.text);
 			},
 		);
+	});
+
+	describe("every table's foreignKeys are in canonical order after upgrading (#413, 1.1c)", () => {
+		// A structural assertion, not a byte comparison (D110): the byte
+		// oracle stays silent on a fixture whose foreign keys already
+		// happened to be canonical (measured -- spike W9: golden-table-
+		// constraints's own app.comments was already canonical, so its T2
+		// byte-oracle row never exercised this). This asserts the universal
+		// claim -- every table's foreignKeys are declaration-form-
+		// independently ordered -- directly, over every one of the 12
+		// fixtures, so a fixture that happens to already be canonical still
+		// gets checked instead of silently passing either way.
+		it.each(FORMAT_5_FIXTURES)("$label", ({ file }) => {
+			const raw = readFixture(file);
+			const result = upgradeSnapshot(raw, registry);
+			const parsed = parseSnapshot(result.text);
+			const tableEntries = Object.entries(parsed.objects).filter(([key]) =>
+				key.startsWith("table:"),
+			);
+			tableEntries.forEach(([key, node]) => {
+				const table = node as {
+					readonly foreignKeys?: ReadonlyArray<ForeignKeySnapshotLike>;
+				};
+				if (table.foreignKeys === undefined) {
+					return;
+				}
+				expect(
+					isSortedByCanonicalForeignKeyOrder(table.foreignKeys),
+					`table "${key}" has non-canonical foreignKeys order: ${JSON.stringify(table.foreignKeys.map((fk) => fk.name))}`,
+				).toBe(true);
+			});
+		});
 	});
 
 	describe("a golden case with unchanged declarations reproduces the writer's bytes", () => {

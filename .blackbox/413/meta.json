@@ -126,6 +126,13 @@
       "title": "spike: extending tableKind.canonicalize to sort foreignKeys is safe and sufficient",
       "pr": null,
       "decisions": []
+    },
+    {
+      "id": "W10",
+      "at": "2026-09-05T09:14Z",
+      "title": "1.1c: canonicalizeTable sorts foreignKeys into D1 canonical order",
+      "pr": null,
+      "decisions": []
     }
   ],
   "prs": [],
