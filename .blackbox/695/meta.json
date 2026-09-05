@@ -4,9 +4,9 @@
   "ref": "quickstart-now/hejbro#695",
   "title": "harden-verify-and-dsl D106 round-2 follow-ups: loader guard and three missing observers",
   "parent": "quickstart-now/hejbro#412",
-  "status": "open",
+  "status": "closed",
   "opened": "2026-09-05",
-  "closed": null,
+  "closed": "2026-09-05",
   "decisions": [],
   "work": [
     {
@@ -17,7 +17,13 @@
       "decisions": []
     }
   ],
-  "prs": [],
+  "prs": [
+    {
+      "number": 896,
+      "role": "closes",
+      "pinnedAt": "2026-09-05T08:37Z"
+    }
+  ],
   "origin": null,
   "followUps": []
 }

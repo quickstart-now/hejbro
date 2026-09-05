@@ -1,0 +1,45 @@
+{
+  "version": 3,
+  "number": 896,
+  "ref": "quickstart-now/hejbro#896",
+  "title": "test: observer pins for the vendored client and the loader (#663, #667, #695)",
+  "head": "4818520bb8c1694d5127003a7957ce6c2579137f",
+  "headRef": "test-observer-pins",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-05T08:37Z",
+  "refs": [
+    {
+      "path": ".changeset/observer-pins-695.md",
+      "blob": "bff5b947771292c059dbd27378a3f1946685a4ca"
+    },
+    {
+      "path": "packages/cli/test/loader-cycle.test.ts",
+      "blob": "8769ba29cb51b4db82247410b64ae97af1b23640"
+    },
+    {
+      "path": "packages/cli/test/loader.test.ts",
+      "blob": "f0a35db533cede76f1edfe32cd012bde86728994"
+    },
+    {
+      "path": "packages/core/src/dsl/table.ts",
+      "blob": "f1448f8d32597d27f732629119be1f1189157e0d"
+    },
+    {
+      "path": "packages/core/test/engine/function-authority-refusal.test.ts",
+      "blob": "1acf0cd69f817484a29e626b6117d891aec4190e"
+    },
+    {
+      "path": "packages/core/test/plpgsql/render-body.test.ts",
+      "blob": "9ce3d5546ccc33c2d0f55662c9ee07310a412624"
+    },
+    {
+      "path": "packages/query/test/client/functions.test.ts",
+      "blob": "df8324c96bd321495a81170765c3e97f5edf0e1c"
+    },
+    {
+      "path": "packages/query/test/client/select.test.ts",
+      "blob": "c8a5b43b1dc44705424f38bc9646231f763e2869"
+    }
+  ]
+}
