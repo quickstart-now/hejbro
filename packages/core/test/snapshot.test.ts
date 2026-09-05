@@ -344,6 +344,82 @@ describe("renderSnapshot / parseSnapshot", () => {
 			);
 		});
 	});
+
+	// #413, 1.2: the older-format message splits on the release floor (5) —
+	// below it (no release ever wrote that shape) keeps the pin-or-reset
+	// guidance; at or above it (a format this build's own history wrote,
+	// upgradeSnapshot can re-encode) names `hejbro upgrade` instead.
+	describe("the older-format message splits on the release floor (#413)", () => {
+		it.each([
+			[
+				"a format-4 snapshot (older than any release)",
+				JSON.stringify({ formatVersion: 4, dialect: "postgres", objects: {} }),
+				4,
+				false,
+			],
+			[
+				"the pre-formatVersion key (older than any release)",
+				JSON.stringify({ hejbroSnapshot: 3, dialect: "postgres", objects: {} }),
+				3,
+				false,
+			],
+			[
+				"a format-5 snapshot (a format this build's own history wrote)",
+				JSON.stringify({ formatVersion: 5, dialect: "postgres", objects: {} }),
+				5,
+				true,
+			],
+			[
+				"a format-6 snapshot (a format this build's own history wrote)",
+				JSON.stringify({ formatVersion: 6, dialect: "postgres", objects: {} }),
+				6,
+				true,
+			],
+			[
+				"a format-7 snapshot (a format this build's own history wrote)",
+				JSON.stringify({ formatVersion: 7, dialect: "postgres", objects: {} }),
+				7,
+				true,
+			],
+		])("%s", (_label, raw, foundVersion, namesUpgrade) => {
+			// Every row names the version mismatch it found against the
+			// version this build expects — the delta scenarios require this
+			// regardless of which guidance follows it (#413).
+			expect(() => parseSnapshot(raw)).toThrowError(
+				expect.objectContaining({
+					code: "unsupported-snapshot-version",
+					message: expect.stringContaining(
+						`snapshot version ${foundVersion} is older than this build supports (expects 8)`,
+					),
+				}),
+			);
+			if (namesUpgrade) {
+				expect(() => parseSnapshot(raw)).toThrowError(
+					expect.objectContaining({
+						message: expect.stringMatching(/Next: run `hejbro upgrade`\.?$/),
+					}),
+				);
+				expect(() => parseSnapshot(raw)).toThrowError(
+					expect.objectContaining({
+						message: expect.not.stringMatching(/\bpin\b|\breset\b/i),
+					}),
+				);
+				return;
+			}
+			expect(() => parseSnapshot(raw)).toThrowError(
+				expect.objectContaining({
+					message: expect.stringContaining(
+						"hejbro is pre-1.0 and has no format-migration path yet",
+					),
+				}),
+			);
+			expect(() => parseSnapshot(raw)).toThrowError(
+				expect.objectContaining({
+					message: expect.not.stringContaining("Next: run `hejbro upgrade`"),
+				}),
+			);
+		});
+	});
 });
 
 // D79/#159: parseSnapshot's optional per-kind requiredKeys check. Every

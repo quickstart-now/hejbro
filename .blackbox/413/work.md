@@ -54,3 +54,20 @@ CRAP gate caught a second issue after that refactor: folding the with/non-with d
 
 Result: 45/45 tests green (T1 12 + T2 10 golden byte-oracle + 4 in-memory queryKind fixed points [with/union/except/intersect, none present in any committed snapshot] + T3 15 + T4 4 refusal rows), full pnpm test (@hejbro/core: 101 files / 1726 passed + 1 todo), all custom gates (bans, next-marker, diagnostic-xref, crap) green.
 
+<a id="w5"></a>
+## W5 — 1.2: older-format message splits on the release floor
+
+_2026-09-05T07:32Z_
+
+Split parseSnapshot's older-format diagnostic on HEJBRO_UPGRADABLE_SNAPSHOT_FLOOR (5): below it (a format no release ever wrote) keeps olderVersionMessage's pin-or-reset guidance verbatim, unchanged; at or above it (5, 6, 7 -- this build's own snapshot history) a new olderReleasedFormatMessage names `hejbro upgrade` and never mentions pinning or resetting. olderFormatMessage is a small if-only dispatcher (no ternary) between the two, called from validatePresentFormatVersion; validateMissingFormatVersion (the pre-formatVersion-key path) is untouched since it is always below the floor.
+
+Verified the split doesn't break 1.1's T4 (upgradeSnapshot's below-floor/newer refusals carry the ordinary read's exact code+message): upgradeSnapshot's own validateUpgradeableFormatVersion calls olderVersionMessage directly for its below-floor branch, exactly what olderFormatMessage itself calls for the same input -- same function, same argument, same string.
+
+Red confirmed by actual revert-and-rerun (not just written-then-passed): reverted validatePresentFormatVersion's call back to olderVersionMessage, reran the new 5-row table -- the 3 released-format rows (5/6/7) failed exactly as expected, the 2 below-floor rows stayed green. Restored the fix; all green again.
+
+Added a further assertion after su-planner review: each row also asserts the message names the exact version mismatch found ("snapshot version <v> is older than this build supports (expects 8)") per the delta scenario's "naming the version mismatch" clause -- catches an implementation that names `hejbro upgrade` without saying which version was found.
+
+Test file: packages/core/test/snapshot.test.ts (existing version-message file, per tasks.md's own allowance), new describe "the older-format message splits on the release floor (#413)", 5-row it.each table. All gates green: pnpm check, check-types (18/18), full pnpm test (@hejbro/core: 101 files / 1731 passed + 1 todo), check:bans, check:next-marker, check:diagnostic-xref, check:crap (44 at threshold, no violations).
+
+Note: an early full `pnpm test` run failed on `preset-smoke` with "Failed to resolve entry for package @hejbro/core" -- self-inflicted: I had `TURBO_FORCE=1 pnpm check-types` (which rebuilds core's dist) running concurrently with `TURBO_FORCE=1 pnpm test` in the background, racing tsdown's clean-then-rewrite of packages/core/dist against preset-smoke's module resolution. Not a product defect. Fixed by running `pnpm build --force` then `pnpm test` sequentially, with nothing else touching dist concurrently -- confirms these gates must not be run in parallel against the same worktree's dist.
+

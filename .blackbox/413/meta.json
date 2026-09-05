@@ -76,6 +76,13 @@
       "title": "1.1b: generic discriminator-driven normalization closes the byte oracle",
       "pr": null,
       "decisions": []
+    },
+    {
+      "id": "W5",
+      "at": "2026-09-05T07:32Z",
+      "title": "1.2: older-format message splits on the release floor",
+      "pr": null,
+      "decisions": []
     }
   ],
   "prs": [],
