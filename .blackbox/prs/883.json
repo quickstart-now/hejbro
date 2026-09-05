@@ -3,11 +3,11 @@
   "number": 883,
   "ref": "quickstart-now/hejbro#883",
   "title": "build: declare third-party client ranges once in the pnpm catalog (#491)",
-  "head": "3d4e5df88362df5ba62b9a3de105afaaeae91793",
+  "head": "9209e4b44a06474d46886fa9526f01e5a8ab569f",
   "headRef": "chore-client-ranges",
   "base": "dev",
   "merged": null,
-  "pinnedAt": "2026-09-05T05:05Z",
+  "pinnedAt": "2026-09-05T05:29Z",
   "refs": [
     {
       "path": ".changeset/client-ranges-catalog.md",
@@ -51,7 +51,7 @@
     },
     {
       "path": "scripts/check-client-ranges.mjs",
-      "blob": "ea912a32c90f8a852881ad4465343480a8c2ca9c"
+      "blob": "3f860c0fb997081f748dd96f443f82a69abc6bdb"
     }
   ]
 }
