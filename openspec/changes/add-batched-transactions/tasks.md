@@ -69,10 +69,12 @@ After 1.2a the red is isolated to `@hejbro/neon` alone.
       fourth key's direct consequence — split out, it would be a task
       with no red of its own).
 
-- [ ] 1.2b (~6m) The one-shot driver implements (486/R5). Runs after the
-      `feat-config-driver` piece (#458) merges and this branch is
-      rebased; until then `packages/neon` belongs to that piece. Red:
-      the tier table's remaining two rows — {neon ws, neon http} — plus
+- [ ] 1.2b (~6m) The one-shot driver implements (486/R5). #458 has
+      merged and this branch was rebased onto it, so `packages/neon` is
+      this change's to edit; this task builds on what that piece left
+      there (`neonDriver`'s overloads, `buildWebSocketDriver`,
+      `wsCapabilitiesFor`) rather than reshaping it. Red: the tier
+      table's remaining two rows — {neon ws, neon http} — plus
       the HTTP driver's own `batch` sending `[…pins, …members]` through
       `sql.transaction` in order and returning one row list per member
       (recorded `HttpQueryable`, offline and deterministic); a failing
