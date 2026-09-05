@@ -35,12 +35,14 @@ they are.
 Within-family divergence (#489: `int` vs `bigint`, `numeric` vs
 `bigint`) is invisible at family granularity by construction. The same
 granularity also lets through the same-family pairs the server itself
-refuses — an array against an array of a different element type
-(`text[]` against `integer[]`), a time-of-day type (`time`, `timetz`)
-against a date or timestamp type, `json` against `jsonb`, `macaddr`
-against `inet` or `cidr`, and an enum against `text`, `varchar` or
-`char` — measured on postgres:17; they are tracked as #977, and this
-requirement states the gap rather than closing it.
+refuses — an array against an array whose element types are themselves
+a pair the server refuses (`text[]` against `integer[]`, `time[]`
+against `timestamptz[]`; arrays unify exactly when their elements do),
+an enum against `text`, `varchar`, `char`, or a different enum type, a
+time-of-day type (`time`, `timetz`) against a date or timestamp type,
+`json` against `jsonb`, `macaddr` against `inet` or `cidr` — measured
+on postgres:17; they are tracked as #977, and this requirement states
+the gap rather than closing it.
 
 ## The measurement (task 1.1)
 
@@ -76,11 +78,14 @@ This section's own sweep tested each concrete type against only the ten
 family representatives (one per family), which surfaces four
 same-family refusals this way: `json` against `jsonb` (`42846`), `time`
 or `timetz` against `timestamptz` (`42846`), `macaddr` against `inet`
-(`42804`), an enum against `text` (`42804`). A wider review measurement
-— 30 concrete types against each other, 900 ordered pairs — found a
-broader class the same way, the array-element-type case among them
-(`text[]` against `integer[]`, `42846`); the full list lives in #977,
-not closed by this change.
+(`42804`), an enum against `text` (`42804`). The array class stays
+invisible here for a second, separate reason: the sweep's own concrete
+type list carried a single array type (`text[]`) and never varied its
+element type, so no two array types were ever probed against each
+other. A wider review measurement — 30 concrete types against each
+other, 900 ordered pairs, varying the array element type among them —
+found the broader class the same way; the full list lives in #977, not
+closed by this change.
 
 Reproduction — a fresh `postgres:17` container, then the self-contained
 SQL below (schema, three `values`-based probe sets, final dump):

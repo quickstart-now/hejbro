@@ -306,20 +306,24 @@ cannot unify fails to type-check at the combinator's parameter. The
 refused pairs are measured, not assumed — on postgres:17, across the ten
 concrete type families, no cross-family pair unifies. A `sql` fragment
 or a literal the type layer cannot place (family `"unknown"`) matches
-every family on either side: Postgres types an untyped expression
-against the other branch at parse time, and refusing it here would make
-the builder stricter than the database. The rule sees families, not
-types — `integer` against `bigint` still type-checks (#489). The same
+every family on either side, because its type is not visible here — an
+untyped literal inside the fragment is resolved by the server against
+the other branch, while a fragment the server types on its own (`sql`
+with `1`, `now()`) is compared there and may be refused; this layer
+does not see it either way. The rule sees families, not types —
+`integer` against `bigint` still type-checks (#489). The same
 granularity also lets through the same-family pairs the server itself
-refuses — an array against an array of a different element type
-(`text[]` against `integer[]`), a time-of-day type (`time`, `timetz`)
-against a date or timestamp type, `json` against `jsonb`, `macaddr`
-against `inet` or `cidr`, and an enum against `text`, `varchar` or
-`char` — measured on postgres:17; they are tracked as #977, and hejbro
-states the gap rather than closing it. Core's combinators, the chain's,
-and a recursive CTE's anchor/recursive-term pair all share this one
-rule — the chain's own combinators refuse exactly the family pairs
-core's do.
+refuses — an array against an array whose element types are themselves
+a pair the server refuses (`text[]` against `integer[]`, `time[]`
+against `timestamptz[]`; arrays unify exactly when their elements do),
+an enum against `text`, `varchar`, `char`, or a different enum type, a
+time-of-day type (`time`, `timetz`) against a date or timestamp type,
+`json` against `jsonb`, `macaddr` against `inet` or `cidr` — measured
+on postgres:17; they are tracked as #977, and hejbro states the gap
+rather than closing it.
+Core's combinators, the chain's, and a recursive CTE's
+anchor/recursive-term pair all share this one rule — the chain's own
+combinators refuse exactly the family pairs core's do.
 
 A set operation built with the core builder's own combinators
 (`select(a).union(select(b))` from `hejbro`, not through a handle) and
