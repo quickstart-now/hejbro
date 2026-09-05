@@ -609,7 +609,7 @@ _lead · extension · basis 412/D24, D25; D110; cd review round 2 (a synthesized
 Process rule for every future brief: when a review or a task cites a value an external library throws or returns, the input table carries the value as measured from that library on this machine (or a container), not a hand-built lookalike; a synthesized example that is more lenient than the real class turns a red test green. Recorded here so the next brief template carries it. Ratification: owner on return.
 
 <a id="r33"></a>
-## R33 — R34 — Sealed reviewer measurement for pieces whose input is not hejbro's own output
+## R33 — Sealed reviewer measurement for pieces whose input is not hejbro's own output
 
 _lead · extension · 2026-09-05T12:31Z · ratified: pending_
 
