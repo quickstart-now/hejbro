@@ -15,8 +15,8 @@ cannot see what type such an expression has, and this rule SHALL refuse
 only what it can prove the server refuses. What the server does with it
 afterwards is the server's: an untyped literal is resolved against the
 other branch, while a fragment the server types on its own is compared
-there and may be refused. The pairs the server unifies are the
-same-family ones; those SHALL stay accepted. A branch whose family is
+there and may be refused. Every pair the server unifies is a
+same-family one; those SHALL stay accepted. A branch whose family is
 `"unknown"` is accepted for the visibility reason above, not because
 the server is known to unify it. A cross-family unification measured
 later is added to the table, not to this sentence. The refusal is
@@ -50,7 +50,9 @@ than closing it.
 - **WHEN** one branch's key is an expression Postgres itself leaves
   untyped — a quoted literal, `NULL` — on either side or both
 - **THEN** the combination type-checks, and the compiled statement is
-  the one Postgres accepts by typing the untyped side against the other
+  the one Postgres accepts at type resolution — whether the literal's
+  own text parses as the resolved type is a value-level question the
+  server answers at execution
 
 #### Scenario: A `sql` fragment is accepted because the type layer cannot see it
 - **WHEN** one branch's key is a `sql` fragment, whose family is

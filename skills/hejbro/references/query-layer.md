@@ -308,11 +308,13 @@ concrete type families, no cross-family pair unifies. A `sql` fragment
 or a literal the type layer cannot place (family `"unknown"`) matches
 every family on either side, because its type is not visible here — an
 untyped literal inside the fragment is resolved by the server against
-the other branch, while a fragment the server types on its own (`sql`
-with `1`, `now()`) is compared there and may be refused; this layer
-does not see it either way. The rule sees families, not types —
-`integer` against `bigint` still type-checks (#489). The same
-granularity also lets through the same-family pairs the server itself
+the other branch at type resolution (whether the literal's own text
+parses as the resolved type is a value-level question the server
+answers at execution, `22P02`/`22007`), while a fragment the server
+types on its own (`sql` with `1`, `now()`) is compared there and may be
+refused; this layer does not see it either way. The rule sees families,
+not types — `integer` against `bigint` still type-checks (#489). The
+same granularity also lets through the same-family pairs the server itself
 refuses — an array against an array whose element types are themselves
 a pair the server refuses (`text[]` against `integer[]`, `time[]`
 against `timestamptz[]`; arrays unify exactly when their elements do),

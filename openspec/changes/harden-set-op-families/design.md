@@ -9,10 +9,12 @@ A `sql` fragment or an unplaceable literal resolves to family
 `"unknown"` because the type layer cannot see what type the expression
 has, not because the server is known to unify it with anything: an
 untyped literal is resolved by Postgres against the other branch at
-parse time, while a fragment the server types on its own (`sql`1``
-is `integer`) is compared there and may be refused (measured: `sql`1``
-against `text` is accepted here and refused on postgres:17 with
-`42804`, #977). Refusing `"unknown"` on the theory that the server
+type resolution (whether the literal's own text parses as the resolved
+type is a value-level question the server answers at execution,
+`22P02`/`22007`), while a fragment the server types on its own
+(`sql`1`` is `integer`) is compared there and may be refused (measured:
+`sql`1`` against `text` is accepted here and refused on postgres:17
+with `42804`, #977). Refusing `"unknown"` on the theory that the server
 usually unifies it would still risk being stricter than the database in
 the cases it does (the plpgsql-function-bodies precedent: hejbro never
 becomes stricter than Postgres), so this rule accepts `"unknown"` on
