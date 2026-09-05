@@ -6,12 +6,14 @@ import type {
 } from "../src/apply/ledger";
 import {
 	asLedgerAccessFailure,
+	bodyChecksum,
 	bootstrapLedger,
 	clearLedgerRows,
 	isMigrationRecorded,
 	readLedger,
 	recordAppliedMigration,
 } from "../src/apply/ledger";
+import { sha256Hex } from "../src/hash";
 
 /** Postgres's own code for "the relation named in this statement does not exist" -- what a `select`/`insert` against a ledger table that was never bootstrapped fails with. */
 const UNDEFINED_TABLE = "42P01";
@@ -45,9 +47,10 @@ const makeUnbootstrappedSession = (): DriverSession => ({
  * A tiny in-memory stand-in for the ledger table itself -- enough to prove
  * a bootstrap-then-write-then-read round trip actually behaves like a
  * table with a server-assigned identity order, without a real database.
- * `create`/`insert`/`select` are matched by the shape of SQL `bootstrapLedger`
- * and `recordAppliedMigration`/`readLedger` are expected to send; anything
- * else is a bug in the code under test, not a fixture gap, so it throws.
+ * `create`/`alter`/`insert`/`select` are matched by the shape of SQL
+ * `bootstrapLedger` and `recordAppliedMigration`/`readLedger` are expected
+ * to send; anything else is a bug in the code under test, not a fixture
+ * gap, so it throws.
  */
 const makeInMemoryLedgerSession = (): { readonly session: DriverSession } => {
 	let bootstrapped = false;
@@ -58,6 +61,15 @@ const makeInMemoryLedgerSession = (): { readonly session: DriverSession } => {
 			const sql = compiled.sql.trim().toLowerCase();
 			if (sql.startsWith("create schema") || sql.startsWith("create table")) {
 				bootstrapped = true;
+				return [];
+			}
+			if (sql.startsWith("alter table")) {
+				if (!bootstrapped) {
+					throw Object.assign(
+						new Error('relation "hejbro.migration_ledger" does not exist'),
+						{ code: UNDEFINED_TABLE },
+					);
+				}
 				return [];
 			}
 			if (sql.startsWith("insert into")) {
@@ -318,7 +330,11 @@ describe("a failed ledger statement says which statement failed / 1.1 (harden-le
 		});
 
 		it("success control: an ordinary bootstrap is not tagged at all", async () => {
-			const { session } = makeScriptedSession([{ rows: [] }, { rows: [] }]);
+			const { session } = makeScriptedSession([
+				{ rows: [] },
+				{ rows: [] },
+				{ rows: [] },
+			]);
 
 			await expect(bootstrapLedger(session)).resolves.toBeUndefined();
 		});
@@ -426,6 +442,52 @@ describe("bootstrapLedger / 1.2", () => {
 		expect(
 			tableStatements.every((call) => /if not exists/i.test(call.sql)),
 		).toBe(true);
+	});
+});
+
+describe("bootstrapLedger / 1.1 (checksum column)", () => {
+	it("create table declares the checksum column, nullable, and an alter statement follows to upgrade an existing ledger", async () => {
+		const { session, calls } = makeRecordingSession();
+
+		await bootstrapLedger(session);
+
+		const tableIndex = calls.findIndex((call) =>
+			call.sql.toLowerCase().includes("create table"),
+		);
+		const alterIndex = calls.findIndex((call) =>
+			call.sql.toLowerCase().includes("alter table"),
+		);
+		expect(tableIndex).toBeGreaterThanOrEqual(0);
+		expect(alterIndex).toBe(tableIndex + 1);
+		const checksumLine = calls[tableIndex]?.sql
+			.split("\n")
+			.find((line) => line.toLowerCase().includes('"checksum"'));
+		expect(checksumLine).toMatch(/"checksum"\s+text/i);
+		expect(checksumLine?.toLowerCase()).not.toContain("not null");
+		expect(calls[alterIndex]?.sql).toBe(
+			'alter table "hejbro"."migration_ledger" add column if not exists "checksum" text',
+		);
+	});
+
+	it("42501 on the checksum column's alter is a tagged write failure at the bootstrap site", async () => {
+		const error = permissionDeniedTable();
+		const { session } = makeScriptedSession([
+			{ rows: [] },
+			{ rows: [] },
+			{ throws: error },
+		]);
+
+		await expect(bootstrapLedger(session)).rejects.toSatisfy(
+			(thrown: unknown) => {
+				const tag = asLedgerAccessFailure(thrown);
+				return (
+					tag !== null &&
+					tag.direction === "write" &&
+					tag.site === "bootstrap" &&
+					tag.cause === error
+				);
+			},
+		);
 	});
 });
 
@@ -571,5 +633,79 @@ describe("clearLedgerRows / 5.3, D106 R1 B1", () => {
 				);
 			},
 		);
+	});
+});
+
+/**
+ * [task 1.1, 631/R2] The banner boundary is two predicates, not a scan: a
+ * banner is exactly a first line (after `\r\n` -> `\n`) equal to the
+ * literal `-- hejbro migration`; the body is everything after the first
+ * `"\n\n"`, that separator excluded. No banner means the whole file is
+ * the input. Expected values are computed through `sha256Hex`, never
+ * hardcoded hex, so a change to `sha256Hex` itself cannot make this suite
+ * lie about `bodyChecksum`'s own boundary logic.
+ */
+describe("bodyChecksum / 1.1, 631/R2", () => {
+	const banner = "-- hejbro migration\n-- hejbro: 0.1.0\n";
+	const body = 'create table "public"."t" ("id" bigint);\n';
+	const file1 = `${banner}\n${body}`;
+	const bodyWithBlankLine = "stmt1;\n\nstmt2;";
+	const noBannerFile = 'create table "public"."t" ();\n';
+	const dashFirstLineFile =
+		'-- a snapshot of the database\n\ncreate table "public"."t" ();\n';
+	const bannerWithUpgraded = `${banner}-- upgraded-from: sha256:${"0".repeat(64)}\n`;
+
+	it.each<[string, string, string]>([
+		["banner + body -- the checksum is the body's own hash", file1, body],
+		[
+			"the same file with every \\n written as \\r\\n -- equal to LF",
+			file1.replace(/\n/g, "\r\n"),
+			body,
+		],
+		[
+			"no banner -- first line is DDL, the whole file is hashed",
+			noBannerFile,
+			noBannerFile,
+		],
+		[
+			"no banner -- first line starts with -- but is not the literal banner, the whole file is hashed",
+			dashFirstLineFile,
+			dashFirstLineFile,
+		],
+		[
+			"the banner gains a line (upgraded-from) -- the checksum is unchanged",
+			`${bannerWithUpgraded}\n${body}`,
+			body,
+		],
+		[
+			"a blank line inside the body stays in the body -- only the first \\n\\n separates",
+			`${banner}\n${bodyWithBlankLine}`,
+			bodyWithBlankLine,
+		],
+	])("%s", (_label, fileText, expectedBodyText) => {
+		expect(bodyChecksum(fileText)).toBe(sha256Hex(expectedBodyText));
+	});
+
+	it("a trailing space added inside the body changes the checksum", () => {
+		const bodyWithTrailingSpace = body.replace(
+			'("id" bigint);',
+			'("id" bigint); ',
+		);
+
+		expect(bodyChecksum(`${banner}\n${bodyWithTrailingSpace}`)).not.toBe(
+			bodyChecksum(file1),
+		);
+	});
+
+	it("a lone \\r is not a line ending -- only \\r\\n is normalized", () => {
+		const bodyWithLoneCr = body.replace('("id" bigint);', '("id"\rbigint);');
+
+		expect(bodyChecksum(`${banner}\n${bodyWithLoneCr}`)).not.toBe(
+			bodyChecksum(file1),
+		);
+	});
+
+	it("banner only, no blank-line separator anywhere -- the empty body", () => {
+		expect(bodyChecksum(banner)).toBe(sha256Hex(""));
 	});
 });

@@ -70,6 +70,12 @@ const LEDGER_WITH_NOTE_ROWS: ReadonlyArray<CatalogRow> = [
 	{ relkind: "r", persistence: "p", name: "note", type: "text" },
 ];
 
+/** [task 1.1, 631/R2] The bootstrap's own fifth column -- a ledger that already carries it (upgraded, or freshly bootstrapped) is still the ledger, exactly like any other extra column {@link LEDGER_WITH_NOTE_ROWS} already proves. */
+const LEDGER_WITH_CHECKSUM_ROWS: ReadonlyArray<CatalogRow> = [
+	...LEDGER_ROWS,
+	{ relkind: "r", persistence: "p", name: "checksum", type: "text" },
+];
+
 const PARTIAL_ROWS: ReadonlyArray<CatalogRow> = [
 	{ relkind: "r", persistence: "p", name: "id", type: "bigint" },
 	{ relkind: "r", persistence: "p", name: "filename", type: "text" },
@@ -169,6 +175,13 @@ describe("probeLedgerIdentity / 1.1", () => {
 		[
 			"the four bootstrap columns plus note text",
 			LEDGER_WITH_NOTE_ROWS,
+			{
+				kind: "ledger",
+			},
+		],
+		[
+			"the four bootstrap columns plus the checksum column (631/R2) -- a fifth column is still a ledger",
+			LEDGER_WITH_CHECKSUM_ROWS,
 			{
 				kind: "ledger",
 			},

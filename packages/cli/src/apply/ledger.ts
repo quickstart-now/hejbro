@@ -1,4 +1,5 @@
 import type { CompileResult, DriverRow, DriverSession } from "@hejbro/query";
+import { sha256Hex } from "../hash";
 
 /*
  * [design, task 1.1] The error codes `add-apply-engine` raises, settled
@@ -318,11 +319,51 @@ export const bootstrapLedger = async (
 	);
 	await exec(
 		session,
-		`create table if not exists ${QUALIFIED_LEDGER_TABLE} (\n\t"id" bigint generated always as identity primary key,\n\t"filename" text not null unique,\n\t"origin" text not null check ("origin" in (${LEDGER_ORIGIN_CHECK_LIST})),\n\t"applied_at" timestamptz not null default now()\n)`,
+		`create table if not exists ${QUALIFIED_LEDGER_TABLE} (\n\t"id" bigint generated always as identity primary key,\n\t"filename" text not null unique,\n\t"origin" text not null check ("origin" in (${LEDGER_ORIGIN_CHECK_LIST})),\n\t"applied_at" timestamptz not null default now(),\n\t"checksum" text\n)`,
 		[],
 		"write",
 		"bootstrap",
 	);
+	// `create table if not exists` never touches an already-existing ledger,
+	// so a ledger bootstrapped before this column existed needs its own
+	// statement to gain it.
+	await exec(
+		session,
+		`alter table ${QUALIFIED_LEDGER_TABLE} add column if not exists "checksum" text`,
+		[],
+		"write",
+		"bootstrap",
+	);
+};
+
+/** [task 1.1, 631/R2] `@hejbro/core`'s `renderBanner` writes this as a migration file's first line; kept in sync by hand, not imported (core is outside this change's file boundary) -- if the two spellings ever drift, a banner is hashed into the body instead of stripped from it. */
+const BANNER_FIRST_LINE = "-- hejbro migration";
+
+/**
+ * [task 1.1, 631/R2] SHA-256 hex of a migration file's body: the file with
+ * `\r\n` normalized to `\n` (no other normalization), then everything
+ * after the first `"\n\n"` -- that separator excluded. A file whose first
+ * line is not exactly {@link BANNER_FIRST_LINE} carries no banner and is
+ * hashed whole; a banner with no `"\n\n"` anywhere hashes the empty body.
+ */
+export const bodyChecksum = (fileText: string): string => {
+	const normalized = fileText.replace(/\r\n/g, "\n");
+	const firstLineEnd = normalized.indexOf("\n");
+	if (firstLineEnd === -1) {
+		if (normalized !== BANNER_FIRST_LINE) {
+			return sha256Hex(normalized);
+		}
+		return sha256Hex("");
+	}
+	const firstLine = normalized.slice(0, firstLineEnd);
+	if (firstLine !== BANNER_FIRST_LINE) {
+		return sha256Hex(normalized);
+	}
+	const separatorStart = normalized.indexOf("\n\n");
+	if (separatorStart === -1) {
+		return sha256Hex("");
+	}
+	return sha256Hex(normalized.slice(separatorStart + "\n\n".length));
 };
 
 /** [task 16.1, D106 M7] One ledger row, as `readLedger` reads it back: the filename it identifies its migration by, and how it entered the ledger. */
