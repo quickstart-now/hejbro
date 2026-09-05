@@ -346,3 +346,37 @@ that found it -- with one paragraph added to tasks.md 1.5; files
 `ledger.ts`, `execute.ts` or `migrate.ts`/`raise.ts` as the write site
 requires, all inside the header.
 
+<a id="r14"></a>
+## R14 — apply-ledger-filtered: judged where identity is judged, catalog read only on detection, the message names state, role and policies
+
+_lead · interpretation · basis R1 · 2026-09-05T20:12Z · ratified: pending_
+
+(a) The filtered judgement is made where the identity judgement is made,
+as the delta says: `LedgerIdentity` gains a `filtered` kind and
+`assertLedgerNotOccupied` throws `apply-ledger-filtered` for it and
+`apply-ledger-occupied` for the others -- no call site changes, so the
+piece stays inside its files; the function's name now understates what it
+does, which one comment states, and a rename is a separate piece because
+it touches four callers including `reset`. (b) The policy list is read by
+a second catalog statement only when the probe reports `relrowsecurity`
+or `relforcerowsecurity`; a normal run's hot path keeps its one
+statement, and the second statement's failure is classified as
+`apply-ledger-unreadable` through the same `probeRows` path. (c) The
+connecting role is read in that same second statement (`current_user`),
+not added to the probe: filtering is a state, not a failure, so no fresh
+connection is needed, and the normal run's SQL does not change at all.
+(d) Message: `"<schema>"."<ledger>" has row-level security
+<enabled|forced|enabled and forced>, and hejbro never turns it on for its
+own ledger. Rows this role cannot see read as a ledger that recorded
+nothing, and the next \`migrate\` would re-apply the chain from the
+start. The connecting role is "<role>"; <policies>. Next: disable
+row-level security on the ledger, or connect as the role that applied the
+chain, then rerun \`hejbro <command>\`.` where `<policies>` is `the
+policies on it are "p1", "p2"` or, when the catalog holds none, `it
+carries no policy at all, so every row is hidden from that role` --
+row-level security with no policy is a default deny, and saying so sends
+the user to the right next action (the `"no columns"` precedent in
+`apply-ledger-occupied`). (e) `apply-ledger-occupied` wins: the filtered
+judgement applies only to a relation that has the ledger's shape, the
+delta's own premise.
+

@@ -151,6 +151,17 @@
       "at": "2026-09-05T19:32Z",
       "title": "an old ledger is read through a four-column fallback and upgraded by the first command that writes",
       "ratified": null
+    },
+    {
+      "id": "R14",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R1"
+      ],
+      "at": "2026-09-05T20:12Z",
+      "title": "apply-ledger-filtered: judged where identity is judged, catalog read only on detection, the message names state, role and policies",
+      "ratified": null
     }
   ],
   "work": [],
