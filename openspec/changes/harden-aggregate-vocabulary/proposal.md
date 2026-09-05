@@ -56,6 +56,11 @@ None.
   vocabulary for every builder function, windowed cells included, and
   two scenarios pin a windowed cell's precision and the vocabulary's
   closure.
+  Also MODIFIED: *A db handle executes built statements* — the
+  preview-equals-executed scenario is qualified to the statement's own
+  send, so a handle with an applied execution context (whose context
+  statements precede the caller's on the same transaction) is no longer
+  literally unsatisfiable as worded. No code moves for this clause.
 
 ## Impact
 

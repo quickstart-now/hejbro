@@ -1,5 +1,22 @@
 ## MODIFIED Requirements
 
+### Requirement: A db handle executes built statements
+A db handle SHALL be constructed from schema declarations plus a driver
+and SHALL execute built statements, returning rows typed by the
+statement's inferred result type. What is sent to the database for a
+statement SHALL be exactly the statement's pure `compile()` output; an
+applied execution context precedes it on the same transaction, per
+`rls-execution-context`, and is not part of the statement.
+
+#### Scenario: Executed SQL equals previewed SQL
+- **WHEN** a statement is compiled for preview and then executed on a db
+  handle — with or without an execution context applied
+- **THEN** the SQL text and parameters the driver receives for that
+  statement are identical to the previewed compile output, any context
+  statements the handle applies precede it inside the same transaction
+  rather than altering it, and the resolved rows carry the inferred
+  result type
+
 ### Requirement: Nested values are revived to their declared types
 Executing a statement with nested reads SHALL deliver every nested
 value converted to its column's declared read type, exactly as a
