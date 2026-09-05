@@ -754,8 +754,18 @@ Within a kind, the statements a run emits SHALL follow the declarations'
 own dependency order: a declared object is created — or altered — after
 the declared objects it references, so a table carrying a foreign key to
 another declared table comes after that table, whichever order their
-identities sort in, and a mutually referencing pair — which no order
-satisfies — keeps its existing identity order. A reset's drops run in
+identities sort in, and a mutually referencing group — a pair, or a
+longer cycle — which no order satisfies, keeps its existing identity
+order throughout. The order among objects
+whose references are all satisfied is identity order, and an object
+whose references are satisfied is placed as early as they allow: the
+statements are emitted in waves, each wave holding every object whose
+referenced objects were emitted in earlier waves, in identity order
+within the wave. An object that references nothing therefore lands in
+the first wave, ahead of an object that sorts before it by identity but
+references something later — `p_parent, q_child (→ p_parent), self_ref`
+emits `p_parent, self_ref, q_child` on the create side, and the drop
+side follows the same waves over the reversed references. A reset's drops run in
 reverse *dependency* order — a dependent before what it depends on,
 computed from the same references (migration-apply) — never the literal
 reverse of the statement sequence this run emits. The migration's own name SHALL
@@ -925,6 +935,15 @@ line SHALL NOT collapse them into one file.
 - **WHEN** a run adds a value to an existing enum type and references
   that value only inside a `plpgsql` function body
 - **THEN** one migration is written
+
+#### Scenario: An unconstrained object lands in the earliest wave, in identity order
+- **WHEN** three tables are created in one run — `p_parent`, `q_child`
+  referencing `p_parent`, and `self_ref` referencing nothing outside
+  itself — and later dropped in one run
+- **THEN** the creates are emitted `p_parent, self_ref, q_child`, and
+  the drops `q_child, self_ref, p_parent` — each wave in identity order,
+  a self-reference never blocking its own table, `q_child` after
+  `p_parent` on the create side and before it on the drop side
 
 ### Requirement: The migration chain on disk is verifiable
 The CLI SHALL provide a `verify` command that checks, without a
