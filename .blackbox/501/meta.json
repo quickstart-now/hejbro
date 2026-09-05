@@ -4,9 +4,9 @@
   "ref": "quickstart-now/hejbro#501",
   "title": "add a real FILTER (WHERE …) aggregate constructor",
   "parent": "quickstart-now/hejbro#412",
-  "status": "open",
+  "status": "closed",
   "opened": "2026-09-05",
-  "closed": null,
+  "closed": "2026-09-05",
   "decisions": [
     {
       "id": "R1",
@@ -170,7 +170,13 @@
       ]
     }
   ],
-  "prs": [],
+  "prs": [
+    {
+      "number": 963,
+      "role": "closes",
+      "pinnedAt": "2026-09-05T16:55Z"
+    }
+  ],
   "origin": null,
   "followUps": []
 }
