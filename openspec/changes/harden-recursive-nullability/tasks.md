@@ -18,9 +18,15 @@ knowledge (a recursive term projecting a left-joined table's non-null
 column reads nullable in query, non-null in the copy) and would widen
 too little — the lying type this change exists to remove.
 
+**Out of scope**: the *anchor's* own left-joined set, which
+`asRecursive` absorbs exactly as every other CTE body position does. A
+key the anchor projects from a left-joined table still reads non-null
+outward — a pre-existing gap, unchanged here and pinned by no test of
+this change (an untested boundary, not a fixed behavior).
+
 **Files edited**: `packages/core/src/query/with.ts` and the core CTE
-type tests (1.1); `packages/query/src/types/select-result.ts` and the
-query CTE type tests (1.2), the query execution test (1.2b);
+type tests (1.1, 1.1b); `packages/query/src/types/select-result.ts` and
+the query CTE type tests (1.2), the query execution test (1.2b);
 `skills/hejbro/references/query-layer.md`, one `.changeset/*.md` (1.3).
 `packages/query/src/db/chain.ts` is expected to need **no source
 change** — `ChainApi.with` takes core's own `CteBuilder` and resolves
@@ -29,7 +35,7 @@ structurally — and it is the only further source file this change may
 touch if that expectation fails. If a task appears to need any other
 file, that goes back to the planner, not into the diff.
 
-**Ordering.** 1.1 → 1.2 → 1.2b → 1.3.
+**Ordering.** 1.1 → 1.1b → 1.2 → 1.2b → 1.3.
 
 ## 1. Outward nullability
 
@@ -50,6 +56,22 @@ file, that goes back to the planner, not into the diff.
       core — see the ruling above); 1.2 owns it. Files: `with.ts`, its
       type tests.
 
+- [ ] 1.1b (~6m) The carrier also carries the recursive term's own
+      left-joined set (#500/R3). `WidenedBy<TRecursiveValue,
+      TRecursiveLeftJoined>`: `asRecursive` infers the set from the
+      stage the recursive callback returns, since a left-joined column
+      is nullable no matter what it declares and that fact lives on the
+      stage, not on the value. Red: the core CTE type test file, three
+      structural rows — {a recursive callback that left-joins a table
+      carries that table in the outward brand}, {a callback that
+      left-joins nothing carries `never`, the tracked empty set}, {a
+      recursive term that is a `SetOpStage` carries `UntrackedJoins`,
+      the fail-safe default, since that stage type holds no set at
+      all}. The comment on the carrier states the one constraint that
+      makes this legal: `select.ts`'s absorption rule forbids
+      *narrowing* on a set a position did not earn; this reads it only
+      to *widen*. Files: `with.ts`, its type tests.
+
 - [ ] 1.2 (~7m) The query layer widens the outward row. Red: the query
       package's CTE type tests, an `expectTypeOf` table through
       `handle.with(...)`'s recursive form — {anchor non-null, recursive
@@ -62,7 +84,8 @@ file, that goes back to the planner, not into the diff.
       today}, {two keys, one widened, one not}, {**the recursive term
       projects a left-joined table's non-null column → outward
       nullable**} — the last row is why the rule lives here and not in
-      core. Files:
+      core, and it resolves through `ProjectedColumnResult<R,
+      TRecursiveLeftJoined>`, the set 1.1b carries. Files:
       `types/select-result.ts`, tests.
 
 - [ ] 1.2b (~6m) The delivered value and the chain surface agree. Red:
