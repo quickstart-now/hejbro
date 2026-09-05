@@ -60,10 +60,15 @@ None.
   `"unknown"` wildcard, the measured pair table as a type-level
   constant), `query/with.ts` (the recursive-term compatibility test
   reuses it), type tests.
-- `@hejbro/query`: `types/set-op.ts` re-export unchanged; chain type
-  tests gain the family rows.
+- `@hejbro/query`: `types/set-op.ts` re-export unchanged, but the chain
+  stage now carries its projection (503/R7) — `db/chain.ts`'s
+  set-operation combinators check projection against projection through
+  the same `SetOpResult` fold while the result type stays the resolved
+  row; chain type tests gain the family rows.
 - `skills/hejbro`: `references/query-layer.md` (set-operation and
   recursive-CTE sections).
 
-No overlap with `widen-set-op-execute` beyond `query/select.ts`, in a
-different region (`SetOpResult` vs `SetOpStage`); sequence the PRs.
+No overlap with `widen-set-op-execute` beyond `query/select.ts`
+(different regions — `SetOpResult` vs `SetOpStage`) and, after 503/R7,
+`packages/query/src/db/chain.ts`; this change lands first,
+widen-set-op-execute rebases.
