@@ -23,7 +23,10 @@ const DEPENDENCY_FIELDS = [
 ];
 
 const catalogNames = () => {
-	const workspace = readFileSync(join(REPO_ROOT, "pnpm-workspace.yaml"), "utf8");
+	const workspace = readFileSync(
+		join(REPO_ROOT, "pnpm-workspace.yaml"),
+		"utf8",
+	);
 	const catalogSection = workspace.split(/^catalog:\s*$/m)[1] ?? "";
 	return new Set(
 		catalogSection
@@ -52,10 +55,14 @@ const problemsIn = (manifestPath, catalog) => {
 			.filter(([name]) => CLIENT_PACKAGES.includes(name))
 			.flatMap(([name, range]) => {
 				if (range !== "catalog:") {
-					return [`${location}: ${field}.${name} is "${range}" -- spell it "catalog:" and keep the range in pnpm-workspace.yaml`];
+					return [
+						`${location}: ${field}.${name} is "${range}" -- spell it "catalog:" and keep the range in pnpm-workspace.yaml`,
+					];
 				}
 				if (!catalog.has(name)) {
-					return [`${location}: ${field}.${name} points at the catalog, but pnpm-workspace.yaml's catalog has no "${name}" entry`];
+					return [
+						`${location}: ${field}.${name} points at the catalog, but pnpm-workspace.yaml's catalog has no "${name}" entry`,
+					];
 				}
 				return [];
 			}),
@@ -65,11 +72,17 @@ const problemsIn = (manifestPath, catalog) => {
 const catalog = catalogNames();
 const problems = manifestPaths().flatMap((path) => problemsIn(path, catalog));
 if (problems.length > 0) {
-	console.error(`error[check-client-ranges]: ${problems.length} client range(s) declared outside the catalog:`);
+	console.error(
+		`error[check-client-ranges]: ${problems.length} client range(s) declared outside the catalog:`,
+	);
 	for (const problem of problems) {
 		console.error(`  ${problem}`);
 	}
-	console.error("Next: set the range once under `catalog:` in pnpm-workspace.yaml and spell `catalog:` in every manifest that names the package.");
+	console.error(
+		"Next: set the range once under `catalog:` in pnpm-workspace.yaml and spell `catalog:` in every manifest that names the package.",
+	);
 	process.exit(1);
 }
-console.log(`check-client-ranges: ok -- ${CLIENT_PACKAGES.join(", ")} declared through the catalog everywhere`);
+console.log(
+	`check-client-ranges: ok -- ${CLIENT_PACKAGES.join(", ")} declared through the catalog everywhere`,
+);
