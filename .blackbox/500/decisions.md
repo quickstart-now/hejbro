@@ -105,6 +105,6 @@ instead.
 This does not contradict R2's rejection of a core-side rule for
 widening too little. Making the type true at the deciding layer is this
 change's work; making the chain surface show it is the separate change
-that narrows the absorption, tracked as a follow-up under #815
-alongside #932.
+that narrows the absorption, tracked as #942 under #815, a sibling of
+#932.
 
