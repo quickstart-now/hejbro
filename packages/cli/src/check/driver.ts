@@ -136,8 +136,11 @@ export const loadCheckDriver = async (
 /** The `client.end` member every closable driver carries (design Q2 (i)) -- named here once so the refusal message and the runtime check never drift apart. */
 const CLOSE_MEMBER = "client.end";
 
-/** Runtime narrowing only: the driver contract has no closing member, so a factory-built driver is checked for one at the moment it would be used, never assumed from its declared type. */
+/** Runtime narrowing only: the driver contract has no closing member, so a factory-built driver is checked for one at the moment it would be used, never assumed from its declared type -- including the shape a factory returns when its own arrow function forgot `return` (#458 review round 1, task 1.7). */
 const hasClosableClient = (driver: Driver): driver is CheckDriverConnection => {
+	if (typeof driver !== "object" || driver === null) {
+		return false;
+	}
 	const client = (driver as { readonly client?: unknown }).client;
 	if (typeof client !== "object" || client === null) {
 		return false;

@@ -341,51 +341,118 @@ describe("withCheckConnection / configured factory (#458 task 1.2)", () => {
 		expect(importer).not.toHaveBeenCalled();
 	});
 
-	it("refuses a driver with no client.end before any statement is sent, naming the field and the missing member", async () => {
-		const executed = vi.fn(async () => []);
-		const unclosable: Driver = {
-			capabilities: fakeCapabilities,
-			execute: executed,
-			transaction: async () => {
-				throw new Error("transaction should not be called by this test");
-			},
-			setupSession: async () => {
-				throw new Error("setupSession should not be called by this test");
-			},
-		};
-		const factory = () => unclosable;
+	// #458 review round 1, task 1.7: `hasClosableClient` must refuse every
+	// shape a factory could hand back that has no way to close, never
+	// crash on one -- a table, not one example (D110), so a guard that is
+	// consistent on its neighbours but not on `null`/`undefined` shows up
+	// as exactly those two rows failing, not a hand-picked single case.
+	// `buildDriver` takes the shared `execute` spy and returns the exact
+	// value the factory hands back, so every row's own shape is concrete,
+	// never assembled from a base at the call site.
+	const unclosableDriverRows: ReadonlyArray<{
+		readonly label: string;
+		readonly buildDriver: (
+			execute: () => Promise<ReadonlyArray<unknown>>,
+		) => unknown;
+	}> = [
+		{
+			label: "no client member at all",
+			buildDriver: (execute) => ({
+				capabilities: fakeCapabilities,
+				execute,
+				transaction: async () => {
+					throw new Error("transaction should not be called by this test");
+				},
+				setupSession: async () => {
+					throw new Error("setupSession should not be called by this test");
+				},
+			}),
+		},
+		{
+			label: "client: null",
+			buildDriver: (execute) => ({
+				capabilities: fakeCapabilities,
+				execute,
+				transaction: async () => {
+					throw new Error("transaction should not be called by this test");
+				},
+				setupSession: async () => {
+					throw new Error("setupSession should not be called by this test");
+				},
+				client: null,
+			}),
+		},
+		{
+			label: "client.end is not a function (42)",
+			buildDriver: (execute) => ({
+				capabilities: fakeCapabilities,
+				execute,
+				transaction: async () => {
+					throw new Error("transaction should not be called by this test");
+				},
+				setupSession: async () => {
+					throw new Error("setupSession should not be called by this test");
+				},
+				client: { end: 42 },
+			}),
+		},
+		{
+			label: "a top-level end, no client wrapper",
+			buildDriver: (execute) => ({
+				capabilities: fakeCapabilities,
+				execute,
+				transaction: async () => {
+					throw new Error("transaction should not be called by this test");
+				},
+				setupSession: async () => {
+					throw new Error("setupSession should not be called by this test");
+				},
+				end: async () => {},
+			}),
+		},
+		{ label: "a number, not an object", buildDriver: () => 42 },
+		{ label: "null", buildDriver: () => null },
+		{ label: "undefined", buildDriver: () => undefined },
+	];
 
-		await expect(
-			withCheckConnection(
-				"postgres://from-flag",
-				{},
-				CHECK_CONTEXT,
-				async () => "report",
-				undefined,
-				factory,
-			),
-		).rejects.toEqual(
-			expect.objectContaining({
-				code: "check-driver-unclosable",
-				message: expect.stringContaining("driver"),
-			}),
-		);
-		await expect(
-			withCheckConnection(
-				"postgres://from-flag",
-				{},
-				CHECK_CONTEXT,
-				async () => "report",
-				undefined,
-				factory,
-			),
-		).rejects.toEqual(
-			expect.objectContaining({
-				message: expect.stringContaining("client.end"),
-			}),
-		);
-		expect(executed).not.toHaveBeenCalled();
-	});
+	it.each(unclosableDriverRows)(
+		"refuses a factory-built driver with no way to close before any statement is sent, naming the field and the missing member ($label)",
+		async ({ buildDriver }) => {
+			const executed = vi.fn(async () => []);
+			const factory = () => buildDriver(executed) as Driver;
+
+			await expect(
+				withCheckConnection(
+					"postgres://from-flag",
+					{},
+					CHECK_CONTEXT,
+					async () => "report",
+					undefined,
+					factory,
+				),
+			).rejects.toEqual(
+				expect.objectContaining({
+					code: "check-driver-unclosable",
+					message: expect.stringContaining("driver"),
+				}),
+			);
+			await expect(
+				withCheckConnection(
+					"postgres://from-flag",
+					{},
+					CHECK_CONTEXT,
+					async () => "report",
+					undefined,
+					factory,
+				),
+			).rejects.toEqual(
+				expect.objectContaining({
+					message: expect.stringContaining("client.end"),
+				}),
+			);
+			expect(executed).not.toHaveBeenCalled();
+		},
+	);
 
 	it("still closes the connection after a failing body when a factory is configured", async () => {
 		const ends: number[] = [];
