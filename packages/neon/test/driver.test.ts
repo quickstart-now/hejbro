@@ -165,6 +165,38 @@ describe("neonDriver(pool) execute (task 3.2)", () => {
 
 		expect(releaseCalls).toHaveLength(1);
 	});
+
+	it("a multi-command sql text resolves to the last command's rows, never undefined or a crash (task 1.6, #892) -- node-postgres answers an array, one entry per command, for exactly this shape", async () => {
+		// Unlike `stubPoolWithClient`'s own fixed `{ rows: [] }` answer
+		// (never exercises the array shape at all), this client answers a
+		// two-command text the way node-postgres actually does (measured
+		// against postgres:17, design.md Q6): an array, one entry per
+		// command. #892 comment 2's own regression: `handle.execute`/
+		// `tx.execute` threw an uncoded `TypeError` (`rows.map`) reading
+		// `undefined` off that array as if it were a single Result.
+		const client: {
+			query: ReturnType<typeof vi.fn>;
+			release: ReturnType<typeof vi.fn>;
+		} = {
+			query: vi.fn(async () => [
+				{ command: "SELECT", rowCount: 1, rows: [{ a: 1 }] },
+				{ command: "SELECT", rowCount: 1, rows: [{ b: 2 }] },
+			]),
+			release: vi.fn(),
+		};
+		const pool = {
+			connect: vi.fn(async () => client),
+		} as unknown as NeonPool;
+		const driver = neonDriver(pool);
+
+		const rows = await driver.execute({
+			sql: "select 1 as a; select 2 as b",
+			params: [],
+			kind: "sql",
+		});
+
+		expect(rows).toEqual([{ b: 2 }]);
+	});
 });
 
 describe("neonDriver(pool) transaction (task 3.3)", () => {

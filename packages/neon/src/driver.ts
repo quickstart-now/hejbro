@@ -5,8 +5,13 @@ import type {
 	DriverCapabilities,
 	DriverRow,
 	DriverSession,
+	QueryResultLike,
 } from "@hejbro/query";
-import { preparedStatementName, throwMissingCapability } from "@hejbro/query";
+import {
+	lastRows,
+	preparedStatementName,
+	throwMissingCapability,
+} from "@hejbro/query";
 import type { Pool, PoolClient } from "@neondatabase/serverless";
 import { buildHttpDriver, type HttpQueryable } from "./http";
 import { anonymousRole, authenticatedRole } from "./roles";
@@ -103,7 +108,11 @@ const makeSession = (
 			types: intervalPassthroughTypes,
 			...nameForQueryConfig(compiled, preparedStatements),
 		});
-		return result.rows;
+		// node-postgres's own return type never models the multi-command
+		// shape (task 1.6, #892): an array, one entry per command, when
+		// `compiled.sql` (the `sql` escape hatch only) carries more than
+		// one -- our own `SETUP_SESSION_SQL` travels this exact path.
+		return lastRows(result as QueryResultLike | ReadonlyArray<QueryResultLike>);
 	},
 });
 

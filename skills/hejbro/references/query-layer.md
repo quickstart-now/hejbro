@@ -59,6 +59,12 @@ Whether a statement is named depends only on the option and the
 statement's own kind, never on its text, its parameters, or anything
 observed at execution time.
 
+A multi-command `sql` text (`select 1; select 2`) resolves to the
+**last** command's rows — psql's own convention — never `undefined`
+(task 1.6, #892). `@hejbro/pg` and `@hejbro/neon`'s own session-setup
+statement is itself multi-command, so this rule is exercised on every
+connection, not just an escape-hatch edge case a caller might hit.
+
 The option defaults to `false` — an existing caller's driver sends
 exactly what it always did. Turning it on is a deliberate, workload-
 aware choice, not a default, for two reasons: after a few executions

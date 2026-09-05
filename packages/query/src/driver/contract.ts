@@ -188,6 +188,14 @@ export type Driver = DriverSession & {
 };
 
 /**
+ * Re-exported here, the driver contract's own module (task 1.6, #892):
+ * the fold a driver applies to a node-postgres-shaped query result
+ * before handing rows back -- see `./result-rows.ts` for the function
+ * itself.
+ */
+export type { QueryResultLike } from "./result-rows";
+export { lastRows } from "./result-rows";
+/**
  * Re-exported here, the driver contract's own module (task 1.5, #891):
  * the name a driver declaring `"prepared-statements"` derives from a
  * statement text -- see `./statement-name.ts` for the function itself.

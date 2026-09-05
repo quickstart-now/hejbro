@@ -96,6 +96,7 @@ const HEJBRO_RUNTIME_EXPORTS: ReadonlyArray<string> = [
 	"jsonObjectFrom",
 	"jsonb",
 	"lag",
+	"lastRows",
 	"lastValue",
 	"lead",
 	"leftJoinedBrand",
