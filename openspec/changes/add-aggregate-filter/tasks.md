@@ -61,7 +61,7 @@ planner, not into the diff.
       such. Files: `walk.ts`, `read-shape.ts`, `query/select.ts`, tests
       (`retarget.test.ts` included).
 
-- [ ] 1.4 (~8m) The query package. Red: `params.test.ts` — a literal
+- [x] 1.4 (~8m) The query package. Red: `params.test.ts` — a literal
       inside the filter condition is lifted to `$n` in order; the nested
       revive ratchet row for a filtered `count`/`max`/`sum` (cast ⇔
       revive, `own` for `sum`). Files: `params.ts`, `convert.ts`, tests.

@@ -143,6 +143,27 @@ const builderReadShapeOf = (expr: FunctionCallNode): ReadShape | undefined => {
 };
 
 /**
+ * @internal exported for `nested-revive.test.ts`'s ratchet table only,
+ * never the public barrel -- an own-shape aggregate (`sum`/`avg`) and an
+ * unrecognized expression both revive to `undefined` `ColumnState` by
+ * design (#452), so asserting `columnState` alone can't tell "correctly
+ * unwrapped, own shape" apart from "failed to unwrap, not recognized at
+ * all"; this lets that table assert the unwrapped function name itself
+ * instead.
+ */
+export const unwrappedBuilderFunctionName = (
+	expr: ExprNode,
+): string | undefined => {
+	if (expr.nodeKind === "window" || expr.nodeKind === "aggregateFilter") {
+		return unwrappedBuilderFunctionName(expr.fn);
+	}
+	if (!isBuilderAggregate(expr)) {
+		return undefined;
+	}
+	return expr.functionName;
+};
+
+/**
  * Every declared `WITH` entry's own query, by name (add-ctes, task 5.3) --
  * threaded alongside `tables` so a CTE column ref can resolve its
  * conversion state by reading through the entry's own projection instead
@@ -244,6 +265,14 @@ const columnStateForExpr = (
 	cteQueryByName: CteQueryByName = EMPTY_CTES,
 ): ColumnState | undefined => {
 	if (expr.nodeKind === "window") {
+		return columnStateForExpr(expr.fn, tables, cteQueryByName);
+	}
+	// A filtered aggregate (#501/R2 Q4) reads back exactly as its inner
+	// call would, same delegation as `window` just above -- covers both
+	// nesting orders (`filter(count(), …)` and `over(filter(count(), …),
+	// spec)`) since this recurses again through the `window` branch first
+	// when windowed.
+	if (expr.nodeKind === "aggregateFilter") {
 		return columnStateForExpr(expr.fn, tables, cteQueryByName);
 	}
 	if (expr.nodeKind !== "columnRef") {
