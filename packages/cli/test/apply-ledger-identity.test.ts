@@ -1,3 +1,4 @@
+import { HejbroError } from "@hejbro/core";
 import type { CompileResult, Driver, DriverRow } from "@hejbro/query";
 import { describe, expect, it } from "vitest";
 import type { LedgerIdentity } from "../src/apply/ledger-identity";
@@ -5,6 +6,9 @@ import {
 	assertLedgerNotOccupied,
 	probeLedgerIdentity,
 } from "../src/apply/ledger-identity";
+
+/** `probeLedgerIdentity` has no one real caller here -- stands in for whichever of `status`/`migrate`/`reset`/`raise` actually calls it, the same convention `apply-execute.test.ts`'s own `NEXT_COMMAND` follows. */
+const PROBE_COMMAND = "hejbro status";
 
 /** One `pg_class`/`pg_attribute` row shape, as `probeLedgerIdentity`'s own statement returns it -- the fake driver's whole answer is a list of these. `persistence` (2.2, 783/R5) is `c.relpersistence`, repeated on every row the same way `relkind` is. */
 type CatalogRow = {
@@ -359,7 +363,7 @@ describe("probeLedgerIdentity / 1.1", () => {
 		async (_label, rows, expected) => {
 			const { driver } = makeFakeCatalogDriver(rows);
 
-			const identity = await probeLedgerIdentity(driver);
+			const identity = await probeLedgerIdentity(driver, PROBE_COMMAND);
 
 			expect(identity).toEqual(expected);
 			// [2.1, review repair] Every occupied case names a kind of object
@@ -373,12 +377,93 @@ describe("probeLedgerIdentity / 1.1", () => {
 	it("sends exactly one catalog statement and opens no transaction", async () => {
 		const { driver, calls } = makeFakeCatalogDriver(LEDGER_ROWS);
 
-		await probeLedgerIdentity(driver);
+		await probeLedgerIdentity(driver, PROBE_COMMAND);
 
 		expect(calls).toHaveLength(1);
 		expect(calls[0]?.sql).toContain("pg_class");
 		expect(calls[0]?.sql).not.toContain("information_schema");
 		expect(calls[0]?.sql).not.toContain("to_regclass");
+	});
+});
+
+/** A driver whose catalog read fails with `failError`, and whose `select current_user` (the classifier's own role read, D2) succeeds with a fixed role -- `transaction` still throws, matching {@link makeFakeCatalogDriver}'s own invariant. */
+const makeFailingCatalogDriver = (
+	failError: unknown,
+): { readonly driver: Driver; readonly calls: CompileResult[] } => {
+	const calls: CompileResult[] = [];
+	const driver: Driver = {
+		capabilities: { "interactive-transactions": false, "session-state": false },
+		execute: async (compiled) => {
+			calls.push(compiled);
+			const sql = compiled.sql.trim().toLowerCase();
+			if (sql.startsWith("select c.relkind")) {
+				throw failError;
+			}
+			if (sql.startsWith("select current_user")) {
+				return [
+					{ currentUser: "ld_role" },
+				] as unknown as ReadonlyArray<DriverRow>;
+			}
+			return [];
+		},
+		transaction: async () => {
+			throw new Error("probeLedgerIdentity must never open a transaction");
+		},
+		setupSession: async () => {},
+	};
+	return { driver, calls };
+};
+
+describe("a refused catalog read is a coded diagnostic / 1.8 (harden-ledger-diagnostics)", () => {
+	it.each<[string, unknown]>([
+		[
+			"42501, permission denied",
+			Object.assign(new Error("permission denied for table pg_class"), {
+				code: "42501",
+			}),
+		],
+		["a bare error with no code", new Error("connection reset by peer")],
+	])(
+		"%s -> apply-ledger-unreadable naming the catalog read, not the ledger table itself",
+		async (_label, failError) => {
+			const { driver } = makeFailingCatalogDriver(failError);
+
+			const error: unknown = await probeLedgerIdentity(
+				driver,
+				PROBE_COMMAND,
+			).catch((caught: unknown) => caught);
+
+			expect(error).toBeInstanceOf(HejbroError);
+			const hejbroErr = error as HejbroError;
+			expect(hejbroErr.code).toBe("apply-ledger-unreadable");
+			expect(hejbroErr.message).toContain("the catalog read that judges");
+			expect(hejbroErr.message).toContain('"hejbro"."migration_ledger"');
+			expect(hejbroErr.message).toMatch(/Next:/);
+			expect(hejbroErr.message).toContain(PROBE_COMMAND);
+			expect((hejbroErr as unknown as { readonly cause: unknown }).cause).toBe(
+				failError,
+			);
+		},
+	);
+
+	it("regression: the four commands' existing probe rows still answer as today (absent/ledger/occupied unaffected)", async () => {
+		const { driver: absentDriver } = makeFakeCatalogDriver([]);
+		const { driver: ledgerDriver } = makeFakeCatalogDriver(LEDGER_ROWS);
+		const { driver: occupiedDriver } = makeFakeCatalogDriver(UNRELATED_ROWS);
+
+		await expect(
+			probeLedgerIdentity(absentDriver, PROBE_COMMAND),
+		).resolves.toEqual({ kind: "absent" });
+		await expect(
+			probeLedgerIdentity(ledgerDriver, PROBE_COMMAND),
+		).resolves.toEqual({ kind: "ledger" });
+		await expect(
+			probeLedgerIdentity(occupiedDriver, PROBE_COMMAND),
+		).resolves.toEqual({
+			kind: "occupied",
+			relation: "table",
+			columns: ["name", "payload"],
+		});
 	});
 });
 

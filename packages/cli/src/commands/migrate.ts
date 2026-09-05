@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import type { HejbroError } from "@hejbro/core";
 import type { Driver } from "@hejbro/query";
 import { defineCommand } from "citty";
 import {
@@ -8,8 +9,18 @@ import {
 } from "../apply/capability";
 import type { Migration } from "../apply/execute";
 import { applyMigration } from "../apply/execute";
-import type { LedgerOrigin } from "../apply/ledger";
-import { bootstrapLedger, readLedger } from "../apply/ledger";
+import type { LedgerAccessDirection, LedgerOrigin } from "../apply/ledger";
+import {
+	asLedgerAccessFailure,
+	bootstrapLedger,
+	LEDGER_SCHEMA,
+	LEDGER_TABLE,
+	readLedger,
+} from "../apply/ledger";
+import {
+	throwLedgerReadFailure,
+	throwLedgerWriteFailure,
+} from "../apply/ledger-diagnostics";
 import {
 	assertLedgerNotOccupied,
 	probeLedgerIdentity,
@@ -37,6 +48,44 @@ const MIGRATE_ARGS = {
 } as const;
 
 const MIGRATE_COMMAND = "hejbro migrate";
+
+/** [task 1.5, harden-ledger-diagnostics] The identity a ledger-failure diagnostic's header names -- the ledger itself, never a migration file: `applyFrom`'s own generic failure path (`failureResult`) already uses the failing file for the migration's own failures, so this is deliberately a different label, never reused for both. */
+const LEDGER_IDENTITY = `"${LEDGER_SCHEMA}"."${LEDGER_TABLE}"`;
+
+/**
+ * [task 1.5, harden-ledger-diagnostics, design.md D4] Turns a tagged
+ * ledger-statement failure into its coded diagnostic -- called only after
+ * the transaction that failed has already rolled back (either
+ * `driver.transaction`'s own catch, inside `applyMigration`, or here
+ * directly for `bootstrapLedger`/`readLedger`, neither of which opens a
+ * transaction), so the classifier's own role read runs on a connection
+ * that can still answer (D2, measured `25P02` otherwise). `rowFilename`
+ * is read only when the tag's own site is `"row"`.
+ */
+const classifyLedgerFailure = async (
+	driver: Driver,
+	direction: LedgerAccessDirection,
+	rawFailure: unknown,
+	rowFilename: string | undefined,
+): Promise<HejbroError> => {
+	try {
+		if (direction === "read") {
+			await throwLedgerReadFailure(driver, rawFailure, MIGRATE_COMMAND);
+		} else {
+			await throwLedgerWriteFailure(
+				driver,
+				rawFailure,
+				MIGRATE_COMMAND,
+				rowFilename,
+			);
+		}
+	} catch (classified) {
+		return asHejbroError(classified);
+	}
+	throw new Error(
+		"unreachable: a ledger diagnostic classifier resolved instead of throwing",
+	);
+};
 
 /** [task 16.1, D106 M7] The ledger origin `fileName` records under, given `plan.baselineFileNames` -- no ternary (house style): a chain-applied file is `"applied"`, a baseline file is `"registered"` (the same word this file's own report line already uses for it, below); `migrate` never writes `"raised"` (that origin is `raise`'s own). */
 const originFor = (
@@ -160,6 +209,19 @@ const alreadyRegisteredReportLines = (
 	];
 };
 
+/** The four report buckets, in their fixed order -- shared by every `MigrateResult` builder below (a clean finish, a migration's own failure, and a ledger failure) so the three never drift apart on what "so far" means. */
+const bucketLines = (
+	appliedSoFar: ReadonlyArray<string>,
+	registeredSoFar: ReadonlyArray<string>,
+	alreadyAppliedSoFar: ReadonlyArray<string>,
+	alreadyRegisteredSoFar: ReadonlyArray<string>,
+): ReadonlyArray<string> => [
+	...appliedSoFarLines(appliedSoFar),
+	...registeredReportLines(registeredSoFar),
+	...alreadyAppliedReportLines(alreadyAppliedSoFar),
+	...alreadyRegisteredReportLines(alreadyRegisteredSoFar),
+];
+
 const failureResult = (
 	appliedSoFar: ReadonlyArray<string>,
 	alreadyAppliedSoFar: ReadonlyArray<string>,
@@ -171,14 +233,52 @@ const failureResult = (
 	const hejbroErr = asHejbroError(error);
 	return {
 		exitCode: 1,
-		stdout: [
-			...appliedSoFarLines(appliedSoFar),
-			...registeredReportLines(registeredSoFar),
-			...alreadyAppliedReportLines(alreadyAppliedSoFar),
-			...alreadyRegisteredReportLines(alreadyRegisteredSoFar),
-		],
+		stdout: bucketLines(
+			appliedSoFar,
+			registeredSoFar,
+			alreadyAppliedSoFar,
+			alreadyRegisteredSoFar,
+		),
 		stderr: renderDiagnostics(
 			[fromHejbroError(hejbroErr, failedFileName)],
+			null,
+		),
+	};
+};
+
+/**
+ * [task 1.5, harden-ledger-diagnostics, D5] A ledger failure is never the
+ * migration's own failure (#823): exit two (a run that could not act,
+ * proven by the rollback -- nothing was applied that this diagnostic
+ * doesn't already account for in `appliedSoFar` and its siblings), and
+ * the header names the ledger (`LEDGER_IDENTITY`), never `next.fileName`.
+ */
+const ledgerFailureResult = async (
+	driver: Driver,
+	appliedSoFar: ReadonlyArray<string>,
+	alreadyAppliedSoFar: ReadonlyArray<string>,
+	registeredSoFar: ReadonlyArray<string>,
+	alreadyRegisteredSoFar: ReadonlyArray<string>,
+	direction: LedgerAccessDirection,
+	rawFailure: unknown,
+	rowFilename: string | undefined,
+): Promise<MigrateResult> => {
+	const classified = await classifyLedgerFailure(
+		driver,
+		direction,
+		rawFailure,
+		rowFilename,
+	);
+	return {
+		exitCode: 2,
+		stdout: bucketLines(
+			appliedSoFar,
+			registeredSoFar,
+			alreadyAppliedSoFar,
+			alreadyRegisteredSoFar,
+		),
+		stderr: renderDiagnostics(
+			[fromHejbroError(classified, LEDGER_IDENTITY)],
 			null,
 		),
 	};
@@ -220,12 +320,12 @@ export const applyFrom = async (
 	if (next === undefined) {
 		return {
 			exitCode: 0,
-			stdout: [
-				...appliedSoFarLines(appliedSoFar),
-				...registeredReportLines(registeredSoFar),
-				...alreadyAppliedReportLines(alreadyAppliedSoFar),
-				...alreadyRegisteredReportLines(alreadyRegisteredSoFar),
-			],
+			stdout: bucketLines(
+				appliedSoFar,
+				registeredSoFar,
+				alreadyAppliedSoFar,
+				alreadyRegisteredSoFar,
+			),
 			stderr: null,
 		};
 	}
@@ -270,6 +370,19 @@ export const applyFrom = async (
 			alreadyRegisteredSoFar,
 		);
 	} catch (error) {
+		const tag = asLedgerAccessFailure(error);
+		if (tag !== null) {
+			return ledgerFailureResult(
+				driver,
+				appliedSoFar,
+				alreadyAppliedSoFar,
+				registeredSoFar,
+				alreadyRegisteredSoFar,
+				tag.direction,
+				error,
+				next.fileName,
+			);
+		}
 		return failureResult(
 			appliedSoFar,
 			alreadyAppliedSoFar,
@@ -355,25 +468,66 @@ export const runMigrate = async (
 			{ commandName: MIGRATE_COMMAND, codes: APPLY_CONNECTION_CODES },
 			async (driver) => {
 				assertInteractiveTransactions(driver, MIGRATE_COMMAND);
-				const identity = await probeLedgerIdentity(driver);
+				const identity = await probeLedgerIdentity(driver, MIGRATE_COMMAND);
 				assertLedgerNotOccupied(identity, MIGRATE_COMMAND);
-				await bootstrapLedger(driver);
-				const ledgerState = await readLedger(driver);
-				const plan = planApply(chain, ledgerState, baselineFileNames);
-				if (!plan.ok) {
-					return planFailureResult(plan);
+				// [task 1.5, harden-ledger-diagnostics] Neither statement here
+				// opens a transaction, so a tagged failure from either one is
+				// classified right where it's caught -- the same driver, no
+				// rollback to wait for (unlike applyMigration's own ledger
+				// writes, task 1.4).
+				//
+				// [task 2.1, harden-ledger-diagnostics review repair] Read
+				// before bootstrapping, mirroring apply/raise.ts's own order:
+				// `create ... if not exists` checks the ACL before it checks
+				// existence, so bootstrapping first against an already-
+				// existing ledger can report "the bootstrap was refused" for
+				// a database that was never missing anything -- and which
+				// code comes back then depends on which grant happens to be
+				// absent, not on the fact that actually matters (the ledger
+				// exists and cannot be read). `readLedger` already reports an
+				// absent table as a state (`{ exists: false }`, D9), so
+				// bootstrapping only in that branch loses nothing planApply
+				// needs.
+				try {
+					const ledgerState = await readLedger(driver);
+					if (!ledgerState.exists) {
+						await bootstrapLedger(driver);
+					}
+					const plan = planApply(chain, ledgerState, baselineFileNames);
+					if (!plan.ok) {
+						return planFailureResult(plan);
+					}
+					if (plan.pending.length === 0) {
+						return {
+							exitCode: 0,
+							stdout: [NOTHING_TO_APPLY_LINE],
+							stderr: null,
+						};
+					}
+					const migrations: ReadonlyArray<Migration> = plan.pending.map(
+						(fileName) => ({
+							fileName,
+							sql: readFileSync(join(migrationsDirPath, fileName), "utf8"),
+							origin: originFor(fileName, plan.baselineFileNames),
+						}),
+					);
+					return await applyFrom(driver, migrations, []);
+				} catch (error) {
+					const tag = asLedgerAccessFailure(error);
+					if (tag === null) {
+						throw error;
+					}
+					return ledgerFailureResult(
+						driver,
+						[],
+						[],
+						[],
+						[],
+						tag.direction,
+						error,
+						undefined,
+					);
 				}
-				if (plan.pending.length === 0) {
-					return { exitCode: 0, stdout: [NOTHING_TO_APPLY_LINE], stderr: null };
-				}
-				const migrations: ReadonlyArray<Migration> = plan.pending.map(
-					(fileName) => ({
-						fileName,
-						sql: readFileSync(join(migrationsDirPath, fileName), "utf8"),
-						origin: originFor(fileName, plan.baselineFileNames),
-					}),
-				);
-				return await applyFrom(driver, migrations, []);
 			},
 			importer,
 		);

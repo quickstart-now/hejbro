@@ -190,6 +190,44 @@ const resolvePool = (poolOrConnectionString: Pool | string): Pool => {
 };
 
 /**
+ * [task 2.6, 836/R4/R5, closes #864] Node treats an unhandled `'error'`
+ * event as fatal -- without this listener, an idle pool client's own
+ * failure (a terminated backend, a dropped connection) kills the whole
+ * process before any `catch` in this driver or in the CLI above it ever
+ * runs, regardless of whether a caller's own statement was in flight at
+ * the time. A no-op is deliberate, not a missing feature: the statement
+ * that was actually running still rejects through its own promise (`pg`'s
+ * own client-level error path, unaffected by this listener), which is
+ * what lets the ledger classifier above render it; this listener's only
+ * job is keeping the process alive long enough for that rejection to be
+ * observed. Called from {@link buildDriver}, not from {@link resolvePool}
+ * (string-only) -- a caller-supplied `Pool` (the instance overload) can
+ * be just as unlistened as a fresh one, so both overloads need it.
+ */
+const silenceUnhandledPoolError = (pool: Pool): void => {
+	pool.on("error", () => {});
+};
+
+/**
+ * [task 2.6, 836/R4/R5, closes #864] The Pool-level listener above only
+ * covers a client that is *idle* (node-postgres's own documented scope
+ * for `Pool`'s own `'error'` event) -- measured against a real server: a
+ * checked-out client whose backend is terminated mid-query emits
+ * `'error'` on the `PoolClient` itself ("Connection terminated
+ * unexpectedly"), a second, separate unhandled-event crash the pool
+ * listener does nothing for. A no-op here too, for the same reason: the
+ * statement actually in flight still rejects through its own promise
+ * (verified: silencing this event does not swallow that rejection),
+ * this listener's only job is keeping the process alive long enough for
+ * it to be observed. Called once per checkout, from both `execute` and
+ * `transaction` -- the client object is different every time `pool.connect()`
+ * resolves, so there is no one place to attach it once.
+ */
+const silenceUnhandledClientError = (client: PoolClient): void => {
+	client.on("error", () => {});
+};
+
+/**
  * One driver shape shared by both {@link pgDriver} overloads -- built once
  * `pool` is settled, so the instance and connection-string forms can
  * never diverge in what they hand back. `ensurePinned` closes over
@@ -201,12 +239,14 @@ const resolvePool = (poolOrConnectionString: Pool | string): Pool => {
  * the textual forward reference.
  */
 const buildDriver = (pool: Pool): Driver & { readonly client: Pool } => {
+	silenceUnhandledPoolError(pool);
 	const ensurePinned = checkoutGuard(() => driver.setupSession);
 	const driver: Driver & { readonly client: Pool } = {
 		client: pool,
 		capabilities: CAPABILITIES,
 		execute: async (compiled) => {
 			const client = await pool.connect();
+			silenceUnhandledClientError(client);
 			try {
 				await ensurePinned(client);
 				return await makeSession(client).execute(compiled);
@@ -216,6 +256,7 @@ const buildDriver = (pool: Pool): Driver & { readonly client: Pool } => {
 		},
 		transaction: async (callback) => {
 			const client = await pool.connect();
+			silenceUnhandledClientError(client);
 			try {
 				await ensurePinned(client);
 				await client.query("BEGIN");

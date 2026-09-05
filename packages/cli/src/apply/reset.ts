@@ -20,7 +20,8 @@ import {
 	driverErrorDetail,
 	driverErrorReason,
 } from "./execute";
-import { clearLedgerRows } from "./ledger";
+import { asLedgerAccessFailure, clearLedgerRows } from "./ledger";
+import { throwLedgerWriteFailure } from "./ledger-diagnostics";
 import {
 	assertLedgerNotOccupied,
 	probeLedgerIdentity,
@@ -519,7 +520,7 @@ export const applyReset = async (
 	// for a `<database>:<count>` token on a run that is refused anyway is
 	// wasted and misleading, and this catalog read opens no transaction, so
 	// nothing the confirmation protects is touched by running it first.
-	const identity = await probeLedgerIdentity(driver);
+	const identity = await probeLedgerIdentity(driver, "hejbro reset");
 	assertLedgerNotOccupied(identity, "hejbro reset");
 	const databaseName = await currentDatabaseName(driver);
 	assertResetConfirmed(databaseName, changes, confirmed);
@@ -557,9 +558,29 @@ export const applyReset = async (
 			return { ledgerCleared: ledgerExists };
 		});
 	} catch (error) {
+		const phaseCause = resetPhaseCauseOf(error);
+		const phase = resetPhaseOf(error);
+		// [task 1.7, harden-ledger-diagnostics, design.md D6] A refused
+		// ledger clear is a ledger failure, not a refused drop -- but only
+		// when `clearLedgerRows`'s own statement (task 1.1) actually tagged
+		// it; the phase label alone is not proof (a caller reasoning "phase
+		// is ledger, so it's a ledger code" would misclassify anything else
+		// ever routed through the ledger phase without going through
+		// `ledger.ts`'s own `exec`). `driver.transaction` has already rolled
+		// back by the time this catch runs, so the classifier's own role
+		// read can still succeed (D2, measured `25P02` otherwise).
+		const ledgerTag = asLedgerAccessFailure(phaseCause);
+		if (phase === "ledger" && ledgerTag !== null) {
+			await throwLedgerWriteFailure(
+				driver,
+				phaseCause,
+				"hejbro reset",
+				undefined,
+			);
+		}
 		return throwResetDropFailed(
-			resetPhaseCauseOf(error),
-			resetPhaseOf(error),
+			phaseCause,
+			phase,
 			dropsContainCycle(changes, registry),
 		);
 	}

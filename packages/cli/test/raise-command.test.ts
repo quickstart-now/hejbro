@@ -108,4 +108,73 @@ describe("runRaise / 7.7", () => {
 		expect(result.stderr).toContain("error[raise-file-missing]");
 		expect(result.stderr).toContain("hejbro raise");
 	});
+
+	// [task 2.4, harden-ledger-diagnostics review repair] The header names
+	// the ledger, not `hejbro raise` -- the same identity every command's
+	// own ledger diagnostic now shares.
+	it("a ledger read refusal's header names the ledger, not the command", async () => {
+		await writeFixtureFile(
+			cwd,
+			"vendor/schema.sql",
+			'create schema "app";\ncreate table "app"."t" (id integer);',
+		);
+		const readRefusedImporter = async () => ({
+			pgDriver: () => ({
+				capabilities,
+				execute: async (compiled: FakeCompiled) => {
+					const sql = compiled.sql.trim().toLowerCase();
+					if (sql.startsWith('select "filename"')) {
+						throw Object.assign(
+							new Error("permission denied for table migration_ledger"),
+							{ code: "42501" },
+						);
+					}
+					if (sql.startsWith("select current_user")) {
+						return [{ currentUser: "ld_role" }];
+					}
+					return [];
+				},
+				transaction: async <T>(
+					callback: (session: {
+						execute: (
+							compiled: FakeCompiled,
+						) => Promise<ReadonlyArray<FakeRow>>;
+					}) => Promise<T>,
+				): Promise<T> =>
+					callback({ execute: async () => [] as ReadonlyArray<FakeRow> }),
+				setupSession: async () => {},
+				client: { end: async () => {} },
+			}),
+		});
+
+		const result = await runRaise(
+			cwd,
+			["--url", "postgres://fake", "--file", "vendor/schema.sql"],
+			readRefusedImporter,
+		);
+
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain(
+			'error[apply-ledger-unreadable]: "hejbro"."migration_ledger"',
+		);
+	});
+
+	// Regression: a non-ledger precondition (raise-file-missing above,
+	// raise-not-empty here) keeps naming the command, unaffected by 2.4.
+	it("regression: raise-not-empty's header still names the command", async () => {
+		await writeFixtureFile(
+			cwd,
+			"vendor/schema.sql",
+			'create schema "app";\ncreate table "app"."t" (id integer);',
+		);
+
+		const result = await runRaise(
+			cwd,
+			["--url", "postgres://fake", "--file", "vendor/schema.sql"],
+			makeImporter({ seededLedgerRows: ["0001_init.sql"] }),
+		);
+
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain("error[raise-not-empty]: hejbro raise");
+	});
 });

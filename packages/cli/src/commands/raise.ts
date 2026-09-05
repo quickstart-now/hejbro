@@ -6,6 +6,10 @@ import {
 	APPLY_CONNECTION_CODES,
 	assertInteractiveTransactions,
 } from "../apply/capability";
+import {
+	isLedgerDiagnosticCode,
+	LEDGER_DIAGNOSTIC_IDENTITY,
+} from "../apply/ledger-diagnostics";
 import type { SnapshotFile } from "../apply/raise";
 import { applyRaise } from "../apply/raise";
 import type { CheckDriverImporter } from "../check/driver";
@@ -72,13 +76,21 @@ const assertFileFlagGiven = (fileFlag: string | undefined): string => {
 	);
 };
 
+/** [task 2.4, harden-ledger-diagnostics review repair] The two ledger codes name the ledger; every other precondition (`raise-file-missing`, `apply-ledger-occupied`, `raise-not-empty`, a connection failure, ...) keeps naming `hejbro raise`, unchanged. */
+const diagnosticIdentity = (code: string): string => {
+	if (isLedgerDiagnosticCode(code)) {
+		return LEDGER_DIAGNOSTIC_IDENTITY;
+	}
+	return RAISE_COMMAND;
+};
+
 const preconditionResult = (error: unknown): RaiseResult => {
 	const hejbroErr = asHejbroError(error);
 	return {
 		exitCode: 1,
 		stdout: [],
 		stderr: renderDiagnostics(
-			[fromHejbroError(hejbroErr, RAISE_COMMAND)],
+			[fromHejbroError(hejbroErr, diagnosticIdentity(hejbroErr.code))],
 			null,
 		),
 	};

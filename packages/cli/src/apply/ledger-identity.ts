@@ -1,6 +1,7 @@
 import { throwHejbroError } from "@hejbro/core";
 import type { CompileResult, Driver, DriverRow } from "@hejbro/query";
 import { LEDGER_SCHEMA, LEDGER_TABLE } from "./ledger";
+import { throwLedgerReadFailure } from "./ledger-diagnostics";
 
 /**
  * [design.md, 783/R2] What sits at hejbro's own ledger name -- read once,
@@ -146,19 +147,47 @@ const isLedgerShape = (
 	);
 
 /**
+ * [task 1.8, harden-ledger-diagnostics, design.md D8] Sends {@link PROBE_SQL}
+ * and, on failure, classifies it as `apply-ledger-unreadable` with the
+ * probe's own opening clause -- never tagged (this statement never runs
+ * through `ledger.ts`'s `exec`), so `throwLedgerReadFailure` reads the
+ * raw driver error straight off its own fallback (`tag?.cause ?? failure`).
+ */
+const probeRows = async (
+	driver: Driver,
+	commandName: string,
+): Promise<ReadonlyArray<DriverRow>> => {
+	try {
+		return await driver.execute({
+			sql: PROBE_SQL,
+			params: [],
+			kind: "sql",
+		} satisfies CompileResult);
+	} catch (error) {
+		await throwLedgerReadFailure(driver, error, commandName, "probe");
+		throw error;
+	}
+};
+
+/**
  * [design.md, 783/R2] `migrate`, `status`, `reset` and `raise` each call
  * this once, before any other read or write of the ledger -- the one
  * judgement they share, so the same relation is never called the ledger
  * by one command and something else by another.
+ *
+ * [task 1.8, harden-ledger-diagnostics, design.md D8] This statement
+ * never runs through `ledger.ts`'s own `exec` (it reads the catalog, not
+ * the ledger table), so a failure here is never tagged -- caught and
+ * classified directly, the same `apply-ledger-unreadable` code the
+ * ledger's own read failures take, but with the probe's own opening
+ * clause ("the catalog read that judges ... was refused") naming what
+ * was actually refused: the judgement, not the ledger.
  */
 export const probeLedgerIdentity = async (
 	driver: Driver,
+	commandName: string,
 ): Promise<LedgerIdentity> => {
-	const rows = await driver.execute({
-		sql: PROBE_SQL,
-		params: [],
-		kind: "sql",
-	} satisfies CompileResult);
+	const rows = await probeRows(driver, commandName);
 	if (rows.length === 0) {
 		return { kind: "absent" };
 	}

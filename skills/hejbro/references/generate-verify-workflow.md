@@ -217,6 +217,24 @@ confirmation. None of the four commands reads, writes or clears that
 object: it's left exactly as it was, and the error says to move or drop
 it yourself, or point `--url` at the database hejbro actually manages.
 
+Once that check passes, the ledger's own reads and writes can still be
+refused by the server: `status`'s and `migrate`'s own read of it,
+`raise`'s bootstrap and the row it records, `reset`'s clearing of its
+rows. A role that may connect but lacks `select` on
+`"hejbro"."migration_ledger"` (or `usage` on the `"hejbro"` schema)
+surfaces as the coded `apply-ledger-unreadable` error, naming the
+connecting role and the server's own reason. A refused write — the
+bootstrap, the row being recorded, or the rows being cleared — surfaces
+as `apply-ledger-unwritable`, naming which of those was refused and
+stating that the run rolled back with it; a migration whose own DDL the
+database accepted but whose ledger row it refused is never reported as
+that migration's own failure, because the two share one transaction and
+neither half is left applied. Neither error asks hejbro to fix
+anything on its own behalf — it never grants a privilege and never
+alters the ledger's shape — so the `Next:` line always points back at
+the database itself: grant the role what the refused statement needed,
+or connect as the role that applied.
+
 A drop the database refuses — most commonly an object outside your
 declarations still depending on one being dropped, or the declared-cycle
 case above — surfaces as the coded `reset-drop-failed` error carrying the

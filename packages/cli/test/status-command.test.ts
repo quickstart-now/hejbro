@@ -347,5 +347,126 @@ describe("runStatus / 7.6, database unchanged", () => {
 				sql.trim().toLowerCase().startsWith('select "filename"'),
 			),
 		).toBe(false);
+		// [task 2.4, harden-ledger-diagnostics review repair] Regression:
+		// apply-ledger-occupied is not one of the two codes this task
+		// unifies -- its header still names the command, unchanged.
+		expect(result.stderr).toContain(
+			"error[apply-ledger-occupied]: hejbro status",
+		);
+	});
+});
+
+/** A fake importer whose driver answers the identity probe with `LEDGER_PROBE_ROWS`, `select current_user` with a fixed role, and fails `readLedger`'s own read with `failError` -- everything else answers `[]`. */
+const makeFailingReadImporter = (
+	failError: unknown,
+): {
+	readonly importer: () => Promise<{
+		readonly pgDriver: () => {
+			readonly capabilities: {
+				readonly "interactive-transactions": boolean;
+				readonly "session-state": boolean;
+			};
+			readonly execute: (compiled: {
+				readonly sql: string;
+			}) => Promise<ReadonlyArray<Record<string, unknown>>>;
+			readonly transaction: () => Promise<never>;
+			readonly setupSession: () => Promise<void>;
+			readonly client: { readonly end: () => Promise<void> };
+		};
+	}>;
+	readonly calls: string[];
+} => {
+	const calls: string[] = [];
+	const importer = async () => ({
+		pgDriver: () => ({
+			capabilities: {
+				"interactive-transactions": false,
+				"session-state": false,
+			},
+			execute: async (compiled: { readonly sql: string }) => {
+				calls.push(compiled.sql);
+				const sql = compiled.sql.trim().toLowerCase();
+				if (sql.startsWith("select c.relkind")) {
+					return LEDGER_PROBE_ROWS;
+				}
+				if (sql.startsWith('select "filename"')) {
+					throw failError;
+				}
+				if (sql.startsWith("select current_user")) {
+					return [{ currentUser: "ld_noselect" }];
+				}
+				return [];
+			},
+			transaction: async () => {
+				throw new Error("status must never open a transaction");
+			},
+			setupSession: async () => {},
+			client: { end: async () => {} },
+		}),
+	});
+	return { importer, calls };
+};
+
+describe("runStatus — a ledger the role may not read is a coded diagnostic, never a raw failure / 1.6 (harden-ledger-diagnostics)", () => {
+	beforeAll(assertBuiltCli);
+
+	let cwd: string;
+
+	beforeEach(async () => {
+		cwd = await createCliFixtureDir();
+		await writeFixtureFile(cwd, "hejbro.config.ts", CONFIG_SOURCE);
+		await writeFixtureFile(
+			cwd,
+			"migrations/0001_a.sql",
+			[
+				"-- hejbro migration",
+				"-- parent-snapshot: sha256:aaaa",
+				"-- snapshot: sha256:bbbb",
+				'create table "app"."a" (id integer);',
+			].join("\n"),
+		);
+	});
+
+	afterEach(async () => {
+		await removeCliFixtureDir(cwd);
+	});
+
+	it("42501 on the ledger's own read -> exit 1, apply-ledger-unreadable, Next:, no stack frame", async () => {
+		const { importer } = makeFailingReadImporter(
+			Object.assign(new Error("permission denied for table migration_ledger"), {
+				code: "42501",
+			}),
+		);
+
+		const result = await runStatus(cwd, ["--url", "postgres://fake"], importer);
+
+		expect(result.exitCode).toBe(1);
+		expect(result.stdout).toEqual([]);
+		expect(result.stderr).toContain("error[apply-ledger-unreadable]");
+		expect(result.stderr).toContain("42501");
+		expect(result.stderr).toContain("Next:");
+		// A raw failure prints a stack trace line ("at " followed by a file
+		// path/function) -- this diagnostic's own body never does.
+		expect(result.stderr).not.toMatch(/\bat .*\.(ts|js):\d+/);
+		// [task 2.4, harden-ledger-diagnostics review repair] The header
+		// names the ledger, not `hejbro status` -- the same identity
+		// `migrate` already used for this code, so one code never prints two
+		// different headers depending on which command raised it.
+		expect(result.stderr).toContain(
+			'error[apply-ledger-unreadable]: "hejbro"."migration_ledger"',
+		);
+	});
+
+	it("regression: a successful read still reports today's output byte-for-byte", async () => {
+		const { importer } = makeFakeStatusImporter(LEDGER_PROBE_ROWS);
+
+		const result = await runStatus(cwd, ["--url", "postgres://fake"], importer);
+
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toEqual([
+			"status: the ledger table exists and records no migrations yet.",
+			"status: 1 migration(s) pending:",
+			" - 0001_a.sql",
+		]);
 	});
 });

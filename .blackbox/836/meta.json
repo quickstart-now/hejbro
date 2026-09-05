@@ -4,16 +4,134 @@
   "ref": "quickstart-now/hejbro#836",
   "title": "status: a permission error on a real ledger reaches the user as a raw node-postgres object",
   "parent": "quickstart-now/hejbro#815",
-  "status": "open",
+  "status": "closed",
   "opened": "2026-09-04",
-  "closed": null,
-  "decisions": [],
-  "work": [],
+  "closed": "2026-09-05",
+  "decisions": [
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "412/D12",
+        "412/D13",
+        "412/R27"
+      ],
+      "at": "2026-09-04T21:02Z",
+      "title": "ld proposal approved; D1-D9 settled (codes unreadable/unwritable, current_user, one 23502 branch, tags in ledger.ts, migrate exit 2, reset delete to ledger code, measured path table, probe under read code, 42P01 tolerance kept)",
+      "ratified": null
+    },
+    {
+      "id": "R2",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R1",
+        "412/D13"
+      ],
+      "at": "2026-09-04T21:13Z",
+      "title": "scope: migrate's raw bootstrap failure is covered by the write code; 1.9 integration witness stays",
+      "ratified": null
+    },
+    {
+      "id": "R3",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R1",
+        "R2",
+        "412/D13"
+      ],
+      "at": "2026-09-04T22:46Z",
+      "title": "ld (b) accepted at fb0003fa; reset clear failures move to the ledger code by rule (#753 intent stands); flake → #862; reviewer summoned",
+      "ratified": null
+    },
+    {
+      "id": "R4",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "R1",
+        "R3",
+        "412/D13"
+      ],
+      "at": "2026-09-04T23:13Z",
+      "title": "ld review round 1: B1 read-before-bootstrap, B2 no 42P01 tolerance inside a transaction, B3 pg pool error listener (scope extension), B4 column-specific hint; group 2, narrow re-review",
+      "ratified": null
+    },
+    {
+      "id": "R5",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R4",
+        "412/D13"
+      ],
+      "at": "2026-09-04T23:16Z",
+      "title": "B3: option A stands; defect size recorded as #864 (closes with this PR); NB3 → #865; 2.5 wording accepted",
+      "ratified": null
+    },
+    {
+      "id": "R6",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R4",
+        "R1"
+      ],
+      "at": "2026-09-04T23:17Z",
+      "title": "B2 clarification: the statement decides — a ledger that vanished at the in-transaction recheck is apply-ledger-unreadable, at the insert apply-ledger-unwritable; exit 2 and rollback either way",
+      "ratified": null
+    },
+    {
+      "id": "R7",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R4",
+        "R5",
+        "R6",
+        "412/D13"
+      ],
+      "at": "2026-09-05T01:09Z",
+      "title": "ld (c) accepted at fde2aea0: re-review 6/6; role-name omission on dead connections stays; #870 filed; corpus to #714; PR by the lead",
+      "ratified": null
+    }
+  ],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-04T22:29Z",
+      "title": "group 1: ledger reads, and the bootstrap write, are coded rather than raw",
+      "pr": null,
+      "decisions": [
+        "R1",
+        "R2"
+      ]
+    },
+    {
+      "id": "W2",
+      "at": "2026-09-05T00:41Z",
+      "title": "group 2: review repairs — the reads, the probe, and the driver that killed the process",
+      "pr": null,
+      "decisions": [
+        "R3",
+        "R4",
+        "R5",
+        "R6"
+      ]
+    }
+  ],
   "prs": [
     {
       "number": 838,
       "role": "refs",
       "pinnedAt": "2026-09-04T15:45Z"
+    },
+    {
+      "number": 871,
+      "role": "closes",
+      "pinnedAt": "2026-09-05T01:18Z"
     }
   ],
   "origin": null,

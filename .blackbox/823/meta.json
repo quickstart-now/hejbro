@@ -4,16 +4,55 @@
   "ref": "quickstart-now/hejbro#823",
   "title": "migrate: a failed ledger insert is reported as the migration's failure",
   "parent": "quickstart-now/hejbro#815",
-  "status": "open",
+  "status": "closed",
   "opened": "2026-09-04",
-  "closed": null,
-  "decisions": [],
-  "work": [],
+  "closed": "2026-09-05",
+  "decisions": [
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "412/D12",
+        "412/D13",
+        "412/R27"
+      ],
+      "at": "2026-09-04T21:02Z",
+      "title": "attribution of a failed ledger write: site named, rolled back stated, 23502 branch, tag before apply-failed, exit 2 (see 836/R1)",
+      "ratified": null
+    }
+  ],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-04T22:29Z",
+      "title": "group 1: a ledger write failure is the ledger's, never the migration's",
+      "pr": null,
+      "decisions": [
+        "R1"
+      ]
+    },
+    {
+      "id": "W2",
+      "at": "2026-09-05T00:42Z",
+      "title": "group 2: attribution holds when the ledger vanishes mid-transaction",
+      "pr": null,
+      "decisions": [
+        "R4",
+        "R6"
+      ]
+    }
+  ],
   "prs": [
     {
       "number": 835,
       "role": "refs",
       "pinnedAt": "2026-09-04T15:04Z"
+    },
+    {
+      "number": 871,
+      "role": "closes",
+      "pinnedAt": "2026-09-05T01:18Z"
     }
   ],
   "origin": null,

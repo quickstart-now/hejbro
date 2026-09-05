@@ -10,6 +10,7 @@ import {
 	applyMigration,
 	stripQuotedAndCommentedText,
 } from "../src/apply/execute";
+import { asLedgerAccessFailure } from "../src/apply/ledger";
 
 type FailWhen = (compiled: CompileResult) => boolean;
 type RowsWhen = (
@@ -202,6 +203,176 @@ describe("applyMigration / 3.3", () => {
 			expect(message).toMatch(/regenerate/i);
 			expect(message).toMatch(/Next:/);
 		}
+	});
+});
+
+describe("which half of the transaction failed decides which artifact is named / 1.4 (harden-ledger-diagnostics)", () => {
+	it.each<[string, unknown]>([
+		[
+			"42601, migration's own syntax error",
+			Object.assign(new Error("syntax error"), { code: "42601" }),
+		],
+		[
+			"42P07, migration's own already-exists",
+			Object.assign(new Error('relation "t2_a" already exists'), {
+				code: "42P07",
+			}),
+		],
+	])(
+		"%s -> apply-failed naming the migration file (regression)",
+		async (_label, error) => {
+			const migration: Migration = {
+				fileName: "0007_bad.sql",
+				sql: "ddl",
+				origin: "applied",
+			};
+			const { driver } = makeFakeDriver({
+				failWhen: (call) => call.sql === migration.sql,
+				failError: error,
+			});
+
+			await expect(
+				applyMigration(driver, migration, NEXT_COMMAND),
+			).rejects.toMatchObject({ code: "apply-failed" });
+		},
+	);
+
+	it("55P04, migration's own unsafe enum use -> apply-unsafe-new-enum-value naming the migration file (regression)", async () => {
+		const migration: Migration = {
+			fileName: "0007_enum.sql",
+			sql: "ddl",
+			origin: "applied",
+		};
+		const { driver } = makeFakeDriver({
+			failWhen: (call) => call.sql === migration.sql,
+			failError: Object.assign(
+				new Error('unsafe use of new value "great" of enum type mood'),
+				{ code: "55P04" },
+			),
+		});
+
+		await expect(
+			applyMigration(driver, migration, NEXT_COMMAND),
+		).rejects.toMatchObject({ code: "apply-unsafe-new-enum-value" });
+	});
+
+	it.each<[string, unknown]>([
+		[
+			"23502, id has no identity or default",
+			Object.assign(
+				new Error(
+					'null value in column "id" of relation "migration_ledger" violates not-null constraint',
+				),
+				{ code: "23502", column: "id" },
+			),
+		],
+		[
+			"42501, insert withheld",
+			Object.assign(new Error("permission denied for table migration_ledger"), {
+				code: "42501",
+			}),
+		],
+		[
+			"23505, filename already recorded",
+			Object.assign(
+				new Error(
+					'duplicate key value violates unique constraint "migration_ledger_filename_key"',
+				),
+				{ code: "23505" },
+			),
+		],
+	])(
+		"%s -> the tagged write failure escapes with its site and cause intact, never apply-failed",
+		async (_label, error) => {
+			const migration: Migration = {
+				fileName: "0008_ok.sql",
+				sql: 'create table "app"."t8" (id integer);',
+				origin: "applied",
+			};
+			const { driver } = makeFakeDriver({
+				failWhen: (call) => call.sql.toLowerCase().includes("insert into"),
+				failError: error,
+			});
+
+			await expect(
+				applyMigration(driver, migration, NEXT_COMMAND),
+			).rejects.toSatisfy((thrown: unknown) => {
+				const tag = asLedgerAccessFailure(thrown);
+				return (
+					tag !== null &&
+					tag.direction === "write" &&
+					tag.site === "row" &&
+					tag.cause === error
+				);
+			});
+		},
+	);
+
+	it("42501 on the in-transaction recheck -> the tagged read failure escapes the same way", async () => {
+		const migration: Migration = {
+			fileName: "0009_ok.sql",
+			sql: 'create table "app"."t9" (id integer);',
+			origin: "applied",
+		};
+		const error = Object.assign(
+			new Error("permission denied for table migration_ledger"),
+			{ code: "42501" },
+		);
+		const { driver } = makeFakeDriver({
+			failWhen: (call) =>
+				call.sql.toLowerCase().includes("select") &&
+				call.params.includes(migration.fileName),
+			failError: error,
+		});
+
+		await expect(
+			applyMigration(driver, migration, NEXT_COMMAND),
+		).rejects.toSatisfy((thrown: unknown) => {
+			const tag = asLedgerAccessFailure(thrown);
+			return (
+				tag !== null &&
+				tag.direction === "read" &&
+				tag.site === "recheck" &&
+				tag.cause === error
+			);
+		});
+	});
+
+	// [task 2.2, harden-ledger-diagnostics review repair, 836/R4 B2, 836/R6]
+	// A ledger dropped concurrently mid-transaction: isMigrationRecorded's
+	// own 42P01 no longer reads as "not recorded" -- a tagged read failure
+	// escapes the same way 42501 does above, never the migration's own
+	// (untagged) statement failing next inside an already-aborted
+	// transaction.
+	it("42P01 (the ledger vanished) on the in-transaction recheck -> the tagged read failure escapes, no migration SQL sent after it", async () => {
+		const migration: Migration = {
+			fileName: "0010_ok.sql",
+			sql: 'create table "app"."t10" (id integer);',
+			origin: "applied",
+		};
+		const error = Object.assign(
+			new Error('relation "hejbro.migration_ledger" does not exist'),
+			{ code: "42P01" },
+		);
+		const { driver, calls } = makeFakeDriver({
+			failWhen: (call) =>
+				call.sql.toLowerCase().includes("select") &&
+				call.params.includes(migration.fileName),
+			failError: error,
+		});
+
+		await expect(
+			applyMigration(driver, migration, NEXT_COMMAND),
+		).rejects.toSatisfy((thrown: unknown) => {
+			const tag = asLedgerAccessFailure(thrown);
+			return (
+				tag !== null &&
+				tag.direction === "read" &&
+				tag.site === "recheck" &&
+				tag.cause === error
+			);
+		});
+		expect(calls.some((call) => call.sql === migration.sql)).toBe(false);
 	});
 });
 

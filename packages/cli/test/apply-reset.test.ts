@@ -770,7 +770,7 @@ describe("applyReset — a ledger that was never bootstrapped still lets every d
 		).toBe(false);
 	});
 
-	it("a ledger-delete failure surfaces as reset-drop-failed, never swallowed into a silent COMMIT", async () => {
+	it("a ledger-delete failure surfaces coded, never swallowed into a silent COMMIT (task 1.7: apply-ledger-unwritable, not reset-drop-failed -- see the phase-naming describe below)", async () => {
 		const { driver } = makeFakeDriver("testdb", undefined, {
 			thrown: Object.assign(
 				new Error('relation "hejbro.migration_ledger" does not exist'),
@@ -793,7 +793,7 @@ describe("applyReset — a ledger that was never bootstrapped still lets every d
 		).catch((caught: unknown) => caught);
 
 		expect(error).toBeInstanceOf(HejbroError);
-		expect((error as HejbroError).code).toBe("reset-drop-failed");
+		expect((error as HejbroError).code).toBe("apply-ledger-unwritable");
 	});
 });
 
@@ -1029,7 +1029,7 @@ describe("applyReset — reset-drop-failed names the phase that actually failed 
 		});
 	};
 
-	it("① 55000 from the ledger clear -- ledger-phase wording, no dependency advice", async () => {
+	it("① 55000 from the ledger clear -- task 1.7: apply-ledger-unwritable naming the ledger, not reset-drop-failed (every ledger-clear failure is tagged by ledger.ts's own exec regardless of SQLSTATE, D6)", async () => {
 		const { driver } = makeFakeDriver("testdb", undefined, {
 			thrown: Object.assign(
 				new Error(
@@ -1048,11 +1048,9 @@ describe("applyReset — reset-drop-failed names the phase that actually failed 
 		).catch((caught: unknown) => caught);
 
 		expect(error).toBeInstanceOf(HejbroError);
-		expect((error as HejbroError).code).toBe("reset-drop-failed");
+		expect((error as HejbroError).code).toBe("apply-ledger-unwritable");
 		const message = (error as HejbroError).message;
-		expect(message).toContain(
-			"hejbro reset failed while clearing the ledger, after its drops had already run",
-		);
+		expect(message).toContain("the clearing of the ledger's rows");
 		expect(message).not.toContain("failed to drop your declared objects");
 		expect(message).not.toContain("resolve what the error above describes (");
 	});
@@ -1082,7 +1080,7 @@ describe("applyReset — reset-drop-failed names the phase that actually failed 
 		expect(message).not.toContain("resolve what the error above describes (");
 	});
 
-	it("③ 42P01 from the ledger clear (TOCTOU) -- ledger-phase wording, still reset-drop-failed, still rejects", async () => {
+	it("③ 42P01 from the ledger clear (TOCTOU) -- task 1.7: apply-ledger-unwritable, still rejects, still names no drop/dependency claim", async () => {
 		const { driver } = makeFakeDriver("testdb", undefined, {
 			thrown: Object.assign(
 				new Error('relation "hejbro.migration_ledger" does not exist'),
@@ -1099,13 +1097,46 @@ describe("applyReset — reset-drop-failed names the phase that actually failed 
 		).catch((caught: unknown) => caught);
 
 		expect(error).toBeInstanceOf(HejbroError);
-		expect((error as HejbroError).code).toBe("reset-drop-failed");
+		expect((error as HejbroError).code).toBe("apply-ledger-unwritable");
 		const message = (error as HejbroError).message;
-		expect(message).toContain(
-			"hejbro reset failed while clearing the ledger, after its drops had already run",
-		);
+		expect(message).toContain("the clearing of the ledger's rows");
 		expect(message).not.toContain("failed to drop your declared objects");
 		expect(message).not.toContain("resolve what the error above describes (");
+	});
+
+	it("task 1.7: 42501 from the ledger clear -- a refused clearing of the ledger is not a refused drop, drops accepted, neither cycle nor dependency advice appears", async () => {
+		const { driver, calls } = makeFakeDriver("testdb", undefined, {
+			thrown: Object.assign(
+				new Error("permission denied for table migration_ledger"),
+				{ code: "42501" },
+			),
+		});
+		await seedLedger(driver);
+
+		const error: unknown = await applyReset(
+			driver,
+			managedSnapshot,
+			registry,
+			"testdb:2",
+		).catch((caught: unknown) => caught);
+
+		expect(error).toBeInstanceOf(HejbroError);
+		expect((error as HejbroError).code).toBe("apply-ledger-unwritable");
+		const message = (error as HejbroError).message;
+		expect(message).toContain('"hejbro"."migration_ledger"');
+		expect(message).toContain("the clearing of the ledger's rows");
+		expect(message).not.toContain(
+			"an object outside your declarations may still depend on one you're dropping",
+		);
+		expect(message).not.toContain(
+			"a set of your declared tables that reference each other in a cycle",
+		);
+		// The drop itself ran (and, inside the one transaction, rolled back
+		// together with the refused ledger clear) -- this is a refused
+		// clearing, not a refused drop.
+		expect(
+			calls.some((call) => call.sql.toLowerCase().includes("drop table")),
+		).toBe(true);
 	});
 
 	it("④ 2BP01, no cycle in the plan -- today's drop-phase wording and outside-declarations advice (regression pin)", async () => {

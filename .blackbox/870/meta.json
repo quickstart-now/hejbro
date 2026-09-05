@@ -1,0 +1,21 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#870",
+  "title": "cli integration suite: 14 concurrent postgres containers contend and a failed run leaves orphans",
+  "parent": "quickstart-now/hejbro#815",
+  "status": "open",
+  "opened": "2026-09-05",
+  "closed": null,
+  "decisions": [],
+  "work": [],
+  "prs": [
+    {
+      "number": 871,
+      "role": "refs",
+      "pinnedAt": "2026-09-05T01:18Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}
