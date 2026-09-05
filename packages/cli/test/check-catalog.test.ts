@@ -313,6 +313,21 @@ describe("readCatalog / 1.2 an index carries the constraint it backs", () => {
 		expect(CHECK_CATALOG_QUERIES.indexes).toContain("conindid");
 	});
 
+	// M6, design.md: `conindid` is not only "the constraint this index
+	// implements" -- a foreign key's own row carries the same value,
+	// naming the *referenced* table's unique/primary-key index, so an
+	// unrestricted join would misreport that index as backing every
+	// foreign key that merely points at it (measured live, #726/#707:
+	// examples/postgres's own declared primary keys, each referenced by
+	// at least one foreign key, all misreported). Only `p`/`u`/`x` are
+	// constraints Postgres gives their own backing index; a foreign key
+	// never does.
+	it("pins the indexes query text to a pg_constraint join restricted to p/u/x, excluding foreign keys", () => {
+		expect(CHECK_CATALOG_QUERIES.indexes).toContain(
+			"con.contype in ('p','u','x')",
+		);
+	});
+
 	it("parses an index row naming the constraint it backs, and one backing none", async () => {
 		const rows: ReadonlyArray<DriverRow> = [
 			{
