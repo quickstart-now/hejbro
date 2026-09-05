@@ -12,15 +12,17 @@ conflict expected).
 **Files edited**: `packages/core/src/query/select.ts`, `packages/core/
 src/query/with.ts`, `packages/core/test/query/*set-op*-types.test.ts`
 and the recursive-term type test, `packages/core/test/query/
-select.test.ts` (1.2a — the one call site the new rule refuses); `packages/
-query/src/db/chain.ts`, `packages/query/test/types/*.test.ts` (1.2b);
-`skills/hejbro/references/query-layer.md`, one `.changeset/*.md` (1.3).
-A task that tightens a type also repairs the existing call sites the
-new rule refuses; the repo-wide `check-types` run is that list, and
-each such file is named here. If a task appears to need any other
-file, that goes back to the planner, not into the diff.
+select.test.ts` (1.2a — the one call site the new rule refuses);
+`packages/query/src/db/chain.ts`, the new `packages/query/src/db/
+chain-projection.ts`, `packages/query/src/index.ts`, `packages/query/
+test/types/*.test.ts` (1.2b, 1.2c); `skills/hejbro/references/
+query-layer.md`, one `.changeset/*.md` (1.3). A task that tightens a
+type also repairs the existing call sites the new rule refuses; the
+repo-wide `check-types` run is that list, and each such file is named
+here. If a task appears to need any other file, that goes back to the
+planner, not into the diff.
 
-**Ordering.** 1.1 → 1.2a → 1.2b → 1.3.
+**Ordering.** 1.1 → 1.2a → 1.2b → 1.2c → 1.3.
 
 ## 1. Family agreement
 
@@ -54,20 +56,31 @@ file, that goes back to the planner, not into the diff.
       table reddens exactly that family's same-family rows and nothing
       else. Files: `select.ts`, `with.ts`, core tests.
 
-- [ ] 1.2b (~10m) **[design]** The chain carries its projection
-      (503/R7). The chain's combinators are typed by the resolved row
-      (`SelectResult<…>`), which carries no family and cannot be
-      inverted, so the stage carries its projection as a phantom and the
-      combinators check projection against projection through the same
-      `SetOpResult` fold; the result type stays the resolved row, and no
-      runtime behavior changes. Settled with the lead before code: the
-      carrier's shape (phantom property or brand) and where the other
-      branch's projection is read from. Red: 1.2a's input table on the
-      chain surface. Files: `packages/query/src/db/chain.ts`,
-      `packages/query/test/types/*.test.ts`, and only if a new exported
-      symbol appears `packages/cli/src/core-surface.ts` (one line,
-      ENGINE, 500/R5) — that case runs the repo-wide `check-types` and
-      `packages/cli/test/exports.test.ts` in this task.
+- [ ] 1.2b (~10m) **[design]** The chain's projection carrier (503/R7,
+      503/R9). `SelectChainLimited` and `SelectChainSetOp` gain an
+      optional phantom `{ readonly [chainProjectionBrand]?: TProjection }`
+      — never assigned at runtime, the `leftJoinedBrand` precedent —
+      declared in `@hejbro/query` and exported from its barrel because
+      the emitted `.d.ts` names it. A combined stage carries the left
+      branch's projection, and the new type parameter defaults so
+      one-argument uses keep compiling. Red: the brand-existence row —
+      the property is extracted with `infer` and asserted directly,
+      never by comparing whole stage types (that passes vacuously,
+      `select-join-types.test.ts`'s own measured trap). Files:
+      `packages/query/src/db/chain.ts`, the new `packages/query/src/db/
+      chain-projection.ts`, `packages/query/src/index.ts`,
+      `packages/query/test/types/*.test.ts`.
+
+- [ ] 1.2c (~10m) The rule on the chain surface. Red: 1.2a's input
+      table on the chain — a refused pair, an accepted same-family
+      pair, `"unknown"` on one side, a union-typed family — plus a
+      branch carrying no brand (`related()`'s terminal) that stays
+      accepted. Green: the combinators' `other` parameter takes the
+      family check beside the existing row-based `CompatibleBranch`,
+      never in place of it. Mutation: removing the brand from
+      `SelectChainLimited` turns the chain's refusal row green and
+      nothing else. Files: `packages/query/src/db/chain.ts`,
+      `packages/query/test/types/*.test.ts`.
 
 - [ ] 1.3 (~5m) Reference and changeset. `query-layer.md`'s
       set-operation and recursive-CTE sections state the family rule,
