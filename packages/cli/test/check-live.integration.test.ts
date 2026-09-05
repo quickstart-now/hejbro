@@ -334,6 +334,72 @@ describe("hejbro check / live witness (group 6)", () => {
 		}
 	});
 
+	it("reports a database-only column, index, check constraint and unique constraint on a managed table (6.5, harden-check-inventory #707/#726)", async () => {
+		// Control first, same discipline as 6.3: the unaltered fixture must
+		// pass before the mutations below, so a later failure is provably
+		// caused by them, not a pre-existing fixture defect.
+		const before = await runCli(EXAMPLE_DIR, ["check", "--url", chainUrl()]);
+		expect(before.exitCode).toBe(0);
+
+		// app.members already carries a declared primary key
+		// (`members_pkey`) and a declared unique column (`email`,
+		// `members_email_key`) -- exactly the two indexes this inventory
+		// must stay silent about. `members_legacy_unique` is a
+		// database-only UNIQUE constraint on a different column
+		// (`display_name`), backed by Postgres's own same-named index
+		// (M4) -- unlike the declared two, this one is not excluded.
+		psqlCommand(
+			"chain",
+			"alter table app.members add column legacy_note text;",
+		);
+		psqlCommand(
+			"chain",
+			"create index members_legacy_idx on app.members (display_name);",
+		);
+		psqlCommand(
+			"chain",
+			"alter table app.members add constraint members_legacy_ck check (length(display_name) < 500);",
+		);
+		psqlCommand(
+			"chain",
+			"alter table app.members add constraint members_legacy_unique unique (display_name);",
+		);
+
+		try {
+			const after = await runCli(EXAMPLE_DIR, ["check", "--url", chainUrl()]);
+
+			expect(after.exitCode).toBe(0);
+			expect(after.stdout).toContain(
+				"unmanaged column (not covered by any declaration): app.members.legacy_note",
+			);
+			expect(after.stdout).toContain(
+				"unmanaged index (not covered by any declaration): app.members.members_legacy_idx",
+			);
+			expect(after.stdout).toContain(
+				"unmanaged check constraint (not covered by any declaration): app.members.members_legacy_ck",
+			);
+			expect(after.stdout).toContain(
+				"unmanaged index (backs constraint members_legacy_unique; not covered by any declaration): app.members.members_legacy_unique",
+			);
+			// The indexes backing the *declared* primary key and unique
+			// column stay silent -- Q4's exclusion rule, proved here against
+			// a real server rather than a fixture.
+			expect(after.stdout).not.toContain("app.members.members_pkey");
+			expect(after.stdout).not.toContain("app.members.members_email_key");
+		} finally {
+			psqlCommand(
+				"chain",
+				"alter table app.members drop constraint members_legacy_unique;",
+			);
+			psqlCommand(
+				"chain",
+				"alter table app.members drop constraint members_legacy_ck;",
+			);
+			psqlCommand("chain", "drop index app.members_legacy_idx;");
+			psqlCommand("chain", "alter table app.members drop column legacy_note;");
+		}
+	});
+
 	it("exits 2 against a real server when a check constraint cannot be compared", async () => {
 		// The process-only half of the 3-way contract (4.5): 0 and 1 are
 		// already covered above via the CLI itself (6.2's "no differences",
