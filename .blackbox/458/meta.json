@@ -80,6 +80,13 @@
       "title": "One unreproduced packages/cli test failure under full-suite load",
       "pr": null,
       "decisions": []
+    },
+    {
+      "id": "W4",
+      "at": "2026-09-05T10:46Z",
+      "title": "task 1.12: describe an errorevent-shaped throw, plus a pre-existing null-prototype crash",
+      "pr": null,
+      "decisions": []
     }
   ],
   "prs": [],

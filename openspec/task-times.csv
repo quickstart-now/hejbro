@@ -942,3 +942,4 @@ date,change-id,task-id,group,est_min,actual_min,waited_user_min,notes
 2026-09-05,add-config-driver,1.9,1,5,8,0,shape-based error describer; includes the rewind measurement and the code+message neighbour
 2026-09-05,add-config-driver,1.10,1,6,14,0,neon websocket exposes client; first entry into packages/neon
 2026-09-05,add-config-driver,1.11,1,5,20,0,neon http no-op close incl. the offline cli-smoke e2e; times reconstructed from commit timestamps
+2026-09-05,add-config-driver,1.12,1,6,44,0,real ErrorEvent has an empty message; grew two crash guards found after the first commit (String() on a null-prototype throw); times partly reconstructed

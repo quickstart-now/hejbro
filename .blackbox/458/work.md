@@ -34,3 +34,37 @@ pool/isolate/fileParallelism, so files run isolated per process and the
 new globalThis test seams cannot cross files; the seven seam keys are
 distinct and each is cleared in afterEach.
 
+<a id="w4"></a>
+## W4 — task 1.12: describe an errorevent-shaped throw, plus a pre-existing null-prototype crash
+
+_2026-09-05T10:46Z_
+
+Task 1.12 (review round 2) added `errorConstructorName` as the last
+rung before `describeDriverError`'s final fallback, so a real
+`ErrorEvent` (empty own `message`, no `code`) renders as `"ErrorEvent"`
+instead of `"[object ErrorEvent]"`. The hand-made row from 1.9
+(`{ message: "connection reset", type: "error" }`) never exercised the
+real bug: a genuine `ErrorEvent`'s own `message` is empty, so it never
+reached that row's branch at all -- kept both rows side by side, only
+the real-instance row reproduces the class.
+
+Mandatory reinforcement found by the same review: the fallback's own
+last resort, `String(error)`, throws `TypeError: Cannot convert object
+to primitive value` for a null-prototype object (`Object.create(null)`)
+-- pre-existing, not introduced by 1.12, reachable because a user's
+config-driver factory can throw anything. Confirmed red first (2 of 3
+new rows failed with exactly that TypeError; the third,
+`{ constructor: 1 }`, was already green since `errorConstructorName`'s
+existing `typeof name !== "string"` guard already handles a
+non-function `constructor` safely). Fixed by splitting the fallback:
+primitives keep `String(error)`, objects use
+`Object.prototype.toString.call(error)` (never throws, same
+`"[object Object]"` for a plain `{}`). Rewind-verified: reverting only
+the split reproduces exactly the same 2 failures, the other 11 rows
+unaffected.
+
+Two commits: d53c0a73 (constructor-name rung), 4cc5c391 (the
+reinforcement). task-times.csv carries both as one row (1.12, 44m
+actual vs 6m estimate) since the reinforcement was the same task
+continued after review, not a separate one.
+
