@@ -13,6 +13,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 const EXAMPLE_ROOT = join(import.meta.dirname, "..");
 const CLI_PACKAGE_ROOT = join(EXAMPLE_ROOT, "..", "..", "packages", "cli");
 const CLI_PATH = join(CLI_PACKAGE_ROOT, "dist", "cli.js");
+const NEON_PACKAGE_ROOT = join(EXAMPLE_ROOT, "..", "..", "packages", "neon");
 
 const assertBuiltCli = (): void => {
 	if (!existsSync(CLI_PATH)) {
@@ -70,6 +71,21 @@ const linkHejbro = async (cwd: string): Promise<void> => {
 	await symlink(CLI_PACKAGE_ROOT, join(cwd, "node_modules", "hejbro"), "dir");
 };
 
+/** #458 review round 1, task 1.11: `@hejbro/neon` linked the same way -- a
+ * real dependency of the real package (bundled as external, `type-
+ * overrides.ts`'s own runtime `import { types } from "@neondatabase/
+ * serverless"`) resolves from the symlink's own real location, walking
+ * up through `packages/neon/node_modules` the same way `hejbro`'s own
+ * workspace dependencies already do -- no second symlink needed. */
+const linkNeon = async (cwd: string): Promise<void> => {
+	await mkdir(join(cwd, "node_modules", "@hejbro"), { recursive: true });
+	await symlink(
+		NEON_PACKAGE_ROOT,
+		join(cwd, "node_modules", "@hejbro", "neon"),
+		"dir",
+	);
+};
+
 const SCHEMA_SOURCE = `import { schema, table, uuid } from "hejbro";
 
 export const app = schema("app");
@@ -106,6 +122,50 @@ export default defineConfig({
 			setupSession: async () => {},
 			client: { end: async () => {} },
 		};
+	},
+});
+`;
+
+/**
+ * #458 review round 1, task 1.11: the real `@hejbro/neon` HTTP driver
+ * (`neonDriver`'s function-argument overload), fed a fake `HttpQueryable`
+ * -- never the real `neon(connectionString)` client, so this stays fully
+ * offline and deterministic like 1.5's own fixture. Proves the real
+ * package's driver passes the CLI's closable gate and reaches the fake
+ * queryable, not a reimplementation of the driver shape. `callLogPath`
+ * records every call the fake queryable receives, `;`-joined.
+ */
+const neonHttpConfigSource = (
+	callLogPath: string,
+): string => `import { defineConfig } from "hejbro";
+import { neonDriver } from "@hejbro/neon";
+import { appendFileSync, writeFileSync } from "node:fs";
+
+const logPath = ${JSON.stringify(callLogPath)};
+
+export default defineConfig({
+	entry: ["src/**/*.schema.ts"],
+	migrationsDir: "migrations",
+	snapshotPath: "hejbro.snapshot.json",
+	prefixStrategy: "timestamp",
+	driver: (connectionString) => {
+		writeFileSync(logPath, "");
+		const fakeSql = Object.assign(
+			() => {
+				throw new Error("tagged-template form not used by this fixture");
+			},
+			{
+				query: () => {
+					appendFileSync(logPath, "query;");
+					return [];
+				},
+				transaction: async (members) => {
+					appendFileSync(logPath, "transaction;");
+					return members.map(() => []);
+				},
+			},
+		);
+		return neonDriver(fakeSql);
 	},
 });
 `;
@@ -172,5 +232,38 @@ describe("a configured driver factory serves hejbro check over the built CLI (#4
 		expect(check.stderr).toContain("driver");
 		expect(check.stderr).toContain("invalid-config");
 		expect(existsSync(callFilePath)).toBe(false);
+	});
+});
+
+// #458 review round 1, task 1.11: the real @hejbro/neon HTTP driver,
+// configured as `driver`, passes the CLI's closable gate -- fully
+// offline (a fake queryable, never a real neon(connectionString)
+// client), so this stays as deterministic as 1.5's own fixture.
+describe("the real @hejbro/neon HTTP driver passes the CLI's closable gate (#458 task 1.11)", () => {
+	it("hejbro check --url reaches the fake queryable, never check-driver-unclosable", async () => {
+		await linkNeon(cwd);
+		const callLogPath = join(cwd, "neon-http-calls.txt");
+		const init = await runCli(cwd, ["init"]);
+		expect(init.exitCode).toBe(0);
+		await writeFile(
+			join(cwd, "hejbro.config.ts"),
+			neonHttpConfigSource(callLogPath),
+		);
+		await mkdir(join(cwd, "src"), { recursive: true });
+		await writeFile(join(cwd, "src", "app.schema.ts"), SCHEMA_SOURCE);
+		const generate = await runCli(cwd, ["generate"]);
+		expect(generate.exitCode).toBe(0);
+
+		const check = await runCli(cwd, ["check", "--url", "postgres://x"]);
+
+		// Not exit-code 0: the fake queryable answers every statement with
+		// empty rows, so a later comparison can legitimately report a
+		// difference. The proof is the call log the fake queryable itself
+		// wrote, and the three diagnostics this run must never have hit.
+		expect(existsSync(callLogPath)).toBe(true);
+		expect(readFileSync(callLogPath, "utf8")).toContain("transaction;");
+		expect(check.stderr).not.toContain("check-driver-unclosable");
+		expect(check.stderr).not.toContain("check-driver-missing");
+		expect(check.stderr).not.toContain("check-connection-missing");
 	});
 });
