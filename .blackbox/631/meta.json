@@ -118,6 +118,17 @@
       "at": "2026-09-05T18:36Z",
       "title": "a run with nothing pending compares nothing; status is where a changed body is reported",
       "ratified": null
+    },
+    {
+      "id": "R11",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R9"
+      ],
+      "at": "2026-09-05T18:51Z",
+      "title": "status compares bodies on a run with no disagreement; a disagreement is reported alone, as today",
+      "ratified": null
     }
   ],
   "work": [],

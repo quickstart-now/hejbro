@@ -258,3 +258,20 @@ register for; the delta already names `status` as the command that
 reports a changed body without acting. The delta gains one scenario so
 the constructor-mode reviewer can answer the input from the spec.
 
+<a id="r11"></a>
+## R11 — status compares bodies on a run with no disagreement; a disagreement is reported alone, as today
+
+_lead · interpretation · basis R9 · 2026-09-05T18:51Z · ratified: pending_
+
+`runStatus` already short-circuits: a plan with a disagreement renders
+the disagreement and nothing else -- not the applied set, not the pending
+set -- and that shape predates this piece. The delta's `status` sentence
+lists four things in one breath, but "together" was never true of the
+first three, so reading it as a mandate to print bodies beside
+disagreements would change a contract this piece did not open. Ruling:
+option A -- on a run whose plan has no disagreement, `status` reads the
+chain files, calls the shared `changedBodies`, reports one finding per
+changed body after its existing sections, and exits 1; a run with a
+disagreement keeps today's behaviour. The delta gains one scenario so the
+reviewer can answer the mixed input from the spec.
+
