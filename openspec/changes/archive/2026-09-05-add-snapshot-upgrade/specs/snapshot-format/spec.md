@@ -82,8 +82,13 @@ shape is a refusal naming the field, never a guessed value.
 - **THEN** the result equals the current expected snapshot byte for byte
 
 #### Scenario: The current format is a fixed point
-- **WHEN** a current-format snapshot is re-encoded
-- **THEN** the result is byte-identical to the input
+- **WHEN** a current-format snapshot as the current writer renders it --
+  in canonical form -- is re-encoded
+- **THEN** the result is byte-identical to the input; a same-format
+  file an earlier writer rendered in a different canonical order (a
+  pre-release writer's `checks` order, measured) is re-encoded to the
+  current canonical form instead, and `hejbro upgrade` still treats a
+  format match as a no-op (tracked separately)
 
 #### Scenario: Formats outside the released range are refused
 - **WHEN** a format-4 snapshot, one carrying the pre-`formatVersion`
