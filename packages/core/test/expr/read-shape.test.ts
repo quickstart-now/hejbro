@@ -117,12 +117,15 @@ describe("BUILDER_READ_SHAPES closure (#452 task 1.1)", () => {
 		);
 	});
 
-	it("every derived constructor is reachable from the public barrel (src/index.ts)", () => {
-		const allReachable = [...derivedConstructorNames].every(
+	it("every derived constructor is reachable from the public barrel (src/index.ts), named on failure", () => {
+		const unreachable = [...derivedConstructorNames].filter(
 			(name) =>
-				typeof (coreBarrel as Record<string, unknown>)[name] === "function",
+				typeof (coreBarrel as Record<string, unknown>)[name] !== "function",
 		);
-		expect(allReachable).toBe(true);
+		// an empty array on failure would only say "something is wrong" --
+		// asserting the array itself names exactly which constructor(s)
+		// the barrel dropped or renamed, not just that the check failed.
+		expect(unreachable).toEqual([]);
 	});
 
 	it.each(constructorFunctionNames)(
@@ -131,6 +134,21 @@ describe("BUILDER_READ_SHAPES closure (#452 task 1.1)", () => {
 			expect(Object.hasOwn(BUILDER_READ_SHAPES, functionName)).toBe(true);
 		},
 	);
+
+	// The reverse of the it.each above: every ROW BUILDER_READ_SHAPES
+	// declares must be backed by a real, invocable constructor -- without
+	// this, a stale or orphan row (added, then its constructor renamed or
+	// removed) would sit in the table forever with nothing ever exercising
+	// it, an asymmetric gap the forward direction alone can't see.
+	it("every row in BUILDER_READ_SHAPES is backed by a constructor in the call table (no orphan rows)", () => {
+		const producedNames = new Set(
+			constructorFunctionNames.map(([, functionName]) => functionName),
+		);
+		const orphanRows = Object.keys(BUILDER_READ_SHAPES).filter(
+			(name) => !producedNames.has(name),
+		);
+		expect(orphanRows).toEqual([]);
+	});
 
 	it("is closed over BuilderFunctionName: a table missing one row fails satisfies", () => {
 		const incomplete = {
