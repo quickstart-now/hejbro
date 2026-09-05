@@ -3,11 +3,11 @@
   "number": 909,
   "ref": "quickstart-now/hejbro#909",
   "title": "feat(cli,neon): a driver factory in hejbro.config.ts for every db-connected command (#458)",
-  "head": "c63067539bf1a96419772477f97b7796f5b9789f",
+  "head": "970af5a9bc5ba5c7d3280f86f452196da3ac4ca6",
   "headRef": "feat-config-driver",
   "base": "dev",
   "merged": null,
-  "pinnedAt": "2026-09-05T11:18Z",
+  "pinnedAt": "2026-09-05T11:34Z",
   "refs": [
     {
       "path": ".changeset/add-config-driver.md",
@@ -18,8 +18,12 @@
       "blob": "259203cb1b62a2256f343ef42911c26c93bc26e4"
     },
     {
+      "path": "examples/cli-smoke/package.json",
+      "blob": "6e9f7a7246a7eb95cafa7c57909fe6266d06f389"
+    },
+    {
       "path": "examples/cli-smoke/test/config-driver.e2e.test.ts",
-      "blob": "c888cdab35fcf6d05ad3636fc43dc420712c849f"
+      "blob": "e0501765e6ebf2a8d96eed6c316e3febcd3024aa"
     },
     {
       "path": "openspec/changes/add-config-driver/design.md",
@@ -144,6 +148,10 @@
     {
       "path": "packages/neon/test/driver.test.ts",
       "blob": "338a7f198457453c8963dec564ba6888974249fa"
+    },
+    {
+      "path": "pnpm-lock.yaml",
+      "blob": "35781cac89be85768b1691751b969f95dea22d6a"
     },
     {
       "path": "skills/hejbro/references/brownfield-adoption.md",

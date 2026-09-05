@@ -87,13 +87,20 @@
       "title": "task 1.12: describe an errorevent-shaped throw, plus a pre-existing null-prototype crash",
       "pr": null,
       "decisions": []
+    },
+    {
+      "id": "W5",
+      "at": "2026-09-05T11:34Z",
+      "title": "W5 — CI: cli-smoke's neon e2e failed because @hejbro/neon was never built before the test",
+      "pr": null,
+      "decisions": []
     }
   ],
   "prs": [
     {
       "number": 909,
       "role": "closes",
-      "pinnedAt": "2026-09-05T11:18Z"
+      "pinnedAt": "2026-09-05T11:34Z"
     }
   ],
   "origin": null,
