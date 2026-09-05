@@ -587,3 +587,10 @@ _lead · interpretation · basis 412/D24, D25; read on 2026-09-05: packages/quer
 
 F6: an empty context no longer satisfies contextRequired -- a zero-statement rendering and a role-less, setting-less default rendering both refuse with context-rendering-empty; on a driver that does not declare the context mandatory nothing changed. F7: the refusal names the surface invoked, never db.context. Both landed with harden-context-boundary and the Nile change; #561 closes with no further work. Ratification: owner on return.
 
+<a id="d27"></a>
+## D27 — Oldest-first means the oldest top-level issues (#413 and its peers), not #412's own sub-issue queue
+
+_owner · 2026-09-05T10:58Z · raw 9d9e9165-53a6-4428-bebf-45e47e987321#78_
+
+The owner corrects the lead's reading of "process issues oldest-first across the whole repo": the intent was the old standalone issues (#413, #458, #486, #500, #501, #503, #514, #515, #631, #653, …) — not the post-release sub-issue queue under #412/#815 (#816–#875), which the lead had been draining first. Queue order from here: oldest top-level issues first; the #815 queue after them. The fl piece already in flight (#816–#832) finishes; the next free slots go to the old issues.
+

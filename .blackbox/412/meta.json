@@ -629,6 +629,15 @@
       "at": "2026-09-05T05:50Z",
       "title": "#561 closes: both D106 gca findings are already shipped behaviour",
       "ratified": null
+    },
+    {
+      "id": "D27",
+      "by": "owner",
+      "at": "2026-09-05T10:58Z",
+      "title": "Oldest-first means the oldest top-level issues (#413 and its peers), not #412's own sub-issue queue",
+      "raw": [
+        "9d9e9165-53a6-4428-bebf-45e47e987321#78"
+      ]
     }
   ],
   "work": [
