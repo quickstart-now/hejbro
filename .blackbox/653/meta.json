@@ -30,6 +30,17 @@
       "at": "2026-09-05T21:14Z",
       "title": "the snippet prelude and the guide join the files; the no-member scenario is a type-layer claim",
       "ratified": null
+    },
+    {
+      "id": "R3",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R2"
+      ],
+      "at": "2026-09-05T22:39Z",
+      "title": "Relations renders one line per relation after Relationships, declaration order, always present, collision-omitted, carried tables only",
+      "ratified": null
     }
   ],
   "work": [],
