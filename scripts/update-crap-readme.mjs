@@ -172,14 +172,26 @@ const withBadge = replaceBetween(
 // Three outcomes, not two: numbers unchanged and the file already says so;
 // numbers unchanged but the working copy carried a different stamp (the
 // #574 case -- the block is restored from HEAD); numbers changed.
+// #497: the verb states what this run DID to the file, never what it
+// found -- "unchanged" once read as "nothing to do" when the file had in
+// fact just been written to the same bytes, and "refreshed" hid which
+// numbers moved. The movement is spelled out so the reader never has to
+// diff the block to learn it.
+const movement = () => {
+	if (previous === null) {
+		return `no committed block to compare against; now ${scanned} scanned, ${violationCount} over, highest ${highest}`;
+	}
+	return `scanned ${previous.scanned}->${scanned}, over ${previous.violationCount}->${violationCount}, highest ${previous.highest}->${highest}`;
+};
+
 const changeVerb = () => {
 	if (numbersUnchanged && withBadge === readme) {
-		return "unchanged (numbers match)";
+		return "left byte-identical (numbers unchanged; nothing to commit)";
 	}
 	if (numbersUnchanged) {
-		return "restored from HEAD (numbers match)";
+		return "REWRITTEN to HEAD's block (numbers unchanged; the working copy carried a different stamp -- commit or discard README.md)";
 	}
-	return "refreshed";
+	return `REWRITTEN (${movement()} -- commit README.md)`;
 };
 
 const summaryLine = (verb) =>

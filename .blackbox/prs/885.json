@@ -1,0 +1,21 @@
+{
+  "version": 3,
+  "number": 885,
+  "ref": "quickstart-now/hejbro#885",
+  "title": "chore(scripts): crap gate says what it wrote and names the cache (#497)",
+  "head": "7bffc7f6794504f81d63e9b26ad1651950ece6c0",
+  "headRef": "chore-crap-wording",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-05T05:09Z",
+  "refs": [
+    {
+      "path": "scripts/check-crap.mjs",
+      "blob": "a0f6be9e50a9a7cf93cb160eaf55c0ff2c4f97df"
+    },
+    {
+      "path": "scripts/update-crap-readme.mjs",
+      "blob": "a2924493bf4c4221181977aa700b1db2ba53ff80"
+    }
+  ]
+}

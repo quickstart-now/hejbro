@@ -73,8 +73,12 @@ const remedyLine = () => {
 };
 
 if (violations.length > 0 && EXIT_NONZERO_ON_VIOLATION) {
+	// #497: the coverage this gate reads is turbo's `test:coverage` output,
+	// and a replayed cache can fail a tree that passes fresh -- the
+	// opposite direction of the stale pass everyone watches for, so it is
+	// named here rather than left for intuition.
 	console.error(
-		`\nerror[check-crap]: ${violations.length} function(s) exceed the CRAP threshold of ${CRAP_THRESHOLD}. ${remedyLine()}`,
+		`\nerror[check-crap]: ${violations.length} function(s) exceed the CRAP threshold of ${CRAP_THRESHOLD}. ${remedyLine()} If this same tree passes elsewhere, the coverage under each package's coverage/coverage-final.json may be a stale turbo replay: rerun \`pnpm check:crap --force\` before reading these numbers as real.`,
 	);
 	process.exit(1);
 }
