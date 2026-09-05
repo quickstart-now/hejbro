@@ -102,6 +102,13 @@
       "title": "review outcome supplement: #970/#971/#972 filed, reviewer's independent verification",
       "pr": null,
       "decisions": []
+    },
+    {
+      "id": "W4",
+      "at": "2026-09-05T18:16Z",
+      "title": "re-review outcome: b0, repeated references() widened to 13+1 rows, delta scenario closes n5",
+      "pr": null,
+      "decisions": []
     }
   ],
   "prs": [],

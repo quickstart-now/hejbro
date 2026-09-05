@@ -162,3 +162,43 @@ recorded in W1/W2):
    judgment is that this is a correct result, not a wrong one, and no new
    guard is needed.
 
+<a id="w4"></a>
+## W4 — re-review outcome: b0, repeated references() widened to 13+1 rows, delta scenario closes n5
+
+_2026-09-05T18:16Z_
+
+Re-review outcome for group 1 (add-references-actions): B 0. B1 and N1
+are closed; the piece is otherwise unchanged.
+
+Re-review scale: the reviewer widened the repeated-`.references()` input
+to 13 rows plus 1 interleaved row and reran it -- all pass under R6's
+contract (the last call's target, the last call's actions, no other
+state-slot contamination). The pre-existing parity tables (36/30/36 rows)
+are unharmed, a 66-row real-server catalog comparison shows zero
+mismatches, and the example's `hejbro verify` hash is unchanged from
+before this rework.
+
+Procedure deviation (recorded as fact): during the B1 task, the
+implementer ran red then green without first sending the red output as
+its own message, contrary to the team's standing instruction. The red
+output was included in the eventual completion report and the deviation
+was self-reported. This is the only procedure deviation in this piece.
+
+N5 is closed: it became the delta scenario `A repeated references() call
+replaces the reference as a whole` (514/R7), under the requirement
+`Column-level foreign keys are declared with references`. #972 (whether
+a repeated call should instead be refused, and the pre-existing behavior
+of a repeated call silently dropping the first target) stays open and is
+cited from the new scenario's own last clause so the two do not
+contradict.
+
+N6 (fact only, no action): the public `ColumnState.referenceActions`
+type widened from `{...}` to `{...} | null`; its only reader
+(`foldColumnReferences` in `table.ts`) already folds it with `?.`, so the
+widening needed no reader change.
+
+The type layer is unchanged by this fix: `.references(target, null)`
+still fails to type-check (TS2345) -- the `| null` widening landed only
+on the internal `ColumnState`, never on the public `references()`
+parameter type.
+
