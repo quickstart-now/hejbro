@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import type {
 	CompileKind,
 	CompileResult,
@@ -7,7 +6,7 @@ import type {
 	DriverRow,
 	DriverSession,
 } from "@hejbro/query";
-import { throwMissingCapability } from "@hejbro/query";
+import { preparedStatementName, throwMissingCapability } from "@hejbro/query";
 import type { Pool, PoolClient } from "@neondatabase/serverless";
 import { buildHttpDriver, type HttpQueryable } from "./http";
 import { anonymousRole, authenticatedRole } from "./roles";
@@ -54,16 +53,6 @@ export type NeonDriverOptions = {
 };
 
 /**
- * `hejbro_` + the first 32 hex digits of SHA-256 over the statement text
- * (add-prepared-statements design Q4) -- duplicated from `@hejbro/pg`'s
- * own copy rather than imported: the provider-preset boundary
- * (`.claude/rules/provider-preset.md`) forbids this package from
- * depending on a concrete driver implementation, even for a pure helper.
- */
-const preparedStatementName = (sql: string): string =>
-	`hejbro_${createHash("sha256").update(sql).digest("hex").slice(0, 32)}`;
-
-/**
  * The kinds a prepared statement may carry (mirrors `@hejbro/pg`'s own
  * `BUILT_KINDS`): an explicit allowlist, never `kind !== "sql"` -- a
  * future `CompileKind` this set doesn't yet name fails closed (sent
@@ -85,7 +74,7 @@ const BUILT_KINDS: ReadonlySet<CompileKind> = new Set([
  */
 type Queryable = Pick<Pool, "query">;
 
-/** The `name` key {@link makeSession} spreads into a query config -- an empty object when the statement is not to be named (mirrors `@hejbro/pg`'s own helper), never `{ name: undefined }`. */
+/** The `name` key {@link makeSession} spreads into a query config -- an empty object when the statement is not to be named, never `{ name: undefined }`. `preparedStatementName` (task 1.5, #891) is `@hejbro/query`'s own driver-contract export -- no local copy, unlike before this task. */
 const nameForQueryConfig = (
 	compiled: CompileResult,
 	preparedStatements: boolean,

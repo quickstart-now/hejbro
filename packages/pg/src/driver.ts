@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import type {
 	CompileKind,
 	CompileResult,
@@ -7,7 +6,7 @@ import type {
 	DriverRow,
 	DriverSession,
 } from "@hejbro/query";
-import { throwMissingCapability } from "@hejbro/query";
+import { preparedStatementName, throwMissingCapability } from "@hejbro/query";
 import type { CustomTypesConfig, PoolClient } from "pg";
 import { Pool, types as pgTypes } from "pg";
 
@@ -54,20 +53,6 @@ export type PgDriverOptions = {
 };
 
 /**
- * `hejbro_` + the first 32 hex digits of SHA-256 over the statement text
- * (add-prepared-statements design Q4): 39 bytes, inside Postgres's 63-byte
- * identifier limit, and a pure function of the text alone -- the same text
- * yields the same name on every connection and in every process, and two
- * different texts practically never collide (their whole 256-bit digests
- * would have to). node-postgres's own client caches "parsed" per
- * connection and per name and refuses one name for two texts, so a name
- * that is a pure function of the text can never legitimately collide with
- * a different text on one connection.
- */
-const preparedStatementName = (sql: string): string =>
-	`hejbro_${createHash("sha256").update(sql).digest("hex").slice(0, 32)}`;
-
-/**
  * The kinds a prepared statement may carry (add-prepared-statements
  * spec, "A driver that declares prepared statements names its built
  * statements"): an explicit allowlist, never `kind !== "sql"` -- a
@@ -86,7 +71,12 @@ const BUILT_KINDS: ReadonlySet<CompileKind> = new Set([
  * The `name` key {@link makeSession} spreads into a query config -- an
  * empty object when the statement is not to be named, never `{ name:
  * undefined }`, so an existing caller's config stays byte-identical to
- * what it was before this option existed.
+ * what it was before this option existed. `preparedStatementName`
+ * (task 1.5, #891, exported by `@hejbro/query`'s own driver contract) is
+ * a pure function of the statement text alone, which is exactly what
+ * node-postgres's own client needs: it caches "parsed" per connection
+ * and per name and refuses one name for two texts, so a name that can
+ * never legitimately collide with a different text on one connection.
  */
 const nameForQueryConfig = (
 	compiled: CompileResult,

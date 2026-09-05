@@ -39,7 +39,11 @@ every time. The name is derived from the statement text alone
 same text always gets the same name, on every connection and in every
 process, and two different texts do not share a name — the name is a
 128-bit digest of the text, so a collision is not a practical
-possibility. A `db.fn` call compiles as the `sql` kind and is therefore
+possibility. `@hejbro/query` exports this derivation itself as
+`preparedStatementName(sql)` — the one function `@hejbro/pg` and
+`@hejbro/neon` both call, so a driver that declares `prepared-
+statements` never holds its own copy of the naming rule. A `db.fn`
+call compiles as the `sql` kind and is therefore
 never named, exactly like the escape hatch. Once a statement is
 prepared it stays prepared for the connection's life — hejbro evicts
 nothing, so the set of distinct texts an application compiles (bounded

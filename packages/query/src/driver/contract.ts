@@ -186,3 +186,10 @@ export type Driver = DriverSession & {
 	 */
 	readonly contextRequired?: true;
 };
+
+/**
+ * Re-exported here, the driver contract's own module (task 1.5, #891):
+ * the name a driver declaring `"prepared-statements"` derives from a
+ * statement text -- see `./statement-name.ts` for the function itself.
+ */
+export { preparedStatementName } from "./statement-name";

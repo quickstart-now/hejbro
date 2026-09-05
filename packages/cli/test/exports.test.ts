@@ -127,6 +127,7 @@ const HEJBRO_RUNTIME_EXPORTS: ReadonlyArray<string> = [
 	"percentRank",
 	"pgEnum",
 	"predropStatement",
+	"preparedStatementName",
 	"rank",
 	"real",
 	"rls",
