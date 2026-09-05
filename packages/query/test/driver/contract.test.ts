@@ -6,19 +6,20 @@ import type {
 	DriverSession,
 } from "../../src/driver/contract";
 
-describe("Driver capability contract (owner decision ①, task 4.1; three keys, task 1.1/#303)", () => {
+describe("Driver capability contract (owner decision ①, task 4.1; four keys, task 1.1/#303, #486)", () => {
 	it("a driver missing a capability key is a compile error", () => {
-		// @ts-expect-error "session-state" and "prepared-statements" are missing from the exhaustive capability record.
+		// @ts-expect-error "session-state", "prepared-statements" and "batched-transactions" are missing from the exhaustive capability record.
 		const _missingKeys: DriverCapabilities = {
 			"interactive-transactions": true,
 		};
 	});
 
-	it("a driver missing only prepared-statements is a compile error (the third key, task 1.1)", () => {
-		// @ts-expect-error "prepared-statements" is missing from the exhaustive capability record.
-		const _missingPreparedStatements: DriverCapabilities = {
+	it("a driver missing only batched-transactions is a compile error (the fourth key, task 1.1)", () => {
+		// @ts-expect-error "batched-transactions" is missing from the exhaustive capability record.
+		const _missingBatchedTransactions: DriverCapabilities = {
 			"interactive-transactions": true,
 			"session-state": false,
+			"prepared-statements": false,
 		};
 	});
 
@@ -27,6 +28,7 @@ describe("Driver capability contract (owner decision ①, task 4.1; three keys, 
 			"interactive-transactions": true,
 			"session-state": false,
 			"prepared-statements": false,
+			"batched-transactions": false,
 		};
 		expectTypeOf(capabilities).toEqualTypeOf<DriverCapabilities>();
 	});
@@ -36,16 +38,18 @@ describe("Driver capability contract (owner decision ①, task 4.1; three keys, 
 			"interactive-transactions": true,
 			"session-state": true,
 			"prepared-statements": false,
+			"batched-transactions": false,
 			// @ts-expect-error "streaming" was never declared as a capability key.
 			streaming: true,
 		};
 	});
 
-	it("naming a fourth key outside the fixed set is a compile error (the union stays closed, task 1.1)", () => {
-		const _fourthKey: DriverCapabilities = {
+	it("naming a fifth key outside the fixed set is a compile error (the union stays closed, task 1.1)", () => {
+		const _fifthKey: DriverCapabilities = {
 			"interactive-transactions": true,
 			"session-state": true,
 			"prepared-statements": true,
+			"batched-transactions": true,
 			// @ts-expect-error "streaming-cursors" was never declared as a capability key.
 			"streaming-cursors": true,
 		};
@@ -58,10 +62,12 @@ describe("Driver capability contract (owner decision ①, task 4.1; three keys, 
 				"interactive-transactions": true,
 				"session-state": true,
 				"prepared-statements": false,
+				"batched-transactions": false,
 			},
 			transaction: async <T>(
 				callback: (session: DriverSession) => Promise<T>,
 			) => callback({ execute: async () => [] }),
+			batch: async () => [],
 			setupSession: async () => {},
 		};
 	});
@@ -73,11 +79,30 @@ describe("Driver capability contract (owner decision ①, task 4.1; three keys, 
 				"interactive-transactions": true,
 				"session-state": true,
 				"prepared-statements": false,
+				"batched-transactions": false,
 			},
 			execute: async () => [],
 			transaction: async <T>(
 				callback: (session: DriverSession) => Promise<T>,
 			) => callback({ execute: async () => [] }),
+			batch: async () => [],
+		};
+	});
+
+	it("batch is mandatory on Driver itself, not gated behind the batched-transactions capability (task 1.1, #486)", () => {
+		// @ts-expect-error a Driver without `batch` is missing its mandatory prerequisite.
+		const _missingBatch: Driver = {
+			capabilities: {
+				"interactive-transactions": true,
+				"session-state": true,
+				"prepared-statements": false,
+				"batched-transactions": false,
+			},
+			execute: async () => [],
+			transaction: async <T>(
+				callback: (session: DriverSession) => Promise<T>,
+			) => callback({ execute: async () => [] }),
+			setupSession: async () => {},
 		};
 	});
 });
@@ -88,9 +113,11 @@ describe("Driver.contributedRoles (task 4.7's role-contribution slot, batch C re
 			"interactive-transactions": true,
 			"session-state": true,
 			"prepared-statements": false,
+			"batched-transactions": false,
 		},
 		execute: async () => [],
 		transaction: async (callback) => callback({ execute: async () => [] }),
+		batch: async () => [],
 		setupSession: async () => {},
 	};
 
@@ -118,9 +145,11 @@ describe("Driver.renderContext (task 1.1, #554 -- the context-rendering contribu
 			"interactive-transactions": true,
 			"session-state": true,
 			"prepared-statements": false,
+			"batched-transactions": false,
 		},
 		execute: async () => [],
 		transaction: async (callback) => callback({ execute: async () => [] }),
+		batch: async () => [],
 		setupSession: async () => {},
 	};
 
@@ -152,9 +181,11 @@ describe("Driver.roleLessPlatform (task 1.2, #554 -- the role-less-platform decl
 			"interactive-transactions": true,
 			"session-state": true,
 			"prepared-statements": false,
+			"batched-transactions": false,
 		},
 		execute: async () => [],
 		transaction: async (callback) => callback({ execute: async () => [] }),
+		batch: async () => [],
 		setupSession: async () => {},
 	};
 
@@ -176,9 +207,11 @@ describe("Driver.contextRequired (task 1.3, #554 -- the context-mandatory declar
 			"interactive-transactions": true,
 			"session-state": true,
 			"prepared-statements": false,
+			"batched-transactions": false,
 		},
 		execute: async () => [],
 		transaction: async (callback) => callback({ execute: async () => [] }),
+		batch: async () => [],
 		setupSession: async () => {},
 	};
 
@@ -195,11 +228,12 @@ describe("Driver.contextRequired (task 1.3, #554 -- the context-mandatory declar
 });
 
 describe("roleLessPlatform and contextRequired are not capabilities (task 1.4, #554)", () => {
-	it("DriverCapabilities still requires exactly the three keys (regression control, unaffected by the new driver declarations)", () => {
+	it("DriverCapabilities still requires exactly the four keys (regression control, unaffected by the new driver declarations)", () => {
 		const capabilities: DriverCapabilities = {
 			"interactive-transactions": true,
 			"session-state": false,
 			"prepared-statements": false,
+			"batched-transactions": false,
 		};
 		expectTypeOf(capabilities).toEqualTypeOf<DriverCapabilities>();
 	});
@@ -209,6 +243,7 @@ describe("roleLessPlatform and contextRequired are not capabilities (task 1.4, #
 			"interactive-transactions": true,
 			"session-state": true,
 			"prepared-statements": false,
+			"batched-transactions": false,
 			// @ts-expect-error "roleLessPlatform" was never declared as a capability key.
 			roleLessPlatform: true,
 		};
@@ -219,6 +254,7 @@ describe("roleLessPlatform and contextRequired are not capabilities (task 1.4, #
 			"interactive-transactions": true,
 			"session-state": true,
 			"prepared-statements": false,
+			"batched-transactions": false,
 			// @ts-expect-error "contextRequired" was never declared as a capability key.
 			contextRequired: true,
 		};

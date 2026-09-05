@@ -10,6 +10,7 @@ const capabilitiesWithSessionState = (
 	"interactive-transactions": interactiveTransactions,
 	"session-state": sessionState,
 	"prepared-statements": false,
+	"batched-transactions": false,
 });
 
 describe("assertSessionStateConformance (task 1.4/1.5, #481)", () => {

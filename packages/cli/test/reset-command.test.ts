@@ -90,9 +90,11 @@ const makeFakeDriver = (
 			"interactive-transactions": true,
 			"session-state": true,
 			"prepared-statements": false,
+			"batched-transactions": false,
 		},
 		execute: session.execute,
 		transaction: async (callback) => callback(session),
+		batch: async () => [],
 		setupSession: async () => {},
 	};
 	return { driver, calls };
@@ -160,6 +162,7 @@ describe("applyResetReport / 7.7", () => {
 			"interactive-transactions": false,
 			"session-state": false,
 			"prepared-statements": false,
+			"batched-transactions": false,
 		});
 
 		await expect(
@@ -245,6 +248,7 @@ describe("runReset — a ledger diagnostic's header names the ledger, not the co
 						"interactive-transactions": true,
 						"session-state": true,
 						"prepared-statements": false,
+						"batched-transactions": false,
 					},
 					execute: async (compiled: CompileResult) => {
 						const sql = compiled.sql.trim().toLowerCase();
@@ -274,6 +278,7 @@ describe("runReset — a ledger diagnostic's header names the ledger, not the co
 								return [];
 							},
 						}),
+					batch: async () => [],
 					setupSession: async () => {},
 					client: { end: async () => {} },
 				}),
@@ -322,6 +327,7 @@ describe("runReset — a ledger diagnostic's header names the ledger, not the co
 						"interactive-transactions": true,
 						"session-state": true,
 						"prepared-statements": false,
+						"batched-transactions": false,
 					},
 					execute: async (compiled: CompileResult) => {
 						const sql = compiled.sql.trim().toLowerCase();
@@ -336,6 +342,7 @@ describe("runReset — a ledger diagnostic's header names the ledger, not the co
 					transaction: async <T>(
 						callback: (session: DriverSession) => Promise<T>,
 					): Promise<T> => callback({ execute: async () => [] }),
+					batch: async () => [],
 					setupSession: async () => {},
 					client: { end: async () => {} },
 				}),

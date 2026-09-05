@@ -1,0 +1,21 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#892",
+  "title": "pg driver: a multi-command sql text resolves to undefined rows",
+  "parent": "quickstart-now/hejbro#815",
+  "status": "closed",
+  "opened": "2026-09-05",
+  "closed": "2026-09-05",
+  "decisions": [],
+  "work": [],
+  "prs": [
+    {
+      "number": 955,
+      "role": "closes",
+      "pinnedAt": "2026-09-05T16:18Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

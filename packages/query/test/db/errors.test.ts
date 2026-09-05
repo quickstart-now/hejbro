@@ -17,6 +17,7 @@ const driverThatThrows = (driverError: Error): Driver => ({
 		"interactive-transactions": true,
 		"session-state": true,
 		"prepared-statements": false,
+		"batched-transactions": false,
 	},
 	execute: vi.fn(async () => {
 		throw driverError;
@@ -24,6 +25,7 @@ const driverThatThrows = (driverError: Error): Driver => ({
 	transaction: vi.fn(async (callback) =>
 		callback({ execute: vi.fn(async () => []) }),
 	),
+	batch: vi.fn(async () => []),
 	setupSession: vi.fn(async () => {}),
 });
 
@@ -119,6 +121,7 @@ describe("driver-message fidelity (#427)", () => {
 				"interactive-transactions": true,
 				"session-state": true,
 				"prepared-statements": false,
+				"batched-transactions": false,
 			},
 			execute: vi.fn(async () => {
 				throw "socket hang up";
@@ -126,6 +129,7 @@ describe("driver-message fidelity (#427)", () => {
 			transaction: vi.fn(async (callback) =>
 				callback({ execute: vi.fn(async () => []) }),
 			),
+			batch: vi.fn(async () => []),
 			setupSession: vi.fn(async () => {}),
 		};
 		const handle = db({ posts }, driver);
@@ -158,6 +162,7 @@ describe("driver-message fidelity (#427)", () => {
 				"interactive-transactions": true,
 				"session-state": true,
 				"prepared-statements": false,
+				"batched-transactions": false,
 			},
 			execute: vi.fn(async () => {
 				throw { weird: true };
@@ -165,6 +170,7 @@ describe("driver-message fidelity (#427)", () => {
 			transaction: vi.fn(async (callback) =>
 				callback({ execute: vi.fn(async () => []) }),
 			),
+			batch: vi.fn(async () => []),
 			setupSession: vi.fn(async () => {}),
 		};
 		const handle = db({ posts }, driver);

@@ -11,6 +11,7 @@ import {
 	uuid,
 } from "@hejbro/core";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
+import type { CompileResult } from "../../src/compile/compile";
 import type { DbContext } from "../../src/db/context";
 import { defaultContextRendering } from "../../src/db/context";
 import { db } from "../../src/db/db";
@@ -180,6 +181,7 @@ describe("contributed statements are sent one at a time, in the rendering's own 
 				"interactive-transactions": true,
 				"session-state": true,
 				"prepared-statements": false,
+				"batched-transactions": false,
 			},
 			execute: vi.fn(async () => []),
 			transaction: vi.fn(async (callback) => {
@@ -200,6 +202,7 @@ describe("contributed statements are sent one at a time, in the rendering's own 
 				};
 				return callback(session);
 			}),
+			batch: vi.fn(async () => []),
 			setupSession: vi.fn(async () => {}),
 		};
 		const handle = db(appSchema, driver);
@@ -261,9 +264,11 @@ describe("DbContext and the rendering's context type are the same type (task 2.1
 				"interactive-transactions": true,
 				"session-state": true,
 				"prepared-statements": false,
+				"batched-transactions": false,
 			},
 			execute: async () => [],
 			transaction: async (callback) => callback({ execute: async () => [] }),
+			batch: async () => [],
 			setupSession: async () => {},
 			renderContext: (renderedContext) => {
 				expectTypeOf(renderedContext).toEqualTypeOf<DbContext>();
@@ -471,6 +476,7 @@ describe("db.as(context) -- a failing set_config stops the chain (fail-stop, not
 				"interactive-transactions": true,
 				"session-state": true,
 				"prepared-statements": false,
+				"batched-transactions": false,
 			},
 			execute: vi.fn(async () => []),
 			transaction: vi.fn(async (callback) => {
@@ -489,6 +495,7 @@ describe("db.as(context) -- a failing set_config stops the chain (fail-stop, not
 				};
 				return callback(session);
 			}),
+			batch: vi.fn(async () => []),
 			setupSession: vi.fn(async () => {}),
 		};
 		const handle = db(appSchema, driver);
@@ -567,5 +574,322 @@ describe("db.as(context) -- the operation named on a missing-capability refusal 
 		await expect(scoped.fn.helloWorld({})).rejects.toMatchObject({
 			operation: "db.fn",
 		});
+	});
+});
+
+describe("the context runs in a batch when interactive transactions are absent (task 1.3, #486)", () => {
+	it("interactive true (even with batched also true): the same statements run in one transaction() call, and batch is never called -- interactive wins where both are declared", async () => {
+		const { driver, sentPerTransaction } = recordingTransactionalDriver({
+			interactiveTransactions: true,
+			batchedTransactions: true,
+		});
+		const handle = db(appSchema, driver);
+
+		await handle.as({ role: roleName("grant_reader") }).execute(select(posts));
+
+		expect(driver.transaction).toHaveBeenCalledTimes(1);
+		expect(driver.batch).not.toHaveBeenCalled();
+		expect(sentPerTransaction[0]).toHaveLength(2); // role, statement
+	});
+
+	it("interactive false, batched true: batch runs exactly once with [...context statements, caller statement], resolving to the last member's rows, and transaction never runs", async () => {
+		const row = {
+			id: "33333333-3333-3333-3333-333333333333",
+			status: "draft",
+		};
+		const { driver, batchCalls } = recordingTransactionalDriver({
+			interactiveTransactions: false,
+			batchedTransactions: true,
+			rows: [row],
+		});
+		const handle = db(appSchema, driver);
+
+		const result = await handle
+			.as({ role: roleName("grant_reader") })
+			.execute(select(posts));
+
+		expect(driver.batch).toHaveBeenCalledTimes(1);
+		expect(driver.transaction).not.toHaveBeenCalled();
+		expect(batchCalls).toHaveLength(1);
+		expect(batchCalls[0]).toHaveLength(2); // role statement, then the caller's own
+		expect(batchCalls[0]?.[0]?.sql).toBe('set local role "grant_reader"');
+		expect(batchCalls[0]?.[1]?.sql).toContain("posts");
+		expect(result).toHaveLength(1);
+		expect(result[0]).toMatchObject({ status: "draft" });
+	});
+
+	it("both capabilities false: the error names both keys, in the order asserted, and no driver member runs", async () => {
+		const { driver } = recordingTransactionalDriver({
+			interactiveTransactions: false,
+			batchedTransactions: false,
+		});
+		const handle = db(appSchema, driver);
+
+		await expect(
+			handle.as({ role: roleName("grant_reader") }).execute(select(posts)),
+		).rejects.toMatchObject({
+			code: "driver-missing-capability",
+			capabilities: ["interactive-transactions", "batched-transactions"],
+		});
+
+		expect(driver.transaction).not.toHaveBeenCalled();
+		expect(driver.execute).not.toHaveBeenCalled();
+		expect(driver.batch).not.toHaveBeenCalled();
+	});
+
+	it("contextRequired + an empty rendering + batched-only: context-rendering-empty is thrown before batch is ever called", async () => {
+		const rendering: ContextRendering = () => [];
+		const { driver } = recordingTransactionalDriver({
+			interactiveTransactions: false,
+			batchedTransactions: true,
+			renderContext: rendering,
+			contextRequired: true,
+		});
+		const handle = db(appSchema, driver);
+
+		await expect(
+			handle.as({ role: roleName("grant_reader") }).execute(select(posts)),
+		).rejects.toMatchObject({ code: "context-rendering-empty" });
+
+		expect(driver.batch).not.toHaveBeenCalled();
+	});
+
+	it("an empty rendering (zero context statements, one member sent) is never a false-positive batch-result-count-mismatch (task 1.3, #486/R14, review finding N3's off-by-one trap)", async () => {
+		const rendering: ContextRendering = () => [];
+		const { driver, batchCalls } = recordingTransactionalDriver({
+			interactiveTransactions: false,
+			batchedTransactions: true,
+			renderContext: rendering,
+			roleLessPlatform: true,
+		});
+		const handle = db(appSchema, driver);
+
+		await handle.as({}).execute(select(posts));
+
+		expect(batchCalls).toHaveLength(1);
+		expect(batchCalls[0]).toHaveLength(1); // the caller's own statement alone
+	});
+
+	it("batched-only: db.as(context).transaction(cb) still asserts only interactive-transactions, naming just that key (a callback is inherently interactive)", async () => {
+		const { driver } = recordingTransactionalDriver({
+			interactiveTransactions: false,
+			batchedTransactions: true,
+		});
+		const handle = db(appSchema, driver);
+
+		await expect(
+			handle
+				.as({ role: roleName("grant_reader") })
+				.transaction(async (tx) => tx.execute(select(posts))),
+		).rejects.toMatchObject({
+			code: "driver-missing-capability",
+			capability: "interactive-transactions",
+		});
+
+		expect(driver.batch).not.toHaveBeenCalled();
+		expect(driver.transaction).not.toHaveBeenCalled();
+	});
+
+	it("the same statements, from the same rendering, in the same order travel through both paths (delta wording) -- the batch's own context-statement prefix equals the interactive path's own sent prefix", async () => {
+		const context = {
+			role: roleName("grant_reader"),
+			settings: { "app.claim": "value" },
+		};
+
+		const interactive = recordingTransactionalDriver({
+			interactiveTransactions: true,
+		});
+		await db(appSchema, interactive.driver).as(context).execute(select(posts));
+		const interactiveContextStatements =
+			interactive.sentPerTransaction[0]?.slice(0, -1);
+
+		const batched = recordingTransactionalDriver({
+			interactiveTransactions: false,
+			batchedTransactions: true,
+		});
+		await db(appSchema, batched.driver).as(context).execute(select(posts));
+		const batchContextStatements = batched.batchCalls[0]?.slice(0, -1);
+
+		// each side ran through its OWN path (not both accidentally taking
+		// the same one, which would make the equality below pass vacuously):
+		// role + one setting, two statements, on each side independently.
+		expect(interactive.sentPerTransaction).toHaveLength(1);
+		expect(interactiveContextStatements).toHaveLength(2);
+		expect(batched.batchCalls).toHaveLength(1);
+		expect(batchContextStatements).toHaveLength(2);
+		expect(batchContextStatements).toEqual(interactiveContextStatements);
+	});
+
+	it("invariant: the batch path's send executes exactly one statement, measured as driver.batch's own call count -- a send that grows to call session.execute more than once would call driver.batch more than once too", async () => {
+		const { driver } = recordingTransactionalDriver({
+			interactiveTransactions: false,
+			batchedTransactions: true,
+		});
+		const handle = db(appSchema, driver);
+
+		await handle.as({ role: roleName("grant_reader") }).execute(select(posts));
+
+		expect(driver.batch).toHaveBeenCalledTimes(1);
+	});
+
+	it("interactive false, batched true: db.fn also runs through the batch path, not just execute", async () => {
+		const { driver, batchCalls } = recordingTransactionalDriver({
+			interactiveTransactions: false,
+			batchedTransactions: true,
+		});
+		const handle = db(appSchema, driver);
+
+		await handle.as({ role: roleName("grant_reader") }).fn.helloWorld({});
+
+		expect(driver.batch).toHaveBeenCalledTimes(1);
+		expect(driver.transaction).not.toHaveBeenCalled();
+		expect(batchCalls[0]?.[0]?.sql).toBe('set local role "grant_reader"');
+	});
+});
+
+describe("a failing batch is reported as a batch (task 1.3b, #486, 486/R9)", () => {
+	it.each([
+		[
+			"a context statement fails",
+			new Error('role "grant_reader" does not exist'),
+		],
+		[
+			"the caller's own statement fails",
+			new Error('column "bad_col" does not exist'),
+		],
+	])(
+		"%s: the driver's rejection surfaces as one batch-shaped report, never a claim that only the caller's own statement failed",
+		async (_name, driverError) => {
+			const { driver } = recordingTransactionalDriver({
+				interactiveTransactions: false,
+				batchedTransactions: true,
+				batchImpl: async () => {
+					throw driverError;
+				},
+			});
+			const handle = db(appSchema, driver);
+
+			try {
+				await handle
+					.as({ role: roleName("grant_reader") })
+					.execute(select(posts));
+				expect.unreachable("execute should have rejected");
+			} catch (error) {
+				expect(error).toHaveProperty("code", "query-execution-failed");
+				expect(error).toHaveProperty("kind", "select");
+				expect(error).toHaveProperty("cause", driverError);
+				const message = (error as Error).message;
+				// singular count (the common case: one role statement, no
+				// settings) reads as correct English, not "1 ... statements".
+				expect(message).toContain("a batch of 1 context statement");
+				expect(message).not.toContain("a batch of 1 context statements");
+				expect(message).toContain('"select" statement');
+				expect(message).toContain(
+					"the driver does not report which member failed",
+				);
+				// every member is listed, numbered, in the order sent: the
+				// context statement first, then the caller's own -- never
+				// `;`-joined (that character already means something else in
+				// this PR, a multi-command `sql` text, #892/task 1.6).
+				expect(message).toContain(
+					'Statement: 1) set local role "grant_reader" 2) select "id", "status" from "app"."posts".',
+				);
+				// the exact regression this reopens: no standalone claim that
+				// only the caller's own statement failed.
+				expect(message).not.toMatch(
+					/^query execution failed for this "select" statement:/,
+				);
+			}
+		},
+	);
+
+	it.each([
+		[
+			"fewer results than statements sent",
+			async (statements: ReadonlyArray<CompileResult>) =>
+				statements.slice(0, -1).map(() => []),
+		],
+		[
+			"more results than statements sent",
+			async (statements: ReadonlyArray<CompileResult>) => [
+				...statements.map(() => []),
+				[],
+			],
+		],
+		["zero results", async () => []],
+	])(
+		"a driver returning %s is refused with batch-result-count-mismatch, naming both counts -- never reported as query-execution-failed (task 1.3, #486/R14, review finding N3)",
+		async (_name, batchImpl) => {
+			const { driver } = recordingTransactionalDriver({
+				interactiveTransactions: false,
+				batchedTransactions: true,
+				batchImpl,
+			});
+			const handle = db(appSchema, driver);
+
+			await expect(
+				handle.as({ role: roleName("grant_reader") }).execute(select(posts)),
+			).rejects.toMatchObject({
+				code: "batch-result-count-mismatch",
+				sent: 2, // role statement + the caller's own
+			});
+		},
+	);
+
+	it("the interactive path is unchanged: a failing context statement still names only that one statement (regression guard)", async () => {
+		const roleFailure = new Error('role "grant_reader" does not exist');
+		const driver: Driver = {
+			capabilities: {
+				"interactive-transactions": true,
+				"session-state": true,
+				"prepared-statements": false,
+				"batched-transactions": false,
+			},
+			execute: vi.fn(async () => []),
+			transaction: vi.fn(async (callback) => {
+				const session: DriverSession = {
+					execute: vi.fn(async () => {
+						throw roleFailure;
+					}),
+				};
+				return callback(session);
+			}),
+			batch: vi.fn(async () => []),
+			setupSession: vi.fn(async () => {}),
+		};
+		const handle = db(appSchema, driver);
+
+		try {
+			await handle
+				.as({ role: roleName("grant_reader") })
+				.execute(select(posts));
+			expect.unreachable("execute should have rejected");
+		} catch (error) {
+			expect(error).toHaveProperty("code", "query-execution-failed");
+			// the role statement's own kind ("sql"), not the caller's -- the
+			// interactive path sends one statement at a time and knows
+			// exactly which one failed.
+			expect(error).toHaveProperty("kind", "sql");
+			expect(error).toHaveProperty("cause", roleFailure);
+			const message = (error as Error).message;
+			expect(message).toMatch(
+				/^query execution failed for this "sql" statement:/,
+			);
+			expect(message).toContain('set local role "grant_reader"');
+			expect(message).not.toContain("a batch of");
+		}
+	});
+
+	it("a batch that itself succeeded but whose row conversion fails afterward propagates the raw result-conversion-failed unchanged, never rebuilt as a batch report", async () => {
+		const { driver } = recordingTransactionalDriver({
+			interactiveTransactions: false,
+			batchedTransactions: true,
+			rows: [{}], // resolves the right member count, but every declared column is missing
+		});
+		const handle = db(appSchema, driver);
+
+		await expect(
+			handle.as({ role: roleName("grant_reader") }).execute(select(posts)),
+		).rejects.toMatchObject({ code: "result-conversion-failed" });
 	});
 });

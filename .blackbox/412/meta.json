@@ -668,6 +668,18 @@
       "at": "2026-09-05T12:31Z",
       "title": "Sealed reviewer measurement for pieces whose input is not hejbro's own output",
       "ratified": null
+    },
+    {
+      "id": "R36",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "412/D24",
+        "D25; AGENTS.md (test-only and example work follows the plain cycle without a proposal)"
+      ],
+      "at": "2026-09-05T08:29Z",
+      "title": "Lead-direct plain-cycle batches for the remaining uncovered issues",
+      "ratified": null
     }
   ],
   "work": [
@@ -759,6 +771,11 @@
       "number": 923,
       "role": "refs",
       "pinnedAt": "2026-09-05T12:33Z"
+    },
+    {
+      "number": 955,
+      "role": "refs",
+      "pinnedAt": "2026-09-05T16:18Z"
     }
   ],
   "origin": null,

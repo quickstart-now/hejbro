@@ -174,7 +174,22 @@ describe("pgDriver(pool) (owner decision ①, task 5.1)", () => {
 			"interactive-transactions": true,
 			"session-state": true,
 			"prepared-statements": false,
+			"batched-transactions": false,
 		});
+	});
+
+	it("batch refuses before touching the pool at all -- not even pool.connect() (task 1.2a, #486)", async () => {
+		const pool = new Pool({
+			connectionString: "postgres://localhost/does-not-need-to-connect",
+		});
+		const connectSpy = vi.spyOn(pool, "connect");
+		const driver = pgDriver(pool);
+
+		await expect(
+			driver.batch([{ sql: "select 1", params: [], kind: "sql" }]),
+		).rejects.toThrow(/batched-transactions/);
+
+		expect(connectSpy).not.toHaveBeenCalled();
 	});
 
 	// D106 R1 N3 (add-prepared-statements): an untyped caller's `"true"`
@@ -453,6 +468,39 @@ describe("pgDriver({ preparedStatements }) names built statements only when the 
 			throw new Error("the checkout pin was never sent");
 		}
 		expect(pin.name).toBeUndefined();
+	});
+
+	it("a multi-command sql text resolves to the last command's rows, never undefined or a crash (task 1.6, #892) -- node-postgres answers an array, one entry per command, for exactly this shape", async () => {
+		// Unlike `stubPoolWithClient`'s own fixed `{ rows: [] }` answer
+		// (never exercises the array shape at all), this client answers a
+		// two-command text the way node-postgres actually does (measured
+		// against postgres:17, design.md Q6): an array, one entry per
+		// command. #892 comment 2's own regression: `handle.execute`/
+		// `tx.execute` threw an uncoded `TypeError` (`rows.map`) reading
+		// `undefined` off that array as if it were a single Result.
+		const client: {
+			query: ReturnType<typeof vi.fn>;
+			on: ReturnType<typeof vi.fn>;
+		} = {
+			query: vi.fn(async () => [
+				{ command: "SELECT", rowCount: 1, rows: [{ a: 1 }] },
+				{ command: "SELECT", rowCount: 1, rows: [{ b: 2 }] },
+			]),
+			on: vi.fn(),
+		};
+		const pool = {
+			connect: vi.fn(async () => ({ ...client, release: vi.fn() })),
+			on: vi.fn(),
+		} as unknown as Pool;
+		const driver = pgDriver(pool);
+
+		const rows = await driver.execute({
+			sql: "select 1 as a; select 2 as b",
+			params: [],
+			kind: "sql",
+		});
+
+		expect(rows).toEqual([{ b: 2 }]);
 	});
 
 	it("capabilities['prepared-statements'] mirrors the option, for both the pool and the connection-string overload", () => {

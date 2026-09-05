@@ -252,9 +252,11 @@ const makeFakeDriver = (
 			"interactive-transactions": true,
 			"session-state": true,
 			"prepared-statements": false,
+			"batched-transactions": false,
 		},
 		execute: session.execute,
 		transaction: async (callback) => callback(session),
+		batch: async () => [],
 		setupSession: async () => {},
 	};
 	return { driver, calls, ledgerRows };
@@ -1248,6 +1250,7 @@ describe("applyReset — reset-drop-failed names the phase that actually failed 
 				"interactive-transactions": true,
 				"session-state": true,
 				"prepared-statements": false,
+				"batched-transactions": false,
 			},
 			execute: session.execute,
 			// Rejects before the callback ever runs -- standing in for BEGIN
@@ -1256,6 +1259,11 @@ describe("applyReset — reset-drop-failed names the phase that actually failed 
 			// only wraps the two statements inside the callback), so this
 			// is exactly `resetPhaseOf`'s "unknown" fallback.
 			transaction: async () => {
+				throw Object.assign(new Error("connection terminated unexpectedly"), {
+					code: "08006",
+				});
+			},
+			batch: async () => {
 				throw Object.assign(new Error("connection terminated unexpectedly"), {
 					code: "08006",
 				});

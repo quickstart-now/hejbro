@@ -7,7 +7,14 @@
  * contract types, `DbContext`/`ScopedDb`/`Tx`, the result-row types every
  * one of them resolves through, `throwMissingCapability` (#490 — the
  * driver contract's own missing-capability failure, so a driver package
- * constructs it instead of copying its message text), and
+ * constructs it instead of copying its message text),
+ * `preparedStatementName` (task 1.5, #891 — the one statement-name
+ * derivation every driver declaring `"prepared-statements"` calls,
+ * so `@hejbro/pg` and `@hejbro/neon` hold no byte-identical copy of
+ * their own), `lastRows`/`QueryResultLike` (task 1.6, #892 — the one
+ * fold from a possibly multi-command node-postgres-shaped result to
+ * the rows a caller sees, the last command's, that both drivers call
+ * instead of each reimplementing it), and
  * `defaultContextRendering`/`ContextRendering` (#554/#555 review F1 —
  * the default rendering's own spec requirement, "reachable by a driver
  * package", needs a public-entry export; a module-level `export const`
@@ -82,6 +89,9 @@ export type {
 	DriverSession,
 } from "./driver/contract";
 export { throwMissingCapability } from "./driver/errors";
+export type { QueryResultLike } from "./driver/result-rows";
+export { lastRows } from "./driver/result-rows";
+export { preparedStatementName } from "./driver/statement-name";
 export type { SqlExpr } from "./sql";
 export { sql } from "./sql";
 export type { ReturningRow } from "./types/returning";

@@ -56,6 +56,7 @@ const handRolledDriver = (pool: Pool): Driver => {
 			"interactive-transactions": true,
 			"session-state": true,
 			"prepared-statements": false,
+			"batched-transactions": false,
 		},
 		execute: (compiled) => run(pool, compiled),
 		transaction: async (callback) => {
@@ -75,6 +76,7 @@ const handRolledDriver = (pool: Pool): Driver => {
 				client.release();
 			}
 		},
+		batch: async () => [],
 		setupSession: async () => {},
 	};
 };

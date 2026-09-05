@@ -1,0 +1,212 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#486",
+  "title": "the driver contract has no vocabulary for non-interactive statement batches",
+  "parent": "quickstart-now/hejbro#412",
+  "status": "closed",
+  "opened": "2026-09-05",
+  "closed": "2026-09-05",
+  "decisions": [
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "412/D24",
+        "D25; D95 (a truthful capability set names what a driver can do); the #300/#486 measurement (Neon HTTP sql.transaction batch applies set local role + set_config atomically",
+        "no leakage); the HTTP driver's existing throwing transaction() precedent"
+      ],
+      "at": "2026-09-05T08:26Z",
+      "title": "A fourth capability, batched-transactions, with a batch member; a context runs as one batch where interactive transactions are absent",
+      "ratified": null
+    },
+    {
+      "id": "R2",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "412/D24",
+        "D25; same files (driver contract",
+        "pg",
+        "neon); refusal rejected because a multi-command text is only detectable after it ran; psql precedent"
+      ],
+      "at": "2026-09-05T08:29Z",
+      "title": "#891 (one exported name helper) and #892 (multi-command text = last command's rows) fold into add-batched-transactions",
+      "ratified": null
+    },
+    {
+      "id": "R3",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "412/D24",
+        "D25; 486/R1",
+        "R2; bt (a) report (tasks.md named files that do not exist; scopedRun's session-shaped callback; SETUP_SESSION_SQL is itself a multi-command text)"
+      ],
+      "at": "2026-09-05T11:20Z",
+      "title": "Kick-off rulings: existing error/test files, an any-of assertCapability with an N-key message, a batch-per-execute session inside context.ts, and 1.2 deferred until #458 lands",
+      "ratified": null
+    },
+    {
+      "id": "R4",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "412/D24",
+        "D25; 486/R2; #891's own reasoning (no shared point but @hejbro/query); bt measurement on postgres 17 / pg 8.23 (array result per command",
+        "42601 when params accompany a multi-command text)"
+      ],
+      "at": "2026-09-05T11:24Z",
+      "title": "1.6: a multi-command text folds by Array.isArray to the last command's rows, in one @hejbro/query function both drivers call",
+      "ratified": null
+    },
+    {
+      "id": "R5",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [],
+      "at": "2026-09-05T11:49Z",
+      "title": "R5 — split task 1.2 into 1.2a (pg, supabase, nile) and 1.2b (neon, after #458)",
+      "ratified": null
+    },
+    {
+      "id": "R6",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [],
+      "at": "2026-09-05T11:49Z",
+      "title": "R6 — a zero-length batch result array is an internal-invariant error, not an empty row list",
+      "ratified": null
+    },
+    {
+      "id": "R7",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [],
+      "at": "2026-09-05T11:49Z",
+      "title": "R7 — nile and supabase declare batched-transactions differently because they own different obligations",
+      "ratified": null
+    },
+    {
+      "id": "R8",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [],
+      "at": "2026-09-05T11:49Z",
+      "title": "R8 — 1.2a/1.2b admit their own test fixture sweeps, not a separate task",
+      "ratified": null
+    },
+    {
+      "id": "R9",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [],
+      "at": "2026-09-05T13:18Z",
+      "title": "a failing batch is reported as a batch, never as one member's failure",
+      "ratified": null
+    },
+    {
+      "id": "R10",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [],
+      "at": "2026-09-05T13:51Z",
+      "title": "task 1.3's missing red-first evidence is supplied by mutation",
+      "ratified": null
+    },
+    {
+      "id": "R11",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [],
+      "at": "2026-09-05T13:51Z",
+      "title": "batch([]) sends nothing over the wire, not even the driver's own pins",
+      "ratified": null
+    },
+    {
+      "id": "R12",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [],
+      "at": "2026-09-05T13:53Z",
+      "title": "rewriting #557's boundary test is admitted; D95 is unchanged",
+      "ratified": null
+    },
+    {
+      "id": "R13",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [],
+      "at": "2026-09-05T14:19Z",
+      "title": "the supabase preset's capability table is widened in this PR",
+      "ratified": null
+    },
+    {
+      "id": "R14",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [],
+      "at": "2026-09-05T15:05Z",
+      "title": "the review's four non-blocking findings are split between this PR and an issue",
+      "ratified": null
+    }
+  ],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-05T12:00Z",
+      "title": "W1 -- mutation testing closes the task 1.3 red-first gap (486/R10)",
+      "pr": null,
+      "decisions": [
+        "R10"
+      ]
+    },
+    {
+      "id": "W2",
+      "at": "2026-09-05T13:53Z",
+      "title": "task 1.2b rewrote #557's boundary test -- before and after titles, per 486/R12",
+      "pr": null,
+      "decisions": [
+        "R12"
+      ]
+    },
+    {
+      "id": "W3",
+      "at": "2026-09-05T14:19Z",
+      "title": "task 1.4's file pointer was wrong; the artifacts corrected it (486/R13)",
+      "pr": null,
+      "decisions": [
+        "R13"
+      ]
+    },
+    {
+      "id": "W4",
+      "at": "2026-09-05T15:05Z",
+      "title": "the review's scale and N3's routing history (486/R14)",
+      "pr": null,
+      "decisions": [
+        "R14"
+      ]
+    },
+    {
+      "id": "W5",
+      "at": "2026-09-05T15:06Z",
+      "title": "result-rows.ts's R6 and context.ts's R14 are separate zero-result decisions",
+      "pr": null,
+      "decisions": [
+        "R6",
+        "R14"
+      ]
+    }
+  ],
+  "prs": [
+    {
+      "number": 955,
+      "role": "closes",
+      "pinnedAt": "2026-09-05T16:18Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

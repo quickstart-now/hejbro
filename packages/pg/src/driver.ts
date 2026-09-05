@@ -1,10 +1,16 @@
-import { createHash } from "node:crypto";
 import type {
 	CompileKind,
 	CompileResult,
 	Driver,
 	DriverCapabilities,
+	DriverRow,
 	DriverSession,
+	QueryResultLike,
+} from "@hejbro/query";
+import {
+	lastRows,
+	preparedStatementName,
+	throwMissingCapability,
 } from "@hejbro/query";
 import type { CustomTypesConfig, PoolClient } from "pg";
 import { Pool, types as pgTypes } from "pg";
@@ -16,7 +22,10 @@ import { Pool, types as pgTypes } from "pg";
  * preserves `SET`-style session state across sequential statements on
  * the same connection. `prepared-statements` is the caller's own,
  * stated through {@link PgDriverOptions} (add-prepared-statements
- * design Q3).
+ * design Q3). `batched-transactions` is fixed `false` (task 1.2a,
+ * #486/R5): a single physical connection already has `transaction()`,
+ * so a batch execution path has nothing to add here -- {@link
+ * buildDriver}'s own `batch` member refuses before sending anything.
  */
 // Frozen, and the option read with `=== true` (D106 R1 N3): a JS caller's
 // `"true"` or `1` must not land verbatim in a declaration typed boolean,
@@ -26,26 +35,27 @@ const capabilitiesFor = (preparedStatements: boolean): DriverCapabilities =>
 		"interactive-transactions": true,
 		"session-state": true,
 		"prepared-statements": preparedStatements,
+		"batched-transactions": false,
 	});
+
+/**
+ * `Driver.batch`'s own body on this driver (task 1.2a, #486/R5): refuses
+ * before touching the pool at all -- not even `pool.connect()` -- the
+ * same pattern `@hejbro/neon`'s HTTP driver already uses for its own
+ * missing `transaction()`. Mandatory on every `Driver` regardless of the
+ * capability's own value (contract.ts's own tsdoc); this driver declares
+ * it `false` and this is that declaration's one enforcement point.
+ */
+const refuseBatch = async (
+	_statements: ReadonlyArray<CompileResult>,
+): Promise<ReadonlyArray<ReadonlyArray<DriverRow>>> => {
+	throwMissingCapability("batched-transactions", "batch");
+};
 
 /** The second-argument shape both `pgDriver` overloads accept (add-prepared-statements design Q3). */
 export type PgDriverOptions = {
 	readonly preparedStatements?: boolean;
 };
-
-/**
- * `hejbro_` + the first 32 hex digits of SHA-256 over the statement text
- * (add-prepared-statements design Q4): 39 bytes, inside Postgres's 63-byte
- * identifier limit, and a pure function of the text alone -- the same text
- * yields the same name on every connection and in every process, and two
- * different texts practically never collide (their whole 256-bit digests
- * would have to). node-postgres's own client caches "parsed" per
- * connection and per name and refuses one name for two texts, so a name
- * that is a pure function of the text can never legitimately collide with
- * a different text on one connection.
- */
-const preparedStatementName = (sql: string): string =>
-	`hejbro_${createHash("sha256").update(sql).digest("hex").slice(0, 32)}`;
 
 /**
  * The kinds a prepared statement may carry (add-prepared-statements
@@ -66,7 +76,12 @@ const BUILT_KINDS: ReadonlySet<CompileKind> = new Set([
  * The `name` key {@link makeSession} spreads into a query config -- an
  * empty object when the statement is not to be named, never `{ name:
  * undefined }`, so an existing caller's config stays byte-identical to
- * what it was before this option existed.
+ * what it was before this option existed. `preparedStatementName`
+ * (task 1.5, #891, exported by `@hejbro/query`'s own driver contract) is
+ * a pure function of the statement text alone, which is exactly what
+ * node-postgres's own client needs: it caches "parsed" per connection
+ * and per name and refuses one name for two texts, so a name that can
+ * never legitimately collide with a different text on one connection.
  */
 const nameForQueryConfig = (
 	compiled: CompileResult,
@@ -149,7 +164,11 @@ const makeSession = (
 			types: intervalPassthroughTypes,
 			...nameForQueryConfig(compiled, preparedStatements),
 		});
-		return result.rows;
+		// node-postgres's own return type never models the multi-command
+		// shape (task 1.6, #892): an array, one entry per command, when
+		// `compiled.sql` (the `sql` escape hatch only) carries more than
+		// one -- our own `SETUP_SESSION_SQL` travels this exact path.
+		return lastRows(result as QueryResultLike | ReadonlyArray<QueryResultLike>);
 	},
 });
 
@@ -395,6 +414,7 @@ const buildDriver = (
 				throw error;
 			}
 		},
+		batch: refuseBatch,
 		setupSession,
 	};
 	return driver;

@@ -1,10 +1,16 @@
-import { createHash } from "node:crypto";
 import type {
 	CompileKind,
 	CompileResult,
 	Driver,
 	DriverCapabilities,
+	DriverRow,
 	DriverSession,
+	QueryResultLike,
+} from "@hejbro/query";
+import {
+	lastRows,
+	preparedStatementName,
+	throwMissingCapability,
 } from "@hejbro/query";
 import type { Pool, PoolClient } from "@neondatabase/serverless";
 import { buildHttpDriver, type HttpQueryable } from "./http";
@@ -18,29 +24,38 @@ import { intervalPassthroughTypes } from "./type-overrides";
  * preserves `SET`-style session state across sequential statements on
  * it, exactly like `@hejbro/pg`'s own `Pool`. `prepared-statements` is
  * the caller's own (task 1.3, #303), stated through
- * {@link NeonDriverOptions}.
+ * {@link NeonDriverOptions}. `batched-transactions` is fixed `false`
+ * (task 1.2b, #486/R5): this path already has `transaction()`, so a
+ * batch execution path has nothing to add here -- {@link
+ * buildWebSocketDriver}'s own `batch` member refuses before sending
+ * anything, mirroring `@hejbro/pg`'s own `refuseBatch`.
  */
 const wsCapabilitiesFor = (preparedStatements: boolean): DriverCapabilities =>
 	Object.freeze({
 		"interactive-transactions": true,
 		"session-state": true,
 		"prepared-statements": preparedStatements,
+		"batched-transactions": false,
 	});
+
+/**
+ * `Driver.batch`'s own body on the WebSocket path (task 1.2b, #486/R5):
+ * refuses before touching the pool at all -- not even `pool.connect()`
+ * -- mirroring `@hejbro/pg`'s own `refuseBatch`. Mandatory on every
+ * `Driver` regardless of the capability's own value; this driver
+ * declares it `false` and this is that declaration's one enforcement
+ * point.
+ */
+const refuseBatch = async (
+	_statements: ReadonlyArray<CompileResult>,
+): Promise<ReadonlyArray<ReadonlyArray<DriverRow>>> => {
+	throwMissingCapability("batched-transactions", "batch");
+};
 
 /** The second-argument shape `neonDriver`'s `Pool` overload accepts (task 1.3, #303, add-prepared-statements design Q3) -- the HTTP overload has no session to prepare in, so its own type offers none. */
 export type NeonDriverOptions = {
 	readonly preparedStatements?: boolean;
 };
-
-/**
- * `hejbro_` + the first 32 hex digits of SHA-256 over the statement text
- * (add-prepared-statements design Q4) -- duplicated from `@hejbro/pg`'s
- * own copy rather than imported: the provider-preset boundary
- * (`.claude/rules/provider-preset.md`) forbids this package from
- * depending on a concrete driver implementation, even for a pure helper.
- */
-const preparedStatementName = (sql: string): string =>
-	`hejbro_${createHash("sha256").update(sql).digest("hex").slice(0, 32)}`;
 
 /**
  * The kinds a prepared statement may carry (mirrors `@hejbro/pg`'s own
@@ -64,7 +79,7 @@ const BUILT_KINDS: ReadonlySet<CompileKind> = new Set([
  */
 type Queryable = Pick<Pool, "query">;
 
-/** The `name` key {@link makeSession} spreads into a query config -- an empty object when the statement is not to be named (mirrors `@hejbro/pg`'s own helper), never `{ name: undefined }`. */
+/** The `name` key {@link makeSession} spreads into a query config -- an empty object when the statement is not to be named, never `{ name: undefined }`. `preparedStatementName` (task 1.5, #891) is `@hejbro/query`'s own driver-contract export -- no local copy, unlike before this task. */
 const nameForQueryConfig = (
 	compiled: CompileResult,
 	preparedStatements: boolean,
@@ -93,7 +108,11 @@ const makeSession = (
 			types: intervalPassthroughTypes,
 			...nameForQueryConfig(compiled, preparedStatements),
 		});
-		return result.rows;
+		// node-postgres's own return type never models the multi-command
+		// shape (task 1.6, #892): an array, one entry per command, when
+		// `compiled.sql` (the `sql` escape hatch only) carries more than
+		// one -- our own `SETUP_SESSION_SQL` travels this exact path.
+		return lastRows(result as QueryResultLike | ReadonlyArray<QueryResultLike>);
 	},
 });
 
@@ -201,6 +220,7 @@ const buildWebSocketDriver = (
 				throw error;
 			}
 		},
+		batch: refuseBatch,
 		setupSession,
 		// Neon's two Data API roles (task 3.5, consumes group 4's
 		// constants) -- so db.as(...)'s fail-closed role allowlist admits

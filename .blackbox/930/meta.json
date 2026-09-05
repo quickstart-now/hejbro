@@ -1,0 +1,21 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#930",
+  "title": "nile: vitest alias covers core and query but not @hejbro/pg, so nile tests can pass against a stale pg dist",
+  "parent": "quickstart-now/hejbro#815",
+  "status": "open",
+  "opened": "2026-09-05",
+  "closed": null,
+  "decisions": [],
+  "work": [],
+  "prs": [
+    {
+      "number": 955,
+      "role": "refs",
+      "pinnedAt": "2026-09-05T16:18Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

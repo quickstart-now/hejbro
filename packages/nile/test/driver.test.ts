@@ -1,4 +1,5 @@
 import { roleName, schema, select, table, uuid } from "@hejbro/core";
+import { pgDriver } from "@hejbro/pg";
 import type {
 	ContextRendering,
 	Driver,
@@ -17,6 +18,8 @@ type SentStatement = {
 
 type RecordingBaseOptions = {
 	readonly interactiveTransactions?: boolean;
+	/** Declares `"batched-transactions"` (task 1.2a, #486/R7 -- pins the mechanism: nile owns no execution path, so a base declaring this `true` with its own `batch` must be inherited whole, unchanged). */
+	readonly batchedTransactions?: boolean;
 	readonly renderContext?: ContextRendering;
 	readonly rows?: ReadonlyArray<DriverRow>;
 	/**
@@ -63,6 +66,7 @@ const recordingBase = (
 			"interactive-transactions": options.interactiveTransactions ?? true,
 			"session-state": true,
 			"prepared-statements": false,
+			"batched-transactions": options.batchedTransactions ?? false,
 		},
 		execute: vi.fn(async () => rows),
 		transaction: vi.fn(async (callback) => {
@@ -79,6 +83,7 @@ const recordingBase = (
 			};
 			return callback(session);
 		}),
+		batch: vi.fn(async () => []),
 		setupSession: vi.fn(async () => {}),
 		...renderContextField(options.renderContext),
 	};
@@ -173,6 +178,26 @@ describe("nileDriver(driver) forwards capabilities unchanged (task 2.2, #564)", 
 		// rendering was never reached, without needing a way to spy on the
 		// module-level export directly.
 		expect(driver.transaction).not.toHaveBeenCalled();
+	});
+});
+
+describe("nileDriver's batched-transactions tier (task 1.2a, #486/R7) -- no execution path of its own, so the declaration and batch are inherited whole, never reimplemented", () => {
+	it("① nile over pg (the shipped configuration): batched-transactions reads false, and batch refuses before touching the pool", async () => {
+		const base = pgDriver("postgres://localhost/does-not-need-to-connect");
+		const wrapped = nileDriver(base);
+
+		expect(wrapped.capabilities["batched-transactions"]).toBe(false);
+		await expect(
+			wrapped.batch([{ sql: "select 1", params: [], kind: "sql" }]),
+		).rejects.toThrow(/batched-transactions/);
+	});
+
+	it("② over a fake base declaring batched-transactions true with its own batch: both the declaration and the member are inherited whole (mechanism, pinned, test-only)", () => {
+		const { driver } = recordingBase({ batchedTransactions: true });
+		const wrapped = nileDriver(driver);
+
+		expect(wrapped.capabilities["batched-transactions"]).toBe(true);
+		expect(wrapped.batch).toBe(driver.batch);
 	});
 });
 

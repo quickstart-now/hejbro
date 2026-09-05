@@ -5,6 +5,8 @@ import type {
 	ContextRendering,
 	DbContext,
 	Driver,
+	DriverCapabilityKey,
+	DriverRow,
 	DriverSession,
 } from "../driver/contract";
 import { assertCapability } from "../driver/errors";
@@ -15,7 +17,7 @@ import { executeOn, sendCompiled } from "./execute";
 import { createFnApi } from "./fn";
 import type { TypedFnApi } from "./fn-types";
 import type { Tx } from "./transaction";
-import { runCallbackWithTx } from "./transaction";
+import { runCallbackWithTx, TRANSACTION_OPERATION } from "./transaction";
 
 /**
  * `db.as(context)`'s own argument (task 2.10, #554/#555): re-exported
@@ -205,18 +207,37 @@ export const defaultContextRendering: ContextRendering = (context) => [
 ];
 
 /**
- * Applies `context` on `session` (task 2.2, #555): `driver`'s own
- * rendering when it contributes one, `defaultContextRendering` otherwise
- * (spec: "Contributing nothing keeps the existing statements") — the
- * driver's own rendering fully replaces the default, never runs
- * alongside it. Every returned statement is sent one at a time, in the
- * rendering's own order (a `reduce`-chained sequential await, not
- * `Promise.all` — these share one connection, and issuing them
- * concurrently would race on it, task 2.6). Every statement here goes
- * through `sendCompiled` (task 4.5's `query-execution-failed` contract),
- * never a bespoke error path. `operation` is threaded through only to
- * name an empty-rendering refusal's surface (task 1.9) -- it never
- * reaches a statement or the rendering itself.
+ * `context`'s own statements (task 1.3, #486): `driver`'s own rendering
+ * when it contributes one, `defaultContextRendering` otherwise (spec:
+ * "Contributing nothing keeps the existing statements") -- the driver's
+ * own rendering fully replaces the default, never runs alongside it.
+ * Shared by the interactive path ({@link applyContext}) and the batch
+ * path (`runContextInBatch`) so both send "the same statements, from the
+ * same built-in or contributed rendering, in the same order" (delta) by
+ * construction, never by two call sites happening to agree. `operation`
+ * is threaded through only to name an empty-rendering refusal's surface
+ * (task 1.9) -- it never reaches a statement or the rendering itself.
+ */
+const contextStatements = (
+	driver: Driver,
+	context: DbContext,
+	operation: string,
+): ReadonlyArray<CompileResult> => {
+	const rendering = driver.renderContext ?? defaultContextRendering;
+	const statements = rendering(context);
+	if (statements.length === 0 && driver.contextRequired === true) {
+		throwContextRenderingEmpty(operation);
+	}
+	return statements;
+};
+
+/**
+ * Applies `context` on `session` (task 2.2, #555): every statement from
+ * {@link contextStatements} sent one at a time, in the rendering's own
+ * order (a `reduce`-chained sequential await, not `Promise.all` — these
+ * share one connection, and issuing them concurrently would race on it,
+ * task 2.6). Every statement here goes through `sendCompiled` (task
+ * 4.5's `query-execution-failed` contract), never a bespoke error path.
  */
 const applyContext = async (
 	driver: Driver,
@@ -224,11 +245,7 @@ const applyContext = async (
 	context: DbContext,
 	operation: string,
 ): Promise<void> => {
-	const rendering = driver.renderContext ?? defaultContextRendering;
-	const statements = rendering(context);
-	if (statements.length === 0 && driver.contextRequired === true) {
-		throwContextRenderingEmpty(operation);
-	}
+	const statements = contextStatements(driver, context, operation);
 	await statements.reduce<Promise<void>>(
 		(previous, statement) =>
 			previous.then(async () => {
@@ -238,17 +255,237 @@ const applyContext = async (
 	);
 };
 
+/** "1 result" vs "N results" -- guard clause, not ternary (house style). */
+const resultNoun = (count: number): string => {
+	if (count === 1) {
+		return "1 result";
+	}
+	return `${count} results`;
+};
+
+/** "1 statement" vs "N statements" -- guard clause, not ternary (house style). */
+const memberNoun = (count: number): string => {
+	if (count === 1) {
+		return "1 statement";
+	}
+	return `${count} statements`;
+};
+
+/**
+ * Builds and throws the `batch-result-count-mismatch`-coded, enriched
+ * plain `Error` (D57) -- a driver contract violation (task 1.3, #486;
+ * review finding N3): `Driver.batch` must resolve exactly one row list
+ * per member sent, and any other count -- fewer, more, or zero -- is a
+ * wrong answer, not merely a missing one, since silently returning a
+ * context statement's own rows as the caller's would go unnoticed. Names
+ * both counts so the message is falsifiable regardless of which
+ * direction the driver got it wrong. Absorbs the former "zero results"
+ * internal-invariant case (486/R14): zero is one instance of a count
+ * mismatch, not a separate failure mode -- unlike `result-rows.ts`'s own
+ * zero-length-array case (task 1.6, #892/R6), which is a different site
+ * entirely (a single node-postgres multi-command result, never a driver
+ * batch result) and keeps its own uncoded internal-invariant error.
+ */
+function throwBatchResultCountMismatch(sent: number, returned: number): never {
+	throw Object.assign(
+		new Error(
+			`driver.batch returned ${resultNoun(returned)}, but the query layer sent ${memberNoun(sent)} -- one row list per member is required. Next: use a driver whose batch member honors that contract, or file an issue against this one.`,
+		),
+		{ code: "batch-result-count-mismatch", sent, returned },
+	);
+}
+
+const isBatchResultCountMismatchError = (
+	error: unknown,
+): error is Error & { readonly code: "batch-result-count-mismatch" } =>
+	error instanceof Error &&
+	(error as { code?: unknown }).code === "batch-result-count-mismatch";
+
+/**
+ * The last entry of a driver batch result (task 1.3, #486), after
+ * checking `results` holds exactly one entry per `members` sent (task
+ * 1.3, #486/R14, review finding N3) -- `members.length` is always at
+ * least 1 ({@link runContextInBatch} always appends the caller's own
+ * statement), so a checked-equal `results` always has a defined last
+ * entry; the second guard exists only so `tsc` can see that, and folds
+ * into the same coded error rather than a second failure shape.
+ */
+const lastBatchRowsChecked = (
+	members: ReadonlyArray<CompileResult>,
+	results: ReadonlyArray<ReadonlyArray<DriverRow>>,
+): ReadonlyArray<DriverRow> => {
+	if (results.length !== members.length) {
+		throwBatchResultCountMismatch(members.length, results.length);
+	}
+	const last = results[results.length - 1];
+	if (last === undefined) {
+		throwBatchResultCountMismatch(members.length, results.length);
+	}
+	return last;
+};
+
+/** What `sendCompiled`'s own `throwQueryExecutionFailed` (`execute.ts`, task 4.5) enriches its `Error` with -- read back here (task 1.3b, #486/R9) to recover the caller's own `kind` and the driver's own raw `cause`, both already correct, without importing `execute.ts`'s private builder. */
+type QueryExecutionFailedError = Error & {
+	readonly code: "query-execution-failed";
+	readonly kind: CompileResult["kind"];
+	readonly cause: unknown;
+};
+
+const isQueryExecutionFailedError = (
+	error: unknown,
+): error is QueryExecutionFailedError =>
+	error instanceof Error &&
+	(error as { code?: unknown }).code === "query-execution-failed";
+
+/**
+ * Builds and throws the batch-shaped `query-execution-failed` report
+ * (task 1.3b, #486/R9): `code` and `kind` stay what `sendCompiled` had
+ * already gotten right, `cause` is the driver's own rejection verbatim
+ * -- only the message changes, from a claim that the caller's own
+ * statement alone failed (false whenever a context statement was the
+ * actual cause) to naming the whole batch and admitting what a batch
+ * result cannot say: which member failed. `members` lists every
+ * statement actually sent, in order, so nothing known is withheld.
+ */
+/** "1 context statement" vs "N context statements" -- a guard clause, not a ternary (house style); the singular is the common case (one role, no settings) and reads as broken English left plural. */
+const contextStatementNoun = (count: number): string => {
+	if (count === 1) {
+		return "1 context statement";
+	}
+	return `${count} context statements`;
+};
+
+/**
+ * Every batch member, numbered (`1) …`, never `;`-joined: this PR gives
+ * `;` its own meaning inside a single multi-command `sql` text (#892,
+ * task 1.6 -- "the last command's rows"), so joining a *list of separate
+ * statements* with the same character would read as one more multi-
+ * command text instead of what it is here, a report of what was sent.
+ */
+const numberedStatementList = (members: ReadonlyArray<CompileResult>): string =>
+	members.map((member, index) => `${index + 1}) ${member.sql}`).join(" ");
+
+const throwBatchExecutionFailed = (
+	members: ReadonlyArray<CompileResult>,
+	contextStatementCount: number,
+	kind: CompileResult["kind"],
+	cause: unknown,
+): never => {
+	throw Object.assign(
+		new Error(
+			`query execution failed for a batch of ${contextStatementNoun(contextStatementCount)} and this "${kind}" statement; the driver does not report which member failed. Statement: ${numberedStatementList(members)}. Next: the driver's full error (fields like "detail" and "hint" included) is on "cause" -- this wrapper never retries or reinterprets it.`,
+		),
+		{ code: "query-execution-failed", kind, cause },
+	);
+};
+
+/**
+ * Runs `send` on a single-`execute` session backed by one `driver.batch`
+ * call (task 1.3, #486): the context's own statements ({@link
+ * contextStatements}) plus `send`'s one caller statement, sent as one
+ * batch, resolving to the last member's rows. Never a second
+ * implementation of the context-application sequence -- the batch path's
+ * only difference from {@link applyContext}'s interactive path is where
+ * the statements travel, not what they are or what order they're in.
+ *
+ * A driver rejection surfaces through `sendCompiled` first (task 4.5,
+ * `execute.ts`), already carrying the correct `kind`/`cause` but the
+ * wrong message (it names only `compiled`, the caller's own statement --
+ * task 1.3b, #486/R9: a context statement could equally have been the
+ * actual cause, and a batch result never says which). `sent` records the
+ * one statement this session's own `execute` actually received, so the
+ * catch below can rebuild the report naming the whole batch instead,
+ * without a second implementation of `sendCompiled`'s own enrichment.
+ */
+const runContextInBatch = async <T>(
+	driver: Driver,
+	context: DbContext,
+	operation: string,
+	send: (session: DriverSession) => Promise<T>,
+): Promise<T> => {
+	const statements = contextStatements(driver, context, operation);
+	const sent: Array<CompileResult> = [];
+	try {
+		return await send({
+			execute: async (compiled) => {
+				sent.push(compiled);
+				const members = [...statements, compiled];
+				const results = await driver.batch(members);
+				return lastBatchRowsChecked(members, results);
+			},
+		});
+	} catch (error) {
+		const callerStatement = sent[0];
+		if (callerStatement === undefined || !isQueryExecutionFailedError(error)) {
+			throw error;
+		}
+		// `sendCompiled` (task 4.5) wraps whatever `execute` throws as
+		// `query-execution-failed`, `cause` set to the original -- so a
+		// count-mismatch thrown above arrives here as `error.cause`, not
+		// `error` itself (review finding N3, "trap 2"). Rethrown unwrapped,
+		// ahead of the 1.3b rebuild below, so its own code reaches the
+		// caller rather than being re-wrapped a second time under the
+		// wrong one.
+		if (isBatchResultCountMismatchError(error.cause)) {
+			throw error.cause;
+		}
+		return throwBatchExecutionFailed(
+			[...statements, callerStatement],
+			statements.length,
+			error.kind,
+			error.cause,
+		);
+	}
+};
+
+/**
+ * Opens one fresh, context-applied transaction and runs `send` on it —
+ * the interactive path both {@link createProviderRun} and
+ * {@link createAsApi} share (task 1.3, #486), so a capability check
+ * choosing this path can never diverge from what actually runs.
+ */
+const runContextInteractively = <T>(
+	driver: Driver,
+	context: DbContext,
+	operation: string,
+	send: (session: DriverSession) => Promise<T>,
+): Promise<T> =>
+	driver.transaction(async (session) => {
+		await applyContext(driver, session, context, operation);
+		return send(session);
+	});
+
+/**
+ * The capability keys a given operation may run under (task 1.3, #486):
+ * `"transaction"` is the callback-scoped surface (`db.transaction`/
+ * `db.as(context).transaction`) -- inherently interactive, so it is
+ * never a batch candidate and asserts the single legacy key. Every other
+ * operation (execute, chain, `db.fn`) can run either way, preferring
+ * interactive where both are declared (delta: "Interactive transactions
+ * win where both are declared"), so it asserts both, interactive first.
+ */
+const capabilitiesForOperation = (
+	operation: string,
+): ReadonlyArray<DriverCapabilityKey> => {
+	if (operation === TRANSACTION_OPERATION) {
+		return ["interactive-transactions"];
+	}
+	return ["interactive-transactions", "batched-transactions"];
+};
+
 /**
  * The primitive a registered `context` provider runs every execution
- * surface through (add-context-provider, task 1.1/1.2): asserts the
- * interactive-transaction capability *before* consulting the resolver (so
+ * surface through (add-context-provider, task 1.1/1.2; batch path, task
+ * 1.3, #486): asserts capability *before* consulting the resolver (so
  * the failure belongs to the driver alone, task 1.6), resolves the
  * context, rejects fail-closed if the resolver yielded nothing, validates
  * the resolved role through the exact same {@link assertDeclaredRole}
- * `db.as(context)` uses, then applies it via the exact same
- * {@link applyContext} inside one fresh `driver.transaction` -- the same
- * two functions the explicit path calls, never a second implementation of
- * either (the invariant every task in this group serves).
+ * `db.as(context)` uses, then runs it either interactively or as one
+ * batch -- declaration alone decides which (never a runtime probe of
+ * `driver.batch`'s presence): `"transaction"` (routed here by
+ * `transaction.ts`'s `guardedProviderTransactionOpener`) always runs
+ * interactively, every other operation follows
+ * `driver.capabilities["interactive-transactions"]`.
  */
 export type ProviderRun = <T>(
 	operation: string,
@@ -264,16 +501,19 @@ export const createProviderRun = (
 		operation: string,
 		send: (session: DriverSession) => Promise<T>,
 	): Promise<T> => {
-		assertCapability(driver, "interactive-transactions", operation);
+		assertCapability(driver, capabilitiesForOperation(operation), operation);
 		const context = await provider();
 		if (context === undefined || context === null) {
 			throwProviderContextEmpty();
 		}
 		assertContextRole(driver, context.role, declaredRoles);
-		return driver.transaction(async (session) => {
-			await applyContext(driver, session, context, operation);
-			return send(session);
-		});
+		if (
+			operation === TRANSACTION_OPERATION ||
+			driver.capabilities["interactive-transactions"]
+		) {
+			return runContextInteractively(driver, context, operation, send);
+		}
+		return runContextInBatch(driver, context, operation, send);
 	};
 };
 
@@ -304,23 +544,37 @@ export const createAsApi = <
 	return (context: DbContext): ScopedDb<TFunctions, TSchema> => {
 		assertContextRole(driver, context.role, declaredRoles);
 		/**
-		 * Opens one fresh, context-applied transaction and runs `send` on
-		 * it — the single primitive `execute`/`fn`/`transaction` (task 4.7
-		 * × 4.9) all build on, so context application can never cover some
-		 * and miss another. `operation` names the caller for
-		 * `assertCapability`'s error, so folding three call sites into one
-		 * doesn't blur "which member did this" out of the missing-
-		 * capability message.
+		 * Runs `send` interactively or as one batch (task 4.7 × 4.9; batch
+		 * path task 1.3, #486) — the single primitive `execute`/`fn`/chain
+		 * all build on, so context application can never cover some and
+		 * miss another. `operation` names the caller for `assertCapability`'s
+		 * error, so folding these call sites into one doesn't blur "which
+		 * member did this" out of the missing-capability message. Never
+		 * used for `transaction` (see {@link scopedRunInteractive} below):
+		 * a callback is inherently interactive, so it must not fall through
+		 * to the batch path just because both keys are asserted here.
 		 */
 		const scopedRun = async <T>(
 			operation: string,
 			send: (session: DriverSession) => Promise<T>,
 		): Promise<T> => {
-			assertCapability(driver, "interactive-transactions", operation);
-			return driver.transaction(async (session) => {
-				await applyContext(driver, session, context, operation);
-				return send(session);
-			});
+			assertCapability(
+				driver,
+				["interactive-transactions", "batched-transactions"],
+				operation,
+			);
+			if (driver.capabilities["interactive-transactions"]) {
+				return runContextInteractively(driver, context, operation, send);
+			}
+			return runContextInBatch(driver, context, operation, send);
+		};
+		/** `transaction`'s own primitive (task 1.3, #486): a callback is inherently interactive, so this asserts the single legacy key and never falls through to the batch path. */
+		const scopedRunInteractive = async <T>(
+			operation: string,
+			send: (session: DriverSession) => Promise<T>,
+		): Promise<T> => {
+			assertCapability(driver, ["interactive-transactions"], operation);
+			return runContextInteractively(driver, context, operation, send);
 		};
 		const scopedExecute = (statement: CompileInput): Promise<unknown> =>
 			scopedRun("db.execute", (session) =>
@@ -329,7 +583,7 @@ export const createAsApi = <
 		const scopedTransaction = <T>(
 			callback: (tx: Tx) => Promise<T>,
 		): Promise<T> =>
-			scopedRun("transaction", (session) =>
+			scopedRunInteractive(TRANSACTION_OPERATION, (session) =>
 				runCallbackWithTx(session, tables, callback),
 			);
 		return {

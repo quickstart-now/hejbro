@@ -24,6 +24,7 @@ const recordingTransactionalDriver = (): {
 			"interactive-transactions": true,
 			"session-state": true,
 			"prepared-statements": false,
+			"batched-transactions": false,
 		},
 		execute: async () => [],
 		transaction: async (callback) => {
@@ -37,6 +38,7 @@ const recordingTransactionalDriver = (): {
 			};
 			return callback(session);
 		},
+		batch: async () => [],
 		setupSession: async () => {},
 	};
 	return { driver, sentPerTransaction };

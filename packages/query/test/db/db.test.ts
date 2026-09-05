@@ -84,11 +84,13 @@ const fakeDriver = (contributedRoles?: ReadonlyArray<string>): Driver => ({
 		"interactive-transactions": true,
 		"session-state": true,
 		"prepared-statements": false,
+		"batched-transactions": false,
 	},
 	execute: vi.fn(async () => []),
 	transaction: vi.fn(async (callback) =>
 		callback({ execute: vi.fn(async () => []) }),
 	),
+	batch: vi.fn(async () => []),
 	setupSession: vi.fn(async () => {}),
 	...contributedRolesField(contributedRoles),
 });

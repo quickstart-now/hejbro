@@ -134,7 +134,7 @@ type _ColumnPlanEntryNeverReExported = ColumnPlanEntry;
  * -- both are the header's own words, restated as assertions.
  */
 describe("@hejbro/query public barrel (task 7.8)", () => {
-	it("exposes exactly the agreed runtime value exports -- db, compile, sql, throwMissingCapability, defaultContextRendering, createNameKeyedDb", () => {
+	it("exposes exactly the agreed runtime value exports -- db, compile, sql, throwMissingCapability, preparedStatementName, lastRows, defaultContextRendering, createNameKeyedDb", () => {
 		// Exact-set equality (not just "contains") -- the task's own
 		// contract is "matches the agreed list": this fails just as hard
 		// on an accidental future *addition* (e.g. a stray `convertRows`
@@ -144,6 +144,8 @@ describe("@hejbro/query public barrel (task 7.8)", () => {
 			"createNameKeyedDb",
 			"db",
 			"defaultContextRendering",
+			"lastRows",
+			"preparedStatementName",
 			"sql",
 			"throwMissingCapability",
 		]);
@@ -161,6 +163,21 @@ describe("@hejbro/query public barrel (task 7.8)", () => {
 		expect(() =>
 			barrel.throwMissingCapability("session-state", "setupSession"),
 		).toThrowError(/session-state/);
+	});
+
+	it("the prepared-statement name derivation is exported (task 1.5, #891 -- a driver package calls this instead of holding its own byte-identical copy)", () => {
+		expect(typeof barrel.preparedStatementName).toBe("function");
+		expect(barrel.preparedStatementName("select 1")).toBe(
+			"hejbro_822ae07d4783158bc1912bb623e5107c",
+		);
+	});
+
+	it("the multi-command result fold is exported (task 1.6, #892 -- both drivers call this instead of each reimplementing the same fold)", () => {
+		expect(typeof barrel.lastRows).toBe("function");
+		expect(barrel.lastRows({ rows: [{ a: 1 }] })).toEqual([{ a: 1 }]);
+		expect(
+			barrel.lastRows([{ rows: [{ a: 1 }] }, { rows: [{ b: 2 }] }]),
+		).toEqual([{ b: 2 }]);
 	});
 
 	it("never re-exports the test-only conversion internals (db/convert.ts) -- named absence, redundant with the exact-match above on purpose (one loosening independently of the other still fails)", () => {

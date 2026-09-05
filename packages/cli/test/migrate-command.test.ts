@@ -55,9 +55,11 @@ const makeFakeDriver = (options?: {
 			"interactive-transactions": true,
 			"session-state": true,
 			"prepared-statements": false,
+			"batched-transactions": false,
 		},
 		execute: session.execute,
 		transaction: async (callback) => callback(session),
+		batch: async () => [],
 		setupSession: async () => {},
 	};
 	return { driver, calls };
@@ -334,6 +336,7 @@ describe("assertInteractiveTransactions / 7.3", () => {
 				"interactive-transactions": false,
 				"session-state": false,
 				"prepared-statements": false,
+				"batched-transactions": false,
 			},
 		});
 
@@ -609,6 +612,7 @@ describe("runMigrate / 7.2 connection acquisition, apply-owned codes", () => {
 			"interactive-transactions": true,
 			"session-state": true,
 			"prepared-statements": false,
+			"batched-transactions": false,
 		};
 		const unreachableImporter = async () => ({
 			pgDriver: () => ({
@@ -620,6 +624,9 @@ describe("runMigrate / 7.2 connection acquisition, apply-owned codes", () => {
 				},
 				transaction: async () => {
 					throw new Error("transaction should not be called by this test");
+				},
+				batch: async () => {
+					throw new Error("batch should not be called by this test");
 				},
 				setupSession: async () => {},
 				client: { end: async () => {} },
@@ -694,9 +701,11 @@ describe("runMigrate — a relation that is not the ledger at the ledger's name 
 				"interactive-transactions": true,
 				"session-state": true,
 				"prepared-statements": false,
+				"batched-transactions": false,
 			},
 			execute: session.execute,
 			transaction: async (callback) => callback(session),
+			batch: async () => [],
 			setupSession: async () => {},
 			client: { end: async () => {} },
 		};
@@ -938,9 +947,11 @@ const makeFailingLedgerImporter = (
 			"interactive-transactions": true,
 			"session-state": true,
 			"prepared-statements": false,
+			"batched-transactions": false,
 		},
 		execute: session.execute,
 		transaction: async (callback) => callback(session),
+		batch: async () => [],
 		setupSession: async () => {},
 		client: { end: async () => {} },
 	};
@@ -1172,6 +1183,7 @@ const buildRecordingMigrateDriver = (
 		"interactive-transactions": true,
 		"session-state": true,
 		"prepared-statements": false,
+		"batched-transactions": false,
 	},
 ): {
 	readonly driver: CheckDriverConnection;
@@ -1200,6 +1212,7 @@ const buildRecordingMigrateDriver = (
 		capabilities,
 		execute: session.execute,
 		transaction: async (callback) => callback(session),
+		batch: async () => [],
 		setupSession: async () => {},
 		client: {
 			end: async () => {
@@ -1265,6 +1278,7 @@ describe("hejbro migrate / the configured driver factory threads through (#458 t
 			"interactive-transactions": false,
 			"session-state": true,
 			"prepared-statements": false,
+			"batched-transactions": false,
 		});
 		installFactorySeam({ calls: [], driver });
 		const importer: CheckDriverImporter = async () => {

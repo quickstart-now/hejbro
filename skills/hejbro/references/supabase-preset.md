@@ -51,14 +51,19 @@ const poolerModeDriver = supabaseDriver(
 );
 ```
 
-| Connection | `endpoint` | `interactive-transactions` | `session-state` | `prepared-statements` |
-| --- | --- | --- | --- | --- |
-| Direct connection, or Supabase's session-mode pooler | omitted, or `"session"` | `true` | `true` | the wrapped driver's own |
-| Supabase's transaction-mode pooler (Supavisor, port 6543) | `"transaction-pooler"` | `true` | `false` | `false` |
+| Connection | `endpoint` | `interactive-transactions` | `session-state` | `prepared-statements` | `batched-transactions` |
+| --- | --- | --- | --- | --- | --- |
+| Direct connection, or Supabase's session-mode pooler | omitted, or `"session"` | `true` | `true` | the wrapped driver's own | `false` |
+| Supabase's transaction-mode pooler (Supavisor, port 6543) | `"transaction-pooler"` | `true` | `false` | `false` | `false` |
 
 On the session path the capability set is whatever the wrapped driver
 declares — these values are `pgDriver`'s. The pooler path is the only
-one where this preset replaces them.
+one where this preset replaces them. `batched-transactions` reads
+`false` on both paths: `pgDriver` itself never declares it `true`, and
+the pooler path fixes its own capability record independently of the
+wrapped driver either way (task 1.2a, #486/R7) — an inherited `batch`
+member under a declared-`false` capability would fail closed
+regardless.
 
 ### The pooler refuses a base driver that names its own statements
 

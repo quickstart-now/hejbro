@@ -83,6 +83,7 @@ describe("neonDriver -- the overload fixes the capability set (task 3.1)", () =>
 			"interactive-transactions": true,
 			"session-state": true,
 			"prepared-statements": false,
+			"batched-transactions": false,
 		});
 	});
 
@@ -103,13 +104,14 @@ describe("neonDriver -- the overload fixes the capability set (task 3.1)", () =>
 		},
 	);
 
-	it("a neon() query function declares both capabilities false", () => {
+	it("a neon() query function declares interactive-transactions/session-state/prepared-statements false and batched-transactions true", () => {
 		const sql = neon(HTTP_CONNECTION_STRING);
 		const driver = neonDriver(sql);
 		expect(driver.capabilities).toEqual({
 			"interactive-transactions": false,
 			"session-state": false,
 			"prepared-statements": false,
+			"batched-transactions": true,
 		});
 	});
 
@@ -129,6 +131,7 @@ describe("neonDriver -- the overload fixes the capability set (task 3.1)", () =>
 			"interactive-transactions": true,
 			"session-state": true,
 			"prepared-statements": false,
+			"batched-transactions": false,
 		});
 		expect(connectSpy).not.toHaveBeenCalled();
 	});
@@ -161,6 +164,38 @@ describe("neonDriver(pool) execute (task 3.2)", () => {
 		await driver.execute({ sql: "select 1", params: [], kind: "sql" });
 
 		expect(releaseCalls).toHaveLength(1);
+	});
+
+	it("a multi-command sql text resolves to the last command's rows, never undefined or a crash (task 1.6, #892) -- node-postgres answers an array, one entry per command, for exactly this shape", async () => {
+		// Unlike `stubPoolWithClient`'s own fixed `{ rows: [] }` answer
+		// (never exercises the array shape at all), this client answers a
+		// two-command text the way node-postgres actually does (measured
+		// against postgres:17, design.md Q6): an array, one entry per
+		// command. #892 comment 2's own regression: `handle.execute`/
+		// `tx.execute` threw an uncoded `TypeError` (`rows.map`) reading
+		// `undefined` off that array as if it were a single Result.
+		const client: {
+			query: ReturnType<typeof vi.fn>;
+			release: ReturnType<typeof vi.fn>;
+		} = {
+			query: vi.fn(async () => [
+				{ command: "SELECT", rowCount: 1, rows: [{ a: 1 }] },
+				{ command: "SELECT", rowCount: 1, rows: [{ b: 2 }] },
+			]),
+			release: vi.fn(),
+		};
+		const pool = {
+			connect: vi.fn(async () => client),
+		} as unknown as NeonPool;
+		const driver = neonDriver(pool);
+
+		const rows = await driver.execute({
+			sql: "select 1 as a; select 2 as b",
+			params: [],
+			kind: "sql",
+		});
+
+		expect(rows).toEqual([{ b: 2 }]);
 	});
 });
 
@@ -213,6 +248,7 @@ describe("neonDriver(pool) setupSession pin and capability (task 3.4)", () => {
 			"interactive-transactions": true,
 			"session-state": true,
 			"prepared-statements": false,
+			"batched-transactions": false,
 		});
 
 		await driver.execute({ sql: "select 1", params: [], kind: "sql" });
@@ -573,22 +609,21 @@ describe("neonDriver(pool) + db.as(context) baseline pin, session path (task 4.3
 	});
 });
 
-describe("buildHttpDriver + db.as(context) still refused with missing-capability (task 4.3, #557 -- the boundary this change must not move: a context-rendering contribution point existing on the contract does not widen who may run a context)", () => {
-	it("db.as(context) on the HTTP driver fails with the same missing-capability error it failed with before, and never sends a request", async () => {
-		const sentBatches: Array<unknown> = [];
+describe("buildHttpDriver + db.as(context) now runs as one batch (task 1.2b, #486 -- #557/D95's boundary was drawn for a mere contribution point on a driver declaring no relevant capability; this driver now declares batched-transactions:true, the capability that specific boundary predates)", () => {
+	it("db.as(context) on the HTTP driver succeeds, sending the context statements and the caller's own statement as one batch, in order", async () => {
+		const sentBatches: Array<ReadonlyArray<string>> = [];
 		const fakeSql = Object.assign(
 			() => {
 				throw new Error("tagged-template form not used by this driver");
 			},
 			{
-				query: vi.fn(() => {
-					sentBatches.push("query");
-					return { queryData: {} };
-				}),
-				transaction: vi.fn(async (members: ReadonlyArray<unknown>) => {
-					sentBatches.push(members);
-					return members.map(() => []);
-				}),
+				query: vi.fn((query: string) => ({ queryData: { query } })),
+				transaction: vi.fn(
+					async (members: ReadonlyArray<{ queryData: { query: string } }>) => {
+						sentBatches.push(members.map((member) => member.queryData.query));
+						return members.map(() => []);
+					},
+				),
 			},
 		) as unknown as HttpQueryable;
 		const driver = buildHttpDriver(fakeSql);
@@ -601,30 +636,18 @@ describe("buildHttpDriver + db.as(context) still refused with missing-capability
 		// capability gate, not the role whitelist.
 		const handle = db({ widgets }, driver, { roles: [authenticatedRole] });
 
-		await expect(
-			handle.as({ role: authenticatedRole }).execute(select(widgets)),
-		).rejects.toMatchObject({
-			code: "driver-missing-capability",
-			capability: "interactive-transactions",
-			// pins which layer actually refused (review round 1, F-adjacent
-			// recommendation): the HTTP driver's own transaction() throws
-			// this exact same code/capability unconditionally too (its own
-			// hardcoded defense), so those two fields alone can't tell the
-			// query layer's own gate apart from the driver's redundant one.
-			// `operation` only ever comes from the query layer's own
-			// assertCapability call site (context.ts's `scopedRun`) -- the
-			// scoped path names the caller's own surface (`db.execute` here,
-			// since the caller invoked `.execute()`; harden-context-boundary
-			// task 1.6's per-verb naming); the driver's own thrower still
-			// names "transaction" instead (see http-session.test.ts).
-			operation: "db.execute",
-		});
+		const rows = await handle
+			.as({ role: authenticatedRole })
+			.execute(select(widgets));
 
-		// nothing reached the fake sql client at all -- the query layer's
-		// own capability gate (assertCapability, called before the
-		// resolver/context is ever touched) refuses this before the
-		// driver's own transaction/query members are invoked.
-		expect(sentBatches).toHaveLength(0);
+		expect(rows).toEqual([]);
+		expect(sentBatches).toHaveLength(1);
+		expect(sentBatches[0]?.slice(0, 3)).toEqual([
+			"set intervalstyle to 'postgres'",
+			"set bytea_output to 'hex'",
+			'set local role "authenticated"',
+		]);
+		expect(sentBatches[0]?.[3]).toContain("widgets");
 	});
 });
 

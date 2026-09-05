@@ -39,7 +39,11 @@ every time. The name is derived from the statement text alone
 same text always gets the same name, on every connection and in every
 process, and two different texts do not share a name — the name is a
 128-bit digest of the text, so a collision is not a practical
-possibility. A `db.fn` call compiles as the `sql` kind and is therefore
+possibility. `@hejbro/query` exports this derivation itself as
+`preparedStatementName(sql)` — the one function `@hejbro/pg` and
+`@hejbro/neon` both call, so a driver that declares `prepared-
+statements` never holds its own copy of the naming rule. A `db.fn`
+call compiles as the `sql` kind and is therefore
 never named, exactly like the escape hatch. Once a statement is
 prepared it stays prepared for the connection's life — hejbro evicts
 nothing, so the set of distinct texts an application compiles (bounded
@@ -54,6 +58,12 @@ text that carries more than one command cannot be prepared as one.
 Whether a statement is named depends only on the option and the
 statement's own kind, never on its text, its parameters, or anything
 observed at execution time.
+
+A multi-command `sql` text (`select 1; select 2`) resolves to the
+**last** command's rows — psql's own convention — never `undefined`
+(task 1.6, #892). `@hejbro/pg` and `@hejbro/neon`'s own session-setup
+statement is itself multi-command, so this rule is exercised on every
+connection, not just an escape-hatch edge case a caller might hit.
 
 The option defaults to `false` — an existing caller's driver sends
 exactly what it always did. Turning it on is a deliberate, workload-
@@ -687,10 +697,15 @@ vendoring loop.
 everything it runs shares one wrapping transaction that applies the role
 and settings with transaction-local scope before the statement runs, so
 nothing persists on the connection afterwards, and the unscoped handle
-stays untouched. Executing under a context on a driver without the
-interactive-transaction capability fails immediately with the explicit
-missing-capability error (see "Errors" below), before anything reaches
-the database.
+stays untouched. A driver declaring `interactive-transactions` runs it
+this way, on one held connection; a driver declaring
+`batched-transactions` instead (and not `interactive-transactions`) runs
+the context and the caller's own statement as one batch in a single
+round trip — the role and settings are still transaction-local to that
+one batch, never a held session (task 1.3, #486). Executing under a
+context on a driver declaring **neither** capability fails immediately
+with the explicit missing-capability error naming both keys (see
+"Errors" below), before anything reaches the database.
 
 **There is no `asRole()`/`roleContext()` helper on the vanilla surface.**
 `DbContext` is a plain object literal — `{ role, settings? }` — passed
@@ -1147,7 +1162,8 @@ concrete next step.
 
 | `code` | When |
 |---|---|
-| `query-execution-failed` | The driver rejected an executed statement (e.g. a constraint violation) — the message leads with the driver's own message (a cause with no usable message is named as such), followed by the parameterized SQL text. The query layer itself never writes the statement's parameter *values* onto the error — the SQL stays parameterized; text the database echoes inside its own error message or fields is the database's report, carried faithfully. |
+| `query-execution-failed` | The driver rejected an executed statement (e.g. a constraint violation) — the message leads with the driver's own message (a cause with no usable message is named as such), followed by the parameterized SQL text. On a driver running a context in one batch (`"batched-transactions"`, no `"interactive-transactions"`, #486), a rejection instead reports the whole batch — every member statement, in order — and states plainly that the driver does not say which member failed, rather than naming only the caller's own statement (which may not have been the actual cause). The query layer itself never writes a statement's parameter *values* onto the error — the SQL stays parameterized; text the database echoes inside its own error message or fields is the database's report, carried faithfully. |
+| `batch-result-count-mismatch` | A batched-only driver's `batch` resolved a number of row lists other than the number of members sent — fewer, more, or none (task 1.3, #486/R14, review finding N3). Named a contract violation, not an empty answer: silently returning a context statement's own rows to the caller would be a wrong answer, not a missing one. The message names both counts (how many the driver returned, how many the query layer sent); no rows from any member, including the context's own, ever reach the caller. |
 | `result-conversion-failed` | A returned column's value couldn't convert to its declared type (an unconvertible/missing column, an array arrival-shape mismatch, or a `NULL` element under `.notNullElements()`). |
 | `driver-missing-capability` | An operation — `db.execute`, `db.select`, `db.insert`, `db.update`, `db.deleteFrom`, `db.with`, `db.fn`, or `transaction` — needs a capability the active driver doesn't declare `true`. Every one of those names the caller's own surface except `transaction`, which stays one shared token on purpose: the driver contract requires a driver's own thrower to raise that identical value for its own member. A capability explicitly declared `false` fails exactly like an undeclared one, never attempted. The capability set itself is fixed and exhaustive: a driver's own declaration must name every one of them, and omitting one, or naming one outside the set, fails to type-check rather than defaulting silently — this is a compile-time guarantee, checked before this runtime error's own path is ever reached. |
 | `function-argument-count-mismatch` | `db.fn`'s call to a declared function was given the wrong number of named arguments — a runtime sanity check on a value TypeScript never compile-time-checked (a pre-built object, not a fresh literal, so the excess-property check never ran for it). No coercion or guessing; the message names how many were declared. |

@@ -168,6 +168,7 @@ const recordingDriver = (
 			"interactive-transactions": true,
 			"session-state": true,
 			"prepared-statements": false,
+			"batched-transactions": false,
 		},
 		execute: vi.fn(async (compiled) => {
 			sent.push({ sql: compiled.sql, params: compiled.params });
@@ -182,6 +183,7 @@ const recordingDriver = (
 			};
 			return callback(session);
 		}),
+		batch: vi.fn(async () => []),
 		setupSession: vi.fn(async () => {}),
 	};
 	return { driver, sent };

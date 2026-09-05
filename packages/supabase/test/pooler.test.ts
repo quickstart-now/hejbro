@@ -14,11 +14,13 @@ const fakeDriver = (): Driver => ({
 		"interactive-transactions": true,
 		"session-state": true,
 		"prepared-statements": false,
+		"batched-transactions": false,
 	},
 	execute: vi.fn(async () => []),
 	transaction: vi.fn(async (callback) =>
 		callback({ execute: vi.fn(async () => []) }),
 	),
+	batch: vi.fn(async () => []),
 	setupSession: vi.fn(async () => {}),
 });
 
@@ -46,6 +48,7 @@ const recordingTransactionalDriver = (
 			"interactive-transactions": true,
 			"session-state": true,
 			"prepared-statements": false,
+			"batched-transactions": false,
 		},
 		execute: vi.fn(async () => []),
 		transaction: vi.fn(async (callback) => {
@@ -59,6 +62,7 @@ const recordingTransactionalDriver = (
 			};
 			return callback(session);
 		}),
+		batch: vi.fn(async () => []),
 		setupSession: vi.fn(async () => {}),
 	};
 	return { driver, sentPerTransaction };
@@ -74,7 +78,56 @@ describe("poolerDriver(driver) (task 1.1)", () => {
 			"interactive-transactions": true,
 			"session-state": false,
 			"prepared-statements": false,
+			"batched-transactions": false,
 		});
+	});
+});
+
+describe("poolerDriver(driver)'s batched-transactions tier (task 1.2a, #486/R7): this decorator builds its own capability record, so its batch member must agree with it independently of the wrapped driver's own", () => {
+	it("declares batched-transactions false, and batch refuses before touching the wrapped driver at all", async () => {
+		const driver = fakeDriver();
+
+		const wrapped = poolerDriver(driver);
+
+		expect(wrapped.capabilities["batched-transactions"]).toBe(false);
+		await expect(
+			wrapped.batch([{ sql: "select 1", params: [], kind: "sql" }]),
+		).rejects.toThrow(/batched-transactions/);
+		expect(driver.batch).not.toHaveBeenCalled();
+		expect(driver.transaction).not.toHaveBeenCalled();
+	});
+
+	it("still declares false and still refuses even over a base declaring batched-transactions true with its own working batch -- an inherited batch under a false declaration is exactly the hole 'A capability explicitly declared false fails closed' forbids", async () => {
+		const trueBase: Driver = {
+			...fakeDriver(),
+			capabilities: {
+				"interactive-transactions": true,
+				"session-state": true,
+				"prepared-statements": false,
+				"batched-transactions": true,
+			},
+			batch: vi.fn(async () => [[]]),
+		};
+
+		const wrapped = poolerDriver(trueBase);
+
+		expect(wrapped.capabilities["batched-transactions"]).toBe(false);
+		await expect(
+			wrapped.batch([{ sql: "select 1", params: [], kind: "sql" }]),
+		).rejects.toThrow(/batched-transactions/);
+		expect(trueBase.batch).not.toHaveBeenCalled();
+	});
+
+	it("two driver values do not share one mutable capability record -- writing through one must not change the other (486, reviewer finding N2)", () => {
+		const a = poolerDriver(fakeDriver());
+		const b = poolerDriver(fakeDriver());
+
+		expect(() => {
+			(a.capabilities as { "batched-transactions": boolean })[
+				"batched-transactions"
+			] = true;
+		}).toThrow();
+		expect(b.capabilities["batched-transactions"]).toBe(false);
 	});
 });
 
@@ -198,11 +251,13 @@ describe("poolerDriver(driver).setupSession (task 1.5)", () => {
 				"interactive-transactions": true,
 				"session-state": true,
 				"prepared-statements": false,
+				"batched-transactions": false,
 			},
 			execute: vi.fn(async () => []),
 			transaction: vi.fn(async (callback) =>
 				callback({ execute: vi.fn(async () => []) }),
 			),
+			batch: vi.fn(async () => []),
 			setupSession: vi.fn(async (session: DriverSession) => {
 				await session.execute({
 					sql: "set intervalstyle to 'postgres'; set bytea_output to 'hex'",
@@ -253,6 +308,7 @@ describe("task 1.6: the envelope-positional properties the conformance kit canno
 				"interactive-transactions": true,
 				"session-state": true,
 				"prepared-statements": false,
+				"batched-transactions": false,
 			},
 			execute: vi.fn(async () => []),
 			transaction: vi.fn(async (callback) => {
@@ -265,6 +321,7 @@ describe("task 1.6: the envelope-positional properties the conformance kit canno
 				};
 				return callback(session);
 			}),
+			batch: vi.fn(async () => []),
 			setupSession: vi.fn(async () => {}),
 		};
 		const wrapped = poolerDriver(underlying);
@@ -300,6 +357,7 @@ describe("task 1.6: the envelope-positional properties the conformance kit canno
 					"interactive-transactions": true,
 					"session-state": false,
 					"prepared-statements": false,
+					"batched-transactions": false,
 				},
 				{ recordedOnConnection: brokenEnvelope, callerStatement },
 			),
@@ -323,6 +381,7 @@ describe("task 1.6: the envelope-positional properties the conformance kit canno
 					"interactive-transactions": true,
 					"session-state": false,
 					"prepared-statements": false,
+					"batched-transactions": false,
 				},
 				{ recordedForOneExecute: sessionSurfaceOnly, callerStatement },
 			),
@@ -353,6 +412,7 @@ describe("poolerDriver(driver) conforms to the driver contract (task 1.7, #481-s
 				"interactive-transactions": true,
 				"session-state": true,
 				"prepared-statements": false,
+				"batched-transactions": false,
 			},
 			execute: vi.fn(async () => []),
 			transaction: vi.fn(async (callback) => {
@@ -367,6 +427,7 @@ describe("poolerDriver(driver) conforms to the driver contract (task 1.7, #481-s
 				envelope.push(commitStatement);
 				return result;
 			}),
+			batch: vi.fn(async () => []),
 			setupSession: vi.fn(async () => {}),
 		};
 		const wrapped = poolerDriver(underlying);

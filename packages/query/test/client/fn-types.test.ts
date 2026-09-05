@@ -37,9 +37,11 @@ const driver: Driver = {
 		"interactive-transactions": true,
 		"session-state": true,
 		"prepared-statements": false,
+		"batched-transactions": false,
 	},
 	execute: async () => [],
 	transaction: async (callback) => callback({ execute: async () => [] }),
+	batch: async () => [],
 	setupSession: async () => {},
 };
 const client = createNameKeyedDb<TestDatabase>(driver, {

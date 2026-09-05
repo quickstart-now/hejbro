@@ -68,16 +68,24 @@ pass the client whose capabilities you need:
   `@neondatabase/serverless`: a real WebSocket connection.
   `interactive-transactions` and `session-state` both `true` —
   `db.transaction(...)` and `db.as(...)` work exactly like `@hejbro/pg`.
-  `options?.preparedStatements` names every built statement on this
-  connection, identically to `pgDriver`'s own option (see
+  `batched-transactions` is `false` (task 1.2a, #486): a single held
+  connection already has `transaction()`, so `batch` refuses before
+  sending anything, the same as `@hejbro/pg`'s own connection-string
+  path. `options?.preparedStatements` names every built statement on
+  this connection, identically to `pgDriver`'s own option (see
   `query-layer.md`'s "Prepared statements" section) — absent, it is
   `false`, matching this path's behavior before the option existed.
 - **`neonDriver(sql)`**, given a `neon()` query function: HTTP one-shot.
   `interactive-transactions`, `session-state`, and `prepared-statements`
-  all `false` — `db.transaction(...)` and `db.as(...)` fail immediately
+  all `false`, `batched-transactions` `true` (task 1.2b, #486) —
+  `db.as(context)` runs the context and the caller's statement as one
+  batch (role/settings are transaction-local to that one batch, not a
+  held session), but `db.transaction(callback)` still fails immediately
   with the driver contract's own missing-capability error, before
-  anything is sent. This overload's type accepts no options argument at
-  all: a one-shot HTTP request has no session to prepare a statement in.
+  anything is sent: a callback is interactive by definition, and this
+  path never holds a connection open between statements. This overload's
+  type accepts no options argument at all: a one-shot HTTP request has no
+  session to prepare a statement in.
   Every execution still carries the same session pins (`IntervalStyle`,
   `bytea_output`) `@hejbro/pg` applies once per connection, batched with
   each statement instead — arrival shape for `interval`/`bytea`/etc. is
