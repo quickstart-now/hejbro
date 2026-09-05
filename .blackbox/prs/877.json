@@ -1,0 +1,81 @@
+{
+  "version": 3,
+  "number": 877,
+  "ref": "quickstart-now/hejbro#877",
+  "title": "chore(openspec): archive harden-ledger-diagnostics after d106 round 1",
+  "head": "848de1f0fcdc16e81ae765063024ec65ff7560c6",
+  "headRef": "archive-ledger-diagnostics",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-05T02:07Z",
+  "refs": [
+    {
+      "path": ".changeset/harden-ledger-diagnostics.md",
+      "blob": "16debd1250126b994c554e2a02a70c7c0b450b4a"
+    },
+    {
+      "path": "README.md",
+      "blob": "4cda47f52756d563cbd4f4c3805bd45260e3497c"
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-05-harden-ledger-diagnostics/design.md",
+      "blob": "37ba5d46bf23386889b14c9f180ed585a0e66fd0"
+    },
+    {
+      "path": "openspec/changes/harden-ledger-diagnostics/design.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-05-harden-ledger-diagnostics/evaluation.md",
+      "blob": "f8e02c0b8ce4b06698cd1237d0e4e5281af5484b"
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-05-harden-ledger-diagnostics/proposal.md",
+      "blob": "fbd858334c61a7cbc2aee93e4a37f14d556ab78d"
+    },
+    {
+      "path": "openspec/changes/harden-ledger-diagnostics/proposal.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-05-harden-ledger-diagnostics/specs/migration-apply/spec.md",
+      "blob": "2fed1cb32a2fc37ea34fa29c83ceef1761165796"
+    },
+    {
+      "path": "openspec/changes/harden-ledger-diagnostics/specs/migration-apply/spec.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-05-harden-ledger-diagnostics/tasks.md",
+      "blob": "1a464ee006091f89de5f202d863c8580897ab8cf"
+    },
+    {
+      "path": "openspec/changes/harden-ledger-diagnostics/tasks.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/specs/migration-apply/spec.md",
+      "blob": "58701ccf623b6ce67a48ec4034b5b3a3c81ee0bd"
+    },
+    {
+      "path": "openspec/task-times.csv",
+      "blob": "09fee9789808f2e75e2d5f5164a8f7b855f10980"
+    },
+    {
+      "path": "packages/cli/src/apply/ledger-diagnostics.ts",
+      "blob": "47bf0a86c1923a6caa0c64b1237cbdaffad965be"
+    },
+    {
+      "path": "packages/cli/test/apply-ledger-diagnostics.test.ts",
+      "blob": "3b03ebaa0b3d2f2224ac01bf912f0612f13ac672"
+    },
+    {
+      "path": "packages/pg/src/driver.ts",
+      "blob": "35e6ade6efc3398e5b763e07f0efb87f9d30bcc2"
+    },
+    {
+      "path": "packages/pg/test/driver.test.ts",
+      "blob": "64c822ed08bac6720245106257dfe338f20f9e21"
+    }
+  ]
+}
