@@ -107,6 +107,17 @@
       "at": "2026-09-05T18:56Z",
       "title": "the chain carries its projection as a phantom brand that lives in @hejbro/query; left projection, parallel checks, fail-open",
       "ratified": null
+    },
+    {
+      "id": "R10",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R9"
+      ],
+      "at": "2026-09-05T19:16Z",
+      "title": "the chain applies the family verdict alone: one type-only core export, SetOpFamiliesRefused",
+      "ratified": null
     }
   ],
   "work": [
