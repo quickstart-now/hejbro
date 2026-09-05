@@ -293,3 +293,8 @@ after `pnpm build --force`, `pnpm check:next-marker` included;
 `task-times.csv` rows 2.1–2.4 and the badge restamp; blackbox `W2` on
 #846; then the reviewer re-checks the new tip against B1, B2, B4, N1, N2
 and the B3 sentence only.
+
+## 3. D106 round-1 correction (B1 · B2 · N1 · N3)
+
+- [x] 3.1 ~9m — Red: `packages/cli/test/generate-command.test.ts` "migrationsDir is judged even when the snapshot already matches" (a regular file / a dangling link at `migrationsDir` after a `generate` that left nothing to do → exit 1, the coded refusal, never the no-changes line); `packages/cli/test/loader.test.ts` "a --config value that names the working directory" (`.`, `./`, `..` → `config-not-a-file` whose `Next:` names the file to pass, never "remove") and "config-not-found quotes a --config value a shell would split" (`my dir/h.ts` → `--config "my dir/h.ts"`, `$` escaped, a plain value bare). Green: `generate` lists the migrations directory before the first pass; `configNotAFileMessage` answers the cwd case; `shellArgument` quotes the echo. Delta: the init nesting scenario's third input states that the flagged configuration file exists. #875 tracks the unreadable configuration file (N2). Files: `commands/generate.ts`, `loader.ts`, the two tests, the cli-commands delta.
+

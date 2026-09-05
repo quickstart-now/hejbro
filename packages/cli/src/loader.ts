@@ -91,6 +91,17 @@ const DEFAULT_CONFIG_FILE_NAME = "hejbro.config.ts";
  * "flag absent" (NB8: that silent fallback used to resolve to the
  * working directory and then refuse it as an existing "directory").
  */
+/** A `--config` value as it must be typed back into a shell: bare when it
+ * carries only path-safe characters, double-quoted (with `"`, `\\`, `$` and
+ * backtick escaped) otherwise — a pasted `Next:` must run as one argument
+ * (D106 R1 N3). */
+export const shellArgument = (value: string): string => {
+	if (/^[A-Za-z0-9_./~:@=+,-]+$/.test(value)) {
+		return value;
+	}
+	return `"${value.replace(/(["\\$`])/g, "\\$1")}"`;
+};
+
 export const configFlagFrom = (
 	rawArgs: ReadonlyArray<string>,
 ): string | undefined => {
@@ -148,6 +159,15 @@ export const configNotAFileMessage = (
 		| { readonly kind: "dangling"; readonly target: string },
 ): ConfigPathParts => {
 	if (holder.kind === "directory") {
+		// A value that names the working directory or its parent (`.`, `./`,
+		// `..`) must never be answered with "remove that directory" (D106 R1
+		// N1): the remedy is the file the flag was meant to name.
+		if (/^\.\.?\/?$/.test(rel)) {
+			return {
+				reason: `"${rel}" is the configuration path, but that is a directory — the configuration is a file hejbro reads.`,
+				next: "pass the configuration file itself (--config ./hejbro.config.ts), or drop the flag to use ./hejbro.config.ts,",
+			};
+		}
 		return {
 			reason: `"${rel}" is the configuration path, but a directory is there — the configuration is a file hejbro reads.`,
 			next: `move or remove the existing directory at "${rel}", or name another file with --config,`,
@@ -264,7 +284,7 @@ export const loadConfig = async (
 		// report line.
 		return throwHejbroError(
 			"config-not-found",
-			`no configuration file was found at "${rel}". Next: run \`hejbro init --config ${configFlag}\` to scaffold it there, with a migrations directory and an empty snapshot file, then add a declaration file and rerun \`hejbro generate\`.`,
+			`no configuration file was found at "${rel}". Next: run \`hejbro init --config ${shellArgument(configFlag)}\` to scaffold it there, with a migrations directory and an empty snapshot file, then add a declaration file and rerun \`hejbro generate\`.`,
 		);
 	}
 	if (outcome.kind === "present" && outcome.actualKind === "directory") {

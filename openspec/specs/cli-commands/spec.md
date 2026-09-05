@@ -1239,23 +1239,33 @@ an artifact would have to be created inside SHALL be judged the same
 way. The same refusal SHALL cover a path
 an artifact would have to be created inside, and a configuration that
 names one path for two artifacts: neither can be satisfied, and one of
-them would otherwise be reported as already present. It SHALL equally
-cover a configuration whose planned snapshot file would have to hold
-another planned artifact — the migrations directory named at any depth
-inside the snapshot path, under any spelling of either — because a file
-cannot hold a directory, and creating the directory first would leave
-the snapshot's own check finding a directory `init` itself made and
-reporting the snapshot as present. That refusal SHALL name both fields
-and carry the same code as the one-path-for-two refusal. A snapshot file
+them would otherwise be reported as already present. Every artifact's
+path — the configuration file's included — is judged by its ancestors
+before its own node, so a file, a dangling link or a closed directory
+on the way is named as the node that blocks, never as the artifact's
+own path with a bare operating-system code. It SHALL equally
+cover a configuration whose planned file — the snapshot, or the
+configuration file itself — would have to hold another planned
+artifact, named at any depth inside its path, under any spelling of
+either: a file holds nothing, and creating the held artifact first
+would leave the file's own check finding a node `init` itself made and
+reporting the file as present. That refusal SHALL name both artifacts,
+SHALL say which kind the held artifact is — a directory or a file —
+and carry the same code as the one-path-for-two refusal; its `Next:`
+SHALL name the thing the user can actually change: the configured
+field, or, where the configuration file is one of the two, the field
+that points inside it and `--config`. A snapshot file
 inside the migrations directory is not this case: a directory holds a
 file, and the commands that read the directory look only at migration
 files. Every one of these checks SHALL be made before anything is
-created, so a refused run leaves the project as it found it. A path a
-configuration spells as a directory SHALL be refused the same way when
-the artifact is a file: the commands that read that file resolve the
-same spelling and look inside a directory that cannot hold it, so
-creating anything for such a value would produce a file none of them
-reads.
+created, so a refused run leaves the project as it found it. A snapshot
+path a configuration spells as a directory is refused when the
+configuration is read, by every command, so `init` never meets one.
+
+A refusal about the configuration file's own path SHALL describe that
+path as the configuration path, never as a field named after the file,
+so the file's name appears once — the reader is told what the path is
+for, not the same name twice.
 
 Whether an artifact *can* be created is one of those checks: for every
 artifact the run would create, the deepest directory that already
@@ -1301,7 +1311,8 @@ otherwise have used.
 Which configuration file that is SHALL follow `--config <path>` exactly
 as it does for `generate`: an absolute path as given, a relative one
 resolved from the working directory, and `./hejbro.config.ts` when the
-flag is absent. The file the flag names is the one `init` reads when it
+flag is absent; an empty value is refused as every other command
+refuses it. The file the flag names is the one `init` reads when it
 exists and the one it writes when nothing sits there — never a default
 beside it — and the report SHALL name it by its path relative to the
 working directory. The migrations directory and the snapshot file do not
@@ -1438,6 +1449,36 @@ from `generate`.
   and the target the link points at, nothing is created, and nothing
   is written through the link
 
+#### Scenario: A file on the way to the configuration path is named as the file
+- **WHEN** `hejbro init --config f/hejbro.config.ts` runs and `f` is a
+  regular file
+- **THEN** the run fails with a coded refusal whose message and `Next:`
+  name `f` as the file that would have to be a directory — never
+  `f/hejbro.config.ts` with a bare operating-system code — and nothing
+  is created, exactly as the same tree under `migrationsDir: "f/mig"`
+  is refused
+
+#### Scenario: A directory at the configuration path is refused naming it once
+- **WHEN** `hejbro init` runs where a directory sits at
+  `hejbro.config.ts`
+- **THEN** the run fails with a coded refusal whose message names
+  `hejbro.config.ts` as the configuration path and the directory found
+  there, without repeating the file's name as a field, and whose
+  `Next:` names moving that directory or naming another file with
+  `--config`
+
+#### Scenario: A planned file that would have to hold another artifact is refused by the held artifact's kind
+- **WHEN** `hejbro init` runs with `snapshotPath:
+  "hejbro.config.ts/state.json"`, or with `migrationsDir:
+  "hejbro.config.ts/mig"`, or with `--config state.json/hejbro.config.ts`
+  where that configuration file already exists and names `snapshotPath:
+  "state.json"`, nothing else existing
+- **THEN** the run fails with the one-path-for-two code, its message
+  says a file cannot hold a file in the first case and a directory in
+  the second, its `Next:` names the configured field to move — and
+  `--config` where the configuration file is the held artifact — and
+  nothing is created
+
 ### Requirement: A preset declares whether its platform can plan a statement
 A provider preset SHALL be able to declare that its platform cannot plan
 a statement — that `EXPLAIN` is not available — as data on the preset
@@ -1480,9 +1521,21 @@ path the user spelled as absolute, and one command reporting the
 spelling while another reports the joined location is exactly the
 disagreement this rule ends. A relative value SHALL be honoured as
 spelled, including a leading `./`, a trailing separator on a directory
-path, and a `..` that leaves the working directory — a trailing
-separator on a file path (`snapshotPath`) names a directory where a file
-belongs and is refused by the kind check below, never re-spelled.
+path, and a `..` that leaves the working directory.
+
+A `snapshotPath` whose spelling names a directory — a trailing
+separator, an empty value, or a last segment that is `.` or `..` —
+SHALL be refused the same way: when the configuration is read, by every
+command that reads it, with the error code `invalid-config` naming the
+field and a `Next:` naming the spelling to drop. It names a directory
+where a file belongs, and no command could ever read or write a file
+under that spelling; refusing it once, before any command looks at the
+disk, is what keeps `init` and the commands that read the snapshot from
+answering the same value two ways — one refusing the spelling, the
+other finding the file under the stripped spelling and then failing to
+open it under the spelled one, as a permission problem that did not
+exist. `migrationsDir` is a directory and keeps every one of those
+spellings.
 
 #### Scenario: An absolute-looking configured path is refused by every command
 - **WHEN** a configuration sets `migrationsDir` or `snapshotPath` to a
@@ -1498,23 +1551,41 @@ belongs and is refused by the kind check below, never re-spelled.
 - **THEN** the directory is created at that path under the working
   directory, and the run does not refuse the spelling
 
+#### Scenario: A snapshot path spelled as a directory is refused by every command
+- **WHEN** a configuration sets `snapshotPath` to `"state.json/"`,
+  `""`, `"."` or `"db/.."`, and `hejbro init`, `hejbro generate` or any
+  other command that reads the configuration runs
+- **THEN** it fails with the error code `invalid-config` naming
+  `snapshotPath`, before any artifact is read or written, and the same
+  configuration with `migrationsDir: "mig/"` is not refused for that
+  field
+
 ### Requirement: A snapshot that cannot be read as a file is refused before it is read
 Every command that reads the snapshot file — `generate`, `baseline`,
 `verify`, `check` — SHALL check what sits at the configured snapshot
-path before reading it. A directory there SHALL stop the run with the
-error code `snapshot-not-a-file`, naming the configured path and the
-kind expected there, with a `Next:` that names the way back to a
-snapshot file. A file there that the process cannot read SHALL stop the
+path before reading it, by the same judgement `init` applies to the
+same path: a symbolic link is judged by what it points at, and the
+path's ancestors are judged before the path itself. A directory there,
+or a link to one, SHALL stop the run with the error code
+`snapshot-not-a-file`, naming the configured path and the kind expected
+there, with a `Next:` that names the way back to a snapshot file. A
+link whose target does not exist SHALL stop the run with the same code,
+naming the configured path and the target the link points at, spelled
+relative to the working directory — never read as an absent snapshot,
+whose `Next:` would send the user to a command that refuses the same
+tree. A file there that the process cannot read SHALL stop the
 run with the error code `snapshot-unreadable`, naming the configured
 path and the operating system's own code, with a `Next:` naming the
 permissions to check. The kind is decided first: a directory is refused
 as a directory even when it could not have been read, and only a
 regular file whose read fails is refused as unreadable. A snapshot
-whose path cannot even be inspected — a directory on the way refuses
-the look-up — SHALL be refused as unreadable too, naming the operating
-system's own code, and its `Next:` SHALL name the directory that blocks
-the look-up, decided exactly as `init` decides it: the deepest ancestor
-the run could still inspect. Neither SHALL surface as a raw read
+whose path cannot even be inspected SHALL be refused as unreadable
+too, and its `Next:` SHALL name the node that blocks the look-up,
+decided exactly as `init` decides it: for a permission, the deepest
+ancestor the run could still inspect, with the operating system's own
+code; for a file or a dangling link on the way, that file or link by
+its own path and what it is, with no code — never the configured path
+as a thing to check permissions on. Neither SHALL surface as a raw read
 failure, and neither message SHALL carry an absolute path. The commands that consume
 the snapshot resolve the same path `init` scaffolds, so a directory
 there is a project `init` would refuse to create; the read side SHALL
@@ -1545,6 +1616,23 @@ going to succeed.
   the configured path and the operating system's own code, and its
   `Next:` line names `parent` — the same directory `hejbro init` would
   name for the same tree
+
+#### Scenario: A dangling link at the snapshot path is refused, never read as absent
+- **WHEN** a symbolic link whose target does not exist sits at the
+  configured `snapshotPath` and `hejbro generate`, `hejbro baseline`,
+  `hejbro verify` or `hejbro check` runs
+- **THEN** it fails with the error code `snapshot-not-a-file` naming
+  that path and the target the link points at, never with the
+  not-found code, and `hejbro init` on the same tree names the same
+  path and target
+
+#### Scenario: A file on the way to the snapshot path is named as the file
+- **WHEN** the configured `snapshotPath` is `f/state.json`, `f` is a
+  regular file, and `hejbro generate` runs
+- **THEN** it fails with the error code `snapshot-unreadable` whose
+  message and `Next:` name `f` as the file in the way — never
+  `f/state.json` as a path to check permissions on — and `hejbro init`
+  on the same tree names `f` too
 
 ### Requirement: A set's order is never a snapshot movement
 Where `generate` decides whether the snapshot moved, and where `verify`
@@ -1587,3 +1675,129 @@ declarations, which reads both through the canonical form.
 - **THEN** the migration carries that column's statement and nothing
   else, and the written snapshot lists every set-shaped array in
   canonical order
+
+### Requirement: A migrations directory that cannot be listed is refused before it is read
+Every command that lists the migrations directory — `generate`,
+`baseline`, `verify`, `history`, `migrate`, `status`, `restore` — SHALL
+judge what sits at the configured `migrationsDir` before listing it,
+by the same judgement `init` applies to the same path. A regular file
+there, or a symbolic link whose target does not exist, SHALL stop the
+run with the error code `migrations-dir-not-a-directory`, naming the
+configured path and — for a link — the target it points at, with a
+`Next:` naming the way back to a directory. A path that cannot be
+inspected or listed — a directory on the way that refuses the look-up,
+a file on the way, a link on the way whose target does not exist, a
+directory the process may not read — SHALL stop the run with the error
+code `migrations-dir-unreadable`, naming the configured path, and its
+`Next:` SHALL name the node that blocks: the deepest ancestor the run
+could still inspect for a permission, the file or link itself
+otherwise. The operating system's own code is named where the operating
+system refused — a permission, a loop, a listing that failed; a file or
+a dangling link on the way is a judgement of kind, named by the node
+and what it is, with no code to report. A symbolic link to a
+directory is that directory. Nothing at the configured path is not a
+fault: the directory is read as holding no migrations, exactly as
+before, and the commands that write into it create it. Neither refusal
+SHALL surface as a raw listing failure, and neither message SHALL carry
+an absolute path.
+
+#### Scenario: A file at the migrations directory is refused with its own code
+- **WHEN** a regular file sits at the configured `migrationsDir` and
+  `hejbro generate`, `hejbro verify`, `hejbro baseline` or `hejbro
+  history` runs
+- **THEN** it fails with the error code `migrations-dir-not-a-directory`
+  naming that path and a `Next:` line, before any migration or snapshot
+  is written, and no raw filesystem error and no absolute path reaches
+  the output
+
+#### Scenario: A dangling link at the migrations directory is refused, never read as empty
+- **WHEN** a symbolic link whose target does not exist sits at the
+  configured `migrationsDir` and `hejbro generate` runs
+- **THEN** it fails with the error code `migrations-dir-not-a-directory`
+  naming that path and the target the link points at, and writes
+  nothing through the link
+
+#### Scenario: A migrations directory that cannot be inspected names the node that blocks it
+- **WHEN** the configured `migrationsDir` is `nx/mig` and the directory
+  `nx` exists with no permission to look inside it, or `nx` is a regular
+  file, and `hejbro generate` runs
+- **THEN** it fails with the error code `migrations-dir-unreadable`
+  naming the configured path — with the operating system's own code
+  where `nx` refused the look-up, and as the file it is where `nx` is a
+  file — and its `Next:` line names `nx` — the same node `hejbro init`
+  names for the same tree
+
+#### Scenario: An absent migrations directory is still no migrations
+- **WHEN** nothing sits at the configured `migrationsDir` and `hejbro
+  generate` runs against an existing empty snapshot
+- **THEN** the run proceeds as before, creating the directory when it
+  has a migration to write
+
+### Requirement: The `--config` flag names a file
+Every command that accepts `--config <path>` — `init`, `generate`,
+`baseline`, `history` — SHALL resolve the value the same way: an
+absolute path as given, a relative path from the working directory. A
+value that is empty or only whitespace — `--config=`, `--config ""` —
+SHALL be refused before any path is resolved, with the error code
+`invalid-config-flag` and a `Next:` naming the flag's form and that
+dropping the flag means `./hejbro.config.ts`; it SHALL never be
+resolved to the working directory, since the refusal that would follow
+tells the user to remove the directory they are standing in.
+
+The commands that read the configuration SHALL judge what sits at the
+resolved path before loading it, by the same judgement `init` applies
+to the same path. Nothing there SHALL fail with the error code
+`config-not-found`, naming the path that was looked up and, in its
+`Next:`, `hejbro init` with the same `--config` value when the flag was
+given — never a default the user did not ask for. The value that
+`Next:` echoes is the one the user typed, as typed: a path the user
+supplied is never re-spelled, whether it was absolute or relative and
+wherever the command was run from. That echo is the user's own input
+reflected back, not a path hejbro discovered — the one place an
+absolute path may appear in a report — and it appears in the `Next:`
+command only; the header and every label still name the path relative
+to the working directory. A directory there, or
+a symbolic link whose target does not exist, SHALL fail with the error
+code `config-not-a-file`, naming the path — and the link's target —
+once, and a `Next:` naming the node to move and that `--config` can
+name another file. A path that cannot be inspected — a permission on the
+way, a file on the way, a link on the way whose target does not exist —
+SHALL fail with the error code `config-unreadable`, naming the path —
+and the operating system's own code where the operating system refused
+the look-up; a file or a dangling link on the way is named by the node
+and what it is — and its `Next:` SHALL name the node that blocks,
+decided as `init` decides it. `init` SHALL refuse the same
+trees with the same sentences under its own code, and SHALL create the
+configuration only where the judgement found nothing at all.
+
+#### Scenario: An empty --config value is refused by every command that takes the flag
+- **WHEN** `hejbro init --config=`, `hejbro generate --config=` or
+  `hejbro history --config ""` runs
+- **THEN** it fails with the error code `invalid-config-flag`, its
+  `Next:` shows the flag's form, nothing is created, and no message
+  tells the user to remove the working directory
+
+#### Scenario: A missing configuration is named by the path that was looked up
+- **WHEN** `hejbro generate --config sub/hejbro.config.ts` runs and
+  nothing sits at `sub/hejbro.config.ts`
+- **THEN** it fails with the error code `config-not-found` naming
+  `sub/hejbro.config.ts`, and its `Next:` names `hejbro init --config
+  sub/hejbro.config.ts` — and without the flag the message names
+  `hejbro.config.ts` and `hejbro init`, exactly as before
+
+#### Scenario: A directory or a dangling link at the configuration path is refused as not a file
+- **WHEN** a directory, or a symbolic link whose target does not exist,
+  sits at the path `--config` names (or at `hejbro.config.ts` with no
+  flag), and `hejbro generate` runs
+- **THEN** it fails with the error code `config-not-a-file`, naming the
+  path once — and the link's target — never an import-resolution
+  diagnostic, and `hejbro init` on the same tree refuses naming the same
+  node with the same `Next:`
+
+#### Scenario: A file on the way to the configuration path is named as the file
+- **WHEN** `hejbro generate --config f/hejbro.config.ts` runs and `f` is
+  a regular file
+- **THEN** it fails with the error code `config-unreadable` whose
+  message and `Next:` name `f` as the file in the way — never
+  `f/hejbro.config.ts` as a path to check — and `hejbro init --config
+  f/hejbro.config.ts` names `f` too

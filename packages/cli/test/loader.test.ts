@@ -408,3 +408,51 @@ describe("loadDeclarations", () => {
 		);
 	});
 });
+
+// D106 round 1 N1: a typed `.`/`..` is the working directory (or its parent);
+// the remedy must never be "remove the directory you are standing in".
+describe("loadConfig / a --config value that names the working directory (D106 R1 N1)", () => {
+	it.each([".", "./", ".."])(
+		"refuses %s as config-not-a-file without asking to remove it",
+		async (value) => {
+			const base = await mkdtemp(join(tmpdir(), "hejbro-loader-dot-"));
+			const cwd = join(base, "here");
+			await mkdir(cwd, { recursive: true });
+			try {
+				await loadConfig(cwd, value);
+				throw new Error("expected loadConfig to throw");
+			} catch (error) {
+				expect(error).toMatchObject({ code: "config-not-a-file" });
+				const message = (error as { message: string }).message;
+				expect(message).not.toContain("move or remove");
+				expect(message).toContain("--config ./hejbro.config.ts");
+			} finally {
+				await rm(base, { recursive: true, force: true });
+			}
+		},
+	);
+});
+
+// D106 round 1 N3: the echoed value must survive being pasted back into a shell.
+describe("loadConfig / config-not-found quotes a --config value a shell would split (D106 R1 N3)", () => {
+	it.each([
+		{ value: "my dir/h.ts", expected: '--config "my dir/h.ts"' },
+		{
+			value: "sub/hejbro.config.ts",
+			expected: "--config sub/hejbro.config.ts",
+		},
+		{ value: "odd$name/h.ts", expected: '--config "odd\\$name/h.ts"' },
+	])("echoes $value as $expected", async ({ value, expected }) => {
+		const cwd = await mkdtemp(join(tmpdir(), "hejbro-loader-quote-"));
+		try {
+			await loadConfig(cwd, value);
+			throw new Error("expected loadConfig to throw");
+		} catch (error) {
+			expect(error).toMatchObject({ code: "config-not-found" });
+			const message = (error as { message: string }).message;
+			expect(message).toContain(`hejbro init ${expected}`);
+		} finally {
+			await rm(cwd, { recursive: true, force: true });
+		}
+	});
+});
