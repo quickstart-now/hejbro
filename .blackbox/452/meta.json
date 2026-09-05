@@ -22,7 +22,22 @@
       "ratified": null
     }
   ],
-  "work": [],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-05T05:32Z",
+      "title": "windowed aggregate cell cast: red before task 1.2's fix",
+      "pr": null,
+      "decisions": []
+    },
+    {
+      "id": "W2",
+      "at": "2026-09-05T05:32Z",
+      "title": "task 1.4 ratchet verified: reverting select.ts reproduces the 11 red rows",
+      "pr": null,
+      "decisions": []
+    }
+  ],
   "prs": [],
   "origin": null,
   "followUps": []
