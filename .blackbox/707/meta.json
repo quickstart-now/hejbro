@@ -32,6 +32,19 @@
       "at": "2026-09-05T00:50Z",
       "title": "cv (b) accepted at 22f1f99e; conindid repair and its delta sentence accepted; gate gap → #869; report-then-wait rule adopted; reviewer summoned",
       "ratified": null
+    },
+    {
+      "id": "R3",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R1",
+        "R2",
+        "412/D13"
+      ],
+      "at": "2026-09-05T01:20Z",
+      "title": "cv review round 1: N1/N3 repaired in the piece, the column line's clause too; #872 #873 #874 filed; narrow re-review",
+      "ratified": null
     }
   ],
   "work": [
