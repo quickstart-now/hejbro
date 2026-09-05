@@ -16,6 +16,7 @@ import type {
 import { expr, resolveOrderTerm } from "../expr/ast";
 import type { ReadShape } from "../expr/read-shape";
 import { BUILDER_READ_SHAPES } from "../expr/read-shape";
+import type { SqlTypeFamily } from "../expr/type-family";
 import { someExprNode } from "../expr/walk";
 import { markConsumed, noteBuilder } from "../plpgsql/recording-session";
 import type { TypeNode } from "../types/type-node";
@@ -115,6 +116,72 @@ type SameKeys<TLeft, TRight> = [keyof TLeft] extends [keyof TRight]
 		: false
 	: false;
 
+/** Measured on postgres:17 (design.md, task 1.1): a set operation unifies only within the same family, so each list holds just that family — a right-hand family absent from a left-hand family's own list is one the server refuses (`42804`/`42846`). */
+export const setOpUnifiableFamilies = {
+	uuid: ["uuid"],
+	text: ["text"],
+	numeric: ["numeric"],
+	boolean: ["boolean"],
+	datetime: ["datetime"],
+	interval: ["interval"],
+	json: ["json"],
+	bytea: ["bytea"],
+	net: ["net"],
+	array: ["array"],
+} as const satisfies Record<
+	Exclude<SqlTypeFamily, "unknown">,
+	readonly SqlTypeFamily[]
+>;
+
+/** A projected value's family, or `"unknown"` for a shape with none (a `Table` projection's `tableMeta` symbol key, among others) — never stricter than a value the type layer cannot place. */
+type ProjectedFamily<TValue> = TValue extends {
+	readonly family: infer TFamily extends SqlTypeFamily;
+}
+	? TFamily
+	: "unknown";
+
+/** `true` only for a single literal family, never a union — the fold below must not distribute over a wide `Expr` and refuse it because one of its members would be. */
+type IsSingleFamily<TFamily, TCopy = TFamily> = [TFamily] extends [never]
+	? false
+	: TFamily extends TCopy
+		? [TCopy] extends [TFamily]
+			? true
+			: false
+		: never;
+
+/** `"unknown"` on either side is a wildcard; otherwise refused exactly when both sides are single literal families and the right is absent from the left's {@link setOpUnifiableFamilies} row. */
+type FamilyPairRefused<TLeft, TRight> = "unknown" extends TLeft
+	? false
+	: "unknown" extends TRight
+		? false
+		: IsSingleFamily<TLeft> extends true
+			? IsSingleFamily<TRight> extends true
+				? TLeft extends keyof typeof setOpUnifiableFamilies
+					? TRight extends (typeof setOpUnifiableFamilies)[TLeft][number]
+						? false
+						: true
+					: false
+				: false
+			: false;
+
+/**
+ * Folds {@link FamilyPairRefused} over every shared key — `true` when some
+ * shared key's two families are a pair the vendored table refuses. The
+ * chain's own combinators (`@hejbro/query`) use this verdict alone, never
+ * {@link SetOpResult} itself: `SetOpResult`'s key-set fold also refuses a
+ * `Table` projection (the `tableMeta` symbol key) against an object
+ * projection the server accepts, and the chain already has its own
+ * row-based key/shape check (503/R9 decision 3).
+ */
+export type SetOpFamiliesRefused<TLeft, TRight> = {
+	[K in keyof TLeft & keyof TRight]: FamilyPairRefused<
+		ProjectedFamily<TLeft[K]>,
+		ProjectedFamily<TRight[K]>
+	>;
+}[keyof TLeft & keyof TRight] extends false
+	? false
+	: true;
+
 /**
  * Set-operation result typing (moved from `@hejbro/query`, add-ctes task
  * 6.5): the database rejects branches whose rows are not union-compatible,
@@ -138,10 +205,18 @@ type SameKeys<TLeft, TRight> = [keyof TLeft] extends [keyof TRight]
  * through this same type too (#487, harden-query-surface) — a
  * mismatched union used to compile here and fail at the server instead;
  * it is refused at build time now, matching every other union surface.
+ *
+ * harden-set-op-families (#503, #966): a matching key set is also folded
+ * per key through {@link SetOpFamiliesRefused} — a family mismatch the
+ * server refuses (design.md, task 1.1) resolves the whole result to
+ * `never` exactly like a key-set mismatch does; `"unknown"` is a wildcard
+ * on either side.
  */
 export type SetOpResult<TLeft, TRight> =
 	SameKeys<TLeft, TRight> extends true
-		? { readonly [K in keyof TLeft]: TLeft[K] | TRight[K & keyof TRight] }
+		? SetOpFamiliesRefused<TLeft, TRight> extends true
+			? never
+			: { readonly [K in keyof TLeft]: TLeft[K] | TRight[K & keyof TRight] }
 		: never;
 
 /**

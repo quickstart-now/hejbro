@@ -1,0 +1,73 @@
+{
+  "version": 3,
+  "number": 992,
+  "ref": "quickstart-now/hejbro#992",
+  "title": "feat(core,query): refuse set-operation branches whose type families the server cannot unify (#503, #966)",
+  "head": "060693e4b5ffe0a3911d5aed6223e4873dea3a8c",
+  "headRef": "harden-set-op-families",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-05T22:58Z",
+  "refs": [
+    {
+      "path": ".changeset/harden-set-op-families.md",
+      "blob": "b8dfad1141fc2e18e02104572a36ce5daa83d1b1"
+    },
+    {
+      "path": "README.md",
+      "blob": "3caa82cd6240dafbd40a0c5f3bd5194fbc0cab8c"
+    },
+    {
+      "path": "openspec/changes/harden-set-op-families/design.md",
+      "blob": "283258a8556e15159b9a202c71aff481577e8bea"
+    },
+    {
+      "path": "openspec/changes/harden-set-op-families/proposal.md",
+      "blob": "4fa1c4d9021a6ce6007b4d9fc9235ada98f6110b"
+    },
+    {
+      "path": "openspec/changes/harden-set-op-families/specs/query-type-inference/spec.md",
+      "blob": "1e5267ba608346f82706f75fbd3d53bdde256630"
+    },
+    {
+      "path": "openspec/changes/harden-set-op-families/tasks.md",
+      "blob": "3835567c0e735c30002df93dc37ce04acef2c6dd"
+    },
+    {
+      "path": "openspec/task-times.csv",
+      "blob": "2ca28d567b495b5a0ecf7aa136ab3f3b9bc449e4"
+    },
+    {
+      "path": "packages/core/src/index.ts",
+      "blob": "8ed9dfebebc176ce416bf6f08e6ed38bdfce05cb"
+    },
+    {
+      "path": "packages/core/src/query/select.ts",
+      "blob": "de1cc903bda69fc3aa3ffed80a540941280158bf"
+    },
+    {
+      "path": "packages/core/test/query/select.test.ts",
+      "blob": "c9ea2816326a8e117bcef555e111a809a476db5b"
+    },
+    {
+      "path": "packages/core/test/query/set-op-family-types.test.ts",
+      "blob": "d2a0f3531ffa0db90f25863cf02a6ba6fea6fc6c"
+    },
+    {
+      "path": "packages/query/src/db/chain-projection.ts",
+      "blob": "c42de2a01c7ee10e72647dde1530b9687bc900e2"
+    },
+    {
+      "path": "packages/query/src/db/chain.ts",
+      "blob": "a9bfa775f0d581b24f76987cd10957b8513998f3"
+    },
+    {
+      "path": "packages/query/test/types/chain-types.test.ts",
+      "blob": "366d32cac3f98aa51012df862971fa25bbea1ae5"
+    },
+    {
+      "path": "skills/hejbro/references/query-layer.md",
+      "blob": "a2123cdbea4067bf82693d84b8829d1650685a64"
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#489",
+  "title": "type-divergent recursive terms pass the relaxed check and die with 42804",
+  "parent": "quickstart-now/hejbro#282",
+  "status": "open",
+  "opened": "2026-09-05",
+  "closed": null,
+  "decisions": [],
+  "work": [],
+  "prs": [
+    {
+      "number": 992,
+      "role": "refs",
+      "pinnedAt": "2026-09-05T22:58Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

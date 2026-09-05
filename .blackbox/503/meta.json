@@ -1,0 +1,217 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#503",
+  "title": "reject cross-family set-operation branches at build time",
+  "parent": "quickstart-now/hejbro#412",
+  "status": "closed",
+  "opened": "2026-09-05",
+  "closed": "2026-09-05",
+  "decisions": [
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "412/D24",
+        "D25; the 42804 measurement in #503; hejbro never stricter than Postgres (plpgsql-function-bodies precedent); #489's within-family scope"
+      ],
+      "at": "2026-09-05T11:00Z",
+      "title": "Cross-family set-operation branches are refused at build time by a measured pair table; unknown is a wildcard; #489 stays separate",
+      "ratified": null
+    },
+    {
+      "id": "R2",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "R1"
+      ],
+      "at": "2026-09-05T17:38Z",
+      "title": "#966 folds into this change: the recursive anchor/term pair is the third surface",
+      "ratified": null
+    },
+    {
+      "id": "R3",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R1"
+      ],
+      "at": "2026-09-05T17:47Z",
+      "title": "the measurement protocol: 42804 alone means refused, union all, one representative per family plus a homogeneity sweep",
+      "ratified": null
+    },
+    {
+      "id": "R4",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R1"
+      ],
+      "at": "2026-09-05T17:47Z",
+      "title": "never only for two single-literal families the table refuses; every other shape is accepted; core's type-test naming",
+      "ratified": null
+    },
+    {
+      "id": "R5",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R3"
+      ],
+      "at": "2026-09-05T18:00Z",
+      "title": "42846 is a refusal too; the four same-family refusals are a gap not a false refusal; the table is a per-family record",
+      "ratified": null
+    },
+    {
+      "id": "R6",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R1"
+      ],
+      "at": "2026-09-05T18:00Z",
+      "title": "the unified-pair scenario names the pairs that exist; the within-family paragraph names the four refusals",
+      "ratified": null
+    },
+    {
+      "id": "R7",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "R1"
+      ],
+      "at": "2026-09-05T18:22Z",
+      "title": "the chain carries its projection so the family rule reaches the primary surface; 1.2 splits; chain.ts joins the boundary",
+      "ratified": null
+    },
+    {
+      "id": "R8",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "R4"
+      ],
+      "at": "2026-09-05T18:40Z",
+      "title": "a rule that tightens types repairs the call sites it newly refuses; today that is one test line",
+      "ratified": null
+    },
+    {
+      "id": "R9",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R7"
+      ],
+      "at": "2026-09-05T18:56Z",
+      "title": "the chain carries its projection as a phantom brand that lives in @hejbro/query; left projection, parallel checks, fail-open",
+      "ratified": null
+    },
+    {
+      "id": "R10",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R9"
+      ],
+      "at": "2026-09-05T19:16Z",
+      "title": "the chain applies the family verdict alone: one type-only core export, SetOpFamiliesRefused",
+      "ratified": null
+    },
+    {
+      "id": "R11",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "R9"
+      ],
+      "at": "2026-09-05T19:41Z",
+      "title": "the chain's six combinators become one intersection; the second hand-written copy goes",
+      "ratified": null
+    },
+    {
+      "id": "R12",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R6"
+      ],
+      "at": "2026-09-05T20:16Z",
+      "title": "the within-family gap is a class, not a list of four: array element types head it",
+      "ratified": null
+    },
+    {
+      "id": "R13",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R12"
+      ],
+      "at": "2026-09-05T20:40Z",
+      "title": "arrays unify when their elements do; enums refuse each other; a sql fragment is unseen, not a wildcard",
+      "ratified": null
+    }
+  ],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-05T18:08Z",
+      "title": "the r6 ruling gains a third paragraph after the measurement",
+      "pr": null,
+      "decisions": [
+        "R6"
+      ]
+    },
+    {
+      "id": "W2",
+      "at": "2026-09-05T18:50Z",
+      "title": "the family fold's compile cost measured against the pre-rule baseline",
+      "pr": null,
+      "decisions": [
+        "R4"
+      ]
+    },
+    {
+      "id": "W3",
+      "at": "2026-09-05T19:35Z",
+      "title": "the family rule landed on three surfaces with its measured table",
+      "pr": null,
+      "decisions": [
+        "R1",
+        "R4",
+        "R5",
+        "R7",
+        "R9",
+        "R10"
+      ]
+    },
+    {
+      "id": "W4",
+      "at": "2026-09-05T21:01Z",
+      "title": "the two residual wildcard overstatements found by re-reading the delta",
+      "pr": null,
+      "decisions": [
+        "R13"
+      ]
+    },
+    {
+      "id": "W5",
+      "at": "2026-09-05T22:39Z",
+      "title": "the last two precision fixes: a one-way inclusion and a type-resolution limit",
+      "pr": null,
+      "decisions": [
+        "R13"
+      ]
+    }
+  ],
+  "prs": [
+    {
+      "number": 992,
+      "role": "closes",
+      "pinnedAt": "2026-09-05T22:58Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}
