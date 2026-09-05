@@ -65,7 +65,10 @@ other table:
 each requested key adds a field to the row — the target's `Row` or
 `null` for `"one"`, `ReadonlyArray` of the target's `Row` for `"many"` —
 a key outside the map fails to type-check, and the result chain keeps
-`.where()`/`.orderBy()`/`.limit()`/`.offset()`. The statement SHALL be
+exactly the stages the declaring side's own related chain has --
+`.where()`, `.orderBy()`, `.limit()` -- and no others: the client offers
+no stage the declaring repository's chain lacks, and `.offset()` after
+`related()` exists on neither. The statement SHALL be
 the one the declaring repository's `related()` compiles for the same
 spec, so a scoped handle (`client.as(context)`) applies its context to
 the nested reads as it does to the row itself. A contract emitted before

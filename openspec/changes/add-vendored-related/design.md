@@ -38,11 +38,15 @@ the compile-parity test pins.
 
 ## Q4 — The result chain
 
-`NameKeyedRelatedChain<TRow & Nested>`: the same four stages the plain
-chain has, no further `.related()` (the `db()` surface's
-`SelectChainRelated` is the same shape). `.related()` is available on
-the whole-table select only — the client has no projection stage, so
-the question of "related after a projection" does not arise here.
+`NameKeyedRelatedChain<TRow & Nested>`: exactly the stages the `db()`
+surface's own `SelectChainRelated` has — `.where()`, `.orderBy()`,
+`.limit()` — and no further `.related()`. Measured while implementing
+task 1.2: that family has never carried `.offset()` (`chain.ts`'s
+`SelectChainRelatedLimited` is a bare terminal), so "the same shape" and
+"four stages" could not both be true; the shape wins (653/R4).
+`.related()` is available on the whole-table select only — the client
+has no projection stage, so the question of "related after a
+projection" does not arise here.
 
 ## Q5 — Collision rule at emit time
 

@@ -45,9 +45,10 @@ the planner, not into the diff.
       {}` and a `Database` without `Relations` have no `.related`
       member; the runtime test — `.related(spec).compile()` equals the
       internal handle's `select(table).related(spec).compile()` for the
-      same spec, the four stages compose after it, and `client.as(ctx)`
-      scopes the nested read (the recorded `set_config` precedes the
-      statement). Files: `name-keyed-db.ts`, tests.
+      same spec, the three stages the declaring side's related chain has
+      compose after it, and `client.as(ctx)` scopes the nested read (the
+      recorded `set_config` precedes the statement). Files:
+      `name-keyed-db.ts`, tests.
 
 - [ ] 1.3 (~7m) The two-repository witness. Red:
       `two-repo.integration.test.ts` gains "3.3: the consumer joins the

@@ -43,7 +43,8 @@ consumption repository speak one query language).
   adds a nested field to the row — `Row | null` of the target for a
   `"one"` relation, `ReadonlyArray<Row>` of the target for `"many"` —
   and a key outside the map fails to type-check. The result chain keeps
-  `.where()`/`.orderBy()`/`.limit()`/`.offset()`. A table with no
+  exactly the stages the declaring side's own related chain has —
+  `.where()`, `.orderBy()`, `.limit()`. A table with no
   relations has no `.related` member at all, and a contract vendored
   before `Relations` existed builds a client on which no table has one —
   the same rule a pre-functions contract already follows.
