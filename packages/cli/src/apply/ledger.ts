@@ -201,6 +201,15 @@ const isUndefinedTableError = (error: unknown): boolean =>
 	"code" in error &&
 	(error as { readonly code?: unknown }).code === UNDEFINED_TABLE;
 
+/** [task 1.5, 631/R13] Postgres's own code for "the named column does not exist" -- the one failure `readLedger`'s own fallback interprets, on the one column (`checksum`) a ledger predating this piece's own bootstrap can lack. */
+const UNDEFINED_COLUMN = "42703";
+
+const isUndefinedColumnError = (error: unknown): boolean =>
+	typeof error === "object" &&
+	error !== null &&
+	"code" in error &&
+	(error as { readonly code?: unknown }).code === UNDEFINED_COLUMN;
+
 /**
  * [task 1.1, design.md D4] Which way a statement `exec` sent moved data --
  * every ledger-touching command's read is answered by a grant or by
@@ -327,6 +336,23 @@ export const bootstrapLedger = async (
 	// `create table if not exists` never touches an already-existing ledger,
 	// so a ledger bootstrapped before this column existed needs its own
 	// statement to gain it.
+	await upgradeLedgerColumns(session);
+};
+
+/**
+ * [task 1.5, 631/R13] The one place `alter table ... add column if not
+ * exists "checksum" text` is written -- `bootstrapLedger` calls this for
+ * a freshly-created table, and a command that writes to an
+ * already-existing ledger (`execute.ts`, on the write path only) calls it
+ * once before its first write, so a ledger created before this piece
+ * gains the column the same idempotent way either caller reaches it. A
+ * role that may not alter the ledger surfaces this as
+ * `apply-ledger-unwritable` at the `bootstrap` site, the same as any
+ * other bootstrap statement.
+ */
+export const upgradeLedgerColumns = async (
+	session: DriverSession,
+): Promise<void> => {
 	await exec(
 		session,
 		`alter table ${QUALIFIED_LEDGER_TABLE} add column if not exists "checksum" text`,
@@ -436,6 +462,30 @@ export const readLedger = async (
 		const tag = asLedgerAccessFailure(error);
 		if (tag !== null && isUndefinedTableError(tag.cause)) {
 			return { exists: false };
+		}
+		// [task 1.5, 631/R13] A ledger created before this piece's own
+		// `checksum` column lacks it. Every caller of `readLedger` has
+		// already passed `probeLedgerIdentity`/`assertLedgerNotOccupied`,
+		// which guarantee the four original bootstrap columns exist with
+		// the right types -- `checksum` is the only column this select can
+		// be missing, so re-reading with the four original columns and
+		// folding every row's checksum to `null` is safe, not a guess.
+		if (tag !== null && isUndefinedColumnError(tag.cause)) {
+			const rows = await exec(
+				session,
+				`select "filename", "origin" from ${QUALIFIED_LEDGER_TABLE} order by "id"`,
+				[],
+				"read",
+				"read",
+			);
+			return {
+				exists: true,
+				applied: rows.map((row) => ({
+					filename: String(row.filename),
+					origin: String(row.origin) as LedgerOrigin,
+					checksum: null,
+				})),
+			};
 		}
 		throw error;
 	}

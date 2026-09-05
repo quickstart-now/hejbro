@@ -26,6 +26,7 @@ import {
 	LEDGER_SCHEMA,
 	LEDGER_TABLE,
 	readLedger,
+	upgradeLedgerColumns,
 } from "../apply/ledger";
 import {
 	throwLedgerReadFailure,
@@ -514,6 +515,13 @@ export const runMigrate = async (
 					const ledgerState = await readLedger(driver);
 					if (!ledgerState.exists) {
 						await bootstrapLedger(driver);
+					} else {
+						// [task 1.5, 631/R13] The read fallback above already lets
+						// a pre-checksum ledger answer `exists: true` with every
+						// row's checksum null -- this is what actually adds the
+						// column to it, once per apply run, before this run's
+						// own writes (if any).
+						await upgradeLedgerColumns(driver);
 					}
 					const plan = planApply(chain, ledgerState, baselineFileNames);
 					if (!plan.ok) {

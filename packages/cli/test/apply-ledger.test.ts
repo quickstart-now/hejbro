@@ -12,6 +12,7 @@ import {
 	isMigrationRecorded,
 	readLedger,
 	recordAppliedMigration,
+	upgradeLedgerColumns,
 	wholeFileChecksum,
 } from "../src/apply/ledger";
 import { sha256Hex } from "../src/hash";
@@ -914,5 +915,85 @@ describe("readLedger / 1.2, 631/R6 (checksum column)", () => {
 			call.sql.toLowerCase().startsWith("select"),
 		);
 		expect(selectStatement?.sql).toMatch(/"checksum"/i);
+	});
+});
+
+/**
+ * [task 1.5, 631/R13] A ledger created before this piece's own `checksum`
+ * column exists as an ordinary relation the four bootstrap columns
+ * describe -- `probeLedgerIdentity`/`assertLedgerNotOccupied` (already run
+ * by every caller before `readLedger`) guarantee those four columns exist
+ * with the right types, so a `42703` on the three-column select can only
+ * mean `checksum` itself, never a different missing column.
+ */
+describe("readLedger / 1.5, 631/R13 (old ledger fallback)", () => {
+	it("a 42703 on the checksum select retries with the four original columns, folding every row's checksum to null", async () => {
+		const { session, calls } = makeScriptedSession([
+			{
+				throws: Object.assign(new Error('column "checksum" does not exist'), {
+					code: "42703",
+				}),
+			},
+			{
+				rows: [
+					{ filename: "0001_init.sql", origin: "applied" },
+					{ filename: "0002_add_column.sql", origin: "applied" },
+				],
+			},
+		]);
+
+		await expect(readLedger(session)).resolves.toEqual({
+			exists: true,
+			applied: [
+				{ filename: "0001_init.sql", origin: "applied", checksum: null },
+				{
+					filename: "0002_add_column.sql",
+					origin: "applied",
+					checksum: null,
+				},
+			],
+		});
+		expect(calls).toHaveLength(2);
+		expect(calls[1]?.sql.toLowerCase()).toMatch(
+			/^select "filename", "origin" from/,
+		);
+	});
+});
+
+/**
+ * [task 1.5, 631/R13] `upgradeLedgerColumns` is the one place the
+ * idempotent upgrade statement is written -- `bootstrapLedger` reuses it
+ * (already pinned by the bootstrap tests above), and a write command
+ * calls it directly on an already-existing ledger (migrate-command.test.ts's
+ * own command-level test pins that call site and its ordering, since a
+ * unit call here cannot witness whether `migrate.ts` still makes it).
+ */
+describe("upgradeLedgerColumns / 1.5, 631/R13", () => {
+	it("sends the idempotent alter, tagged write/bootstrap", async () => {
+		const { session, calls } = makeRecordingSession();
+
+		await upgradeLedgerColumns(session);
+
+		expect(calls).toHaveLength(1);
+		expect(calls[0]?.sql).toBe(
+			'alter table "hejbro"."migration_ledger" add column if not exists "checksum" text',
+		);
+	});
+
+	it("42501 on the alter is a tagged write failure at the bootstrap site", async () => {
+		const error = permissionDeniedTable();
+		const { session } = makeScriptedSession([{ throws: error }]);
+
+		await expect(upgradeLedgerColumns(session)).rejects.toSatisfy(
+			(thrown: unknown) => {
+				const tag = asLedgerAccessFailure(thrown);
+				return (
+					tag !== null &&
+					tag.direction === "write" &&
+					tag.site === "bootstrap" &&
+					tag.cause === error
+				);
+			},
+		);
 	});
 });

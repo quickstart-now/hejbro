@@ -1412,6 +1412,55 @@ describe("runMigrate — an applied migration's body changed / 1.3, 631/R9", () 
 	});
 });
 
+describe("runMigrate — an already-existing ledger is upgraded, never bootstrapped / 1.5, 631/R13", () => {
+	let cwd: string;
+
+	beforeEach(async () => {
+		cwd = await createCliFixtureDir();
+		await writeFixtureFile(cwd, "hejbro.config.ts", CONFIG_SOURCE);
+		await writeFixtureFile(
+			cwd,
+			"migrations/0001_a.sql",
+			[
+				"-- hejbro migration",
+				"-- parent-snapshot: sha256:aaaa",
+				"-- snapshot: sha256:bbbb",
+				'create table "app"."a" (id integer);',
+			].join("\n"),
+		);
+	});
+
+	afterEach(async () => {
+		await removeCliFixtureDir(cwd);
+	});
+
+	it("sends the checksum-column alter before the pending migration's own ledger insert, and never bootstraps", async () => {
+		const { importer, calls } = makeFailingLedgerImporter(
+			() => false,
+			new Error("unreachable"),
+			{ ledgerRows: [] },
+		);
+
+		const result = await runMigrate(
+			cwd,
+			["--url", "postgres://fake"],
+			importer,
+		);
+
+		expect(result.exitCode).toBe(0);
+		const lowered = calls.map((sql) => sql.trim().toLowerCase());
+		const alterIndex = lowered.findIndex((sql) =>
+			sql.startsWith("alter table"),
+		);
+		const insertIndex = lowered.findIndex((sql) =>
+			sql.startsWith("insert into"),
+		);
+		expect(alterIndex).toBeGreaterThanOrEqual(0);
+		expect(insertIndex).toBeGreaterThan(alterIndex);
+		expect(lowered.some((sql) => sql.startsWith("create schema"))).toBe(false);
+	});
+});
+
 // add-config-driver, #458, task 1.4: mirrors check-command.test.ts's own
 // seam (a fixture config runs in-process through jiti, so a per-test
 // recording driver reaches it only through globalThis).
