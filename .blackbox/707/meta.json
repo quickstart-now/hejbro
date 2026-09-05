@@ -4,9 +4,9 @@
   "ref": "quickstart-now/hejbro#707",
   "title": "check is silent about undeclared indexes and check constraints on managed tables",
   "parent": "quickstart-now/hejbro#412",
-  "status": "open",
+  "status": "closed",
   "opened": "2026-09-04",
-  "closed": null,
+  "closed": "2026-09-05",
   "decisions": [
     {
       "id": "R1",
@@ -70,7 +70,13 @@
       ]
     }
   ],
-  "prs": [],
+  "prs": [
+    {
+      "number": 878,
+      "role": "closes",
+      "pinnedAt": "2026-09-05T02:28Z"
+    }
+  ],
   "origin": null,
   "followUps": []
 }

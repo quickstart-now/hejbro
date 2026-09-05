@@ -1,0 +1,105 @@
+{
+  "version": 3,
+  "number": 878,
+  "ref": "quickstart-now/hejbro#878",
+  "title": "feat(cli): check lists database-only columns, indexes and checks on managed tables (#707, #726)",
+  "head": "3da44a2626b80e1c835626a81b34e5f622e4fc77",
+  "headRef": "fix-check-inventory",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-05T02:28Z",
+  "refs": [
+    {
+      "path": ".changeset/harden-check-inventory.md",
+      "blob": "247dd2646b4647bec55ed0a10f1ad32daba63e59"
+    },
+    {
+      "path": "README.md",
+      "blob": "6f5ca347b6fb137eb24a4590c083fcfcfae034e5"
+    },
+    {
+      "path": "examples/brownfield/test/brownfield.integration.test.ts",
+      "blob": "062bf23e9f83aeb99ea9a24583e4b281948a968f"
+    },
+    {
+      "path": "openspec/changes/harden-check-inventory/design.md",
+      "blob": "4b0e5ff387a7abcf42e96d029430cef20d7fcacc"
+    },
+    {
+      "path": "openspec/changes/harden-check-inventory/proposal.md",
+      "blob": "c325bc6c640ef8642694266385d5fdb395f72b62"
+    },
+    {
+      "path": "openspec/changes/harden-check-inventory/specs/catalog-inference/spec.md",
+      "blob": "7859a892a0af0fa26d705476ab8b99fd9ae3172f"
+    },
+    {
+      "path": "openspec/changes/harden-check-inventory/specs/cli-commands/spec.md",
+      "blob": "78472808c3944bdd83f04499ddaee62049cf3455"
+    },
+    {
+      "path": "openspec/changes/harden-check-inventory/tasks.md",
+      "blob": "f71b18f91605d940992947eb3a246dbc752ff453"
+    },
+    {
+      "path": "openspec/task-times.csv",
+      "blob": "fc85836baba906f022fa4a9899e577e939f124a2"
+    },
+    {
+      "path": "packages/cli/src/check/catalog.ts",
+      "blob": "e075a3da3fc746daa7ce6f2314bd8523b4d6bced"
+    },
+    {
+      "path": "packages/cli/src/check/inventory.ts",
+      "blob": "5e9db3dec2b4130f7084482f6891ccb4df7aff0e"
+    },
+    {
+      "path": "packages/cli/src/commands/check.ts",
+      "blob": "ec6ee088257f48d50212a84de8426de3335a15e5"
+    },
+    {
+      "path": "packages/cli/src/infer/loss-report.ts",
+      "blob": "d0bfe4450d90f2bafccbf217fbe912d4b10e9df8"
+    },
+    {
+      "path": "packages/cli/test/check-catalog.test.ts",
+      "blob": "33034ce91855a7b03f9ebd7de72d19190f887104"
+    },
+    {
+      "path": "packages/cli/test/check-command.test.ts",
+      "blob": "f07f3864417441403f4418f2f5efd037287a7cc3"
+    },
+    {
+      "path": "packages/cli/test/check-expression.test.ts",
+      "blob": "b0c23af0e93c40d974d9f8e0514d6861f7e3d2d5"
+    },
+    {
+      "path": "packages/cli/test/check-inventory.test.ts",
+      "blob": "d67d23f2a2db9d0c3dd60436c0696e245bfea995"
+    },
+    {
+      "path": "packages/cli/test/check-live.integration.test.ts",
+      "blob": "9a0c11c85232b4052344f25d258aae52aa16d357"
+    },
+    {
+      "path": "packages/cli/test/infer-adapter.test.ts",
+      "blob": "8993f9f086e15cd6d7d045489c744820af914937"
+    },
+    {
+      "path": "packages/cli/test/infer-loss-report.test.ts",
+      "blob": "7c7314e461a0f1d84026c351e907f00b14ef8a4c"
+    },
+    {
+      "path": "packages/cli/test/infer-omitted-names.integration.test.ts",
+      "blob": "2e25c9e66b122aa706bef7764e72803f01d1ce0d"
+    },
+    {
+      "path": "packages/cli/test/infer-unique-on-omitted-table.test.ts",
+      "blob": "8e3339947197a43ea8cde96b6af23f8818d5e6e9"
+    },
+    {
+      "path": "skills/hejbro/references/brownfield-adoption.md",
+      "blob": "d89d6f4f6379a443c5bb945ba9a5b49bb753e4af"
+    }
+  ]
+}

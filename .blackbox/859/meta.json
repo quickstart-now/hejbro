@@ -1,0 +1,21 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#859",
+  "title": "check: DB-only primary-key, unique, foreign-key and exclusion constraints on managed tables are not named as constraints",
+  "parent": "quickstart-now/hejbro#815",
+  "status": "open",
+  "opened": "2026-09-05",
+  "closed": null,
+  "decisions": [],
+  "work": [],
+  "prs": [
+    {
+      "number": 878,
+      "role": "refs",
+      "pinnedAt": "2026-09-05T02:28Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

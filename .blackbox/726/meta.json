@@ -4,9 +4,9 @@
   "ref": "quickstart-now/hejbro#726",
   "title": "loss report promises check will report an omitted column, but check has no column-level inventory",
   "parent": "quickstart-now/hejbro#412",
-  "status": "open",
+  "status": "closed",
   "opened": "2026-09-04",
-  "closed": null,
+  "closed": "2026-09-05",
   "decisions": [
     {
       "id": "R1",
@@ -33,7 +33,13 @@
       ]
     }
   ],
-  "prs": [],
+  "prs": [
+    {
+      "number": 878,
+      "role": "closes",
+      "pinnedAt": "2026-09-05T02:28Z"
+    }
+  ],
   "origin": null,
   "followUps": []
 }
