@@ -1055,7 +1055,9 @@ describe("set-op order-by output-column guard (review F1)", () => {
 		expect(() => renderSetOp(nonProjected)).toThrowError(/output/);
 
 		const aliased = select({ headline: posts.status }, posts)
-			.union(select({ headline: comments.id }, comments))
+			// Same family on both sides (503/R8): this guard's input is the
+			// orderBy, not which table each branch reads.
+			.union(select({ headline: posts.status }, posts))
 			// the SOURCE ref renders "status", but the output column is
 			// "headline" -- Postgres rejects it, so we do first.
 			.orderBy(posts.status);

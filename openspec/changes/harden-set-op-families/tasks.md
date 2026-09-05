@@ -38,7 +38,7 @@ file, that goes back to the planner, not into the diff.
       (a family added without a row fails). Files: `select.ts`, tests,
       design.md.
 
-- [ ] 1.2a (~10m) The rule on the two projection surfaces. Red: an
+- [x] 1.2a (~10m) The rule on the two projection surfaces. Red: an
       input table over {every refused pair from the vendored table →
       `@ts-expect-error` at the combinator's parameter; every accepted
       pair → accepted; `"unknown"` on the left, on the right, on both →
