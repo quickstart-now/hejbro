@@ -197,4 +197,23 @@ describe("filter() refuses anything that is not a builder aggregate, task 1.1 (#
 			}),
 		);
 	});
+
+	// CRAP coverage gap found by the group-completion gate (#501): an
+	// unqualified functionCall whose name isn't one of the five aggregates
+	// (e.g. lower(...)) is a computed expression, not a builder aggregate
+	// -- the delta's own "anything that is not a builder aggregate" wording
+	// covers it, but no refusal row exercised it before this one.
+	it("refuses an unqualified function call that isn't one of the five aggregates", () => {
+		const computed: Expr = expr("text", {
+			nodeKind: "functionCall",
+			schemaName: null,
+			functionName: "lower",
+			args: [viewsColumn.exprNode],
+		});
+		expect(() => filter(computed, condition)).toThrowError(
+			expect.objectContaining({
+				code: "filter-not-aggregate",
+			}),
+		);
+	});
 });

@@ -168,28 +168,42 @@ const aggregateFunctionCallOf = (
 };
 
 /**
+ * A phrase per `nodeKind`, for the shapes that need no field of their
+ * own -- `functionCall` is handled separately below (its phrase depends
+ * on `schemaName`/`functionName`), and any kind absent here (including
+ * an unqualified `functionCall`) is a plain "an expression" (#501/R2 Q3).
+ */
+const FILTER_TARGET_PHRASES: Partial<Record<ExprNode["nodeKind"], string>> = {
+	columnRef: "a column reference",
+	sqlTemplate: "a raw sql fragment",
+	window: "an already-windowed expression",
+};
+
+/** `functionCall`'s own phrase: a schema-qualified call names a declared function; an unqualified one (not a builder aggregate, or `aggregateFunctionCallOf` would have accepted it) is a plain computed expression. */
+const describeFunctionCallTarget = (node: FunctionCallNode): string => {
+	if (node.schemaName === null) {
+		return "an expression";
+	}
+	return `a declared function call "${node.schemaName}.${node.functionName}"`;
+};
+
+/**
  * Names what `filter()` actually received, one phrase per refused shape
  * (#501/R2 Q3) -- a window-only call (`rowNumber()`) carries no
- * `exprNode` at all; the rest are read off `exprNode.nodeKind`.
+ * `exprNode` at all; the rest are read off `exprNode.nodeKind`, a table
+ * lookup rather than an if-chain (CRAP: a per-branch if-chain here scores
+ * above the repository's own threshold even at full coverage, #501
+ * group-completion gate).
  */
 const describeFilterTarget = (target: object): string => {
 	if (!("exprNode" in target)) {
 		return "a window function";
 	}
 	const node = (target as { readonly exprNode: ExprNode }).exprNode;
-	if (node.nodeKind === "columnRef") {
-		return "a column reference";
+	if (node.nodeKind === "functionCall") {
+		return describeFunctionCallTarget(node);
 	}
-	if (node.nodeKind === "sqlTemplate") {
-		return "a raw sql fragment";
-	}
-	if (node.nodeKind === "window") {
-		return "an already-windowed expression";
-	}
-	if (node.nodeKind === "functionCall" && node.schemaName !== null) {
-		return `a declared function call "${node.schemaName}.${node.functionName}"`;
-	}
-	return "an expression";
+	return FILTER_TARGET_PHRASES[node.nodeKind] ?? "an expression";
 };
 
 const throwFilterNotAggregate = (target: object): never =>
