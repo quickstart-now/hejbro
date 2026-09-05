@@ -3,11 +3,11 @@
   "number": 883,
   "ref": "quickstart-now/hejbro#883",
   "title": "build: declare third-party client ranges once in the pnpm catalog (#491)",
-  "head": "72bc14654c0bd9dda532e133cb1257ac974eda09",
+  "head": "3d4e5df88362df5ba62b9a3de105afaaeae91793",
   "headRef": "chore-client-ranges",
   "base": "dev",
   "merged": null,
-  "pinnedAt": "2026-09-05T05:00Z",
+  "pinnedAt": "2026-09-05T05:05Z",
   "refs": [
     {
       "path": ".changeset/client-ranges-catalog.md",
@@ -16,6 +16,10 @@
     {
       "path": ".github/workflows/ci.yml",
       "blob": "d48d86626cfe02d22dde2c5092a53fb76db122a6"
+    },
+    {
+      "path": "examples/postgres/package.json",
+      "blob": "037dc647aa5075cc994b4a90db88238fb0b1a231"
     },
     {
       "path": "package.json",
@@ -39,7 +43,7 @@
     },
     {
       "path": "pnpm-lock.yaml",
-      "blob": "dc6240bab814fadf7cbbdb477b5fcaf7cc62d15c"
+      "blob": "a911795646c2f4fbe8a70c44b33744d826178723"
     },
     {
       "path": "pnpm-workspace.yaml",
