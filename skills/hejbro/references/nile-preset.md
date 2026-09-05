@@ -60,6 +60,37 @@ with a `tenant_id uuid` column is all Nile's platform requires: *"You can
 create a tenant aware table in Nile by creating a table with a
 'tenant_id' column of type uuid… This is all it takes."*
 
+## The CLI's own connection
+
+`hejbro.config.ts` can name a `driver` factory so the seven CLI commands
+that connect — `check`, `status`, `migrate`, `raise`, `reset`, `import`
+and `pull` — go through this preset's own decorated driver instead of
+the vanilla `@hejbro/pg` import each falls back to when the field is
+absent:
+
+```ts
+import { nileDriver } from "@hejbro/nile";
+import { pgDriver } from "@hejbro/pg";
+import { defineConfig } from "hejbro";
+
+export default defineConfig({
+	entry: ["src/app.schema.ts"],
+	migrationsDir: "migrations",
+	snapshotPath: "hejbro.snapshot.json",
+	prefixStrategy: "index",
+	driver: (connectionString) => nileDriver(pgDriver(connectionString)),
+});
+```
+
+The factory receives only the connection string each command already
+resolved from `--url`/`DATABASE_URL` — `hejbro.config.ts` itself never
+carries one. The driver it returns must still be closable
+(`client.end`, the same member `pgDriver`'s own connection-string form
+carries) — `nileDriver` spreads its base driver through, so this shape
+already satisfies it; a custom driver that drops `client.end` before
+returning it from `driver` is refused, naming the field, before any
+statement is sent.
+
 ## The two platform declarations
 
 `nileDriver`'s output carries two fixed declarations, never discovered

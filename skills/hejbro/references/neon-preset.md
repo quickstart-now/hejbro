@@ -18,6 +18,40 @@ const driver = neonDriver(pool);
 const auth = neonAuth("claims"); // or "jwt" -- see "Authentication modes" below
 ```
 
+## The CLI's own connection
+
+`hejbro.config.ts` can name a `driver` factory so the seven CLI commands
+that connect — `check`, `status`, `migrate`, `raise`, `reset`, `import`
+and `pull` — go through this preset's own driver instead of the vanilla
+`@hejbro/pg` import each falls back to when the field is absent:
+
+```ts
+import { neonDriver } from "@hejbro/neon";
+import { Pool } from "@neondatabase/serverless";
+import { defineConfig } from "hejbro";
+
+export default defineConfig({
+	entry: ["src/app.schema.ts"],
+	migrationsDir: "migrations",
+	snapshotPath: "hejbro.snapshot.json",
+	prefixStrategy: "index",
+	driver: (connectionString) => {
+		const pool = new Pool({ connectionString });
+		return { ...neonDriver(pool), client: { end: () => pool.end() } };
+	},
+});
+```
+
+The factory receives only the connection string each command already
+resolved from `--url`/`DATABASE_URL` — `hejbro.config.ts` itself never
+carries one. The WebSocket `Pool` path is the one to configure here:
+`migrate`/`raise`/`reset` need `interactive-transactions`, which only it
+declares (see the table below). The driver a factory returns must also
+be closable (`client.end`) — `neonDriver(pool)`'s own return value
+carries none (unlike `@hejbro/pg`'s, whose `client` member *is* the
+`Pool` itself), so this shape adds one explicitly; dropping it is
+refused, naming the field, before any statement is sent.
+
 ## The two connection paths
 
 `neonDriver` is overloaded on the client it is handed, and the two

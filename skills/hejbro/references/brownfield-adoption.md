@@ -75,12 +75,16 @@ hejbro check --url postgres://...
 # or: DATABASE_URL=postgres://... hejbro check
 ```
 
-It needs the `@hejbro/pg` package installed (`pnpm add -D @hejbro/pg`).
-`hejbro` itself declares it as no dependency kind at all — not a
-runtime dependency, not a peer, optional or otherwise — so installing
-`hejbro` never pulls in a Postgres client for the commands that never
-connect, and the package manager is never asked to reason about a
-package only `check` uses.
+If `hejbro.config.ts` sets no `driver`, it needs the `@hejbro/pg`
+package installed (`pnpm add -D @hejbro/pg`). `hejbro` itself declares
+it as no dependency kind at all — not a runtime dependency, not a peer,
+optional or otherwise — so installing `hejbro` never pulls in a
+Postgres client for the commands that never connect, and the package
+manager is never asked to reason about a package only `check` uses.
+Configure a `driver` factory instead (see `references/{supabase,neon,
+nile}-preset.md` for the decorated shape each preset's own project
+uses) and that factory connects for every command that needs one —
+`@hejbro/pg` is never installed at all.
 
 The exit code answers three separate questions, not one:
 
@@ -343,7 +347,8 @@ renaming the column in the database ends that one, the same remedy
   inventory section), `packages/cli/src/check/catalog.ts` (the read-only
   catalog queries), `packages/cli/src/check/driver.ts` (`--url`/
   `DATABASE_URL` resolution, `@hejbro/pg` declared as no dependency
-  kind at all), `packages/cli/src/apply/plan.ts` (`baselineFileNames`,
+  kind at all, a configured `driver` factory preferred over it when
+  `hejbro.config.ts` sets one), `packages/cli/src/apply/plan.ts` (`baselineFileNames`,
   the subset of pending migrations `migrate` registers rather than
   applies), `packages/cli/src/apply/execute.ts` (`applyMigration` skips
   sending a baseline file's SQL), `packages/cli/src/commands/migrate.ts`
