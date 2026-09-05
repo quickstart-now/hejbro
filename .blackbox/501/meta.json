@@ -21,6 +21,24 @@
       "at": "2026-09-05T05:49Z",
       "title": "FILTER (WHERE …) ships as a filter(aggregate, condition) wrapper over a new AggregateFilterNode variant",
       "ratified": null
+    },
+    {
+      "id": "R2",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [],
+      "at": "2026-09-05T12:58Z",
+      "title": "filter's accepted set, signature, message shape and scope",
+      "ratified": null
+    },
+    {
+      "id": "R3",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [],
+      "at": "2026-09-05T13:06Z",
+      "title": "the window fn slot widens in two places",
+      "ratified": null
     }
   ],
   "work": [],

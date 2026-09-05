@@ -32,9 +32,15 @@ const placeholder = columnRef("app", "t", "c", { typeName: "bigint" });
  * than silently: `over()` attaches a window spec to an existing
  * aggregate or window-only call, so it never produces a function-call
  * node under its own name and has no row of its own in
- * `BUILDER_READ_SHAPES`.
+ * `BUILDER_READ_SHAPES`. `filter()` (#501/R2) is the same shape of
+ * wrapper -- it attaches a `FILTER (WHERE …)` clause to an existing
+ * aggregate rather than naming a Postgres function of its own, so it
+ * has no row here either.
  */
-const NON_CONSTRUCTOR_EXPORTS: ReadonlySet<string> = new Set(["over"]);
+const NON_CONSTRUCTOR_EXPORTS: ReadonlySet<string> = new Set([
+	"over",
+	"filter",
+]);
 
 /** Every function-valued runtime export of `module`, minus {@link NON_CONSTRUCTOR_EXPORTS} -- a type-only export (e.g. `Aggregated`) or a non-function value (e.g. `readAsBrand`, a symbol) never appears here. */
 const constructorExportNames = (

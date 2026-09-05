@@ -1,6 +1,7 @@
 import { throwHejbroError } from "../error";
-import type { Expr, ExprNode } from "./ast";
+import type { Condition, Expr, ExprNode, FunctionCallNode } from "./ast";
 import { expr } from "./ast";
+import { AGGREGATE_READ_SHAPES } from "./read-shape";
 import { someExprNode } from "./walk";
 
 /**
@@ -137,3 +138,91 @@ export const sum = (operand: Expr): Expr<"numeric"> =>
 /** `avg(<expr>)`. See {@link aggregate} for why this carries no read-type brand. */
 export const avg = (operand: Expr): Expr<"numeric"> =>
 	expr("numeric", aggregate("avg", [operand.exprNode]));
+
+/**
+ * `target`'s function call, or `undefined` when `target` isn't a real,
+ * unfiltered, unwindowed call one of {@link AGGREGATE_READ_SHAPES}'s five
+ * names -- `filter()`'s own accepted set (#501/R2 Q1: the full builder
+ * key set also holds the eleven window-only names and would wrongly
+ * admit `rowNumber()`). A schema-qualified call is a declared function
+ * (`db.fn`), never the builder's own, same rule `query/select.ts`'s
+ * `builderAggregateFunctionName` already applies (#452).
+ */
+const aggregateFunctionCallOf = (
+	target: object,
+): FunctionCallNode | undefined => {
+	if (!("exprNode" in target)) {
+		return undefined;
+	}
+	const node = (target as { readonly exprNode: ExprNode }).exprNode;
+	if (node.nodeKind !== "functionCall") {
+		return undefined;
+	}
+	if (node.schemaName !== null) {
+		return undefined;
+	}
+	if (!Object.hasOwn(AGGREGATE_READ_SHAPES, node.functionName)) {
+		return undefined;
+	}
+	return node;
+};
+
+/**
+ * Names what `filter()` actually received, one phrase per refused shape
+ * (#501/R2 Q3) -- a window-only call (`rowNumber()`) carries no
+ * `exprNode` at all; the rest are read off `exprNode.nodeKind`.
+ */
+const describeFilterTarget = (target: object): string => {
+	if (!("exprNode" in target)) {
+		return "a window function";
+	}
+	const node = (target as { readonly exprNode: ExprNode }).exprNode;
+	if (node.nodeKind === "columnRef") {
+		return "a column reference";
+	}
+	if (node.nodeKind === "sqlTemplate") {
+		return "a raw sql fragment";
+	}
+	if (node.nodeKind === "window") {
+		return "an already-windowed expression";
+	}
+	if (node.nodeKind === "functionCall" && node.schemaName !== null) {
+		return `a declared function call "${node.schemaName}.${node.functionName}"`;
+	}
+	return "an expression";
+};
+
+const throwFilterNotAggregate = (target: object): never =>
+	throwHejbroError(
+		"filter-not-aggregate",
+		`filter() accepts one of the builder's aggregates -- count(), min(), max(), sum() or avg() -- and got ${describeFilterTarget(target)}. Next: wrap one of those aggregates, or, to window a filtered aggregate, filter first and window outside: over(filter(count(), condition), spec).`,
+	);
+
+/**
+ * `filter(aggregate, condition)` — Postgres's own `FILTER (WHERE …)`
+ * clause (#501/R2), applying to any of the five builder aggregates and
+ * keeping the aggregate's own result type and conversion (`Aggregated`,
+ * same rebuild `aggregatedExtremum`/`over()`'s `overAggregate` use: drop
+ * `sqlName`, keep the symbol-keyed read brand). `condition` takes what
+ * `where` takes -- a runtime value inside it is lifted to a bind
+ * parameter like any other condition (`@hejbro/query`'s `params.ts`, a
+ * later task).
+ */
+export const filter = <TExpr extends Expr>(
+	target: TExpr,
+	condition: Condition,
+): Aggregated<TExpr> => {
+	const fn = aggregateFunctionCallOf(target);
+	if (fn === undefined) {
+		return throwFilterNotAggregate(target);
+	}
+	const {
+		sqlName: _sqlName,
+		exprNode: _exprNode,
+		...rest
+	} = target as TExpr & { readonly sqlName?: string };
+	return {
+		...rest,
+		exprNode: { nodeKind: "aggregateFilter", fn, where: condition.exprNode },
+	} as Aggregated<TExpr>;
+};

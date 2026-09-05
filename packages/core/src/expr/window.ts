@@ -1,6 +1,7 @@
 import { throwHejbroError } from "../error";
 import type { Aggregated, ReadAs } from "./aggregate";
 import type {
+	AggregateFilterNode,
 	Expr,
 	ExprNode,
 	FunctionCallNode,
@@ -212,7 +213,7 @@ export type WindowSpec = {
 };
 
 const buildWindowNode = (
-	fn: FunctionCallNode,
+	fn: FunctionCallNode | AggregateFilterNode,
 	spec: WindowSpec,
 ): WindowNode => ({
 	nodeKind: "window",
@@ -237,15 +238,23 @@ const hasWindowFn = (target: object): boolean => "windowFn" in target;
 const throwInvalidOverTarget = (): never =>
 	throwHejbroError(
 		"invalid-over-target",
-		"over() requires a function call -- an existing aggregate (sum(), count(), min(), max(), avg()) or one of the window-only constructors (rowNumber(), rank(), lag(), ...). Next: wrap one of those, or drop over() if this expression isn't a window function.",
+		"over() requires a function call -- an existing aggregate (sum(), count(), min(), max(), avg()), a filtered aggregate (filter(count(), condition)), or one of the window-only constructors (rowNumber(), rank(), lag(), ...). Next: wrap one of those, or drop over() if this expression isn't a window function.",
 	);
 
-/** `over()`'s aggregate-target branch: `target` must already render as a function call (Postgres's own requirement — a window clause attaches to a function call, nothing else). */
+/**
+ * `over()`'s aggregate-target branch: `target` must already render as a
+ * function call or a filtered aggregate (#501/R2 Q2, #501/R3) — Postgres's
+ * own requirement, a window clause attaches to a function call (filtered
+ * or not), nothing else.
+ */
 const overAggregate = <TExpr extends Expr>(
 	target: TExpr,
 	spec: WindowSpec,
 ): Aggregated<TExpr> => {
-	if (target.exprNode.nodeKind !== "functionCall") {
+	if (
+		target.exprNode.nodeKind !== "functionCall" &&
+		target.exprNode.nodeKind !== "aggregateFilter"
+	) {
 		return throwInvalidOverTarget();
 	}
 	const {

@@ -27,8 +27,11 @@ recorded as a ruling on the change's issue.
 
 ## Q3 — What `filter` accepts
 
-Builder aggregates only, decided at build time by the read-shape
-vocabulary's own key set (a schema-qualified `db.fn` call is a user
+Builder aggregates only, decided at build time by the aggregate
+read-shape vocabulary's own key set — `AGGREGATE_READ_SHAPES`, the
+window-only half of the same table excluded, since the whole
+`BUILDER_READ_SHAPES` key set also holds the eleven window-only names
+and would admit `rowNumber()` (a schema-qualified `db.fn` call is a user
 function, never the builder's): anything else fails with
 `filter-not-aggregate`, naming the five constructors. The condition
 takes the `Condition` type `where` takes; literals in it are lifted

@@ -234,6 +234,17 @@ export const buildUnrelatedCase = (kind: ExprNode["nodeKind"]): ExprNode => {
 				partitionBy: [unrelatedColumnRef],
 				orderBy: [{ expr: unrelatedLiteral, direction: "asc" }],
 			};
+		case "aggregateFilter":
+			return {
+				nodeKind: "aggregateFilter",
+				fn: {
+					nodeKind: "functionCall",
+					schemaName: null,
+					functionName: "count",
+					args: [unrelatedColumnRef],
+				},
+				where: unrelatedLiteral,
+			};
 		case "selectExpr":
 			return {
 				nodeKind: "selectExpr",

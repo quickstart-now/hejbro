@@ -7,8 +7,8 @@ minimal green, then refactor. Every source rule of this repository
 applies (`any`/`let`/`var`/`for`/`while`/ternary banned; comments state
 the constraint only). Lands after `harden-aggregate-vocabulary` merges.
 
-**Files edited**: `packages/core/src/expr/{ast,aggregate,render-sql,
-codec,expr-children,retarget,walk,read-shape}.ts`, `packages/core/src/
+**Files edited**: `packages/core/src/expr/{ast,aggregate,window,
+render-sql,codec,expr-children,retarget,walk,read-shape}.ts`, `packages/core/src/
 query/select.ts`, `packages/core/src/index.ts`, `packages/core/test/expr/
 reachable-kinds.ts` and the tests beside each (1.1–1.3); `packages/query/
 src/compile/params.ts`, `packages/query/src/db/convert.ts` and tests
@@ -20,7 +20,7 @@ planner, not into the diff.
 
 ## 1. FILTER (WHERE …)
 
-- [ ] 1.1 (~10m) **[design]** The node and the wrapper. Settles
+- [x] 1.1 (~10m) **[design]** The node and the wrapper. Settles
       `AggregateFilterNode { nodeKind: "aggregateFilter"; fn:
       FunctionCallNode; where: ExprNode }`, the widened `WindowNode.fn`,
       `filter(target, condition)`'s signature (returns `target`'s own
@@ -31,7 +31,11 @@ planner, not into the diff.
       {columnRef, `sql\`1\``, a schema-qualified call, `rowNumber()`,
       `over(count(), spec)`} → `filter-not-aggregate`; the D70
       completeness fixture gains the kind (the assertion is red until a
-      fixture produces one). Files: `ast.ts`, `aggregate.ts`,
+      fixture produces one). The `fn` slot widens in two places that must
+      move together: `ast.ts`'s type and `window.ts`'s own runtime guard
+      (`overAggregate` admits an aggregate-filter node, `buildWindowNode`
+      takes the widened slot, `invalid-over-target` says so). Files:
+      `ast.ts`, `aggregate.ts`, `window.ts`, `read-shape.ts`,
       `reachable-kinds.ts`, `index.ts`, tests.
 
 - [ ] 1.2 (~9m) Render, encode, decode. Red: the render tests — the

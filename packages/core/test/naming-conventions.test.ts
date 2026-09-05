@@ -10,12 +10,14 @@ import {
 	between,
 	buildSnapshot,
 	check,
+	count,
 	createDefaultRegistry,
 	defineTrigger,
 	defineView,
 	emptySnapshot,
 	eq,
 	exists,
+	filter,
 	generateMigration,
 	getTableMeta,
 	grant,
@@ -418,6 +420,22 @@ describe("D70 naming convention: expression subtree discriminators are kebab-cas
 		),
 	);
 
+	// add-aggregate-filter (#501/R2): a view carrying a filtered aggregate
+	// is the declaration-reachable producer of the `aggregateFilter` node
+	// -- without one here, the completeness assertion below would flag
+	// `aggregate-filter` as vocabulary the fixture never reached.
+	const filteredCountByAuthorView = defineView(
+		app,
+		"filtered_count_by_author_view",
+		select(
+			{
+				authorId: posts.authorId,
+				publishedCount: filter(count(), isNotNull(posts.publishedAt)),
+			},
+			posts,
+		).groupBy(posts.authorId),
+	);
+
 	// add-ctes, task 4.5: a view whose body declares a CTE is the
 	// declaration-reachable producer of the "with" query vocabulary --
 	// group 1 deferred the question of whether `encodeQueryNode` needed
@@ -449,6 +467,7 @@ describe("D70 naming convention: expression subtree discriminators are kebab-cas
 			postsWithCommentsView,
 			priceSummaryView,
 			rankByAuthorView,
+			filteredCountByAuthorView,
 			rankedPostsView,
 		],
 		previousSnapshot: emptySnapshot,
