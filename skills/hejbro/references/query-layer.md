@@ -301,6 +301,22 @@ per the left branch's declarations. A set-operation query is also a
 valid view body (`defineView` accepts it; the view's columns come from
 the left branch).
 
+Branches must also agree in type family, key by key: a pair Postgres
+cannot unify fails to type-check at the combinator's parameter. The
+refused pairs are measured, not assumed — on postgres:17, across the ten
+concrete type families, no cross-family pair unifies. A `sql` fragment
+or a literal the type layer cannot place (family `"unknown"`) matches
+every family on either side: Postgres types an untyped expression
+against the other branch at parse time, and refusing it here would make
+the builder stricter than the database. The rule sees families, not
+types — `integer` against `bigint` still type-checks (#489), and it
+does not catch four same-family pairs the server itself refuses (`json`
+against `jsonb`, `time`/`timetz` against `timestamptz`, `macaddr`
+against `inet`, an enum against `text`; #977). Core's combinators, the
+chain's, and a recursive CTE's anchor/recursive-term pair all share this
+one rule — the chain's own combinators refuse exactly the family pairs
+core's do.
+
 A set operation built with the core builder's own combinators
 (`select(a).union(select(b))` from `hejbro`, not through a handle) and
 executed with `handle.execute(...)` reads back as the LEFT branch's
@@ -381,7 +397,10 @@ recursive term commonly needs a window function or an aggregate the anchor
 doesn't): a recursive CTE is grammatically `anchor UNION [ALL]
 recursive-term`, so this is the same union-compatibility rule
 `.union()`/`.unionAll()` already apply between any two branches, not a
-second one.
+second one. The keys must also agree in family: an anchor's `text`
+column against a recursive term's `integer` column for the same key now
+fails to type-check, where the server used to be the one to refuse it
+(`42804`).
 
 The outward row's *type* per key is always the anchor's; its
 *nullability* is not — a key reads nullable when either the anchor or

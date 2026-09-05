@@ -83,7 +83,7 @@ planner, not into the diff.
       `packages/query/test/types/*.test.ts`, `packages/core/src/query/
       select.ts`, `packages/core/src/index.ts`.
 
-- [ ] 1.3 (~5m) Reference and changeset. `query-layer.md`'s
+- [x] 1.3 (~5m) Reference and changeset. `query-layer.md`'s
       set-operation and recursive-CTE sections state the family rule,
       the wildcard and the within-family limit; `pnpm changeset` →
       `minor`. Files: the reference, `.changeset/*.md`.
