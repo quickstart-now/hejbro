@@ -17,9 +17,9 @@ reuses `execute.ts`'s `applyMigration`;
 (1.1, 631/R5); `packages/cli/test/apply-plan.test.ts`, whose `LedgerRow`
 literals gain the new required field (1.2, 631/R8);
 `packages/cli/test/apply-live.integration.test.ts` (1.5, 1.6);
-`skills/hejbro/references/generate-verify-workflow.md` and one
-`.changeset/*.md` (1.7). If a task appears to need any other file, that
-goes back to the planner, not into the diff.
+`skills/hejbro/references/generate-verify-workflow.md` (1.3, 1.6, 1.7)
+and one `.changeset/*.md` (1.7). If a task appears to need any other
+file, that goes back to the planner, not into the diff.
 
 **Ordering.** 1.1 → 1.2 → 1.3 → 1.4 → 1.5 → 1.6 → 1.7.
 

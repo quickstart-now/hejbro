@@ -347,12 +347,14 @@ Before applying anything pending, `migrate` SHALL hash the body of every
 recorded migration present on disk the way the ledger hashed it and
 compare it with the checksum the ledger holds; a mismatch SHALL be
 refused with `apply-migration-body-changed` before any statement is
-sent, naming the file, the recorded and the current checksum, and the
-remedy — restore the file from version control, or write a deliberate
-change as a new migration; hejbro never rewrites applied history. A row
-recorded before the checksum column existed carries none and is not
-compared. The offline walk (`verify`) keeps its stated limit: it never
-sees a body edit; this apply-time check is the half that does, and the
+sent, naming each changed file with the recorded and the current
+checksum, abbreviated to twelve hex digits, and the remedy — restore the
+file from version control, or write a deliberate change as a new
+migration; hejbro never rewrites applied history. One run SHALL name
+every file whose body changed, not the first it finds. A row recorded
+before the checksum column existed carries none and is not compared. The
+offline walk (`verify`) keeps its stated limit: it never sees a body
+edit; this apply-time check is the half that does, and the
 generate/verify reference says which half answers which question.
 
 #### Scenario: An edited applied body refuses the run before anything is sent
