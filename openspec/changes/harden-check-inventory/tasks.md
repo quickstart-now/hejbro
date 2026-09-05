@@ -22,7 +22,7 @@ delta scenarios of `openspec show harden-check-inventory --diff` hold.
 
 ## 1. `check`'s inventory names database-only objects on managed tables (#707 · #726)
 
-- [ ] 1.1 [design] ~8m — Red: `packages/cli/test/check-inventory.test.ts`
+- [x] 1.1 [design] ~8m — Red: `packages/cli/test/check-inventory.test.ts`
   new describe "the inventory's anchor is a managed table" with an input
   table over the four table states × one database-only column each —
   a table a `table:` declaration manages (listed), a catalog table no
@@ -36,7 +36,7 @@ delta scenarios of `openspec show harden-check-inventory --diff` hold.
   updated to match.
   Files: `packages/cli/src/check/inventory.ts`,
   `packages/cli/src/commands/check.ts`, the test.
-- [ ] 1.2 ~9m — Red: `packages/cli/test/check-catalog.test.ts` "an index
+- [x] 1.2 ~9m — Red: `packages/cli/test/check-catalog.test.ts` "an index
   carries the constraint it backs": the fake session's `indexes` rows
   carry `constraintName: string | null` and the parsed `Catalog` exposes
   it; the pinned query text joins `pg_constraint` on `conindid`. Green:
@@ -45,7 +45,7 @@ delta scenarios of `openspec show harden-check-inventory --diff` hold.
   `packages/cli/test/*.test.ts`. The fact is read from `conindid`, never
   from the index and the constraint sharing a name (design.md).
   Files: `packages/cli/src/check/catalog.ts`, the tests.
-- [ ] 1.3 ~8m — Red: `check-inventory.test.ts` describe "unmanaged
+- [x] 1.3 ~8m — Red: `check-inventory.test.ts` describe "unmanaged
   columns" with an input table over column kinds on one managed table: a
   column the declaration covers (never listed), a database-only plain
   column, a database-only generated column, a database-only identity
@@ -53,7 +53,7 @@ delta scenarios of `openspec show harden-check-inventory --diff` hold.
   `"createdAt"`) — the last four all listed by `schema.table.name`, none
   of them read for type, default or expression.
   Files: `packages/cli/src/check/inventory.ts`, the test.
-- [ ] 1.4 [design] ~10m — Red: `check-inventory.test.ts` describe
+- [x] 1.4 [design] ~10m — Red: `check-inventory.test.ts` describe
   "unmanaged indexes" with an input table over `pg_index` rows on one
   managed table: an index the declaration names (not listed), the index
   backing the declared primary key (not listed), the index backing a
@@ -66,14 +66,14 @@ delta scenarios of `openspec show harden-check-inventory --diff` hold.
   no constraint — the case name-matching would get wrong). Green: the
   index axis and its exclusion-by-backed-constraint rule.
   Files: `packages/cli/src/check/inventory.ts`, the test.
-- [ ] 1.5 ~7m — Red: `check-inventory.test.ts` describe "unmanaged check
+- [x] 1.5 ~7m — Red: `check-inventory.test.ts` describe "unmanaged check
   constraints" with an input table over `pg_constraint` rows on one
   managed table: a check the declaration names (not listed), a
   database-only check, and one row of each other constraint type (`p`,
   `u`, `f`) on the same table (never listed as a check constraint —
   those are #859's, not this change's).
   Files: `packages/cli/src/check/inventory.ts`, the test.
-- [ ] 1.6 [design] ~9m — Red: `packages/cli/test/check-command.test.ts`
+- [x] 1.6 [design] ~9m — Red: `packages/cli/test/check-command.test.ts`
   new describe "the inventory section names objects, not only tables"
   with an input table over the three kinds × several identities supplied
   in scrambled catalog order: each prints one
@@ -85,7 +85,7 @@ delta scenarios of `openspec show harden-check-inventory --diff` hold.
   line; a run whose only report content is inventory exits zero. Green:
   `inventoryLines` in `commands/check.ts`.
   Files: `packages/cli/src/commands/check.ts`, the test.
-- [ ] 1.7 ~7m — Red: `packages/cli/test/infer-loss-report.test.ts` new
+- [x] 1.7 ~7m — Red: `packages/cli/test/infer-loss-report.test.ts` new
   cases over the omitted-index and omitted-check lines: each states that
   `check` keeps listing the object as unmanaged until it is renamed in
   the database, and neither contains "will not mention it again"; the
@@ -93,7 +93,7 @@ delta scenarios of `openspec show harden-check-inventory --diff` hold.
   (regression, asserted against the current strings). Green: the two
   consequence sentences in `infer/loss-report.ts`.
   Files: `packages/cli/src/infer/loss-report.ts`, the test.
-- [ ] 1.8 ~9m — Red:
+- [x] 1.8 ~9m — Red:
   `packages/cli/test/check-live.integration.test.ts` new case against
   `postgres:17-alpine`: hejbro's own migration applied, then a
   database-only column, index and check constraint added on the managed
@@ -107,7 +107,7 @@ delta scenarios of `openspec show harden-check-inventory --diff` hold.
   confirm rather than assume).
   Files: `packages/cli/test/check-live.integration.test.ts`,
   `skills/hejbro/references/brownfield-adoption.md`.
-- [ ] 1.9 ~8m — Red: `examples/brownfield/test/brownfield.integration.test.ts`
+- [x] 1.9 ~8m — Red: `examples/brownfield/test/brownfield.integration.test.ts`
   — the corpus witness that today stops at
   `// the column line's own check promise is not asserted -- #726`
   asserts it instead: after the corpus `import`, `check` still exits 0
@@ -119,7 +119,7 @@ delta scenarios of `openspec show harden-check-inventory --diff` hold.
   1.1–1.6 are right; a corpus-level disagreement is a finding to report,
   not to patch here.
   Files: `examples/brownfield/test/brownfield.integration.test.ts`.
-- [ ] 1.10 ~7m — Completes 1.3's and 1.4's input tables with the rows
+- [x] 1.10 ~7m — Completes 1.3's and 1.4's input tables with the rows
   that can actually fail. Red: `packages/cli/test/check-inventory.test.ts`
   — in "unmanaged columns", one row where a column name is *declared on
   one managed table and database-only on another* (`app.users.note`
