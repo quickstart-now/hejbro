@@ -1,0 +1,15 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#816",
+  "title": "core: an argument name is not checked against the body's own row and loop names",
+  "parent": "quickstart-now/hejbro#815",
+  "status": "open",
+  "opened": "2026-09-05",
+  "closed": null,
+  "decisions": [],
+  "work": [],
+  "prs": [],
+  "origin": null,
+  "followUps": []
+}

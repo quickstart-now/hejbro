@@ -1,0 +1,15 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#817",
+  "title": "core: loop and row names in a function body bypass the D36 SQL-name check",
+  "parent": "quickstart-now/hejbro#815",
+  "status": "open",
+  "opened": "2026-09-05",
+  "closed": null,
+  "decisions": [],
+  "work": [],
+  "prs": [],
+  "origin": null,
+  "followUps": []
+}

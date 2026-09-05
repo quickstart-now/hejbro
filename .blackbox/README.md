@@ -133,12 +133,16 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | [#714](714/) | add a brownfield corpus: a database hejbro did not create, with a standing import→baseline→check witness | open | #851 #858 #868 #871 #878 | 0 | 0 (0 pending) |
 | [#815](815/) | 0.2.x: post-release commitments (2) | open | #867 #868 #871 #878 #893 (via #814) #840 (via #819) #876 (via #820) #835 (via #823) #877 (via #823) #833 (via #832) #838 (via #836) #851 (via #841) #855 (via #841) #849 (via #845) #850 (via #845) #847 (via #846) #858 (via #856) #861 (via #856) #900 (via #899) | 0 | 0 (0 pending) |
 | ↳ [#814](814/) | release: changesets leaves the pre dist-tag stale on packages without a stable version | open | #893 | 0 | 1 (0 pending) |
+| ↳ [#816](816/) | core: an argument name is not checked against the body's own row and loop names | open |  | 0 | 0 (0 pending) |
+| ↳ [#817](817/) | core: loop and row names in a function body bypass the D36 SQL-name check | open |  | 0 | 0 (0 pending) |
+| ↳ [#818](818/) | core: duplicate-column wording should name both colliding keys like duplicate-argument does | open |  | 0 | 0 (0 pending) |
 | ↳ [#819](819/) | cli: --config is honoured by every command and one root resolves every configured path | open | #840 | 0 | 0 (0 pending) |
 | ↳ [#820](820/) | cli: a migrationsDir that is a file crashes generate with a raw ENOTDIR | closed | #840 #868 #876 | 0 | 1 (1 pending) |
+| ↳ [#821](821/) | core: duplicate-local-name is case-sensitive, so Row/row reach Postgres as a duplicate declaration | open |  | 0 | 0 (0 pending) |
 | ↳ [#823](823/) | migrate: a failed ledger insert is reported as the migration's failure | closed | #835 #871 #877 | 0 | 1 (0 pending) |
 | ↳ [#830](830/) | cli: config-not-found Next names hejbro.config.ts even when --config pointed elsewhere | closed | #840 #868 #876 | 0 | 1 (1 pending) |
 | ↳ [#831](831/) | cli: the directory-at-config-path refusal repeats the file name twice | closed | #840 #868 #876 | 0 | 1 (0 pending) |
-| ↳ [#832](832/) | core: category-C keywords fail as argument names but are not refused; the stated class does not match the list | open | #833 | 0 | 0 (0 pending) |
+| ↳ [#832](832/) | core: category-C keywords fail as argument names but are not refused; the stated class does not match the list | open | #833 | 0 | 1 (1 pending) |
 | ↳ [#836](836/) | status: a permission error on a real ledger reaches the user as a raw node-postgres object | closed | #838 #871 #877 | 0 | 8 (1 pending) |
 | ↳ [#837](837/) | raise --file with an absolute path is joined onto the cwd and dies with a raw ENOENT | open | #838 | 0 | 0 (0 pending) |
 | ↳ [#839](839/) | test: core cross-instance-symbols times out under load from parallel worktrees | closed | #868 | 0 | 0 (0 pending) |
@@ -171,7 +175,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 
 ## Totals
 
-Owner decisions 91 · rulings 199 (interpretation 136, extension 61, stop 2) · pending extensions 23 · rejected 2
+Owner decisions 91 · rulings 200 (interpretation 136, extension 62, stop 2) · pending extensions 24 · rejected 2
 
 ## Conventions
 

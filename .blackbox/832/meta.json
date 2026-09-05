@@ -7,7 +7,20 @@
   "status": "open",
   "opened": "2026-09-04",
   "closed": null,
-  "decisions": [],
+  "decisions": [
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "412/D24",
+        "412/D25; the five issues' own measurements (#832 N1/N2 on PG 17.11; #816/#817/#821 from the co team; #818 wording)"
+      ],
+      "at": "2026-09-05T05:26Z",
+      "title": "harden-function-locals: the reserved class becomes R, T and C; body locals take the argument key's three checks; the ledger is seeded with argument names",
+      "ratified": null
+    }
+  ],
   "work": [],
   "prs": [
     {

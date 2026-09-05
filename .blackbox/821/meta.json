@@ -1,0 +1,15 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#821",
+  "title": "core: duplicate-local-name is case-sensitive, so Row/row reach Postgres as a duplicate declaration",
+  "parent": "quickstart-now/hejbro#815",
+  "status": "open",
+  "opened": "2026-09-05",
+  "closed": null,
+  "decisions": [],
+  "work": [],
+  "prs": [],
+  "origin": null,
+  "followUps": []
+}
