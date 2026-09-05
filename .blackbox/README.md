@@ -74,11 +74,14 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#653](653/) | vendored client: expose .related() on the name-keyed chain | closed | #1011 #1014 | 0 | 8 (2 pending) |
 | ↳ [#663](663/) | test: the scoped vendored fn observer never asserts the context SQL | closed | #896 | 0 | 0 (0 pending) |
 | ↳ [#667](667/) | test: the vendored read of an existing table is witnessed only under Docker | closed | #896 | 0 | 0 (0 pending) |
+| ↳ [#668](668/) | generate: warn when adopting an existing table will create sequences, RLS or policies that may already exist | open |  | 0 | 0 (0 pending) |
+| ↳ [#671](671/) | existing: adoption never creates the adopted table's declared indexes, checks, FKs or primary key | open |  | 0 | 1 (1 pending) |
 | ↳ [#673](673/) | test: subprocess-spawning suites time out under a full parallel pnpm test and pass in isolation | closed | #773 | 0 | 7 (0 pending) |
 | ↳ [#674](674/) | examples: declare an existing table in the supabase example so the round trip covers the brownfield path | closed | #897 | 0 | 0 (0 pending) |
 | ↳ [#679](679/) | core: function argument names bypass D36 and are emitted unquoted in DDL | closed | #733 #758 | 0 | 3 (0 pending) |
 | ↳ [#686](686/) | ctx.return accepts a mutation with no returning() and renders invalid plpgsql | closed | #733 | 0 | 3 (0 pending) |
 | ↳ [#687](687/) | init ignores the configured migrationsDir and snapshotPath | closed | #739 #759 #770 | 0 | 8 (0 pending) |
+| ↳ [#694](694/) | handover then adoption fails to apply: sequence already exists | open |  | 0 | 0 (0 pending) |
 | ↳ [#695](695/) | harden-verify-and-dsl D106 round-2 follow-ups: loader guard and three missing observers | closed | #896 | 0 | 0 (0 pending) |
 | ↳ [#697](697/) | vendored fn guard is count-only and a __proto__ column key loses its column | closed | #739 | 0 | 4 (0 pending) |
 | ↳ [#701](701/) | array order in kind snapshots can produce a semantically empty alter | closed | #858 #861 | 0 | 5 (0 pending) |
@@ -225,7 +228,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 
 ## Totals
 
-Owner decisions 95 · rulings 301 (interpretation 201, extension 98, stop 2) · pending extensions 60 · rejected 2
+Owner decisions 95 · rulings 302 (interpretation 201, extension 99, stop 2) · pending extensions 61 · rejected 2
 
 ## Conventions
 
