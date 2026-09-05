@@ -336,10 +336,21 @@ exactly SQL's own clause order, so a placement Postgres would reject is
 not expressible.
 
 Aggregates SHALL render as Postgres's own function names, with
-`count()` rendering `count(*)`. There is no separate filtered-count
-constructor, and a `FILTER (WHERE …)` clause is deliberately not part
-of the vocabulary: a filtered count is written through the `sql`
-escape hatch until a real `FILTER` construct ships.
+`count()` rendering `count(*)`. A `FILTER (WHERE …)` clause SHALL be
+written as one wrapper, `filter(aggregate, condition)`, over any of the
+five aggregates: it renders Postgres's own `<aggregate> filter (where
+<condition>)`, keeps the aggregate's own result type and conversion,
+lifts a runtime value in the condition to a bind parameter as `where`
+does, and composes with a window as SQL orders them —
+`over(filter(count(), condition), spec)`. There is no separate
+filtered-count constructor. `filter` over anything that is not a builder
+aggregate — a column, a computed expression, a declared function call, a
+window-only function, a windowed expression — SHALL be refused at build
+time with `filter-not-aggregate`, naming the five constructors it
+accepts and the target it was given. The condition SHALL accept exactly
+what `where` accepts, so a placement `where` refuses is refused here too
+— a window function inside the condition, which Postgres rejects inside
+`FILTER`, fails at build time with the same diagnostic code `where` gives.
 
 #### Scenario: Grouping with a group filter
 - **WHEN** a select projects a column and `count()`, filters rows with
@@ -356,6 +367,30 @@ escape hatch until a real `FILTER` construct ships.
 #### Scenario: having is unavailable without grouping
 - **WHEN** a chain has not called `groupBy`
 - **THEN** `having` is not on that stage
+
+#### Scenario: A filtered aggregate renders Postgres's own clause
+- **WHEN** a select projects `filter(count(), eq(posts.status,
+  "published"))`, `filter(sum(posts.views), gt(posts.views, 10))` and
+  `filter(avg(posts.views), isNull(posts.deletedAt))`, and one of them
+  windowed through `over`
+- **THEN** each compiles to `<aggregate>(…) filter (where …)` with the
+  condition's values as bind parameters, the windowed one appends
+  `over (…)` after the filter clause, and each projected field keeps
+  the aggregate's own result type
+
+#### Scenario: A window function inside the filter condition is refused
+- **WHEN** a select projects `filter(count(), gt(over(rowNumber(), spec),
+  1))` — a window function inside the condition, which Postgres rejects
+  inside `FILTER`
+- **THEN** it fails immediately with `window-function-not-allowed`, the
+  same diagnostic `where` gives for the same input, and nothing is
+  rendered
+
+#### Scenario: filter over a non-aggregate is refused at build time
+- **WHEN** `filter` wraps a column reference, `sql\`1\``, a `db.fn`
+  call, `rowNumber()` and `over(count(), spec)`
+- **THEN** each fails immediately with `filter-not-aggregate`, naming
+  the five aggregate constructors, and nothing is rendered
 
 ### Requirement: Selects compute over windows
 The builder SHALL provide the window vocabulary — `rowNumber`, `rank`,

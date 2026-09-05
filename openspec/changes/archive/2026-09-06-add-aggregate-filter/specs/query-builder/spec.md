@@ -25,7 +25,7 @@ time with `filter-not-aggregate`, naming the five constructors it
 accepts and the target it was given. The condition SHALL accept exactly
 what `where` accepts, so a placement `where` refuses is refused here too
 — a window function inside the condition, which Postgres rejects inside
-`FILTER`, fails at build time with the same diagnostic `where` gives.
+`FILTER`, fails at build time with the same diagnostic code `where` gives.
 
 #### Scenario: Grouping with a group filter
 - **WHEN** a select projects a column and `count()`, filters rows with

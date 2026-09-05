@@ -119,10 +119,10 @@ already made under this version, not a version bump.
 ### Requirement: Stored query-node decode strictness follows the node's format provenance
 The snapshot codec SHALL decide decode strictness per stored node by its
 format provenance, not by a single global policy. A node kind introduced
-within the current format version (the `window` node and the `with`
-node) SHALL be decoded strictly: a stored node of that kind missing a
+within the current format version (the `window` node, the `with` node
+and the `aggregate-filter` node) SHALL be decoded strictly: a stored node of that kind missing a
 required field (a window node's function call; a `with` node's body or
-entry list) is corruption, and decoding SHALL fail naming it rather than
+entry list; an aggregate-filter node's call or condition) is corruption, and decoding SHALL fail naming it rather than
 repairing it into a plausible value — a repaired snapshot is a silently
 different declaration. A node kind whose absence of a field can be an
 older shape genuinely written by an earlier release (the set-operation
@@ -152,6 +152,12 @@ command.
 - **THEN** decoding succeeds (absence and reordering are not decode
   errors for this node kind), and `hejbro verify` reports the edit as a
   hash mismatch when run
+
+#### Scenario: A damaged aggregate-filter node is refused, not repaired
+- **WHEN** a stored aggregate-filter node has no condition, or no
+  function call
+- **THEN** decoding fails, naming the corruption, rather than producing
+  a declaration the snapshot never described
 
 ### Requirement: A set-shaped array is recorded in canonical order
 A snapshot array whose members form a set — an order the database never
