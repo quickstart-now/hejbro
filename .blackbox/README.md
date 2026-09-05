@@ -66,6 +66,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#741](741/) | `hejbro init --config <path>` is ignored and scaffolds a competing project | closed | #840 #847 | 0 | 4 (0 pending) |
 | ↳ [#743](743/) | `init` and `generate` name the same file two different ways | closed | #840 #847 | 0 | 1 (1 pending) |
 | ↳ [#744](744/) | `docker-rm-hygiene` can fail on a temporary file another test is deleting | closed | #773 | 0 | 1 (0 pending) |
+| ↳ [#745](745/) | Configuration paths reach the user as raw stacks and absolute paths | open |  | 0 | 0 (0 pending) |
 | ↳ [#748](748/) | core: "found" is missing from the plpgsql reserved-name list and shadows PL/pgSQL's FOUND silently | closed | #824 #833 | 0 | 6 (1 pending) |
 | ↳ [#749](749/) | a projected .returning() under returns setof <table> must cover the table's column list | closed | #858 #861 | 0 | 2 (1 pending) |
 | ↳ [#750](750/) | 0.2.0-pre.0: five findings from applying one declaration to Postgres 18, Neon, Nile and Supabase | closed | #784 #802 | 7 | 2 (0 pending) |
