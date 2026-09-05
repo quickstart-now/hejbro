@@ -216,6 +216,37 @@ describe("filter() refuses anything that is not a builder aggregate, task 1.1 (#
 		);
 	});
 
+	const thenablePhrase =
+		"a thenable, not an expression -- a function called through db.fn is one";
+	const nonExprPhrase = "a value without an expression node";
+
+	// The thenable check's own boundary (#501/R8 follow-up): `typeof
+	// target.then === "function"` is the exact test, not merely "carries a
+	// `then` key" -- a `then` property that isn't itself callable is not a
+	// thenable, and must not be asserted as one.
+	it.each([
+		["a real Promise", () => Promise.resolve(1), thenablePhrase],
+		[
+			"an object shaped like a thenable (then is a function)",
+			// biome-ignore lint/suspicious/noThenProperty: the point of this row is exactly a thenable-shaped object.
+			() => ({ then: () => {} }),
+			thenablePhrase,
+		],
+		[
+			"an object whose then is NOT a function -- the boundary",
+			// biome-ignore lint/suspicious/noThenProperty: the point of this row is a `then` property that is deliberately not callable.
+			() => ({ then: 1 }),
+			nonExprPhrase,
+		],
+	])("%s -> %s", (_label, build, expectedPhrase) => {
+		expect(() => filter(build() as unknown as Expr, condition)).toThrowError(
+			expect.objectContaining({
+				code: "filter-not-aggregate",
+				message: expect.stringContaining(expectedPhrase),
+			}),
+		);
+	});
+
 	// An arbitrary non-Expr, non-thenable object is genuinely unclassified
 	// -- neither a window function nor a thenable, so it gets its own
 	// factual phrase instead of guessing.
