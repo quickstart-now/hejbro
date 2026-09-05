@@ -104,6 +104,6 @@ file, that goes back to the planner, not into the diff.
       restating it. If `chain.ts` needs no source change, this task
       lands as tests only and says so. Files: the query execution test.
 
-- [ ] 1.3 (~6m) Docs and changeset. The CTE section of `query-layer.md`
+- [x] 1.3 (~6m) Docs and changeset. The CTE section of `query-layer.md`
       states "type from the anchor, nullability from either branch";
       `pnpm changeset` → `patch`. Files: the reference, `.changeset/*.md`.

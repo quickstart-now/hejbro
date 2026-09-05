@@ -383,6 +383,13 @@ recursive-term`, so this is the same union-compatibility rule
 `.union()`/`.unionAll()` already apply between any two branches, not a
 second one.
 
+The outward row's *type* per key is always the anchor's; its
+*nullability* is not — a key reads nullable when either the anchor or
+the recursive term projects it nullable. `handle.with(...)` currently
+reads every CTE key as nullable regardless of this rule (a separate,
+existing boundary, #942), so the rule becomes visible on the chain once
+that boundary narrows.
+
 ```ts prelude=query-handle
 import { eq, select } from "hejbro";
 
