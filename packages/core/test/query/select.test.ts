@@ -3,6 +3,7 @@ import type {
 	ColumnBuilder,
 	ColumnRef,
 	Expr,
+	ExprNode,
 	SelectNode,
 	SetOpNode,
 	Table,
@@ -20,6 +21,7 @@ import {
 	desc,
 	eq,
 	exists,
+	expr,
 	firstValue,
 	gt,
 	interval,
@@ -461,6 +463,14 @@ describe("group 2 review rulings (F1/F2) and the at-risk table", () => {
 		value: text().notNull(),
 	});
 
+	// Scoped to the projected cell's own alias (`::text as "cell"`), not a
+	// bare `.includes("::text")` over the whole rendered statement -- a
+	// whole-statement check is only sound while the outer projection
+	// (`posts.id`, a uuid) happens to need no cast of its own; scoping to
+	// the cell's alias keeps the "own rows never cast" assertions below
+	// meaningful even if that outer shape ever changes (the
+	// `packages/pg/test/integration.test.ts` live witness already asserts
+	// its own casts this same alias-scoped way).
 	const rendersCastFor = (projected: Expr, from: Table): boolean =>
 		renderSelect(
 			select(
@@ -470,42 +480,73 @@ describe("group 2 review rulings (F1/F2) and the at-risk table", () => {
 				},
 				posts,
 			).selectQuery,
-		).includes("::text");
+		).includes('::text as "cell"');
+
+	// A real partitionBy+orderBy, not an empty spec -- {} was true only
+	// because over()'s cast decision doesn't look at the spec at all; a
+	// non-trivial spec proves that, rather than assuming it (the outcome
+	// below must be identical to the {} form, #452 review).
+	const ledgerBigintSpec = {
+		partitionBy: [ledgerBigint.id],
+		orderBy: [ledgerBigint.value],
+	};
+	const ledgerTextSpec = {
+		partitionBy: [ledgerText.id],
+		orderBy: [ledgerText.value],
+	};
 
 	it.each([
 		["count", () => count()],
-		["count (windowed)", () => over(count(), {})],
-		["row_number (windowed)", () => over(rowNumber(), {})],
-		["rank (windowed)", () => over(rank(), {})],
-		["dense_rank (windowed)", () => over(denseRank(), {})],
+		["count (windowed)", () => over(count(), ledgerBigintSpec)],
+		["row_number (windowed)", () => over(rowNumber(), ledgerBigintSpec)],
+		["rank (windowed)", () => over(rank(), ledgerBigintSpec)],
+		["dense_rank (windowed)", () => over(denseRank(), ledgerBigintSpec)],
 	])("%s casts unconditionally (int8 shape)", (_label, build) => {
 		expect(rendersCastFor(build(), ledgerBigint)).toBe(true);
 	});
 
 	it.each([
 		["min", () => min(ledgerBigint.value)],
-		["min (windowed)", () => over(min(ledgerBigint.value), {})],
+		["min (windowed)", () => over(min(ledgerBigint.value), ledgerBigintSpec)],
 		["max", () => max(ledgerBigint.value)],
-		["max (windowed)", () => over(max(ledgerBigint.value), {})],
-		["lag (windowed)", () => over(lag(ledgerBigint.value), {})],
-		["lead (windowed)", () => over(lead(ledgerBigint.value), {})],
-		["first_value (windowed)", () => over(firstValue(ledgerBigint.value), {})],
-		["last_value (windowed)", () => over(lastValue(ledgerBigint.value), {})],
-		["nth_value (windowed)", () => over(nthValue(ledgerBigint.value, 1), {})],
+		["max (windowed)", () => over(max(ledgerBigint.value), ledgerBigintSpec)],
+		["lag (windowed)", () => over(lag(ledgerBigint.value), ledgerBigintSpec)],
+		["lead (windowed)", () => over(lead(ledgerBigint.value), ledgerBigintSpec)],
+		[
+			"first_value (windowed)",
+			() => over(firstValue(ledgerBigint.value), ledgerBigintSpec),
+		],
+		[
+			"last_value (windowed)",
+			() => over(lastValue(ledgerBigint.value), ledgerBigintSpec),
+		],
+		[
+			"nth_value (windowed)",
+			() => over(nthValue(ledgerBigint.value, 1), ledgerBigintSpec),
+		],
 	])("%s casts over a bigint argument (argument shape)", (_label, build) => {
 		expect(rendersCastFor(build(), ledgerBigint)).toBe(true);
 	});
 
 	it.each([
 		["min", () => min(ledgerText.value)],
-		["min (windowed)", () => over(min(ledgerText.value), {})],
+		["min (windowed)", () => over(min(ledgerText.value), ledgerTextSpec)],
 		["max", () => max(ledgerText.value)],
-		["max (windowed)", () => over(max(ledgerText.value), {})],
-		["lag (windowed)", () => over(lag(ledgerText.value), {})],
-		["lead (windowed)", () => over(lead(ledgerText.value), {})],
-		["first_value (windowed)", () => over(firstValue(ledgerText.value), {})],
-		["last_value (windowed)", () => over(lastValue(ledgerText.value), {})],
-		["nth_value (windowed)", () => over(nthValue(ledgerText.value, 1), {})],
+		["max (windowed)", () => over(max(ledgerText.value), ledgerTextSpec)],
+		["lag (windowed)", () => over(lag(ledgerText.value), ledgerTextSpec)],
+		["lead (windowed)", () => over(lead(ledgerText.value), ledgerTextSpec)],
+		[
+			"first_value (windowed)",
+			() => over(firstValue(ledgerText.value), ledgerTextSpec),
+		],
+		[
+			"last_value (windowed)",
+			() => over(lastValue(ledgerText.value), ledgerTextSpec),
+		],
+		[
+			"nth_value (windowed)",
+			() => over(nthValue(ledgerText.value, 1), ledgerTextSpec),
+		],
 	])(
 		"%s casts nothing over a text argument (argument shape)",
 		(_label, build) => {
@@ -515,12 +556,12 @@ describe("group 2 review rulings (F1/F2) and the at-risk table", () => {
 
 	it.each([
 		["sum", () => sum(ledgerBigint.value)],
-		["sum (windowed)", () => over(sum(ledgerBigint.value), {})],
+		["sum (windowed)", () => over(sum(ledgerBigint.value), ledgerBigintSpec)],
 		["avg", () => avg(ledgerBigint.value)],
-		["avg (windowed)", () => over(avg(ledgerBigint.value), {})],
-		["percent_rank (windowed)", () => over(percentRank(), {})],
-		["cume_dist (windowed)", () => over(cumeDist(), {})],
-		["ntile (windowed)", () => over(ntile(4), {})],
+		["avg (windowed)", () => over(avg(ledgerBigint.value), ledgerBigintSpec)],
+		["percent_rank (windowed)", () => over(percentRank(), ledgerBigintSpec)],
+		["cume_dist (windowed)", () => over(cumeDist(), ledgerBigintSpec)],
+		["ntile (windowed)", () => over(ntile(4), ledgerBigintSpec)],
 	])("%s casts nothing (own shape)", (_label, build) => {
 		expect(rendersCastFor(build(), ledgerBigint)).toBe(false);
 	});
@@ -532,6 +573,50 @@ describe("group 2 review rulings (F1/F2) and the at-risk table", () => {
 	// check against, so it is never cast, whatever its shape says.
 	it("an argument-shape aggregate over an operand with no typeNode casts nothing (no typeNode to check)", () => {
 		expect(rendersCastFor(min(sql`1`), ledgerBigint)).toBe(false);
+	});
+
+	// A schema-qualified call named like a builder aggregate is a declared
+	// function (db.fn) -- someone's own schema may legitimately have a
+	// "count" or "max" function, and it must never be treated as the
+	// builder's own. builderAggregateFunctionName's schemaName check runs
+	// AFTER the window-unwrap this change introduced, so a windowed
+	// db.fn call is a regression risk this change specifically created,
+	// not one that predates it -- covered here windowed and unwindowed
+	// alike (#452 neighbor-input promotion).
+	const schemaQualifiedCall = (
+		functionName: string,
+		args: ReadonlyArray<ExprNode> = [],
+	): Expr =>
+		expr("numeric", {
+			nodeKind: "functionCall",
+			schemaName: "app",
+			functionName,
+			args,
+		});
+
+	it.each([
+		[
+			"count (schema-qualified, unwindowed)",
+			() => schemaQualifiedCall("count"),
+		],
+		[
+			"count (schema-qualified, windowed)",
+			() => over(schemaQualifiedCall("count"), ledgerBigintSpec),
+		],
+		[
+			"max (schema-qualified, unwindowed)",
+			() => schemaQualifiedCall("max", [ledgerBigint.value.exprNode]),
+		],
+		[
+			"max (schema-qualified, windowed)",
+			() =>
+				over(
+					schemaQualifiedCall("max", [ledgerBigint.value.exprNode]),
+					ledgerBigintSpec,
+				),
+		],
+	])("%s casts nothing (db.fn guard)", (_label, build) => {
+		expect(rendersCastFor(build(), ledgerBigint)).toBe(false);
 	});
 });
 
