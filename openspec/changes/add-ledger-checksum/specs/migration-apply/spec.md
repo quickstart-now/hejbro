@@ -24,9 +24,9 @@ bootstrap SHALL create the checksum column and
 SHALL add it to a ledger written before the column existed; a row
 recorded then carries no checksum and is never compared.
 Reading a ledger that predates the column SHALL succeed with every row's
-checksum null; the first command that writes to such a ledger SHALL add
-the column before its write, and a read-only command SHALL leave the
-ledger as it is.
+checksum null; the first command that records a row in such a ledger
+SHALL add the column before that write; clearing rows needs no column,
+and a read-only command SHALL leave the ledger as it is.
 
 The ledger is recognized by identity, never by existence alone. The
 relation at that name is hejbro's ledger only when it is an ordinary,
@@ -131,8 +131,9 @@ behind.
 `migrate`'s exit code SHALL distinguish three answers: zero when there
 was nothing pending or every pending migration applied, one when the
 database refused a migration, and two when the run could not act at all
-— an unverifiable chain, a ledger disagreement, a ledger it may not read
-or write, or a missing connection, driver or capability. A ledger
+— an unverifiable chain, a ledger disagreement, an applied migration
+whose body changed, a ledger it may not read or write, or a missing
+connection, driver or capability. A ledger
 failure is two and not one: one is reserved for the database refusing a
 *migration*, which is the one thing a ledger failure proves did not
 happen. Its report SHALL name, in their own buckets, the
@@ -368,7 +369,10 @@ checksum, abbreviated to twelve hex digits, and the remedy — restore the
 file from version control, or write a deliberate change as a new
 migration; hejbro never rewrites applied history. One run SHALL name
 every file whose body changed, not the first it finds. A row recorded
-before the checksum column existed carries none and is not compared. The
+before the checksum column existed carries none and is not compared. A
+row whose origin is `raised` is not compared: its checksum covers the
+whole file, not a body, so comparing it would report a change that did
+not happen. The
 offline walk (`verify`) keeps its stated limit: it never sees a body
 edit; this apply-time check is the half that does, and the
 generate/verify reference says which half answers which question.
