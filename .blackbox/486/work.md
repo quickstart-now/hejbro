@@ -40,3 +40,17 @@ _2026-09-05T14:19Z · per R13_
 
 Task 1.4 pointed at a capability table in `query-layer.md` that does not exist; the literal table is in `supabase-preset.md`. Following the task text alone would have updated nothing and missed the real defect: `query-layer.md`'s RLS section still said a context fails without `interactive-transactions`, which this change had already made false. The task's wording was corrected to the artifacts as they are (486/R13).
 
+<a id="w4"></a>
+## W4 — the review's scale and N3's routing history (486/R14)
+
+_2026-09-05T15:05Z · per R14_
+
+A constructor-mode review ran against the range `8b6258c5..c8ca0b1d`: ~76 lines of constructed input, 10 type obligations, 101 real-server transactions exercised, and all 12 gates green. It returned no blocking finding and four non-blocking ones (N1-N4, 486/R14). N3 -- a batched-only driver returning the wrong number of row lists is never checked, so a contract-breaking driver could hand a context statement's own rows to the caller as if they were the caller's -- was first routed to a separate issue (#946, under #815) as a defensive check outside this delta's stated scope, then pulled back into this same PR on the planner's fail-closed argument and closed here instead, per R14's own addendum.
+
+<a id="w5"></a>
+## W5 — result-rows.ts's R6 and context.ts's R14 are separate zero-result decisions
+
+_2026-09-05T15:06Z · per R6, R14_
+
+Two zero-result sites in this change look alike but are not the same decision. `packages/query/src/driver/result-rows.ts`'s `lastRows` (task 1.6, #892) folds a single node-postgres multi-command result array to its last member's rows; a zero-length array there is unreachable (measured against postgres:17, 486/R6) and keeps its own uncoded internal-invariant `Error`, unchanged by this work. `packages/query/src/db/context.ts`'s `lastBatchRowsChecked` (task 1.3, #486/R14) checks a driver's own `batch` result against the number of members the query layer sent; a zero-count result there is a real, driver-reachable contract violation (a broken third-party driver, not an internal bug), and now resolves through the coded `batch-result-count-mismatch` alongside the fewer/more cases, replacing its own former uncoded internal-invariant `Error`. The two functions share no code and answer different questions -- one about a single driver library's own result shape, the other about a driver author's own contract compliance -- so R6 and R14 stand independently; neither revises the other.
+

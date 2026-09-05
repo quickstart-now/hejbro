@@ -141,6 +141,15 @@
       "at": "2026-09-05T14:19Z",
       "title": "the supabase preset's capability table is widened in this PR",
       "ratified": null
+    },
+    {
+      "id": "R14",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [],
+      "at": "2026-09-05T15:05Z",
+      "title": "the review's four non-blocking findings are split between this PR and an issue",
+      "ratified": null
     }
   ],
   "work": [
@@ -169,6 +178,25 @@
       "pr": null,
       "decisions": [
         "R13"
+      ]
+    },
+    {
+      "id": "W4",
+      "at": "2026-09-05T15:05Z",
+      "title": "the review's scale and N3's routing history (486/R14)",
+      "pr": null,
+      "decisions": [
+        "R14"
+      ]
+    },
+    {
+      "id": "W5",
+      "at": "2026-09-05T15:06Z",
+      "title": "result-rows.ts's R6 and context.ts's R14 are separate zero-result decisions",
+      "pr": null,
+      "decisions": [
+        "R6",
+        "R14"
       ]
     }
   ],

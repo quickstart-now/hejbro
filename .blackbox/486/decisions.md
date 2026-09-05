@@ -93,3 +93,12 @@ _lead · interpretation · 2026-09-05T14:19Z · ratified: pending_
 
 The only literal per-path capability table in the references lives in `skills/hejbro/references/supabase-preset.md`, not in `query-layer.md` as task 1.4 stated. A fourth capability key leaves that table incomplete, so it is widened here -- one column, `false` on both paths (`pgDriver` declares `false`; the pooler builds its own capability record and declares `false` under 486/R7). The file list is extended to reach it, on R8's reasoning: the update is the direct consequence of the declaration this change makes, and splitting it into a separate PR would leave a reference lying from the moment this one merges -- a stale skill is a broken user contract, not a docs nit. Task 1.4's own wording is corrected to name what exists: `query-layer.md`'s RLS section states the three branches, `supabase-preset.md`'s table gains the fourth column.
 
+<a id="r14"></a>
+## R14 — the review's four non-blocking findings are split between this PR and an issue
+
+_lead · interpretation · 2026-09-05T15:05Z · ratified: pending_
+
+The constructor-mode review returned no blocking finding and four non-blocking ones. Three are closed here. N1: the report of a failing batch lists the members the query layer sent and not the driver's own session pins, which is the correct behaviour -- pins are the driver's internals, members are what the query layer composed -- but the delta's "every member that was sent" was in tension with it, so the sentence is made precise. N2: `poolerDriver` builds its own capability record (486/R7) and therefore carries the same obligation to freeze it that `@hejbro/pg` and `@hejbro/neon` already meet; without the freeze every pooler driver value shared one mutable record. N4: the Neon reference's WebSocket bullet named three of the four keys. N3 -- the query layer does not check that a driver returned one row list per member, so a contract-breaking driver has a context statement's rows returned to the caller as their own -- is a defensive check the delta is silent about, and is filed as #946 under #815 rather than added here.
+
+N3 was first routed to #946 and then pulled into this PR on the planner's fail-closed argument: a contract-breaking driver silently handing the caller a context statement's rows is a wrong answer rather than an error, which this repository's design does not admit. The query layer now checks that a driver returned one row list per member and refuses with `batch-result-count-mismatch` otherwise; #946 is closed by this PR.
+
