@@ -1,3 +1,11 @@
+/** Whether `error` is an object carrying a string `message` -- structural, never `instanceof Error` (#458 review round 1, task 1.9): a thrown `ErrorEvent` (Neon's WebSocket `Pool` path throws exactly this on a failed connection) carries a real `message` but is not an `Error` instance, and a narrower type check would keep describing it as `[object ErrorEvent]`. */
+const hasStringMessage = (
+	error: unknown,
+): error is { readonly message: string } =>
+	typeof error === "object" &&
+	error !== null &&
+	typeof (error as { readonly message?: unknown }).message === "string";
+
 /** A `.code` string, the shape every Node/pg error this module sees carries even when its own `message` does not (e.g. `ECONNREFUSED`). */
 const errorCode = (error: unknown): string | undefined => {
 	if (error === null || typeof error !== "object" || !("code" in error)) {
@@ -34,7 +42,7 @@ const flattenAggregateError = (error: AggregateError): string =>
  * `String(error)` only as the last resort.
  */
 export const describeDriverError = (error: unknown): string => {
-	if (error instanceof Error && error.message !== "") {
+	if (hasStringMessage(error) && error.message !== "") {
 		return error.message;
 	}
 	if (error instanceof AggregateError && error.errors.length > 0) {
