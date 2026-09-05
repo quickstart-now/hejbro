@@ -4,6 +4,7 @@ import { throwHejbroError } from "@hejbro/core";
 import { defineCommand } from "citty";
 import {
 	APPLY_CONNECTION_CODES,
+	APPLY_CONNECTION_FLAG,
 	assertInteractiveTransactions,
 } from "../apply/capability";
 import {
@@ -128,7 +129,11 @@ export const runRaise = async (
 		return await withCheckConnection(
 			urlFlag,
 			process.env,
-			{ commandName: RAISE_COMMAND, codes: APPLY_CONNECTION_CODES },
+			{
+				commandName: RAISE_COMMAND,
+				connectionFlag: APPLY_CONNECTION_FLAG,
+				codes: APPLY_CONNECTION_CODES,
+			},
 			async (driver) => {
 				assertInteractiveTransactions(driver, RAISE_COMMAND);
 				await applyRaise(driver, snapshotFile, RAISE_COMMAND);

@@ -155,6 +155,7 @@ export const runPull = async (
 			process.env,
 			{
 				commandName: "hejbro pull",
+				connectionFlag: "--db-url",
 				codes: {
 					connectionMissing: "pull-connection-missing",
 					driverMissing: "pull-driver-missing",

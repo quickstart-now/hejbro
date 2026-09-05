@@ -360,6 +360,7 @@ export const runImport = async (
 			process.env,
 			{
 				commandName: "hejbro import",
+				connectionFlag: "--url",
 				codes: {
 					connectionMissing: "import-connection-missing",
 					driverMissing: "import-driver-missing",

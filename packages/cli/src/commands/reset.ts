@@ -8,6 +8,7 @@ import type { Driver } from "@hejbro/query";
 import { defineCommand } from "citty";
 import {
 	APPLY_CONNECTION_CODES,
+	APPLY_CONNECTION_FLAG,
 	assertInteractiveTransactions,
 } from "../apply/capability";
 import {
@@ -152,7 +153,11 @@ export const runReset = async (
 		return await withCheckConnection(
 			urlFlag,
 			process.env,
-			{ commandName: RESET_COMMAND, codes: APPLY_CONNECTION_CODES },
+			{
+				commandName: RESET_COMMAND,
+				connectionFlag: APPLY_CONNECTION_FLAG,
+				codes: APPLY_CONNECTION_CODES,
+			},
 			(driver) =>
 				applyResetReport(driver, currentSnapshot, registry, confirmFlag),
 			importer,

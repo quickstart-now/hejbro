@@ -715,6 +715,7 @@ export const runCheck = async (
 			process.env,
 			{
 				commandName: "hejbro check",
+				connectionFlag: "--url",
 				codes: {
 					connectionMissing: "check-connection-missing",
 					driverMissing: "check-driver-missing",

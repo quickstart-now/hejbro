@@ -44,6 +44,8 @@ export type ConnectionCodes = {
 
 export type ConnectionContext = {
 	readonly commandName: string;
+	/** The flag this command reads a connection string from (add-config-driver, #458 review round 1, task 1.8) -- `"--url"` for six commands, `"--db-url"` for `pull` -- named here, beside `commandName`, so the connection-missing/connection-failed messages point at the flag this command actually accepts, never a hardcoded one a caller ignores. Supplied as a literal at each call site, exactly like `codes`. */
+	readonly connectionFlag: string;
 	readonly codes: ConnectionCodes;
 };
 
@@ -66,7 +68,7 @@ export const resolveConnectionString = (
 	}
 	return throwHejbroError(
 		context.codes.connectionMissing,
-		`${context.commandName} needs a database connection, but neither --url nor the DATABASE_URL environment variable is set. Next: pass --url <connection-string>, or set DATABASE_URL, then rerun \`${context.commandName}\`.`,
+		`${context.commandName} needs a database connection, but neither ${context.connectionFlag} nor the DATABASE_URL environment variable is set. Next: pass ${context.connectionFlag} <connection-string>, or set DATABASE_URL, then rerun \`${context.commandName}\`.`,
 	);
 };
 
@@ -233,7 +235,7 @@ export const assertConnected = async (
 	} catch (error) {
 		throwHejbroError(
 			context.codes.connectionFailed,
-			`${context.commandName} could not connect to the database: ${describeDriverError(error)}. Next: confirm --url/DATABASE_URL is correct and the database is reachable, then rerun \`${context.commandName}\`.`,
+			`${context.commandName} could not connect to the database: ${describeDriverError(error)}. Next: confirm ${context.connectionFlag}/DATABASE_URL is correct and the database is reachable, then rerun \`${context.commandName}\`.`,
 		);
 	}
 };

@@ -22,11 +22,25 @@ import {
 // here.
 const CHECK_CONTEXT: ConnectionContext = {
 	commandName: "hejbro check",
+	connectionFlag: "--url",
 	codes: {
 		connectionMissing: "check-connection-missing",
 		driverMissing: "check-driver-missing",
 		connectionFailed: "check-connection-failed",
 		driverUnclosable: "check-driver-unclosable",
+	},
+};
+
+// #458 review round 1, task 1.8: `pull`'s own context, its flag `--db-url`
+// -- the one command among the seven whose connection flag differs.
+const PULL_CONTEXT: ConnectionContext = {
+	commandName: "hejbro pull",
+	connectionFlag: "--db-url",
+	codes: {
+		connectionMissing: "pull-connection-missing",
+		driverMissing: "pull-driver-missing",
+		connectionFailed: "pull-connection-failed",
+		driverUnclosable: "pull-driver-unclosable",
 	},
 };
 
@@ -62,6 +76,44 @@ describe("resolveConnectionString", () => {
 			expect.objectContaining({ code: "check-connection-missing" }),
 		);
 	});
+
+	// #458 review round 1, task 1.8: the connection-missing message must
+	// name the flag the CALLING command actually accepts -- a table over
+	// both contexts, not one hand-picked case, so a command whose own
+	// context is wired up wrong shows up as its own row failing.
+	const connectionFlagContexts: ReadonlyArray<{
+		readonly label: string;
+		readonly context: ConnectionContext;
+		readonly acceptedFlag: string;
+		readonly rejectedFlag: string;
+	}> = [
+		{
+			label: "a check-shaped context",
+			context: CHECK_CONTEXT,
+			acceptedFlag: "--url",
+			rejectedFlag: "--db-url",
+		},
+		{
+			label: "pull's own context",
+			context: PULL_CONTEXT,
+			acceptedFlag: "--db-url",
+			rejectedFlag: "--url",
+		},
+	];
+
+	it.each(connectionFlagContexts)(
+		"names the flag $label's own command accepts, never the other one ($label)",
+		({ context, acceptedFlag, rejectedFlag }) => {
+			try {
+				resolveConnectionString(undefined, {}, context);
+				throw new Error("expected resolveConnectionString to throw");
+			} catch (error) {
+				const message = (error as { message: string }).message;
+				expect(message).toContain(acceptedFlag);
+				expect(message).not.toContain(rejectedFlag);
+			}
+		},
+	);
 });
 
 describe("loadCheckDriver", () => {
@@ -245,6 +297,52 @@ describe("assertConnected / 1.5 connection failures", () => {
 			expect.objectContaining({ code: "check-catalog-unreadable" }),
 		);
 	});
+
+	// #458 review round 1, task 1.8: same table as resolveConnectionString's
+	// own, for the connection-failed message this function throws.
+	const connectionFailedFlagContexts: ReadonlyArray<{
+		readonly label: string;
+		readonly context: ConnectionContext;
+		readonly acceptedFlag: string;
+		readonly rejectedFlag: string;
+	}> = [
+		{
+			label: "a check-shaped context",
+			context: CHECK_CONTEXT,
+			acceptedFlag: "--url",
+			rejectedFlag: "--db-url",
+		},
+		{
+			label: "pull's own context",
+			context: PULL_CONTEXT,
+			acceptedFlag: "--db-url",
+			rejectedFlag: "--url",
+		},
+	];
+
+	it.each(connectionFailedFlagContexts)(
+		"names the flag $label's own command accepts, never the other one ($label)",
+		async ({ context, acceptedFlag, rejectedFlag }) => {
+			const failingSession: DriverSession = {
+				execute: async () => {
+					throw new Error("connect ECONNREFUSED 127.0.0.1:1");
+				},
+			};
+
+			await expect(assertConnected(failingSession, context)).rejects.toEqual(
+				expect.objectContaining({
+					message: expect.stringContaining(acceptedFlag),
+				}),
+			);
+			try {
+				await assertConnected(failingSession, context);
+				throw new Error("expected assertConnected to throw");
+			} catch (error) {
+				const message = (error as { message: string }).message;
+				expect(message).not.toContain(rejectedFlag);
+			}
+		},
+	);
 });
 
 describe("withCheckConnection / configured factory (#458 task 1.2)", () => {
