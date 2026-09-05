@@ -297,6 +297,52 @@ describe("diffSnapshots — same-kind dependency ordering", () => {
 		expect(dropOrder.at(0)).toBe("app.gamma");
 	});
 
+	it("places an unconstrained table in the earliest wave, in identity order within the wave (#798)", () => {
+		const pParent = table(app, "p_parent", { id: uuid().primaryKey() });
+		const qChild = table(
+			app,
+			"q_child",
+			{ id: uuid().primaryKey(), parentId: uuid() },
+			(t) => ({
+				foreignKeys: [
+					{
+						columns: [t.parentId],
+						references: { table: pParent, columns: [pParent.id] },
+					},
+				],
+			}),
+		);
+		const selfRef = table(
+			app,
+			"self_ref",
+			{ id: uuid().primaryKey(), parentId: uuid() },
+			(t) => ({
+				foreignKeys: [
+					{ columns: [t.parentId], references: { columns: [t.id] } },
+				],
+			}),
+		);
+		const next = buildSnapshot(
+			[app, getTableMeta(pParent), getTableMeta(qChild), getTableMeta(selfRef)],
+			registry,
+			emptySnapshot,
+		);
+
+		const createOrder = diffSnapshots(emptySnapshot, next, registry)
+			.filter((change) => change.kind === "table")
+			.map((change) => change.identity);
+		expect(createOrder).toEqual([
+			"app.p_parent",
+			"app.self_ref",
+			"app.q_child",
+		]);
+
+		const dropOrder = diffSnapshots(next, emptySnapshot, registry)
+			.filter((change) => change.kind === "table")
+			.map((change) => change.identity);
+		expect(dropOrder).toEqual(["app.q_child", "app.self_ref", "app.p_parent"]);
+	});
+
 	it("never throws on a genuine two-table cycle -- both operations keep the pair in its existing identity order", () => {
 		// A genuine mutual foreign-key cycle can't be built through table()
 		// itself (its `extras` callback resolves `references: { table }`
