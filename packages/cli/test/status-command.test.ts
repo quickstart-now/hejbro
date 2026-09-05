@@ -519,7 +519,11 @@ const buildRecordingDriver = (): {
 	const executed: CompileResult[] = [];
 	const closed: number[] = [];
 	const driver: CheckDriverConnection = {
-		capabilities: { "interactive-transactions": false, "session-state": false },
+		capabilities: {
+			"interactive-transactions": false,
+			"session-state": false,
+			"prepared-statements": false,
+		},
 		execute: async (compiled) => {
 			executed.push(compiled);
 			return [];

@@ -243,7 +243,11 @@ const buildRecordingRaiseDriver = (): {
 		return [];
 	};
 	const driver: CheckDriverConnection = {
-		capabilities: { "interactive-transactions": true, "session-state": true },
+		capabilities: {
+			"interactive-transactions": true,
+			"session-state": true,
+			"prepared-statements": false,
+		},
 		execute,
 		transaction: async (callback) => callback({ execute }),
 		setupSession: async () => {},
