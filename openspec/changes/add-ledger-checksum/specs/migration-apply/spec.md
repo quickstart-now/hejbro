@@ -379,6 +379,13 @@ generate/verify reference says which half answers which question.
 - **WHEN** `raise --file snapshot.sql` succeeds
 - **THEN** the ledger row carries the SHA-256 of the whole file
 
+#### Scenario: A run with nothing pending compares nothing
+- **WHEN** every migration on disk is recorded as applied and one of
+  their bodies was edited afterwards
+- **THEN** `migrate` applies nothing and exits 0 without comparing
+  bodies; the change is reported by `status`, and the next run that has a
+  pending migration refuses with `apply-migration-body-changed`
+
 ### Requirement: A ledger whose rows are filtered is refused
 hejbro never enables row-level security on its own ledger, so a
 relation at the ledger's name that carries row-level security — enabled
