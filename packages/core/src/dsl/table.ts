@@ -1373,8 +1373,11 @@ const foldColumnReferences = (
 				// The per-column `.references()` sugar (D102) has no name
 				// slot of its own -- always derives (D106 R3-B3).
 				name: null,
-				onDelete: null,
-				onUpdate: null,
+				// The second argument to `.references()` (add-references-actions)
+				// -- absent when the column never passed one, same as the
+				// `extras` path's own optional `onDelete`/`onUpdate`.
+				onDelete: entry.columnState.referenceActions?.onDelete ?? null,
+				onUpdate: entry.columnState.referenceActions?.onUpdate ?? null,
 			},
 		];
 	});

@@ -1,3 +1,4 @@
+import type { ForeignKeyAction } from "../dsl/table";
 import { throwHejbroError } from "../error";
 import type { ColumnRef, Expr, ExprNode } from "../expr/ast";
 import { isExpr } from "../expr/ast";
@@ -62,6 +63,11 @@ export type ColumnState = {
 	 * yet to build a `ForeignKeyDeclaration` from).
 	 */
 	readonly references?: () => ColumnRef;
+	/** Set only by `.references(target, actions)`'s second argument (add-references-actions) -- always alongside `references` above, since `.references()` is the only writer of either slot, so "actions without a thunk" is unreachable. */
+	readonly referenceActions?: {
+		readonly onDelete?: ForeignKeyAction;
+		readonly onUpdate?: ForeignKeyAction;
+	};
 };
 
 /**
@@ -393,14 +399,20 @@ export type ColumnBuilder<
 	 * from it). The thunk defers evaluation for import-order safety. The
 	 * target must share this column's type family — Postgres would reject
 	 * a mismatch at apply time, so the declaration fails to type-check
-	 * instead. Self-referencing and composite foreign keys, and
-	 * `onDelete`/`onUpdate` actions, stay on the `extras` path.
+	 * instead. Self-referencing and composite foreign keys stay on the
+	 * `extras` path. The optional second argument (add-references-actions)
+	 * carries `onDelete`/`onUpdate` — it does not affect `TMeta`, so the
+	 * type layer's edge is the same with or without it.
 	 */
 	references<
 		TTargetColumns extends Record<string, ColumnBuilder>,
 		TTargetKey extends keyof TTargetColumns & string,
 	>(
 		target: () => ColumnRef<TFamily> & OriginBrand<TTargetColumns, TTargetKey>,
+		actions?: {
+			readonly onDelete?: ForeignKeyAction;
+			readonly onUpdate?: ForeignKeyAction;
+		},
 	): ColumnBuilder<
 		TFamily,
 		TMeta & { references: { columns: TTargetColumns; key: TTargetKey } }
@@ -525,6 +537,21 @@ export type OriginBrand<
 	};
 };
 
+/** `exactOptionalPropertyTypes` refuses `referenceActions: undefined` outright -- the key must be absent, not present-with-undefined, so `.references(target)` (no second argument) leaves `ColumnState.referenceActions` unset rather than set to `undefined`. */
+const referenceActionsField = (
+	actions:
+		| {
+				readonly onDelete?: ForeignKeyAction;
+				readonly onUpdate?: ForeignKeyAction;
+		  }
+		| undefined,
+): Pick<ColumnState, "referenceActions"> | Record<string, never> => {
+	if (actions === undefined) {
+		return {};
+	}
+	return { referenceActions: actions };
+};
+
 /**
  * Builds a {@link ColumnBuilder} bound to `columnState`. Every chained
  * method calls this factory again with a shallow-updated state, so builders
@@ -549,8 +576,12 @@ export const createColumnBuilder = <
 		}),
 	unique: () =>
 		createColumnBuilder<TFamily, TMeta>({ ...columnState, unique: true }),
-	references: (target) =>
-		createColumnBuilder({ ...columnState, references: target }),
+	references: (target, actions) =>
+		createColumnBuilder({
+			...columnState,
+			references: target,
+			...referenceActionsField(actions),
+		}),
 	default: (value) =>
 		createColumnBuilder<TFamily, TMeta & { hasDefault: true }>({
 			...columnState,
