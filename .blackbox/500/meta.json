@@ -56,7 +56,23 @@
       "ratified": null
     }
   ],
-  "work": [],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-05T13:47Z",
+      "title": "Group 1: outward nullability widening for recursive CTEs",
+      "pr": null,
+      "decisions": [
+        "D24",
+        "D25",
+        "R1",
+        "R2",
+        "R3",
+        "R4",
+        "R5"
+      ]
+    }
+  ],
   "prs": [],
   "origin": null,
   "followUps": []
