@@ -1,0 +1,29 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#765",
+  "title": "skills/hejbro query-layer reference drifts from the set-operation requirement",
+  "parent": "quickstart-now/hejbro#412",
+  "status": "closed",
+  "opened": "2026-09-05",
+  "closed": "2026-09-05",
+  "decisions": [],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-05T05:14Z",
+      "title": "Skill set-operation section aligned with the query-type-inference requirement",
+      "pr": null,
+      "decisions": []
+    }
+  ],
+  "prs": [
+    {
+      "number": 887,
+      "role": "closes",
+      "pinnedAt": "2026-09-05T05:14Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

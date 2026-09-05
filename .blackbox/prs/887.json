@@ -1,0 +1,17 @@
+{
+  "version": 3,
+  "number": 887,
+  "ref": "quickstart-now/hejbro#887",
+  "title": "docs(skills): align the set-operation section with the requirement (#765)",
+  "head": "28df105bc31855b553d2169c5263618a9a65b5e9",
+  "headRef": "docs-set-op-skill",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-05T05:14Z",
+  "refs": [
+    {
+      "path": "skills/hejbro/references/query-layer.md",
+      "blob": "d430693f109ba320893f4ed0a08798090a075057"
+    }
+  ]
+}
