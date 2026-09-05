@@ -6,6 +6,7 @@ import {
 	bigint,
 	defineFunction,
 	defineTrigger,
+	existingTable,
 	interval,
 	schema,
 	select,
@@ -1098,4 +1099,363 @@ describe("a description's column fact reaches the contract under any column key 
 			expect(protoKeyColumn?.mode).toBe("string");
 		},
 	);
+});
+
+/**
+ * 653/R3: one table's own rendered `Database["Tables"]` entry, isolated
+ * by its unique opening key line through its own closing brace -- `Row`/
+ * `Insert`/`Update` all close two tabs deep, so the table entry's own
+ * one-tab close is what stops this slice at exactly one table.
+ */
+const tableEntrySection = (source: string, tableName: string): string =>
+	sectionBetween(source, `\t${JSON.stringify(tableName)}: {`, "\n\t};");
+
+/**
+ * 653/R3, row 9: a hand-written export/snapshot pair (never `table()`,
+ * D110) whose one foreign-key column's TS key is exactly `"Id"` -- the
+ * one input `table()` itself cannot produce (D3, #653 measurement:
+ * `assertSqlName` refuses the SQL name `toSnakeCase("Id")` would produce,
+ * `"_id"`), reachable only because an export is foreign input (#740/D4).
+ * `users` is the FK's target, carried in the same payload so the target
+ * membership rule (R3/P6) does not itself exclude the relation for an
+ * unrelated reason.
+ */
+const buildIdKeyRelationPayload = (): ValidatedExportPayload => {
+	const snapshot: Snapshot = {
+		formatVersion: 8,
+		dialect: "postgres",
+		objects: {
+			"table:app.users": {
+				schema: "app",
+				name: "users",
+				columns: [{ name: "id", typeNode: { typeName: "uuid" } }],
+				indexes: [],
+				foreignKeys: [],
+			},
+			"table:app.widgets": {
+				schema: "app",
+				name: "widgets",
+				columns: [{ name: "id", typeNode: { typeName: "uuid" } }],
+				indexes: [],
+				foreignKeys: [
+					{
+						name: "widgets_id_fkey",
+						columns: ["id"],
+						referencesTable: "app.users",
+						referencesColumns: ["id"],
+					},
+				],
+			},
+		},
+	};
+	const usersFact: ExportTableFact = {
+		schemaName: "app",
+		tableName: "users",
+		exportName: null,
+		columns: {},
+		existing: false,
+	};
+	const widgetsFact: ExportTableFact = {
+		schemaName: "app",
+		tableName: "widgets",
+		exportName: null,
+		columns: {
+			id: { key: "Id", mode: null, notNullElements: false },
+		},
+		existing: false,
+	};
+	return {
+		tables: [usersFact, widgetsFact],
+		functions: [],
+		roles: [],
+		snapshot,
+	};
+};
+
+/**
+ * 653/R3 P6: a hand-written payload whose snapshot carries the foreign
+ * key's target while the export description does not describe it -- the
+ * one state in which `Relationships` names a table the emitted `Tables`
+ * has no entry for (`emit.ts` walks `payload.tables`, `buildRelationships`
+ * walks the snapshot), so only the emitter can keep `target` pointing at
+ * a key that exists.
+ */
+const buildUncarriedTargetPayload = (): ValidatedExportPayload => {
+	const snapshot: Snapshot = {
+		formatVersion: 8,
+		dialect: "postgres",
+		objects: {
+			"table:app.users": {
+				schema: "app",
+				name: "users",
+				columns: [{ name: "id", typeNode: { typeName: "uuid" } }],
+				indexes: [],
+				foreignKeys: [],
+			},
+			"table:app.gadgets": {
+				schema: "app",
+				name: "gadgets",
+				columns: [
+					{ name: "id", typeNode: { typeName: "uuid" } },
+					{ name: "owner_id", typeNode: { typeName: "uuid" } },
+				],
+				indexes: [],
+				foreignKeys: [
+					{
+						name: "gadgets_owner_id_fkey",
+						columns: ["owner_id"],
+						referencesTable: "app.users",
+						referencesColumns: ["id"],
+					},
+				],
+			},
+		},
+	};
+	const ownerIdSqlName = "owner_id";
+	const gadgetsFact: ExportTableFact = {
+		schemaName: "app",
+		tableName: "gadgets",
+		exportName: null,
+		columns: {
+			[ownerIdSqlName]: { key: "ownerId", mode: null, notNullElements: false },
+		},
+		existing: false,
+	};
+	return { tables: [gadgetsFact], functions: [], roles: [], snapshot };
+};
+
+describe("the contract emits Relations (653/R2, R3)", () => {
+	it("row 1: forward keys render in the table's own physical column order, then reverse keys, and the map comes after Relationships", () => {
+		const users = table(app, "users", {
+			id: uuid().primaryKey().defaultRandom(),
+		});
+		const posts = table(app, "posts", {
+			id: uuid().primaryKey().defaultRandom(),
+			editorId: uuid()
+				.notNull()
+				.references(() => users.id),
+			authorId: uuid()
+				.notNull()
+				.references(() => users.id),
+		});
+		const comments = table(app, "comments", {
+			id: uuid().primaryKey().defaultRandom(),
+			postId: uuid()
+				.notNull()
+				.references(() => posts.id),
+		});
+		const payload = buildFixturePayload([app, users, posts, comments]);
+		const source = emitContract(payload, ORIGIN);
+
+		const postsSection = tableEntrySection(source, "posts");
+		expect(postsSection).toContain(
+			"\t\treadonly Relations: {\n" +
+				'\t\t\treadonly editor: { readonly target: "users"; readonly mode: "one" };\n' +
+				'\t\t\treadonly author: { readonly target: "users"; readonly mode: "one" };\n' +
+				'\t\t\treadonly comments: { readonly target: "comments"; readonly mode: "many" };\n' +
+				"\t\t};",
+		);
+		expect(postsSection.indexOf("readonly Relations:")).toBeGreaterThan(
+			postsSection.indexOf("readonly Relationships:"),
+		);
+	});
+
+	it("row 2: a FK column key not ending in Id renders no relation (self-collision)", () => {
+		const users = table(app, "users", {
+			id: uuid().primaryKey().defaultRandom(),
+		});
+		const docs = table(app, "docs", {
+			id: uuid().primaryKey().defaultRandom(),
+			owner: uuid()
+				.notNull()
+				.references(() => users.id),
+		});
+		const payload = buildFixturePayload([app, users, docs]);
+		const source = emitContract(payload, ORIGIN);
+
+		const docsSection = tableEntrySection(source, "docs");
+		expect(docsSection).toContain("readonly Relations: {};");
+	});
+
+	it("row 3: a composite foreign key renders no relation on either side", () => {
+		const projects = table(app, "projects", {
+			tenantId: uuid(),
+			id: uuid().primaryKey().defaultRandom(),
+		});
+		const tasks = table(
+			app,
+			"tasks",
+			{ tenantId: uuid(), projectId: uuid() },
+			(t) => ({
+				foreignKeys: [
+					{
+						columns: [t.tenantId, t.projectId],
+						references: {
+							table: projects,
+							columns: [projects.tenantId, projects.id],
+						},
+					},
+				],
+			}),
+		);
+		const payload = buildFixturePayload([app, projects, tasks]);
+		const source = emitContract(payload, ORIGIN);
+
+		const tasksSection = tableEntrySection(source, "tasks");
+		expect(tasksSection).toContain("readonly Relations: {};");
+		const projectsSection = tableEntrySection(source, "projects");
+		expect(projectsSection).toContain("readonly Relations: {};");
+	});
+
+	it("row 4: two forward FKs to one table collapse to a single reverse key", () => {
+		const users = table(app, "users", {
+			id: uuid().primaryKey().defaultRandom(),
+		});
+		const posts = table(app, "posts", {
+			id: uuid().primaryKey().defaultRandom(),
+			editorId: uuid()
+				.notNull()
+				.references(() => users.id),
+			authorId: uuid()
+				.notNull()
+				.references(() => users.id),
+		});
+		const payload = buildFixturePayload([app, users, posts]);
+		const source = emitContract(payload, ORIGIN);
+
+		const usersSection = tableEntrySection(source, "users");
+		expect(usersSection).toContain(
+			'readonly posts: { readonly target: "posts"; readonly mode: "many" };',
+		);
+		const occurrences = usersSection.split("readonly posts:").length - 1;
+		expect(occurrences).toBe(1);
+	});
+
+	it("row 5: a managed FK onto an existing table renders forward on the managed table and reverse on the existing one (existingTable() cannot itself carry a FK, 653/R3 measurement)", () => {
+		const accounts = existingTable("auth", "accounts", {
+			id: uuid().primaryKey(),
+		});
+		const posts = table(app, "posts", {
+			id: uuid().primaryKey().defaultRandom(),
+			accountId: uuid()
+				.notNull()
+				.references(() => accounts.id),
+		});
+		const payload = buildFixturePayload([app, accounts, posts]);
+		const source = emitContract(payload, ORIGIN);
+
+		const postsSection = tableEntrySection(source, "posts");
+		expect(postsSection).toContain(
+			'readonly account: { readonly target: "accounts"; readonly mode: "one" };',
+		);
+		const accountsSection = tableEntrySection(source, "accounts");
+		expect(accountsSection).toContain(
+			'readonly posts: { readonly target: "posts"; readonly mode: "many" };',
+		);
+	});
+
+	it("row 6: a FK onto a table the export does not carry renders no relation", () => {
+		const authors = table(app, "authors", {
+			id: uuid().primaryKey().defaultRandom(),
+		});
+		const posts = table(app, "posts", {
+			id: uuid().primaryKey().defaultRandom(),
+			authorId: uuid()
+				.notNull()
+				.references(() => authors.id),
+		});
+		// Only `posts` is declared to the migration -- `authors` never
+		// reaches the snapshot at all (contract-emit.test.ts's own
+		// "carries no relation to an unmanaged target" fixture, reused
+		// verbatim per 653/R3 instruction).
+		const payload = buildFixturePayload([app, posts]);
+		const source = emitContract(payload, ORIGIN);
+
+		const postsSection = tableEntrySection(source, "posts");
+		expect(postsSection).toContain("readonly Relationships: readonly [];");
+		expect(postsSection).toContain("readonly Relations: {};");
+	});
+
+	it("row 7: a forward strip colliding with a reverse schema-map key drops only that key, not the table it targets", () => {
+		const users = table(app, "users", {
+			id: uuid().primaryKey().defaultRandom(),
+		});
+		const notes = table(app, "notes", {
+			id: uuid().primaryKey().defaultRandom(),
+			authorsId: uuid()
+				.notNull()
+				.references(() => users.id),
+		});
+		const authors = table(app, "authors", {
+			id: uuid().primaryKey().defaultRandom(),
+			noteId: uuid()
+				.notNull()
+				.references(() => notes.id),
+		});
+		const payload = buildFixturePayload([app, users, notes, authors]);
+		const source = emitContract(payload, ORIGIN);
+
+		const notesSection = tableEntrySection(source, "notes");
+		expect(notesSection).toContain("readonly Relations: {};");
+		const authorsSection = tableEntrySection(source, "authors");
+		expect(authorsSection).toContain(
+			'readonly note: { readonly target: "notes"; readonly mode: "one" };',
+		);
+	});
+
+	it("row 8: a relation key colliding with the table's own column key renders no relation", () => {
+		const users = table(app, "users", {
+			id: uuid().primaryKey().defaultRandom(),
+		});
+		const posts2 = table(app, "posts2", {
+			id: uuid().primaryKey().defaultRandom(),
+			author: text().notNull(),
+			authorId: uuid()
+				.notNull()
+				.references(() => users.id),
+		});
+		const payload = buildFixturePayload([app, users, posts2]);
+		const source = emitContract(payload, ORIGIN);
+
+		const posts2Section = tableEntrySection(source, "posts2");
+		expect(posts2Section).toContain("readonly Relations: {};");
+	});
+
+	it('row 9: a FK column whose TS key is exactly "Id" renders no relation, and never as a blank key (the endsWith("Id") mutant\'s own tell)', () => {
+		const payload = buildIdKeyRelationPayload();
+		const source = emitContract(payload, ORIGIN);
+
+		const widgetsSection = tableEntrySection(source, "widgets");
+		expect(widgetsSection).toContain("readonly Relations: {};");
+		expect(widgetsSection).not.toContain('readonly ""');
+	});
+
+	it("row 10: a FK onto a table the snapshot carries but the contract does not emit renders no relation, though Relationships still names it", () => {
+		const source = emitContract(buildUncarriedTargetPayload(), ORIGIN);
+
+		const gadgetsSection = tableEntrySection(source, "gadgets");
+		expect(gadgetsSection).toContain(
+			'readonly referencedRelation: "app.users";',
+		);
+		expect(gadgetsSection).toContain("readonly Relations: {};");
+		expect(source).not.toContain('\t"users": {');
+	});
+
+	it("the runtime metadata carries no Relations member -- .related() forwards through the existing foreignKeys fact alone", () => {
+		const users = table(app, "users", {
+			id: uuid().primaryKey().defaultRandom(),
+		});
+		const posts = table(app, "posts", {
+			id: uuid().primaryKey().defaultRandom(),
+			authorId: uuid()
+				.notNull()
+				.references(() => users.id),
+		});
+		const payload = buildFixturePayload([app, users, posts]);
+		const source = emitContract(payload, ORIGIN);
+
+		const metadataBlock =
+			source.split("export const contractMetadata")[1] ?? "";
+		expect(metadataBlock).not.toContain("Relations");
+	});
 });

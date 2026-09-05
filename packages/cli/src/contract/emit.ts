@@ -11,6 +11,7 @@ import type { TableClientMeta, TableComputation } from "./tables";
 import {
 	buildEnumLookup,
 	buildTableClientMeta,
+	computeRelationsForTable,
 	computeTable,
 	renderTableEntry,
 } from "./tables";
@@ -163,7 +164,14 @@ const renderDatabaseInterface = (
 	functions: ReadonlyArray<FunctionComputation>,
 ): string => {
 	const enums = enumsInSnapshot(payload.snapshot);
-	const tableEntries = tables.map(renderTableEntry).join("\n");
+	const tableEntries = tables
+		.map((computation) =>
+			renderTableEntry(
+				computation,
+				computeRelationsForTable(computation, tables),
+			),
+		)
+		.join("\n");
 	const enumEntries = enums.map(renderEnumEntry).join("\n");
 	return `export interface Database {
 	readonly Tables: {

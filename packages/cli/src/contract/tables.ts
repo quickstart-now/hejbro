@@ -269,9 +269,110 @@ export const computeTable = (
 	existing: table.existing === true,
 });
 
-/** One `Database["Tables"][tableName]` entry's own source text, keyed by the table's bare SQL name (the mirror is flat — no per-schema nesting, proposal.md's own "the emitted mirror is flat"). */
+/** One entry of a table's emitted `Relations` map (653, add-vendored-related) — `target` names a key of the same `Tables` set this array itself renders, never a raw schema-qualified identity. */
+export type RelationEntry = {
+	readonly key: string;
+	readonly target: string;
+	readonly mode: "one" | "many";
+};
+
+/** `ownerId` -> `owner`. Must stay byte-identical (length guard included) to its runtime twin (`packages/query/src/db/related.ts`) and type twin (`packages/query/src/types/relations.ts`) — one rule, three readers. */
+const stripId = (key: string): string => {
+	if (key.length > 2 && key.endsWith("Id")) {
+		return key.slice(0, -2);
+	}
+	return key;
+};
+
+/** Whether `relationship`'s target is a table this contract actually renders under `Tables` (R3/P6) — a foreign key onto a table the export carries in its snapshot's `Relationships` but never gives its own `Tables` entry must not name it as a `target`. */
+const isCarriedTarget = (
+	relationship: RelationshipEntry,
+	tables: ReadonlyArray<TableComputation>,
+): boolean =>
+	tables.some(
+		(candidate) =>
+			candidate.table.schema === relationship.referencesSchema &&
+			candidate.table.name === relationship.referencesTable,
+	);
+
+/** Forward relations, in `computation.entries`' own physical column order (R3/P3) — one single-column foreign key per entry, its target already schema-vetted by {@link buildRelationships}, filtered again here to the tables this contract actually carries. */
+const forwardRelations = (
+	computation: TableComputation,
+	tables: ReadonlyArray<TableComputation>,
+): ReadonlyArray<RelationEntry> =>
+	computation.entries
+		.map((entry): RelationEntry | null => {
+			const relationship = computation.relationships.find(
+				(candidate) =>
+					candidate.columns.length === 1 &&
+					candidate.columns[0] === entry.sqlName,
+			);
+			if (
+				relationship === undefined ||
+				!isCarriedTarget(relationship, tables)
+			) {
+				return null;
+			}
+			return {
+				key: stripId(entry.tsKey),
+				target: relationship.referencesTable,
+				mode: "one",
+			};
+		})
+		.filter((entry): entry is RelationEntry => entry !== null);
+
+/** Reverse relations, in `tables`' own emitted order (R3/P3) — one entry per referencing table with a single-column foreign key onto `computation`, keyed by that table's own name (never excluding a self-reference). */
+const reverseRelations = (
+	computation: TableComputation,
+	tables: ReadonlyArray<TableComputation>,
+): ReadonlyArray<RelationEntry> =>
+	tables
+		.filter((candidate) =>
+			candidate.relationships.some(
+				(relationship) =>
+					relationship.columns.length === 1 &&
+					relationship.referencesSchema === computation.table.schema &&
+					relationship.referencesTable === computation.table.name,
+			),
+		)
+		.map((candidate) => ({
+			key: candidate.table.name,
+			target: candidate.table.name,
+			mode: "many" as const,
+		}));
+
+/** One table's full `Relations` map (R3/P5): a key present on both sides, or equal to one of the table's own column keys, is omitted from both — mirrors `RelationKeysOf`'s own collision rule (`packages/query/src/types/relations.ts`). */
+export const computeRelationsForTable = (
+	computation: TableComputation,
+	tables: ReadonlyArray<TableComputation>,
+): ReadonlyArray<RelationEntry> => {
+	const forward = forwardRelations(computation, tables);
+	const reverse = reverseRelations(computation, tables);
+	const forwardKeys = forward.map((entry) => entry.key);
+	const reverseKeys = reverse.map((entry) => entry.key);
+	const ownColumnKeys = computation.entries.map((entry) => entry.tsKey);
+	const isOmitted = (key: string): boolean =>
+		(forwardKeys.includes(key) && reverseKeys.includes(key)) ||
+		ownColumnKeys.includes(key);
+	return [...forward, ...reverse].filter((entry) => !isOmitted(entry.key));
+};
+
+const renderRelationEntry = (entry: RelationEntry): string =>
+	`\t\t\treadonly ${renderKey(entry.key)}: { readonly target: ${JSON.stringify(entry.target)}; readonly mode: ${JSON.stringify(entry.mode)} };`;
+
+/** `readonly Relations: {};` when empty (never omitted, R3/P4), else one line per {@link RelationEntry} inside the map. */
+const renderRelations = (relations: ReadonlyArray<RelationEntry>): string => {
+	if (relations.length === 0) {
+		return "\t\treadonly Relations: {};";
+	}
+	const entries = relations.map(renderRelationEntry).join("\n");
+	return `\t\treadonly Relations: {\n${entries}\n\t\t};`;
+};
+
+/** One `Database["Tables"][tableName]` entry's own source text, keyed by the table's bare SQL name (the mirror is flat — no per-schema nesting, proposal.md's own "the emitted mirror is flat"). `relations` is computed over the full `Tables` array (second pass, R3/P3) since a reverse relation needs every table, never just this one. */
 export const renderTableEntry = (
 	computation: TableComputation,
+	relations: ReadonlyArray<RelationEntry>,
 ): string => `\t${JSON.stringify(computation.table.name)}: {
 \t\treadonly Row: {
 ${buildRowInterface(computation.entries)}
@@ -283,6 +384,7 @@ ${buildInsertInterface(computation.entries)}
 ${buildUpdateInterface(computation.entries)}
 \t\t};
 ${renderRelationships(computation.relationships)}
+${renderRelations(relations)}
 \t};`;
 
 /**
