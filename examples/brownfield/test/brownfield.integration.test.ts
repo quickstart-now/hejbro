@@ -441,7 +441,44 @@ describe.each(PG_IMAGES)("brownfield corpus / %s", (image) => {
 					"unmanaged table (not covered by any declaration): shop.Widgets",
 				);
 				expect(checkResult.stdout).not.toContain("Marketing");
-				// the column line's own check promise is not asserted -- #726
+				// harden-check-inventory, task 1.9 (#726): the loss report's own
+				// column-line promise, end to end -- both columns `import`
+				// named as "check reports this column until it is renamed" (the
+				// LOSS_REPORT_ROWS entries above) actually appear in this same
+				// run's `check` inventory.
+				expect(checkResult.stdout).toContain(
+					"unmanaged column (not covered by any declaration): catalog.products.a*/b",
+				);
+				expect(checkResult.stdout).toContain(
+					"unmanaged column (not covered by any declaration): people.accounts._id",
+				);
+				// harden-check-inventory, task 1.9 (#707): the same end-to-end
+				// proof for the loss report's index/check lines -- `import`
+				// named `catalog.orders.IX_Orders_Status` and
+				// `catalog.orders.CK_Orders_Total` with the new 1.7 wording
+				// ("check keeps listing it as unmanaged"), and this run's
+				// `check` inventory actually lists both, on the surviving
+				// declared table (`catalog.orders` itself "stays declared" --
+				// seed/brownfield.sql's own comment) that holds them.
+				expect(firstImport.stdout).toContain(
+					"`check` keeps listing it as unmanaged until it is renamed in the database",
+				);
+				expect(checkResult.stdout).toContain(
+					"unmanaged index (not covered by any declaration): catalog.orders.IX_Orders_Status",
+				);
+				expect(checkResult.stdout).toContain(
+					"unmanaged check constraint (not covered by any declaration): catalog.orders.CK_Orders_Total",
+				);
+				// Q3's boundary, live: `shop.Widgets` is itself unmanaged (the
+				// line above), so none of what it holds -- its columns, its
+				// primary key's own index, its UNIQUE constraint's own index --
+				// gets a line of its own underneath it.
+				expect(checkResult.stdout).not.toContain("shop.Widgets.id");
+				expect(checkResult.stdout).not.toContain("shop.Widgets.sku");
+				expect(checkResult.stdout).not.toContain("shop.Widgets.Widgets_pkey");
+				expect(checkResult.stdout).not.toContain(
+					"shop.Widgets.Widgets_sku_key",
+				);
 			} finally {
 				await removeCliFixtureDir(cwd);
 			}
