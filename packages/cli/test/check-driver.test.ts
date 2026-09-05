@@ -351,6 +351,7 @@ describe("withCheckConnection / configured factory (#458 task 1.2)", () => {
 	const fakeCapabilities: DriverCapabilities = {
 		"interactive-transactions": false,
 		"session-state": false,
+		"prepared-statements": false,
 	};
 
 	const buildClosableDriver = (ends: number[]): CheckDriverConnection => ({

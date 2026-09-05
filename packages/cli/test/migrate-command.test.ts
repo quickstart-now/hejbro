@@ -1171,6 +1171,7 @@ const buildRecordingMigrateDriver = (
 	capabilities: DriverCapabilities = {
 		"interactive-transactions": true,
 		"session-state": true,
+		"prepared-statements": false,
 	},
 ): {
 	readonly driver: CheckDriverConnection;
@@ -1263,6 +1264,7 @@ describe("hejbro migrate / the configured driver factory threads through (#458 t
 		const { driver } = buildRecordingMigrateDriver({
 			"interactive-transactions": false,
 			"session-state": true,
+			"prepared-statements": false,
 		});
 		installFactorySeam({ calls: [], driver });
 		const importer: CheckDriverImporter = async () => {
