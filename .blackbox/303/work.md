@@ -20,3 +20,27 @@ GREEN: mechanically added `"prepared-statements": false` to every
 `pnpm check:bans`, and `TURBO_FORCE=1 pnpm test` (93 files / 1322 tests
 + 2 type-test packages) all green.
 
+<a id="w2"></a>
+## W2 — task 1.2: pgDriver prepares on request
+
+_2026-09-05T04:52Z_
+
+Added PgDriverOptions second argument to both pgDriver overloads
+(pool and connection-string). preparedStatementName derives
+hejbro_ + 32 hex of sha256(text) (node:crypto). makeSession/execute
+sends `name` only for built kinds (select/insert/update/delete/setOp)
+when the option is true; sql-kind is always unnamed. capabilities
+spreads the caller's own prepared-statements over the fixed base.
+
+RED first: packages/pg/test/driver.test.ts's new describe (14 cases
+covering the input table: option x kind x params, plus determinism/
+collision/63-byte/transaction-path/checkout-pin-unnamed/capabilities-
+mirroring axes) against the unmodified driver.ts -- confirmed 9
+failures + missing-2nd-argument tsc errors via `npx vitest run
+test/driver.test.ts -t preparedStatements`. GREEN: implemented the
+option; 52/52 tests pass. Avoided ternary (repo ban) by extracting
+nameForQueryConfig as an if/return helper instead of a conditional
+spread. Full gate green: TURBO_FORCE=1 pnpm check-types (18/18),
+pnpm check, pnpm check:bans, TURBO_FORCE=1 pnpm test (all packages,
+1322+52 etc. all passing, no regressions).
+

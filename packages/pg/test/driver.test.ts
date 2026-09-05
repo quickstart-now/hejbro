@@ -1,5 +1,9 @@
 import { grant, roleName, schema, select, table, uuid } from "@hejbro/core";
-import type { ContextRendering } from "@hejbro/query";
+import type {
+	CompileKind,
+	CompileResult,
+	ContextRendering,
+} from "@hejbro/query";
 import { db, defaultContextRendering } from "@hejbro/query";
 import { assertSessionStateConformance } from "@hejbro/query/testing/driver-conformance";
 import { Client, Pool, types as pgTypes } from "pg";
@@ -10,9 +14,10 @@ import { pgDriver } from "../src/driver";
  * What `pgDriver` actually sends to a node-postgres client -- a bare SQL
  * string (`BEGIN`/`COMMIT`/`ROLLBACK`, the IntervalStyle pin) or a
  * structured query config (`text`/`values`/`types`, a statement routed
- * through `makeSession`). Typed narrowly to exactly the shapes the
- * driver constructs, so the stubs below never need a full `pg`
- * `QueryConfig`.
+ * through `makeSession`, optionally `name` when the caller asked for
+ * prepared statements -- task 1.2, #303). Typed narrowly to exactly the
+ * shapes the driver constructs, so the stubs below never need a full
+ * `pg` `QueryConfig`.
  */
 type CapturedQueryConfig = {
 	readonly text: string;
@@ -23,6 +28,7 @@ type CapturedQueryConfig = {
 			format?: string,
 		) => (value: string) => unknown;
 	};
+	readonly name?: string;
 };
 type QueryCall = string | CapturedQueryConfig;
 
@@ -231,6 +237,198 @@ describe("pgDriver(connectionString) (owner decision ②, task 5.2)", () => {
 		await flushAsyncWork();
 
 		expect(endSpy).not.toHaveBeenCalled();
+	});
+});
+
+describe("pgDriver({ preparedStatements }) names built statements only when the caller asked (task 1.2, #303)", () => {
+	/** Runs one `driver.execute(compiled)` over a fresh stub pool and returns the caller's own captured query config -- the one axis every case in the input table below varies. */
+	const captureCallerConfig = async (
+		options: { readonly preparedStatements?: boolean } | undefined,
+		compiled: CompileResult,
+	): Promise<CapturedQueryConfig> => {
+		const { pool, calls } = stubPoolWithClient();
+		const driver = pgDriver(pool, options);
+		await driver.execute(compiled);
+		const config = calls.find(
+			(call): call is CapturedQueryConfig =>
+				typeof call !== "string" && call.text === compiled.sql,
+		);
+		if (config === undefined) {
+			throw new Error("the caller's own statement was never sent");
+		}
+		return config;
+	};
+
+	it("names a select statement hejbro_ + 32 hex digits of sha256 over its text, when the option is true", async () => {
+		const config = await captureCallerConfig(
+			{ preparedStatements: true },
+			{ sql: "select 1", params: [], kind: "select" },
+		);
+		expect(config.name).toMatch(/^hejbro_[0-9a-f]{32}$/);
+	});
+
+	it.each<[CompileKind, ReadonlyArray<unknown>]>([
+		["insert", [1]],
+		["update", [1]],
+		["delete", [1]],
+		["setOp", [1]],
+	])(
+		"names a built %s statement when the option is true",
+		async (kind, params) => {
+			const config = await captureCallerConfig(
+				{ preparedStatements: true },
+				{ sql: `-- ${kind}`, params, kind },
+			);
+			expect(config.name).toBeDefined();
+		},
+	);
+
+	it("never names a sql-kind statement, even carrying params, when the option is true (the escape hatch is not parsed)", async () => {
+		const config = await captureCallerConfig(
+			{ preparedStatements: true },
+			{ sql: "select $1::int", params: [1], kind: "sql" },
+		);
+		expect(config.name).toBeUndefined();
+	});
+
+	it("never names a sql-kind statement carrying two commands, when the option is true (a prepared statement may carry exactly one)", async () => {
+		const config = await captureCallerConfig(
+			{ preparedStatements: true },
+			{ sql: "select 1; select 2", params: [], kind: "sql" },
+		);
+		expect(config.name).toBeUndefined();
+	});
+
+	it("sends no name at all, config byte-identical to today's, when the option is absent (regression control)", async () => {
+		const kinds: ReadonlyArray<CompileKind> = [
+			"select",
+			"insert",
+			"update",
+			"delete",
+			"setOp",
+			"sql",
+		];
+		await Promise.all(
+			kinds.map(async (kind) => {
+				const config = await captureCallerConfig(undefined, {
+					sql: `-- ${kind}`,
+					params: [],
+					kind,
+				});
+				expect(config).toEqual({
+					text: `-- ${kind}`,
+					values: [],
+					types: config.types,
+				});
+			}),
+		);
+	});
+
+	it("sends no name when the option is explicitly false", async () => {
+		const config = await captureCallerConfig(
+			{ preparedStatements: false },
+			{ sql: "select 1", params: [], kind: "select" },
+		);
+		expect(config.name).toBeUndefined();
+	});
+
+	it("names the same text identically across two drivers built over two different pools (a pure function of the text)", async () => {
+		const compiled: CompileResult = {
+			sql: "select 1",
+			params: [],
+			kind: "select",
+		};
+		const first = await captureCallerConfig(
+			{ preparedStatements: true },
+			compiled,
+		);
+		const second = await captureCallerConfig(
+			{ preparedStatements: true },
+			compiled,
+		);
+		expect(first.name).toBe(second.name);
+	});
+
+	it("names two texts differing by one character differently", async () => {
+		const first = await captureCallerConfig(
+			{ preparedStatements: true },
+			{ sql: "select 1", params: [], kind: "select" },
+		);
+		const second = await captureCallerConfig(
+			{ preparedStatements: true },
+			{ sql: "select 2", params: [], kind: "select" },
+		);
+		expect(first.name).not.toBe(second.name);
+	});
+
+	it("every generated name fits inside Postgres's 63-byte identifier limit", async () => {
+		const config = await captureCallerConfig(
+			{ preparedStatements: true },
+			{ sql: "select 1", params: [], kind: "select" },
+		);
+		expect(config.name).toBeDefined();
+		expect(Buffer.byteLength(config.name ?? "", "utf8")).toBeLessThanOrEqual(
+			63,
+		);
+	});
+
+	it("names a built statement executed inside a transaction too (the session handed to the callback)", async () => {
+		const { pool, calls } = stubPoolWithClient();
+		const driver = pgDriver(pool, { preparedStatements: true });
+
+		await driver.transaction(async (session) => {
+			await session.execute({ sql: "select 1", params: [], kind: "select" });
+			return "done";
+		});
+
+		const config = calls.find(
+			(call): call is CapturedQueryConfig =>
+				typeof call !== "string" && call.text === "select 1",
+		);
+		if (config === undefined) {
+			throw new Error("the caller's own statement was never sent");
+		}
+		expect(config.name).toMatch(/^hejbro_[0-9a-f]{32}$/);
+	});
+
+	it("never names the checkout pin (a sql-kind, multi-command text) even when the option is true", async () => {
+		const { pool, calls } = stubPoolWithClient();
+		const driver = pgDriver(pool, { preparedStatements: true });
+
+		await driver.execute({ sql: "select 1", params: [], kind: "select" });
+
+		const pin = calls.find(
+			(call): call is CapturedQueryConfig =>
+				typeof call !== "string" &&
+				call.text ===
+					"set intervalstyle to 'postgres'; set bytea_output to 'hex'",
+		);
+		if (pin === undefined) {
+			throw new Error("the checkout pin was never sent");
+		}
+		expect(pin.name).toBeUndefined();
+	});
+
+	it("capabilities['prepared-statements'] mirrors the option, for both the pool and the connection-string overload", () => {
+		const pool = new Pool({
+			connectionString: "postgres://localhost/does-not-need-to-connect",
+		});
+		expect(
+			pgDriver(pool, { preparedStatements: true }).capabilities[
+				"prepared-statements"
+			],
+		).toBe(true);
+		expect(pgDriver(pool).capabilities["prepared-statements"]).toBe(false);
+		expect(
+			pgDriver("postgres://localhost/does-not-need-to-connect", {
+				preparedStatements: true,
+			}).capabilities["prepared-statements"],
+		).toBe(true);
+		expect(
+			pgDriver("postgres://localhost/does-not-need-to-connect").capabilities[
+				"prepared-statements"
+			],
+		).toBe(false);
 	});
 });
 
