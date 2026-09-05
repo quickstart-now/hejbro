@@ -1,4 +1,4 @@
-# quickstart-now/hejbro#892 — pg driver: a multi-command sql text resolves to undefined rows
+# quickstart-now/hejbro#946 — query: a batch result whose list count differs from the member count is not detected, so a context statement's rows can be returned as the caller's
 
 Parent: quickstart-now/hejbro#815 · Kind: issue · Status: closed
 

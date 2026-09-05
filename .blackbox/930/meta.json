@@ -1,18 +1,18 @@
 {
   "version": 3,
   "kind": "issue",
-  "ref": "quickstart-now/hejbro#892",
-  "title": "pg driver: a multi-command sql text resolves to undefined rows",
+  "ref": "quickstart-now/hejbro#930",
+  "title": "nile: vitest alias covers core and query but not @hejbro/pg, so nile tests can pass against a stale pg dist",
   "parent": "quickstart-now/hejbro#815",
-  "status": "closed",
+  "status": "open",
   "opened": "2026-09-05",
-  "closed": "2026-09-05",
+  "closed": null,
   "decisions": [],
   "work": [],
   "prs": [
     {
       "number": 955,
-      "role": "closes",
+      "role": "refs",
       "pinnedAt": "2026-09-05T16:18Z"
     }
   ],

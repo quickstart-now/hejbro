@@ -4,9 +4,9 @@
   "ref": "quickstart-now/hejbro#486",
   "title": "the driver contract has no vocabulary for non-interactive statement batches",
   "parent": "quickstart-now/hejbro#412",
-  "status": "open",
+  "status": "closed",
   "opened": "2026-09-05",
-  "closed": null,
+  "closed": "2026-09-05",
   "decisions": [
     {
       "id": "R1",
@@ -200,7 +200,13 @@
       ]
     }
   ],
-  "prs": [],
+  "prs": [
+    {
+      "number": 955,
+      "role": "closes",
+      "pinnedAt": "2026-09-05T16:18Z"
+    }
+  ],
   "origin": null,
   "followUps": []
 }

@@ -1,8 +1,8 @@
 {
   "version": 3,
   "kind": "issue",
-  "ref": "quickstart-now/hejbro#892",
-  "title": "pg driver: a multi-command sql text resolves to undefined rows",
+  "ref": "quickstart-now/hejbro#946",
+  "title": "query: a batch result whose list count differs from the member count is not detected, so a context statement's rows can be returned as the caller's",
   "parent": "quickstart-now/hejbro#815",
   "status": "closed",
   "opened": "2026-09-05",

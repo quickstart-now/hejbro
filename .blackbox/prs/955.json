@@ -1,0 +1,269 @@
+{
+  "version": 3,
+  "number": 955,
+  "ref": "quickstart-now/hejbro#955",
+  "title": "feat(query,neon): batched transactions -- a fourth capability, batch member, and a context that runs as one batch (#486, #891, #892)",
+  "head": "2166a4c0d461460b35299901344b927944bfd2d6",
+  "headRef": "add-batched-transactions",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-05T16:18Z",
+  "refs": [
+    {
+      "path": ".changeset/add-batched-transactions.md",
+      "blob": "23a4e6d0c03fcdef9f2df74ebb16cdd400948ee0"
+    },
+    {
+      "path": "README.md",
+      "blob": "f1ccedab6a8be7ef7b265d8170f6a95ec80dc855"
+    },
+    {
+      "path": "openspec/changes/add-batched-transactions/design.md",
+      "blob": "17f6207522a68686e0a79d74257c6dc8d77c3fd2"
+    },
+    {
+      "path": "openspec/changes/add-batched-transactions/proposal.md",
+      "blob": "30291a69ae519bdaf1fd9e3fa9730ce69b868ea9"
+    },
+    {
+      "path": "openspec/changes/add-batched-transactions/specs/driver-contract/spec.md",
+      "blob": "d3a19153a138bc4705bdf3376387fd8dcc1a7389"
+    },
+    {
+      "path": "openspec/changes/add-batched-transactions/specs/rls-execution-context/spec.md",
+      "blob": "000d798e67160efe8601b51ad2adae760c49ae35"
+    },
+    {
+      "path": "openspec/changes/add-batched-transactions/tasks.md",
+      "blob": "353f3c95e677daab3ae2108342d8294d0183b683"
+    },
+    {
+      "path": "openspec/task-times.csv",
+      "blob": "d51f02943293612558181b329e3c6cbf9e354521"
+    },
+    {
+      "path": "packages/cli/test/apply-execute.test.ts",
+      "blob": "1bb38276582597db219666cdcbe3d0eff4777f11"
+    },
+    {
+      "path": "packages/cli/test/apply-ledger-diagnostics.test.ts",
+      "blob": "33d1a43747415bb598433f7e8179b251076fa459"
+    },
+    {
+      "path": "packages/cli/test/apply-ledger-identity.test.ts",
+      "blob": "923a25cfebef508d8a63eca343d2227089b73665"
+    },
+    {
+      "path": "packages/cli/test/apply-raise.test.ts",
+      "blob": "03a31286c7fd2fe91ff274c1d9350c1c62994584"
+    },
+    {
+      "path": "packages/cli/test/apply-reset.test.ts",
+      "blob": "5822a9b87125ca4625d13f259fdf7a2010c5baf7"
+    },
+    {
+      "path": "packages/cli/test/check-command.test.ts",
+      "blob": "bfc31642b6377a6f9d9f8a69ce5bbf4d304e88f1"
+    },
+    {
+      "path": "packages/cli/test/check-driver.test.ts",
+      "blob": "612b5b351e712bc3a103b0c284cd0e23b4413251"
+    },
+    {
+      "path": "packages/cli/test/exports.test.ts",
+      "blob": "a367d4b2417c9cae38c42681849e69210e76188b"
+    },
+    {
+      "path": "packages/cli/test/import-command.test.ts",
+      "blob": "abc0e72ab7aaba90c572e8615ce60703416c77c1"
+    },
+    {
+      "path": "packages/cli/test/migrate-command.test.ts",
+      "blob": "9de593e919bf029954773e1d513ab4aad78024ae"
+    },
+    {
+      "path": "packages/cli/test/pull-command.test.ts",
+      "blob": "ff5c81021cb7ccdb80810830adeb2f4fba486839"
+    },
+    {
+      "path": "packages/cli/test/raise-command.test.ts",
+      "blob": "76500d612e21b61d00217ee3c0cb4c9648b9b650"
+    },
+    {
+      "path": "packages/cli/test/reset-command.test.ts",
+      "blob": "15457226184498f4ee908434fbf73741995714c0"
+    },
+    {
+      "path": "packages/cli/test/status-command.test.ts",
+      "blob": "937fdc912fcde9182cb798574a4a25546ca4433f"
+    },
+    {
+      "path": "packages/neon/src/driver.ts",
+      "blob": "31ad4f3b166eda9344c2292c99226b91db46ffab"
+    },
+    {
+      "path": "packages/neon/src/http.ts",
+      "blob": "3845264cb875ba0fa851852fdb0e37b55aca2e5d"
+    },
+    {
+      "path": "packages/neon/test/context.test.ts",
+      "blob": "93dc21e90f41a81f378c1279cd53a638853f07ab"
+    },
+    {
+      "path": "packages/neon/test/driver.test.ts",
+      "blob": "2e6e8606e34b362a50a7a3366c210f2120fb0930"
+    },
+    {
+      "path": "packages/neon/test/http-session.test.ts",
+      "blob": "6ea515135b77245507562938750ed2e386bfc4f4"
+    },
+    {
+      "path": "packages/nile/test/context.test.ts",
+      "blob": "a92cf18392617ecebf21b10bd0d0ff0c9a6350de"
+    },
+    {
+      "path": "packages/nile/test/driver.test.ts",
+      "blob": "730a12bcd16e5d4bbd353b3197a0e58a06c51523"
+    },
+    {
+      "path": "packages/pg/src/driver.ts",
+      "blob": "59d32dd93b42076d5e18c81cec8923bc33acc633"
+    },
+    {
+      "path": "packages/pg/test/driver.test.ts",
+      "blob": "501478eaefc8bfe842f22c44d95f9166c5d47418"
+    },
+    {
+      "path": "packages/query/src/db/context.ts",
+      "blob": "2ea2e1e2781e07e9917d5c4c6dad788b906b283f"
+    },
+    {
+      "path": "packages/query/src/db/transaction.ts",
+      "blob": "9e2fc92aef7864f1a28fca408499b9bec19628cf"
+    },
+    {
+      "path": "packages/query/src/driver/contract.ts",
+      "blob": "8d6d74d40a13eb983e8e9944068a1bd1dc2326dd"
+    },
+    {
+      "path": "packages/query/src/driver/errors.ts",
+      "blob": "5bc6dc3babdf051b939e708ecee88cca5379a5f0"
+    },
+    {
+      "path": "packages/query/src/driver/result-rows.ts",
+      "blob": "25f84bb722103fd754d8164c3ff540f2c5f9d5bd"
+    },
+    {
+      "path": "packages/query/src/driver/statement-name.ts",
+      "blob": "ec4e43677ac4c12a905e956df99c3f68faca662b"
+    },
+    {
+      "path": "packages/query/src/index.ts",
+      "blob": "28bb7d038f106dfdf52ff9dcd0a3cf87eb6d938f"
+    },
+    {
+      "path": "packages/query/test/client/fn-types.test.ts",
+      "blob": "b7df1be9b0c4a527c14c0286ccb87137eb97a291"
+    },
+    {
+      "path": "packages/query/test/db/context-provider.test.ts",
+      "blob": "c1303d341e379a9f527b59b796d44a9f9ed75534"
+    },
+    {
+      "path": "packages/query/test/db/context-required.test.ts",
+      "blob": "7f452d34d9eb3f6558b2d509deb469ab32138823"
+    },
+    {
+      "path": "packages/query/test/db/context.test.ts",
+      "blob": "7a1b8c8295f3da450db0b1c235c5fdc372d42982"
+    },
+    {
+      "path": "packages/query/test/db/db.test.ts",
+      "blob": "ad2ab70797d3791fccfb05cdac55460ef3ec7849"
+    },
+    {
+      "path": "packages/query/test/db/errors.test.ts",
+      "blob": "f973179377df1aa5e08d1fb669ca1700ecbbb7ac"
+    },
+    {
+      "path": "packages/query/test/db/execute-conversion.test.ts",
+      "blob": "3391a5c205ef7bb5dce0c9530ab2f1dd9d172d46"
+    },
+    {
+      "path": "packages/query/test/db/execute.test.ts",
+      "blob": "90453ba9ac6637f6475e6e55c079dd5b6b5c75bb"
+    },
+    {
+      "path": "packages/query/test/db/fn-types.test.ts",
+      "blob": "1f807534a352602cacf8369bb4e36370dfcbd13e"
+    },
+    {
+      "path": "packages/query/test/db/fn.test.ts",
+      "blob": "e0ae08ce8a7c0b4ed28e9607111795bc9fb4a19c"
+    },
+    {
+      "path": "packages/query/test/db/recording-driver.ts",
+      "blob": "eb6bf01ca308c56c23b6f74b07eda25506ae4c32"
+    },
+    {
+      "path": "packages/query/test/db/transaction.test.ts",
+      "blob": "434f7c50ba9d302bab9e4ebb46cdb4c117ed0edd"
+    },
+    {
+      "path": "packages/query/test/driver/conformance.test.ts",
+      "blob": "4985b70f8d5b3d0152a4c01ce875f1e3f77d869e"
+    },
+    {
+      "path": "packages/query/test/driver/contract.test.ts",
+      "blob": "944911f4acdfa89c5728f0676f16bb058be4f9fe"
+    },
+    {
+      "path": "packages/query/test/driver/errors.test.ts",
+      "blob": "49b2163a304a71e5105eb8093889a59d83e07a4d"
+    },
+    {
+      "path": "packages/query/test/driver/result-rows.test.ts",
+      "blob": "0850fdf8a81e8a880445cbdc2d8cbf9afb29c7d8"
+    },
+    {
+      "path": "packages/query/test/driver/statement-name.test.ts",
+      "blob": "4df165ebce5852571a4e9acee75d46325e8e48c9"
+    },
+    {
+      "path": "packages/query/test/exports.test.ts",
+      "blob": "fd8a030166db70d8e6936c5831d8941c4427e19e"
+    },
+    {
+      "path": "packages/supabase/src/pooler.ts",
+      "blob": "d9dae857a4b821a2e391b9ee8064d0e471085e4e"
+    },
+    {
+      "path": "packages/supabase/test/context-provider.test.ts",
+      "blob": "6916087437f282f0d5ff377026e18523dc5ebfd7"
+    },
+    {
+      "path": "packages/supabase/test/driver.test.ts",
+      "blob": "0b0c6ae06be557538736d283ee2d19f34f01230d"
+    },
+    {
+      "path": "packages/supabase/test/pooler.test.ts",
+      "blob": "119cb44a31c1006e2b330d02599ecdbb0231c40a"
+    },
+    {
+      "path": "packages/supabase/test/rls-context.integration.test.ts",
+      "blob": "05ffc8107cac2a86703b03633e99649fb11b43b3"
+    },
+    {
+      "path": "skills/hejbro/references/neon-preset.md",
+      "blob": "7de84caf23964478d27e80784d3fb1b694c9709a"
+    },
+    {
+      "path": "skills/hejbro/references/query-layer.md",
+      "blob": "12994091ffa7f009bfa965e3ebfbbe888e3aad1b"
+    },
+    {
+      "path": "skills/hejbro/references/supabase-preset.md",
+      "blob": "b75bac2e1a6e4db73f48029a5da358034f7c5748"
+    }
+  ]
+}
