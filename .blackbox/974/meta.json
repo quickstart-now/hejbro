@@ -1,0 +1,21 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#974",
+  "title": "query: count() reads as bigint | null while the reference says bigint; count is never null",
+  "parent": null,
+  "status": "open",
+  "opened": "2026-09-05",
+  "closed": null,
+  "decisions": [],
+  "work": [],
+  "prs": [
+    {
+      "number": 976,
+      "role": "refs",
+      "pinnedAt": "2026-09-05T17:52Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}
