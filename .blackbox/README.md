@@ -110,7 +110,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | [#830](830/) | cli: config-not-found Next names hejbro.config.ts even when --config pointed elsewhere | open | #840 | 0 | 0 (0 pending) |
 | [#831](831/) | cli: the directory-at-config-path refusal repeats the file name twice | open | #840 | 0 | 0 (0 pending) |
 | [#832](832/) | core: category-C keywords fail as argument names but are not refused; the stated class does not match the list | open | #833 | 0 | 0 (0 pending) |
-| [#836](836/) | status: a permission error on a real ledger reaches the user as a raw node-postgres object | open | #838 | 0 | 6 (1 pending) |
+| [#836](836/) | status: a permission error on a real ledger reaches the user as a raw node-postgres object | open | #838 | 0 | 7 (1 pending) |
 | [#837](837/) | raise --file with an absolute path is joined onto the cwd and dies with a raw ENOENT | open | #838 | 0 | 0 (0 pending) |
 | [#845](845/) | vendor: a table named fn or as is unreachable behind the client's own members | open | #849 #850 | 0 | 0 (0 pending) |
 | [#846](846/) | init/config paths round 2: read-side trailing separator, config ancestor order, nesting wording, dangling link on read, empty --config | open | #847 | 0 | 0 (0 pending) |
@@ -119,7 +119,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 
 ## Totals
 
-Owner decisions 80 · rulings 142 (interpretation 91, extension 49, stop 2) · pending extensions 11 · rejected 2
+Owner decisions 80 · rulings 143 (interpretation 92, extension 49, stop 2) · pending extensions 11 · rejected 2
 
 ## Conventions
 

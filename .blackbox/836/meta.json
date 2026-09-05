@@ -82,6 +82,20 @@
       "at": "2026-09-04T23:17Z",
       "title": "B2 clarification: the statement decides — a ledger that vanished at the in-transaction recheck is apply-ledger-unreadable, at the insert apply-ledger-unwritable; exit 2 and rollback either way",
       "ratified": null
+    },
+    {
+      "id": "R7",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R4",
+        "R5",
+        "R6",
+        "412/D13"
+      ],
+      "at": "2026-09-05T01:09Z",
+      "title": "ld (c) accepted at fde2aea0: re-review 6/6; role-name omission on dead connections stays; #870 filed; corpus to #714; PR by the lead",
+      "ratified": null
     }
   ],
   "work": [
