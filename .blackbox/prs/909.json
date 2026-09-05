@@ -3,11 +3,11 @@
   "number": 909,
   "ref": "quickstart-now/hejbro#909",
   "title": "feat(cli,neon): a driver factory in hejbro.config.ts for every db-connected command (#458)",
-  "head": "970af5a9bc5ba5c7d3280f86f452196da3ac4ca6",
+  "head": "905c937b237b645b2e8fe79d47cb52da8eecf8a4",
   "headRef": "feat-config-driver",
   "base": "dev",
   "merged": null,
-  "pinnedAt": "2026-09-05T11:34Z",
+  "pinnedAt": "2026-09-05T11:44Z",
   "refs": [
     {
       "path": ".changeset/add-config-driver.md",
@@ -107,7 +107,7 @@
     },
     {
       "path": "packages/cli/test/error-message.test.ts",
-      "blob": "122768f35741e76bb6fcef06a56e992e76d638fb"
+      "blob": "fd3396d9dd607e8e962462f3d27ddbc7dcfe3d84"
     },
     {
       "path": "packages/cli/test/import-command.test.ts",
