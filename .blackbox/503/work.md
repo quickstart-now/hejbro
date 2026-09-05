@@ -31,3 +31,10 @@ Each task carries its own mutation evidence. 1.1: deleting a family's row from `
 
 A repo-wide `check-types --continue` after 1.2a's own implementation found exactly one regression outside this piece's own files: `packages/core/test/query/select.test.ts:1058` incidentally unioned a `text` column with a `uuid` column while testing an unrelated order-by output-column guard; the pair is now refused by design, and the guard's column was swapped to a same-family one so its own coverage survives (R8). A 2.54x wall-clock reading that briefly stopped 1.2a turned out to be host load (concurrent pieces' own gates), not the rule: four isolated `tsc --extendedDiagnostics` conditions showed the family fold costs about 5.9% more instantiations than a pre-rule baseline, and the chain's own consumption of it costs about 2.5% more, both reproducible to the digit.
 
+<a id="w4"></a>
+## W4 — the two residual wildcard overstatements found by re-reading the delta
+
+_2026-09-05T21:01Z · per R13_
+
+A re-read of the delta's full text after R13's correction found two more sentences carrying the same overstatement -- both spoke of `"unknown"` as a pair the server is known to unify, which R13 itself disproved (`sql`1`` against `text` is accepted here and refused on postgres:17 with `42804`). The requirement's opening said "the pairs the server unifies are the same-family ones and any pair with `"unknown"` on either side"; scenario 3's WHEN said "the two branches' families for a key are the same, or either side's family is `"unknown"` -- the only pairs the server unifies". Both are corrected to speak of same-family pairs only: the opening now states `"unknown"` is accepted for the visibility reason, not because the server is known to unify it, and scenario 3's WHEN drops the `"unknown"` clause entirely -- that ground is now scenarios 2a and 2b's own. design.md's Q1 carried the identical overstatement ("Postgres types an untyped side against the other branch ... `"unknown"` on either side matches every family") and was corrected the same way.
+

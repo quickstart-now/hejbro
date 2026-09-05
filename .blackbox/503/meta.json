@@ -185,6 +185,15 @@
         "R9",
         "R10"
       ]
+    },
+    {
+      "id": "W4",
+      "at": "2026-09-05T21:01Z",
+      "title": "the two residual wildcard overstatements found by re-reading the delta",
+      "pr": null,
+      "decisions": [
+        "R13"
+      ]
     }
   ],
   "prs": [],
