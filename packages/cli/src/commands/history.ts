@@ -1,6 +1,10 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { parseBannerHashes, throwHejbroError } from "@hejbro/core";
+import {
+	parseBannerHashes,
+	parseBannerUpgradedFrom,
+	throwHejbroError,
+} from "@hejbro/core";
 import { defineCommand } from "citty";
 import { requireConfigFields } from "../config-required";
 import { fromHejbroError, renderDiagnostics } from "../diagnostics";
@@ -114,6 +118,7 @@ export const runHistory = async (
 				config.migrationsDir,
 				config.snapshotPath,
 				bannerCurrentHash,
+				parseBannerUpgradedFrom(fileContent),
 				addedCommits,
 				fileName,
 			);

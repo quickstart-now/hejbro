@@ -97,6 +97,13 @@
       "title": "1.4: hejbro upgrade — check:next-marker forced error-construction sharing, not just message sharing",
       "pr": null,
       "decisions": []
+    },
+    {
+      "id": "W8",
+      "at": "2026-09-05T08:50Z",
+      "title": "1.5: history and restore resolve an upgraded tip",
+      "pr": null,
+      "decisions": []
     }
   ],
   "prs": [],
