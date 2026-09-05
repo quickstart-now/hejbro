@@ -173,6 +173,8 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#873](873/) | import: a foreign key referencing an omitted column makes the starter declaration fail to load | open | #878 | 0 | 0 (0 pending) |
 | ↳ [#874](874/) | loss report: sortedBy uses localeCompare, so import/pull output order depends on the locale | open | #878 | 0 | 0 (0 pending) |
 | ↳ [#875](875/) | config: an unreadable configuration file is reported as config-load-failed with import advice | open | #876 | 0 | 0 (0 pending) |
+| ↳ [#891](891/) | query: one exported statement-name helper for every driver that prepares | open |  | 0 | 0 (0 pending) |
+| ↳ [#892](892/) | pg driver: a multi-command sql text resolves to undefined rows | open |  | 0 | 0 (0 pending) |
 | ↳ [#899](899/) | core: a view created after a schema-wide table grant is never granted by the chain | closed | #900 | 0 | 0 (0 pending) |
 | [#834](834/) | skills: the bare npx skills add still installs the seven internal .claude/skills — metadata.internal hides them (measured on skills 1.5.23) | closed | #888 | 0 | 0 (0 pending) |
 
