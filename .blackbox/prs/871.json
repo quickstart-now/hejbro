@@ -1,0 +1,137 @@
+{
+  "version": 3,
+  "number": 871,
+  "ref": "quickstart-now/hejbro#871",
+  "title": "fix(cli,pg): a failure the ledger owns is attributed to the ledger (#836, #823, #864)",
+  "head": "a74924ba29783fc1764152194a21d7dfd0301322",
+  "headRef": "fix-ledger-diagnostics",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-05T01:18Z",
+  "refs": [
+    {
+      "path": ".changeset/harden-ledger-diagnostics.md",
+      "blob": "9b8a51ebb4cf6a3fee6703f3054c7729dbd035e0"
+    },
+    {
+      "path": "README.md",
+      "blob": "c34d4bd0790115b9fba8c36c2849e78eb455d596"
+    },
+    {
+      "path": "openspec/changes/harden-ledger-diagnostics/design.md",
+      "blob": "37ba5d46bf23386889b14c9f180ed585a0e66fd0"
+    },
+    {
+      "path": "openspec/changes/harden-ledger-diagnostics/proposal.md",
+      "blob": "fbd858334c61a7cbc2aee93e4a37f14d556ab78d"
+    },
+    {
+      "path": "openspec/changes/harden-ledger-diagnostics/specs/migration-apply/spec.md",
+      "blob": "37bba88ebaf7086be787bde3c233357c7d30273d"
+    },
+    {
+      "path": "openspec/changes/harden-ledger-diagnostics/tasks.md",
+      "blob": "ab4c568286c82ae740dd856354ff41b1a297f813"
+    },
+    {
+      "path": "openspec/task-times.csv",
+      "blob": "e05228fda4c216603e9152061a0d9e5311bbd443"
+    },
+    {
+      "path": "packages/cli/src/apply/execute.ts",
+      "blob": "ffcbdf8808777b480f55387d957ed9380210667c"
+    },
+    {
+      "path": "packages/cli/src/apply/ledger-diagnostics.ts",
+      "blob": "12d4c2dc1d53e49a30522f3f9557498da55c6acd"
+    },
+    {
+      "path": "packages/cli/src/apply/ledger-identity.ts",
+      "blob": "2833913beddb52600adecc9e32eb8936953e4d66"
+    },
+    {
+      "path": "packages/cli/src/apply/ledger.ts",
+      "blob": "0c13fe6421599ed3384113e66a8c8d787c4197dd"
+    },
+    {
+      "path": "packages/cli/src/apply/raise.ts",
+      "blob": "09d2a169785509c57f017e3e8ae457bcde7a5e14"
+    },
+    {
+      "path": "packages/cli/src/apply/reset.ts",
+      "blob": "ae8959826548e029cff514be7f2a93e722c56814"
+    },
+    {
+      "path": "packages/cli/src/commands/migrate.ts",
+      "blob": "bc39ab00c80f54c6ee91d79efc9014f68b829430"
+    },
+    {
+      "path": "packages/cli/src/commands/raise.ts",
+      "blob": "f822f10514e272ba2995d37dbb1788a42f980bba"
+    },
+    {
+      "path": "packages/cli/src/commands/reset.ts",
+      "blob": "7f25b84a1ce9bcfcd7e12e347f1c3a96b8328e03"
+    },
+    {
+      "path": "packages/cli/src/commands/status.ts",
+      "blob": "6a07cd4ff8d1bc744d160f198dfdd46db1ed9d41"
+    },
+    {
+      "path": "packages/cli/test/apply-execute.test.ts",
+      "blob": "81e7207c34c9806ad9c7abc32091a24213158bf5"
+    },
+    {
+      "path": "packages/cli/test/apply-ledger-diagnostics.integration.test.ts",
+      "blob": "9ae979bf9e6026b36cffe59c5bf16d8d44ae3563"
+    },
+    {
+      "path": "packages/cli/test/apply-ledger-diagnostics.test.ts",
+      "blob": "04c7f8f7ff9a1b758a70704a6de2f87a8bd10654"
+    },
+    {
+      "path": "packages/cli/test/apply-ledger-identity.test.ts",
+      "blob": "4625472e118264ca02860eb22d9cb0837a88aeaf"
+    },
+    {
+      "path": "packages/cli/test/apply-ledger.test.ts",
+      "blob": "53e78d1b40637a7d4b68fc7cdebab620062247e1"
+    },
+    {
+      "path": "packages/cli/test/apply-raise.test.ts",
+      "blob": "b505fd65db85dcdd076cc379dccbfc281231cf79"
+    },
+    {
+      "path": "packages/cli/test/apply-reset.test.ts",
+      "blob": "a244eeecdb1c93f5b6858098aff456d7789e24ac"
+    },
+    {
+      "path": "packages/cli/test/migrate-command.test.ts",
+      "blob": "6538594fbf2d5ff766c4ac227a74606cf897a332"
+    },
+    {
+      "path": "packages/cli/test/raise-command.test.ts",
+      "blob": "3381a87c1d611e224e1d01de10978e00feb62c54"
+    },
+    {
+      "path": "packages/cli/test/reset-command.test.ts",
+      "blob": "f13a6bd1caf8ab5d1c8cd25733fba29addcbd4c9"
+    },
+    {
+      "path": "packages/cli/test/status-command.test.ts",
+      "blob": "22bcbe8a033e33f1d93d5402e651ac7934e19ed7"
+    },
+    {
+      "path": "packages/pg/src/driver.ts",
+      "blob": "4141c0a419949f8a31966def4de2b3f179a3113e"
+    },
+    {
+      "path": "packages/pg/test/driver.test.ts",
+      "blob": "08517f5dc0ad251f76fc74c3d00cd7ccb77cae3e"
+    },
+    {
+      "path": "skills/hejbro/references/generate-verify-workflow.md",
+      "blob": "cd0989a7e0bbcf52b73ae3fcac642f710a8919c0"
+    }
+  ]
+}

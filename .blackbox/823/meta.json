@@ -4,9 +4,9 @@
   "ref": "quickstart-now/hejbro#823",
   "title": "migrate: a failed ledger insert is reported as the migration's failure",
   "parent": "quickstart-now/hejbro#815",
-  "status": "open",
+  "status": "closed",
   "opened": "2026-09-04",
-  "closed": null,
+  "closed": "2026-09-05",
   "decisions": [
     {
       "id": "R1",
@@ -48,6 +48,11 @@
       "number": 835,
       "role": "refs",
       "pinnedAt": "2026-09-04T15:04Z"
+    },
+    {
+      "number": 871,
+      "role": "closes",
+      "pinnedAt": "2026-09-05T01:18Z"
     }
   ],
   "origin": null,
