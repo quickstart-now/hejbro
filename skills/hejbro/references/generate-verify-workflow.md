@@ -295,6 +295,19 @@ every object the declarations manage, but its report says so: "There was
 no hejbro ledger to clear" rather than claiming a clear that never
 happened.
 
+`hejbro migrate` also compares an already-applied migration's body
+against what the ledger recorded when it was applied — not a chain-hash
+check (`hejbro verify`'s own job, which never sees a body edit), but a
+byte-for-byte comparison of the SQL below its banner. A file the ledger
+recorded whose body on disk no longer matches surfaces as the coded
+`apply-migration-body-changed` error before anything pending is sent,
+naming every such file with the checksum the ledger holds and the
+checksum on disk now, each abbreviated to twelve hex digits. A row
+recorded before this checksum column existed carries none and is never
+compared. The remedy: restore the file from version control, or, if the
+edit was deliberate, write it as a new migration — hejbro never rewrites
+applied history.
+
 ## When an apply step fails partway through
 
 `hejbro migrate` (D12, amended — applying is now hejbro's own command

@@ -1,6 +1,6 @@
 import { hejbroError, throwHejbroError } from "@hejbro/core";
 import type { CompileResult, Driver } from "@hejbro/query";
-import type { LedgerOrigin } from "./ledger";
+import type { LedgerOrigin, LedgerRow } from "./ledger";
 import {
 	asLedgerAccessFailure,
 	bodyChecksum,
@@ -437,4 +437,83 @@ export const applyMigration = async (
 		}
 		return throwApplyFailure(migration.fileName, nextCommand, error);
 	}
+};
+
+/** [task 1.3, 631/R9] One recorded file whose disk body no longer matches the checksum the ledger holds. */
+export type ChangedBody = {
+	readonly filename: string;
+	readonly recordedChecksum: string;
+	readonly diskChecksum: string;
+};
+
+/**
+ * [task 1.3, 631/R9] Pure -- no filesystem, `bodiesOnDisk` (filename ->
+ * full file text) already read by the caller, honouring this module's own
+ * "touches no filesystem" contract. Shared by `migrate.ts` and (task 1.4)
+ * `status.ts`, so the comparison is made once, not twice.
+ *
+ * `origin !== "raised"` is checked here, not left to the caller building
+ * `bodiesOnDisk`, because two callers build that map (`migrate.ts` and
+ * `status.ts`) and the rule belongs in the one place both reach, the same
+ * reasoning `plan.ts`'s own `chainLinkedFileNames` already applies at its
+ * own call site. A raised row's filename is never a chain entry, so it
+ * would almost never collide with a key in `bodiesOnDisk` regardless --
+ * this is the structural guarantee, not a redundant belt.
+ */
+export const changedBodies = (
+	rows: ReadonlyArray<LedgerRow>,
+	bodiesOnDisk: ReadonlyMap<string, string>,
+): ReadonlyArray<ChangedBody> =>
+	rows.flatMap((row) => {
+		if (row.checksum === null) {
+			return [];
+		}
+		if (row.origin === "raised") {
+			return [];
+		}
+		// [lead, 631/R9] Unreachable from `migrate`: its own `bodiesOnDisk`
+		// only ever contains chain files present on disk, and a recorded
+		// filename absent from the chain is already refused by `planApply`
+		// as `apply-ledger-orphan-row` before this function is ever called.
+		// The caller that does reach this branch is `status` (task 1.4),
+		// which reports disagreements instead of refusing and so keeps
+		// going, passing a row whose filename is genuinely absent from its
+		// own map.
+		const diskBody = bodiesOnDisk.get(row.filename);
+		if (diskBody === undefined) {
+			return [];
+		}
+		const diskChecksum = bodyChecksum(diskBody);
+		if (diskChecksum === row.checksum) {
+			return [];
+		}
+		return [
+			{
+				filename: row.filename,
+				recordedChecksum: row.checksum,
+				diskChecksum,
+			},
+		];
+	});
+
+/**
+ * [task 1.3, 631/R9] Refuses with `apply-migration-body-changed`, naming
+ * every changed file with both checksums abbreviated to twelve hex
+ * digits -- the template lives inline at this throw site, in the same
+ * file as {@link changedBodies}, so `check:next-marker` (a same-file
+ * `const` or a literal only) can read the `Next:` line back.
+ */
+export const throwMigrationBodyChanged = (
+	findings: ReadonlyArray<ChangedBody>,
+): never => {
+	const list = findings
+		.map(
+			(finding) =>
+				`"${finding.filename}" (recorded ${finding.recordedChecksum.slice(0, 12)}, on disk ${finding.diskChecksum.slice(0, 12)})`,
+		)
+		.join(", ");
+	throwHejbroError(
+		"apply-migration-body-changed",
+		`the body of a recorded migration changed after it was applied: ${list}. Nothing was applied: a migration sent on top of a body that differs from what ran would build on a history this repository no longer holds. Next: restore the file from version control, or, if the change was deliberate, write it as a new migration -- hejbro never rewrites applied history -- then rerun \`hejbro migrate\`.`,
+	);
 };
