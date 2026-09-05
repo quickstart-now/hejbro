@@ -634,6 +634,10 @@ pinned or ratified, any addition is a new R# with the old one as basis
 append-only begins. Basis: 500/R2's O1c rejection (commit 5ab173cd),
 412/D24; owner ratification pending.
 
+After any manual renumbering, verify the id the next `add` prints
+before committing: the tool numbers by entry count (#943), so a gap
+yields a duplicate.
+
 <a id="r35"></a>
 ## R35 — No git stash inside a worktree: the stash stack is shared by every worktree of the repository
 
