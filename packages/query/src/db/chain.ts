@@ -52,6 +52,7 @@ import type {
 import type { ReturningRow } from "../types/returning";
 import type { SelectResult } from "../types/select-result";
 import type { SetOpResult } from "../types/set-op";
+import type { ChainProjectionBrand } from "./chain-projection";
 import type { Declarations } from "./db";
 import { executeOn } from "./execute";
 import { buildRelatedProjection } from "./related";
@@ -104,7 +105,8 @@ export type SelectChainLimited<
 	compile(): CompileResult;
 	/** The underlying statement — runtime surface a combinator on ANOTHER chain reads to take this side as a branch. */
 	readonly selectQuery: SelectNode;
-} & SetOpChainCombinators<SelectResult<TProjection, TLeftJoined>>;
+} & SetOpChainCombinators<SelectResult<TProjection, TLeftJoined>> &
+	ChainProjectionBrand<TProjection>;
 
 export type SelectChainOrdered<
 	TProjection extends SelectProjection = SelectProjection,
@@ -686,7 +688,10 @@ type CompatibleBranch<TRow, TOther> = [SetOpResult<TRow, TOther>] extends [
 	? never
 	: unknown;
 
-export type SelectChainSetOp<TRow> = ChainTerminal<TRow> & {
+export type SelectChainSetOp<
+	TRow,
+	TProjection extends SelectProjection = SelectProjection,
+> = ChainTerminal<TRow> & {
 	readonly setOpQuery: SetOpNode;
 	union<TOther>(
 		other: SetOpChainBranch<TOther> & CompatibleBranch<TRow, TOther>,
@@ -708,7 +713,7 @@ export type SelectChainSetOp<TRow> = ChainTerminal<TRow> & {
 	): SelectChainSetOp<SetOpResult<TRow, TOther>>;
 	orderBy(...terms: ReadonlyArray<OrderTermInput>): SelectChainSetOp<TRow>;
 	limit(count: number): SelectChainSetOp<TRow>;
-};
+} & ChainProjectionBrand<TProjection>;
 
 /** What a chain combinator accepts as its other side: any select chain stage (whole-table or object projection) or a prior chain combination — anything carrying the underlying statement. */
 export type SetOpChainBranch<TRow> = PromiseLike<ReadonlyArray<TRow>>;

@@ -22,13 +22,16 @@ import type {
 	SelectChainJoinable,
 	SelectChainLimited,
 	SelectChainRelated,
+	SelectChainSetOp,
 	UpdateChainFilterable,
 	UpdateChainFinal,
 	UpdateChainReturnable,
 } from "../../src/db/chain";
+import { chainProjectionBrand } from "../../src/db/chain-projection";
 import type { db, ExecuteResult } from "../../src/db/db";
 import type { Tx } from "../../src/db/transaction";
 import type { SqlExpr } from "../../src/sql";
+import type { SelectResult } from "../../src/types/select-result";
 
 const app = schema("app");
 const posts = table(app, "posts", {
@@ -453,5 +456,30 @@ describe("the handle's retained schema keeps the module's own type (task 1.3, ex
 		expectTypeOf<
 			ReturnType<typeof db<typeof appModule>>["schema"]
 		>().toEqualTypeOf<typeof appModule>();
+	});
+});
+
+// Extracts exactly the branded property, never the whole stage type -- a
+// whole-stage comparison passes vacuously regardless of whether the
+// carrier actually works (measured trap, select-join-types.test.ts's own
+// doc comment for the identical leftJoinedBrand shape).
+type ChainProjectionOf<T> = T extends {
+	readonly [chainProjectionBrand]?: infer TProjection;
+}
+	? NonNullable<TProjection>
+	: never;
+
+describe("the chain stage carries its own projection as a phantom brand (task 1.2b, 503/R9)", () => {
+	it("SelectChainLimited's own brand is exactly its own TProjection", () => {
+		expectTypeOf<
+			ChainProjectionOf<SelectChainLimited<Posts>>
+		>().toEqualTypeOf<Posts>();
+	});
+
+	it("a combined SelectChainSetOp stage still carries the left branch's own projection", () => {
+		type Row = SelectResult<Posts>;
+		expectTypeOf<
+			ChainProjectionOf<SelectChainSetOp<Row, Posts>>
+		>().toEqualTypeOf<Posts>();
 	});
 });

@@ -56,7 +56,7 @@ planner, not into the diff.
       table reddens exactly that family's same-family rows and nothing
       else. Files: `select.ts`, `with.ts`, core tests.
 
-- [ ] 1.2b (~10m) **[design]** The chain's projection carrier (503/R7,
+- [x] 1.2b (~10m) **[design]** The chain's projection carrier (503/R7,
       503/R9). `SelectChainLimited` and `SelectChainSetOp` gain an
       optional phantom `{ readonly [chainProjectionBrand]?: TProjection }`
       — never assigned at runtime, the `leftJoinedBrand` precedent —
