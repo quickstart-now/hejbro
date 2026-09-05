@@ -83,6 +83,46 @@ const assertKnownEndpoint = (endpoint: string): void => {
 };
 
 /**
+ * Builds and throws the `prepared-statements-without-session`-coded,
+ * enriched plain `Error` (D57, add-prepared-statements design Q5): a
+ * base driver that names its own built statements cannot be wrapped by
+ * a path that keeps no session between transactions -- a name prepared
+ * on one backend may be bound on another, where it does not exist,
+ * surfacing only later as the server's own error. Names both remedies
+ * in the `Next:` line, mirroring {@link throwUnknownPoolerMode}'s shape.
+ */
+function throwPreparedStatementsWithoutSession(
+	endpoint: SupabaseDriverEndpoint,
+): never {
+	throw Object.assign(
+		new Error(
+			`the base driver passed to supabaseDriver declares "prepared-statements": true, but the "${endpoint}" endpoint keeps no session between transactions -- a statement prepared on one backend may be bound on another, where it does not exist. Next: build the base driver without preparedStatements, or use the "session" endpoint.`,
+		),
+		{ code: "prepared-statements-without-session" },
+	);
+}
+
+/**
+ * Refused once, at construction, before {@link applyEndpoint} ever runs
+ * (add-prepared-statements design Q5): the transaction-pooler path
+ * cannot carry a prepared statement across the backends it hands out
+ * between transactions, so a base that declares `prepared-statements:
+ * true` is refused here rather than left to fail confusingly on a later
+ * execution. Opens no connection and sends nothing.
+ */
+const assertNoPreparingBaseOverPooler = (
+	driver: Driver,
+	endpoint: SupabaseDriverEndpoint,
+): void => {
+	if (
+		endpoint === "transaction-pooler" &&
+		driver.capabilities["prepared-statements"]
+	) {
+		throwPreparedStatementsWithoutSession(endpoint);
+	}
+};
+
+/**
  * Resolves `driver` for the declared `endpoint` (task 2.1): the
  * transaction-pooler path is `poolerDriver`'s own capability
  * replacement and transaction-local pin wiring; `"session"` passes
@@ -128,6 +168,7 @@ export const supabaseDriver = (
 ): Driver => {
 	const endpoint = options?.endpoint ?? "session";
 	assertKnownEndpoint(endpoint);
+	assertNoPreparingBaseOverPooler(driver, endpoint);
 	return {
 		...applyEndpoint(driver, endpoint),
 		contributedRoles: [anonRole, authenticatedRole, serviceRole],

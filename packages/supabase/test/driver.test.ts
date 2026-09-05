@@ -4,7 +4,10 @@ import { db } from "@hejbro/query";
 import { assertSessionStateConformance } from "@hejbro/query/testing/driver-conformance";
 import { describe, expect, it, vi } from "vitest";
 import { asAnon, asUser } from "../src/context";
-import type { SupabaseDriverEndpoint } from "../src/driver";
+import type {
+	SupabaseDriverEndpoint,
+	SupabaseDriverOptions,
+} from "../src/driver";
 import { supabaseDriver } from "../src/driver";
 import { anonRole, authenticatedRole, serviceRole } from "../src/roles";
 
@@ -209,6 +212,72 @@ describe("supabaseDriver(driver, options) rejects an unrecognized endpoint value
 		expect(driver.transaction).not.toHaveBeenCalled();
 		expect(driver.setupSession).not.toHaveBeenCalled();
 	});
+});
+
+describe("the transaction-pooler endpoint refuses a base that prepares (task 1.4, #303)", () => {
+	const preparingDriver = (): Driver => ({
+		...fakeDriver(),
+		capabilities: {
+			"interactive-transactions": true,
+			"session-state": true,
+			"prepared-statements": true,
+		},
+	});
+
+	it("throws prepared-statements-without-session, naming the endpoint, with a Next: line -- the base is never called", () => {
+		const driver = preparingDriver();
+
+		try {
+			supabaseDriver(driver, { endpoint: "transaction-pooler" });
+			expect.unreachable(
+				"supabaseDriver should have thrown for a preparing base over the transaction-pooler endpoint",
+			);
+		} catch (error) {
+			expect(error).toHaveProperty(
+				"code",
+				"prepared-statements-without-session",
+			);
+			const message = (error as Error).message;
+			expect(message).toContain("transaction-pooler");
+			expect(message).toMatch(/Next:/);
+		}
+
+		expect(driver.execute).not.toHaveBeenCalled();
+		expect(driver.transaction).not.toHaveBeenCalled();
+		expect(driver.setupSession).not.toHaveBeenCalled();
+	});
+
+	it("a non-preparing base over the transaction-pooler endpoint still declares prepared-statements: false (regression control)", () => {
+		const wrapped = supabaseDriver(fakeDriver(), {
+			endpoint: "transaction-pooler",
+		});
+
+		expect(wrapped.capabilities).toEqual({
+			"interactive-transactions": true,
+			"session-state": false,
+			"prepared-statements": false,
+		});
+	});
+
+	it.each<[string, SupabaseDriverOptions | undefined]>([
+		["the session endpoint", { endpoint: "session" }],
+		["no endpoint stated", undefined],
+	])(
+		"%s over a preparing base passes the declaration through, true, and execute reaches the base",
+		async (_label, options) => {
+			const driver = preparingDriver();
+
+			const wrapped = supabaseDriver(driver, options);
+
+			expect(wrapped.capabilities).toEqual({
+				"interactive-transactions": true,
+				"session-state": true,
+				"prepared-statements": true,
+			});
+			await wrapped.execute({ sql: "select 1", params: [], kind: "select" });
+			expect(driver.execute).toHaveBeenCalledTimes(1);
+		},
+	);
 });
 
 describe("supabaseDriver(driver) conforms to the driver contract (#481, task 1.7)", () => {

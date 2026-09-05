@@ -46,6 +46,13 @@
       "title": "task 1.3: neonDriver prepares on request on its Pool path",
       "pr": null,
       "decisions": []
+    },
+    {
+      "id": "W4",
+      "at": "2026-09-05T05:03Z",
+      "title": "task 1.4: transaction-pooler path refuses a preparing base",
+      "pr": null,
+      "decisions": []
     }
   ],
   "prs": [],

@@ -65,3 +65,28 @@ implementing the option. Full gate green: TURBO_FORCE=1 pnpm
 check-types (18/18), pnpm check, pnpm check:bans, TURBO_FORCE=1 pnpm
 test (all packages passing, @hejbro/neon 53/53, no regressions).
 
+<a id="w4"></a>
+## W4 — task 1.4: transaction-pooler path refuses a preparing base
+
+_2026-09-05T05:03Z_
+
+supabaseDriver's "transaction-pooler" endpoint now refuses a base
+driver that declares prepared-statements:true at construction, coded
+prepared-statements-without-session, message naming the endpoint and
+a Next: line naming both remedies (build the base without
+preparedStatements, or use "session"). Checked once alongside
+assertKnownEndpoint, before poolerDriver ever wraps anything -- opens
+no connection, sends nothing. The session endpoint (or no endpoint)
+already passed the base's declaration through unchanged (applyEndpoint
+returns the base as-is), so no separate wiring was needed for that
+half of the table. pooler.ts's own CAPABILITIES already carried
+"prepared-statements": false from task 1.1's mechanical pass.
+
+RED: packages/supabase/test/driver.test.ts's new describe -- 1 failure
+(the refusal case) against the unmodified driver.ts, the other two
+table rows already passing incidentally (regression control + session
+passthrough) since nothing yet contradicted them. GREEN: 15/15 in this
+file. Full gate green: TURBO_FORCE=1 pnpm check-types (18/18), pnpm
+check, pnpm check:bans, TURBO_FORCE=1 pnpm test (all packages passing,
+@hejbro/supabase 145/145, no regressions).
+
