@@ -77,6 +77,13 @@
       "title": "group 1 closes: references() takes referential actions, parity through diff and rename, example converts",
       "pr": null,
       "decisions": []
+    },
+    {
+      "id": "W2",
+      "at": "2026-09-05T17:50Z",
+      "title": "review outcome: b1 repeated references() fix, n1 cheatsheet restore, n2-n4 dispositioned",
+      "pr": null,
+      "decisions": []
     }
   ],
   "prs": [],

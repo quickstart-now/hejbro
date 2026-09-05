@@ -71,3 +71,49 @@ Observed, not fixed (outside this piece's scope):
   bumps mtimes even when content is unchanged); `pnpm build --force`
   resolved it, matching the repository's own documented pitfall.
 
+<a id="w2"></a>
+## W2 — review outcome: b1 repeated references() fix, n1 cheatsheet restore, n2-n4 dispositioned
+
+_2026-09-05T17:50Z_
+
+Review outcome for group 1 (add-references-actions): B1 (must-fix), N1
+(should-fix), N2/N3/N4 (no action inside this piece).
+
+Review scale (the reviewer's own real-server reproduction, cited so this
+entry does not repeat the reasoning): 117 input rows, 72 real-server
+applications, 69 `pg_constraint` catalog comparisons with zero
+mismatches, and 36 form-conversion rows all `hasChanges: false`.
+
+B1: a repeated `.references()` call on one column leaked the first
+call's referential actions onto the second call's target. Root cause:
+`referenceActionsField(undefined)` in `column-builder.ts` returned an
+absent key rather than clearing the slot, so a second call without its
+own `actions` argument left the first call's `referenceActions` value in
+place while `references` (the target thunk) was correctly overwritten --
+target and actions disagreed on which call "won". Ruling 514/R6: a
+`.references()` call replaces the reference as a whole, target and
+actions together; the slot is now written to `null` explicitly whenever
+`actions` is absent, and the now-dead `referenceActionsField` helper was
+removed. Two new red rows in `references-actions.test.ts` pin it: a
+second call without actions clears the first call's action, and a second
+call with different actions keeps only the second's -- both compared
+byte-for-byte against the equivalent `extras` declaration.
+
+N4 (no action): the reviewer judged the type-only import cycle between
+`column-builder.ts` and `dsl/table.ts` (both directions `import type`)
+safe -- erased before emit, so no runtime edge exists, and the direction
+matches an existing precedent elsewhere in the same package.
+
+Reviewer self-report: running `pnpm test` (backgrounded) and
+`check:crap` at the same time in the same worktree produced 55 failures
+from a missing `dist/cli.js` (`test:coverage` and `check:crap`'s own
+`turbo run test:coverage` raced each other's build step); a serial rerun
+was a clean exit 0 -- the same class of self-interference #102 already
+documents for concurrent gates in one worktree.
+
+Out of scope, filed for the lead to register under #815 on return: N2
+(no runtime validation of an action string on the column form -- parity
+with `extras`, which validates only at the type level too) and N3 (a
+derived foreign-key name silently truncates past 63 bytes, undocumented
+either form).
+
