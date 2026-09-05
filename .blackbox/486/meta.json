@@ -34,6 +34,19 @@
       "at": "2026-09-05T08:29Z",
       "title": "#891 (one exported name helper) and #892 (multi-command text = last command's rows) fold into add-batched-transactions",
       "ratified": null
+    },
+    {
+      "id": "R3",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "412/D24",
+        "D25; 486/R1",
+        "R2; bt (a) report (tasks.md named files that do not exist; scopedRun's session-shaped callback; SETUP_SESSION_SQL is itself a multi-command text)"
+      ],
+      "at": "2026-09-05T11:20Z",
+      "title": "Kick-off rulings: existing error/test files, an any-of assertCapability with an N-key message, a batch-per-execute session inside context.ts, and 1.2 deferred until #458 lands",
+      "ratified": null
     }
   ],
   "work": [],

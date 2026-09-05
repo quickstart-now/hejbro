@@ -16,3 +16,10 @@ _lead · extension · basis 412/D24, D25; same files (driver contract, pg, neon)
 
 Tasks 1.5/1.6 added; driver-contract ADDED requirements for the helper export and the last-command rule. Ratification: owner on return.
 
+<a id="r3"></a>
+## R3 — Kick-off rulings: existing error/test files, an any-of assertCapability with an N-key message, a batch-per-execute session inside context.ts, and 1.2 deferred until #458 lands
+
+_lead · interpretation · basis 412/D24, D25; 486/R1, R2; bt (a) report (tasks.md named files that do not exist; scopedRun's session-shaped callback; SETUP_SESSION_SQL is itself a multi-command text) · 2026-09-05T11:20Z · ratified: pending_
+
+Q1 the lead's file names were shorthand — errors.ts and test/driver/{contract,errors}.test.ts are the files, tasks.md corrected in place. Q2 assertCapability takes keys (any-of), single-key message byte-identical, multi-key message in the N-general form, error gains a `capabilities` field. Q3 the batched path hands `send` a batch-per-execute session so the change stays inside context.ts; the one-statement invariant is pinned. Q5 order 1.1 → 1.3 → 1.5 → 1.6 → 1.2 → 1.4, neon untouched until PR #909 merges and the lead rebases. Ratification: owner on return.
+
