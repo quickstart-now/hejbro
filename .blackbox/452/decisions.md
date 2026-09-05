@@ -23,3 +23,10 @@ _lead · interpretation · basis 452/R2 (b); av-reviewer's measurement (a constr
 
 Ratified: the scenario WHEN reads "every aggregate and window constructor the builder's own defining modules export -- each one checked to reach the public surface -- is invoked …". The reverse (enumerate the barrel) is not mechanically derivable without the hand list 1.1 removed. Same nature as R2: no code moves, the sentence matches what is measured. Ratification: owner on return.
 
+<a id="r4"></a>
+## R4 — D106 R1 for harden-aggregate-vocabulary: B1/N5/OK11 — B1 repaired in the archive; N1 N2 restated; N3 N4 filed; N5 by design
+
+_lead · extension · basis D106; 412/D24, D25; evaluation.md (fable, context-free, postgres 17.11) · 2026-09-05T09:35Z · ratified: pending_
+
+B1 (a nested read projected inside a CTE body arrived as the cast's text): the converter's CTE column resolution carried only a scalar state and dropped the entry's nested plan — `ctePlanEntry` now carries it through (patch changeset, with.test.ts). N1: the delta and query-layer.md state the nested vs top-level arrival of sum/avg (JSON number nested, text at top level). N2: the doc's percentRank/cumeDist/ntile rows carry the union type. N3 → #904 (bigserial outside the at-risk cast), N4 → #905 (coalesce and siblings pass an at-risk argument through). N5 (BUILDER_READ_SHAPES core-only) is the delta's own "owned by the core"; no action. Archived as 2026-09-05-harden-aggregate-vocabulary. Ratification: owner on return.
+

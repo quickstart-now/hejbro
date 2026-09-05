@@ -1029,11 +1029,11 @@ What each window function reads back as:
 | function | type | why |
 |---|---|---|
 | `rowNumber()` / `rank()` / `denseRank()` | `bigint` | Postgres's own return type is `int8`, converted like `count()` above |
-| `percentRank()` / `cumeDist()` | `number` | `float8`, arrives already as a JS number, no conversion needed |
-| `ntile(buckets)` | `number` | `int4`, same reasoning |
+| `percentRank()` / `cumeDist()` | `string \| number \| bigint \| null` (the runtime value is a JS number) | `float8`, arrives already as a JS number, no conversion — the type is the vocabulary's "own shape" union, not narrowed to `number` |
+| `ntile(buckets)` | `string \| number \| bigint \| null` (the runtime value is a JS number) | `int4`, same reasoning |
 | `lag(x)` / `lead(x)` / `firstValue(x)` / `lastValue(x)` / `nthValue(x, n)` | `x`'s own declared type | they return their argument's type unchanged, exactly like `min`/`max` above |
 | `count()` wrapped in `over(...)` | `bigint` | same conversion as plain `count()` — `over()` only adds a window clause |
-| `sum(x)` / `avg(x)` wrapped in `over(...)` | `number \| bigint \| string` | **exactly the same as plain `sum`/`avg` above, conversion included** — Postgres's promotion rule depends on the argument's exact type, not on whether a window clause is attached, so a windowed running total over a `bigint` column arrives as the *text* Postgres sends for `numeric` (e.g. `"35"`), not a `bigint`. This is easy to mistake for a bug the first time a running total prints a string instead of a number; it isn't one — narrow it yourself with a cast in a `sql` fragment when you need to, same as the plain form |
+| `sum(x)` / `avg(x)` wrapped in `over(...)` | `number \| bigint \| string` | **exactly the same as plain `sum`/`avg` above, conversion included** — Postgres's promotion rule depends on the argument's exact type, not on whether a window clause is attached, so a windowed running total over a `bigint` column arrives as the *text* Postgres sends for `numeric` (e.g. `"35"`), not a `bigint`. This is easy to mistake for a bug the first time a running total prints a string instead of a number; it isn't one — narrow it yourself with a cast in a `sql` fragment when you need to, same as the plain form | Inside a nested read the cell is the JSON number Postgres serializes (a `sum` past 2^53 is not exact there); the `"35"`-style text is the top-level arrival.
 
 `where`/`groupBy`/`having`, an aggregate's own argument, and the six
 declaration sites that store an expression (a column default, a generated

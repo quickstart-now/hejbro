@@ -169,31 +169,32 @@ const leftmostQuery = (query: SelectNode | SetOpNode): SelectNode => {
  * CTE, so this composes with {@link columnPlanFromProjection}'s own
  * recursion rather than duplicating it.
  */
-const cteColumnState = (
+const ctePlanEntry = (
 	cteName: string,
 	columnName: string,
 	tables: Declarations["tables"],
 	cteQueryByName: CteQueryByName,
-): ColumnState | undefined => {
-	// An unresolved cteName here is unreachable, not silently tolerated:
-	// render already rejects a reference to an undeclared CTE upstream
-	// (task 1.3c), and the builder can't construct one either -- `w.as`
-	// only ever hands out a reference to an entry already bound by a JS
-	// `const` (TDZ), so there is no code path that reaches this branch
-	// with a name `cteQueryByName` doesn't carry.
+): ColumnPlanEntry | undefined => {
 	const entryQuery = cteQueryByName.get(cteName);
 	if (entryQuery === undefined) {
 		return undefined;
 	}
 	const leftmost = leftmostQuery(entryQuery);
-	const plan = columnPlanFromProjection(
+	return columnPlanFromProjection(
 		leftmost.projection,
 		leftmost.from,
 		tables,
 		cteQueryByName,
-	);
-	return plan.find((entry) => entry.alias === columnName)?.columnState;
+	).find((entry) => entry.alias === columnName);
 };
+
+const cteColumnState = (
+	cteName: string,
+	columnName: string,
+	tables: Declarations["tables"],
+	cteQueryByName: CteQueryByName,
+): ColumnState | undefined =>
+	ctePlanEntry(cteName, columnName, tables, cteQueryByName)?.columnState;
 
 /** The conversion state a passthrough aggregate borrows from its own argument. */
 const passthroughArgumentState = (
@@ -316,6 +317,27 @@ const projectionPlanEntry = (
 				),
 			},
 		};
+	}
+	// A CTE column that is itself a nested read carries the entry's own
+	// nested plan through (D106 R1 B1 of harden-aggregate-vocabulary): the
+	// cast happened inside the WITH body, so the revive must follow it out,
+	// or the cell arrives as the cast's text.
+	const inner = uncast(expr);
+	if (inner.nodeKind === "columnRef" && inner.schemaName === null) {
+		const entry = ctePlanEntry(
+			inner.tableName,
+			inner.columnName,
+			tables,
+			cteQueryByName,
+		);
+		if (entry?.nested !== undefined) {
+			return {
+				alias,
+				resultKey: resultKey ?? alias,
+				columnState: undefined,
+				nested: entry.nested,
+			};
+		}
 	}
 	return {
 		alias,
