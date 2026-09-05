@@ -274,6 +274,44 @@ const lastBatchRows = (
 	return last;
 };
 
+/** What `sendCompiled`'s own `throwQueryExecutionFailed` (`execute.ts`, task 4.5) enriches its `Error` with -- read back here (task 1.3b, #486/R9) to recover the caller's own `kind` and the driver's own raw `cause`, both already correct, without importing `execute.ts`'s private builder. */
+type QueryExecutionFailedError = Error & {
+	readonly code: "query-execution-failed";
+	readonly kind: CompileResult["kind"];
+	readonly cause: unknown;
+};
+
+const isQueryExecutionFailedError = (
+	error: unknown,
+): error is QueryExecutionFailedError =>
+	error instanceof Error &&
+	(error as { code?: unknown }).code === "query-execution-failed";
+
+/**
+ * Builds and throws the batch-shaped `query-execution-failed` report
+ * (task 1.3b, #486/R9): `code` and `kind` stay what `sendCompiled` had
+ * already gotten right, `cause` is the driver's own rejection verbatim
+ * -- only the message changes, from a claim that the caller's own
+ * statement alone failed (false whenever a context statement was the
+ * actual cause) to naming the whole batch and admitting what a batch
+ * result cannot say: which member failed. `members` lists every
+ * statement actually sent, in order, so nothing known is withheld.
+ */
+const throwBatchExecutionFailed = (
+	members: ReadonlyArray<CompileResult>,
+	contextStatementCount: number,
+	kind: CompileResult["kind"],
+	cause: unknown,
+): never => {
+	const statementList = members.map((member) => member.sql).join("; ");
+	throw Object.assign(
+		new Error(
+			`query execution failed for a batch of ${contextStatementCount} context statements and this "${kind}" statement; the driver does not report which member failed. Statement: ${statementList}. Next: the driver's full error (fields like "detail" and "hint" included) is on "cause" -- this wrapper never retries or reinterprets it.`,
+		),
+		{ code: "query-execution-failed", kind, cause },
+	);
+};
+
 /**
  * Runs `send` on a single-`execute` session backed by one `driver.batch`
  * call (task 1.3, #486): the context's own statements ({@link
@@ -282,6 +320,15 @@ const lastBatchRows = (
  * implementation of the context-application sequence -- the batch path's
  * only difference from {@link applyContext}'s interactive path is where
  * the statements travel, not what they are or what order they're in.
+ *
+ * A driver rejection surfaces through `sendCompiled` first (task 4.5,
+ * `execute.ts`), already carrying the correct `kind`/`cause` but the
+ * wrong message (it names only `compiled`, the caller's own statement --
+ * task 1.3b, #486/R9: a context statement could equally have been the
+ * actual cause, and a batch result never says which). `sent` records the
+ * one statement this session's own `execute` actually received, so the
+ * catch below can rebuild the report naming the whole batch instead,
+ * without a second implementation of `sendCompiled`'s own enrichment.
  */
 const runContextInBatch = async <T>(
 	driver: Driver,
@@ -290,10 +337,26 @@ const runContextInBatch = async <T>(
 	send: (session: DriverSession) => Promise<T>,
 ): Promise<T> => {
 	const statements = contextStatements(driver, context, operation);
-	return send({
-		execute: async (compiled) =>
-			lastBatchRows(await driver.batch([...statements, compiled])),
-	});
+	const sent: Array<CompileResult> = [];
+	try {
+		return await send({
+			execute: async (compiled) => {
+				sent.push(compiled);
+				return lastBatchRows(await driver.batch([...statements, compiled]));
+			},
+		});
+	} catch (error) {
+		const callerStatement = sent[0];
+		if (callerStatement === undefined || !isQueryExecutionFailedError(error)) {
+			throw error;
+		}
+		return throwBatchExecutionFailed(
+			[...statements, callerStatement],
+			statements.length,
+			error.kind,
+			error.cause,
+		);
+	}
 };
 
 /**

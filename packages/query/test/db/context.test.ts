@@ -729,3 +729,101 @@ describe("the context runs in a batch when interactive transactions are absent (
 		expect(batchCalls[0]?.[0]?.sql).toBe('set local role "grant_reader"');
 	});
 });
+
+describe("a failing batch is reported as a batch (task 1.3b, #486, 486/R9)", () => {
+	it.each([
+		[
+			"a context statement fails",
+			new Error('role "grant_reader" does not exist'),
+		],
+		[
+			"the caller's own statement fails",
+			new Error('column "bad_col" does not exist'),
+		],
+	])(
+		"%s: the driver's rejection surfaces as one batch-shaped report, never a claim that only the caller's own statement failed",
+		async (_name, driverError) => {
+			const { driver } = recordingTransactionalDriver({
+				interactiveTransactions: false,
+				batchedTransactions: true,
+				batchImpl: async () => {
+					throw driverError;
+				},
+			});
+			const handle = db(appSchema, driver);
+
+			try {
+				await handle
+					.as({ role: roleName("grant_reader") })
+					.execute(select(posts));
+				expect.unreachable("execute should have rejected");
+			} catch (error) {
+				expect(error).toHaveProperty("code", "query-execution-failed");
+				expect(error).toHaveProperty("kind", "select");
+				expect(error).toHaveProperty("cause", driverError);
+				const message = (error as Error).message;
+				expect(message).toContain("a batch of 1 context statements");
+				expect(message).toContain('"select" statement');
+				expect(message).toContain(
+					"the driver does not report which member failed",
+				);
+				// every member is listed, in the order sent: the context
+				// statement first, then the caller's own.
+				expect(message).toContain('set local role "grant_reader"');
+				expect(message).toContain("posts");
+				expect(message.indexOf('set local role "grant_reader"')).toBeLessThan(
+					message.indexOf("posts"),
+				);
+				// the exact regression this reopens: no standalone claim that
+				// only the caller's own statement failed.
+				expect(message).not.toMatch(
+					/^query execution failed for this "select" statement:/,
+				);
+			}
+		},
+	);
+
+	it("the interactive path is unchanged: a failing context statement still names only that one statement (regression guard)", async () => {
+		const roleFailure = new Error('role "grant_reader" does not exist');
+		const driver: Driver = {
+			capabilities: {
+				"interactive-transactions": true,
+				"session-state": true,
+				"prepared-statements": false,
+				"batched-transactions": false,
+			},
+			execute: vi.fn(async () => []),
+			transaction: vi.fn(async (callback) => {
+				const session: DriverSession = {
+					execute: vi.fn(async () => {
+						throw roleFailure;
+					}),
+				};
+				return callback(session);
+			}),
+			batch: vi.fn(async () => []),
+			setupSession: vi.fn(async () => {}),
+		};
+		const handle = db(appSchema, driver);
+
+		try {
+			await handle
+				.as({ role: roleName("grant_reader") })
+				.execute(select(posts));
+			expect.unreachable("execute should have rejected");
+		} catch (error) {
+			expect(error).toHaveProperty("code", "query-execution-failed");
+			// the role statement's own kind ("sql"), not the caller's -- the
+			// interactive path sends one statement at a time and knows
+			// exactly which one failed.
+			expect(error).toHaveProperty("kind", "sql");
+			expect(error).toHaveProperty("cause", roleFailure);
+			const message = (error as Error).message;
+			expect(message).toMatch(
+				/^query execution failed for this "sql" statement:/,
+			);
+			expect(message).toContain('set local role "grant_reader"');
+			expect(message).not.toContain("a batch of");
+		}
+	});
+});
