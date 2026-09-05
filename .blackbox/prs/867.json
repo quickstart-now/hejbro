@@ -3,15 +3,19 @@
   "number": 867,
   "ref": "quickstart-now/hejbro#867",
   "title": "chore(blackbox): migrate the record to meta v3, pins once per pr (#866)",
-  "head": "b502fbb9cf3762dedecc6d65f177717cdb3a5ce5",
+  "head": "5498f173acac7af8e14f181047c6c326c2e1b653",
   "headRef": "chore-blackbox-v3",
   "base": "dev",
   "merged": null,
-  "pinnedAt": "2026-09-05T00:23Z",
+  "pinnedAt": "2026-09-05T00:30Z",
   "refs": [
     {
       "path": "AGENTS.md",
       "blob": "21fbc74d23d6de5e02af4a0f0796384dc8d8ca6e"
+    },
+    {
+      "path": "biome.json",
+      "blob": "514cf33961de215de564eca301e1277e9213ef53"
     }
   ]
 }
