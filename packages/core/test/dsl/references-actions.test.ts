@@ -2,8 +2,21 @@ import { describe, expect, it } from "vitest";
 import { schema } from "../../src/dsl/schema";
 import type { ForeignKeyAction } from "../../src/dsl/table";
 import { foreignKeyActions, getTableMeta, table } from "../../src/dsl/table";
+import { diffSnapshots } from "../../src/engine/diff-engine";
 import { generateMigration } from "../../src/engine/generate";
-import { emptySnapshot } from "../../src/snapshot/snapshot";
+import { planRenames } from "../../src/engine/rename-plan";
+import { createDefaultRegistry } from "../../src/kind/registry";
+import {
+	asTableSnapshot,
+	foreignKeyOnDelete,
+	foreignKeyOnUpdate,
+} from "../../src/kinds/table-snapshot";
+import type { Snapshot } from "../../src/snapshot/snapshot";
+import {
+	buildSnapshot,
+	emptySnapshot,
+	renderSnapshot,
+} from "../../src/snapshot/snapshot";
 import { uuid } from "../../src/types/column-builder-factories";
 
 type ActionsInput = {
@@ -137,6 +150,229 @@ describe("column-level references() actions emit identically to extras (add-refe
 			});
 			assertByteIdentical(viaColumn, viaExtras);
 			assertClausePresence(viaColumn.sql, undefined);
+		},
+	);
+});
+
+describe("column-level references() action changes diff identically to extras (add-references-actions task 1.2)", () => {
+	const actionStates: ReadonlyArray<ForeignKeyAction | undefined> = [
+		...foreignKeyActions,
+		undefined,
+	];
+
+	/** All ordered pairs of distinct states -- `states.length * (states.length - 1)`, never a same-to-same "change" (D110: the input table is every state transition a real edit can produce, not one example). */
+	const orderedDistinctPairs = <T>(
+		states: ReadonlyArray<T>,
+	): ReadonlyArray<{ readonly from: T; readonly to: T }> =>
+		states.flatMap((from) =>
+			states.filter((to) => to !== from).map((to) => ({ from, to })),
+		);
+
+	const actionsFor = (
+		key: "onDelete" | "onUpdate",
+		value: ForeignKeyAction | undefined,
+	): ActionsInput | undefined => {
+		if (value === undefined) {
+			return undefined;
+		}
+		if (key === "onDelete") {
+			return { onDelete: value };
+		}
+		return { onUpdate: value };
+	};
+
+	const describeState = (value: ForeignKeyAction | undefined): string => {
+		if (value === undefined) {
+			return "none";
+		}
+		return value;
+	};
+
+	const diffRows = (["onDelete", "onUpdate"] as const).flatMap((key) =>
+		orderedDistinctPairs(actionStates).map(({ from, to }) => ({
+			label: `${key} ${describeState(from)} -> ${describeState(to)}`,
+			key,
+			from,
+			to,
+		})),
+	);
+
+	it.each(diffRows)(
+		"$label emits the same drop-and-add for the column form and extras",
+		({ key, from, to }) => {
+			const fromActions = actionsFor(key, from);
+			const toActions = actionsFor(key, to);
+
+			const fromColumn = generateMigration({
+				declarations: buildDeclarations(true, fromActions, "actions"),
+				previousSnapshot: emptySnapshot,
+			});
+			const fromExtras = generateMigration({
+				declarations: buildDeclarations(false, fromActions, "actions"),
+				previousSnapshot: emptySnapshot,
+			});
+
+			const viaColumn = generateMigration({
+				declarations: buildDeclarations(true, toActions, "actions"),
+				previousSnapshot: fromColumn.snapshot,
+			});
+			const viaExtras = generateMigration({
+				declarations: buildDeclarations(false, toActions, "actions"),
+				previousSnapshot: fromExtras.snapshot,
+			});
+
+			assertByteIdentical(viaColumn, viaExtras);
+			// Vacuous-green guard: two forms silently emitting no alter at all
+			// would also satisfy byte-identity -- pin that a real drop-and-add
+			// (D1's own precedent for a foreign key that cannot be ALTERed in
+			// place) actually happened, carrying the new state's own clause.
+			expect(viaColumn.sql).not.toBe("");
+			expect(viaColumn.sql).toContain("drop constraint");
+			expect(viaColumn.sql).toContain("add constraint");
+			assertClausePresence(viaColumn.sql, toActions);
+		},
+	);
+});
+
+describe("column-level references() actions survive a table rename (add-references-actions task 1.2)", () => {
+	const registry = createDefaultRegistry();
+	const app = schema("app");
+
+	/** Pulls `tableIdentity`'s single foreign key out of a snapshot's raw JSON object graph -- the same `table:<identity>` key shape `rename/snapshot-sets.ts`'s `TABLE_PREFIX` builds, its `onDelete`/`onUpdate` normalized through `foreignKeyOnDelete`/`foreignKeyOnUpdate` (the compact snapshot stores "unspecified" as an absent key, not a literal `null`). */
+	const soleForeignKey = (snapshot: Snapshot, tableIdentity: string) => {
+		const node = snapshot.objects[`table:${tableIdentity}`];
+		if (node === undefined) {
+			throw new Error(`expected a snapshot object for "${tableIdentity}"`);
+		}
+		const tableSnapshot = asTableSnapshot(node);
+		const [foreignKey] = tableSnapshot.foreignKeys;
+		if (foreignKey === undefined) {
+			throw new Error(`expected a foreign key on "${tableIdentity}"`);
+		}
+		return {
+			onDelete: foreignKeyOnDelete(foreignKey),
+			onUpdate: foreignKeyOnUpdate(foreignKey),
+		};
+	};
+
+	const buildRenameScenario = (viaColumn: boolean, postsTableName: string) => {
+		const posts = table(app, postsTableName, { id: uuid().primaryKey() });
+		const comments = (actions: ActionsInput) => {
+			if (viaColumn) {
+				return table(app, "comments", {
+					id: uuid().primaryKey(),
+					postId: uuid()
+						.notNull()
+						.references(() => posts.id, actions),
+				});
+			}
+			return table(
+				app,
+				"comments",
+				{ id: uuid().primaryKey(), postId: uuid().notNull() },
+				(t) => ({
+					foreignKeys: [
+						{
+							columns: [t.postId],
+							references: { table: posts, columns: [posts.id] },
+							...actions,
+						},
+					],
+				}),
+			);
+		};
+		return { posts, comments };
+	};
+
+	const renameRows = [
+		...foreignKeyActions.map((onDelete) => ({
+			label: `onDelete -- ${onDelete}`,
+			actions: { onDelete } as ActionsInput,
+		})),
+		{
+			label: "onDelete and onUpdate together -- cascade / restrict",
+			actions: { onDelete: "cascade", onUpdate: "restrict" } as ActionsInput,
+		},
+	];
+
+	it.each(renameRows)(
+		"$label: renaming the target table retargets the column form exactly like extras, keeping the action",
+		({ actions }) => {
+			const runRename = (viaColumn: boolean) => {
+				const previousScenario = buildRenameScenario(viaColumn, "posts");
+				const nextScenario = buildRenameScenario(viaColumn, "articles");
+				const previous = buildSnapshot(
+					[previousScenario.posts, previousScenario.comments(actions)].map(
+						getTableMeta,
+					),
+					registry,
+					emptySnapshot,
+				);
+				const next = buildSnapshot(
+					[nextScenario.posts, nextScenario.comments(actions)].map(
+						getTableMeta,
+					),
+					registry,
+					emptySnapshot,
+				);
+				const plan = planRenames({
+					previous,
+					next,
+					renames: [
+						{
+							target: "table",
+							schemaName: "app",
+							oldName: "posts",
+							newName: "articles",
+						},
+					],
+					confirmedDrops: [],
+					declaredAtByIdentity: new Map(),
+				});
+				return { plan, next };
+			};
+
+			const columnRun = runRename(true);
+			const extrasRun = runRename(false);
+
+			expect(columnRun.plan.errors).toEqual([]);
+			expect(extrasRun.plan.errors).toEqual([]);
+			expect(
+				diffSnapshots(
+					columnRun.plan.rewrittenPrevious,
+					columnRun.next,
+					registry,
+				),
+			).toEqual([]);
+			expect(
+				diffSnapshots(
+					extrasRun.plan.rewrittenPrevious,
+					extrasRun.next,
+					registry,
+				),
+			).toEqual([]);
+			expect(renderSnapshot(columnRun.plan.rewrittenPrevious)).toBe(
+				renderSnapshot(extrasRun.plan.rewrittenPrevious),
+			);
+
+			// Vacuous-green guard: `diffSnapshots(...).toEqual([])` alone would
+			// also pass if retargeting quietly reset the action to null on
+			// both sides identically -- read the retargeted foreign key's own
+			// fields back and pin them against the row's declared action.
+			const retargeted = soleForeignKey(
+				columnRun.plan.rewrittenPrevious,
+				"app.comments",
+			);
+			if (actions.onDelete === undefined) {
+				expect(retargeted.onDelete).toBeNull();
+			} else {
+				expect(retargeted.onDelete).toBe(actions.onDelete);
+			}
+			if (actions.onUpdate === undefined) {
+				expect(retargeted.onUpdate).toBeNull();
+			} else {
+				expect(retargeted.onUpdate).toBe(actions.onUpdate);
+			}
 		},
 	);
 });
