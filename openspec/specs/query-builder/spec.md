@@ -383,7 +383,7 @@ what `where` accepts, so a placement `where` refuses is refused here too
   1))` — a window function inside the condition, which Postgres rejects
   inside `FILTER`
 - **THEN** it fails immediately with `window-function-not-allowed`, the
-  same diagnostic `where` gives for the same input, and nothing is
+  same diagnostic code `where` gives for the same input, and nothing is
   rendered
 
 #### Scenario: filter over a non-aggregate is refused at build time
