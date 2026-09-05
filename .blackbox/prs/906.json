@@ -3,11 +3,11 @@
   "number": 906,
   "ref": "quickstart-now/hejbro#906",
   "title": "chore(openspec): archive harden-aggregate-vocabulary after D106 round 1 (#452)",
-  "head": "ae38572c8e7154ac9028ecc43588dacd82e47296",
+  "head": "d4b81ba63198ffc4f7f58051e2de556e11aa2d4d",
   "headRef": "archive-aggregate-vocabulary",
   "base": "dev",
   "merged": null,
-  "pinnedAt": "2026-09-05T09:35Z",
+  "pinnedAt": "2026-09-05T09:47Z",
   "refs": [
     {
       "path": ".changeset/cte-nested-revive.md",
@@ -63,7 +63,7 @@
     },
     {
       "path": "skills/hejbro/references/query-layer.md",
-      "blob": "90d2b3ee5c23695d3992b257810732c647868275"
+      "blob": "0b35832e0acbf091a79ef9e8bf26325d5fa6fc7c"
     }
   ]
 }
