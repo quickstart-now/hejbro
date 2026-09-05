@@ -63,11 +63,11 @@ export type ColumnState = {
 	 * yet to build a `ForeignKeyDeclaration` from).
 	 */
 	readonly references?: () => ColumnRef;
-	/** Set only by `.references(target, actions)`'s second argument (add-references-actions) -- always alongside `references` above, since `.references()` is the only writer of either slot, so "actions without a thunk" is unreachable. */
+	/** Set only by `.references(target, actions)`'s second argument (add-references-actions) -- always alongside `references` above, since `.references()` is the only writer of either slot, so "actions without a thunk" is unreachable. A later `.references()` call replaces the reference as a whole (target and actions together, 514/R6), so the writer always sets this to `null` when its own `actions` argument is absent -- never leaves an earlier call's value in place. */
 	readonly referenceActions?: {
 		readonly onDelete?: ForeignKeyAction;
 		readonly onUpdate?: ForeignKeyAction;
-	};
+	} | null;
 };
 
 /**
@@ -537,21 +537,6 @@ export type OriginBrand<
 	};
 };
 
-/** `exactOptionalPropertyTypes` refuses `referenceActions: undefined` outright -- the key must be absent, not present-with-undefined, so `.references(target)` (no second argument) leaves `ColumnState.referenceActions` unset rather than set to `undefined`. */
-const referenceActionsField = (
-	actions:
-		| {
-				readonly onDelete?: ForeignKeyAction;
-				readonly onUpdate?: ForeignKeyAction;
-		  }
-		| undefined,
-): Pick<ColumnState, "referenceActions"> | Record<string, never> => {
-	if (actions === undefined) {
-		return {};
-	}
-	return { referenceActions: actions };
-};
-
 /**
  * Builds a {@link ColumnBuilder} bound to `columnState`. Every chained
  * method calls this factory again with a shallow-updated state, so builders
@@ -580,7 +565,7 @@ export const createColumnBuilder = <
 		createColumnBuilder({
 			...columnState,
 			references: target,
-			...referenceActionsField(actions),
+			referenceActions: actions ?? null,
 		}),
 	default: (value) =>
 		createColumnBuilder<TFamily, TMeta & { hasDefault: true }>({

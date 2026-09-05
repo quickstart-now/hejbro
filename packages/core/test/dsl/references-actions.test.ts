@@ -154,6 +154,75 @@ describe("column-level references() actions emit identically to extras (add-refe
 	);
 });
 
+describe("a second .references() call replaces the reference and its actions (add-references-actions B1, 514/R6)", () => {
+	/** `pets.ownerId` calls `.references()` twice -- once targeting `p1` with an action, once targeting `p2` -- so the second call must fully replace the first (target and actions together), never leaving the first call's action to bleed through onto the second call's target. */
+	const buildRepeatedReferenceDeclarations = (
+		viaColumn: boolean,
+		secondActions: ActionsInput | undefined,
+	) => {
+		const owner = schema("app");
+		const p1 = table(owner, "p1", { id: uuid().primaryKey() });
+		const p2 = table(owner, "p2", { id: uuid().primaryKey() });
+		const pets = (() => {
+			if (viaColumn) {
+				const ownerId = uuid()
+					.notNull()
+					.references(() => p1.id, { onDelete: "cascade" });
+				if (secondActions === undefined) {
+					return table(owner, "pets", {
+						id: uuid().primaryKey(),
+						ownerId: ownerId.references(() => p2.id),
+					});
+				}
+				return table(owner, "pets", {
+					id: uuid().primaryKey(),
+					ownerId: ownerId.references(() => p2.id, secondActions),
+				});
+			}
+			return table(
+				owner,
+				"pets",
+				{ id: uuid().primaryKey(), ownerId: uuid().notNull() },
+				(t) => ({
+					foreignKeys: [
+						{
+							columns: [t.ownerId],
+							references: { columns: [p2.id] },
+							...(secondActions ?? {}),
+						},
+					],
+				}),
+			);
+		})();
+		return [owner, getTableMeta(p1), getTableMeta(p2), getTableMeta(pets)];
+	};
+
+	const rows = [
+		{
+			label: "second call without actions clears the first call's action",
+			secondActions: undefined as ActionsInput | undefined,
+		},
+		{
+			label:
+				"second call with different actions replaces the first call's action",
+			secondActions: { onUpdate: "restrict" } as ActionsInput,
+		},
+	];
+
+	it.each(rows)("$label", ({ secondActions }) => {
+		const viaColumn = generateMigration({
+			declarations: buildRepeatedReferenceDeclarations(true, secondActions),
+			previousSnapshot: emptySnapshot,
+		});
+		const viaExtras = generateMigration({
+			declarations: buildRepeatedReferenceDeclarations(false, secondActions),
+			previousSnapshot: emptySnapshot,
+		});
+		assertByteIdentical(viaColumn, viaExtras);
+		assertClausePresence(viaColumn.sql, secondActions);
+	});
+});
+
 describe("column-level references() action changes diff identically to extras (add-references-actions task 1.2)", () => {
 	const actionStates: ReadonlyArray<ForeignKeyAction | undefined> = [
 		...foreignKeyActions,
