@@ -201,29 +201,65 @@ const describeFunctionCallTarget = (node: FunctionCallNode): string => {
 /**
  * `true` only for a `WindowFunctionCall` (`expr/window.ts`'s own shape) --
  * the one non-`Expr` shape `filter()` legitimately receives (`rowNumber()`
- * and friends). Anything else lacking `exprNode` (a `db.fn` call's own
- * `Promise`, review B1; a plain object) is a different refusal, never
- * this one.
+ * and friends).
  */
 const isWindowFunctionCall = (target: object): boolean => "windowFn" in target;
 
 /**
+ * Reads a non-`Expr` target's own identifying name/schema, if it exposes
+ * one -- never guessed. `db.fn`'s real runtime shape (`@hejbro/query`'s
+ * `FnCaller`, a bare `Promise<unknown>`) exposes neither, so this reads
+ * `undefined` for it; a future or vendored handle that DOES carry
+ * `functionName`/`schemaName` is named accurately instead of folded into
+ * the generic fallback (#501/R7 B1 follow-up: naming "not available" as
+ * if it were known is the exact mistake this fix corrects).
+ */
+const declaredFunctionIdentifierOf = (target: object): string | undefined => {
+	const functionName = (target as { readonly functionName?: unknown })
+		.functionName;
+	if (typeof functionName !== "string") {
+		return undefined;
+	}
+	const schemaName = (target as { readonly schemaName?: unknown }).schemaName;
+	if (typeof schemaName === "string") {
+		return `${schemaName}.${functionName}`;
+	}
+	return functionName;
+};
+
+/**
+ * Names a non-`Expr` target -- one that carries no `exprNode` at all --
+ * told apart by what it actually is: a window-only call (`rowNumber()`)
+ * IS a window function; a handle that exposes its own name
+ * (`declaredFunctionIdentifierOf`) is named as a declared function call;
+ * anything else -- including `db.fn`'s real shape, a bare `Promise` with
+ * no exposed identifier -- is genuinely unclassified, its own factual
+ * phrase rather than a guess. Split out of {@link describeFilterTarget}
+ * to keep each function's own branch count low (CRAP, #501
+ * group-completion gate: a single function covering both the non-`Expr`
+ * and the `exprNode`-bearing cases scored above the repository's own
+ * threshold even at full coverage).
+ */
+const describeNonExprTarget = (target: object): string => {
+	if (isWindowFunctionCall(target)) {
+		return "a window function";
+	}
+	const identifier = declaredFunctionIdentifierOf(target);
+	if (identifier !== undefined) {
+		return `a declared function call "${identifier}"`;
+	}
+	return "an expression without a node";
+};
+
+/**
  * Names what `filter()` actually received, one phrase per refused shape
- * (#501/R2 Q3, review B1) -- a window-only call (`rowNumber()`) is the
- * one shape without `exprNode` that IS legitimately a window function;
- * everything else without `exprNode` (a `db.fn` call's `Promise`, an
- * arbitrary object) gets its own phrase instead of being folded into
- * "a window function". `exprNode`-bearing shapes are read off
- * `exprNode.nodeKind`, a table lookup rather than an if-chain (CRAP: a
- * per-branch if-chain here scores above the repository's own threshold
- * even at full coverage, #501 group-completion gate).
+ * (#501/R2 Q3, review B1). `exprNode`-bearing shapes are read off
+ * `exprNode.nodeKind`, a table lookup rather than an if-chain; anything
+ * without `exprNode` at all delegates to {@link describeNonExprTarget}.
  */
 const describeFilterTarget = (target: object): string => {
 	if (!("exprNode" in target)) {
-		if (isWindowFunctionCall(target)) {
-			return "a window function";
-		}
-		return "a non-expression value";
+		return describeNonExprTarget(target);
 	}
 	const node = (target as { readonly exprNode: ExprNode }).exprNode;
 	if (node.nodeKind === "functionCall") {

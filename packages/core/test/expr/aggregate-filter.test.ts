@@ -1,12 +1,20 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
-import type { Aggregated, Expr, ExprNode, ReadAs } from "../../src/index";
+import type {
+	Aggregated,
+	Condition,
+	Expr,
+	ExprNode,
+	ReadAs,
+} from "../../src/index";
 import {
 	and,
 	avg,
+	coalesce,
 	columnRef,
 	count,
 	expr,
 	filter,
+	genRandomUuid,
 	gt,
 	isNotNull,
 	max,
@@ -186,27 +194,50 @@ describe("filter() refuses anything that is not a builder aggregate, task 1.1 (#
 		);
 	});
 
-	// Review B1: `db.fn`'s real runtime shape (`@hejbro/query`'s `FnCaller`,
-	// `Promise<unknown>`) carries neither `exprNode` nor `windowFn` --
-	// `describeFilterTarget` used to call anything without `exprNode` "a
-	// window function" regardless, which named this wrong. A bare
-	// `Promise` stands in for it here (core has no dependency on
+	// Review B1 follow-up (#501/R7 B1): `db.fn`'s real runtime shape
+	// (`@hejbro/query`'s `FnCaller`) is a bare `Promise<unknown>`, exposing
+	// no `functionName`/`schemaName` of its own -- naming it "a declared
+	// function call" anyway would be naming something that isn't there.
+	// It gets the same honest, generic phrase an arbitrary object does.
+	// A bare `Promise` stands in for it here (core has no dependency on
 	// `@hejbro/query` to construct the real thing).
-	it("refuses a db.fn call (a promise, neither an expression nor a window function)", () => {
+	it("refuses a db.fn call (a bare promise exposing no identifier of its own)", () => {
 		const dbFnResult = Promise.resolve(42) as unknown as Expr;
 		expect(() => filter(dbFnResult, condition)).toThrowError(
 			expect.objectContaining({
 				code: "filter-not-aggregate",
-				message: expect.stringContaining("a non-expression value"),
+				message: expect.stringContaining("an expression without a node"),
 			}),
 		);
 	});
 
-	it("refuses an arbitrary non-expression object, the same way", () => {
+	// An arbitrary non-Expr object is genuinely unclassified -- neither a
+	// window function nor a declared function call, so it gets its own
+	// factual phrase instead of guessing.
+	it("refuses an arbitrary non-expression object", () => {
 		expect(() => filter({} as unknown as Expr, condition)).toThrowError(
 			expect.objectContaining({
 				code: "filter-not-aggregate",
-				message: expect.stringContaining("a non-expression value"),
+				message: expect.stringContaining("an expression without a node"),
+			}),
+		);
+	});
+
+	// The positive counterpart: a handle that DOES expose its own
+	// name/schema (a future or vendored db.fn shape richer than today's
+	// bare Promise) is named accurately from that identifier, never
+	// re-deriving or guessing it.
+	it("refuses a handle that exposes its own function name and schema, named from that identifier", () => {
+		const declaredHandle = {
+			functionName: "my_fn",
+			schemaName: "app",
+		} as unknown as Expr;
+		expect(() => filter(declaredHandle, condition)).toThrowError(
+			expect.objectContaining({
+				code: "filter-not-aggregate",
+				message: expect.stringContaining(
+					'a declared function call "app.my_fn"',
+				),
 			}),
 		);
 	});
@@ -248,17 +279,79 @@ describe("filter() refuses anything that is not a builder aggregate, task 1.1 (#
 
 	// CRAP coverage gap found by the group-completion gate (#501), then
 	// review B1: an unqualified functionCall whose name isn't one of the
-	// five aggregates (e.g. now()) is still a declared function call, not
-	// a bare "expression" -- the schema is absent from the phrase, not the
-	// whole classification. `now()` is a real public constructor
-	// (`expr/operators.ts`), so this row needs no hand-built node.
-	it("refuses an unqualified function call that isn't one of the five aggregates, named by its bare function name", () => {
-		expect(() => filter(now(), condition)).toThrowError(
-			expect.objectContaining({
-				code: "filter-not-aggregate",
-				message: expect.stringContaining('a declared function call "now"'),
-			}),
-		);
+	// five aggregates is still a declared function call, not a bare
+	// "expression" -- the schema is absent from the phrase, not the whole
+	// classification. All three are real public constructors
+	// (`expr/operators.ts`), so none of these rows needs a hand-built node
+	// -- the reviewer's own regression harness names these three exactly.
+	it.each([
+		["now", () => now(), "now"],
+		["genRandomUuid", () => genRandomUuid(), "gen_random_uuid"],
+		["coalesce", () => coalesce(viewsColumn, 0), "coalesce"],
+	])(
+		"refuses %s(), an unqualified function call that isn't one of the five aggregates, named by its bare function name",
+		(_label, build, functionName) => {
+			expect(() => filter(build(), condition)).toThrowError(
+				expect.objectContaining({
+					code: "filter-not-aggregate",
+					message: expect.stringContaining(
+						`a declared function call "${functionName}"`,
+					),
+				}),
+			);
+		},
+	);
+});
+
+// Review B2 follow-up: assertNoWindowFunctionInCondition reuses the
+// SAME shallow someExprNode discipline query/select.ts's own
+// assertNoWindowFunction does (#452/D104's own exists-rejection
+// precedent) -- these two inputs must stay accepted, not become a
+// second, stricter guard.
+describe("filter()'s window-function condition guard stays shallow (#501/R7 B2 follow-up)", () => {
+	it("does not reject a window function inside an exists(...) subquery -- a different query, not this clause", () => {
+		const subquery: ExprNode = {
+			nodeKind: "exists",
+			negated: false,
+			query: {
+				queryKind: "select",
+				projection: {
+					projectionKind: "columns",
+					columns: [
+						{
+							alias: "rn",
+							expr: {
+								nodeKind: "window",
+								fn: {
+									nodeKind: "functionCall",
+									schemaName: null,
+									functionName: "row_number",
+									args: [],
+								},
+								partitionBy: [],
+								orderBy: [],
+							},
+						},
+					],
+				},
+				from: { schemaName: "app", tableName: "posts" },
+				joins: [],
+				where: null,
+				groupBy: [],
+				having: null,
+				orderBy: [],
+				limit: null,
+				offset: null,
+				distinct: null,
+			},
+		};
+		expect(() =>
+			filter(count(), expr("unknown", subquery) as Condition),
+		).not.toThrow();
+	});
+
+	it("does not reject a window-shaped raw sql fragment -- text, not a window ExprNode", () => {
+		expect(() => filter(count(), sql`row_number() over () > 0`)).not.toThrow();
 	});
 });
 
