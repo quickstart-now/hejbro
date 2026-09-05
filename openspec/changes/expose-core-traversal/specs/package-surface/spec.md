@@ -20,12 +20,24 @@ classified as engine in `hejbro`'s curation, and absent from the
 #### Scenario: A preset walks an expression through the registry
 - **WHEN** the RLS validator of the Supabase preset and the query
   package's parameter lifter each traverse an expression that holds a
-  child in every node position the registry knows — a window function's
-  partition and order, a `with` node's body, a set operation's branches,
-  a subquery's clauses among them
+  child in every node position the registry knows — a comparison's two
+  sides, a logical operator's operands, a `not` or null-test operand, an
+  `inList`'s operand and its values, a `between`'s operand and its two
+  bounds, a function call's arguments, a template's interpolated
+  expressions, a window function's own call, its partition keys and its
+  order keys, an aggregate filter's call and its condition, the kinds
+  that carry no child at all — a literal, a raw SQL fragment, a column
+  reference, a PL/pgSQL reference — and an `exists` or `selectExpr` node
+  standing as a leaf
 - **THEN** each reaches every child through the exported traversal, no
   package-local table of child positions exists in either, and the
   behaviour each site's own tests pin is unchanged
+- **AND** a statement's own clauses — a `with` node's body, a set
+  operation's branches, a subquery's clauses — stay outside this
+  registry: those are `SelectNode` positions the lifter reaches through
+  `selectChildExprs`/`replaceSelectChildExprs`, and a node whose child
+  is a whole statement (`exists`, `selectExpr`) reports no expression
+  child here
 
 #### Scenario: A kind reads a change's sides through the guards
 - **WHEN** the storage-bucket kind and the example preset's kind emit for

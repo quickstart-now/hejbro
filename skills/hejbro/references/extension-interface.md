@@ -34,7 +34,9 @@ carries these narrower members:
 `@hejbro/core` also exports five names a preset legitimately needs: the
 walk over an expression, and the guards a kind's `emit` reads a change's
 two sides with. They are engine surface — import them from
-`@hejbro/core`; the `hejbro` barrel does not re-export them.
+`@hejbro/core`; the `hejbro` barrel does not re-export them as runtime
+values. They stay visible to the type checker there as type-only
+re-exports: usable in a `typeof` position, never as a value.
 
 - `exprChildren(node): ReadonlyArray<ExprNode>` — a node's direct child
   expressions, in render order. `exists`/`selectExpr` report none: their
