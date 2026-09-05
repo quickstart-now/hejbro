@@ -31,6 +31,17 @@
       "at": "2026-09-05T06:22Z",
       "title": "Review close-out: B1 closes by aligning the delta prose with Q1 (b); N1 gains a witness task for the context-applied half of the preview scenario",
       "ratified": null
+    },
+    {
+      "id": "R3",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "452/R2 (b); av-reviewer's measurement (a constructor defined in a third module and exported from the barrel passes 20/20 uninvoked)"
+      ],
+      "at": "2026-09-05T07:02Z",
+      "title": "N5: the closure scenario's WHEN names the defining modules, checked to reach the public surface",
+      "ratified": null
     }
   ],
   "work": [

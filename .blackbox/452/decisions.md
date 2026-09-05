@@ -16,3 +16,10 @@ _lead · interpretation · basis 452/R1 design Q1 ('whose name is added to the u
 
 B1 -> (b): the delta's "a constructor without a row fails to type-check" becomes "a name outside the vocabulary's key union fails to type-check at the table's own declaration, and a constructor added without a row is caught by a test that enumerates the constructors from their defining modules" -- the implementation already matches the approved ruling; only the sentence over-claimed. (a) would extend Q1 and is not taken. N1 -> add task 1.6 (~5m): execute.test.ts asserts, on a handle with a context applied, that the statement's own sql/params equal compile() and the context statements precede it in the same transaction. N2/N3/N4 and the two promotions are the planner's. Ratification: owner on return.
 
+<a id="r3"></a>
+## R3 — N5: the closure scenario's WHEN names the defining modules, checked to reach the public surface
+
+_lead · interpretation · basis 452/R2 (b); av-reviewer's measurement (a constructor defined in a third module and exported from the barrel passes 20/20 uninvoked) · 2026-09-05T07:02Z · ratified: pending_
+
+Ratified: the scenario WHEN reads "every aggregate and window constructor the builder's own defining modules export -- each one checked to reach the public surface -- is invoked …". The reverse (enumerate the barrel) is not mechanically derivable without the hand list 1.1 removed. Same nature as R2: no code moves, the sentence matches what is measured. Ratification: owner on return.
+

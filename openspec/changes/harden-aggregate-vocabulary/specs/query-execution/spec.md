@@ -81,8 +81,9 @@ a `bigint` where its author asked for text.
   is neither cast nor converted
 
 #### Scenario: Every builder function is classified, and cast agrees with revive
-- **WHEN** every aggregate and window constructor the public surface
-  exports is invoked and its node's function name looked up in the
+- **WHEN** every aggregate and window constructor the builder's own
+  defining modules export — each one checked to reach the public
+  surface — is invoked and its node's function name looked up in the
   vocabulary, and a nested cell of each is executed
 - **THEN** every name has a row, and each cell is cast in the compiled
   SQL exactly when its value is revived — both for the rows that read
