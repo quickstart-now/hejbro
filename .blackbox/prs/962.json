@@ -1,0 +1,65 @@
+{
+  "version": 3,
+  "number": 962,
+  "ref": "quickstart-now/hejbro#962",
+  "title": "chore(openspec): archive add-batched-transactions after d106 round 1 (#486)",
+  "head": "d5415f7b0bac0bf0f4c3175a9112e4d88f900ea2",
+  "headRef": "archive-add-batched-transactions",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-05T16:47Z",
+  "refs": [
+    {
+      "path": "openspec/changes/archive/2026-09-06-add-batched-transactions/design.md",
+      "blob": "17f6207522a68686e0a79d74257c6dc8d77c3fd2"
+    },
+    {
+      "path": "openspec/changes/add-batched-transactions/design.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-06-add-batched-transactions/evaluation.md",
+      "blob": "4146e428e397cf4e419b7457e6eca630c5383285"
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-06-add-batched-transactions/proposal.md",
+      "blob": "30291a69ae519bdaf1fd9e3fa9730ce69b868ea9"
+    },
+    {
+      "path": "openspec/changes/add-batched-transactions/proposal.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-06-add-batched-transactions/specs/driver-contract/spec.md",
+      "blob": "d3a19153a138bc4705bdf3376387fd8dcc1a7389"
+    },
+    {
+      "path": "openspec/changes/add-batched-transactions/specs/driver-contract/spec.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-06-add-batched-transactions/specs/rls-execution-context/spec.md",
+      "blob": "000d798e67160efe8601b51ad2adae760c49ae35"
+    },
+    {
+      "path": "openspec/changes/add-batched-transactions/specs/rls-execution-context/spec.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-06-add-batched-transactions/tasks.md",
+      "blob": "353f3c95e677daab3ae2108342d8294d0183b683"
+    },
+    {
+      "path": "openspec/changes/add-batched-transactions/tasks.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/specs/driver-contract/spec.md",
+      "blob": "faf41102dc37cc7f665e7583feff9e68aaf2ddc0"
+    },
+    {
+      "path": "openspec/specs/rls-execution-context/spec.md",
+      "blob": "b6d95a190cdd880970033b68413d6cf1a9cb8c09"
+    }
+  ]
+}
