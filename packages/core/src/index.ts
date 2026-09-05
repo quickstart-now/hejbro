@@ -178,6 +178,7 @@ export {
 	decodeQueryNode,
 	encodeQueryNode,
 } from "./expr/codec";
+export { exprChildren, replaceExprChildren } from "./expr/expr-children";
 export { liftLiteral, liftOperand, renderLiteral } from "./expr/literal";
 export {
 	and,
@@ -256,6 +257,7 @@ export {
 } from "./expr/window";
 export type { KeyedDiff } from "./kind/diff-helpers";
 export { diffByKey, sameJson } from "./kind/diff-helpers";
+export { requireBoth, requireNext, requirePrevious } from "./kind/emit-helpers";
 export type {
 	ChangeOperation,
 	HejbroDeclaration,

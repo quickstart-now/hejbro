@@ -225,14 +225,12 @@ const aggregateFilterChildren: ExprChildTraversal<"aggregateFilter"> = {
  * union, so a missing entry is a `tsc` error the same way every other
  * exhaustive handler table in this package is (`someExprNodeHandlers`,
  * `collectColumnRefsHandlers`, `retargetExprNodeHandlers`, ...).
- * **Deliberately not exported, and not re-exported from `index.ts`**:
- * this table is `@hejbro/core`'s own internal single source for `ExprNode`
- * child positions, not a public extension point. Exporting it would be
- * the contract change this group (#473) refuses to make — see
- * `packages/query/src/compile/params.ts`'s `liftExprNode` and
- * `packages/supabase/src/validators/rls-uncached-auth-call.ts`'s
- * `ChildrenOfHandlers`, the two traversal tables outside `@hejbro/core`
- * that restate this same shape and stay unfolded for exactly this reason.
+ * The table itself stays internal (#515): the extension surface is
+ * {@link exprChildren} and {@link replaceExprChildren}, so a package
+ * outside core reads and rebuilds the nodes it was given and never mints
+ * per-kind entries of its own -- which is why no `ExprChildTraversal` type
+ * is exported the way `select-children.ts` exports `ClauseTraversal`, and
+ * why this table's own shape stays core's to change.
  */
 const EXPR_CHILD_TRAVERSALS: {
 	readonly [K in ExprNode["nodeKind"]]: ExprChildTraversal<K>;
@@ -260,6 +258,13 @@ const EXPR_CHILD_TRAVERSALS: {
  * order — the one traversal `walk.ts`'s structural tables,
  * `render-sql.ts`'s `collectColumnRefs`, and `retarget.ts`'s
  * `retargetExprNode` all fold onto (#473).
+ *
+ * Extension surface (#515): `@hejbro/query`'s parameter lifter and
+ * `@hejbro/supabase`'s RLS validator walk expressions through this
+ * function instead of restating child positions, so a node kind gaining a
+ * child is absorbed here. `exists`/`selectExpr` report no children: their
+ * `query` is a `SelectNode`, not an `ExprNode` -- descending into it is
+ * `selectChildExprs`'s job (`select-children.ts`).
  */
 export const exprChildren = (node: ExprNode): ReadonlyArray<ExprNode> => {
 	const traversal = EXPR_CHILD_TRAVERSALS[node.nodeKind] as ExprChildTraversal<
@@ -276,6 +281,10 @@ export const exprChildren = (node: ExprNode): ReadonlyArray<ExprNode> => {
  * (same reference) when every replacement child is reference-identical to
  * the original — the invariant `retarget.ts` depends on: an unrelated
  * rename must return the exact same object it was given, all the way up.
+ *
+ * Extension surface (#515), the rebuild half: a caller outside core walks
+ * with {@link exprChildren} and rebuilds through this function rather than
+ * reconstructing a node kind's fields itself.
  */
 export const replaceExprChildren = (
 	node: ExprNode,
