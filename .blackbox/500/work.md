@@ -48,3 +48,61 @@ Actual task time: 1.1 6m, 1.1b 5m, 1.2 13m (an untracked-default discovery
 in `db.with(...)`'s own row-type default forced a mid-task re-design,
 settled as #500/R4), 1.2b 3m, 1.3 3m — against 6/6/7/6/6m estimated.
 
+<a id="w2"></a>
+## W2 — Task 1.4: review repair -- set-op exception and nested-read widening
+
+_2026-09-05T15:06Z · per R6, R7_
+
+Review repair after the group-1 review (R6, R7):
+
+- `packages/query/src/types/select-result.ts`: `NestedOrExprResult` split
+  into `DirectNestedOrExprResult` (the pre-existing nested-read/column
+  logic, unchanged) and a new top-level `NestedOrExprResult =
+  DirectNestedOrExprResult | RecursiveNullWidening<TValue>`, so a
+  nested-read key now also unions in the recursive term's widening
+  (review B2). `RecursiveNullWidening` resolves the recursive term's own
+  carried value through `DirectNestedOrExprResult`, not
+  `DirectProjectedColumnResult` directly, so a `jsonArrayFrom` recursive
+  value (renders `coalesce(json_agg(...), '[]')`, structurally never
+  null) is not falsely read as nullable (review E7/E11). One layer only:
+  the widening never re-enters itself.
+- No change to `packages/core/src/query/with.ts`: the lead's first R6
+  instruction (carry `never` for a `SetOpStage` recursive term) was
+  executed, found unsound by the reviewer (an untracked left-joined set
+  is UNKNOWN, not empty; `never` would drop a real left join hiding
+  inside a set-op branch), and withdrawn -- `with.ts` reverted to its
+  pre-1.4 committed state (`654991cd`), `UntrackedJoins` stays the
+  set-op recursive term's own carried set, unchanged since R3.
+- `packages/query/test/types/select-result.test.ts`: nine regression
+  rows -- R32, F1, E2, E4, E5, E6, E7, E11a, E11c -- six expecting null
+  (R32, F1, E2's ordinary key, E4, E5, E6) and three expecting non-null
+  (E2's nested-read key, E7, E11a, E11c), since a null-only table cannot
+  catch over-widening. Measured directly (not assumed): reverting only
+  `select-result.ts` and re-running `tsc` showed E4, E6 and E11a red
+  before the fix and E2, E5, E7, E11c, R32, F1 already green -- narrower
+  than the review's own predicted red set, because a nested-read key
+  was already immune to widening entirely before this fix (the B2 bug
+  itself), not selectively over-widened.
+- `skills/hejbro/references/query-layer.md`, `openspec/changes/
+  harden-recursive-nullability/{proposal,design}.md` and the delta's
+  spec: the set-op exception stated explicitly, and "the same per-key
+  union a plain set operation's result already has" (false -- a plain
+  set operation keeps the left branch's own projection) corrected
+  throughout (review N1); the gap that comparison revealed is the
+  lead's new issue #944.
+- Recorded, not fixed (no issue filed, per lead): `json()`/`jsonb()`
+  columns read as `unknown` regardless of `notNull` -- a pre-existing,
+  fail-safe (never a lie) imprecision orthogonal to this change's own
+  axis. Reproduction: `/private/tmp/review-rn-scratch/reviewer-inputs/
+  rn-e10.test.ts` (E10a-c).
+
+Gates: `pnpm build --force`, `tsc --noEmit` for core/query/pg, full
+`packages/query` vitest suite (1046 tests), `pnpm biome check` on all
+changed files -- all pass. Full 12-gate suite run separately, logged.
+
+Actual time: 75m against a 14m estimate. The overrun is the review
+churn itself (R6 issued as `never` then withdrawn on soundness grounds,
+B2 found mid-implementation, E7/E8 found isolating the fix, E8 replaced
+by E11a after the reviewer's own correction) -- the lead's rework cost,
+not a misestimate of the settled contract's own size.
+

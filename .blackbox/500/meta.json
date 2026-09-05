@@ -106,6 +106,16 @@
         "R4",
         "R5"
       ]
+    },
+    {
+      "id": "W2",
+      "at": "2026-09-05T15:06Z",
+      "title": "Task 1.4: review repair -- set-op exception and nested-read widening",
+      "pr": null,
+      "decisions": [
+        "R6",
+        "R7"
+      ]
     }
   ],
   "prs": [],
