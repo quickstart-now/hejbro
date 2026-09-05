@@ -1,0 +1,28 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#631",
+  "title": "migrate: record a body checksum in the ledger and refuse an applied migration whose SQL changed",
+  "parent": "quickstart-now/hejbro#412",
+  "status": "open",
+  "opened": "2026-09-05",
+  "closed": null,
+  "decisions": [
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "412/D24",
+        "D25; #616 (the offline limit stated); the ledger identity rule's own tolerance for a fifth column; Prisma checksum / Drizzle hash precedent"
+      ],
+      "at": "2026-09-05T05:46Z",
+      "title": "The ledger records a body checksum; migrate refuses an applied migration whose body changed; status reports it",
+      "ratified": null
+    }
+  ],
+  "work": [],
+  "prs": [],
+  "origin": null,
+  "followUps": []
+}
