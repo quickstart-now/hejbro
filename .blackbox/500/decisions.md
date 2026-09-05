@@ -9,3 +9,38 @@ _lead · extension · basis 412/D24, 412/D25; the requirement's own measurement 
 
 Design (design.md Q1-Q3): the anchor rule governs types (Postgres's 42804), not nullability (a dimension Postgres never resolves); widen the null dimension only, outward reference only (the recursive callback's reference stays anchor-typed); both builder and chain surfaces. query-type-inference: two MODIFIED requirements; the residue paragraph is replaced by the rule. Ratification: owner on return.
 
+<a id="r2"></a>
+## R2 — R2 — nullability is decided in @hejbro/query alone; core only carries the recursive term's projection
+
+_lead · extension · basis R1 · 2026-09-05T12:39Z · ratified: pending_
+
+The outward widening is expressed in two halves. `@hejbro/core`'s
+`asRecursive` intersects a phantom `WidenedBy<TRecursiveValue>` onto
+every key of the OUTWARD reference -- never onto the reference the
+recursive callback receives -- and carries the recursive term's own
+projected expression there unchanged. `@hejbro/query`'s
+`ProjectedColumnResult` resolves both sides and unions the null:
+`ProjectedColumnResult<E> | (null extends ProjectedColumnResult<R> ?
+null : never)`, a mapped conditional type and so outside the ternary
+ban.
+
+Rejected: core deciding which keys widen (origin brand present, direct
+column ref, `notNull`). That rule is a proper subset of the query
+layer's null knowledge -- a recursive term projecting a left-joined
+table's non-null column reads nullable there and non-null in the copy
+-- so the outward row would widen too little, which is exactly the
+lying type R1 exists to remove. Nullability has one source of truth and
+it is already `ProjectedColumnResult` (D95: a second path has to stay
+true a second time). Rejected too: dropping the origin brand, which
+coarsens the field to the family read type and violates "the type stays
+the anchor's"; and widening `exprNode` past `ColumnRefNode`, which
+breaks `CteFieldRef`/`FromSource` assignability and overloads "not a
+direct column ref" to mean "nullable".
+
+Consequences: `packages/query/src/types/select-result.ts` joins this
+change's file boundary. Task 1.1's red becomes the structural carriage
+in core; the row-nullability table moves to 1.2 and gains the
+left-joined row that decides the question. `packages/query/src/db/
+chain.ts` is expected to need no source change, the chain taking core's
+own `CteBuilder` rather than restating it.
+

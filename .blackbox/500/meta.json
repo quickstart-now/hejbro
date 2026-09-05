@@ -20,6 +20,17 @@
       "at": "2026-09-05T05:39Z",
       "title": "The recursive CTE's outward row type keeps the anchor's types and widens each key's nullability by the recursive term's",
       "ratified": null
+    },
+    {
+      "id": "R2",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "R1"
+      ],
+      "at": "2026-09-05T12:39Z",
+      "title": "R2 — nullability is decided in @hejbro/query alone; core only carries the recursive term's projection",
+      "ratified": null
     }
   ],
   "work": [],
