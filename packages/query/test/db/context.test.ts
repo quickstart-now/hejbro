@@ -762,17 +762,20 @@ describe("a failing batch is reported as a batch (task 1.3b, #486, 486/R9)", () 
 				expect(error).toHaveProperty("kind", "select");
 				expect(error).toHaveProperty("cause", driverError);
 				const message = (error as Error).message;
-				expect(message).toContain("a batch of 1 context statements");
+				// singular count (the common case: one role statement, no
+				// settings) reads as correct English, not "1 ... statements".
+				expect(message).toContain("a batch of 1 context statement");
+				expect(message).not.toContain("a batch of 1 context statements");
 				expect(message).toContain('"select" statement');
 				expect(message).toContain(
 					"the driver does not report which member failed",
 				);
-				// every member is listed, in the order sent: the context
-				// statement first, then the caller's own.
-				expect(message).toContain('set local role "grant_reader"');
-				expect(message).toContain("posts");
-				expect(message.indexOf('set local role "grant_reader"')).toBeLessThan(
-					message.indexOf("posts"),
+				// every member is listed, numbered, in the order sent: the
+				// context statement first, then the caller's own -- never
+				// `;`-joined (that character already means something else in
+				// this PR, a multi-command `sql` text, #892/task 1.6).
+				expect(message).toContain(
+					'Statement: 1) set local role "grant_reader" 2) select "id", "status" from "app"."posts".',
 				);
 				// the exact regression this reopens: no standalone claim that
 				// only the caller's own statement failed.

@@ -297,16 +297,33 @@ const isQueryExecutionFailedError = (
  * result cannot say: which member failed. `members` lists every
  * statement actually sent, in order, so nothing known is withheld.
  */
+/** "1 context statement" vs "N context statements" -- a guard clause, not a ternary (house style); the singular is the common case (one role, no settings) and reads as broken English left plural. */
+const contextStatementNoun = (count: number): string => {
+	if (count === 1) {
+		return "1 context statement";
+	}
+	return `${count} context statements`;
+};
+
+/**
+ * Every batch member, numbered (`1) …`, never `;`-joined: this PR gives
+ * `;` its own meaning inside a single multi-command `sql` text (#892,
+ * task 1.6 -- "the last command's rows"), so joining a *list of separate
+ * statements* with the same character would read as one more multi-
+ * command text instead of what it is here, a report of what was sent.
+ */
+const numberedStatementList = (members: ReadonlyArray<CompileResult>): string =>
+	members.map((member, index) => `${index + 1}) ${member.sql}`).join(" ");
+
 const throwBatchExecutionFailed = (
 	members: ReadonlyArray<CompileResult>,
 	contextStatementCount: number,
 	kind: CompileResult["kind"],
 	cause: unknown,
 ): never => {
-	const statementList = members.map((member) => member.sql).join("; ");
 	throw Object.assign(
 		new Error(
-			`query execution failed for a batch of ${contextStatementCount} context statements and this "${kind}" statement; the driver does not report which member failed. Statement: ${statementList}. Next: the driver's full error (fields like "detail" and "hint" included) is on "cause" -- this wrapper never retries or reinterprets it.`,
+			`query execution failed for a batch of ${contextStatementNoun(contextStatementCount)} and this "${kind}" statement; the driver does not report which member failed. Statement: ${numberedStatementList(members)}. Next: the driver's full error (fields like "detail" and "hint" included) is on "cause" -- this wrapper never retries or reinterprets it.`,
 		),
 		{ code: "query-execution-failed", kind, cause },
 	);
