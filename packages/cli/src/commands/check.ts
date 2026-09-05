@@ -34,6 +34,7 @@ import type {
 	UnmanagedCheckConstraint,
 	UnmanagedColumn,
 	UnmanagedIndex,
+	UnmanagedTable,
 } from "../check/inventory";
 import { buildInventory } from "../check/inventory";
 import { requireConfigFields } from "../config-required";
@@ -226,18 +227,45 @@ const extensionsLines = (
 };
 
 /**
+ * Compares two strings by code point, never by a collation -- review
+ * round 1 N1: `localeCompare` made the inventory's order depend on the
+ * running machine's own locale (measured: the same database printed a
+ * different order under `LC_ALL=en_US.UTF-8` than under
+ * `LC_ALL=sv_SE.UTF-8`), and a normalization pair (NFC/NFD -- two
+ * different Postgres identifiers) compared equal under it, so a stable
+ * sort fell back to whatever order the catalog happened to return them
+ * in. Guard clauses, not a ternary (house style): `<`/`>` already
+ * compare JavaScript strings by UTF-16 code unit, which agrees with
+ * code point order for every character these identifiers can hold.
+ */
+const compareCodePoints = (a: string, b: string): number => {
+	if (a < b) {
+		return -1;
+	}
+	if (a > b) {
+		return 1;
+	}
+	return 0;
+};
+
+/**
  * Every per-instance inventory line is sorted by the identity it names
- * (Q7, design.md) right before rendering -- mirrors `infer/loss-report.ts`'s
- * own `sortedBy` (D106 N3): a catalog read's order is never something a
- * report should depend on, so two runs against the same database (or two
- * databases holding the same objects) print the same lines in the same
- * order regardless of the order the catalog happened to return them in.
+ * (Q7, design.md) right before rendering, by code point (review round 1
+ * N1) -- mirrors `infer/loss-report.ts`'s own `sortedBy` (D106 N3): a
+ * catalog read's order is never something a report should depend on, so
+ * two runs against the same database (or two databases holding the same
+ * objects, created in a different order) print the same lines in the
+ * same order regardless of the order the catalog happened to return
+ * them in, and regardless of the machine's own locale.
  */
 const sortedByIdentity = <T>(
 	items: ReadonlyArray<T>,
 	identityOf: (item: T) => string,
 ): ReadonlyArray<T> =>
-	[...items].sort((a, b) => identityOf(a).localeCompare(identityOf(b)));
+	[...items].sort((a, b) => compareCodePoints(identityOf(a), identityOf(b)));
+
+const tableIdentity = (table: UnmanagedTable): string =>
+	`${table.schema}.${table.table}`;
 
 const columnIdentity = (column: UnmanagedColumn): string =>
 	`${column.schema}.${column.table}.${column.name}`;
@@ -256,6 +284,14 @@ const indexBacksConstraintClause = (constraintName: string | null): string => {
 	}
 	return `backs constraint ${constraintName}; `;
 };
+
+const unmanagedTableLines = (
+	tables: ReadonlyArray<UnmanagedTable>,
+): ReadonlyArray<string> =>
+	sortedByIdentity(tables, tableIdentity).map(
+		(table) =>
+			`unmanaged table (not covered by any declaration): ${tableIdentity(table)}`,
+	);
 
 const unmanagedColumnLines = (
 	columns: ReadonlyArray<UnmanagedColumn>,
@@ -289,10 +325,7 @@ const unmanagedCheckConstraintLines = (
  * difference a project is obliged to fix.
  */
 const inventoryLines = (inventory: Inventory): ReadonlyArray<string> => [
-	...inventory.unmanagedTables.map(
-		(table) =>
-			`unmanaged table (not covered by any declaration): ${table.schema}.${table.table}`,
-	),
+	...unmanagedTableLines(inventory.unmanagedTables),
 	...unmanagedColumnLines(inventory.unmanagedColumns),
 	...unmanagedIndexLines(inventory.unmanagedIndexes),
 	...unmanagedCheckConstraintLines(inventory.unmanagedCheckConstraints),

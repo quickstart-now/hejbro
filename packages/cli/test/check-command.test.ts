@@ -245,6 +245,117 @@ describe("the inventory section names objects, not only tables", () => {
 	});
 });
 
+describe("the inventory is ordered by code point, on every axis (D106 review round 1 N1)", () => {
+	// Review finding: `localeCompare` made the order depend on the running
+	// machine's collation (measured: the same database printed a
+	// different order under LC_ALL=en_US.UTF-8 than under sv_SE.UTF-8),
+	// and a normalization pair (NFC/NFD -- two different Postgres
+	// identifiers) compared equal under it, so a stable sort fell back to
+	// catalog (attnum) order -- two databases holding the same objects,
+	// created in a different order, then printed a different report. The
+	// fix reads code points, never a collation, and applies to all four
+	// axes -- including tables, which the SQL `order by` previously left
+	// on the database's own collation.
+	it("prints the same lines in the same order whichever order the objects arrive in, across all four axes", () => {
+		const oneOrder: Inventory = {
+			unmanagedTables: [
+				{ schema: "app", table: "zeta" },
+				{ schema: "app", table: "alpha" },
+			],
+			unmanagedColumns: [
+				{ schema: "app", table: "widgets", name: "b_col" },
+				{ schema: "app", table: "widgets", name: "a_col" },
+			],
+			unmanagedIndexes: [
+				{
+					schema: "app",
+					table: "widgets",
+					name: "z_idx",
+					constraintName: null,
+				},
+				{
+					schema: "app",
+					table: "widgets",
+					name: "a_idx",
+					constraintName: null,
+				},
+			],
+			unmanagedCheckConstraints: [
+				{ schema: "app", table: "widgets", name: "z_ck" },
+				{ schema: "app", table: "widgets", name: "a_ck" },
+			],
+			extensions: [],
+		};
+		const reversedOrder: Inventory = {
+			unmanagedTables: [...oneOrder.unmanagedTables].reverse(),
+			unmanagedColumns: [...oneOrder.unmanagedColumns].reverse(),
+			unmanagedIndexes: [...oneOrder.unmanagedIndexes].reverse(),
+			unmanagedCheckConstraints: [
+				...oneOrder.unmanagedCheckConstraints,
+			].reverse(),
+			extensions: [],
+		};
+
+		const first = renderCheckReport([], oneOrder);
+		const second = renderCheckReport([], reversedOrder);
+
+		expect(first.stdout).toEqual(second.stdout);
+		expect(first.stdout).toEqual([
+			"check does not compare view bodies.",
+			"a declared object is checked for existence even where its contents are not otherwise compared.",
+			"check's reads are not a single snapshot: opening no transaction is what keeps this command free of any driver capability, and a schema changing while check runs can produce a torn report.",
+			"unmanaged table (not covered by any declaration): app.alpha",
+			"unmanaged table (not covered by any declaration): app.zeta",
+			"unmanaged column (not covered by any declaration): app.widgets.a_col",
+			"unmanaged column (not covered by any declaration): app.widgets.b_col",
+			"unmanaged index (not covered by any declaration): app.widgets.a_idx",
+			"unmanaged index (not covered by any declaration): app.widgets.z_idx",
+			"unmanaged check constraint (not covered by any declaration): app.widgets.a_ck",
+			"unmanaged check constraint (not covered by any declaration): app.widgets.z_ck",
+			"check: no differences.",
+		]);
+	});
+
+	it("orders non-ASCII names by code point, not by a collation, and never ties an NFC/NFD pair", () => {
+		// "z_col" (U+007A) sorts before "ä_col" (U+00E4) by code point --
+		// the opposite of what many locale collations do (they place "ä"
+		// near "a", before "z"). The NFC "café_a" (single U+00E9) and the
+		// NFD "café_a" (U+0065 U+0301) are different Postgres identifiers,
+		// visually identical but distinct code point sequences -- a
+		// collation-aware compare can treat them as equal, which is
+		// exactly the tie the review measured falling back to catalog
+		// order.
+		const nfc = "café_a"; // NFC: single code point U+00E9
+		const nfd = "café_a"; // NFD: U+0065 + combining acute U+0301
+		const inventory: Inventory = {
+			unmanagedTables: [],
+			unmanagedColumns: [
+				{ schema: "app", table: "widgets", name: "z_col" },
+				{ schema: "app", table: "widgets", name: "ä_col" },
+				{ schema: "app", table: "widgets", name: nfc },
+				{ schema: "app", table: "widgets", name: nfd },
+			],
+			unmanagedIndexes: [],
+			unmanagedCheckConstraints: [],
+			extensions: [],
+		};
+
+		const report = renderCheckReport([], inventory);
+
+		const columnLines = report.stdout.filter((line) =>
+			line.startsWith("unmanaged column"),
+		);
+		expect(columnLines).toEqual([
+			`unmanaged column (not covered by any declaration): app.widgets.${nfd}`,
+			`unmanaged column (not covered by any declaration): app.widgets.${nfc}`,
+			"unmanaged column (not covered by any declaration): app.widgets.z_col",
+			"unmanaged column (not covered by any declaration): app.widgets.ä_col",
+		]);
+		// No tie collapsed the NFC/NFD pair into one line.
+		expect(new Set(columnLines).size).toBe(4);
+	});
+});
+
 describe("check's inventory does not widen to a whole reserved schema (D106 R3, #665)", () => {
 	// Declaring one existing table in `auth` used to pull `auth`'s own
 	// name into `declaredSchemaNames`, and once a schema counts as
