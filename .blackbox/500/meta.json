@@ -128,6 +128,17 @@
         "R6",
         "R7"
       ]
+    },
+    {
+      "id": "W3",
+      "at": "2026-09-05T15:27Z",
+      "title": "Task 1.4 finalized: reviewer's E11/E12/E2u classification, red confirmed",
+      "pr": null,
+      "decisions": [
+        "R6",
+        "R7",
+        "R8"
+      ]
     }
   ],
   "prs": [],
