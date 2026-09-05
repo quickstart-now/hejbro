@@ -538,3 +538,24 @@ _owner · 2026-09-05T03:57Z · raw ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#245_
 
 The owner closes the session: write the session memory and stop. Memory was written under D20 (phase-cycle checkpoint, ratification queue, workflow rules); this entry marks the close. State at close: every #412 batch change archived (co li ip ck qy so cp ld cv), dev at ac485bc2, no worktrees, no live agents; the .blackbox/412 record (D20-D22) and index refresh stay uncommitted in the main checkout for the next PR. Next slot #819 awaits an explicit go.
 
+<a id="d23"></a>
+## D23 — PR #880 is merged by the owner; the session ends and resumes next session
+
+_owner · 2026-09-05T04:14Z_
+
+Owner decision (2026-09-05, end of the previous session, recorded here because the session closed before the record could be written): the uncommitted 412 records (D20–D22 plus the regenerated index) go out as their own PR (#880) and the owner merges it directly; everything else waits for the next session. Basis: the owner's words at session close — "handle it in the next session; I will merge #880 myself." Applied: #880 merged by the owner at 2026-09-05T04:09Z (dev fffea4dc); the next session starts from a clean dev.
+
+<a id="d24"></a>
+## D24 — Open issues are processed oldest-first across the whole repository
+
+_owner · 2026-09-05T04:14Z · raw 9d9e9165-53a6-4428-bebf-45e47e987321#1_
+
+Owner decision (2026-09-05, session start): after #880 merged, open issues are processed in creation order, oldest first, across the whole repository — not by the R1 slot order (#819 → #837 → #832 → #694 → …) and not per umbrella. This supersedes the R1 ordering for slot selection; umbrella issues (#412, #815) are skipped as containers, and an owner-gated issue at the head of the queue is presented to the owner for its decision rather than skipped. The current head of the queue: #303 (2026-08-26), #375 (2026-08-28), #413 (2026-08-28), #450, #452, #458, #486, #491, #497, #500 … Owner's words: "PR #880 merged; let's process the issues oldest-first across the whole set."
+
+<a id="d25"></a>
+## D25 — Full delegation: the lead decides and processes each issue itself
+
+_owner · 2026-09-05T04:20Z · raw 9d9e9165-53a6-4428-bebf-45e47e987321#2_
+
+Owner decision (2026-09-05): the oldest-first pass is fully delegated — the lead decides each issue's disposition itself and processes it, without returning to the owner per issue. The standing constraint from the same exchange (answer to the #303 question): do not postpone work — "if you keep deferring it, it piles up and comes back." So "park / revisit later" is not an available disposition; each issue reaches a terminal state (implemented, or closed with a final verdict and its basis) and every lead ruling is recorded here (R#) for owner ratification on return. Owner's words: "I'm delegating the work, judge and handle it yourself." / "I delegate, but don't put the work off; if you keep postponing it, it piles up and comes back."
+

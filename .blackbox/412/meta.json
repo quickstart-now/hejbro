@@ -555,6 +555,31 @@
       "raw": [
         "ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#245"
       ]
+    },
+    {
+      "id": "D23",
+      "by": "owner",
+      "at": "2026-09-05T04:14Z",
+      "title": "PR #880 is merged by the owner; the session ends and resumes next session",
+      "raw": []
+    },
+    {
+      "id": "D24",
+      "by": "owner",
+      "at": "2026-09-05T04:14Z",
+      "title": "Open issues are processed oldest-first across the whole repository",
+      "raw": [
+        "9d9e9165-53a6-4428-bebf-45e47e987321#1"
+      ]
+    },
+    {
+      "id": "D25",
+      "by": "owner",
+      "at": "2026-09-05T04:20Z",
+      "title": "Full delegation: the lead decides and processes each issue itself",
+      "raw": [
+        "9d9e9165-53a6-4428-bebf-45e47e987321#2"
+      ]
     }
   ],
   "work": [

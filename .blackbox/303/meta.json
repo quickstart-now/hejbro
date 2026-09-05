@@ -1,0 +1,32 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#303",
+  "title": "Prepared-statement caching behind the driver capability contract",
+  "parent": "quickstart-now/hejbro#412",
+  "status": "open",
+  "opened": "2026-09-05",
+  "closed": null,
+  "decisions": [
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "412/D24",
+        "412/D25 (full delegation",
+        "no deferral); D95 (capability-gated driver behaviour); the archived measurement record (extend-query-runtime",
+        "50/50 positive runs",
+        "6.6-8.4%); Supavisor's named-prepared-statement support being flag-gated (github.com/supabase/supavisor/issues/69",
+        "supabase.github.io/supavisor/faq)"
+      ],
+      "at": "2026-09-05T04:29Z",
+      "title": "Prepared statements ship as an opt-in third capability; the design forks are settled by the lead",
+      "ratified": null
+    }
+  ],
+  "work": [],
+  "prs": [],
+  "origin": null,
+  "followUps": []
+}
