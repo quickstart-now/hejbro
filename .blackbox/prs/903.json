@@ -3,11 +3,11 @@
   "number": 903,
   "ref": "quickstart-now/hejbro#903",
   "title": "chore(openspec): archive add-prepared-statements after D106 round 1 (#303)",
-  "head": "52002bd9ca1e6c925e4ef5ed3c63e5c3fe9f0972",
+  "head": "d72c2fc345198076e3f154ca1ecf37aa41034df6",
   "headRef": "archive-prepared-statements",
   "base": "dev",
   "merged": null,
-  "pinnedAt": "2026-09-05T09:20Z",
+  "pinnedAt": "2026-09-05T09:31Z",
   "refs": [
     {
       "path": ".changeset/prepared-statements-option-strict.md",
@@ -75,7 +75,7 @@
     },
     {
       "path": "skills/hejbro/references/query-layer.md",
-      "blob": "a8c491f7e5efe51b77084cb09540b5523662c144"
+      "blob": "8891b032c030fb5f812ba5b5d846790c5330bf1d"
     }
   ]
 }
