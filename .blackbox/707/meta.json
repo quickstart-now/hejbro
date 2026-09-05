@@ -20,6 +20,18 @@
       "at": "2026-09-04T22:19Z",
       "title": "cv proposal approved; Q1-Q9 settled (informational lines, managed tables only, declared-constraint index exclusion with a backs-constraint line, identifier order, generated/identity included); constraint kind → #859",
       "ratified": null
+    },
+    {
+      "id": "R2",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R1",
+        "412/D13"
+      ],
+      "at": "2026-09-05T00:50Z",
+      "title": "cv (b) accepted at 22f1f99e; conindid repair and its delta sentence accepted; gate gap → #869; report-then-wait rule adopted; reviewer summoned",
+      "ratified": null
     }
   ],
   "work": [
