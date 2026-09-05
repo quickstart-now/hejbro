@@ -19,7 +19,7 @@ planner, not into the diff.
 
 ## 1. Actions on the column form
 
-- [ ] 1.1 (~9m) **[design]** The options argument. Settles the signature
+- [x] 1.1 (~9m) **[design]** The options argument. Settles the signature
       (`references(target, actions?: { readonly onDelete?:
       ForeignKeyAction; readonly onUpdate?: ForeignKeyAction })`) and the
       column-state slot that carries them to the fold. Red: the
@@ -30,22 +30,26 @@ planner, not into the diff.
       actions beside the thunk; `foldColumnReferences` emits them. Files:
       `column-builder.ts`, `table.ts`, tests.
 
-- [ ] 1.2 (~6m) Diff parity. Red: a snapshot from `.references()` with
+- [x] 1.2 (~6m) Diff parity. Red: a snapshot from `.references()` with
       `onDelete: "cascade"` diffed against the same edge with
       `"restrict"` produces the same drop-and-add migration the `extras`
       pair produces; a rename of the target table retargets the
       column-form edge with its actions intact. Files: tests (and
       `table.ts` only if a gap shows).
 
-- [ ] 1.3 (~8m) The example converts. Red: `hejbro verify` in
+- [x] 1.3 (~8m) The example converts. Red: `hejbro verify` in
       `examples/postgres` after converting every single-column foreign
       key to `.references()` with its actions — the snapshot and the
       chain must stay byte-identical (verify's own check 1 and 2), and
       `pnpm --filter example-postgres roundtrip` passes on local Docker.
       Composite or self-referencing keys stay on `extras`. Files:
-      `examples/postgres/src/**`.
+      `examples/postgres/src/**`. `app.schema.ts` and
+      `steps/step-10.schema.ts`'s byte-identity is a convention, not a
+      mechanical gate — `test/chain.test.ts` enforces it indirectly by
+      requiring `step-10`'s declarations to reproduce the same committed
+      migrations and snapshot `app.schema.ts` is verified against.
 
-- [ ] 1.4 (~6m) Docs, decision log, changeset. The cheatsheet's
+- [x] 1.4 (~6m) Docs, decision log, changeset. The cheatsheet's
       foreign-key table teaches the actions on the column form; D102's
       row drops "actions stay on the `extras` path" for the shipped
       sentence; `pnpm changeset` → `minor`. Files: the reference, the
