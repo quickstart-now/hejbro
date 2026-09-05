@@ -4,9 +4,9 @@
   "ref": "quickstart-now/hejbro#846",
   "title": "init/config paths round 2: read-side trailing separator, config ancestor order, nesting wording, dangling link on read, empty --config",
   "parent": "quickstart-now/hejbro#815",
-  "status": "open",
+  "status": "closed",
   "opened": "2026-09-04",
-  "closed": null,
+  "closed": "2026-09-05",
   "decisions": [
     {
       "id": "R1",
@@ -104,6 +104,11 @@
       "number": 847,
       "role": "refs",
       "pinnedAt": "2026-09-04T16:38Z"
+    },
+    {
+      "number": 868,
+      "role": "closes",
+      "pinnedAt": "2026-09-05T00:49Z"
     }
   ],
   "origin": null,

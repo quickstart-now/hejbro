@@ -4,9 +4,9 @@
   "ref": "quickstart-now/hejbro#820",
   "title": "cli: a migrationsDir that is a file crashes generate with a raw ENOTDIR",
   "parent": "quickstart-now/hejbro#815",
-  "status": "open",
+  "status": "closed",
   "opened": "2026-09-04",
-  "closed": null,
+  "closed": "2026-09-05",
   "decisions": [
     {
       "id": "R1",
@@ -34,6 +34,11 @@
       "number": 840,
       "role": "refs",
       "pinnedAt": "2026-09-04T16:03Z"
+    },
+    {
+      "number": 868,
+      "role": "closes",
+      "pinnedAt": "2026-09-05T00:49Z"
     }
   ],
   "origin": null,
