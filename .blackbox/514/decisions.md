@@ -42,3 +42,34 @@ expression the `extras` path uses, which makes `.references(t)` and
 keeps none on `extras`: the example shows the form users should read, and
 the mixed-form canonical-order scenario is covered by core's own tests.
 
+<a id="r3"></a>
+## R3 — examples/postgres conversion scope: app.schema.ts and step-10 only
+
+_lead · interpretation · 2026-09-05T16:36Z · ratified: pending_
+
+Basis: 514/R1 and 514/R2 -- the example is the honest witness, and the
+committed snapshot and migration chain must not move by a byte.
+
+Measured: all seven foreign keys in `examples/postgres/src/app.schema.ts`
+are declared through `extras.foreignKeys`, and all seven carry `onDelete`
+(`projects.ownerId` -> `members.id` also carries `onUpdate: "cascade"`).
+One of them, `comments.parentId` -> `comments.id`, is self-referencing.
+`src/app.schema.ts` and `src/steps/step-10.schema.ts` are byte-identical;
+`step-1` through `step-9` are earlier tutorial snapshots carrying fewer
+foreign keys.
+
+Scope: `app.schema.ts` and `steps/step-10.schema.ts` convert together in
+one diff and stay byte-identical -- six foreign keys move to
+`.references()` with their actions, and the self-referencing one stays on
+`extras`, which satisfies the design's "the example keeps one of each
+form" on its own. `step-1` through `step-9` stay as they are: they are the
+tutorial's own progression, and the delta's witness is the final state's
+unchanged snapshot and chain. Converting every step would drag step
+artifacts and prose along and outgrow one change and one PR; converting
+`app.schema.ts` alone would break its identity with step-10 without
+knowing whether a check enforces that identity -- finding out whether one
+exists is the conversion's own first red.
+
+Tutorial prose that teaches the `extras` form is not edited by this
+change; its location is reported and filed under #815.
+
