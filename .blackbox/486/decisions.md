@@ -9,3 +9,10 @@ _lead · extension · basis 412/D24, D25; D95 (a truthful capability set names w
 
 Design (design.md Q1-Q5): a named capability rather than a buffered fake of transaction(callback); the driver's declaration alone picks the path (interactive wins, batched serves, neither → one error naming both keys); batch(statements) returns one row list per member, atomic, required on Driver with a throwing implementation on false; as(context).transaction(cb) stays interactive-only; the tier check gains a batched leg. driver-contract MODIFIED ×3 + ADDED; rls-execution-context REMOVED ×2 + ADDED ×2. Sequenced after add-prepared-statements archives (shared "exactly N keys" sentence — re-check the delta at merge-in). Ratification: owner on return.
 
+<a id="r2"></a>
+## R2 — #891 (one exported name helper) and #892 (multi-command text = last command's rows) fold into add-batched-transactions
+
+_lead · extension · basis 412/D24, D25; same files (driver contract, pg, neon); refusal rejected because a multi-command text is only detectable after it ran; psql precedent · 2026-09-05T08:29Z · ratified: pending_
+
+Tasks 1.5/1.6 added; driver-contract ADDED requirements for the helper export and the last-command rule. Ratification: owner on return.
+

@@ -1,4 +1,4 @@
-# Proposal: add-batched-transactions (#486)
+# Proposal: add-batched-transactions (#486, #891, #892)
 
 ## Why
 
@@ -50,6 +50,19 @@ Neon recommends for serverless functions.
   callback is interactive by definition. A mandatory-context driver
   (`contextRequired`) is served the same way. Which path a handle takes
   is a property of the driver's declaration, never a runtime probe.
+- **One exported statement-name helper** (#891). The `hejbro_` + SHA-256
+  name `@hejbro/pg` and `@hejbro/neon` each derive today moves to
+  `@hejbro/query`'s driver-contract surface as one export; both drivers
+  call it and hold no copy, and the two goldens stay as its pin.
+- **A multi-command text resolves to its last command's rows** (#892).
+  node-postgres answers a multi-command simple-query text with an array
+  of results and the vanilla driver returned `undefined` rows for it.
+  The contract now states psql's own rule: the rows of the last command
+  are what `execute` resolves, on the vanilla and the Neon WebSocket
+  drivers alike; `undefined` is never what a caller receives. Refusing
+  was rejected: a driver cannot tell a multi-command text apart before
+  sending it without parsing SQL, and refusing after the commands ran
+  would hide effects that already happened.
 - The driver-contract and RLS-context specs are restated; the Neon
   reference's "the HTTP path refuses `db.as`" sentence becomes "the
   HTTP path applies the context in one batch"; one `minor` changeset.
@@ -66,8 +79,9 @@ None.
   capabilities*, *The capability set is exhaustive and statically
   checked* (four keys), *A driver's capability set follows its
   connection path* (a one-shot path declares what its batch can do).
-  ADDED requirement: *A driver executes a pre-composed batch
-  atomically*.
+  ADDED requirements: *A driver executes a pre-composed batch
+  atomically*, *The prepared-statement name is derived by one exported
+  helper*, *A multi-command text resolves to its last command's rows*.
 - **`rls-execution-context`** — REMOVED requirements *Context execution
   requires transactions* and *A provider handle requires the
   interactive-transaction capability*; ADDED requirements *Context

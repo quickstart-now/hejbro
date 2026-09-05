@@ -12,12 +12,14 @@ query/src/driver/missing-capability.ts` and their tests (1.1);
 `packages/neon/src/http.ts`, `packages/neon/src/driver.ts`, `packages/
 pg/src/*.ts`, `packages/supabase/src/driver.ts`, `packages/nile/src/
 driver.ts` and the tier-obligation tests (1.2); `packages/query/src/db/
-context.ts` and tests (1.3); `skills/hejbro/references/neon-preset.md`,
-`skills/hejbro/references/query-layer.md`, one `.changeset/*.md` (1.4).
+context.ts` and tests (1.3); `packages/query/src/driver/statement-name.ts` (new), `packages/pg/src/
+*.ts`, `packages/neon/src/driver.ts` (1.5, 1.6); `skills/hejbro/references/
+neon-preset.md`, `skills/hejbro/references/query-layer.md`, one
+`.changeset/*.md` (1.4).
 If a task appears to need any other file, that goes back to the planner,
 not into the diff.
 
-**Ordering.** 1.1 → 1.2 → 1.3 → 1.4.
+**Ordering.** 1.1 → 1.2 → 1.3 → 1.5 → 1.6 → 1.4.
 
 ## 1. Batched transactions
 
@@ -53,3 +55,18 @@ not into the diff.
       still refuses `transaction(cb)`; `query-layer.md`'s capability
       table gains the key; `pnpm changeset` → `minor`. Files: the two
       references, `.changeset/*.md`.
+
+- [ ] 1.5 (~6m) One statement-name helper (#891). Red: `packages/query/
+      test/driver/statement-name.test.ts` — the export yields the two
+      drivers' existing goldens for their golden texts, and a grep test
+      that neither `packages/pg/src` nor `packages/neon/src` defines a
+      `hejbro_` prefix of its own. Files: `statement-name.ts`,
+      `contract.ts` (re-export), the two drivers, tests.
+
+- [ ] 1.6 (~7m) **[design]** A multi-command text (#892). Settles the
+      rule (last command's rows, psql's own) and its wording. Red: the
+      vanilla and Neon WebSocket driver tests — an input table over
+      {`select 1; select 2`, a DDL then a select, a select then a DDL
+      (empty rows), the drivers' own setup text} asserting the resolved
+      rows are the last command's and never `undefined`. Files: the two
+      drivers, tests.

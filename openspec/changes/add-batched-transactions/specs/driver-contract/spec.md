@@ -112,3 +112,37 @@ rule.
   `false`
 - **THEN** it raises the missing-capability error naming
   `batched-transactions`, and nothing reaches the database
+
+### Requirement: The prepared-statement name is derived by one exported helper
+The name a driver declaring `prepared-statements` gives a built
+statement — `hejbro_` followed by 32 hexadecimal characters of the
+SHA-256 of the statement text — SHALL be derived by one function
+exported from the driver-contract surface, and no shipped driver SHALL
+hold a copy of the derivation. The same text yields the same name on
+every driver, connection and process because there is one function,
+not because two copies happen to agree.
+
+#### Scenario: Both drivers name through the export
+- **WHEN** the vanilla and the Neon WebSocket drivers prepare the same
+  statement text
+- **THEN** both names equal the exported helper's result for that text,
+  and neither package defines a derivation of its own
+
+### Requirement: A multi-command text resolves to its last command's rows
+When a `sql`-kind text carrying more than one command is executed
+through a driver holding a session (the vanilla driver, the Neon
+WebSocket driver), `execute` SHALL resolve to the rows of the last
+command, as `psql` reports them — never to `undefined`, and never to
+the first command's rows. A driver's own session-setup text follows the
+same rule. The query layer never composes such a text; the `sql` escape
+hatch is its only source.
+
+#### Scenario: Two selects resolve to the second's rows
+- **WHEN** `sql\`select 1 as a; select 2 as b\`` is executed on the
+  vanilla or the Neon WebSocket driver
+- **THEN** the call resolves `[{ b: 2 }]`
+
+#### Scenario: A trailing command without rows resolves to no rows
+- **WHEN** a text whose last command returns no rows (a `set`, a DDL)
+  follows a select
+- **THEN** the call resolves an empty array, not `undefined`

@@ -20,6 +20,20 @@
       "at": "2026-09-05T08:26Z",
       "title": "A fourth capability, batched-transactions, with a batch member; a context runs as one batch where interactive transactions are absent",
       "ratified": null
+    },
+    {
+      "id": "R2",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "412/D24",
+        "D25; same files (driver contract",
+        "pg",
+        "neon); refusal rejected because a multi-command text is only detectable after it ran; psql precedent"
+      ],
+      "at": "2026-09-05T08:29Z",
+      "title": "#891 (one exported name helper) and #892 (multi-command text = last command's rows) fold into add-batched-transactions",
+      "ratified": null
     }
   ],
   "work": [],
