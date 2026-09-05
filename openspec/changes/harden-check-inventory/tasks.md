@@ -138,7 +138,7 @@ delta scenarios of `openspec show harden-check-inventory --diff` hold.
   is a real defect and is fixed in `inventory.ts` here.
   Files: `packages/cli/src/check/inventory.ts`,
   `packages/cli/test/check-inventory.test.ts`.
-- [ ] 1.11 ~7m — The omitted-column line's own exit condition, after the
+- [x] 1.11 ~7m — The omitted-column line's own exit condition, after the
   review (lead ruling `.blackbox/707/` R3): renaming a column whose name
   no declaration could carry makes the name carryable, and `check` goes
   on naming it until a declaration carries it — so "until it is renamed
