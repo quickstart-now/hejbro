@@ -128,7 +128,10 @@ const stubPoolWithClient = (
 	const client: {
 		query: ReturnType<typeof vi.fn>;
 		release: ReturnType<typeof vi.fn>;
+		on: ReturnType<typeof vi.fn>;
 	} = {
+		// [task 2.6] silenceUnhandledClientError's own per-checkout attach.
+		on: vi.fn(),
 		query: vi.fn(async (call: QueryCall) => {
 			calls.push(call);
 			const failure = failWhen?.(call);
@@ -144,6 +147,13 @@ const stubPoolWithClient = (
 			client.release = newGuard();
 			return client;
 		}),
+		// [task 2.6] `buildDriver` attaches its own `'error'` listener on
+		// every pool it receives (`silenceUnhandledPoolError`) -- a no-op
+		// here since none of this fixture's own tests emit one; only
+		// `Pool`'s real `on`/`emit` matter for that behavior, exercised in
+		// the "pgDriver's pool survives an idle client's own error" suite
+		// with a real `Pool` instance instead of this stub.
+		on: vi.fn(),
 	} as unknown as Pool;
 	return { pool, calls, releaseCalls };
 };
@@ -192,6 +202,7 @@ describe("pgDriver(connectionString) (owner decision ②, task 5.2)", () => {
 		vi.spyOn(driver.client, "connect").mockResolvedValue({
 			query: vi.fn(async () => ({ rows: [] })),
 			release: vi.fn(),
+			on: vi.fn(), // [task 2.6] silenceUnhandledClientError's own attach
 		} as never);
 		const endSpy = vi.spyOn(driver.client, "end");
 
@@ -206,6 +217,7 @@ describe("pgDriver(connectionString) (owner decision ②, task 5.2)", () => {
 		vi.spyOn(driver.client, "connect").mockResolvedValue({
 			query: vi.fn(async () => ({ rows: [] })),
 			release: vi.fn(),
+			on: vi.fn(), // [task 2.6] silenceUnhandledClientError's own attach
 		} as never);
 		const endSpy = vi.spyOn(driver.client, "end");
 
@@ -218,6 +230,45 @@ describe("pgDriver(connectionString) (owner decision ②, task 5.2)", () => {
 		await flushAsyncWork();
 
 		expect(endSpy).not.toHaveBeenCalled();
+	});
+});
+
+describe("pgDriver's pool survives an idle client's own error (task 2.6, 836/R4/R5, closes #864)", () => {
+	// Node's `EventEmitter` special-cases `'error'`: with zero listeners,
+	// `emit('error', err)` throws `err` synchronously out of the `emit`
+	// call itself -- exactly what turns an unhandled pool error into an
+	// unrecoverable process crash outside a test, and exactly what a
+	// synchronous `expect(...).not.toThrow()` around `emit` catches here,
+	// with no real connection needed (the `Pool` constructor never
+	// connects on its own).
+	it("does not crash when the pool emits 'error' (pgDriver(pool))", () => {
+		const pool = new Pool({
+			connectionString: "postgres://localhost/does-not-need-to-connect",
+		});
+		const driver = pgDriver(pool);
+
+		expect(() => {
+			driver.client.emit("error", new Error("terminated by administrator"));
+		}).not.toThrow();
+	});
+
+	it("does not crash when the pool emits 'error' (pgDriver(connectionString))", () => {
+		const driver = pgDriver("postgres://localhost/does-not-need-to-connect");
+
+		expect(() => {
+			driver.client.emit("error", new Error("terminated by administrator"));
+		}).not.toThrow();
+	});
+
+	it("attaches its own listener rather than relying on one the caller already had (pgDriver(pool))", () => {
+		const pool = new Pool({
+			connectionString: "postgres://localhost/does-not-need-to-connect",
+		});
+		expect(pool.listenerCount("error")).toBe(0);
+
+		const driver = pgDriver(pool);
+
+		expect(driver.client.listenerCount("error")).toBeGreaterThan(0);
 	});
 });
 
@@ -620,8 +671,12 @@ describe("pgDriver setupSession IntervalStyle pin (owner decision ④, task 5.5)
 				return { rows: [] };
 			}),
 			release: vi.fn(),
+			on: vi.fn(), // [task 2.6] silenceUnhandledClientError's own attach
 		};
-		const pool = { connect: vi.fn(async () => client) } as unknown as Pool;
+		const pool = {
+			connect: vi.fn(async () => client),
+			on: vi.fn(), // [task 2.6] buildDriver's own error-listener attach
+		} as unknown as Pool;
 		const driver = pgDriver(pool);
 
 		// the first execute()'s pin attempt fails, and the whole call
@@ -659,9 +714,16 @@ describe("pgDriver setupSession IntervalStyle pin (owner decision ④, task 5.5)
 				return { rows: [] };
 			}),
 			release: vi.fn(),
+			on: vi.fn(), // [task 2.6] silenceUnhandledClientError's own attach
 		};
-		const poolA = { connect: vi.fn(async () => client) } as unknown as Pool;
-		const poolB = { connect: vi.fn(async () => client) } as unknown as Pool;
+		const poolA = {
+			connect: vi.fn(async () => client),
+			on: vi.fn(), // [task 2.6] buildDriver's own error-listener attach
+		} as unknown as Pool;
+		const poolB = {
+			connect: vi.fn(async () => client),
+			on: vi.fn(), // [task 2.6] buildDriver's own error-listener attach
+		} as unknown as Pool;
 		const driverA = pgDriver(poolA);
 		const driverB = pgDriver(poolB);
 

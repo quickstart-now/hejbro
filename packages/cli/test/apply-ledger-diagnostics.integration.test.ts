@@ -180,6 +180,98 @@ const holdMigrateLock = (
 	};
 };
 
+/**
+ * [task 2.6, 836/R4/R5, closes #864] Opens an interactive `psql` session
+ * against `database` and holds an `ACCESS EXCLUSIVE` lock on the ledger
+ * table inside an uncommitted transaction, so a plain `select` against
+ * that table (`readLedger`'s own statement) blocks -- the deterministic
+ * half of this task's race (a real read caught mid-flight, never left to
+ * two processes racing on their own schedules). Mirrors
+ * {@link holdMigrateLock} exactly, one statement swapped.
+ */
+const holdLedgerTableLock = (
+	database: string,
+): { readonly ready: Promise<void>; readonly release: () => void } => {
+	const proc = spawn(
+		"docker",
+		[
+			"exec",
+			"-i",
+			CONTAINER,
+			"psql",
+			"-U",
+			"postgres",
+			"-d",
+			database,
+			"-t",
+			"-A",
+		],
+		{ stdio: ["pipe", "pipe", "inherit"] },
+	);
+	const ready = new Promise<void>((resolveReady) => {
+		let buffer = "";
+		proc.stdout?.on("data", (chunk: Buffer) => {
+			buffer += chunk.toString();
+			if (buffer.includes("LOCKHELD")) {
+				resolveReady();
+			}
+		});
+	});
+	proc.stdin?.write(
+		'begin;\nlock table "hejbro"."migration_ledger" in access exclusive mode;\nselect \'LOCKHELD\';\n',
+	);
+	return {
+		ready,
+		release: () => {
+			proc.stdin?.write("commit;\n");
+			proc.stdin?.end();
+		},
+	};
+};
+
+/** The `pid` of a backend blocked waiting on the ledger table's lock, reading it off `pg_stat_activity` the same way real DBAs would -- `null` while no such backend exists yet. */
+const blockedReaderPid = (database: string): number | null => {
+	const output = execFileSync(
+		"docker",
+		[
+			"exec",
+			CONTAINER,
+			"psql",
+			"-U",
+			"postgres",
+			"-d",
+			database,
+			"-t",
+			"-A",
+			"-c",
+			"select pid from pg_stat_activity where wait_event_type = 'Lock' and query ilike '%migration_ledger%' limit 1",
+		],
+		{ encoding: "utf-8" },
+	);
+	const trimmed = output.trim();
+	if (trimmed === "") {
+		return null;
+	}
+	return Number(trimmed);
+};
+
+const waitUntilBlockedReader = async (
+	database: string,
+	attemptsLeft: number,
+): Promise<number> => {
+	const pid = blockedReaderPid(database);
+	if (pid !== null) {
+		return pid;
+	}
+	if (attemptsLeft <= 0) {
+		throw new Error(
+			"status's own ledger read never blocked on the table lock -- the race this test builds never armed.",
+		);
+	}
+	await sleep(100);
+	return waitUntilBlockedReader(database, attemptsLeft - 1);
+};
+
 let hostPort = "";
 /** Connects as `postgres` (superuser, trust auth) -- for setup/verification, never the scenario under test. */
 const hostUrl = (database: string): string =>
@@ -464,6 +556,45 @@ describe("hejbro ledger diagnostics — live witness (#836/#823, task 1.9)", () 
 			if (pendingFileName !== undefined) {
 				expect(migrate.stderr).not.toContain(pendingFileName);
 			}
+		} finally {
+			await removeCliFixtureDir(cwd);
+		}
+	}, 60_000);
+
+	it("(d) task 2.6: the backend is terminated while status's own ledger read is blocked -- a coded diagnostic, never a raw crash (closes #864)", async () => {
+		const database = "ld_terminated";
+		psqlCommand("postgres", `create database ${database};`);
+		const cwd = await createCliFixtureDir();
+		try {
+			await runCli(cwd, ["init"]);
+			await writeFixtureFile(cwd, "src/a.schema.ts", SCHEMA_A_SOURCE);
+			await runCli(cwd, ["generate"]);
+			const bootstrap = await runCli(cwd, [
+				"migrate",
+				"--url",
+				hostUrl(database),
+			]);
+			expect(bootstrap.exitCode).toBe(0);
+
+			const holder = holdLedgerTableLock(database);
+			await holder.ready;
+			const statusPromise = runCli(cwd, ["status", "--url", hostUrl(database)]);
+			const pid = await waitUntilBlockedReader(database, 50);
+			// The reviewer's own reproduction, measured against a real server
+			// (2 of 2 deterministic): terminating the backend a ledger read is
+			// blocked on used to kill the whole `status` process with an
+			// unhandled `'error'` event -- `@hejbro/pg`'s pool had no listener
+			// of its own (836/R4/R5, #864). Fixed by giving the pool one
+			// (`silenceUnhandledPoolError`); this is the live witness that a
+			// terminated connection now surfaces as this coded diagnostic
+			// instead.
+			psqlCommand("postgres", `select pg_terminate_backend(${pid});`);
+			const status = await statusPromise;
+			holder.release();
+
+			expect(status.exitCode).not.toBe(0);
+			expect(status.stderr).toContain("error[apply-ledger-unreadable]");
+			expect(status.stderr).not.toMatch(STACK_FRAME_PATTERN);
 		} finally {
 			await removeCliFixtureDir(cwd);
 		}
