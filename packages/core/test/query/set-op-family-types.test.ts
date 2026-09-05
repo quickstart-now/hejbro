@@ -178,17 +178,48 @@ describe("the rule reaches the core combinator's own parameter (task 1.2a, core 
 		);
 	});
 
-	it("the compiled statement is the one Postgres accepts (an untyped branch's runtime counterpart to the row above)", () => {
-		// Type-checking alone is only half the scenario's claim -- this
-		// closes the other half: the untyped side and the concrete column
-		// both render into one ordinary union, not a placeholder for
-		// either branch.
-		const stage = select({ v: sql`1` }, numericRows).union(
+	// `sql` resolves to family "unknown" here in the type layer, but a
+	// fragment is not always genuinely untyped to the server (`` sql`1` ``
+	// is `integer` there, not unknown) -- these three rows use a quoted
+	// string literal, the server's own untyped case (scenario: "An
+	// expression the server leaves untyped is resolved against the other
+	// branch"), and assert the rendered statement is the one Postgres
+	// accepts, not just that it type-checks.
+	it("an expression the server leaves untyped is resolved against the other branch -- on the left", () => {
+		const stage = select({ v: sql`'1'` }, numericRows).union(
 			select({ v: numericRows.v }, numericRows),
 		);
 		expect(renderSetOp(stage.setOpQuery)).toBe(
-			'select 1 as "v" from "app"."numeric_rows" union select "app"."numeric_rows"."v" as "v" from "app"."numeric_rows"',
+			'select \'1\' as "v" from "app"."numeric_rows" union select "app"."numeric_rows"."v" as "v" from "app"."numeric_rows"',
 		);
+	});
+
+	it("an expression the server leaves untyped is resolved against the other branch -- on the right", () => {
+		const stage = select({ v: numericRows.v }, numericRows).union(
+			select({ v: sql`'1'` }, numericRows),
+		);
+		expect(renderSetOp(stage.setOpQuery)).toBe(
+			'select "app"."numeric_rows"."v" as "v" from "app"."numeric_rows" union select \'1\' as "v" from "app"."numeric_rows"',
+		);
+	});
+
+	it("an expression the server leaves untyped is resolved against the other branch -- on both sides", () => {
+		const stage = select({ v: sql`'1'` }, numericRows).union(
+			select({ v: sql`'1'` }, numericRows),
+		);
+		expect(renderSetOp(stage.setOpQuery)).toBe(
+			'select \'1\' as "v" from "app"."numeric_rows" union select \'1\' as "v" from "app"."numeric_rows"',
+		);
+	});
+
+	it("a sql fragment is accepted because the type layer cannot see it, even where the server would refuse it", () => {
+		// `` sql`1` `` has no family this layer can see, so it is accepted
+		// against `text` -- but the server resolves the fragment itself as
+		// `integer`, and `integer` against `text` is a refused pair
+		// (measured 1.1): this exact statement fails on postgres:17 with
+		// `42804`, not here. No `@ts-expect-error`: this is the fail-open
+		// this layer's own visibility limit predicts, not a bug.
+		select({ v: sql`1` }, textRows).union(select({ v: textRows.v }, textRows));
 	});
 });
 
