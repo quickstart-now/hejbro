@@ -4,9 +4,9 @@
   "ref": "quickstart-now/hejbro#515",
   "title": "core-internal traversal helpers presets/query can't fold without a public export",
   "parent": "quickstart-now/hejbro#412",
-  "status": "open",
+  "status": "closed",
   "opened": "2026-09-05",
-  "closed": null,
+  "closed": "2026-09-05",
   "decisions": [
     {
       "id": "R1",
@@ -88,7 +88,13 @@
       "decisions": []
     }
   ],
-  "prs": [],
+  "prs": [
+    {
+      "number": 988,
+      "role": "closes",
+      "pinnedAt": "2026-09-05T20:51Z"
+    }
+  ],
   "origin": null,
   "followUps": []
 }

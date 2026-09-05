@@ -1,0 +1,21 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#473",
+  "title": "exprnode child positions are restated across six structural traversal tables",
+  "parent": "quickstart-now/hejbro#282",
+  "status": "open",
+  "opened": "2026-09-05",
+  "closed": null,
+  "decisions": [],
+  "work": [],
+  "prs": [
+    {
+      "number": 988,
+      "role": "refs",
+      "pinnedAt": "2026-09-05T20:51Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}
