@@ -1,0 +1,21 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#815",
+  "title": "0.2.x: post-release commitments (2)",
+  "parent": null,
+  "status": "open",
+  "opened": "2026-09-05",
+  "closed": null,
+  "decisions": [],
+  "work": [],
+  "prs": [
+    {
+      "number": 867,
+      "role": "refs",
+      "pinnedAt": "2026-09-05T00:24Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

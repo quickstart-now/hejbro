@@ -45,7 +45,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | [#374](374/) | adversarial spec-only review stage in the opsx cycle | closed | #539 | 1 | 0 (0 pending) |
 | [#377](377/) | snapshot format stability policy for 1.0 | closed | #383 | 1 | 0 (0 pending) |
 | [#378](378/) | defect-leakage metric over escaped defects | closed | #384 | 1 | 0 (0 pending) |
-| [#412](412/) | 0.2.x: post-release commitments | open | #715 #808 #824 #835 #840 #849 #851 #858 #850 (via #449) #737 (via #528) #760 (via #528) #773 (via #533) #733 (via #679) #758 (via #679) #739 (via #687) #759 (via #687) #770 (via #687) #861 (via #701) #847 (via #741) #833 (via #748) #784 (via #750) #802 (via #750) #775 (via #752) #799 (via #752) #780 (via #754) #795 (via #754) #855 (via #778) #838 (via #783) #786 (via #785) #789 (via #787) #790 (via #788) #792 (via #791) #794 (via #793) #822 (via #800) #806 (via #804) #813 (via #807) #811 (via #810) | 19 | 28 (0 pending) |
+| [#412](412/) | 0.2.x: post-release commitments | open | #715 #808 #824 #835 #840 #849 #851 #858 #867 #850 (via #449) #737 (via #528) #760 (via #528) #773 (via #533) #733 (via #679) #758 (via #679) #739 (via #687) #759 (via #687) #770 (via #687) #861 (via #701) #847 (via #741) #833 (via #748) #784 (via #750) #802 (via #750) #775 (via #752) #799 (via #752) #780 (via #754) #795 (via #754) #855 (via #778) #838 (via #783) #786 (via #785) #789 (via #787) #790 (via #788) #792 (via #791) #794 (via #793) #822 (via #800) #806 (via #804) #813 (via #807) #811 (via #810) | 19 | 28 (0 pending) |
 | ↳ [#449](449/) | concurrent tx.execute beside a nested transaction is unguarded | closed | #849 #850 | 0 | 3 (2 pending) |
 | ↳ [#528](528/) | driver-conformance kit mis-observes transaction-wrapping session-state:false drivers | closed | #737 #760 | 0 | 6 (0 pending) |
 | ↳ [#531](531/) | pg checkout reads its own setupSession; the spec's late-binding scenario fails for spread decorators | closed | #737 | 0 | 3 (0 pending) |
@@ -111,27 +111,28 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | [#573](573/) | nile preset: measure identity columns and keyless tables on tenant-aware tables (D106 F9) | closed | #578 | 1 | 0 (0 pending) |
 | [#603](603/) | Apply engine (D12 revised): hejbro owns migrate and reset, production included | closed | #628 | 0 | 0 (0 pending) |
 | [#714](714/) | add a brownfield corpus: a database hejbro did not create, with a standing import→baseline→check witness | open | #851 #858 | 0 | 0 (0 pending) |
-| [#819](819/) | cli: --config is honoured by every command and one root resolves every configured path | open | #840 | 0 | 0 (0 pending) |
-| [#820](820/) | cli: a migrationsDir that is a file crashes generate with a raw ENOTDIR | open | #840 | 0 | 0 (0 pending) |
-| [#823](823/) | migrate: a failed ledger insert is reported as the migration's failure | open | #835 | 0 | 0 (0 pending) |
-| [#830](830/) | cli: config-not-found Next names hejbro.config.ts even when --config pointed elsewhere | open | #840 | 0 | 0 (0 pending) |
-| [#831](831/) | cli: the directory-at-config-path refusal repeats the file name twice | open | #840 | 0 | 0 (0 pending) |
-| [#832](832/) | core: category-C keywords fail as argument names but are not refused; the stated class does not match the list | open | #833 | 0 | 0 (0 pending) |
-| [#836](836/) | status: a permission error on a real ledger reaches the user as a raw node-postgres object | open | #838 | 0 | 0 (0 pending) |
-| [#837](837/) | raise --file with an absolute path is joined onto the cwd and dies with a raw ENOENT | open | #838 | 0 | 0 (0 pending) |
-| [#841](841/) | check: the backtick delimiter around expression texts collides with a backtick inside a string literal | open | #851 #855 | 0 | 0 (0 pending) |
-| [#842](842/) | pg driver: set intervalstyle / set bytea_output per connection contradicts the no-session-state clause | open | #851 | 0 | 0 (0 pending) |
-| [#843](843/) | check: a not-compared outcome folds into exit 1 with real differences | open | #851 | 0 | 0 (0 pending) |
-| [#844](844/) | check: plain index key columns, uniqueness and method are still compared for existence only | open | #851 | 0 | 0 (0 pending) |
-| [#845](845/) | vendor: a table named fn or as is unreachable behind the client's own members | open | #849 #850 | 0 | 0 (0 pending) |
-| [#846](846/) | init/config paths round 2: read-side trailing separator, config ancestor order, nesting wording, dangling link on read, empty --config | open | #847 | 0 | 0 (0 pending) |
-| [#848](848/) | query: a nested transaction the root callback never awaited commits alone after the root commit | open | #849 #850 | 0 | 0 (0 pending) |
-| [#852](852/) | check: the column-default axis still delimits expression text with double quotes | open | #855 | 0 | 0 (0 pending) |
-| [#853](853/) | check: a not-compared Next: blames EXPLAIN privilege for a non-privilege server reason | open | #855 | 0 | 0 (0 pending) |
-| [#854](854/) | check: the declared expression is spelled differently by mode and surface | open | #855 | 0 | 0 (0 pending) |
-| [#856](856/) | core: a trigger with a duplicated event or update column commits a migration postgres refuses | open | #858 #861 | 0 | 0 (0 pending) |
-| [#857](857/) | core: a policy with a repeated role renders a duplicate the catalog keeps | open | #858 | 0 | 0 (0 pending) |
-| [#866](866/) | chore: vendor dd-blackbox meta v3 and migrate the record (pins once per PR) | closed | #867 | 0 | 0 (0 pending) |
+| [#815](815/) | 0.2.x: post-release commitments (2) | open | #867 #840 (via #819) #835 (via #823) #833 (via #832) #838 (via #836) #851 (via #841) #855 (via #841) #849 (via #845) #850 (via #845) #847 (via #846) #858 (via #856) #861 (via #856) | 0 | 0 (0 pending) |
+| ↳ [#819](819/) | cli: --config is honoured by every command and one root resolves every configured path | open | #840 | 0 | 0 (0 pending) |
+| ↳ [#820](820/) | cli: a migrationsDir that is a file crashes generate with a raw ENOTDIR | open | #840 | 0 | 0 (0 pending) |
+| ↳ [#823](823/) | migrate: a failed ledger insert is reported as the migration's failure | open | #835 | 0 | 0 (0 pending) |
+| ↳ [#830](830/) | cli: config-not-found Next names hejbro.config.ts even when --config pointed elsewhere | open | #840 | 0 | 0 (0 pending) |
+| ↳ [#831](831/) | cli: the directory-at-config-path refusal repeats the file name twice | open | #840 | 0 | 0 (0 pending) |
+| ↳ [#832](832/) | core: category-C keywords fail as argument names but are not refused; the stated class does not match the list | open | #833 | 0 | 0 (0 pending) |
+| ↳ [#836](836/) | status: a permission error on a real ledger reaches the user as a raw node-postgres object | open | #838 | 0 | 0 (0 pending) |
+| ↳ [#837](837/) | raise --file with an absolute path is joined onto the cwd and dies with a raw ENOENT | open | #838 | 0 | 0 (0 pending) |
+| ↳ [#841](841/) | check: the backtick delimiter around expression texts collides with a backtick inside a string literal | open | #851 #855 | 0 | 0 (0 pending) |
+| ↳ [#842](842/) | pg driver: set intervalstyle / set bytea_output per connection contradicts the no-session-state clause | open | #851 | 0 | 0 (0 pending) |
+| ↳ [#843](843/) | check: a not-compared outcome folds into exit 1 with real differences | open | #851 | 0 | 0 (0 pending) |
+| ↳ [#844](844/) | check: plain index key columns, uniqueness and method are still compared for existence only | open | #851 | 0 | 0 (0 pending) |
+| ↳ [#845](845/) | vendor: a table named fn or as is unreachable behind the client's own members | open | #849 #850 | 0 | 0 (0 pending) |
+| ↳ [#846](846/) | init/config paths round 2: read-side trailing separator, config ancestor order, nesting wording, dangling link on read, empty --config | open | #847 | 0 | 0 (0 pending) |
+| ↳ [#848](848/) | query: a nested transaction the root callback never awaited commits alone after the root commit | open | #849 #850 | 0 | 0 (0 pending) |
+| ↳ [#852](852/) | check: the column-default axis still delimits expression text with double quotes | open | #855 | 0 | 0 (0 pending) |
+| ↳ [#853](853/) | check: a not-compared Next: blames EXPLAIN privilege for a non-privilege server reason | open | #855 | 0 | 0 (0 pending) |
+| ↳ [#854](854/) | check: the declared expression is spelled differently by mode and surface | open | #855 | 0 | 0 (0 pending) |
+| ↳ [#856](856/) | core: a trigger with a duplicated event or update column commits a migration postgres refuses | open | #858 #861 | 0 | 0 (0 pending) |
+| ↳ [#857](857/) | core: a policy with a repeated role renders a duplicate the catalog keeps | open | #858 | 0 | 0 (0 pending) |
+| ↳ [#866](866/) | chore: vendor dd-blackbox meta v3 and migrate the record (pins once per PR) | closed | #867 | 0 | 0 (0 pending) |
 
 ## Totals
 
