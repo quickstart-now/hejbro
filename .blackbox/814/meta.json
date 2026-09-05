@@ -7,7 +7,19 @@
   "status": "open",
   "opened": "2026-09-05",
   "closed": null,
-  "decisions": [],
+  "decisions": [
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "run 33868831782 (four young packages landed on latest); OIDC trusted publishing leaves no credential for a post-publish dist-tag step; changesets' own pre-mode tagging for packages with a stable history"
+      ],
+      "at": "2026-09-05T06:31Z",
+      "title": "A pre-mode publish passes --tag pre; the change is owner-gated and PR #893 waits for the owner",
+      "ratified": null
+    }
+  ],
   "work": [],
   "prs": [
     {
