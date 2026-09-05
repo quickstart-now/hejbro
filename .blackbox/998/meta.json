@@ -9,7 +9,13 @@
   "closed": null,
   "decisions": [],
   "work": [],
-  "prs": [],
+  "prs": [
+    {
+      "number": 999,
+      "role": "refs",
+      "pinnedAt": "2026-09-05T23:36Z"
+    }
+  ],
   "origin": null,
   "followUps": []
 }
