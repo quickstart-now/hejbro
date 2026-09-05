@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type {
+	CompileKind,
 	CompileResult,
 	Driver,
 	DriverCapabilities,
@@ -11,20 +12,21 @@ import { anonymousRole, authenticatedRole } from "./roles";
 import { intervalPassthroughTypes } from "./type-overrides";
 
 /**
- * Fixed per task 3.4, measured against a local proxy (`design.md`), not
- * assumed from the client's node-postgres compatibility: a Neon `Pool`
- * holds one physical connection open across round trips (`BEGIN`/
- * `COMMIT`) and preserves `SET`-style session state across sequential
- * statements on it, exactly like `@hejbro/pg`'s own `Pool`.
- * `prepared-statements` is the caller's own (task 1.3, #303), stated
- * through {@link NeonDriverOptions} -- this fixed base is spread with the
- * caller's answer at construction.
+ * `interactive-transactions` and `session-state` are fixed `true` (task
+ * 3.4, measured against a local proxy, `design.md`): a Neon `Pool` holds
+ * one physical connection open across round trips (`BEGIN`/`COMMIT`) and
+ * preserves `SET`-style session state across sequential statements on
+ * it, exactly like `@hejbro/pg`'s own `Pool`. `prepared-statements` is
+ * the caller's own (task 1.3, #303), stated through
+ * {@link NeonDriverOptions}.
  */
-const WS_CAPABILITIES: DriverCapabilities = {
+const wsCapabilitiesFor = (
+	preparedStatements: boolean,
+): DriverCapabilities => ({
 	"interactive-transactions": true,
 	"session-state": true,
-	"prepared-statements": false,
-};
+	"prepared-statements": preparedStatements,
+});
 
 /** The second-argument shape `neonDriver`'s `Pool` overload accepts (task 1.3, #303, add-prepared-statements design Q3) -- the HTTP overload has no session to prepare in, so its own type offers none. */
 export type NeonDriverOptions = {
@@ -42,6 +44,20 @@ const preparedStatementName = (sql: string): string =>
 	`hejbro_${createHash("sha256").update(sql).digest("hex").slice(0, 32)}`;
 
 /**
+ * The kinds a prepared statement may carry (mirrors `@hejbro/pg`'s own
+ * `BUILT_KINDS`): an explicit allowlist, never `kind !== "sql"` -- a
+ * future `CompileKind` this set doesn't yet name fails closed (sent
+ * unnamed) rather than being named by default.
+ */
+const BUILT_KINDS: ReadonlySet<CompileKind> = new Set([
+	"select",
+	"insert",
+	"update",
+	"delete",
+	"setOp",
+]);
+
+/**
  * The queryable surface {@link makeSession} needs from either a `Pool` or
  * a single checked-out `PoolClient` — kept narrow (mirrors
  * `@hejbro/pg`'s own `Queryable`) so this never has to distinguish which
@@ -54,7 +70,7 @@ const nameForQueryConfig = (
 	compiled: CompileResult,
 	preparedStatements: boolean,
 ): { readonly name?: string } => {
-	if (preparedStatements && compiled.kind !== "sql") {
+	if (preparedStatements && BUILT_KINDS.has(compiled.kind)) {
 		return { name: preparedStatementName(compiled.sql) };
 	}
 	return {};
@@ -101,20 +117,21 @@ const setupSession = async (session: DriverSession): Promise<void> => {
  * Builds the per-driver checkout guard (mirrors `@hejbro/pg`'s own): a
  * `WeakSet` scoped to one {@link buildWebSocketDriver} call, pinning
  * strictly before returning so a caller's next statement on the same
- * client is never sent unpinned.
+ * client is never sent unpinned. `preparedStatements` is threaded to
+ * {@link makeSession} exactly as every other call site does -- no
+ * special case for the checkout pin; `nameForQueryConfig`'s own kind
+ * check is what keeps the pin's `kind: "sql"` statement unnamed.
  */
 const checkoutGuard = (
 	getSetupSession: () => (session: DriverSession) => Promise<void>,
+	preparedStatements: boolean,
 ): ((client: PoolClient) => Promise<void>) => {
 	const pinnedConnections = new WeakSet<PoolClient>();
 	return async (client) => {
 		if (pinnedConnections.has(client)) {
 			return;
 		}
-		// The pin is always `kind: "sql"`, which `makeSession` never names
-		// regardless of this flag -- `false` documents that (mirrors
-		// `@hejbro/pg`'s own checkoutGuard).
-		await getSetupSession()(makeSession(client, false));
+		await getSetupSession()(makeSession(client, preparedStatements));
 		pinnedConnections.add(client);
 	};
 };
@@ -146,12 +163,12 @@ const buildWebSocketDriver = (
 	pool: Pool,
 	preparedStatements: boolean,
 ): Driver => {
-	const ensurePinned = checkoutGuard(() => driver.setupSession);
+	const ensurePinned = checkoutGuard(
+		() => driver.setupSession,
+		preparedStatements,
+	);
 	const driver: Driver = {
-		capabilities: {
-			...WS_CAPABILITIES,
-			"prepared-statements": preparedStatements,
-		},
+		capabilities: wsCapabilitiesFor(preparedStatements),
 		execute: async (compiled) => {
 			const client = await pool.connect();
 			try {

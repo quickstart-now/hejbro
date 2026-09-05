@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type {
+	CompileKind,
 	CompileResult,
 	Driver,
 	DriverCapabilities,
@@ -9,19 +10,19 @@ import type { CustomTypesConfig, PoolClient } from "pg";
 import { Pool, types as pgTypes } from "pg";
 
 /**
- * Fixed per owner decision ①, tasks.md group 5 header -- both capabilities
- * are `true` because a single physical TCP connection to Postgres
- * inherently supports `BEGIN`/`COMMIT` across round trips and preserves
- * `SET`-style session state across sequential statements on the same
- * connection. `prepared-statements` is the caller's own, stated through
- * {@link PgDriverOptions} (add-prepared-statements design Q3) -- this
- * fixed base object is spread with the caller's answer at construction.
+ * `interactive-transactions` and `session-state` are fixed `true` (owner
+ * decision ①, tasks.md group 5 header): a single physical TCP connection
+ * to Postgres inherently supports `BEGIN`/`COMMIT` across round trips and
+ * preserves `SET`-style session state across sequential statements on
+ * the same connection. `prepared-statements` is the caller's own,
+ * stated through {@link PgDriverOptions} (add-prepared-statements
+ * design Q3).
  */
-const CAPABILITIES: DriverCapabilities = {
+const capabilitiesFor = (preparedStatements: boolean): DriverCapabilities => ({
 	"interactive-transactions": true,
 	"session-state": true,
-	"prepared-statements": false,
-};
+	"prepared-statements": preparedStatements,
+});
 
 /** The second-argument shape both `pgDriver` overloads accept (add-prepared-statements design Q3). */
 export type PgDriverOptions = {
@@ -43,6 +44,21 @@ const preparedStatementName = (sql: string): string =>
 	`hejbro_${createHash("sha256").update(sql).digest("hex").slice(0, 32)}`;
 
 /**
+ * The kinds a prepared statement may carry (add-prepared-statements
+ * spec, "A driver that declares prepared statements names its built
+ * statements"): an explicit allowlist, never `kind !== "sql"` -- a
+ * future `CompileKind` this list doesn't yet name must fail closed
+ * (sent unnamed) rather than being named by default.
+ */
+const BUILT_KINDS: ReadonlySet<CompileKind> = new Set([
+	"select",
+	"insert",
+	"update",
+	"delete",
+	"setOp",
+]);
+
+/**
  * The `name` key {@link makeSession} spreads into a query config -- an
  * empty object when the statement is not to be named, never `{ name:
  * undefined }`, so an existing caller's config stays byte-identical to
@@ -52,7 +68,7 @@ const nameForQueryConfig = (
 	compiled: CompileResult,
 	preparedStatements: boolean,
 ): { readonly name?: string } => {
-	if (preparedStatements && compiled.kind !== "sql") {
+	if (preparedStatements && BUILT_KINDS.has(compiled.kind)) {
 		return { name: preparedStatementName(compiled.sql) };
 	}
 	return {};
@@ -185,20 +201,22 @@ const setupSession = async (session: DriverSession): Promise<void> => {
  * additional session setup) has to take effect on every checkout from
  * then on; closing over the original function reference here would make
  * that wrapper permanently unreachable from the checkout path, silently.
+ *
+ * `preparedStatements` is threaded to {@link makeSession} exactly as
+ * every other call site does (task 1.2, #303) -- no special case for
+ * the checkout pin: `nameForQueryConfig`'s own kind check is what keeps
+ * the pin's `kind: "sql"` statement unnamed, not a hardcoded value here.
  */
 const checkoutGuard = (
 	getSetupSession: () => (session: DriverSession) => Promise<void>,
+	preparedStatements: boolean,
 ): ((client: PoolClient) => Promise<void>) => {
 	const pinnedConnections = new WeakSet<PoolClient>();
 	return async (client) => {
 		if (pinnedConnections.has(client)) {
 			return;
 		}
-		// The pin is always `kind: "sql"` (setupSession's own call), which
-		// `makeSession` never names regardless of this flag -- `false` here
-		// documents that, rather than threading a value that can't change
-		// the outcome.
-		await getSetupSession()(makeSession(client, false));
+		await getSetupSession()(makeSession(client, preparedStatements));
 		pinnedConnections.add(client);
 	};
 };
@@ -338,13 +356,13 @@ const buildDriver = (
 	preparedStatements: boolean,
 ): Driver & { readonly client: Pool } => {
 	silenceUnhandledPoolError(pool);
-	const ensurePinned = checkoutGuard(() => driver.setupSession);
+	const ensurePinned = checkoutGuard(
+		() => driver.setupSession,
+		preparedStatements,
+	);
 	const driver: Driver & { readonly client: Pool } = {
 		client: pool,
-		capabilities: {
-			...CAPABILITIES,
-			"prepared-statements": preparedStatements,
-		},
+		capabilities: capabilitiesFor(preparedStatements),
 		execute: async (compiled) => {
 			const client = await pool.connect();
 			silenceUnhandledClientError(client);

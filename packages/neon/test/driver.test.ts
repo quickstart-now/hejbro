@@ -272,24 +272,31 @@ describe("neonDriver(pool, { preparedStatements }) names built statements only w
 	});
 
 	it("sends no name at all when the option is absent (regression control)", async () => {
+		// `toStrictEqual`, not `toEqual`: `toEqual` treats `{ name:
+		// undefined }` as equal to `{}`, hiding exactly the regression
+		// this test exists to catch.
 		const config = await captureCallerConfig(undefined, {
 			sql: "select 1",
 			params: [],
 			kind: "select",
 		});
-		expect(config).toEqual({
+		expect(config).toStrictEqual({
 			text: "select 1",
 			values: [],
 			types: config.types,
 		});
 	});
 
-	it("sends no name when the option is explicitly false", async () => {
+	it("sends no name when the option is explicitly false -- config has no name key at all, not an undefined one", async () => {
 		const config = await captureCallerConfig(
 			{ preparedStatements: false },
 			{ sql: "select 1", params: [], kind: "select" },
 		);
-		expect(config.name).toBeUndefined();
+		expect(config).toStrictEqual({
+			text: "select 1",
+			values: [],
+			types: config.types,
+		});
 	});
 
 	it("names the same text identically across two drivers built over two different pools (a pure function of the text)", async () => {

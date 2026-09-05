@@ -147,3 +147,56 @@ packages bump minor). Full gate green: TURBO_FORCE=1 pnpm check-types
 (18/18), pnpm check, pnpm check:bans, TURBO_FORCE=1 pnpm test (all
 packages, no regressions). tasks.md's six checkboxes ticked.
 
+<a id="w7"></a>
+## W7 — task 1.2 review fixes: allowlist, uniform makeSession, exact config, public export
+
+_2026-09-05T05:33Z_
+
+Planner review of 1.2 (6d7bb39e) required four fixes, applied before
+proceeding to 1.3:
+(1) nameForQueryConfig switched from a denylist (kind !== "sql") to an
+    explicit BUILT_KINDS allowlist -- a future CompileKind this set
+    doesn't name now fails closed (unnamed) instead of being named by
+    default.
+(2) checkoutGuard no longer hardcodes false for the checkout pin's own
+    makeSession call; it now threads the driver's real
+    preparedStatements value uniformly to every makeSession call site.
+    The pin still comes out unnamed because nameForQueryConfig's own
+    kind check excludes "sql", not because of a call-site special case.
+(3) The two "no option" tests switched from toEqual to toStrictEqual --
+    toEqual treats {name: undefined} as equal to {}, which would have
+    hidden the exact regression ("byte-for-byte what the driver sent
+    before") this axis exists to catch.
+(4) packages/pg/src/index.ts now exports PgDriverOptions as a type,
+    matching @hejbro/supabase's own convention of publishing its
+    driver's options type; no export-pin test exists in packages/pg/
+    test to update. CAPABILITIES const also became a capabilitiesFor()
+    factory per planner's clean-up note (no behavior change).
+
+Verified: packages/pg's 52/52 tests still pass; full gate green
+(TURBO_FORCE=1 pnpm check-types 18/18, pnpm check, pnpm check:bans,
+TURBO_FORCE=1 pnpm test all packages, no regressions).
+
+<a id="w8"></a>
+## W8 — task 1.3 proactive review-parity fixes with 1.2
+
+_2026-09-05T05:39Z_
+
+Applied the same four fixes planner required for 1.2 (W7) to 1.3's
+neon driver.ts proactively, before planner reviewed 1.3, since it was
+implemented mirroring 1.2's original (now-corrected) shape:
+(1) BUILT_KINDS allowlist instead of `kind !== "sql"`.
+(2) checkoutGuard threads the real preparedStatements value to every
+    makeSession call site, including the checkout pin's own -- no
+    special-cased `false`.
+(3) The two "no option"/"explicitly false" tests switched from toEqual
+    to toStrictEqual.
+(4) packages/neon/src/index.ts now exports NeonDriverOptions as a
+    type, matching @hejbro/pg and @hejbro/supabase's own convention.
+WS_CAPABILITIES const became a wsCapabilitiesFor() factory to mirror
+pg's capabilitiesFor(), no behavior change.
+
+Verified: @hejbro/neon's 28/28 tests still pass; full gate green
+(TURBO_FORCE=1 pnpm check-types 18/18, pnpm check, pnpm check:bans,
+TURBO_FORCE=1 pnpm test all packages, no regressions).
+

@@ -300,6 +300,10 @@ describe("pgDriver({ preparedStatements }) names built statements only when the 
 	});
 
 	it("sends no name at all, config byte-identical to today's, when the option is absent (regression control)", async () => {
+		// `toStrictEqual`, not `toEqual`: `toEqual` treats `{ name:
+		// undefined }` as equal to `{}`, which would hide exactly the
+		// regression this test exists to catch -- the config sent must
+		// have no `name` key at all, not merely an undefined one.
 		const kinds: ReadonlyArray<CompileKind> = [
 			"select",
 			"insert",
@@ -315,7 +319,7 @@ describe("pgDriver({ preparedStatements }) names built statements only when the 
 					params: [],
 					kind,
 				});
-				expect(config).toEqual({
+				expect(config).toStrictEqual({
 					text: `-- ${kind}`,
 					values: [],
 					types: config.types,
@@ -324,12 +328,16 @@ describe("pgDriver({ preparedStatements }) names built statements only when the 
 		);
 	});
 
-	it("sends no name when the option is explicitly false", async () => {
+	it("sends no name when the option is explicitly false -- config has no name key at all, not an undefined one", async () => {
 		const config = await captureCallerConfig(
 			{ preparedStatements: false },
 			{ sql: "select 1", params: [], kind: "select" },
 		);
-		expect(config.name).toBeUndefined();
+		expect(config).toStrictEqual({
+			text: "select 1",
+			values: [],
+			types: config.types,
+		});
 	});
 
 	it("names the same text identically across two drivers built over two different pools (a pure function of the text)", async () => {

@@ -6,5 +6,6 @@
 export { authJwt, authUid } from "./auth";
 export type { Claims, NeonAuthMode } from "./context";
 export { neonAuth } from "./context";
+export type { NeonDriverOptions } from "./driver";
 export { neonDriver } from "./driver";
 export { anonymousRole, authenticatedRole } from "./roles";
