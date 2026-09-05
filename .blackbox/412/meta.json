@@ -659,6 +659,15 @@
       "at": "2026-09-05T11:10Z",
       "title": "Reproduction inputs a reviewer hands over are measured from the real library, never synthesized",
       "ratified": null
+    },
+    {
+      "id": "R33",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [],
+      "at": "2026-09-05T12:31Z",
+      "title": "R34 — Sealed reviewer measurement for pieces whose input is not hejbro's own output",
+      "ratified": null
     }
   ],
   "work": [

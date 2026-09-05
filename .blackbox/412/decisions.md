@@ -608,3 +608,10 @@ _lead · extension · basis 412/D24, D25; D110; cd review round 2 (a synthesized
 
 Process rule for every future brief: when a review or a task cites a value an external library throws or returns, the input table carries the value as measured from that library on this machine (or a container), not a hand-built lookalike; a synthesized example that is more lenient than the real class turns a red test green. Recorded here so the next brief template carries it. Ratification: owner on return.
 
+<a id="r33"></a>
+## R33 — R34 — Sealed reviewer measurement for pieces whose input is not hejbro's own output
+
+_lead · extension · 2026-09-05T12:31Z · ratified: pending_
+
+Proposed by the su planner after add-snapshot-upgrade (#413) and adopted by the lead: on a piece whose input comes from outside hejbro's own output (D110 constructor-review class), the reviewer performs its independent measurements before and during the implementation (here: the format-5 snapshot count at the start tag, and the 17-subcommand exhaustive run) and seals them; the implementer's measurement is compared against the sealed table only after it arrives, and the reviewer may announce that further counterexamples exist without naming them. Basis: the piece's B1 was a false claim replicated identically by plan (tasks.md), implementation (e2e assertion) and documentation (skill reference); only an isolated reviewer measuring the sentence itself broke it, and the three measurements later agreed on check/reset/baseline, which the original scenario never named. Records as an extension next to D110; owner ratification pending.
+
