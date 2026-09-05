@@ -155,3 +155,21 @@ delta scenarios of `openspec show harden-check-inventory --diff` hold.
   Files: `packages/cli/src/infer/loss-report.ts`,
   `packages/cli/test/infer-loss-report.test.ts`,
   `packages/cli/test/infer-omitted-names.integration.test.ts`.
+- [ ] 1.12 ~6m — The omitted-*table* line is the fourth sibling of the
+  same defect and was left behind by 1.7 and 1.11 (review round 2, B1):
+  it still ends "until it is renamed in the database", and a renamed
+  table is a table no declaration carries, which `check` goes on naming.
+  Red: `packages/cli/test/infer-loss-report.test.ts`, the pin on the
+  `stillReportedInInventory: true` line — it ends "renamed in the
+  database and declared"; the `false` branch's line is unchanged and
+  pinned as a regression (it promises nothing about `check` and is
+  already exact). Green: the one clause in
+  `omittedTableConsequenceForImport` (`infer/loss-report.ts`). Same
+  task: the comparator's own comment in `commands/check.ts` says UTF-16
+  code units rather than claiming code points (review round 2, N5 — the
+  order is total, locale-independent and tie-free either way, which is
+  what the requirement needs; the words were wrong, not the code), and
+  any test or witness asserting the table line is updated and run.
+  Files: `packages/cli/src/infer/loss-report.ts`,
+  `packages/cli/src/commands/check.ts`,
+  `packages/cli/test/infer-loss-report.test.ts`.

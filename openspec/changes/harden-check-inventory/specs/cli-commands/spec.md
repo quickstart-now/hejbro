@@ -60,8 +60,12 @@ one where nothing true can be said:
   reader is not sent looking for an index nobody wrote.
 
 The inventory SHALL be ordered by the identity each line names, and
-ordered by that identity's code points — not by a collation, whether
-the database's or the machine's. A report ordered by a collation is
+ordered by that identity's UTF-16 code units — not by a collation,
+whether the database's or the machine's. What the rule needs is a total
+order that no locale can vary and in which no two distinct names ever
+compare equal; code-unit order is exactly that, and it coincides with
+code-point order for every identity outside the astral planes. A report
+ordered by a collation is
 ordered differently on two machines that disagree about locale, and two
 identities a collation treats as equal have no order at all between
 them, which is the same defect one step further in. Every axis of the

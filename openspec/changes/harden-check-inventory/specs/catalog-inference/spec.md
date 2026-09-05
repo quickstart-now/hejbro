@@ -38,8 +38,9 @@ inventory rule (`cli-commands`), not a second rule stated here.
 
 #### Scenario: An omitted object's line says what check will do about it
 - **WHEN** a reading omits an index and a check constraint whose catalog
-  names no declaration can carry, on a table it still declares, and the
-  loss report is printed
+  names no declaration can carry on a table it still declares, and a
+  table whose own name it cannot carry in a schema that still declares
+  something else, and the loss report is printed
 - **THEN** each line names the object and states that `check` keeps
   listing it as unmanaged until it is renamed in the database **and
   declared** — never that hejbro will not mention it again, and never
