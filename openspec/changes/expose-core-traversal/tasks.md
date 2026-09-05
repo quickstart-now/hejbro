@@ -7,15 +7,15 @@ minimal green, then refactor. Every source rule of this repository
 applies (`any`/`let`/`var`/`for`/`while`/ternary banned; comments state
 the constraint only).
 
-**Files edited**: `packages/core/src/index.ts`, `packages/core/test/
-exports.test.ts`, `packages/cli`'s barrel classification list and its
-test (1.1); `packages/query/src/compile/params.ts` and its tests (1.2);
-`packages/supabase/src/validators/rls-uncached-auth-call.ts`,
-`packages/supabase/src/storage/bucket-kind.ts`, `examples/preset-smoke/
-src/preset.ts` and their tests (1.3); `skills/hejbro/references/
-extension-interface.md`, one `.changeset/*.md` (1.4). If a task appears
-to need any other file, that goes back to the planner, not into the
-diff.
+**Files edited**: `packages/core/src/index.ts`, `packages/core/src/expr/
+expr-children.ts`, `packages/core/test/exports.test.ts`, `packages/cli`'s
+barrel classification list and its test (1.1); `packages/query/src/
+compile/params.ts` and its tests (1.2); `packages/supabase/src/
+validators/rls-uncached-auth-call.ts`, `packages/supabase/src/storage/
+bucket-kind.ts`, `examples/preset-smoke/src/preset.ts` and their tests
+(1.3); `skills/hejbro/references/extension-interface.md`, one
+`.changeset/*.md` (1.4). If a task appears to need any other file, that
+goes back to the planner, not into the diff.
 
 **Ordering.** 1.1 → 1.2 and 1.3 (independent) → 1.4.
 
@@ -27,7 +27,10 @@ diff.
       surface. Red: `packages/core/test/exports.test.ts` pins the five;
       `hejbro`'s classification test lists them as engine and its
       barrel-absence test names them beside `SELECT_CLAUSE_TRAVERSALS`.
-      Files: `packages/core/src/index.ts`, the two pins.
+      Files: `packages/core/src/index.ts`, `expr/expr-children.ts`'s
+      registry tsdoc — it records the table as deliberately not
+      exported, the constraint this change reverses (515/R2) — and the
+      two pins.
 
 - [ ] 1.2 (~9m) The parameter lifter folds. Red: the params tests gain
       an input table over every node kind the registry knows (one
@@ -41,7 +44,9 @@ diff.
 - [ ] 1.3 (~9m) The preset sites fold. Red: the RLS validator's tests
       gain the same per-position table (an `auth.uid()` call in each
       position is found); the bucket kind's and the example kind's tests
-      pin `invalid-kind-change` for a change missing the needed side.
+      pin `invalid-kind-change` for a change missing the needed side,
+      the folded guard naming the change by its kind token (515/R2), so
+      the bucket kind's two existing message pins move to that wording.
       Green: `ChildrenOfHandlers` becomes `exprChildren`; the two inline
       guards become the helpers. Files: the three sources, tests.
 

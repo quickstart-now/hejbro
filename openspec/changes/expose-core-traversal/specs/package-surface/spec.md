@@ -34,6 +34,8 @@ classified as engine in `hejbro`'s curation, and absent from the
 - **THEN** the first emits as before and the second fails with
   `invalid-kind-change` from the exported guard, and neither kind holds
   an inline guard
+- **AND** a guard folded into the exported helpers names the change by
+  its kind token, as core's own kinds do; the refusal code is unchanged
 
 #### Scenario: The exports are engine surface
 - **WHEN** a value import of any of the five names is attempted from
