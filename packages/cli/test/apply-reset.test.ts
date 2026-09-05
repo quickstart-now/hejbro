@@ -604,6 +604,27 @@ describe("applyReset — a relation that is not the ledger at the ledger's name 
 			calls.some((call) => call.sql.toLowerCase().startsWith("delete from")),
 		).toBe(true);
 	});
+
+	it("631/R15(B2): an existing ledger is upgraded before its rows are cleared -- the alter is sent before the first delete", async () => {
+		const { driver, calls } = makeFakeDriver(
+			"testdb",
+			undefined,
+			undefined,
+			LEDGER_PROBE_ROWS,
+		);
+
+		await applyReset(driver, managedSnapshot, registry, "testdb:2");
+
+		const lowered = calls.map((call) => call.sql.trim().toLowerCase());
+		const alterIndex = lowered.findIndex((sql) =>
+			sql.startsWith("alter table"),
+		);
+		const deleteIndex = lowered.findIndex((sql) =>
+			sql.startsWith("delete from"),
+		);
+		expect(alterIndex).toBeGreaterThanOrEqual(0);
+		expect(deleteIndex).toBeGreaterThan(alterIndex);
+	});
 });
 
 describe("applyReset — a failed drop is reported as a coded error, not an uncaught crash (task 1.4, #753)", () => {

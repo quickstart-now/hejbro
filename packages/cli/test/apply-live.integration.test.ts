@@ -1573,4 +1573,64 @@ describe.each(PG_IMAGES)("apply engine live witness / %s", (image) => {
 			}
 		});
 	});
+
+	describe("reset upgrades a ledger written before the checksum column, 631/R15(B2)", () => {
+		it("reset succeeds against an old ledger and the column is there again afterward", async () => {
+			const database = "checksum_reset_upgrade";
+			psqlCommand(container, "postgres", `create database ${database};`);
+			const cwd = await createCliFixtureDir();
+			try {
+				await runCli(cwd, ["init"]);
+				await writeFixtureFile(
+					cwd,
+					"src/app.schema.ts",
+					CHECKSUM_WITNESS_V1_SOURCE,
+				);
+				await runCli(cwd, ["generate"]);
+				const migrate = await runCli(cwd, [
+					"migrate",
+					"--url",
+					hostUrl(database),
+				]);
+				expect(migrate.exitCode).toBe(0);
+
+				psqlCommand(
+					container,
+					database,
+					'alter table "hejbro"."migration_ledger" drop column "checksum";',
+				);
+
+				const refused = await runCli(cwd, [
+					"reset",
+					"--url",
+					hostUrl(database),
+				]);
+				expect(refused.exitCode).toBe(1);
+				const confirmation = extractRequiredConfirmation(refused.stderr);
+
+				const result = await runCli(cwd, [
+					"reset",
+					"--url",
+					hostUrl(database),
+					"--confirm-drop",
+					confirmation,
+				]);
+				expect(result.exitCode).toBe(0);
+
+				const driver = pgDriver(hostUrl(database));
+				try {
+					const rows = await driver.execute({
+						sql: "select column_name from information_schema.columns where table_schema = 'hejbro' and table_name = 'migration_ledger' and column_name = 'checksum'",
+						params: [],
+						kind: "sql",
+					});
+					expect(rows).toHaveLength(1);
+				} finally {
+					await driver.client.end();
+				}
+			} finally {
+				await removeCliFixtureDir(cwd);
+			}
+		}, 60_000);
+	});
 });
