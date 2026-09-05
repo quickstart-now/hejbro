@@ -124,3 +124,30 @@ the decision log moves; the owner ratifies or reverts this one sentence
 on return. The decision log is an owner hard gate, so this ruling is
 itself in the ratification queue.
 
+<a id="r6"></a>
+## R6 — the last references() call replaces the whole reference, actions included
+
+_lead · interpretation · basis R1 · 2026-09-05T17:46Z · ratified: pending_
+
+The reviewer built the input the delta's universal sentence spans and the
+tests did not: two `.references()` calls on one column. Today the target
+is the last call's and the actions are the first call's, because
+`referenceActionsField(undefined)` in
+`packages/core/src/types/column-builder.ts` returns an absent key and so
+never clears the slot an earlier call wrote; the input type-checks, and
+the rendered DDL disagrees with the `extras` form written from the same
+intent. Ruling: a `.references()` call replaces the reference as a whole
+-- target and actions together -- so a second call without actions leaves
+the column with no referential action and a second call with different
+actions leaves exactly those; the slot is written to `null` explicitly
+when the argument is absent, never left as it was. This is the reading the
+target already has (last call wins) extended to the field that travels
+with it; no refusal is added, because the DSL treats a repeated builder
+call as a re-declaration everywhere else and a loud error here would be
+the only one of its kind. Red first: two rows in the column-builder test
+(second call without actions -> no action in DDL and snapshot; second call
+with different actions -> the second's), each compared byte-for-byte
+against the `extras` form; the reviewer's reproduction under
+`/private/tmp/review-ra-scratch/corpus/` is the source of the rows. Files:
+`column-builder.ts` and its test only.
+

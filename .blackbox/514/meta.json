@@ -57,6 +57,17 @@
       "at": "2026-09-05T17:10Z",
       "title": "the d102 amendment lands in the row's own revision parenthesis",
       "ratified": null
+    },
+    {
+      "id": "R6",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R1"
+      ],
+      "at": "2026-09-05T17:46Z",
+      "title": "the last references() call replaces the whole reference, actions included",
+      "ratified": null
     }
   ],
   "work": [
