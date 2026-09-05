@@ -1,0 +1,23 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#497",
+  "title": "crap gate output misstates its side effects and cache-induced failures",
+  "parent": "quickstart-now/hejbro#412",
+  "status": "open",
+  "opened": "2026-09-05",
+  "closed": null,
+  "decisions": [],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-05T05:08Z",
+      "title": "Gate output now states what it did; fresh forced run shows the byte-identical verb",
+      "pr": null,
+      "decisions": []
+    }
+  ],
+  "prs": [],
+  "origin": null,
+  "followUps": []
+}
