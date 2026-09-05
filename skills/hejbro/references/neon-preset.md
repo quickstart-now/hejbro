@@ -49,6 +49,15 @@ declares (see the table below). The driver it returns is closable
 is — `neonDriver(pool)`'s own `client` member *is* the `Pool` itself, so
 there is nothing to add here.
 
+The HTTP path (`driver: (connectionString) => neonDriver(neon(connectionString))`)
+works here too, for `check`/`status`/`import`/`pull` — the four commands
+that never need `interactive-transactions`. `migrate`/`raise`/`reset`
+still refuse it with the driver contract's own missing-capability error,
+exactly as they refuse it when built by hand: configuring it as `driver`
+changes nothing about that. `neonDriver(sql)`'s own `client.end` is a
+no-op — the HTTP path holds no connection open between requests, so
+there is nothing for the CLI's close step to do.
+
 ## The two connection paths
 
 `neonDriver` is overloaded on the client it is handed, and the two
@@ -64,6 +73,7 @@ pass the client whose capabilities you need:
   `query-layer.md`'s "Prepared statements" section) — absent, it is
   `false`, matching this path's behavior before the option existed.
 - **`neonDriver(sql)`**, given a `neon()` query function: HTTP one-shot.
+<<<<<<< HEAD
   `interactive-transactions`, `session-state`, and `prepared-statements`
   all `false` — `db.transaction(...)` and `db.as(...)` fail immediately
   with the driver contract's own missing-capability error, before
@@ -73,6 +83,18 @@ pass the client whose capabilities you need:
   `bytea_output`) `@hejbro/pg` applies once per connection, batched with
   each statement instead — arrival shape for `interval`/`bytea`/etc. is
   identical to the WebSocket path.
+=======
+  `interactive-transactions` and `session-state` both `false` —
+  `db.transaction(...)` and `db.as(...)` fail immediately with the
+  driver contract's own missing-capability error, before anything is
+  sent. Every execution still carries the same session pins
+  (`IntervalStyle`, `bytea_output`) `@hejbro/pg` applies once per
+  connection, batched with each statement instead — arrival shape for
+  `interval`/`bytea`/etc. is identical to the WebSocket path. Opens
+  nothing between requests, so its own `client.end` (used when this is
+  configured as the CLI's `driver`, above) is a documented no-op, not a
+  missing member.
+>>>>>>> e2be6d13 (fix(neon): document and expose the http driver's no-op close)
 
 **A failed HTTP batch carries no member index.** The pins and the
 caller's own statement travel as one batch; if a pin statement ever

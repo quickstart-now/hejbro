@@ -667,3 +667,28 @@ describe("neonDriver(pool) exposes its own pool as client (#458 task 1.10)", () 
 		expect(endSpy).toHaveBeenCalledTimes(1);
 	});
 });
+
+// #458 review round 1, task 1.11, lead ruling 458/R4: the HTTP path opens
+// nothing, so its own `client.end` is a no-op the CLI's close path can
+// still call -- never a stand-in for `sql` itself. Two red rows: `end()`
+// resolves, AND it never sends a statement (a close that quietly ran one
+// would be the opposite of a no-op, which the first assertion alone
+// can't catch).
+describe("neonDriver(sql) exposes a no-op client (#458 task 1.11)", () => {
+	it("client.end() resolves, and never calls sql (query or transaction)", async () => {
+		const query = vi.fn();
+		const transaction = vi.fn();
+		const fakeSql = Object.assign(
+			() => {
+				throw new Error("tagged-template form not used by this test");
+			},
+			{ query, transaction },
+		) as unknown as HttpQueryable;
+
+		const driver = neonDriver(fakeSql);
+		await expect(driver.client.end()).resolves.toBeUndefined();
+
+		expect(query).not.toHaveBeenCalled();
+		expect(transaction).not.toHaveBeenCalled();
+	});
+});

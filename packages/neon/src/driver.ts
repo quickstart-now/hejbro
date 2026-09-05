@@ -238,11 +238,19 @@ export function neonDriver(
 ): Driver {
 =======
 export function neonDriver(pool: Pool): Driver & { readonly client: Pool };
-export function neonDriver(sql: HttpQueryable): Driver;
+export function neonDriver(
+	sql: HttpQueryable,
+): Driver & { readonly client: { end(): Promise<void> } };
 export function neonDriver(
 	client: Pool | HttpQueryable,
+<<<<<<< HEAD
 ): Driver | (Driver & { readonly client: Pool }) {
 >>>>>>> c6bc84a8 (fix(neon): expose the websocket pool as driver.client)
+=======
+):
+	| (Driver & { readonly client: { end(): Promise<void> } })
+	| (Driver & { readonly client: Pool }) {
+>>>>>>> e2be6d13 (fix(neon): document and expose the http driver's no-op close)
 	if (typeof client === "function") {
 		return buildHttpDriver(client);
 	}
