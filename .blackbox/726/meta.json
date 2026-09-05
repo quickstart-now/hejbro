@@ -22,7 +22,17 @@
       "ratified": null
     }
   ],
-  "work": [],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-05T00:22Z",
+      "title": "loss report's column promise is now true by check's behavior; index/check lines stop over-promising",
+      "pr": null,
+      "decisions": [
+        "R1"
+      ]
+    }
+  ],
   "prs": [],
   "origin": null,
   "followUps": []

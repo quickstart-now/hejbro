@@ -22,7 +22,17 @@
       "ratified": null
     }
   ],
-  "work": [],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-05T00:22Z",
+      "title": "check's inventory axis extended to columns, indexes and check constraints",
+      "pr": null,
+      "decisions": [
+        "R1"
+      ]
+    }
+  ],
   "prs": [],
   "origin": null,
   "followUps": []
