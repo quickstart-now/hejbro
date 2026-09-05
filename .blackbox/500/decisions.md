@@ -37,6 +37,13 @@ the anchor's"; and widening `exprNode` past `ColumnRefNode`, which
 breaks `CteFieldRef`/`FromSource` assignability and overloads "not a
 direct column ref" to mean "nullable".
 
+Rejected as well: rewriting the origin brand's own `notNull` to `false`
+in core. It plants a claim that is false about the declared table
+column, it reaches the other consumers of that brand (`ColumnMapEquals`,
+`.related`), and it keeps the deciding step in core, so it inherits the
+same proper-subset defect -- a left-joined recursive projection stays
+non-null.
+
 Consequences: `packages/query/src/types/select-result.ts` joins this
 change's file boundary. Task 1.1's red becomes the structural carriage
 in core; the row-nullability table moves to 1.2 and gains the
