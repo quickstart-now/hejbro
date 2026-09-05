@@ -57,6 +57,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#528](528/) | driver-conformance kit mis-observes transaction-wrapping session-state:false drivers | closed | #737 #760 | 0 | 6 (0 pending) |
 | ↳ [#531](531/) | pg checkout reads its own setupSession; the spec's late-binding scenario fails for spread decorators | closed | #737 | 0 | 3 (0 pending) |
 | ↳ [#533](533/) | cli restore-command test flakes on first heavy parallel run after install | closed | #773 | 0 | 1 (0 pending) |
+| ↳ [#544](544/) | query-execution: qualify the preview-equals-executed scenario for provider handles | open |  | 0 | 1 (0 pending) |
 | ↳ [#551](551/) | execute() of a core-built set operation loses per-key result typing | closed | #737 | 0 | 2 (0 pending) |
 | ↳ [#552](552/) | whole-table projection renders unqualified columns under a join | closed | #737 | 0 | 3 (0 pending) |
 | ↳ [#652](652/) | ci: changeset gate never checks the PR itself while unreleased changesets cover the fixed group | closed | #886 | 0 | 0 (0 pending) |
@@ -167,7 +168,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 
 ## Totals
 
-Owner decisions 91 · rulings 190 (interpretation 133, extension 55, stop 2) · pending extensions 17 · rejected 2
+Owner decisions 91 · rulings 191 (interpretation 134, extension 55, stop 2) · pending extensions 17 · rejected 2
 
 ## Conventions
 

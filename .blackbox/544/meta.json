@@ -1,0 +1,27 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#544",
+  "title": "query-execution: qualify the preview-equals-executed scenario for provider handles",
+  "parent": "quickstart-now/hejbro#412",
+  "status": "open",
+  "opened": "2026-09-05",
+  "closed": null,
+  "decisions": [
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "412/R30"
+      ],
+      "at": "2026-09-05T09:03Z",
+      "title": "#544 closes with harden-aggregate-vocabulary (412/R30)",
+      "ratified": null
+    }
+  ],
+  "work": [],
+  "prs": [],
+  "origin": null,
+  "followUps": []
+}
