@@ -128,7 +128,11 @@ const recordingDriver = (): {
 		Array<{ readonly sql: string; readonly params: ReadonlyArray<unknown> }>
 	> = [];
 	const driver: Driver = {
-		capabilities: { "interactive-transactions": true, "session-state": true },
+		capabilities: {
+			"interactive-transactions": true,
+			"session-state": true,
+			"prepared-statements": false,
+		},
 		execute: vi.fn(async () => []),
 		transaction: vi.fn(async (callback) => {
 			const sent: Array<{

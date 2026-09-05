@@ -7,6 +7,7 @@ const spyDriver = (interactiveTransactions: boolean): Driver => ({
 	capabilities: {
 		"interactive-transactions": interactiveTransactions,
 		"session-state": true,
+		"prepared-statements": false,
 	},
 	execute: vi.fn(async () => []),
 	transaction: vi.fn(async (callback) =>

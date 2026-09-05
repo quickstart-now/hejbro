@@ -9,6 +9,7 @@ const capabilitiesWithSessionState = (
 ): DriverCapabilities => ({
 	"interactive-transactions": interactiveTransactions,
 	"session-state": sessionState,
+	"prepared-statements": false,
 });
 
 describe("assertSessionStateConformance (task 1.4/1.5, #481)", () => {

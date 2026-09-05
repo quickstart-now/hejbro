@@ -10,7 +10,11 @@ import { PIN_STATEMENTS, poolerDriver, sendPins } from "../src/pooler";
 
 /** A minimal contract `Driver` fixture -- no concrete driver implementation, mirroring `driver.test.ts`'s own `fakeDriver`. */
 const fakeDriver = (): Driver => ({
-	capabilities: { "interactive-transactions": true, "session-state": true },
+	capabilities: {
+		"interactive-transactions": true,
+		"session-state": true,
+		"prepared-statements": false,
+	},
 	execute: vi.fn(async () => []),
 	transaction: vi.fn(async (callback) =>
 		callback({ execute: vi.fn(async () => []) }),
@@ -38,7 +42,11 @@ const recordingTransactionalDriver = (
 } => {
 	const sentPerTransaction: Array<ReadonlyArray<CompileResult>> = [];
 	const driver: Driver = {
-		capabilities: { "interactive-transactions": true, "session-state": true },
+		capabilities: {
+			"interactive-transactions": true,
+			"session-state": true,
+			"prepared-statements": false,
+		},
 		execute: vi.fn(async () => []),
 		transaction: vi.fn(async (callback) => {
 			const sent: Array<CompileResult> = [];
@@ -65,6 +73,7 @@ describe("poolerDriver(driver) (task 1.1)", () => {
 		expect(wrapped.capabilities).toEqual({
 			"interactive-transactions": true,
 			"session-state": false,
+			"prepared-statements": false,
 		});
 	});
 });
@@ -185,7 +194,11 @@ describe("poolerDriver(driver).setupSession (task 1.5)", () => {
 		// no-op is this *value's* own honest content, not a claim that it
 		// suppresses the wrapped driver's real checkout pin.
 		const underlying: Driver = {
-			capabilities: { "interactive-transactions": true, "session-state": true },
+			capabilities: {
+				"interactive-transactions": true,
+				"session-state": true,
+				"prepared-statements": false,
+			},
 			execute: vi.fn(async () => []),
 			transaction: vi.fn(async (callback) =>
 				callback({ execute: vi.fn(async () => []) }),
@@ -236,7 +249,11 @@ describe("task 1.6: the envelope-positional properties the conformance kit canno
 	it("the correct implementation: the pins are recorded after the transaction opens and before the caller's own statement", async () => {
 		const envelope: Array<CompileResult> = [];
 		const underlying: Driver = {
-			capabilities: { "interactive-transactions": true, "session-state": true },
+			capabilities: {
+				"interactive-transactions": true,
+				"session-state": true,
+				"prepared-statements": false,
+			},
 			execute: vi.fn(async () => []),
 			transaction: vi.fn(async (callback) => {
 				envelope.push(beginStatement);
@@ -279,7 +296,11 @@ describe("task 1.6: the envelope-positional properties the conformance kit canno
 		// before `BEGIN`, not after it.
 		expect(() =>
 			assertSessionStateConformance(
-				{ "interactive-transactions": true, "session-state": false },
+				{
+					"interactive-transactions": true,
+					"session-state": false,
+					"prepared-statements": false,
+				},
 				{ recordedOnConnection: brokenEnvelope, callerStatement },
 			),
 		).toThrowError(
@@ -298,7 +319,11 @@ describe("task 1.6: the envelope-positional properties the conformance kit canno
 		);
 		expect(() =>
 			assertSessionStateConformance(
-				{ "interactive-transactions": true, "session-state": false },
+				{
+					"interactive-transactions": true,
+					"session-state": false,
+					"prepared-statements": false,
+				},
 				{ recordedForOneExecute: sessionSurfaceOnly, callerStatement },
 			),
 		).toThrowError(/recordedOnConnection\/callerStatement is required/);
@@ -324,7 +349,11 @@ describe("poolerDriver(driver) conforms to the driver contract (task 1.7, #481-s
 		};
 		const envelope: Array<CompileResult> = [];
 		const underlying: Driver = {
-			capabilities: { "interactive-transactions": true, "session-state": true },
+			capabilities: {
+				"interactive-transactions": true,
+				"session-state": true,
+				"prepared-statements": false,
+			},
 			execute: vi.fn(async () => []),
 			transaction: vi.fn(async (callback) => {
 				envelope.push(beginStatement);

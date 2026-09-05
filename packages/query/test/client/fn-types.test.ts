@@ -33,7 +33,11 @@ type TestDatabase = {
  * the client's public type rather than the emitted source text).
  */
 const driver: Driver = {
-	capabilities: { "interactive-transactions": true, "session-state": true },
+	capabilities: {
+		"interactive-transactions": true,
+		"session-state": true,
+		"prepared-statements": false,
+	},
 	execute: async () => [],
 	transaction: async (callback) => callback({ execute: async () => [] }),
 	setupSession: async () => {},

@@ -246,7 +246,11 @@ describe("a context whose rendering produces nothing is refused (task 1.1, #590)
 			},
 		) as unknown as CompileResult;
 		const driver: Driver = {
-			capabilities: { "interactive-transactions": true, "session-state": true },
+			capabilities: {
+				"interactive-transactions": true,
+				"session-state": true,
+				"prepared-statements": false,
+			},
 			execute: vi.fn(async () => []),
 			transaction: vi.fn(async (callback) => {
 				const session: DriverSession = {

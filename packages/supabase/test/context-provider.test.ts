@@ -20,7 +20,11 @@ const recordingTransactionalDriver = (): {
 		Array<{ sql: string; params: ReadonlyArray<unknown> }>
 	> = [];
 	const driver: Driver = {
-		capabilities: { "interactive-transactions": true, "session-state": true },
+		capabilities: {
+			"interactive-transactions": true,
+			"session-state": true,
+			"prepared-statements": false,
+		},
 		execute: async () => [],
 		transaction: async (callback) => {
 			const sent: Array<{ sql: string; params: ReadonlyArray<unknown> }> = [];

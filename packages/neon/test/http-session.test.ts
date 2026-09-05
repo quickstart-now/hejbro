@@ -165,6 +165,7 @@ describe("HTTP session batch", () => {
 		expect(driver.capabilities).toEqual({
 			"interactive-transactions": false,
 			"session-state": false,
+			"prepared-statements": false,
 		});
 	});
 

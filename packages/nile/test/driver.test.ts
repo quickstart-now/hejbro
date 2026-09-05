@@ -62,6 +62,7 @@ const recordingBase = (
 		capabilities: {
 			"interactive-transactions": options.interactiveTransactions ?? true,
 			"session-state": true,
+			"prepared-statements": false,
 		},
 		execute: vi.fn(async () => rows),
 		transaction: vi.fn(async (callback) => {

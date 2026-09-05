@@ -538,3 +538,52 @@ _owner · 2026-09-05T03:57Z · raw ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#245_
 
 The owner closes the session: write the session memory and stop. Memory was written under D20 (phase-cycle checkpoint, ratification queue, workflow rules); this entry marks the close. State at close: every #412 batch change archived (co li ip ck qy so cp ld cv), dev at ac485bc2, no worktrees, no live agents; the .blackbox/412 record (D20-D22) and index refresh stay uncommitted in the main checkout for the next PR. Next slot #819 awaits an explicit go.
 
+<a id="d23"></a>
+## D23 — PR #880 is merged by the owner; the session ends and resumes next session
+
+_owner · 2026-09-05T04:14Z_
+
+Owner decision (2026-09-05, end of the previous session, recorded here because the session closed before the record could be written): the uncommitted 412 records (D20–D22 plus the regenerated index) go out as their own PR (#880) and the owner merges it directly; everything else waits for the next session. Basis: the owner's words at session close — "handle it in the next session; I will merge #880 myself." Applied: #880 merged by the owner at 2026-09-05T04:09Z (dev fffea4dc); the next session starts from a clean dev.
+
+<a id="d24"></a>
+## D24 — Open issues are processed oldest-first across the whole repository
+
+_owner · 2026-09-05T04:14Z · raw 9d9e9165-53a6-4428-bebf-45e47e987321#1_
+
+Owner decision (2026-09-05, session start): after #880 merged, open issues are processed in creation order, oldest first, across the whole repository — not by the R1 slot order (#819 → #837 → #832 → #694 → …) and not per umbrella. This supersedes the R1 ordering for slot selection; umbrella issues (#412, #815) are skipped as containers, and an owner-gated issue at the head of the queue is presented to the owner for its decision rather than skipped. The current head of the queue: #303 (2026-08-26), #375 (2026-08-28), #413 (2026-08-28), #450, #452, #458, #486, #491, #497, #500 … Owner's words: "PR #880 merged; let's process the issues oldest-first across the whole set."
+
+<a id="d25"></a>
+## D25 — Full delegation: the lead decides and processes each issue itself
+
+_owner · 2026-09-05T04:20Z · raw 9d9e9165-53a6-4428-bebf-45e47e987321#2_
+
+Owner decision (2026-09-05): the oldest-first pass is fully delegated — the lead decides each issue's disposition itself and processes it, without returning to the owner per issue. The standing constraint from the same exchange (answer to the #303 question): do not postpone work — "if you keep deferring it, it piles up and comes back." So "park / revisit later" is not an available disposition; each issue reaches a terminal state (implemented, or closed with a final verdict and its basis) and every lead ruling is recorded here (R#) for owner ratification on return. Owner's words: "I'm delegating the work, judge and handle it yourself." / "I delegate, but don't put the work off; if you keep postponing it, it piles up and comes back."
+
+<a id="d26"></a>
+## D26 — Real-environment product verification on Neon, Nile, Postgres and Supabase is hejbro-assist's; the issues asking hejbro to do it are closed
+
+_owner · 2026-09-05T04:54Z · raw 9d9e9165-53a6-4428-bebf-45e47e987321#3_
+
+Owner decision (2026-09-05, mid-pass): product verification against the real production platforms -- Neon, Nile, plain Postgres and Supabase -- is done by the github.com/hejbro-assist account on its own; the open issues whose content is "verify against a real environment" can be tidied. Owner's words: "Oh right, real prod verification on neon, nile, postgres and supabase seems to be handled by hejbro-assist; the related real-prod-environment verification issues can be cleaned up." Applied by the lead: the set is the issues whose deliverable is hejbro's own process rehearsing or verifying against the real platforms -- #732 (verify migrations against the target database on the PR, apply on merge; its body names exactly the four platforms) is closed citing this decision. Bug reports that came out of hejbro-assist's runs (#825-#828, #834) stay open as bugs; #772 (a suspected Nile rendering defect, "unmeasured") stays open as a bug suspicion with a note that the measurement is hejbro-assist's.
+
+<a id="r29"></a>
+## R29 — #508 (function-valued comparator slot for check) closes as speculative surface
+
+_lead · interpretation · basis 412/D24, 412/D25 (no parking); the issue's own record: no existing kind has catalog-comparable server state, and the slot would drag the CLI's catalog and finding types across the preset boundary (.claude/rules/provider-preset.md) · 2026-09-05T04:57Z · ratified: pending_
+
+Terminal state: closed, not parked. The work itself is wrong today -- an extension slot no kind can use is dead surface, and its shape would be designed against an imagined provider rather than a measured one. When a provider contributes a kind whose server-side state a catalog run can actually compare, that provider's change proposes the slot from the real shape, as its own issue. Ratification: owner on return.
+
+<a id="r30"></a>
+## R30 — #544's one-clause qualification rides in harden-aggregate-vocabulary's query-execution delta
+
+_lead · interpretation · basis 412/D24, 412/D25; the issue's own recommendation (fold in the next time query-execution is touched); the change harden-aggregate-vocabulary (#452) touches query-execution now · 2026-09-05T05:08Z · ratified: pending_
+
+The preview-equals-executed scenario is qualified to the statement's own send (an applied execution context precedes it on the same transaction, per rls-execution-context, and is not part of the statement). Spec-only; no task; the av reviewer sees it through `openspec show --diff`; the av PR closes #544 beside #452. Ratification: owner on return.
+
+<a id="r31"></a>
+## R31 — #561 closes: both D106 gca findings are already shipped behaviour
+
+_lead · interpretation · basis 412/D24, D25; read on 2026-09-05: packages/query/test/db/context-required.test.ts pins per-surface operation tokens (db.execute, db.select, db.fn, transaction) from harden-context-boundary task 1.7 (F7); skills/hejbro/references/query-layer.md documents context-rendering-empty for a zero-statement rendering and db.as({}) on a contextRequired driver (F6) · 2026-09-05T05:50Z · ratified: pending_
+
+F6: an empty context no longer satisfies contextRequired -- a zero-statement rendering and a role-less, setting-less default rendering both refuse with context-rendering-empty; on a driver that does not declare the context mandatory nothing changed. F7: the refusal names the surface invoked, never db.context. Both landed with harden-context-boundary and the Nile change; #561 closes with no further work. Ratification: owner on return.
+

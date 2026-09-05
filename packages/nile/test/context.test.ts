@@ -20,7 +20,11 @@ const recordingBase = (
 } => {
 	const sentPerTransaction: Array<Array<SentStatement>> = [];
 	const driver: Driver = {
-		capabilities: { "interactive-transactions": true, "session-state": true },
+		capabilities: {
+			"interactive-transactions": true,
+			"session-state": true,
+			"prepared-statements": false,
+		},
 		execute: vi.fn(async () => rows),
 		transaction: vi.fn(async (callback) => {
 			const sent: Array<SentStatement> = [];

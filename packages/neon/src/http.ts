@@ -28,6 +28,7 @@ export type HttpQueryable = NeonQueryFunction<false, false>;
 const CAPABILITIES: DriverCapabilities = {
 	"interactive-transactions": false,
 	"session-state": false,
+	"prepared-statements": false,
 };
 
 /**

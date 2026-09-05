@@ -1,16 +1,23 @@
 import { roleName, schema, table, uuid } from "@hejbro/core";
-import type { Driver, DriverSession } from "@hejbro/query";
+import type { CompileResult, Driver, DriverSession } from "@hejbro/query";
 import { db } from "@hejbro/query";
 import { assertSessionStateConformance } from "@hejbro/query/testing/driver-conformance";
 import { describe, expect, it, vi } from "vitest";
 import { asAnon, asUser } from "../src/context";
-import type { SupabaseDriverEndpoint } from "../src/driver";
+import type {
+	SupabaseDriverEndpoint,
+	SupabaseDriverOptions,
+} from "../src/driver";
 import { supabaseDriver } from "../src/driver";
 import { anonRole, authenticatedRole, serviceRole } from "../src/roles";
 
 /** A minimal contract `Driver` fixture -- no concrete driver implementation, mirroring `packages/query/test/db/db.test.ts`'s own `fakeDriver`. */
 const fakeDriver = (): Driver => ({
-	capabilities: { "interactive-transactions": true, "session-state": true },
+	capabilities: {
+		"interactive-transactions": true,
+		"session-state": true,
+		"prepared-statements": false,
+	},
 	execute: vi.fn(async () => []),
 	transaction: vi.fn(async (callback) =>
 		callback({ execute: vi.fn(async () => []) }),
@@ -29,7 +36,11 @@ const recordingTransactionalDriver = (): {
 		Array<{ sql: string; params: ReadonlyArray<unknown> }>
 	> = [];
 	const driver: Driver = {
-		capabilities: { "interactive-transactions": true, "session-state": true },
+		capabilities: {
+			"interactive-transactions": true,
+			"session-state": true,
+			"prepared-statements": false,
+		},
 		execute: vi.fn(async () => []),
 		transaction: vi.fn(async (callback) => {
 			const sent: Array<{ sql: string; params: ReadonlyArray<unknown> }> = [];
@@ -80,6 +91,7 @@ describe("supabaseDriver(driver) one-argument call is unchanged by the endpoint 
 		expect(wrapped.capabilities).toEqual({
 			"interactive-transactions": true,
 			"session-state": true,
+			"prepared-statements": false,
 		});
 	});
 
@@ -148,6 +160,7 @@ describe("supabaseDriver(driver, options) endpoint option (task 2.1)", () => {
 		expect(wrapped.capabilities).toEqual({
 			"interactive-transactions": true,
 			"session-state": false,
+			"prepared-statements": false,
 		});
 	});
 });
@@ -201,6 +214,84 @@ describe("supabaseDriver(driver, options) rejects an unrecognized endpoint value
 	});
 });
 
+describe("the transaction-pooler endpoint refuses a base that prepares (task 1.4, #303)", () => {
+	const preparingDriver = (): Driver => ({
+		...fakeDriver(),
+		capabilities: {
+			"interactive-transactions": true,
+			"session-state": true,
+			"prepared-statements": true,
+		},
+	});
+
+	it("throws prepared-statements-without-session, naming the endpoint, with a Next: line -- the base is never called", () => {
+		const driver = preparingDriver();
+
+		try {
+			supabaseDriver(driver, { endpoint: "transaction-pooler" });
+			expect.unreachable(
+				"supabaseDriver should have thrown for a preparing base over the transaction-pooler endpoint",
+			);
+		} catch (error) {
+			expect(error).toHaveProperty(
+				"code",
+				"prepared-statements-without-session",
+			);
+			const message = (error as Error).message;
+			expect(message).toContain("transaction-pooler");
+			expect(message).toMatch(/Next:/);
+		}
+
+		expect(driver.execute).not.toHaveBeenCalled();
+		expect(driver.transaction).not.toHaveBeenCalled();
+		expect(driver.setupSession).not.toHaveBeenCalled();
+	});
+
+	it("a non-preparing base over the transaction-pooler endpoint still declares prepared-statements: false (regression control)", () => {
+		const wrapped = supabaseDriver(fakeDriver(), {
+			endpoint: "transaction-pooler",
+		});
+
+		expect(wrapped.capabilities).toEqual({
+			"interactive-transactions": true,
+			"session-state": false,
+			"prepared-statements": false,
+		});
+	});
+
+	it.each<[string, SupabaseDriverOptions | undefined]>([
+		["the session endpoint", { endpoint: "session" }],
+		["no endpoint stated", undefined],
+	])(
+		"%s over a preparing base passes the declaration through, true, and execute reaches the base",
+		async (_label, options) => {
+			const driver = preparingDriver();
+
+			const wrapped = supabaseDriver(driver, options);
+
+			expect(wrapped.capabilities).toEqual({
+				"interactive-transactions": true,
+				"session-state": true,
+				"prepared-statements": true,
+			});
+			const compiled: CompileResult = {
+				sql: "select 1",
+				params: [],
+				kind: "select",
+			};
+			await wrapped.execute(compiled);
+			expect(driver.execute).toHaveBeenCalledTimes(1);
+			// This path is a pure passthrough (no wrapping, unlike the
+			// pooler's own execute/transaction members) -- an equal
+			// CompileResult reaches the base's own execute (toHaveBeenCalledWith
+			// is deep equality, not identity). That is enough: the name a
+			// preparing base derives is a function of `sql` alone, so a
+			// preserved `sql` preserves the name it would produce.
+			expect(driver.execute).toHaveBeenCalledWith(compiled);
+		},
+	);
+});
+
 describe("supabaseDriver(driver) conforms to the driver contract (#481, task 1.7)", () => {
 	it("conforms to the driver contract", async () => {
 		// `supabaseDriver` is a pure passthrough decorator (this file's own
@@ -212,7 +303,11 @@ describe("supabaseDriver(driver) conforms to the driver contract (#481, task 1.7
 		// checked, correctly: it never sends anything).
 		const recorded: Array<{ sql: string; params: ReadonlyArray<unknown> }> = [];
 		const underlying: Driver = {
-			capabilities: { "interactive-transactions": true, "session-state": true },
+			capabilities: {
+				"interactive-transactions": true,
+				"session-state": true,
+				"prepared-statements": false,
+			},
 			execute: vi.fn(async () => []),
 			transaction: vi.fn(async (callback) =>
 				callback({ execute: vi.fn(async () => []) }),

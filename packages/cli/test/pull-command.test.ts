@@ -30,7 +30,11 @@ import {
  * directly rather than faking `driver.execute`'s SQL dispatch.
  */
 const fakeConnection: CheckDriverConnection = {
-	capabilities: { "interactive-transactions": false, "session-state": false },
+	capabilities: {
+		"interactive-transactions": false,
+		"session-state": false,
+		"prepared-statements": false,
+	},
 	execute: async () => [],
 	transaction: async () => {
 		throw new Error("transaction should not be called by this test");

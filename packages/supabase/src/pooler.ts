@@ -19,6 +19,7 @@ import type {
 const CAPABILITIES: DriverCapabilities = {
 	"interactive-transactions": true,
 	"session-state": false,
+	"prepared-statements": false,
 };
 
 /**

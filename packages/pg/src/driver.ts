@@ -1,4 +1,6 @@
+import { createHash } from "node:crypto";
 import type {
+	CompileKind,
 	CompileResult,
 	Driver,
 	DriverCapabilities,
@@ -8,15 +10,68 @@ import type { CustomTypesConfig, PoolClient } from "pg";
 import { Pool, types as pgTypes } from "pg";
 
 /**
- * Fixed per owner decision ①, tasks.md group 5 header -- both capabilities
- * are `true` because a single physical TCP connection to Postgres
- * inherently supports `BEGIN`/`COMMIT` across round trips and preserves
- * `SET`-style session state across sequential statements on the same
- * connection.
+ * `interactive-transactions` and `session-state` are fixed `true` (owner
+ * decision ①, tasks.md group 5 header): a single physical TCP connection
+ * to Postgres inherently supports `BEGIN`/`COMMIT` across round trips and
+ * preserves `SET`-style session state across sequential statements on
+ * the same connection. `prepared-statements` is the caller's own,
+ * stated through {@link PgDriverOptions} (add-prepared-statements
+ * design Q3).
  */
-const CAPABILITIES: DriverCapabilities = {
+const capabilitiesFor = (preparedStatements: boolean): DriverCapabilities => ({
 	"interactive-transactions": true,
 	"session-state": true,
+	"prepared-statements": preparedStatements,
+});
+
+/** The second-argument shape both `pgDriver` overloads accept (add-prepared-statements design Q3). */
+export type PgDriverOptions = {
+	readonly preparedStatements?: boolean;
+};
+
+/**
+ * `hejbro_` + the first 32 hex digits of SHA-256 over the statement text
+ * (add-prepared-statements design Q4): 39 bytes, inside Postgres's 63-byte
+ * identifier limit, and a pure function of the text alone -- the same text
+ * yields the same name on every connection and in every process, and two
+ * different texts practically never collide (their whole 256-bit digests
+ * would have to). node-postgres's own client caches "parsed" per
+ * connection and per name and refuses one name for two texts, so a name
+ * that is a pure function of the text can never legitimately collide with
+ * a different text on one connection.
+ */
+const preparedStatementName = (sql: string): string =>
+	`hejbro_${createHash("sha256").update(sql).digest("hex").slice(0, 32)}`;
+
+/**
+ * The kinds a prepared statement may carry (add-prepared-statements
+ * spec, "A driver that declares prepared statements names its built
+ * statements"): an explicit allowlist, never `kind !== "sql"` -- a
+ * future `CompileKind` this list doesn't yet name must fail closed
+ * (sent unnamed) rather than being named by default.
+ */
+const BUILT_KINDS: ReadonlySet<CompileKind> = new Set([
+	"select",
+	"insert",
+	"update",
+	"delete",
+	"setOp",
+]);
+
+/**
+ * The `name` key {@link makeSession} spreads into a query config -- an
+ * empty object when the statement is not to be named, never `{ name:
+ * undefined }`, so an existing caller's config stays byte-identical to
+ * what it was before this option existed.
+ */
+const nameForQueryConfig = (
+	compiled: CompileResult,
+	preparedStatements: boolean,
+): { readonly name?: string } => {
+	if (preparedStatements && BUILT_KINDS.has(compiled.kind)) {
+		return { name: preparedStatementName(compiled.sql) };
+	}
+	return {};
 };
 
 /** Postgres's builtin `interval` type oid -- pg's own default parser turns it into a `PostgresInterval` object with no lossless way back to text (5.0 scout: `String()` gives `"[object Object]"`, and even `.toPostgres()` reorders/reformats fields rather than reproducing the original). */
@@ -69,13 +124,26 @@ type Queryable = Pick<Pool, "query">;
  * node-postgres query config, always carrying {@link intervalPassthroughTypes}
  * (task 5.3). Checkout pinning (task 5.5, {@link checkoutGuard}) happens
  * one level up, before a caller's statement ever reaches this function.
+ *
+ * `preparedStatements` gates {@link preparedStatementName} (task 1.2,
+ * #303): named only when the caller asked *and* `compiled.kind` is a
+ * built kind, never `"sql"` -- hejbro parses no SQL, and a `sql`-kind
+ * text may carry more than one command, which a prepared statement
+ * cannot. {@link nameForQueryConfig} omits the `name` key entirely
+ * rather than setting it `undefined` when not naming, so an existing
+ * caller's query config stays byte-identical to what it was before this
+ * option existed.
  */
-const makeSession = (queryable: Queryable): DriverSession => ({
+const makeSession = (
+	queryable: Queryable,
+	preparedStatements: boolean,
+): DriverSession => ({
 	execute: async (compiled: CompileResult) => {
 		const result = await queryable.query({
 			text: compiled.sql,
 			values: [...compiled.params],
 			types: intervalPassthroughTypes,
+			...nameForQueryConfig(compiled, preparedStatements),
 		});
 		return result.rows;
 	},
@@ -133,16 +201,22 @@ const setupSession = async (session: DriverSession): Promise<void> => {
  * additional session setup) has to take effect on every checkout from
  * then on; closing over the original function reference here would make
  * that wrapper permanently unreachable from the checkout path, silently.
+ *
+ * `preparedStatements` is threaded to {@link makeSession} exactly as
+ * every other call site does (task 1.2, #303) -- no special case for
+ * the checkout pin: `nameForQueryConfig`'s own kind check is what keeps
+ * the pin's `kind: "sql"` statement unnamed, not a hardcoded value here.
  */
 const checkoutGuard = (
 	getSetupSession: () => (session: DriverSession) => Promise<void>,
+	preparedStatements: boolean,
 ): ((client: PoolClient) => Promise<void>) => {
 	const pinnedConnections = new WeakSet<PoolClient>();
 	return async (client) => {
 		if (pinnedConnections.has(client)) {
 			return;
 		}
-		await getSetupSession()(makeSession(client));
+		await getSetupSession()(makeSession(client, preparedStatements));
 		pinnedConnections.add(client);
 	};
 };
@@ -277,18 +351,24 @@ const releaseAfterFailedStatement = (
  * returned `driver` fully initialized, so there is no TDZ hazard despite
  * the textual forward reference.
  */
-const buildDriver = (pool: Pool): Driver & { readonly client: Pool } => {
+const buildDriver = (
+	pool: Pool,
+	preparedStatements: boolean,
+): Driver & { readonly client: Pool } => {
 	silenceUnhandledPoolError(pool);
-	const ensurePinned = checkoutGuard(() => driver.setupSession);
+	const ensurePinned = checkoutGuard(
+		() => driver.setupSession,
+		preparedStatements,
+	);
 	const driver: Driver & { readonly client: Pool } = {
 		client: pool,
-		capabilities: CAPABILITIES,
+		capabilities: capabilitiesFor(preparedStatements),
 		execute: async (compiled) => {
 			const client = await pool.connect();
 			silenceUnhandledClientError(client);
 			const rows = await (async () => {
 				await ensurePinned(client);
-				return await makeSession(client).execute(compiled);
+				return await makeSession(client, preparedStatements).execute(compiled);
 			})().catch((error: unknown) => {
 				releaseAfterFailedStatement(client, error);
 				throw error;
@@ -302,7 +382,7 @@ const buildDriver = (pool: Pool): Driver & { readonly client: Pool } => {
 			try {
 				await ensurePinned(client);
 				await client.query("BEGIN");
-				const result = await callback(makeSession(client));
+				const result = await callback(makeSession(client, preparedStatements));
 				await client.query("COMMIT");
 				client.release();
 				return result;
@@ -320,19 +400,32 @@ const buildDriver = (pool: Pool): Driver & { readonly client: Pool } => {
  * Instance form (owner decision ①): wraps a caller-owned `Pool` as-is --
  * `driver.client` is that same `pool` reference, never a copy, so there is
  * exactly one surface regardless of which overload built the driver.
+ * `options.preparedStatements` (task 1.2, #303) is the caller's own
+ * `prepared-statements` declaration, stated at construction -- absent, it
+ * is `false`, so an existing caller's driver declares and sends exactly
+ * what it did before the option existed.
  */
-export function pgDriver(pool: Pool): Driver & { readonly client: Pool };
+export function pgDriver(
+	pool: Pool,
+	options?: PgDriverOptions,
+): Driver & { readonly client: Pool };
 /**
  * Connection-string form (owner decision ②): constructs and owns a new
  * `Pool` from `connectionString`, exposed as `driver.client` -- never
  * auto-closed (Drizzle convention: pool lifetime = process lifetime).
  * Callers that need teardown call `driver.client.end()` themselves.
+ * `options.preparedStatements` behaves exactly as the instance form's own.
  */
 export function pgDriver(
 	connectionString: string,
+	options?: PgDriverOptions,
 ): Driver & { readonly client: Pool };
 export function pgDriver(
 	poolOrConnectionString: Pool | string,
+	options?: PgDriverOptions,
 ): Driver & { readonly client: Pool } {
-	return buildDriver(resolvePool(poolOrConnectionString));
+	return buildDriver(
+		resolvePool(poolOrConnectionString),
+		options?.preparedStatements ?? false,
+	);
 }

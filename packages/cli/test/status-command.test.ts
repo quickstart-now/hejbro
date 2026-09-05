@@ -221,6 +221,7 @@ const makeFakeStatusImporter = (
 			readonly capabilities: {
 				readonly "interactive-transactions": boolean;
 				readonly "session-state": boolean;
+				readonly "prepared-statements": boolean;
 			};
 			readonly execute: (compiled: {
 				readonly sql: string;
@@ -238,6 +239,7 @@ const makeFakeStatusImporter = (
 			capabilities: {
 				"interactive-transactions": false,
 				"session-state": false,
+				"prepared-statements": false,
 			},
 			execute: async (compiled: { readonly sql: string }) => {
 				calls.push(compiled.sql);
@@ -365,6 +367,7 @@ const makeFailingReadImporter = (
 			readonly capabilities: {
 				readonly "interactive-transactions": boolean;
 				readonly "session-state": boolean;
+				readonly "prepared-statements": boolean;
 			};
 			readonly execute: (compiled: {
 				readonly sql: string;
@@ -382,6 +385,7 @@ const makeFailingReadImporter = (
 			capabilities: {
 				"interactive-transactions": false,
 				"session-state": false,
+				"prepared-statements": false,
 			},
 			execute: async (compiled: { readonly sql: string }) => {
 				calls.push(compiled.sql);

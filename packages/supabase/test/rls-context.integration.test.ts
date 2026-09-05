@@ -52,7 +52,11 @@ const handRolledDriver = (pool: Pool): Driver => {
 		return result.rows;
 	};
 	return {
-		capabilities: { "interactive-transactions": true, "session-state": true },
+		capabilities: {
+			"interactive-transactions": true,
+			"session-state": true,
+			"prepared-statements": false,
+		},
 		execute: (compiled) => run(pool, compiled),
 		transaction: async (callback) => {
 			const client = await pool.connect();

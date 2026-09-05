@@ -101,7 +101,11 @@ const appSchema = {
  * this only needs to resolve without throwing, never carry real data.
  */
 const driver: Driver = {
-	capabilities: { "interactive-transactions": true, "session-state": true },
+	capabilities: {
+		"interactive-transactions": true,
+		"session-state": true,
+		"prepared-statements": false,
+	},
 	execute: async () => [],
 	transaction: async (callback) => callback({ execute: async () => [] }),
 	setupSession: async () => {},

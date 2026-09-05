@@ -251,6 +251,7 @@ const makeFakeDriver = (
 		capabilities: {
 			"interactive-transactions": true,
 			"session-state": true,
+			"prepared-statements": false,
 		},
 		execute: session.execute,
 		transaction: async (callback) => callback(session),
@@ -1246,6 +1247,7 @@ describe("applyReset — reset-drop-failed names the phase that actually failed 
 			capabilities: {
 				"interactive-transactions": true,
 				"session-state": true,
+				"prepared-statements": false,
 			},
 			execute: session.execute,
 			// Rejects before the callback ever runs -- standing in for BEGIN
