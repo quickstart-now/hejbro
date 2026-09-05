@@ -78,6 +78,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#671](671/) | existing: adoption never creates the adopted table's declared indexes, checks, FKs or primary key | closed | #1019 | 0 | 8 (4 pending) |
 | ↳ [#673](673/) | test: subprocess-spawning suites time out under a full parallel pnpm test and pass in isolation | closed | #773 | 0 | 7 (0 pending) |
 | ↳ [#674](674/) | examples: declare an existing table in the supabase example so the round trip covers the brownfield path | closed | #897 | 0 | 0 (0 pending) |
+| ↳ [#678](678/) | infer: role names from policies, not only from grants | open |  | 0 | 0 (0 pending) |
 | ↳ [#679](679/) | core: function argument names bypass D36 and are emitted unquoted in DDL | closed | #733 #758 | 0 | 3 (0 pending) |
 | ↳ [#686](686/) | ctx.return accepts a mutation with no returning() and renders invalid plpgsql | closed | #733 | 0 | 3 (0 pending) |
 | ↳ [#687](687/) | init ignores the configured migrationsDir and snapshotPath | closed | #739 #759 #770 | 0 | 8 (0 pending) |
@@ -86,6 +87,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#697](697/) | vendored fn guard is count-only and a __proto__ column key loses its column | closed | #739 | 0 | 4 (0 pending) |
 | ↳ [#701](701/) | array order in kind snapshots can produce a semantically empty alter | closed | #858 #861 | 0 | 5 (0 pending) |
 | ↳ [#707](707/) | check is silent about undeclared indexes and check constraints on managed tables | closed | #878 #879 | 0 | 5 (0 pending) |
+| ↳ [#712](712/) | decide whether an enum type's catalog name is held to D36 by the catalog reading | open |  | 0 | 1 (1 pending) |
 | ↳ [#726](726/) | loss report promises check will report an omitted column, but check has no column-level inventory | closed | #878 | 0 | 1 (0 pending) |
 | ↳ [#740](740/) | Vendored contract column order follows JS key order, not the snapshot's physical order | closed | #858 #861 | 0 | 2 (0 pending) |
 | ↳ [#741](741/) | `hejbro init --config <path>` is ignored and scaffolds a competing project | closed | #840 #847 | 0 | 4 (0 pending) |
@@ -233,7 +235,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 
 ## Totals
 
-Owner decisions 95 · rulings 309 (interpretation 205, extension 102, stop 2) · pending extensions 64 · rejected 2
+Owner decisions 95 · rulings 310 (interpretation 205, extension 103, stop 2) · pending extensions 65 · rejected 2
 
 ## Conventions
 
