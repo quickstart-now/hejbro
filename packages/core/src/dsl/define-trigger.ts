@@ -155,6 +155,7 @@ export const defineTrigger = <TTable extends Table>(
 		"trigger",
 		null,
 		null,
+		[],
 		(ctx) => body(ctx, rows),
 	);
 

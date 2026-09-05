@@ -395,6 +395,7 @@ export const defineFunction = <
 		returns.returnsKind,
 		scalarReturnFamilyOf(returns),
 		declaredTableOf(returns),
+		argDeclarations.map((declaration) => declaration.argName),
 		(ctx) => body(ctx, refs),
 	);
 

@@ -972,6 +972,7 @@ export const createRecordingContext = (
 	returnKind: ReturnKind,
 	scalarReturnFamily: SqlTypeFamily | null,
 	declaredTable: SetofTableIdentity,
+	argNames: ReadonlyArray<string>,
 ): { readonly ctx: BodyContext; readonly finish: () => FunctionBody } => {
 	openRecordingSession();
 	const state: RecordingState = {
@@ -982,7 +983,11 @@ export const createRecordingContext = (
 		scalarReturnFamily,
 		returned: { current: false },
 		declarations: [],
-		renderedNames: new Map(),
+		// Seeded before the body callback ever runs (#816): the arguments
+		// already passed `resolveArgs`'s own SQL-name/reserved/duplicate
+		// checks, so this only registers them -- checking an already-valid
+		// name again would throw on the wrong occurrence.
+		renderedNames: new Map(argNames.map((name) => [name, "argument"])),
 		constructNames: new Map(),
 		frames: [[]],
 		rowCounter: { current: 0 },
@@ -1050,6 +1055,7 @@ const recordOnce = (
 	returnKind: ReturnKind,
 	scalarReturnFamily: SqlTypeFamily | null,
 	declaredTable: SetofTableIdentity,
+	argNames: ReadonlyArray<string>,
 	run: (ctx: BodyContext) => void,
 ): FunctionBody => {
 	const { ctx, finish } = createRecordingContext(
@@ -1058,6 +1064,7 @@ const recordOnce = (
 		returnKind,
 		scalarReturnFamily,
 		declaredTable,
+		argNames,
 	);
 	try {
 		run(ctx);
@@ -1081,6 +1088,7 @@ export const recordBodyWithGuard = (
 	returnKind: ReturnKind,
 	scalarReturnFamily: SqlTypeFamily | null,
 	declaredTable: SetofTableIdentity,
+	argNames: ReadonlyArray<string>,
 	run: (ctx: BodyContext) => void,
 ): FunctionBody => {
 	const firstBody = recordOnce(
@@ -1089,6 +1097,7 @@ export const recordBodyWithGuard = (
 		returnKind,
 		scalarReturnFamily,
 		declaredTable,
+		argNames,
 		run,
 	);
 	const secondBody = recordOnce(
@@ -1097,6 +1106,7 @@ export const recordBodyWithGuard = (
 		returnKind,
 		scalarReturnFamily,
 		declaredTable,
+		argNames,
 		run,
 	);
 

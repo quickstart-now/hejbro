@@ -983,3 +983,130 @@ describe("a returns builder with notNullElements is refused (#433)", () => {
 		expect(tableWithArray.tags).toBeDefined();
 	});
 });
+
+describe("the body's rendered names are seeded with the argument names (#816)", () => {
+	it("a loop named after an argument collides with the argument, naming it", () => {
+		let caught: unknown;
+		try {
+			defineFunction(
+				app,
+				"echo_shadow_loop",
+				{ args: { x: uuid() }, returns: posts },
+				(ctx) => {
+					ctx.forEach(
+						select(posts).where(eq(posts.id, posts.id)),
+						() => {},
+						"x",
+					);
+					ctx.return(select(posts));
+				},
+			);
+		} catch (error) {
+			caught = error;
+		}
+		expect((caught as { code?: string } | undefined)?.code).toBe(
+			"duplicate-local-name",
+		);
+		expect((caught as { message?: string } | undefined)?.message).toContain(
+			'the argument named "x"',
+		);
+	});
+
+	it("a row read may carry an argument's name -- the row name renders nowhere (control)", () => {
+		const fn = defineFunction(
+			app,
+			"echo_row_same_name",
+			{ args: { x: uuid() }, returns: posts },
+			(ctx) => {
+				ctx.row(
+					select({ id: posts.id }, posts).where(eq(posts.id, posts.id)),
+					"x",
+				);
+				ctx.return(select(posts));
+			},
+		);
+		expect(fn.body.declarations).toEqual([
+			{ declKind: "scalar", name: "x_id", typeNode: { typeName: "uuid" } },
+		]);
+	});
+
+	it("a row read's derived scalar colliding with an argument is refused, naming the argument", () => {
+		let caught: unknown;
+		try {
+			defineFunction(
+				app,
+				"echo_row_shadow_arg",
+				// biome-ignore lint/style/useNamingConvention: adversarial snake_case key under test.
+				{ args: { x_id: uuid() }, returns: posts },
+				(ctx) => {
+					ctx.row(
+						select({ id: posts.id }, posts).where(eq(posts.id, posts.id)),
+						"x",
+					);
+					ctx.return(select(posts));
+				},
+			);
+		} catch (error) {
+			caught = error;
+		}
+		expect((caught as { code?: string } | undefined)?.code).toBe(
+			"duplicate-local-name",
+		);
+		expect((caught as { message?: string } | undefined)?.message).toContain(
+			'the argument named "x_id"',
+		);
+	});
+
+	it("a loop with a different name from the argument is unaffected (control)", () => {
+		const fn = defineFunction(
+			app,
+			"echo_loop_no_collision",
+			{ args: { x: uuid() }, returns: posts },
+			(ctx) => {
+				ctx.forEach(select(posts).where(eq(posts.id, posts.id)), () => {}, "y");
+				ctx.return(select(posts));
+			},
+		);
+		expect(fn.body.declarations).toEqual([{ declKind: "record", name: "y" }]);
+	});
+
+	it("a loop named after an argument's derived SQL name collides even though the keys differ -- comparison is by derived name, not by key", () => {
+		let caught: unknown;
+		try {
+			defineFunction(
+				app,
+				"echo_loop_derived_collision",
+				{ args: { userId: uuid() }, returns: posts },
+				(ctx) => {
+					ctx.forEach(
+						select(posts).where(eq(posts.id, posts.id)),
+						() => {},
+						"user_id",
+					);
+					ctx.return(select(posts));
+				},
+			);
+		} catch (error) {
+			caught = error;
+		}
+		expect((caught as { code?: string } | undefined)?.code).toBe(
+			"duplicate-local-name",
+		);
+		expect((caught as { message?: string } | undefined)?.message).toContain(
+			'the argument named "user_id"',
+		);
+	});
+
+	it("a body with no declared arguments behaves as before (control, no regression)", () => {
+		const fn = defineFunction(
+			app,
+			"echo_no_args",
+			{ returns: posts },
+			(ctx) => {
+				ctx.forEach(select(posts).where(eq(posts.id, posts.id)), () => {}, "x");
+				ctx.return(select(posts));
+			},
+		);
+		expect(fn.body.declarations).toEqual([{ declKind: "record", name: "x" }]);
+	});
+});
