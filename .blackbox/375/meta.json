@@ -37,6 +37,13 @@
       "title": "First CI run failed: dash refuses set -o pipefail; the script is invoked as sh",
       "pr": null,
       "decisions": []
+    },
+    {
+      "id": "W3",
+      "at": "2026-09-05T07:58Z",
+      "title": "roundtrip readiness probe races the postgres image's init restart",
+      "pr": null,
+      "decisions": []
     }
   ],
   "prs": [

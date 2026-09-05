@@ -20,7 +20,16 @@ trap cleanup EXIT
 [ -e "$EXAMPLE_DIR/node_modules/hejbro" ] || { echo "run pnpm install first: $EXAMPLE_DIR/node_modules/hejbro is missing (pnpm workspace link)" >&2; exit 2; }
 
 docker run -d --name "$CONTAINER" -e POSTGRES_PASSWORD=postgres "$IMAGE" >/dev/null
-until docker exec "$CONTAINER" pg_isready -U postgres -q; do sleep 1; done
+# Readiness is probed over TCP, not the unix socket: the image's entrypoint
+# first runs a temporary server bound to the socket only (listen_addresses
+# ''), then stops it and starts the real one. A socket probe can pass on the
+# temporary server and the next psql then finds no socket at all (#375, seen
+# on GitHub's runner). Only the final server answers on 127.0.0.1.
+for _ in $(seq 1 120); do
+  docker exec "$CONTAINER" pg_isready -h 127.0.0.1 -U postgres -q && break
+  sleep 1
+done
+docker exec "$CONTAINER" pg_isready -h 127.0.0.1 -U postgres -q || { echo "postgres container did not become ready" >&2; exit 2; }
 psql() { docker exec -i "$CONTAINER" psql -U postgres -v ON_ERROR_STOP=1 -q "$@"; }
 
 psql -c 'create database chain;' -c 'create database fresh;'
