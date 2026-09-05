@@ -51,9 +51,10 @@ one where nothing true can be said:
   backs SHALL be read from the catalog's own record of it, never
   inferred from the two names matching — and the record to read is the
   constraint the index *implements*. A foreign key's own catalog record
-  names the index it points at on the referenced table, so a key that
-  something references is otherwise reported as unmanaged once per
-  foreign key pointing at it, under that foreign key's name. Any other index the catalog
+  names the index it points at on the referenced table; read without
+  that distinction, a key another table references is reported as
+  unmanaged once for every foreign key pointing at it, each time under
+  that foreign key's name. Any other index the catalog
   holds on a managed table is inventoried — and where such an index
   backs a constraint, its line SHALL name that constraint, so that a
   reader is not sent looking for an index nobody wrote.
