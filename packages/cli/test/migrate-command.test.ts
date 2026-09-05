@@ -1336,9 +1336,13 @@ describe("runMigrate — an applied migration's body changed / 1.3, 631/R9", () 
 	// present on disk, so a recorded-but-missing filename is always
 	// refused by `planApply` as `apply-ledger-orphan-row` before
 	// `changedBodies` is ever called, regardless of that guard's own
-	// correctness. The guard's mutation witness is task 1.4's `status`,
-	// which reports instead of refusing and so does reach it with an
-	// absent file.
+	// correctness. Under strict TypeScript, `ReadonlyMap.get()` answers
+	// `T | undefined`, so the guard itself is the type contract's own
+	// handling, not a defensive guess; the one path that reaches
+	// `undefined` there is a race (the file removed between the chain
+	// read and the body read), where falling through to "not a finding"
+	// is correct -- hashing the empty string would misreport a vanished
+	// file as a changed one.
 	it("5: a recorded file missing from disk stays apply-ledger-orphan-row's own case, not this code", async () => {
 		await writeFixtureFile(cwd, "migrations/0002_b.sql", file2);
 		const { importer } = makeFailingLedgerImporter(

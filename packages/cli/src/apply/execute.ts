@@ -471,14 +471,18 @@ export const changedBodies = (
 		if (row.origin === "raised") {
 			return [];
 		}
-		// [lead, 631/R9] Unreachable from `migrate`: its own `bodiesOnDisk`
-		// only ever contains chain files present on disk, and a recorded
-		// filename absent from the chain is already refused by `planApply`
-		// as `apply-ledger-orphan-row` before this function is ever called.
-		// The caller that does reach this branch is `status` (task 1.4),
-		// which reports disagreements instead of refusing and so keeps
-		// going, passing a row whose filename is genuinely absent from its
-		// own map.
+		// [lead, 631/R9] `ReadonlyMap.get()` answers `T | undefined` under
+		// strict TypeScript -- this branch handles that type contract, not
+		// a defensive guess. Both `migrate` and `status` (task 1.4) only
+		// ever put chain files present on disk into `bodiesOnDisk`, and a
+		// recorded filename absent from the chain is refused as
+		// `apply-ledger-orphan-row` by `planApply` before either caller
+		// reaches this function. The one path that does hit `undefined`
+		// here is a race: the file existed when the chain was read and was
+		// removed before this call read its body. Falling through to
+		// "not a finding" is correct there -- hashing the empty string
+		// would misreport a file that vanished as a file whose body
+		// changed.
 		const diskBody = bodiesOnDisk.get(row.filename);
 		if (diskBody === undefined) {
 			return [];

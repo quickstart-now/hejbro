@@ -1,11 +1,14 @@
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { hejbroError } from "@hejbro/core";
 import type { Driver } from "@hejbro/query";
 import { defineCommand } from "citty";
 import {
 	APPLY_CONNECTION_CODES,
 	APPLY_CONNECTION_FLAG,
 } from "../apply/capability";
-import type { LedgerState } from "../apply/ledger";
+import { changedBodies } from "../apply/execute";
+import type { LedgerRow, LedgerState } from "../apply/ledger";
 import { asLedgerAccessFailure, readLedger } from "../apply/ledger";
 import {
 	LEDGER_DIAGNOSTIC_IDENTITY,
@@ -153,6 +156,21 @@ export const renderStatusReport = (
 	stderr: null,
 });
 
+/** [task 1.4, 631/R9] `ledger.exists` narrows which arm carries `applied` -- mirrors `migrate.ts`'s own private `recordedRows` (and `plan.ts`'s `ledgerRows`); an absent ledger has recorded nothing to compare. */
+const recordedRows = (ledger: LedgerState): ReadonlyArray<LedgerRow> => {
+	if (ledger.exists) {
+		return ledger.applied;
+	}
+	return [];
+};
+
+/** [task 1.4, 631/R9, R11] The message body for one changed file's diagnostic -- inline at the one `hejbroError` call site below, so `check:next-marker`'s same-file `Next:` search resolves it. */
+const bodyChangedMessage = (
+	recordedChecksum: string,
+	diskChecksum: string,
+): string =>
+	`body changed after it was applied (recorded ${recordedChecksum.slice(0, 12)}, on disk ${diskChecksum.slice(0, 12)}). Next: restore the file from version control, or, if the change was deliberate, write it as a new migration -- hejbro never rewrites applied history -- before rerunning \`hejbro migrate\`.`;
+
 /** `plan.ok === false`'s own report -- a chain that does not verify, or every ledger/chain disagreement group 2 computed (task 7.6: "reports a ledger row with no file" is exactly `apply-ledger-orphan-row` here). */
 export const renderPlanFailure = (
 	plan: Extract<PlanResult, { readonly ok: false }>,
@@ -262,6 +280,40 @@ export const runStatus = async (
 					const plan = planApply(chain, ledgerState);
 					if (!plan.ok) {
 						return renderPlanFailure(plan);
+					}
+					// [task 1.4, 631/R9, R11] This comparison runs only when the
+					// plan has no disagreement -- a run with a disagreement keeps
+					// reporting that disagreement alone, as it did before this
+					// task.
+					const bodiesOnDisk = new Map<string, string>(
+						chain.map((entry) => [
+							entry.fileName,
+							readFileSync(join(migrationsDirPath, entry.fileName), "utf8"),
+						]),
+					);
+					const findings = changedBodies(
+						recordedRows(ledgerState),
+						bodiesOnDisk,
+					);
+					if (findings.length > 0) {
+						const diagnostics = findings.map((finding) =>
+							fromHejbroError(
+								hejbroError(
+									"apply-migration-body-changed",
+									bodyChangedMessage(
+										finding.recordedChecksum,
+										finding.diskChecksum,
+									),
+								),
+								finding.filename,
+							),
+						);
+						const report = renderStatusReport(plan, ledgerState);
+						return {
+							exitCode: 1,
+							stdout: report.stdout,
+							stderr: renderDiagnostics(diagnostics, null),
+						};
 					}
 					return renderStatusReport(plan, ledgerState);
 				} catch (error) {

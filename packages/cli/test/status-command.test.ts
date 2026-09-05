@@ -2,6 +2,7 @@ import { hejbroError } from "@hejbro/core";
 import type { CompileResult } from "@hejbro/query";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { LedgerState } from "../src/apply/ledger";
+import { bodyChecksum } from "../src/apply/ledger";
 import type { PlanResult } from "../src/apply/plan";
 import type { CheckDriverConnection } from "../src/check/driver";
 import { planFailureResult } from "../src/commands/migrate";
@@ -216,9 +217,12 @@ const LEDGER_PROBE_ROWS: ReadonlyArray<ProbeRow> = [
 	},
 ];
 
-/** A fake importer whose driver answers the identity probe with `probeRows` and `readLedger`'s own statement with no rows -- every other statement (including a write) is recorded so a test can assert none was ever sent. */
+/** A fake importer whose driver answers the identity probe with `probeRows` and `readLedger`'s own statement with `options.ledgerRows` (default: none) -- every other statement (including a write) is recorded so a test can assert none was ever sent. */
 const makeFakeStatusImporter = (
 	probeRows: ReadonlyArray<ProbeRow>,
+	options?: {
+		readonly ledgerRows?: ReadonlyArray<Record<string, unknown>>;
+	},
 ): {
 	readonly importer: () => Promise<{
 		readonly pgDriver: () => {
@@ -255,6 +259,9 @@ const makeFakeStatusImporter = (
 				const sql = compiled.sql.trim().toLowerCase();
 				if (sql.startsWith("select c.relkind")) {
 					return probeRows;
+				}
+				if (sql.startsWith('select "filename"')) {
+					return options?.ledgerRows ?? [];
 				}
 				return [];
 			},
@@ -604,5 +611,209 @@ describe("hejbro status / the configured driver factory threads through (#458 ta
 		expect(importerCalls).toHaveLength(0);
 		expect(executed.length).toBeGreaterThan(0);
 		expect(closed).toHaveLength(1);
+	});
+});
+
+/**
+ * [task 1.4, 631/R9, R11] `status` reports a changed body as its own
+ * per-file diagnostic (identity: the filename, code:
+ * `apply-migration-body-changed`), on a run whose plan has no
+ * disagreement -- a disagreement is reported alone, as today, and the
+ * body comparison never runs. `origin: "raised"` and a `null` checksum
+ * are never compared, the same rules `changedBodies` already states.
+ */
+describe("runStatus — a changed body is reported / 1.4, 631/R9, R11", () => {
+	beforeAll(assertBuiltCli);
+
+	let cwd: string;
+
+	const bannerBlock = (
+		parent: string,
+		current: string,
+		extraLines: ReadonlyArray<string> = [],
+	): string =>
+		[
+			"-- hejbro migration",
+			...extraLines,
+			`-- parent-snapshot: ${parent}`,
+			`-- snapshot: ${current}`,
+		].join("\n");
+
+	const migrationFileText = (
+		parent: string,
+		current: string,
+		body: string,
+		extraLines: ReadonlyArray<string> = [],
+	): string => `${bannerBlock(parent, current, extraLines)}\n\n${body}`;
+
+	const file1Body = 'create table "app"."a" (id integer);';
+	const file2Body = 'create table "app"."b" (id integer);';
+	const originalFile1 = migrationFileText(
+		"sha256:aaaa",
+		"sha256:bbbb",
+		file1Body,
+	);
+	const originalFile2 = migrationFileText(
+		"sha256:bbbb",
+		"sha256:cccc",
+		file2Body,
+	);
+	const editedFile1 = migrationFileText(
+		"sha256:aaaa",
+		"sha256:bbbb",
+		`${file1Body}\nalter table "app"."a" add column "z" integer;`,
+	);
+	const editedFile2 = migrationFileText(
+		"sha256:bbbb",
+		"sha256:cccc",
+		`${file2Body}\nalter table "app"."b" add column "z" integer;`,
+	);
+
+	beforeEach(async () => {
+		cwd = await createCliFixtureDir();
+		await writeFixtureFile(cwd, "hejbro.config.ts", CONFIG_SOURCE);
+	});
+
+	afterEach(async () => {
+		await removeCliFixtureDir(cwd);
+	});
+
+	const changedBodyMessage = (
+		recordedChecksum: string,
+		diskChecksum: string,
+	): string =>
+		`body changed after it was applied (recorded ${recordedChecksum.slice(0, 12)}, on disk ${diskChecksum.slice(0, 12)}). Next: restore the file from version control, or, if the change was deliberate, write it as a new migration -- hejbro never rewrites applied history -- before rerunning \`hejbro migrate\`.`;
+
+	it("1: a recorded file's body was edited -- one diagnostic naming the file, exit 1", async () => {
+		await writeFixtureFile(cwd, "migrations/0001_a.sql", editedFile1);
+		const { importer } = makeFakeStatusImporter(LEDGER_PROBE_ROWS, {
+			ledgerRows: [
+				{
+					filename: "0001_a.sql",
+					origin: "applied",
+					checksum: bodyChecksum(originalFile1),
+				},
+			],
+		});
+
+		const result = await runStatus(cwd, ["--url", "postgres://fake"], importer);
+
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain("apply-migration-body-changed");
+		expect(result.stderr).toContain("0001_a.sql");
+		expect(result.stderr).toContain(
+			changedBodyMessage(
+				bodyChecksum(originalFile1),
+				bodyChecksum(editedFile1),
+			),
+		);
+	});
+
+	it("2: a row with a null checksum is never compared -- exit 0, no diagnostic", async () => {
+		await writeFixtureFile(cwd, "migrations/0001_a.sql", editedFile1);
+		const { importer } = makeFakeStatusImporter(LEDGER_PROBE_ROWS, {
+			ledgerRows: [
+				{ filename: "0001_a.sql", origin: "applied", checksum: null },
+			],
+		});
+
+		const result = await runStatus(cwd, ["--url", "postgres://fake"], importer);
+
+		expect(result.exitCode).toBe(0);
+		expect(result.stderr).toBeNull();
+	});
+
+	it("3: two recorded files edited -- two diagnostics, in chain order", async () => {
+		await writeFixtureFile(cwd, "migrations/0001_a.sql", editedFile1);
+		await writeFixtureFile(cwd, "migrations/0002_b.sql", editedFile2);
+		const { importer } = makeFakeStatusImporter(LEDGER_PROBE_ROWS, {
+			ledgerRows: [
+				{
+					filename: "0001_a.sql",
+					origin: "applied",
+					checksum: bodyChecksum(originalFile1),
+				},
+				{
+					filename: "0002_b.sql",
+					origin: "applied",
+					checksum: bodyChecksum(originalFile2),
+				},
+			],
+		});
+
+		const result = await runStatus(cwd, ["--url", "postgres://fake"], importer);
+
+		expect(result.exitCode).toBe(1);
+		const stderr = result.stderr ?? "";
+		expect(stderr.indexOf("0001_a.sql")).toBeGreaterThanOrEqual(0);
+		expect(stderr.indexOf("0002_b.sql")).toBeGreaterThan(
+			stderr.indexOf("0001_a.sql"),
+		);
+	});
+
+	it("4: an orphan row and an edited body together -- only the disagreement is reported, no body diagnostic", async () => {
+		await writeFixtureFile(cwd, "migrations/0001_a.sql", editedFile1);
+		const { importer } = makeFakeStatusImporter(LEDGER_PROBE_ROWS, {
+			ledgerRows: [
+				{
+					filename: "0001_a.sql",
+					origin: "applied",
+					checksum: bodyChecksum(originalFile1),
+				},
+				{
+					filename: "0099_ghost.sql",
+					origin: "applied",
+					checksum: bodyChecksum("-- hejbro migration\n\nselect 1;"),
+				},
+			],
+		});
+
+		const result = await runStatus(cwd, ["--url", "postgres://fake"], importer);
+
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain("apply-ledger-orphan-row");
+		expect(result.stderr).not.toContain("apply-migration-body-changed");
+	});
+
+	it("5: a clean run reports no changed body -- control", async () => {
+		await writeFixtureFile(cwd, "migrations/0001_a.sql", originalFile1);
+		const { importer } = makeFakeStatusImporter(LEDGER_PROBE_ROWS, {
+			ledgerRows: [
+				{
+					filename: "0001_a.sql",
+					origin: "applied",
+					checksum: bodyChecksum(originalFile1),
+				},
+			],
+		});
+
+		const result = await runStatus(cwd, ["--url", "postgres://fake"], importer);
+
+		expect(result.exitCode).toBe(0);
+		expect(result.stderr).toBeNull();
+	});
+
+	// The raised row below is given the same filename as a real chain file
+	// on disk, not to imitate a realistic raise -- a raised row's filename
+	// is never a chain entry -- but to isolate condition 2 (`origin !==
+	// "raised"`) from condition 3 (absent from `bodiesOnDisk`): a
+	// different filename would leave the two indistinguishable, since
+	// either one alone already excludes the row.
+	it("6: a raised row is never reported as a changed body", async () => {
+		await writeFixtureFile(cwd, "migrations/0001_a.sql", originalFile1);
+		const { importer } = makeFakeStatusImporter(LEDGER_PROBE_ROWS, {
+			ledgerRows: [
+				{
+					filename: "0001_a.sql",
+					origin: "raised",
+					checksum: bodyChecksum(editedFile1),
+				},
+			],
+		});
+
+		const result = await runStatus(cwd, ["--url", "postgres://fake"], importer);
+
+		expect(result.exitCode).toBe(0);
+		expect(result.stderr).toBeNull();
 	});
 });
