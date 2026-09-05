@@ -23,6 +23,19 @@
       "at": "2026-09-05T04:29Z",
       "title": "Prepared statements ship as an opt-in third capability; the design forks are settled by the lead",
       "ratified": null
+    },
+    {
+      "id": "R2",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "303/R1; ps-reviewer round 1 (B 0 / N 5",
+        "18 scenarios",
+        "62 constructed inputs); ps-planner's report"
+      ],
+      "at": "2026-09-05T06:22Z",
+      "title": "Review close-out: the never-share sentence is made honest (128-bit hash), PgDriverOptions export ratified, the shared name helper and two follow-ups go to #815",
+      "ratified": null
     }
   ],
   "work": [
@@ -93,6 +106,20 @@
       "id": "W10",
       "at": "2026-09-05T06:14Z",
       "title": "review N-items: cross pins, transaction breadth, missing cells, pass-through, doc",
+      "pr": null,
+      "decisions": []
+    },
+    {
+      "id": "W11",
+      "at": "2026-09-05T06:33Z",
+      "title": "closing commit: honest collision bound in spec + skill, R2 blackbox inclusion",
+      "pr": null,
+      "decisions": []
+    },
+    {
+      "id": "W12",
+      "at": "2026-09-05T06:35Z",
+      "title": "Stub captures cannot see the client library's protocol switch",
       "pr": null,
       "decisions": []
     }

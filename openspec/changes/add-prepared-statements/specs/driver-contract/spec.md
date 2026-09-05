@@ -114,8 +114,10 @@ built statement — one whose kind is `select`, `insert`, `update`,
 and plans each distinct text once and later executions of the same text
 on that connection bind to the prepared statement. The name SHALL be
 derived from the statement text alone: the same text yields the same
-name on every connection and in every process, two different texts
-never share a name, and the name fits the server's identifier length. A
+name on every connection and in every process, two different texts do
+not share a name — the name is a 128-bit digest of the text, so a
+collision is not a practical possibility — and the name fits the
+server's identifier length. A
 statement of the `sql` kind SHALL always be sent unnamed, whatever the
 declaration: the driver parses no SQL, and a text that carries more than
 one command cannot be prepared, so the escape hatch, the session pins

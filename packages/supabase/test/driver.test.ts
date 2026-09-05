@@ -282,12 +282,11 @@ describe("the transaction-pooler endpoint refuses a base that prepares (task 1.4
 			await wrapped.execute(compiled);
 			expect(driver.execute).toHaveBeenCalledTimes(1);
 			// This path is a pure passthrough (no wrapping, unlike the
-			// pooler's own execute/transaction members) -- the exact
-			// CompileResult the caller sent is what reaches the base's own
-			// execute, byte-for-byte, so whatever naming the base itself
-			// performs on it (pgDriver's/neonDriver's own contract, proven
-			// directly in their own test suites) applies to the real
-			// statement, never a copy or a stripped one.
+			// pooler's own execute/transaction members) -- an equal
+			// CompileResult reaches the base's own execute (toHaveBeenCalledWith
+			// is deep equality, not identity). That is enough: the name a
+			// preparing base derives is a function of `sql` alone, so a
+			// preserved `sql` preserves the name it would produce.
 			expect(driver.execute).toHaveBeenCalledWith(compiled);
 		},
 	);

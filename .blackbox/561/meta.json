@@ -4,9 +4,9 @@
   "ref": "quickstart-now/hejbro#561",
   "title": "context-required boundary: vacuous contexts and operation naming (D106 gca F6/F7)",
   "parent": "quickstart-now/hejbro#301",
-  "status": "open",
+  "status": "closed",
   "opened": "2026-09-04",
-  "closed": null,
+  "closed": "2026-09-05",
   "decisions": [
     {
       "id": "D1",

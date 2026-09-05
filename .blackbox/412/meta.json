@@ -580,6 +580,55 @@
       "raw": [
         "9d9e9165-53a6-4428-bebf-45e47e987321#2"
       ]
+    },
+    {
+      "id": "D26",
+      "by": "owner",
+      "at": "2026-09-05T04:54Z",
+      "title": "Real-environment product verification on Neon, Nile, Postgres and Supabase is hejbro-assist's; the issues asking hejbro to do it are closed",
+      "raw": [
+        "9d9e9165-53a6-4428-bebf-45e47e987321#3"
+      ]
+    },
+    {
+      "id": "R29",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "412/D24",
+        "412/D25 (no parking); the issue's own record: no existing kind has catalog-comparable server state",
+        "and the slot would drag the CLI's catalog and finding types across the preset boundary (.claude/rules/provider-preset.md)"
+      ],
+      "at": "2026-09-05T04:57Z",
+      "title": "#508 (function-valued comparator slot for check) closes as speculative surface",
+      "ratified": null
+    },
+    {
+      "id": "R30",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "412/D24",
+        "412/D25; the issue's own recommendation (fold in the next time query-execution is touched); the change harden-aggregate-vocabulary (#452) touches query-execution now"
+      ],
+      "at": "2026-09-05T05:08Z",
+      "title": "#544's one-clause qualification rides in harden-aggregate-vocabulary's query-execution delta",
+      "ratified": null
+    },
+    {
+      "id": "R31",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "412/D24",
+        "D25; read on 2026-09-05: packages/query/test/db/context-required.test.ts pins per-surface operation tokens (db.execute",
+        "db.select",
+        "db.fn",
+        "transaction) from harden-context-boundary task 1.7 (F7); skills/hejbro/references/query-layer.md documents context-rendering-empty for a zero-statement rendering and db.as({}) on a contextRequired driver (F6)"
+      ],
+      "at": "2026-09-05T05:50Z",
+      "title": "#561 closes: both D106 gca findings are already shipped behaviour",
+      "ratified": null
     }
   ],
   "work": [

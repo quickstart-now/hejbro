@@ -37,7 +37,9 @@ already-prepared statement, rather than being parsed and planned again
 every time. The name is derived from the statement text alone
 (`hejbro_` followed by 32 hex digits of SHA-256 over the text): the
 same text always gets the same name, on every connection and in every
-process, and two different texts never collide. Once a statement is
+process, and two different texts do not share a name — the name is a
+128-bit digest of the text, so a collision is not a practical
+possibility. Once a statement is
 prepared it stays prepared for the connection's life — hejbro evicts
 nothing, so the set of distinct texts an application compiles (bounded
 by its own code; parameters are placeholders) is what accumulates,

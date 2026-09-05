@@ -256,3 +256,53 @@ regressions), pnpm check:crap (0 violations, README unchanged --
 no src function touched). Docker integration not re-run per planner
 (no source logic change).
 
+<a id="w11"></a>
+## W11 — closing commit: honest collision bound in spec + skill, R2 blackbox inclusion
+
+_2026-09-05T06:33Z_
+
+Lead ruling R2 applied verbatim: driver-contract spec.md's ADDED
+requirement changes "two different texts never share a name" to "two
+different texts do not share a name -- the name is a 128-bit digest of
+the text, so a collision is not a practical possibility" (the prior
+wording was an absolute claim; the actual guarantee is SHA-256's first
+128 bits, probabilistic, matching what the source comment already said
+honestly). Checked skills/hejbro/references/{query-layer,supabase-
+preset,neon-preset}.md for the same absolute claim: only query-layer.md
+had it ("two different texts never collide"), corrected to the same
+wording; the other two never made this claim.
+
+openspec validate add-prepared-statements --strict (both the
+deprecated "openspec change validate" and the current "openspec
+validate" forms): "Change is valid" in both.
+
+Included in this commit per lead direction (R2): .blackbox/303's own
+R2 entry, .blackbox/412's 4 files (README.md, decisions.md, meta.json
+-- the lead's own D23-D26 record, not another team's stray write as
+previously assumed), .blackbox/README.md. .blackbox/561 stays
+untouched -- out of scope, not mentioned by the lead.
+
+Full gate green: TURBO_FORCE=1 pnpm check-types (18/18), pnpm check,
+pnpm check:bans, TURBO_FORCE=1 pnpm test (all packages, no
+regressions). pnpm check:crap: first run failed with exit 130
+(SIGINT, transient scheduling hiccup, not source-caused); rerun
+succeeded, 0 violations, README unchanged (no src function touched by
+this docs-only commit).
+
+<a id="w12"></a>
+## W12 — Stub captures cannot see the client library's protocol switch
+
+_2026-09-05T06:35Z_
+
+A stub that records the query config shows what the driver hands to the
+client library, but not what the library then does with it. Naming a
+statement makes node-postgres take even a parameterless statement through
+the extended protocol (`requiresPreparation()`: `if (this.name) return
+true`), so the arrival shape of every custom-parsed type changes layer
+without any stub assertion moving. The named/unnamed row-equality check
+against a real server is what covers that layer.
+
+Rule for driver pieces: when a change alters what is handed to the client
+library, ask whether it switches the protocol before designing the stub
+tests -- a live witness is required where it does.
+
