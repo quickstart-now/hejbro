@@ -377,6 +377,38 @@ export const loadConfig = async (
 };
 
 /**
+ * The lenient load `import`/`pull`/`raise` use (add-config-driver, #458,
+ * lead ruling 458/R2): these three never read the configuration before
+ * this field existed, and they bootstrap a project that may not have one
+ * yet, so an absent file means "no factory configured", byte-identical to
+ * running without the field. Every other load failure -- an invalid
+ * `driver`, a directory or unreadable node at the default path -- refuses
+ * exactly as {@link loadConfig} does; only its `code` is checked, never
+ * its message. Takes no `configFlag`: `loadConfig` throws
+ * `config-not-found` for both "nothing at the default path" and "nothing
+ * at the --config path", and only the former may be absorbed -- a
+ * misspelled path the user typed must never be silently treated as "no
+ * configuration" (a caller that later accepts --config for these three
+ * commands, harden-config-root, must resolve that ambiguity itself
+ * before this helper could take one).
+ */
+export const loadConfigIfPresent = async (
+	cwd: string,
+): Promise<{
+	readonly config: HejbroConfig;
+	readonly configPath: string;
+} | null> => {
+	try {
+		return await loadConfig(cwd, undefined);
+	} catch (error) {
+		if (error instanceof HejbroError && error.code === "config-not-found") {
+			return null;
+		}
+		throw error;
+	}
+};
+
+/**
  * `Table`'s hidden metadata lived behind a per-module-instance `Symbol()`
  * (D15, `dsl/table.ts`'s `tableMeta`) — `isTable()` used to compare
  * against *this* `@hejbro/core` instance's symbol only, which silently

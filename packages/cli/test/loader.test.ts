@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { HejbroInput } from "@hejbro/core";
 import { isTable } from "@hejbro/core";
+<<<<<<< HEAD
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { loadConfig, loadDeclarations } from "../src/loader";
 import { assertBuiltCli } from "./support/cli-runner";
@@ -19,6 +20,14 @@ import { assertBuiltCli } from "./support/cli-runner";
 // the loader-cycle precedent) -- a stale dist would surface here as an
 // import failure, not as "stale build".
 beforeAll(assertBuiltCli);
+=======
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import {
+	loadConfig,
+	loadConfigIfPresent,
+	loadDeclarations,
+} from "../src/loader";
+>>>>>>> 0a75462b (feat(cli): load the configuration leniently for import, pull and raise)
 
 const schemaNameOf = (declaration: HejbroInput): string | null => {
 	if (typeof declaration !== "object" || declaration === null) {
@@ -483,5 +492,74 @@ describe("loadConfig / config-not-found quotes a --config value a shell would sp
 		} finally {
 			await rm(cwd, { recursive: true, force: true });
 		}
+	});
+});
+
+// add-config-driver, #458, task 1.2b, lead ruling 458/R2: `import`/`pull`/
+// `raise` never took --config, so this helper never accepts a configFlag --
+// only the default path's absence is "no factory configured"; every other
+// load failure (including a misspelled --config the user typed, once
+// harden-config-root gives these commands the flag) stays a refusal.
+describe("loadConfigIfPresent (#458 task 1.2b)", () => {
+	let cwd: string;
+
+	beforeEach(async () => {
+		cwd = await mkdtemp(join(tmpdir(), "hejbro-loader-lenient-"));
+	});
+
+	afterEach(async () => {
+		await rm(cwd, { recursive: true, force: true });
+	});
+
+	it("returns null without throwing when no hejbro.config.ts is present", async () => {
+		await expect(loadConfigIfPresent(cwd)).resolves.toBeNull();
+	});
+
+	it("returns the same result loadConfig gives for a valid configuration, driver included", async () => {
+		await writeFile(
+			join(cwd, "hejbro.config.ts"),
+			'export default { entry: ["src/**/*.schema.ts"] };\n',
+		);
+
+		const direct = await loadConfig(cwd, undefined);
+
+		await expect(loadConfigIfPresent(cwd)).resolves.toEqual(direct);
+	});
+
+	it("still refuses an invalid driver, the message identical to loadConfig's own", async () => {
+		await writeFile(
+			join(cwd, "hejbro.config.ts"),
+			'export default { entry: ["src/**/*.schema.ts"], driver: "pg" };\n',
+		);
+
+		const directError = await loadConfig(cwd, undefined).catch(
+			(error: unknown) => error,
+		);
+		const lenientError = await loadConfigIfPresent(cwd).catch(
+			(error: unknown) => error,
+		);
+
+		expect(directError).toMatchObject({ code: "invalid-config" });
+		expect(lenientError).toMatchObject({
+			code: "invalid-config",
+			message: (directError as { message: string }).message,
+		});
+	});
+
+	it("passes config-not-a-file through unchanged when the default path is a directory", async () => {
+		await mkdir(join(cwd, "hejbro.config.ts"), { recursive: true });
+
+		await expect(loadConfigIfPresent(cwd)).rejects.toMatchObject({
+			code: "config-not-a-file",
+		});
+	});
+
+	it("passes config-unreadable through unchanged (an ancestor of the default path is a file)", async () => {
+		const fileAsCwd = join(cwd, "f");
+		await writeFile(fileAsCwd, "not a directory");
+
+		await expect(loadConfigIfPresent(fileAsCwd)).rejects.toMatchObject({
+			code: "config-unreadable",
+		});
 	});
 });
