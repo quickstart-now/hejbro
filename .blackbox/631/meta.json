@@ -85,6 +85,17 @@
       "at": "2026-09-05T17:43Z",
       "title": "a raised file is hashed whole, banner or not",
       "ratified": null
+    },
+    {
+      "id": "R8",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "R6"
+      ],
+      "at": "2026-09-05T18:01Z",
+      "title": "a file that fails only because it lacks the new field or argument gains exactly that",
+      "ratified": null
     }
   ],
   "work": [],

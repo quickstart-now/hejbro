@@ -180,3 +180,23 @@ mutation that must redden it (swap `raise`'s hash to `bodyChecksum`).
 design.md's Q1 sentence is repaired in place to state the unconditional
 rule.
 
+<a id="r8"></a>
+## R8 — a file that fails only because it lacks the new field or argument gains exactly that
+
+_lead · extension · basis R6 · 2026-09-05T18:01Z · ratified: pending_
+
+R5 named one fake, R6 named three files, and each time one more file of
+the same kind appeared outside the named list (`apply-reset` ->
+`migrate-command`, `status-command` -> `apply-plan`). The class is the
+rule, not the list. Ruling: when this piece adds a required field or a
+required argument and any file under `packages/cli` fails only because
+that field or argument is absent -- an incomplete type literal, an
+argument-count mismatch, a fake that does not know the new column -- the
+file gains exactly that field or argument; no assertion and no logic
+moves, production is untouched, the task report carries one line per file
+saying what changed and why, and only a file the tasks.md Files-edited
+header does not already cover is added to it. Any other shape of failure
+still stops and reports. `packages/cli/test/apply-plan.test.ts` (four
+`LedgerRow` literals, TS2322/TS2741) is the first file handled under this
+clause.
+
