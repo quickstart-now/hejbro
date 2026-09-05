@@ -1,0 +1,21 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#942",
+  "title": "query: db.with reads every CTE key nullable (untracked boundary), so the recursive-nullability widening is not observable on the chain surface",
+  "parent": "quickstart-now/hejbro#815",
+  "status": "open",
+  "opened": "2026-09-05",
+  "closed": null,
+  "decisions": [],
+  "work": [],
+  "prs": [
+    {
+      "number": 956,
+      "role": "refs",
+      "pinnedAt": "2026-09-05T16:37Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

@@ -45,7 +45,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | [#374](374/) | adversarial spec-only review stage in the opsx cycle | closed | #539 | 1 | 0 (0 pending) |
 | [#377](377/) | snapshot format stability policy for 1.0 | closed | #383 | 1 | 0 (0 pending) |
 | [#378](378/) | defect-leakage metric over escaped defects | closed | #384 | 1 | 0 (0 pending) |
-| [#412](412/) | 0.2.x: post-release commitments | open | #715 #808 #824 #835 #840 #849 #851 #858 #867 #868 #871 #878 #880 #895 #910 #923 #955 #894 (via #303) #903 (via #303) #881 (via #375) #941 (via #413) #850 (via #449) #882 (via #450) #901 (via #452) #906 (via #452) #909 (via #458) #911 (via #458) #883 (via #491) #885 (via #497) #884 (via #510) #737 (via #528) #760 (via #528) #773 (via #533) #886 (via #652) #896 (via #663) #897 (via #674) #733 (via #679) #758 (via #679) #739 (via #687) #759 (via #687) #770 (via #687) #861 (via #701) #879 (via #707) #847 (via #741) #900 (via #742) #889 (via #745) #833 (via #748) #784 (via #750) #802 (via #750) #775 (via #752) #799 (via #752) #780 (via #754) #795 (via #754) #887 (via #765) #855 (via #778) #838 (via #783) #786 (via #785) #789 (via #787) #790 (via #788) #792 (via #791) #794 (via #793) #890 (via #798) #898 (via #798) #822 (via #800) #806 (via #804) #813 (via #807) #811 (via #810) | 28 | 35 (4 pending) |
+| [#412](412/) | 0.2.x: post-release commitments | open | #715 #808 #824 #835 #840 #849 #851 #858 #867 #868 #871 #878 #880 #895 #910 #923 #955 #956 #894 (via #303) #903 (via #303) #881 (via #375) #941 (via #413) #850 (via #449) #882 (via #450) #901 (via #452) #906 (via #452) #909 (via #458) #911 (via #458) #883 (via #491) #885 (via #497) #884 (via #510) #737 (via #528) #760 (via #528) #773 (via #533) #886 (via #652) #896 (via #663) #897 (via #674) #733 (via #679) #758 (via #679) #739 (via #687) #759 (via #687) #770 (via #687) #861 (via #701) #879 (via #707) #847 (via #741) #900 (via #742) #889 (via #745) #833 (via #748) #784 (via #750) #802 (via #750) #775 (via #752) #799 (via #752) #780 (via #754) #795 (via #754) #887 (via #765) #855 (via #778) #838 (via #783) #786 (via #785) #789 (via #787) #790 (via #788) #792 (via #791) #794 (via #793) #890 (via #798) #898 (via #798) #822 (via #800) #806 (via #804) #813 (via #807) #811 (via #810) | 28 | 35 (4 pending) |
 | ↳ [#303](303/) | Prepared-statement caching behind the driver capability contract | closed | #894 #903 | 0 | 3 (2 pending) |
 | ↳ [#375](375/) | run the d49 round-trip witness in ci | closed | #881 | 0 | 1 (1 pending) |
 | ↳ [#413](413/) | snapshot format upgrade path across released versions | closed | #923 #941 | 0 | 6 (2 pending) |
@@ -56,7 +56,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#486](486/) | the driver contract has no vocabulary for non-interactive statement batches | closed | #955 | 0 | 14 (5 pending) |
 | ↳ [#491](491/) | align third-party client version ranges across published packages (catalog policy) | closed | #883 | 0 | 1 (0 pending) |
 | ↳ [#497](497/) | crap gate output misstates its side effects and cache-induced failures | closed | #885 | 0 | 0 (0 pending) |
-| ↳ [#500](500/) | recursive CTE row type stays non-null-inferred even when the recursive term is nullable | open |  | 0 | 8 (3 pending) |
+| ↳ [#500](500/) | recursive CTE row type stays non-null-inferred even when the recursive term is nullable | closed | #956 | 0 | 8 (3 pending) |
 | ↳ [#502](502/) | audit server-behavior assertions across openspec/specs | closed | #910 | 0 | 0 (0 pending) |
 | ↳ [#510](510/) | cross-check MODIFIED requirement titles against the base spec in CI | closed | #884 | 0 | 0 (0 pending) |
 | ↳ [#528](528/) | driver-conformance kit mis-observes transaction-wrapping session-state:false drivers | closed | #737 #760 | 0 | 6 (0 pending) |
@@ -136,7 +136,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | [#573](573/) | nile preset: measure identity columns and keyless tables on tenant-aware tables (D106 F9) | closed | #578 | 1 | 0 (0 pending) |
 | [#603](603/) | Apply engine (D12 revised): hejbro owns migrate and reset, production included | closed | #628 | 0 | 0 (0 pending) |
 | [#714](714/) | add a brownfield corpus: a database hejbro did not create, with a standing import→baseline→check witness | open | #851 #858 #868 #871 #878 #910 | 0 | 0 (0 pending) |
-| [#815](815/) | 0.2.x: post-release commitments (2) | open | #867 #868 #871 #878 #893 (via #814) #910 (via #816) #924 (via #816) #840 (via #819) #876 (via #820) #835 (via #823) #877 (via #823) #833 (via #832) #838 (via #836) #851 (via #841) #855 (via #841) #849 (via #845) #850 (via #845) #847 (via #846) #858 (via #856) #861 (via #856) #955 (via #891) #900 (via #899) | 0 | 0 (0 pending) |
+| [#815](815/) | 0.2.x: post-release commitments (2) | open | #867 #868 #871 #878 #893 (via #814) #910 (via #816) #924 (via #816) #840 (via #819) #876 (via #820) #835 (via #823) #877 (via #823) #833 (via #832) #838 (via #836) #851 (via #841) #855 (via #841) #849 (via #845) #850 (via #845) #847 (via #846) #858 (via #856) #861 (via #856) #955 (via #891) #900 (via #899) #956 (via #932) | 0 | 0 (0 pending) |
 | ↳ [#814](814/) | release: changesets leaves the pre dist-tag stale on packages without a stable version | open | #893 | 0 | 1 (0 pending) |
 | ↳ [#816](816/) | core: an argument name is not checked against the body's own row and loop names | closed | #910 #924 | 0 | 0 (0 pending) |
 | ↳ [#817](817/) | core: loop and row names in a function body bypass the D36 SQL-name check | closed | #910 #924 | 0 | 0 (0 pending) |
@@ -179,6 +179,8 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#892](892/) | pg driver: a multi-command sql text resolves to undefined rows | closed | #955 | 0 | 0 (0 pending) |
 | ↳ [#899](899/) | core: a view created after a schema-wide table grant is never granted by the chain | closed | #900 | 0 | 0 (0 pending) |
 | ↳ [#930](930/) | nile: vitest alias covers core and query but not @hejbro/pg, so nile tests can pass against a stale pg dist | open | #955 | 0 | 0 (0 pending) |
+| ↳ [#932](932/) | core: a CTE or view body's left-join set is absorbed, so an anchor projecting a left-joined non-null column reads non-null outward | open | #956 | 0 | 0 (0 pending) |
+| ↳ [#942](942/) | query: db.with reads every CTE key nullable (untracked boundary), so the recursive-nullability widening is not observable on the chain surface | open | #956 | 0 | 0 (0 pending) |
 | ↳ [#946](946/) | query: a batch result whose list count differs from the member count is not detected, so a context statement's rows can be returned as the caller's | closed | #955 | 0 | 0 (0 pending) |
 | [#834](834/) | skills: the bare npx skills add still installs the seven internal .claude/skills — metadata.internal hides them (measured on skills 1.5.23) | closed | #888 | 0 | 0 (0 pending) |
 

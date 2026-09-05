@@ -1,0 +1,73 @@
+{
+  "version": 3,
+  "number": 956,
+  "ref": "quickstart-now/hejbro#956",
+  "title": "fix(core,query): a recursive cte's outward row keeps the anchor's types and widens nullability by the recursive term (#500)",
+  "head": "64f5e28a9c738f66c1ef429f663165c2940cf996",
+  "headRef": "feat-recursive-nullability",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-05T16:37Z",
+  "refs": [
+    {
+      "path": ".changeset/harden-recursive-nullability.md",
+      "blob": "7ee8245c2624b2c520e9d73f63476f6acf7d5f40"
+    },
+    {
+      "path": "README.md",
+      "blob": "ad87b2571ffbb3e39adcea2aa6bf071548b23168"
+    },
+    {
+      "path": "openspec/changes/harden-recursive-nullability/design.md",
+      "blob": "b1a1a4e63360887f63a3aaa3dc3c312ba60c2d42"
+    },
+    {
+      "path": "openspec/changes/harden-recursive-nullability/proposal.md",
+      "blob": "53fe35b7ecc42a1f78d8375f00bb110dbca6682b"
+    },
+    {
+      "path": "openspec/changes/harden-recursive-nullability/specs/query-type-inference/spec.md",
+      "blob": "487f0031b895987d56c9c4aea9deebf90c7c96b1"
+    },
+    {
+      "path": "openspec/changes/harden-recursive-nullability/tasks.md",
+      "blob": "235866091a823e65b388adf0be0e8d8330571518"
+    },
+    {
+      "path": "openspec/task-times.csv",
+      "blob": "ce702b8c09c5b7cd72b25566eb91fdf016029856"
+    },
+    {
+      "path": "packages/cli/src/core-surface.ts",
+      "blob": "1e04263aa6099468460d1abd47c16d53f6986c80"
+    },
+    {
+      "path": "packages/core/src/index.ts",
+      "blob": "3f6659fcaf2ceb38a3bb13d16688d81814afb62d"
+    },
+    {
+      "path": "packages/core/src/query/with.ts",
+      "blob": "4d294b90a67e579b665e73bdb87e9001317d1ad6"
+    },
+    {
+      "path": "packages/core/test/query/with-recursive.test.ts",
+      "blob": "d7356ca52e2fe290c4dab2c21a1880c4c6abe19c"
+    },
+    {
+      "path": "packages/query/src/types/select-result.ts",
+      "blob": "a85726dd2be88891448e9e1b2611057dbb88ca85"
+    },
+    {
+      "path": "packages/query/test/db/chain.test.ts",
+      "blob": "7154c060e5d5baa914316af357c2df34098be10e"
+    },
+    {
+      "path": "packages/query/test/types/select-result.test.ts",
+      "blob": "0e5f1f74e644279cea026e3594cfc9c4adb28e47"
+    },
+    {
+      "path": "skills/hejbro/references/query-layer.md",
+      "blob": "20ba9a9df663a976ff48be6d2a0802e9e25e3e2d"
+    }
+  ]
+}

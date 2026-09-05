@@ -4,9 +4,9 @@
   "ref": "quickstart-now/hejbro#500",
   "title": "recursive CTE row type stays non-null-inferred even when the recursive term is nullable",
   "parent": "quickstart-now/hejbro#412",
-  "status": "open",
+  "status": "closed",
   "opened": "2026-09-05",
-  "closed": null,
+  "closed": "2026-09-05",
   "decisions": [
     {
       "id": "R1",
@@ -150,7 +150,13 @@
       ]
     }
   ],
-  "prs": [],
+  "prs": [
+    {
+      "number": 956,
+      "role": "closes",
+      "pinnedAt": "2026-09-05T16:37Z"
+    }
+  ],
   "origin": null,
   "followUps": []
 }
