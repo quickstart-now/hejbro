@@ -52,6 +52,17 @@
       "at": "2026-09-05T19:50Z",
       "title": "the #473 pin that kept the registry internal is inverted, not deleted",
       "ratified": null
+    },
+    {
+      "id": "R5",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R2"
+      ],
+      "at": "2026-09-05T20:29Z",
+      "title": "scenario 1 names registry positions only; a query position is not an expression child",
+      "ratified": null
     }
   ],
   "work": [
