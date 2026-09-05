@@ -21,3 +21,16 @@ Once these three read the configuration they are the only config-reading
 commands with no --config flag. Out of scope for add-config-driver by
 lead ruling 458/R2 item 3; harden-config-root handles it. No code here.
 
+<a id="w3"></a>
+## W3 — One unreproduced packages/cli test failure under full-suite load
+
+_2026-09-05T08:31Z_
+
+One TURBO_FORCE=1 pnpm test run reported 10 failures in packages/cli;
+three later full runs were clean. The failing names and their failure
+mode were lost: the run was piped through tail -20. Ruled out as a
+cause of the code under change: no vitest config in this repo sets
+pool/isolate/fileParallelism, so files run isolated per process and the
+new globalThis test seams cannot cross files; the seven seam keys are
+distinct and each is cleared in afterEach.
+

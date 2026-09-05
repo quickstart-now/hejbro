@@ -47,6 +47,13 @@
       "title": "import, pull and raise take no --config flag",
       "pr": null,
       "decisions": []
+    },
+    {
+      "id": "W3",
+      "at": "2026-09-05T08:31Z",
+      "title": "One unreproduced packages/cli test failure under full-suite load",
+      "pr": null,
+      "decisions": []
     }
   ],
   "prs": [],

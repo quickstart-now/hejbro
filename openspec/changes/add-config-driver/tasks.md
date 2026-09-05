@@ -43,7 +43,7 @@ other, both on 1.2b) → 1.5 → 1.6. 1.2b is inserted by lead ruling
 
 ## 1. A configured driver factory
 
-- [ ] 1.1 (~7m) **[design]** The `driver` field. Settles the type
+- [x] 1.1 (~7m) **[design]** The `driver` field. Settles the type
       (`(connectionString: string) => Driver | Promise<Driver>` on
       `HejbroConfig`), the schema (a function, nothing else) and the
       shape hint's wording. Red: the config loader's test, a table:
@@ -52,7 +52,7 @@ other, both on 1.2b) → 1.5 → 1.6. 1.2b is inserted by lead ruling
       `"driver"` and the shape}. Files: `packages/cli/src/config.ts`,
       its test.
 
-- [ ] 1.2 (~9m) **[design]** Procurement prefers the factory. Settles
+- [x] 1.2 (~9m) **[design]** Procurement prefers the factory. Settles
       the unclosable refusal's code (`<prefix>-driver-unclosable`, a
       fourth literal in `ConnectionCodes`, spelled at each call site like
       the other three) and message. Red: `packages/cli/test/
@@ -68,7 +68,7 @@ other, both on 1.2b) → 1.5 → 1.6. 1.2b is inserted by lead ruling
       before the factory runs}. Files: `packages/cli/src/check/driver.ts`,
       the test.
 
-- [ ] 1.2b (~6m) **[design]** The lenient configuration load, for the
+- [x] 1.2b (~6m) **[design]** The lenient configuration load, for the
       three commands that never read one (lead ruling 458/R2). Settles
       the helper's name and return shape (the configuration when it
       loads, `null` when no file is there — never a partial
@@ -79,12 +79,19 @@ other, both on 1.2b) → 1.5 → 1.6. 1.2b is inserted by lead ruling
       `invalid-config`, the message unchanged from `loadConfig`'s};
       {a config path that is a directory → `config-not-a-file`
       unchanged}; {an unreadable config → `config-unreadable`
-      unchanged}. Only `config-not-found` is absorbed, and only when no
-      `--config` was given — a `--config` naming a file that isn't
-      there is still a refusal (`loadConfig` already distinguishes the
-      two). Files: `packages/cli/src/loader.ts`, its test.
+      unchanged}. The helper takes **no `--config` argument at all** and
+      always loads the default path: `loadConfig` throws
+      `config-not-found` for both "no default file" and "`--config`
+      named a file that isn't there" (loader.ts:271-288), so a helper
+      that took the flag and absorbed that code by its code alone would
+      silently swallow a typo in a path the user typed. Keeping the
+      flag out makes the absorbed case exactly one thing; when
+      `harden-config-root` gives these commands `--config`, it has to
+      confront the distinction deliberately. Narrow on the hejbro error
+      code with the existing guard and rethrow everything else — never
+      on message text. Files: `packages/cli/src/loader.ts`, its test.
 
-- [ ] 1.3 (~9m) `check`, `status`, `pull` thread the configured factory.
+- [x] 1.3 (~9m) `check`, `status`, `pull` thread the configured factory.
       Red: each command's in-process test gains a case: a config whose
       `driver` is a recording factory → the factory is called with that
       command's own connection flag value (`--db-url` for `pull`,
@@ -95,7 +102,7 @@ other, both on 1.2b) → 1.5 → 1.6. 1.2b is inserted by lead ruling
       case: {no config file → the vanilla importer path, byte-identical
       to today}. Files: the three command files, their tests.
 
-- [ ] 1.4 (~9m) `migrate`, `raise`, `reset`, `import` thread it too.
+- [x] 1.4 (~9m) `migrate`, `raise`, `reset`, `import` thread it too.
       Same red shape as 1.3 per command; plus, for one apply command, a
       recording driver declaring `interactive-transactions: false` is
       refused by the existing capability check exactly as an imported
@@ -105,7 +112,7 @@ other, both on 1.2b) → 1.5 → 1.6. 1.2b is inserted by lead ruling
       that gap is real and belongs to `harden-config-root`, not here.
       Files: the four command files, their tests.
 
-- [ ] 1.5 (~8m) End to end over the built CLI. Red: `examples/cli-smoke/
+- [x] 1.5 (~8m) End to end over the built CLI. Red: `examples/cli-smoke/
       test/config-driver.e2e.test.ts` (subprocess, `assertBuiltCli`): a
       temp project whose `hejbro.config.ts` exports a `driver` factory
       that writes what it was called with to a file and returns a
@@ -114,9 +121,14 @@ other, both on 1.2b) → 1.5 → 1.6. 1.2b is inserted by lead ruling
       project with `driver: "pg"` fails at config load naming the field.
       Files: the test and its fixture.
 
-- [ ] 1.6 (~6m) Docs and changeset. `supabase-preset.md` shows `driver:
+- [x] 1.6 (~6m) Docs and changeset. `supabase-preset.md` shows `driver:
       (url) => supabaseDriver(pgDriver(url), { endpoint:
       "transaction-pooler" })` and says which commands use it;
       `neon-preset.md` and `nile-preset.md` the equivalent one-liner;
-      `pnpm changeset` → `minor`. Files: the three references,
+      `pnpm changeset` → `minor`. `brownfield-adoption.md` is in the
+      list too (planner check before 1.6): its line 78 states flatly
+      that `check` "needs the `@hejbro/pg` package installed", which
+      this change makes false whenever a factory is configured — a
+      stale skill is a broken user contract, not a docs nit. Files: the
+      three preset references, `brownfield-adoption.md`,
       `.changeset/*.md`.
