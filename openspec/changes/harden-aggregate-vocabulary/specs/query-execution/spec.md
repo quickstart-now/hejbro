@@ -46,8 +46,9 @@ builder's constructors: a name outside the vocabulary's key union
 fails to type-check at the table's own declaration, and a constructor
 added without a row — or a name that drifts from its row — is caught
 by a test that enumerates the constructors from their defining
-modules and cross-checks that enumeration against the public surface
-in both directions. A cell is cast exactly when it is revived.
+modules, checks each one reaches the public surface, and admits no
+row the enumeration does not produce. A cell is cast exactly when it
+is revived.
 
 The at-risk cast is the compiler's own encoding, and conversion SHALL
 undo exactly that: a value arriving through it is revived by the type

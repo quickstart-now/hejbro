@@ -29,8 +29,8 @@ kept.
   `avg`, `percent_rank`, `cume_dist`, `ntile`). The key type is a
   closed union of the builder's own function names, so a name outside
   it fails to type-check at the table's declaration, and a test
-  enumerates the constructors from their defining modules —
-  cross-checked against the public surface both ways — so a
+  enumerates the constructors from their defining modules, checks each
+  reaches the public surface, and admits no orphan row — so a
   constructor added without a row, or a name string that drifts from
   its row, is caught at run time.
 - **Both sides read the table.** The cast side casts a cell whose
