@@ -1,14 +1,29 @@
+import type { SelectProjection } from "@hejbro/core";
 import {
+	avg,
 	bigint,
 	bytea,
 	count,
+	cumeDist,
 	date as dateColumn,
+	denseRank,
 	eq,
+	firstValue,
 	interval,
 	jsonArrayFrom,
 	jsonObjectFrom,
+	lag,
+	lastValue,
+	lead,
 	max,
+	min,
+	nthValue,
+	ntile,
 	numeric,
+	over,
+	percentRank,
+	rank,
+	rowNumber,
 	schema,
 	select,
 	sql,
@@ -314,6 +329,117 @@ describe("grandchild revive (g3 review F4 -- kills the nested-plan recursion mut
 		const grandchild = threads[0]?.parent;
 		expect(grandchild?.viewTotal).toBe(9007199254740993n);
 	});
+});
+
+// #452 task 1.3: BUILDER_READ_SHAPES-driven revive table -- one row per
+// builder function (windowed and unwindowed where the function allows
+// it), asserting the revived JS value matches its shape: `int8` revives
+// as `bigint` regardless of argument, `argument` revives exactly as its
+// own argument's declared state (a bigint argument parses, a text one
+// passes through unchanged), `own` is never revived at all -- the raw
+// JSON arrival passes straight through unconverted.
+describe("nested revive follows BUILDER_READ_SHAPES (#452 task 1.3)", () => {
+	const items = table(app, "items", {
+		id: uuid().primaryKey(),
+		postId: uuid()
+			.notNull()
+			.references(() => posts.id),
+		amount: bigint().notNull(),
+		label: text().notNull(),
+	});
+
+	const pastPrecision = "9007199254740993";
+
+	const revive = async (
+		cell: Parameters<typeof jsonArrayFrom>[0],
+		rawCellValue: unknown,
+	): Promise<unknown> => {
+		const { driver } = recordingTransactionalDriver({
+			rows: [
+				{
+					id: "0b0e5b3e-0000-4000-8000-000000000001",
+					stats: [{ cell: rawCellValue }],
+				},
+			],
+		});
+		const handle = db({ app, posts, comments, items }, driver);
+		const rows = await handle.select(
+			{ id: posts.id, stats: jsonArrayFrom(cell) },
+			posts,
+		);
+		return (rows[0]?.stats[0] as Record<string, unknown> | undefined)?.cell;
+	};
+
+	const itemsFor = <TProjection extends SelectProjection>(
+		projected: TProjection,
+	) => select(projected, items).where(eq(items.postId, posts.id));
+
+	it.each([
+		["count", () => itemsFor({ cell: count() })],
+		["count (windowed)", () => itemsFor({ cell: over(count(), {}) })],
+		["row_number (windowed)", () => itemsFor({ cell: over(rowNumber(), {}) })],
+		["rank (windowed)", () => itemsFor({ cell: over(rank(), {}) })],
+		["dense_rank (windowed)", () => itemsFor({ cell: over(denseRank(), {}) })],
+	])("%s revives as bigint (int8 shape)", async (_label, build) => {
+		expect(await revive(build(), pastPrecision)).toBe(9007199254740993n);
+	});
+
+	it.each([
+		["min", () => itemsFor({ cell: min(items.amount) })],
+		["min (windowed)", () => itemsFor({ cell: over(min(items.amount), {}) })],
+		["max", () => itemsFor({ cell: max(items.amount) })],
+		["max (windowed)", () => itemsFor({ cell: over(max(items.amount), {}) })],
+		["lag (windowed)", () => itemsFor({ cell: over(lag(items.amount), {}) })],
+		["lead (windowed)", () => itemsFor({ cell: over(lead(items.amount), {}) })],
+		[
+			"first_value (windowed)",
+			() => itemsFor({ cell: over(firstValue(items.amount), {}) }),
+		],
+		[
+			"last_value (windowed)",
+			() => itemsFor({ cell: over(lastValue(items.amount), {}) }),
+		],
+		[
+			"nth_value (windowed)",
+			() => itemsFor({ cell: over(nthValue(items.amount, 1), {}) }),
+		],
+	])(
+		"%s revives per its bigint argument (argument shape)",
+		async (_label, build) => {
+			expect(await revive(build(), pastPrecision)).toBe(9007199254740993n);
+		},
+	);
+
+	it.each([
+		["min over a text argument", () => itemsFor({ cell: min(items.label) })],
+		[
+			"lag over a text argument (windowed)",
+			() => itemsFor({ cell: over(lag(items.label), {}) }),
+		],
+	])(
+		"%s revives per its text argument, not forced to bigint",
+		async (_label, build) => {
+			expect(await revive(build(), "hello")).toBe("hello");
+		},
+	);
+
+	it.each([
+		["sum", () => itemsFor({ cell: sum(items.amount) })],
+		["sum (windowed)", () => itemsFor({ cell: over(sum(items.amount), {}) })],
+		["avg", () => itemsFor({ cell: avg(items.amount) })],
+		["avg (windowed)", () => itemsFor({ cell: over(avg(items.amount), {}) })],
+		[
+			"percent_rank (windowed)",
+			() => itemsFor({ cell: over(percentRank(), {}) }),
+		],
+		["cume_dist (windowed)", () => itemsFor({ cell: over(cumeDist(), {}) })],
+		["ntile (windowed)", () => itemsFor({ cell: over(ntile(4), {}) })],
+	])(
+		"%s is never revived (own shape) -- the raw arrival passes through",
+		async (_label, build) => {
+			expect(await revive(build(), 42)).toBe(42);
+		},
+	);
 });
 
 // #444 F6 task 6.2: characterize which aggregate cell shapes inside a

@@ -5,6 +5,7 @@ import type {
 	FunctionCallNode,
 	ProjectionNode,
 	QueryNode,
+	ReadShape,
 	ReturningNode,
 	SelectNode,
 	SetOpNode,
@@ -13,7 +14,7 @@ import type {
 	TableRefNode,
 	TypeNode,
 } from "@hejbro/core";
-import { getTableMeta } from "@hejbro/core";
+import { BUILDER_READ_SHAPES, getTableMeta } from "@hejbro/core";
 import type { CompileInput } from "../compile/compile";
 import type { DriverRow } from "../driver/contract";
 import { parseArrayText } from "../types/array-text";
@@ -121,32 +122,25 @@ const BIGINT_STATE: ColumnState = {
 	mode: "bigint",
 };
 
-/** Every builder function whose result is always `int8`, whatever its argument (or lack of one) — see {@link BIGINT_STATE}. */
-const BIGINT_FUNCTIONS = ["count", "row_number", "rank", "dense_rank"];
-
-/**
- * `min`/`max` and the five window value functions (`lag`/`lead`/
- * `firstValue`/`lastValue`/`nthValue`, D104) all return their FIRST
- * argument's own type unchanged, so they convert as that argument does —
- * the type layer says the same thing (`min`/`lag`/… all carry the
- * argument's own `Expr` through, `Aggregated`/`WindowFunctionCall`'s
- * shared shape). `sum`/`avg` are deliberately absent: Postgres promotes
- * their result by the argument's exact type, and guessing one conversion
- * for all of them would be the lie the family-widened type avoids.
- */
-const PASSTHROUGH_AGGREGATES = [
-	"min",
-	"max",
-	"lag",
-	"lead",
-	"first_value",
-	"last_value",
-	"nth_value",
-];
-
 /** `true` only for the builder's own unqualified aggregates. A SCHEMA-qualified call is a declared function (`db.fn`), which may legitimately be named `count` in someone's schema and must not be converted as one. */
 const isBuilderAggregate = (expr: ExprNode): expr is FunctionCallNode =>
 	expr.nodeKind === "functionCall" && expr.schemaName === null;
+
+/**
+ * `expr`'s {@link ReadShape} per `BUILDER_READ_SHAPES` (#452) — the same
+ * table `@hejbro/core`'s `query/select.ts` reads for its own cast
+ * decision (the two sides cannot share a function, but they share this
+ * data). `undefined` when `expr` isn't one of the builder's own
+ * aggregates at all.
+ */
+const builderReadShapeOf = (expr: FunctionCallNode): ReadShape | undefined => {
+	if (!Object.hasOwn(BUILDER_READ_SHAPES, expr.functionName)) {
+		return undefined;
+	}
+	return BUILDER_READ_SHAPES[
+		expr.functionName as keyof typeof BUILDER_READ_SHAPES
+	];
+};
 
 /**
  * Every declared `WITH` entry's own query, by name (add-ctes, task 5.3) --
@@ -223,10 +217,11 @@ const aggregateColumnState = (
 	if (!isBuilderAggregate(expr)) {
 		return undefined;
 	}
-	if (BIGINT_FUNCTIONS.includes(expr.functionName)) {
+	const shape = builderReadShapeOf(expr);
+	if (shape === "int8") {
 		return BIGINT_STATE;
 	}
-	if (!PASSTHROUGH_AGGREGATES.includes(expr.functionName)) {
+	if (shape !== "argument") {
 		return undefined;
 	}
 	return passthroughArgumentState(expr, tables, cteQueryByName);
@@ -237,9 +232,9 @@ const aggregateColumnState = (
  * unwindowed — `over(count(), spec)` reads back as a `count()` does,
  * `over(rowNumber(), spec)` as the new `row_number` bigint state above,
  * `over(lag(col), spec)` by passing through to `col`'s own state. `sum`/
- * `avg` stay uncast either way, windowed or not (see
- * {@link PASSTHROUGH_AGGREGATES}'s own doc comment) — this delegation
- * never has to special-case them. `cteQueryByName` defaults to empty
+ * `avg` stay uncast either way, windowed or not (their `BUILDER_READ_SHAPES`
+ * row is `"own"`, #452) — this delegation never has to special-case them.
+ * `cteQueryByName` defaults to empty
  * everywhere outside a `WITH` body (add-ctes, task 5.3).
  */
 const columnStateForExpr = (

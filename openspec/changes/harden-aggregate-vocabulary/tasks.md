@@ -53,7 +53,7 @@ needs both; 1.5 last.
       window-unwrapping helper; `isCountCall`/`isPassthroughAggregateCall`
       retire. Files: `packages/core/src/query/select.ts`, the test.
 
-- [ ] 1.3 (~7m) The revive side reads the table. Red: `packages/query/
+- [x] 1.3 (~7m) The revive side reads the table. Red: `packages/query/
       test/db/nested-revive.test.ts` gains a table over the rows
       asserting the revived state per row (`int8` → `bigint` state;
       `argument` → the argument column's state; `own` → `undefined`),
