@@ -162,6 +162,17 @@
       "at": "2026-09-05T20:12Z",
       "title": "apply-ledger-filtered: judged where identity is judged, catalog read only on detection, the message names state, role and policies",
       "ratified": null
+    },
+    {
+      "id": "R15",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "R2"
+      ],
+      "at": "2026-09-05T22:48Z",
+      "title": "the banner ends where the leading comment block ends; status never lists a changed body as applied; reset upgrades too",
+      "ratified": null
     }
   ],
   "work": [

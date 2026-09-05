@@ -380,3 +380,39 @@ the user to the right next action (the `"no columns"` precedent in
 judgement applies only to a relation that has the ledger's shape, the
 delta's own premise.
 
+<a id="r15"></a>
+## R15 — the banner ends where the leading comment block ends; status never lists a changed body as applied; reset upgrades too
+
+_lead · extension · basis R2 · 2026-09-05T22:48Z · ratified: pending_
+
+The constructor-mode review built 36 inputs against postgres:17.11 and
+found three contradictions. (B3, the serious one) R2 defined the body as
+the text after the first blank line. A hand-written migration whose
+banner is not followed by a blank line therefore had its executed
+statements *outside* the checksum -- an edit to `create table` after
+apply was invisible to both `migrate` and `status`. R2's predicate is
+replaced: the file's first line must still be exactly
+`-- hejbro migration` (otherwise the whole file is hashed, as before);
+after it, the banner is the maximal leading run of lines that are comment
+lines (`--` prefix) or blank, and the body is everything from the first
+line that is neither. Blank lines and comment lines inside the body
+remain body. This keeps every R2 property the tests pin (CRLF folded,
+lone CR is an edit, `-- upgraded-from:` growth is not, banner prose is
+not) and closes the gap: a statement can never sit in the banner because
+a statement is never a comment line. `raise` (whole file) is unchanged.
+(B1) `status` printed a changed-body file in its "recorded as applied"
+bucket as well as on its own diagnostic; the delta says "never as
+applied". The applied bucket excludes files reported as changed; they
+appear once, as the diagnostic. (B2) `reset` writes to the ledger (it
+deletes rows) and did not add the column on an old ledger; R13's sentence
+is "the first command that writes". `reset` calls the shared
+`upgradeLedgerColumns` before its first write, through the same
+`exec(..., "write", "bootstrap")` path, so an unwritable role still lands
+on `apply-ledger-unwritable`. That is one call site plus its test:
+`packages/cli/src/apply/reset.ts` (or `commands/reset.ts`, whichever
+holds the write) and `apply-reset.test.ts` join the Files-edited header
+for this call only. Rejected: narrowing R13's sentence to
+`migrate`/`raise` (the ledger would then hold two kinds of writer), and
+treating B3 as documentation (the executed text must be inside the hash
+or the change has no meaning).
+
