@@ -18,12 +18,7 @@ reuses `execute.ts`'s `applyMigration`;
 literals gain the new required field (1.2, 631/R8);
 `packages/cli/test/apply-live.integration.test.ts` (1.5, 1.6);
 `skills/hejbro/references/generate-verify-workflow.md` (1.3, 1.6, 1.7)
-and one `.changeset/*.md` (1.7); `packages/cli/src/apply/reset.ts` and
-`packages/cli/test/apply-reset.test.ts`, for the one call that upgrades
-a ledger written before the checksum column existed before `reset`'s
-own first write (631/R15, constructor-mode review finding B2 — `reset`
-writes to the ledger too, so R13's "first command that writes" reaches
-it). If a task appears to need any other
+and one `.changeset/*.md` (1.7). If a task appears to need any other
 file, that goes back to the planner, not into the diff.
 
 **Ordering.** 1.1 → 1.2 → 1.3 → 1.4 → 1.5 → 1.6 → 1.7.

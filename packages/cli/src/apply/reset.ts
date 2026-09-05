@@ -20,11 +20,7 @@ import {
 	driverErrorDetail,
 	driverErrorReason,
 } from "./execute";
-import {
-	asLedgerAccessFailure,
-	clearLedgerRows,
-	upgradeLedgerColumns,
-} from "./ledger";
+import { asLedgerAccessFailure, clearLedgerRows } from "./ledger";
 import { throwLedgerWriteFailure } from "./ledger-diagnostics";
 import {
 	assertLedgerNotOccupied,
@@ -550,12 +546,6 @@ export const applyReset = async (
 			}
 			if (ledgerExists) {
 				try {
-					// [631/R15(B2)] `reset` writes to the ledger too (it
-					// deletes rows), so R13's "the first command that writes
-					// to such a ledger" reaches it -- the same idempotent
-					// call `migrate`'s own else-branch makes (631/R13),
-					// before this run's own write.
-					await upgradeLedgerColumns(session);
 					await clearLedgerRows(session);
 				} catch (error) {
 					// [D106 R1, NB1] Same rule, tagged "ledger" -- by this

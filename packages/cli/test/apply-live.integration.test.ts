@@ -1574,9 +1574,12 @@ describe.each(PG_IMAGES)("apply engine live witness / %s", (image) => {
 		});
 	});
 
-	describe("reset upgrades a ledger written before the checksum column, 631/R15(B2)", () => {
-		it("reset succeeds against an old ledger and the column is there again afterward", async () => {
-			const database = "checksum_reset_upgrade";
+	// [631/R15(B2)] A write that does not record a row (this deletes them)
+	// carries no checksum, so it needs no column -- the column is added by
+	// the next command that records one, never by `reset`.
+	describe("reset does not add the checksum column, 631/R15(B2)", () => {
+		it("reset succeeds against an old ledger and the column is still absent afterward", async () => {
+			const database = "checksum_reset_no_upgrade";
 			psqlCommand(container, "postgres", `create database ${database};`);
 			const cwd = await createCliFixtureDir();
 			try {
@@ -1624,7 +1627,7 @@ describe.each(PG_IMAGES)("apply engine live witness / %s", (image) => {
 						params: [],
 						kind: "sql",
 					});
-					expect(rows).toHaveLength(1);
+					expect(rows).toHaveLength(0);
 				} finally {
 					await driver.client.end();
 				}
