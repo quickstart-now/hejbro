@@ -45,6 +45,22 @@
       "at": "2026-09-05T09:15Z",
       "title": "The reserved class states three sources; the set never loosens in this change",
       "ratified": null
+    },
+    {
+      "id": "R4",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "412/D24",
+        "D25; 832/R1",
+        "R3; the requirement's own 'one list",
+        "one check and one message'; fl measurement 81 names × 3 positions on postgres:17 (C: 63/63 fail as arguments",
+        "63/63 harmless as loop/row locals; group of 16: 9 fail in rendered positions",
+        "7 harmless)"
+      ],
+      "at": "2026-09-05T09:25Z",
+      "title": "Uniform refusal stands: category C stays refused in loop and row positions although the server accepts it there",
+      "ratified": null
     }
   ],
   "work": [],

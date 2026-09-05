@@ -23,3 +23,10 @@ _lead · extension · basis 412/D24, D25; 832/R1; fl measurement: catcode C = 63
 
 (A): the requirement's class = R+T+C keywords, plpgsql's own declared variables (found, sqlstate, sqlerrm, tg_*, and new/old in trigger bodies), and the measured list of plpgsql statement-opening words that fail in a rendered position; exit/elsif stay out by measurement. Names measured harmless are not removed here (loosening is another change) and are recorded in W#. proposal's 63/61 sentence corrected by the planner. Ratification: owner on return.
 
+<a id="r4"></a>
+## R4 — Uniform refusal stands: category C stays refused in loop and row positions although the server accepts it there
+
+_lead · interpretation · basis 412/D24, D25; 832/R1, R3; the requirement's own 'one list, one check and one message'; fl measurement 81 names × 3 positions on postgres:17 (C: 63/63 fail as arguments, 63/63 harmless as loop/row locals; group of 16: 9 fail in rendered positions, 7 harmless) · 2026-09-05T09:25Z · ratified: pending_
+
+(A): the scenario's rationale clause is replaced by the measured facts; the `out` sentence becomes "parsed as OUT mode, refused 42P13 against returns void". The third class source is an enumeration (9 failing + 5 historically refused; exit/elsif named as outside the class); new/old belong to the declared-variable source and get a trigger-context measurement. Ratification: owner on return.
+
