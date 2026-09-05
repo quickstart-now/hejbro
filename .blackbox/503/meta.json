@@ -52,6 +52,28 @@
       "at": "2026-09-05T17:47Z",
       "title": "never only for two single-literal families the table refuses; every other shape is accepted; core's type-test naming",
       "ratified": null
+    },
+    {
+      "id": "R5",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R3"
+      ],
+      "at": "2026-09-05T18:00Z",
+      "title": "42846 is a refusal too; the four same-family refusals are a gap not a false refusal; the table is a per-family record",
+      "ratified": null
+    },
+    {
+      "id": "R6",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R1"
+      ],
+      "at": "2026-09-05T18:00Z",
+      "title": "the unified-pair scenario names the pairs that exist; the within-family paragraph names the four refusals",
+      "ratified": null
     }
   ],
   "work": [],
