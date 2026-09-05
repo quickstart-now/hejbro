@@ -1,0 +1,31 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#413",
+  "title": "snapshot format upgrade path across released versions",
+  "parent": "quickstart-now/hejbro#412",
+  "status": "open",
+  "opened": "2026-09-05",
+  "closed": null,
+  "decisions": [
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "412/D24",
+        "412/D25 (oldest-first",
+        "full delegation); the owner's 2026-08-28 ruling on #413 (a real forward path from 0.2.0 on",
+        "downward stays a refusal); D101 (the #413 path supersedes the no-command sentence); measured: 0.1.1 shipped format 5 (git show hejbro@0.1.1:examples/postgres/hejbro.snapshot.json)",
+        "0.2.0-pre.1 ships format 8; verify's first check hashes the snapshot file bytes against the tip's banner line and re-hashes nothing else in the chain"
+      ],
+      "at": "2026-09-05T04:43Z",
+      "title": "The upgrade path ships as an explicit hejbro upgrade over the current decoder's lenient rules; the tip is re-chained with an upgraded-from banner line",
+      "ratified": null
+    }
+  ],
+  "work": [],
+  "prs": [],
+  "origin": null,
+  "followUps": []
+}
