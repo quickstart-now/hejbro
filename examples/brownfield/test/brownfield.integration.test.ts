@@ -461,7 +461,7 @@ describe.each(PG_IMAGES)("brownfield corpus / %s", (image) => {
 				// declared table (`catalog.orders` itself "stays declared" --
 				// seed/brownfield.sql's own comment) that holds them.
 				expect(firstImport.stdout).toContain(
-					"`check` keeps listing it as unmanaged until it is renamed in the database",
+					"`check` keeps listing it as unmanaged until it is renamed in the database and declared",
 				);
 				expect(checkResult.stdout).toContain(
 					"unmanaged index (not covered by any declaration): catalog.orders.IX_Orders_Status",

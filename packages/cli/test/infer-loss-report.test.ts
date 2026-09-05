@@ -484,7 +484,7 @@ describe("buildLossReport / 1.7", () => {
 		expect(importLine).toBe(pullLine);
 		expect(importLine).toContain('index "app.widgets.IX_Widgets"');
 		expect(importLine).toContain(
-			"`check` keeps listing it as unmanaged until it is renamed in the database",
+			"`check` keeps listing it as unmanaged until it is renamed in the database and declared",
 		);
 		expect(importLine).not.toContain("will not mention it again");
 	});
@@ -501,7 +501,7 @@ describe("buildLossReport / 1.7", () => {
 		expect(line).toBeDefined();
 		expect(line).toContain('check constraint "app.widgets.CK_Widgets"');
 		expect(line).toContain(
-			"`check` keeps listing it as unmanaged until it is renamed in the database",
+			"`check` keeps listing it as unmanaged until it is renamed in the database and declared",
 		);
 		expect(line).not.toContain("will not mention it again");
 	});
@@ -564,7 +564,7 @@ describe("buildLossReport / 1.7", () => {
 			"only thing that schema would have declared",
 		);
 		expect(indexLine).toContain(
-			"`check` keeps listing it as unmanaged until it is renamed in the database",
+			"`check` keeps listing it as unmanaged until it is renamed in the database and declared",
 		);
 
 		const consequenceSentences = new Set([

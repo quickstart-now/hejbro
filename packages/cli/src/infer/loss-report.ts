@@ -475,10 +475,13 @@ const omittedTableLines = (
  * (harden-check-inventory, #707) keeps naming this index as unmanaged
  * on every run, the same way it does an omitted table (see
  * {@link omittedTableConsequenceForImport}) -- this line states that,
- * never that hejbro will not mention it again.
+ * never that hejbro will not mention it again. Review round 1 N3:
+ * renaming alone only makes the name declarable -- the inventory keeps
+ * naming the index until a declaration actually covers it, so the line
+ * names the whole exit condition, not just its first half.
  */
 const omittedIndexLine = (index: OmittedIndex): string =>
-	`Omitted: index "${index.schema}.${index.table}.${index.sqlName}" -- its catalog name is not a valid hejbro SQL identifier, so no declaration can carry it under the same name \`check\` would compare it by. \`check\` keeps listing it as unmanaged until it is renamed in the database; a hand-written declaration under a different name only adds a second one.`;
+	`Omitted: index "${index.schema}.${index.table}.${index.sqlName}" -- its catalog name is not a valid hejbro SQL identifier, so no declaration can carry it under the same name \`check\` would compare it by. \`check\` keeps listing it as unmanaged until it is renamed in the database and declared; a hand-written declaration under a different name only adds a second one.`;
 
 const omittedIndexLines = (
 	indexes: ReadonlyArray<OmittedIndex>,
@@ -490,7 +493,7 @@ const omittedIndexLines = (
 
 /** A check constraint's own name is compared by `check` the same way an index's is (see {@link omittedIndexLine}) -- omission costs only this check, and a vendored contract never carries checks either. */
 const omittedCheckLine = (check: OmittedCheck): string =>
-	`Omitted: check constraint "${check.schema}.${check.table}.${check.sqlName}" -- its catalog name is not a valid hejbro SQL identifier, so no declaration can carry it under the same name \`check\` would compare it by. \`check\` keeps listing it as unmanaged until it is renamed in the database; a hand-written declaration under a different name only adds a second one.`;
+	`Omitted: check constraint "${check.schema}.${check.table}.${check.sqlName}" -- its catalog name is not a valid hejbro SQL identifier, so no declaration can carry it under the same name \`check\` would compare it by. \`check\` keeps listing it as unmanaged until it is renamed in the database and declared; a hand-written declaration under a different name only adds a second one.`;
 
 const omittedCheckLines = (
 	checks: ReadonlyArray<OmittedCheck>,

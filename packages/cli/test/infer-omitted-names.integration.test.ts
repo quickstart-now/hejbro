@@ -285,7 +285,7 @@ describe("catalog-inference / D106 R4-B1: a bad name costs the object, not the r
 			);
 			expect(first.stdout).toContain("unmanaged-table inventory");
 			expect(first.stdout).toContain(
-				"`check` keeps listing it as unmanaged until it is renamed in the database",
+				"`check` keeps listing it as unmanaged until it is renamed in the database and declared",
 			);
 			// D106 R5-B2: a leading-underscore column round-trips through its
 			// own TypeScript key but is not a valid hejbro SQL identifier --
