@@ -157,6 +157,7 @@ const releaseAfterFailedTransaction = async (
 	client.release(true);
 };
 
+<<<<<<< HEAD
 /** Builds the WebSocket `Driver` — `neonDriver`'s (task 3.1) target when handed a Neon `Pool`. `preparedStatements` is the caller's own answer (task 1.3, #303), threaded into every {@link makeSession} call site. */
 const buildWebSocketDriver = (
 	pool: Pool,
@@ -168,6 +169,23 @@ const buildWebSocketDriver = (
 	);
 	const driver: Driver = {
 		capabilities: wsCapabilitiesFor(preparedStatements),
+=======
+/**
+ * Builds the WebSocket `Driver` — `neonDriver`'s (task 3.1) target when
+ * handed a Neon `Pool`. `client: pool` mirrors `@hejbro/pg`'s own
+ * `pgDriver` exactly (#458 review round 1, task 1.10, lead ruling
+ * 458/R3): this path holds a real connection, so the CLI's own
+ * configured-driver factory can close it the same way it closes
+ * `pgDriver`'s -- `driver.client.end()`.
+ */
+const buildWebSocketDriver = (
+	pool: Pool,
+): Driver & { readonly client: Pool } => {
+	const ensurePinned = checkoutGuard(() => driver.setupSession);
+	const driver: Driver & { readonly client: Pool } = {
+		client: pool,
+		capabilities: WS_CAPABILITIES,
+>>>>>>> c6bc84a8 (fix(neon): expose the websocket pool as driver.client)
 		execute: async (compiled) => {
 			const client = await pool.connect();
 			try {
@@ -211,12 +229,20 @@ const buildWebSocketDriver = (
  * alternative, `driver-contract`'s "instead of probing behavior at
  * runtime").
  */
+<<<<<<< HEAD
 export function neonDriver(pool: Pool, options?: NeonDriverOptions): Driver;
 export function neonDriver(sql: HttpQueryable): Driver;
 export function neonDriver(
 	client: Pool | HttpQueryable,
 	options?: NeonDriverOptions,
 ): Driver {
+=======
+export function neonDriver(pool: Pool): Driver & { readonly client: Pool };
+export function neonDriver(sql: HttpQueryable): Driver;
+export function neonDriver(
+	client: Pool | HttpQueryable,
+): Driver | (Driver & { readonly client: Pool }) {
+>>>>>>> c6bc84a8 (fix(neon): expose the websocket pool as driver.client)
 	if (typeof client === "function") {
 		return buildHttpDriver(client);
 	}

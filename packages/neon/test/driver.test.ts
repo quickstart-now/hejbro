@@ -627,3 +627,43 @@ describe("buildHttpDriver + db.as(context) still refused with missing-capability
 		expect(sentBatches).toHaveLength(0);
 	});
 });
+
+// #458 review round 1, task 1.10, lead ruling 458/R3: a released driver
+// exposes its own way to close what it opened, mirroring `@hejbro/pg`'s
+// own `client: pool` -- never a new shape. The WebSocket path holds a
+// real connection (a `Pool`) and must carry it; the HTTP path (task 3.1's
+// other overload) opens nothing and is out of scope here (a separate
+// ruling pending).
+describe("neonDriver(pool) exposes its own pool as client (#458 task 1.10)", () => {
+	it("driver.client is the exact Pool instance it was built from", () => {
+		const pool = new Pool({
+			connectionString: "postgres://localhost/does-not-need-to-connect",
+		});
+
+		const driver = neonDriver(pool);
+
+		expect(driver.client).toBe(pool);
+	});
+
+	// The exact one-liner `neon-preset.md` shows for `hejbro.config.ts`'s
+	// `driver` field (`driver: (url) => neonDriver(new Pool({
+	// connectionString: url }))`) reaches a real close -- mirrors
+	// `packages/cli/src/check/driver.ts`'s own `withCheckConnection`,
+	// which calls `driver.client.end()` in its `finally` block once the
+	// command's body has run, whether it succeeded or threw.
+	it("the factory shape the preset docs show reaches pool.end() exactly once, the same call the CLI's own connection lifecycle makes", async () => {
+		const pool = new Pool({
+			connectionString: "postgres://localhost/does-not-need-to-connect",
+		});
+		const endSpy = vi.spyOn(pool, "end").mockResolvedValue(undefined);
+		// Stands in for `driver: (connectionString) => neonDriver(new Pool({
+		// connectionString }))` -- the string itself is irrelevant here,
+		// only that the returned driver's own `client` is this pool.
+		const factory = (_connectionString: string) => neonDriver(pool);
+
+		const driver = factory("postgres://ignored");
+		await driver.client.end();
+
+		expect(endSpy).toHaveBeenCalledTimes(1);
+	});
+});
