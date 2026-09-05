@@ -654,6 +654,11 @@ describe("bodyChecksum / 1.1, 631/R2", () => {
 	const dashFirstLineFile =
 		'-- a snapshot of the database\n\ncreate table "public"."t" ();\n';
 	const bannerWithUpgraded = `${banner}-- upgraded-from: sha256:${"0".repeat(64)}\n`;
+	const bodyWithTrailingSpace = body.replace(
+		'("id" bigint);',
+		'("id" bigint); ',
+	);
+	const bodyWithLoneCr = body.replace("bigint", "big\rint");
 
 	it.each<[string, string, string]>([
 		["banner + body -- the checksum is the body's own hash", file1, body],
@@ -682,27 +687,18 @@ describe("bodyChecksum / 1.1, 631/R2", () => {
 			`${banner}\n${bodyWithBlankLine}`,
 			bodyWithBlankLine,
 		],
+		[
+			"a trailing space inside the body is an edit, not whitespace to trim",
+			`${banner}\n${bodyWithTrailingSpace}`,
+			bodyWithTrailingSpace,
+		],
+		[
+			"a lone \\r is not a line ending -- only \\r\\n is normalized",
+			`${banner}\n${bodyWithLoneCr}`,
+			bodyWithLoneCr,
+		],
 	])("%s", (_label, fileText, expectedBodyText) => {
 		expect(bodyChecksum(fileText)).toBe(sha256Hex(expectedBodyText));
-	});
-
-	it("a trailing space added inside the body changes the checksum", () => {
-		const bodyWithTrailingSpace = body.replace(
-			'("id" bigint);',
-			'("id" bigint); ',
-		);
-
-		expect(bodyChecksum(`${banner}\n${bodyWithTrailingSpace}`)).not.toBe(
-			bodyChecksum(file1),
-		);
-	});
-
-	it("a lone \\r is not a line ending -- only \\r\\n is normalized", () => {
-		const bodyWithLoneCr = body.replace('("id" bigint);', '("id"\rbigint);');
-
-		expect(bodyChecksum(`${banner}\n${bodyWithLoneCr}`)).not.toBe(
-			bodyChecksum(file1),
-		);
 	});
 
 	it("banner only, no blank-line separator anywhere -- the empty body", () => {
