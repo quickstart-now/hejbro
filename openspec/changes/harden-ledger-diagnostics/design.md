@@ -84,6 +84,19 @@ session_user` succeeds for a role whose `select` on the ledger is
 withheld and for one without `usage` on the `hejbro` schema — it needs no
 privilege of its own, so the failure path can always ask.
 
+*Reviewed and declined (review round 2):* on a connection that is already
+gone — a terminated backend, a killed server — the role read cannot run
+either, so those diagnostics carry no role clause, and the `Next:` line
+generalises to "the connecting role". The reviewer proposed filling the
+gap from the connection string's username. Declined on option 3's own
+measured ground: a connection string routinely carries no username, and
+when it does it is what the client *asked* to be, which `set role` and a
+`security definer` context can both make untrue. Omitting the clause says
+less; filling it from the URL would say something hejbro cannot check
+precisely when it can no longer ask. The requirement's own scenario — a
+withheld privilege — always has a live connection, and there the role is
+named.
+
 ## D3 — Message and `Next:` wording
 
 **Background.** The family's own template (`apply-ledger-occupied`) is:

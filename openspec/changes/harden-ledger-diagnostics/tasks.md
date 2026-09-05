@@ -314,6 +314,14 @@ text that says something untrue. Every repair keeps the delta as approved.
       transaction's *context* decide instead would strand the direction
       tag `ledger.ts` attaches and re-introduce, on another axis, exactly
       the inconsistency 2.1 removes.
+      **Measured in review round 2:** inside `migrate`'s own transaction
+      only the read branch is reachable. The recheck's `select` holds
+      `ACCESS SHARE` on the ledger until that transaction ends, so a
+      concurrent `drop table` cannot land between the recheck and the
+      insert — it waits, and takes effect after the commit. The write
+      branch's 42P01 is reached through `reset`'s clearing instead, where
+      round 1 already measured it. Both branches exist because the rule is
+      one rule, not because both are reachable from every command.
       Red: `packages/cli/test/apply-execute.test.ts`, case *"a ledger that
       vanishes mid-transaction is the ledger's failure"*: the fake driver
       answers the recheck with 42P01 → the tagged read failure escapes
