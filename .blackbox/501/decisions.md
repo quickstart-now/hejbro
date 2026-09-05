@@ -42,3 +42,12 @@ Basis: R3.
 
 render-sql.ts's collectColumnRefs calls exprChildren on the render path, so a view carrying a filtered aggregate crashes before it renders while expr-children.ts's traversal registry does not know the kind; the same reachable-kind loop also runs at module evaluation time in render-sql.test.ts. expr-children.ts and its test therefore move from task 1.3 into task 1.2, together with the red sentence "exprChildren yields the call and the condition". Leaving them in 1.3 was refused: it is not the same as the type-check sites left red per task, because both suites die during collection and task 1.2 would land with none of its own green evidence. This is a defect in the task split, not a change of contract -- the split was checked against the file list and never against the runtime call graph. Task 1.3 keeps retarget, walk, read-shape and query/select.ts.
 
+<a id="r5"></a>
+## R5 — the traversal table restated in supabase is this change's own
+
+_lead · interpretation · 2026-09-05T13:42Z · ratified: pending_
+
+Basis: R3, R4.
+
+Adding a variant to ExprNode breaks every exhaustive registry in the repository, including the two child-traversal tables restated outside @hejbro/core that expr-children.ts's own comment names: @hejbro/query's liftExprNode (task 1.4) and @hejbro/supabase's ChildrenOfHandlers in validators/rls-uncached-auth-call.ts. The supabase entry is this change's own compile failure, not a follow-up: pnpm check-types is a group-completion gate and a monorepo that does not compile cannot ship. The file boundary that reserves packages/supabase/src/** for another slice is waived for this one file, confirmed against what that slice is editing (pooler.ts). The proposal's Impact list is corrected to enumerate the sites the type forces -- window.ts, expr-children.ts, params.ts and this one -- because three of them were found by a crash rather than by reading the list.
+

@@ -48,6 +48,15 @@
       "at": "2026-09-05T13:21Z",
       "title": "expr-children moves into the render task",
       "ratified": null
+    },
+    {
+      "id": "R5",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [],
+      "at": "2026-09-05T13:42Z",
+      "title": "the traversal table restated in supabase is this change's own",
+      "ratified": null
     }
   ],
   "work": [
@@ -72,6 +81,17 @@
         "R2",
         "R3",
         "R4"
+      ]
+    },
+    {
+      "id": "W3",
+      "at": "2026-09-05T13:46Z",
+      "title": "task 1.4-1.5 aftermath: three registry copies and a stale barrel, all found by crash",
+      "pr": null,
+      "decisions": [
+        "R3",
+        "R4",
+        "R5"
       ]
     }
   ],

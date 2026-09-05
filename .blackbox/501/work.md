@@ -28,3 +28,14 @@ query/select.ts's cast-agreement table had an empty-green gap for sum/avg and th
 
 Per 412/R35 (stash banned across worktrees, a shared stash stack), the select.ts fix was set aside to capture that red without touching git stash: `git diff > select-ts.patch && git checkout -- select.ts`, ran the suite for the genuine pre-implementation failures, then `git apply select-ts.patch` to restore the fix.
 
+<a id="w3"></a>
+## W3 — task 1.4-1.5 aftermath: three registry copies and a stale barrel, all found by crash
+
+_2026-09-05T13:46Z · per R3, R4, R5_
+
+The proposal's own Impact list, written at 501/R1, was checked against tasks.md's own file grouping only, never against the runtime call graph or the repository's exhaustive-registry pattern -- three of the sites the new AggregateFilterNode variant forces (expr/window.ts's own runtime guard, expr-children.ts's traversal registry, and @hejbro/supabase's rls-uncached-auth-call.ts's own ChildrenOfHandlers, a third restatement of the same child-traversal shape core's own comment already names as existing outside @hejbro/core) were each found only when a test or the render path crashed, not by reading the Impact list ahead of time. The proposal is corrected (501/R5) to enumerate all four forced sites (window.ts, expr-children.ts, params.ts, the supabase validator) plus the two pins that needed no source change (retarget.ts, read-shape.ts) explicitly, closing the same kind of gap for any reviewer reading it after the fact.
+
+The supabase validator's own fix (501/R5) followed the same red-then-green discipline as every other task in this group: two new tests (a filtered aggregate's condition, and its own function argument) were added and run BEFORE the ChildrenOfHandlers entry existed, confirming a crash (TypeError: handler is not a function), not a silent miss -- an auth.uid()/auth.jwt() call hidden inside a filter(...) condition would have thrown, never passed undetected.
+
+A separate, unrelated gap surfaced independently while writing task 1.5's own doc snippet: packages/cli's hejbro barrel (index.ts's hand-kept value re-export list, and core-surface.ts's VOCABULARY it must match) never gained filter as a value export when core added it in task 1.1 -- `export type * from "@hejbro/core"` alone re-exported it as a type only, so `import { filter } from "hejbro"` could not call it. packages/cli/test/exports.test.ts's own barrel-curation gate (#471) had already been red since commit ea364785, unnoticed because per-package `pnpm test` runs don't cross package boundaries. Closed by adding filter to VOCABULARY, index.ts's list, and the test's own pinned HEJBRO_RUNTIME_EXPORTS snapshot (which needed the same one-line update once the barrel line was fixed).
+

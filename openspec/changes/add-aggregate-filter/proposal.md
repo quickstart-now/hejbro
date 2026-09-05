@@ -55,13 +55,31 @@ None.
 
 ## Impact
 
+A new `ExprNode` variant is enforced by every exhaustive registry in the
+repository, so the impact is exactly the set of those registries plus the
+runtime guards that narrow the same slots — enumerated here rather than
+discovered one crash at a time.
+
 - `@hejbro/core`: `expr/ast.ts` (the variant; the window node's slot),
-  `expr/aggregate.ts` (the wrapper), `expr/render-sql.ts`, `expr/codec.ts`,
-  `expr/expr-children.ts`, `expr/retarget.ts`, `expr/walk.ts`,
-  `expr/read-shape.ts`, `query/select.ts` (the nested-read cast reads
-  through it), the D70 completeness fixture, the barrel and its pin.
-- `@hejbro/query`: `compile/params.ts` (lifting through the variant),
+  `expr/aggregate.ts` (the wrapper), `expr/window.ts` (`over`'s own
+  runtime guard and `buildWindowNode`'s narrowed slot, which the type
+  widening alone does not reach), `expr/render-sql.ts`, `expr/codec.ts`,
+  `expr/expr-children.ts` (called on the render path by
+  `collectColumnRefs`, so rendering depends on it), `expr/walk.ts`,
+  `query/select.ts` (the nested-read cast reads through it), the D70
+  completeness fixture, the barrel and its pin. `expr/retarget.ts` and
+  `expr/read-shape.ts` need no source change — their generic fallbacks
+  walk through `expr-children.ts` — and are covered by pins only.
+- `@hejbro/query`: `compile/params.ts` (lifting through the variant —
+  one of the two child-traversal tables restated outside core),
   `db/convert.ts` (reads through it).
+- `@hejbro/supabase`: `validators/rls-uncached-auth-call.ts` — the second
+  child-traversal table restated outside core (`ChildrenOfHandlers`);
+  without its entry the package does not compile.
+- `hejbro` (the user-facing package): `src/index.ts`'s value re-exports
+  and `src/core-surface.ts`'s vocabulary — a new core value export that
+  misses both is a type-only export there, so the wrapper this change
+  ships would not be importable by a user at all.
 - `skills/hejbro`: `references/query-layer.md`.
 
 Lands after `harden-aggregate-vocabulary` (#452), which owns the
