@@ -45,7 +45,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | [#374](374/) | adversarial spec-only review stage in the opsx cycle | closed | #539 | 1 | 0 (0 pending) |
 | [#377](377/) | snapshot format stability policy for 1.0 | closed | #383 | 1 | 0 (0 pending) |
 | [#378](378/) | defect-leakage metric over escaped defects | closed | #384 | 1 | 0 (0 pending) |
-| [#412](412/) | 0.2.x: post-release commitments | open | #715 #808 #824 #835 #840 #849 #851 #858 #867 #868 #871 #878 #880 #895 #894 (via #303) #903 (via #303) #881 (via #375) #850 (via #449) #882 (via #450) #901 (via #452) #906 (via #452) #883 (via #491) #885 (via #497) #884 (via #510) #737 (via #528) #760 (via #528) #773 (via #533) #886 (via #652) #896 (via #663) #897 (via #674) #733 (via #679) #758 (via #679) #739 (via #687) #759 (via #687) #770 (via #687) #861 (via #701) #879 (via #707) #847 (via #741) #889 (via #745) #833 (via #748) #784 (via #750) #802 (via #750) #775 (via #752) #799 (via #752) #780 (via #754) #795 (via #754) #887 (via #765) #855 (via #778) #838 (via #783) #786 (via #785) #789 (via #787) #790 (via #788) #792 (via #791) #794 (via #793) #890 (via #798) #898 (via #798) #822 (via #800) #806 (via #804) #813 (via #807) #811 (via #810) | 26 | 31 (0 pending) |
+| [#412](412/) | 0.2.x: post-release commitments | open | #715 #808 #824 #835 #840 #849 #851 #858 #867 #868 #871 #878 #880 #895 #894 (via #303) #903 (via #303) #881 (via #375) #850 (via #449) #882 (via #450) #901 (via #452) #906 (via #452) #883 (via #491) #885 (via #497) #884 (via #510) #737 (via #528) #760 (via #528) #773 (via #533) #886 (via #652) #896 (via #663) #897 (via #674) #733 (via #679) #758 (via #679) #739 (via #687) #759 (via #687) #770 (via #687) #861 (via #701) #879 (via #707) #847 (via #741) #900 (via #742) #889 (via #745) #833 (via #748) #784 (via #750) #802 (via #750) #775 (via #752) #799 (via #752) #780 (via #754) #795 (via #754) #887 (via #765) #855 (via #778) #838 (via #783) #786 (via #785) #789 (via #787) #790 (via #788) #792 (via #791) #794 (via #793) #890 (via #798) #898 (via #798) #822 (via #800) #806 (via #804) #813 (via #807) #811 (via #810) | 26 | 31 (0 pending) |
 | ↳ [#303](303/) | Prepared-statement caching behind the driver capability contract | closed | #894 #903 | 0 | 3 (2 pending) |
 | ↳ [#375](375/) | run the d49 round-trip witness in ci | closed | #881 | 0 | 1 (1 pending) |
 | ↳ [#449](449/) | concurrent tx.execute beside a nested transaction is unguarded | closed | #849 #850 | 0 | 3 (2 pending) |
@@ -75,6 +75,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#726](726/) | loss report promises check will report an omitted column, but check has no column-level inventory | closed | #878 | 0 | 1 (0 pending) |
 | ↳ [#740](740/) | Vendored contract column order follows JS key order, not the snapshot's physical order | closed | #858 #861 | 0 | 2 (0 pending) |
 | ↳ [#741](741/) | `hejbro init --config <path>` is ignored and scaffolds a competing project | closed | #840 #847 | 0 | 4 (0 pending) |
+| ↳ [#742](742/) | Add the constructor-review corpus to `examples/brownfield` | closed | #900 | 0 | 1 (0 pending) |
 | ↳ [#743](743/) | `init` and `generate` name the same file two different ways | closed | #840 #847 | 0 | 1 (1 pending) |
 | ↳ [#744](744/) | `docker-rm-hygiene` can fail on a temporary file another test is deleting | closed | #773 | 0 | 1 (0 pending) |
 | ↳ [#745](745/) | Configuration paths reach the user as raw stacks and absolute paths | closed | #889 | 0 | 0 (0 pending) |
@@ -129,7 +130,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | [#573](573/) | nile preset: measure identity columns and keyless tables on tenant-aware tables (D106 F9) | closed | #578 | 1 | 0 (0 pending) |
 | [#603](603/) | Apply engine (D12 revised): hejbro owns migrate and reset, production included | closed | #628 | 0 | 0 (0 pending) |
 | [#714](714/) | add a brownfield corpus: a database hejbro did not create, with a standing import→baseline→check witness | open | #851 #858 #868 #871 #878 | 0 | 0 (0 pending) |
-| [#815](815/) | 0.2.x: post-release commitments (2) | open | #867 #868 #871 #878 #893 (via #814) #840 (via #819) #876 (via #820) #835 (via #823) #877 (via #823) #833 (via #832) #838 (via #836) #851 (via #841) #855 (via #841) #849 (via #845) #850 (via #845) #847 (via #846) #858 (via #856) #861 (via #856) | 0 | 0 (0 pending) |
+| [#815](815/) | 0.2.x: post-release commitments (2) | open | #867 #868 #871 #878 #893 (via #814) #840 (via #819) #876 (via #820) #835 (via #823) #877 (via #823) #833 (via #832) #838 (via #836) #851 (via #841) #855 (via #841) #849 (via #845) #850 (via #845) #847 (via #846) #858 (via #856) #861 (via #856) #900 (via #899) | 0 | 0 (0 pending) |
 | ↳ [#814](814/) | release: changesets leaves the pre dist-tag stale on packages without a stable version | open | #893 | 0 | 1 (0 pending) |
 | ↳ [#819](819/) | cli: --config is honoured by every command and one root resolves every configured path | open | #840 | 0 | 0 (0 pending) |
 | ↳ [#820](820/) | cli: a migrationsDir that is a file crashes generate with a raw ENOTDIR | closed | #840 #868 #876 | 0 | 1 (1 pending) |
@@ -164,11 +165,12 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#873](873/) | import: a foreign key referencing an omitted column makes the starter declaration fail to load | open | #878 | 0 | 0 (0 pending) |
 | ↳ [#874](874/) | loss report: sortedBy uses localeCompare, so import/pull output order depends on the locale | open | #878 | 0 | 0 (0 pending) |
 | ↳ [#875](875/) | config: an unreadable configuration file is reported as config-load-failed with import advice | open | #876 | 0 | 0 (0 pending) |
+| ↳ [#899](899/) | core: a view created after a schema-wide table grant is never granted by the chain | closed | #900 | 0 | 0 (0 pending) |
 | [#834](834/) | skills: the bare npx skills add still installs the seven internal .claude/skills — metadata.internal hides them (measured on skills 1.5.23) | closed | #888 | 0 | 0 (0 pending) |
 
 ## Totals
 
-Owner decisions 91 · rulings 194 (interpretation 134, extension 58, stop 2) · pending extensions 20 · rejected 2
+Owner decisions 91 · rulings 195 (interpretation 135, extension 58, stop 2) · pending extensions 20 · rejected 2
 
 ## Conventions
 

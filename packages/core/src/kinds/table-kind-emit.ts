@@ -19,11 +19,7 @@ import {
 } from "../sql/statement";
 import type { TypeNode } from "../types/type-node";
 import { renderTypeNode } from "../types/type-node";
-import {
-	grantIdentity,
-	renderGrantStatement,
-	standingAllTablesGrants,
-} from "./grant-kind";
+import { catchUpStandingGrants } from "./grant-kind";
 import type { SequenceSnapshot } from "./sequence-kind";
 import { asSequenceSnapshot, nextvalExpression } from "./sequence-kind";
 import {
@@ -131,35 +127,8 @@ const standingGrantStatements = (
 	next: TableSnapshot,
 	nextSnapshot: Snapshot | undefined,
 	siblingChanges: ReadonlyArray<KindChange>,
-): ReadonlyArray<SqlStatement> => {
-	if (nextSnapshot === undefined) {
-		return [];
-	}
-	const newlyCreatedGrantIdentities = new Set(
-		siblingChanges
-			.filter(
-				(sibling) => sibling.kind === "grant" && sibling.operation === "create",
-			)
-			.map((sibling) => sibling.identity),
-	);
-	return standingAllTablesGrants(next.schema, nextSnapshot)
-		.filter(
-			(grant) =>
-				!newlyCreatedGrantIdentities.has(
-					grantIdentity(grant.schema, grant.grantKind, grant.role),
-				),
-		)
-		.map((grant) =>
-			statement(
-				renderGrantStatement(
-					"all-tables-privileges",
-					next.schema,
-					grant.role,
-					grant.privileges,
-				),
-			),
-		);
-};
+): ReadonlyArray<SqlStatement> =>
+	catchUpStandingGrants(next.schema, nextSnapshot, siblingChanges);
 
 const emitCreate = (
 	next: TableSnapshot,

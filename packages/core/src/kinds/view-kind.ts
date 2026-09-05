@@ -27,10 +27,12 @@ import {
 	applyColumnOrderToSelect,
 	noColumnOrder,
 } from "../snapshot/column-order";
+import type { Snapshot } from "../snapshot/snapshot";
 import type { JsonValue } from "../snapshot/stable-json";
 import { qualifyName } from "../sql/identifier";
 import type { SqlStatement } from "../sql/statement";
 import { predropStatement, statement } from "../sql/statement";
+import { catchUpStandingGrants } from "./grant-kind";
 
 /**
  * A view's serialized snapshot node — `columns` drives the
@@ -256,9 +258,21 @@ const securityInvokerClause = (securityInvoker: boolean): string => {
 const createOrReplaceSql = (snapshot: ViewSnapshot): string =>
 	`create or replace view ${qualifyName(snapshot.schema, snapshot.name)}${securityInvokerClause(viewSecurityInvoker(snapshot))} as ${viewSelectSql(snapshot)};`;
 
-const emitCreate = (change: KindChange): ReadonlyArray<SqlStatement> => [
-	statement(createOrReplaceSql(asViewSnapshot(requireNext(change)))),
-];
+// #742: a standing schema-wide table grant covers views too (Postgres's
+// `on all tables in schema`), so a view created after that grant needs
+// the same catch-up a table gets (#121/D78) -- or the chain leaves the
+// view ungranted where a fresh migration grants it.
+const emitCreate = (
+	change: KindChange,
+	siblingChanges: ReadonlyArray<KindChange>,
+	nextSnapshot: Snapshot | undefined,
+): ReadonlyArray<SqlStatement> => {
+	const next = asViewSnapshot(requireNext(change));
+	return [
+		statement(createOrReplaceSql(next)),
+		...catchUpStandingGrants(next.schema, nextSnapshot, siblingChanges),
+	];
+};
 
 const emitAlter = (change: KindChange): ReadonlyArray<SqlStatement> => {
 	// #472 trap 2: next is checked before previous here — the reverse of
@@ -360,9 +374,14 @@ export const viewKind: ObjectKind<ViewDeclaration> = {
 			},
 		];
 	},
-	emit: (change, siblingChanges) =>
+	emit: (change, siblingChanges, nextSnapshot) =>
 		dispatchEmit(
-			{ create: emitCreate, alter: emitAlter, drop: emitDrop },
+			{
+				create: (createChange, siblings) =>
+					emitCreate(createChange, siblings, nextSnapshot),
+				alter: emitAlter,
+				drop: emitDrop,
+			},
 			change,
 			siblingChanges,
 		),

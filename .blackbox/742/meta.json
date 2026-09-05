@@ -1,0 +1,43 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#742",
+  "title": "Add the constructor-review corpus to `examples/brownfield`",
+  "parent": "quickstart-now/hejbro#412",
+  "status": "closed",
+  "opened": "2026-09-05",
+  "closed": "2026-09-05",
+  "decisions": [
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "412/D24",
+        "D25",
+        "412/R32; D110 (inputs beside their scenario); the fixtures #739/#740/#697 added after this issue was filed"
+      ],
+      "at": "2026-09-05T08:55Z",
+      "title": "The corpus lives beside the surface it exercises; the two uncovered rows are added, the rest are mapped",
+      "ratified": null
+    }
+  ],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-05T08:55Z",
+      "title": "Argument-key corpus and the overlapping-column join view",
+      "pr": null,
+      "decisions": []
+    }
+  ],
+  "prs": [
+    {
+      "number": 900,
+      "role": "closes",
+      "pinnedAt": "2026-09-05T11:03Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

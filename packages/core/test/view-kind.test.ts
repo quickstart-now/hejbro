@@ -6,12 +6,16 @@ import { generateMigration } from "../src/engine/generate";
 import type { SetOpNode } from "../src/expr/ast";
 import { expr } from "../src/expr/ast";
 import { eq, isNotNull } from "../src/expr/operators";
+import type { KindChange } from "../src/kind/object-kind";
 import { createDefaultRegistry } from "../src/kind/registry";
+import type { GrantSnapshot } from "../src/kinds/grant-kind";
 import type { ViewSnapshot } from "../src/kinds/view-kind";
 import { viewKind, viewSelectSql } from "../src/kinds/view-kind";
 import type { SetOpStage } from "../src/query/select";
 import { select } from "../src/query/select";
+import type { Snapshot } from "../src/snapshot/snapshot";
 import { buildSnapshot, emptySnapshot } from "../src/snapshot/snapshot";
+import type { JsonValue } from "../src/snapshot/stable-json";
 import { text, timestamptz, uuid } from "../src/types/column-builder-factories";
 
 const app = schema("app");
@@ -680,5 +684,83 @@ describe("set-operation view bodies (add-set-operations task 2.2)", () => {
 			key.startsWith("view:"),
 		)?.[1] as { columns: ReadonlyArray<string> };
 		expect(viewSnapshot.columns).toEqual(["id", "name"]);
+	});
+});
+
+describe("viewKind.emit — create re-issues standing schema-wide grants (#742, the table rule of #121/D78)", () => {
+	const allTablesGrant = (
+		schemaName: string,
+		role: string,
+		privileges: GrantSnapshot["privileges"],
+	): GrantSnapshot => ({
+		schema: schemaName,
+		grantKind: "all-tables-privileges",
+		role,
+		privileges,
+	});
+	const snapshotWith = (objects: Record<string, unknown>): Snapshot => ({
+		formatVersion: 8,
+		dialect: "postgres",
+		objects: objects as Snapshot["objects"],
+	});
+	const createChange = (next: JsonValue): KindChange => ({
+		kind: "view",
+		operation: "create",
+		identity: "app.published_posts",
+		previous: null,
+		next,
+		notes: [],
+	});
+	const publishedPosts = () =>
+		viewKind.serialize(defineView(app, "published_posts", select(posts)));
+
+	it("re-issues the exact schema-wide statement for a standing grant in the view's schema", () => {
+		const nextSnapshot = snapshotWith({
+			"grant:app.all-tables-privileges.app_reader": allTablesGrant(
+				"app",
+				"app_reader",
+				["select"],
+			),
+		});
+		const change = createChange(publishedPosts());
+		const statements = viewKind.emit(change, [change], nextSnapshot);
+		expect(statements.map((s) => s.sql).at(-1)).toBe(
+			'grant select on all tables in schema "app" to "app_reader";',
+		);
+	});
+
+	it("does not duplicate a grant created in the same diff, and ignores another schema's grant", () => {
+		const grantSnapshot = allTablesGrant("app", "app_reader", ["select"]);
+		const grantCreate: KindChange = {
+			kind: "grant",
+			operation: "create",
+			identity: "app.all-tables-privileges.app_reader",
+			previous: null,
+			next: grantSnapshot,
+			notes: [],
+		};
+		const change = createChange(publishedPosts());
+		expect(
+			viewKind.emit(
+				change,
+				[change, grantCreate],
+				snapshotWith({
+					"grant:app.all-tables-privileges.app_reader": grantSnapshot,
+				}),
+			),
+		).toHaveLength(1);
+		expect(
+			viewKind.emit(
+				change,
+				[change],
+				snapshotWith({
+					"grant:other.all-tables-privileges.app_reader": allTablesGrant(
+						"other",
+						"app_reader",
+						["select"],
+					),
+				}),
+			),
+		).toHaveLength(1);
 	});
 });

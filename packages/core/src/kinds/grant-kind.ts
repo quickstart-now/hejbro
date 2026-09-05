@@ -150,6 +150,54 @@ export const standingAllTablesGrants = (
 				grant.schema === schema && grant.grantKind === "all-tables-privileges",
 		);
 
+/**
+ * The statements a newly created relation in `schema` needs so every
+ * standing `all-tables-privileges` grant covers it too (#121/D78) —
+ * re-issued as the identical schema-wide statement, never a
+ * relation-scoped rewrite (see {@link renderGrantStatement}). A grant
+ * that is itself created in this same diff is skipped: its own `create`
+ * emit already covers the new relation. Shared by `tableKind` and
+ * `viewKind` (#742): Postgres's `grant ... on all tables in schema`
+ * covers views as well as tables, so a view added after the grant needs
+ * the same catch-up — a chain that skipped it diverged from a fresh
+ * migration on exactly that grant. `nextSnapshot` is `undefined` only
+ * for a caller that invokes `emit` without it (no in-repo caller does),
+ * in which case the relation stays ungranted rather than throwing.
+ */
+export const catchUpStandingGrants = (
+	schema: string,
+	nextSnapshot: Snapshot | undefined,
+	siblingChanges: ReadonlyArray<KindChange>,
+): ReadonlyArray<SqlStatement> => {
+	if (nextSnapshot === undefined) {
+		return [];
+	}
+	const newlyCreatedGrantIdentities = new Set(
+		siblingChanges
+			.filter(
+				(sibling) => sibling.kind === "grant" && sibling.operation === "create",
+			)
+			.map((sibling) => sibling.identity),
+	);
+	return standingAllTablesGrants(schema, nextSnapshot)
+		.filter(
+			(grant) =>
+				!newlyCreatedGrantIdentities.has(
+					grantIdentity(grant.schema, grant.grantKind, grant.role),
+				),
+		)
+		.map((grant) =>
+			statement(
+				renderGrantStatement(
+					"all-tables-privileges",
+					schema,
+					grant.role,
+					grant.privileges,
+				),
+			),
+		);
+};
+
 /** Zero or one statement, depending on whether `privileges` is non-empty — the `if` helper an alter's optional grant/revoke half needs instead of a ternary. */
 const statementIfAny = (
 	privileges: ReadonlyArray<TablePrivilege>,
