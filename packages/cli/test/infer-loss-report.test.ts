@@ -476,7 +476,14 @@ describe("buildLossReport / 1.7", () => {
 		);
 	});
 
-	it("pins the omitted-table line's exact text when its schema still anchors an inventory scan (regression, unchanged by this change)", () => {
+	// harden-check-inventory, task 1.12 (review round 2 B1): renaming an
+	// omitted table alone only makes its name declarable -- `check`'s own
+	// inventory keeps naming it, unmanaged, until a declaration actually
+	// covers it (measured live: renaming `zoo."Cages"` to `cages` left it
+	// listed). Same over-promise N3 already fixed for the index/check
+	// lines and task 1.11 fixed for the column line -- this is the same
+	// fix for the table line the review found still carried it.
+	it("pins the omitted-table line's exact text when its schema still anchors an inventory scan (renamed and declared, not renamed alone)", () => {
 		const report = buildLossReport({
 			...emptyFacts("import"),
 			omittedTables: [
@@ -486,7 +493,7 @@ describe("buildLossReport / 1.7", () => {
 
 		const line = report.find((entry) => entry.includes("Widgets"));
 		expect(line).toBe(
-			'Omitted: table "app.Widgets" -- its catalog name is not a valid hejbro SQL identifier, so no declaration can carry it. Everything it holds (columns, checks, indexes and foreign keys) is left undeclared, and `check` keeps listing the table itself in its unmanaged-table inventory (informational, never a failing check) until it is renamed in the database.',
+			'Omitted: table "app.Widgets" -- its catalog name is not a valid hejbro SQL identifier, so no declaration can carry it. Everything it holds (columns, checks, indexes and foreign keys) is left undeclared, and `check` keeps listing the table itself in its unmanaged-table inventory (informational, never a failing check) until it is renamed in the database and declared.',
 		);
 	});
 

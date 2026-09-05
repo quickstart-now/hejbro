@@ -432,13 +432,17 @@ const omittedSchemaLines = (
  * keeps listing it as unmanaged on every run, the same way it now does
  * an omitted index or check (harden-check-inventory, #707 -- see
  * {@link omittedIndexLine}), as long as its own schema is still
- * declared (by its other, expressible tables).
+ * declared (by its other, expressible tables). Review round 2 B1:
+ * renaming alone only makes the name one a declaration can carry --
+ * `check` goes on naming the table as unmanaged until a declaration
+ * actually covers it (measured live: renaming the table left it
+ * listed), so the line names the whole exit condition.
  */
 const omittedTableConsequenceForImport = (
 	stillReportedInInventory: boolean,
 ): string => {
 	if (stillReportedInInventory) {
-		return "`check` keeps listing the table itself in its unmanaged-table inventory (informational, never a failing check) until it is renamed in the database.";
+		return "`check` keeps listing the table itself in its unmanaged-table inventory (informational, never a failing check) until it is renamed in the database and declared.";
 	}
 	return "the omitted table was the only thing that schema would have declared, so nothing keeps naming it after this run's own report -- rename it in the database, or declare its schema's other objects so `check`'s inventory has something to anchor on.";
 };
