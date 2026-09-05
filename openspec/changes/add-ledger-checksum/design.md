@@ -12,7 +12,13 @@ recorded as a ruling on the change's issue.
   checkout on another platform does not read as an edit; nothing else
   is normalized — trailing whitespace inside a body is an edit like any
   other.
-- A raised snapshot file has no banner: the whole file is hashed.
+- A raised file is hashed whole, banner or not. A snapshot SQL file
+  carries no banner, which is why the rule and the file usually agree,
+  but the rule never consults the banner: a file whose first line is
+  `-- hejbro migration` handed to `raise --file` still records the
+  checksum of the entire normalised file, because the requirement states
+  the whole file without a condition. `wholeFileChecksum` shares only the
+  line-ending normalisation with `bodyChecksum`.
 - A baseline is registered, not run, but its body is still the text the
   database is assumed to hold: hashed the same way.
 
