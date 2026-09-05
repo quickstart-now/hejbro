@@ -735,6 +735,7 @@ export const runCheck = async (
 				return renderCheckReport(findings, inventory, registry, snapshot, mode);
 			},
 			importer,
+			config.driver,
 		);
 	} catch (error) {
 		return preconditionErrorReport(error);

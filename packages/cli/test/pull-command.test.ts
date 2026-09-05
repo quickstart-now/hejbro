@@ -22,6 +22,7 @@ import {
 	vendorSqlPath,
 	writeLock,
 } from "../src/vendor/lock";
+import { createCliFixtureDir, removeCliFixtureDir } from "./support/cli-runner";
 
 /**
  * Same seam granularity as `import-command.test.ts`: the connectivity
@@ -265,5 +266,148 @@ describe("runPull / 4.1", () => {
 		expect(outcome.stderr).toContain("vendor-destination-not-vendored");
 		expect(outcome.stderr).not.toContain("--force");
 		expect(outcome.stderr).toContain("hejbro pull");
+	});
+});
+
+// add-config-driver, #458, task 1.3: pull never read hejbro.config.ts
+// before this field existed (lead ruling 458/R2) -- every test above
+// this point runs in a bare temp dir with none, so it already proves the
+// "no configuration file" path unchanged. These two blocks add the two
+// rows that path can't cover: a configured factory, and a configuration
+// present but silent on `driver`.
+const FACTORY_SEAM_KEY = "__hejbroPullConfigDriverFactorySeam458__";
+
+type FactorySeam = {
+	readonly calls: string[];
+	readonly driver: CheckDriverConnection;
+};
+
+const globalRecord = globalThis as Record<string, unknown>;
+
+const installFactorySeam = (seam: FactorySeam): void => {
+	globalRecord[FACTORY_SEAM_KEY] = seam;
+};
+
+const clearFactorySeam = (): void => {
+	delete globalRecord[FACTORY_SEAM_KEY];
+};
+
+const FACTORY_CONFIG_SOURCE = `import { defineConfig } from "hejbro";
+
+export default defineConfig({
+	entry: ["src/**/*.schema.ts"],
+	driver: (connectionString) => {
+		const seam = globalThis[${JSON.stringify(FACTORY_SEAM_KEY)}];
+		seam.calls.push(connectionString);
+		return seam.driver;
+	},
+});
+`;
+
+const NO_DRIVER_CONFIG_SOURCE = `import { defineConfig } from "hejbro";
+
+export default defineConfig({
+	entry: ["src/**/*.schema.ts"],
+});
+`;
+
+const buildRecordingDriver = (): {
+	readonly driver: CheckDriverConnection;
+	readonly executed: number[];
+	readonly closed: number[];
+} => {
+	const executed: number[] = [];
+	const closed: number[] = [];
+	const driver: CheckDriverConnection = {
+		capabilities: { "interactive-transactions": false, "session-state": false },
+		execute: async () => {
+			executed.push(1);
+			return [];
+		},
+		transaction: async () => {
+			throw new Error("transaction should not be called by this test");
+		},
+		setupSession: async () => {
+			throw new Error("setupSession should not be called by this test");
+		},
+		client: {
+			end: async () => {
+				closed.push(1);
+			},
+		},
+	};
+	return { driver, executed, closed };
+};
+
+// These two blocks need `node_modules/hejbro` to actually resolve (their
+// fixture `hejbro.config.ts` imports it) -- `createCliFixtureDir` sets
+// that symlink up; the bare `mkdtempSync` `cwd` every other test in this
+// file uses does not, and every one of those tests already proves the
+// "no configuration file" path (none of them ever writes one).
+describe("hejbro pull / the configured driver factory threads through (#458 task 1.3)", () => {
+	let factoryCwd: string;
+
+	beforeEach(async () => {
+		factoryCwd = await createCliFixtureDir();
+	});
+
+	afterEach(async () => {
+		clearFactorySeam();
+		await removeCliFixtureDir(factoryCwd);
+	});
+
+	it("calls the factory exactly once with --db-url's string, the recording driver takes the connectivity probe, closes it, and never imports @hejbro/pg", async () => {
+		writeFileSync(join(factoryCwd, "hejbro.config.ts"), FACTORY_CONFIG_SOURCE);
+		const { driver, executed, closed } = buildRecordingDriver();
+		const calls: string[] = [];
+		installFactorySeam({ calls, driver });
+		const importerCalls: string[] = [];
+		const importer = async (): Promise<never> => {
+			importerCalls.push("called");
+			throw new Error("the importer must not run when a factory is configured");
+		};
+
+		const outcome = await runPull(
+			factoryCwd,
+			["--db-url", "postgres://factory-test", "--schema", "app"],
+			{
+				importer,
+				inferCatalog: async () => emptyResult,
+				currentDatabaseName: async () => "widgets_db",
+			},
+		);
+
+		expect(outcome.exitCode).toBe(0);
+		expect(calls).toEqual(["postgres://factory-test"]);
+		expect(importerCalls).toHaveLength(0);
+		expect(executed.length).toBeGreaterThan(0);
+		expect(closed).toHaveLength(1);
+	});
+});
+
+describe("hejbro pull / a configuration present but silent on driver behaves like none (#458 task 1.3)", () => {
+	let noDriverCwd: string;
+
+	beforeEach(async () => {
+		noDriverCwd = await createCliFixtureDir();
+	});
+
+	afterEach(async () => {
+		await removeCliFixtureDir(noDriverCwd);
+	});
+
+	it("still uses the vanilla importer path when hejbro.config.ts exists but sets no driver", async () => {
+		writeFileSync(
+			join(noDriverCwd, "hejbro.config.ts"),
+			NO_DRIVER_CONFIG_SOURCE,
+		);
+
+		const outcome = await runPull(
+			noDriverCwd,
+			["--db-url", "postgres://fixture", "--schema", "app"],
+			depsFor(widgetsResult),
+		);
+
+		expect(outcome.exitCode).toBe(0);
 	});
 });

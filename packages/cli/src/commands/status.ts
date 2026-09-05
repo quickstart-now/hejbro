@@ -265,6 +265,7 @@ export const runStatus = async (
 				}
 			},
 			importer,
+			config.driver,
 		);
 	} catch (error) {
 		return preconditionResult(error);

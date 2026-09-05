@@ -15,6 +15,7 @@ import { collectFlagValues, normalizeEqualsFlags } from "../flags";
 import { sha256Hex } from "../hash";
 import type { InferCatalogOptions, InferCatalogResult } from "../infer/compose";
 import { inferFromCatalog } from "../infer/compose";
+import { loadConfigIfPresent } from "../loader";
 import {
 	assertLockWritable,
 	vendorContractPath,
@@ -144,6 +145,11 @@ export const runPull = async (
 		const inferCatalog = deps.inferCatalog ?? inferFromCatalog;
 		const readCurrentDatabaseName =
 			deps.currentDatabaseName ?? currentDatabaseName;
+		// pull never read hejbro.config.ts before this field existed
+		// (add-config-driver, #458, lead ruling 458/R2): a project with none
+		// yet still runs through the vanilla driver, so absence is never a
+		// refusal here.
+		const loaded = await loadConfigIfPresent(cwd);
 		return await withCheckConnection(
 			dbUrlFlag,
 			process.env,
@@ -196,6 +202,7 @@ export const runPull = async (
 				};
 			},
 			deps.importer,
+			loaded?.config.driver,
 		);
 	} catch (error) {
 		return errorReport(error);

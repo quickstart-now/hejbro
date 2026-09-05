@@ -1,7 +1,9 @@
 import { hejbroError } from "@hejbro/core";
+import type { CompileResult } from "@hejbro/query";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { LedgerState } from "../src/apply/ledger";
 import type { PlanResult } from "../src/apply/plan";
+import type { CheckDriverConnection } from "../src/check/driver";
 import { planFailureResult } from "../src/commands/migrate";
 import {
 	renderPlanFailure,
@@ -472,5 +474,109 @@ describe("runStatus — a ledger the role may not read is a coded diagnostic, ne
 			"status: 1 migration(s) pending:",
 			" - 0001_a.sql",
 		]);
+	});
+});
+
+// add-config-driver, #458, task 1.3: mirrors check-command.test.ts's own
+// seam (a fixture config runs in-process through jiti, so a per-test
+// recording driver reaches it only through globalThis).
+const FACTORY_SEAM_KEY = "__hejbroStatusConfigDriverFactorySeam458__";
+
+type FactorySeam = {
+	readonly calls: string[];
+	readonly driver: CheckDriverConnection;
+};
+
+const globalRecord = globalThis as Record<string, unknown>;
+
+const installFactorySeam = (seam: FactorySeam): void => {
+	globalRecord[FACTORY_SEAM_KEY] = seam;
+};
+
+const clearFactorySeam = (): void => {
+	delete globalRecord[FACTORY_SEAM_KEY];
+};
+
+const FACTORY_CONFIG_SOURCE = `import { defineConfig } from "hejbro";
+
+export default defineConfig({
+	entry: ["src/**/*.schema.ts"],
+	migrationsDir: "migrations",
+	snapshotPath: "hejbro.snapshot.json",
+	driver: (connectionString) => {
+		const seam = globalThis[${JSON.stringify(FACTORY_SEAM_KEY)}];
+		seam.calls.push(connectionString);
+		return seam.driver;
+	},
+});
+`;
+
+const buildRecordingDriver = (): {
+	readonly driver: CheckDriverConnection;
+	readonly executed: CompileResult[];
+	readonly closed: number[];
+} => {
+	const executed: CompileResult[] = [];
+	const closed: number[] = [];
+	const driver: CheckDriverConnection = {
+		capabilities: { "interactive-transactions": false, "session-state": false },
+		execute: async (compiled) => {
+			executed.push(compiled);
+			return [];
+		},
+		transaction: async () => {
+			throw new Error("transaction should not be called by this test");
+		},
+		setupSession: async () => {
+			throw new Error("setupSession should not be called by this test");
+		},
+		client: {
+			end: async () => {
+				closed.push(1);
+			},
+		},
+	};
+	return { driver, executed, closed };
+};
+
+describe("hejbro status / the configured driver factory threads through (#458 task 1.3)", () => {
+	let cwd: string;
+
+	beforeEach(async () => {
+		cwd = await createCliFixtureDir();
+		await writeFixtureFile(cwd, "hejbro.config.ts", FACTORY_CONFIG_SOURCE);
+		await writeFixtureFile(
+			cwd,
+			"migrations/0001_a.sql",
+			[
+				"-- hejbro migration",
+				"-- parent-snapshot: sha256:aaaa",
+				"-- snapshot: sha256:bbbb",
+				'create table "app"."a" (id integer);',
+			].join("\n"),
+		);
+	});
+
+	afterEach(async () => {
+		clearFactorySeam();
+		await removeCliFixtureDir(cwd);
+	});
+
+	it("calls the factory exactly once with --url's string, sends status's statements to the recording driver, closes it, and never imports @hejbro/pg", async () => {
+		const { driver, executed, closed } = buildRecordingDriver();
+		const calls: string[] = [];
+		installFactorySeam({ calls, driver });
+		const importerCalls: string[] = [];
+		const importer = async (): Promise<never> => {
+			importerCalls.push("called");
+			throw new Error("the importer must not run when a factory is configured");
+		};
+
+		await runStatus(cwd, ["--url", "postgres://factory-test"], importer);
+
+		expect(calls).toEqual(["postgres://factory-test"]);
+		expect(importerCalls).toHaveLength(0);
+		expect(executed.length).toBeGreaterThan(0);
+		expect(closed).toHaveLength(1);
 	});
 });
