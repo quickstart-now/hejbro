@@ -90,7 +90,7 @@ declaring the same column through both fails at declaration time:
 | Use when | Form | Covers |
 |---|---|---|
 | A single local column, referencing one other table | Column-level `.references()` | Also feeds the query layer's relation types (`related()` — see the query-layer reference) in the same declaration; nothing is declared twice. An optional second argument carries `onDelete`/`onUpdate` |
-| Composite (multi-column) or self-referencing | `extras.foreignKeys` | Everything the column-level form can't express |
+| Composite (multi-column), self-referencing, or an explicit constraint name | `extras.foreignKeys` | Everything the column-level form can't express |
 
 **Column-level**: `ownerId: uuid().notNull().references(() => users.id)`
 — one declaration feeds both the generated DDL and the query layer's
