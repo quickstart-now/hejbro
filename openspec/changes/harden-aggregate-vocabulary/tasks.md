@@ -22,7 +22,7 @@ needs both; 1.5 last.
 
 ## 1. One read-shape vocabulary
 
-- [ ] 1.1 (~9m) **[design]** The vocabulary and its closure. Settles the
+- [x] 1.1 (~9m) **[design]** The vocabulary and its closure. Settles the
       export's name and row shape (`BUILDER_READ_SHAPES`, `Readonly<
       Record<BuilderFunctionName, "int8" | "argument" | "own">>`, with
       `BuilderFunctionName` the union the constructors already spell)
