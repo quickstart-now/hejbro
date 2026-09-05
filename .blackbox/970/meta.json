@@ -1,0 +1,21 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#970",
+  "title": "core: an unknown referential action string reaches the DDL unrefused on the type-check-free path",
+  "parent": null,
+  "status": "open",
+  "opened": "2026-09-05",
+  "closed": null,
+  "decisions": [],
+  "work": [],
+  "prs": [
+    {
+      "number": 979,
+      "role": "refs",
+      "pinnedAt": "2026-09-05T18:48Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

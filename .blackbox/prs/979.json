@@ -1,0 +1,69 @@
+{
+  "version": 3,
+  "number": 979,
+  "ref": "quickstart-now/hejbro#979",
+  "title": "feat(core): references() takes referential actions on the column form (#514)",
+  "head": "e6311b1015a9e7d4984df281a2a27bd75f1eeb8b",
+  "headRef": "feat-references-actions",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-05T18:48Z",
+  "refs": [
+    {
+      "path": ".changeset/add-references-actions.md",
+      "blob": "12bd8a98ce4b7afe08f2931149ab39d4aabbeb29"
+    },
+    {
+      "path": "README.md",
+      "blob": "02b9b4fe421a7f07de2fa6e47b8feb7fa63cee07"
+    },
+    {
+      "path": "docs/specs/2026-08-19-hejbro-design.md",
+      "blob": "dd62dfaff7fe717c35de0ccfaa1af9aced8e9ad5"
+    },
+    {
+      "path": "examples/postgres/src/app.schema.ts",
+      "blob": "938402a20ffddfe37d0444bbe7d6388ee1ce6a41"
+    },
+    {
+      "path": "examples/postgres/src/steps/step-10.schema.ts",
+      "blob": "938402a20ffddfe37d0444bbe7d6388ee1ce6a41"
+    },
+    {
+      "path": "openspec/changes/add-references-actions/design.md",
+      "blob": "49e4c5ccb7f623cd93665b4f34a9fd8d28a22eb7"
+    },
+    {
+      "path": "openspec/changes/add-references-actions/proposal.md",
+      "blob": "39679e3d2582cadc8b2fe5800b69f0aabc4fd4c0"
+    },
+    {
+      "path": "openspec/changes/add-references-actions/specs/table-declaration/spec.md",
+      "blob": "29109bc443bb12873a82f772e597292fc501bde2"
+    },
+    {
+      "path": "openspec/changes/add-references-actions/tasks.md",
+      "blob": "dd95f8accde741078d116c8bdef4efe1bab00a46"
+    },
+    {
+      "path": "openspec/task-times.csv",
+      "blob": "53c002405de79c09ce6a4393b926ff1761ba3e5c"
+    },
+    {
+      "path": "packages/core/src/dsl/table.ts",
+      "blob": "ae8d36f4a798d2c989e89ad252d81880dd0cb9ce"
+    },
+    {
+      "path": "packages/core/src/types/column-builder.ts",
+      "blob": "f39a49161f65f7a821c708a89b693b35ec3f0216"
+    },
+    {
+      "path": "packages/core/test/dsl/references-actions.test.ts",
+      "blob": "94c5a1d93f56133c40ec64325b69f744c0f95fc3"
+    },
+    {
+      "path": "skills/hejbro/references/dsl-cheatsheet.md",
+      "blob": "7e477a2d339bf74a80c03f5f0ff9d82163b35e90"
+    }
+  ]
+}

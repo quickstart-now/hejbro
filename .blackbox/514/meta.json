@@ -4,9 +4,9 @@
   "ref": "quickstart-now/hejbro#514",
   "title": "references() cannot express referential actions (onDelete/onUpdate)",
   "parent": "quickstart-now/hejbro#412",
-  "status": "open",
+  "status": "closed",
   "opened": "2026-09-05",
-  "closed": null,
+  "closed": "2026-09-05",
   "decisions": [
     {
       "id": "R1",
@@ -111,7 +111,13 @@
       "decisions": []
     }
   ],
-  "prs": [],
+  "prs": [
+    {
+      "number": 979,
+      "role": "closes",
+      "pinnedAt": "2026-09-05T18:48Z"
+    }
+  ],
   "origin": null,
   "followUps": []
 }
