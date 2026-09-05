@@ -10,7 +10,7 @@ the constraint only). Lands in either order with `widen-set-op-execute`
 conflict expected).
 
 **Files edited**: `packages/core/src/query/select.ts`, `packages/core/
-src/query/with.ts`, `packages/core/test/query/*set-op*.types.test.ts`
+src/query/with.ts`, `packages/core/test/query/*set-op*-types.test.ts`
 and the recursive-term type test (1.1, 1.2); `packages/query/test/
 *types*.test.ts` (1.2); `skills/hejbro/references/query-layer.md`, one
 `.changeset/*.md` (1.3). If a task appears to need any other file, that
