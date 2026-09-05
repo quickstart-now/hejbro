@@ -1,5 +1,10 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
-import type { ColumnRefNode, CteFieldRef, WidenedBy } from "../../src/index";
+import type {
+	ColumnRefNode,
+	CteFieldRef,
+	UntrackedJoins,
+	WidenedBy,
+} from "../../src/index";
 import {
 	bigint,
 	count,
@@ -22,6 +27,10 @@ const t = table(app, "t", {
 	id: integer().primaryKey(),
 	parent: integer(),
 	v: numeric({ mode: "number" }),
+});
+const other = table(app, "other", {
+	id: integer().primaryKey(),
+	tId: integer(),
 });
 
 describe("withRecursive (add-ctes task 6.1)", () => {
@@ -166,7 +175,7 @@ describe("the recursive term is typed from the anchor (add-ctes task 6.2)", () =
 			return select({ id: p.id, v: p.v }, p);
 		});
 		expectTypeOf(stage.projectionInput.v).toEqualTypeOf<
-			typeof anchorOnly.projectionInput.v & WidenedBy<typeof windowedV>
+			typeof anchorOnly.projectionInput.v & WidenedBy<typeof windowedV, never>
 		>();
 	});
 });
@@ -517,10 +526,10 @@ describe("the outward reference carries the recursive term's projection (#500/R2
 					),
 			);
 			expectTypeOf(r.id).toEqualTypeOf<
-				CteFieldRef<typeof t.id> & WidenedBy<CteFieldRef<typeof t.id>>
+				CteFieldRef<typeof t.id> & WidenedBy<CteFieldRef<typeof t.id>, never>
 			>();
 			expectTypeOf(r.v).toEqualTypeOf<
-				CteFieldRef<typeof t.id> & WidenedBy<typeof t.v>
+				CteFieldRef<typeof t.id> & WidenedBy<typeof t.v, never>
 			>();
 			return select({ id: r.id, v: r.v }, r);
 		});
@@ -562,6 +571,71 @@ describe("the outward reference carries the recursive term's projection (#500/R2
 			const body = select({ id: r.id, v: r.v }, r);
 			expectTypeOf(r.v.exprNode).toEqualTypeOf<ColumnRefNode>();
 			return body;
+		});
+		expect(stage.withQuery.recursive).toBe(true);
+	});
+});
+
+// #500/R3: the recursive term's own left-joined set travels with
+// `WidenedBy` too -- @hejbro/query needs it to tell "left-joined, reads
+// nullable regardless of notNull" from "not joined, notNull survives"
+// when it later resolves `ProjectedColumnResult<R, TRecursiveLeftJoined>`
+// (task 1.2). Reading it here only ever widens a key toward nullable --
+// `select.ts`'s own absorption note forbids narrowing on a set a
+// position never earned, which this is not.
+describe("the outward reference carries the recursive term's left-joined set (#500/R3, task 1.1b)", () => {
+	it("a recursive callback that left-joins a table carries that table in the outward brand", () => {
+		const stage = withCte((w) => {
+			const r = w.asRecursive(
+				"r",
+				select({ id: t.id, v: t.id }, t).where(isNull(t.parent)),
+				(self) =>
+					select({ id: self.id, v: t.v }, self).leftJoin(
+						other,
+						eq(self.id, other.tId),
+					),
+			);
+			expectTypeOf(r.v).toEqualTypeOf<
+				CteFieldRef<typeof t.id> & WidenedBy<typeof t.v, typeof other>
+			>();
+			return select({ id: r.id, v: r.v }, r);
+		});
+		expect(stage.withQuery.recursive).toBe(true);
+	});
+
+	it("a callback that left-joins nothing carries never, the tracked empty set", () => {
+		const stage = withCte((w) => {
+			const r = w.asRecursive(
+				"r",
+				select({ id: t.id, v: t.id }, t).where(isNull(t.parent)),
+				(self) =>
+					select({ id: self.id, v: t.v }, self).innerJoin(
+						t,
+						eq(self.id, t.parent),
+					),
+			);
+			expectTypeOf(r.v).toEqualTypeOf<
+				CteFieldRef<typeof t.id> & WidenedBy<typeof t.v, never>
+			>();
+			return select({ id: r.id, v: r.v }, r);
+		});
+		expect(stage.withQuery.recursive).toBe(true);
+	});
+
+	it("a recursive term that is a SetOpStage carries UntrackedJoins, the fail-safe default", () => {
+		const stage = withCte((w) => {
+			const r = w.asRecursive(
+				"r",
+				select({ id: t.id, v: t.id }, t).where(isNull(t.parent)),
+				(self) =>
+					select({ id: self.id, v: t.v }, self)
+						.innerJoin(t, eq(self.id, t.parent))
+						.union(select({ id: t.id, v: t.v }, t)),
+			);
+			expectTypeOf(r.v).toEqualTypeOf<
+				CteFieldRef<typeof t.id> & WidenedBy<typeof t.v, UntrackedJoins>
+			>();
+			return select({ id: r.id, v: r.v }, r);
 		});
 		expect(stage.withQuery.recursive).toBe(true);
 	});

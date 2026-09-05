@@ -8,6 +8,7 @@ import type {
 	WithEntryNode,
 	WithNode,
 } from "../expr/ast";
+import type { UntrackedJoins } from "./left-joined";
 import type {
 	SelectLimited,
 	SelectProjection,
@@ -118,12 +119,19 @@ export type CteReference<
 /**
  * Phantom marker (the `columnOriginBrand`/`readAsBrand` precedent), never
  * assigned at runtime — carries the recursive term's own projected value
- * for one key onto that key's OUTWARD reference (#500/R2). Nullability
- * itself is not decided here: `@hejbro/query`'s `ProjectedColumnResult` is
- * the one place that already resolves a projected value's null dimension,
- * left joins included, and reads this brand to union it with the anchor's
- * own. A second, core-side rule would be a proper subset of that
- * knowledge and would widen too little.
+ * for one key, and that term's own left-joined set (#500/R3), onto that
+ * key's OUTWARD reference (#500/R2). Nullability itself is not decided
+ * here: `@hejbro/query`'s `ProjectedColumnResult` is the one place that
+ * already resolves a projected value's null dimension, left joins
+ * included, and reads this brand (as `ProjectedColumnResult<R,
+ * TRecursiveLeftJoined>`) to union it with the anchor's own. A second,
+ * core-side rule would be a proper subset of that knowledge and would
+ * widen too little.
+ *
+ * Reading the recursive term's own left-joined set here only ever
+ * WIDENS a key toward nullable — `select.ts`'s own absorption note
+ * (narrow-join-nullability task 1.4) forbids NARROWING on a set a
+ * position never earned, which this is not.
  *
  * Public: `@hejbro/query`'s type tests `infer` against this exact
  * symbol-keyed property across the package boundary, the same reason
@@ -132,25 +140,33 @@ export type CteReference<
 export const widenedByBrand: unique symbol = Symbol("hejbro:widened-by");
 
 /** The brand's shape — see {@link widenedByBrand}. */
-export type WidenedBy<TRecursiveValue> = {
-	readonly [widenedByBrand]?: TRecursiveValue;
+export type WidenedBy<
+	TRecursiveValue,
+	TRecursiveLeftJoined = UntrackedJoins,
+> = {
+	readonly [widenedByBrand]?: readonly [TRecursiveValue, TRecursiveLeftJoined];
 };
 
 /**
- * `asRecursive`'s own outward reference (#500/R2): every key of the
- * anchor's row environment, each intersected with {@link WidenedBy} the
- * recursive term's own projected value for that same key — every key,
- * never a selected subset, since which keys actually widen is
- * `@hejbro/query`'s decision, not this builder's. The reference the
- * recursive callback itself receives stays a plain {@link CteReference}
- * (Q2: written before its own type exists, typed from the anchor alone).
+ * `asRecursive`'s own outward reference (#500/R2, #500/R3): every key of
+ * the anchor's row environment, each intersected with {@link WidenedBy}
+ * the recursive term's own projected value for that same key and the
+ * recursive term's own left-joined set — every key, never a selected
+ * subset, since which keys actually widen is `@hejbro/query`'s decision,
+ * not this builder's. The reference the recursive callback itself
+ * receives stays a plain {@link CteReference} (Q2: written before its
+ * own type exists, typed from the anchor alone).
  */
 export type RecursiveCteReference<
 	TProjection extends SelectProjection,
 	TRecursiveProjection extends SelectProjection,
+	TRecursiveLeftJoined = UntrackedJoins,
 > = {
 	readonly [K in keyof CteRowEnvironment<TProjection>]: CteRowEnvironment<TProjection>[K] &
-		WidenedBy<TRecursiveProjection[K & keyof TRecursiveProjection]>;
+		WidenedBy<
+			TRecursiveProjection[K & keyof TRecursiveProjection],
+			TRecursiveLeftJoined
+		>;
 } & { readonly [cteRowMeta]: CteRowMeta };
 
 /**
@@ -276,17 +292,22 @@ export type CteBuilder = {
 	readonly asRecursive: <
 		TProjection extends SelectProjection,
 		TRecursiveProjection extends SelectProjection = TProjection,
+		TRecursiveLeftJoined = UntrackedJoins,
 	>(
 		name: string,
 		anchor: SelectLimited<TProjection> | SetOpStage<TProjection>,
 		recursiveTerm: ((
 			self: CteReference<TProjection>,
 		) =>
-			| SelectLimited<TRecursiveProjection>
+			| SelectLimited<TRecursiveProjection, TRecursiveLeftJoined>
 			| SetOpStage<TRecursiveProjection>) &
 			CompatibleRecursiveTerm<TProjection, TRecursiveProjection>,
 		options?: RecursiveCteEntryOptions,
-	) => RecursiveCteReference<TProjection, TRecursiveProjection>;
+	) => RecursiveCteReference<
+		TProjection,
+		TRecursiveProjection,
+		TRecursiveLeftJoined
+	>;
 };
 
 /**

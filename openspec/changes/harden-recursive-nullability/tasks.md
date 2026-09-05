@@ -56,7 +56,7 @@ file, that goes back to the planner, not into the diff.
       core — see the ruling above); 1.2 owns it. Files: `with.ts`, its
       type tests.
 
-- [ ] 1.1b (~6m) The carrier also carries the recursive term's own
+- [x] 1.1b (~6m) The carrier also carries the recursive term's own
       left-joined set (#500/R3). `WidenedBy<TRecursiveValue,
       TRecursiveLeftJoined>`: `asRecursive` infers the set from the
       stage the recursive callback returns, since a left-joined column
