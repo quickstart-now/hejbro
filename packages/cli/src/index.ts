@@ -45,6 +45,7 @@ export {
 	existingTable,
 	exists,
 	expr,
+	filter,
 	firstValue,
 	foreignKeyActions,
 	genRandomUuid,

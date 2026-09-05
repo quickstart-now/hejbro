@@ -986,11 +986,10 @@ const result = await handle.transaction(async (tx) => {
 
 `count()`, `min`, `max`, `sum` and `avg`, with `groupBy`/`having` in
 SQL's own clause order (`where` filters rows, `having` filters groups).
-There is no `FILTER (WHERE …)` constructor yet — an earlier, invented
-`countWhere(expr)` covered one use of it without generalizing to the
-real clause, and was removed rather than kept (#469); a real `FILTER
-(WHERE …)` construct is a tracked follow-up, not this version's
-vocabulary (#501):
+An earlier, invented `countWhere(expr)` covered one narrow use of
+`FILTER (WHERE …)` without generalizing to the real clause, and was
+removed rather than kept (#469); `filter(aggregate, condition)` below
+is the real construct (#501):
 
 ```ts prelude=query-handle
 import { count, gt, max } from "hejbro";
@@ -1019,6 +1018,43 @@ type-check now, rather than compiling and failing wrong later.
 
 `having` is available only after `groupBy`, and `groupBy` only after
 `where` — the chain allows what SQL allows, in the order SQL allows it.
+
+### `FILTER (WHERE …)`
+
+`filter(aggregate, condition)` wraps one of the five aggregate
+constructors above (`count`, `min`, `max`, `sum`, `avg`) and renders
+Postgres's own `FILTER (WHERE …)` clause after the aggregate call,
+keeping that aggregate's own result type and conversion unchanged. The
+condition takes what `where` takes — a runtime value inside it is
+lifted to a bind parameter, in the same left-to-right order every other
+condition's values are:
+
+```ts prelude=query-handle
+import { count, eq, filter } from "hejbro";
+
+const published = await handle
+	.select(
+		{
+			status: posts.status,
+			publishedCount: filter(count(), eq(posts.status, "published")),
+		},
+		posts,
+	)
+	.groupBy(posts.status);
+```
+
+which renders `count(*) filter (where "app"."posts"."status" = $1)` for
+the second projected column. `filter` composes with `over` in the one
+order SQL allows — filter first, window outside:
+`over(filter(count(), condition), spec)` renders `count(*) filter
+(where …) over (…)`; the reverse (`filter(over(count(), spec),
+condition)`) is not representable and fails at build time.
+
+`filter` over anything that isn't one of the five aggregate
+constructors — a column reference, a raw `sql` fragment, a declared
+`db.fn` call, a window-only constructor (`rowNumber()`, `rank()`, …), or
+an already-windowed expression — fails immediately with
+`filter-not-aggregate`, naming what it accepts and what it got.
 
 ## Window functions
 

@@ -66,6 +66,13 @@ planner, not into the diff.
       revive ratchet row for a filtered `count`/`max`/`sum` (cast ⇔
       revive, `own` for `sum`). Files: `params.ts`, `convert.ts`, tests.
 
-- [ ] 1.5 (~5m) Docs and changeset. `query-layer.md`'s aggregate
-      section shows `filter` and its composition with `over`; `pnpm
-      changeset` → `minor`. Files: the reference, `.changeset/*.md`.
+- [x] 1.5 (~8m) Docs, the user-facing barrel, and the changeset.
+      `query-layer.md`'s aggregate section shows `filter` and its
+      composition with `over`, importing it from `hejbro` the way a user
+      does; `pnpm changeset` → `minor`. `filter` is user surface, so it
+      belongs to the `hejbro` package's vocabulary: without the value
+      re-export it exists only as a type there, and both the snippet
+      compile test and the barrel curation gate (#471) are already red.
+      Files: the reference, `.changeset/*.md`,
+      `packages/cli/src/{index,core-surface}.ts` (and
+      `packages/cli/test/exports.test.ts` only if it asks for one).

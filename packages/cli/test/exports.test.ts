@@ -75,6 +75,7 @@ const HEJBRO_RUNTIME_EXPORTS: ReadonlyArray<string> = [
 	"existingTable",
 	"exists",
 	"expr",
+	"filter",
 	"firstValue",
 	"foreignKeyActions",
 	"genRandomUuid",
