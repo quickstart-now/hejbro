@@ -70,6 +70,28 @@ const THROWN_VALUE_ROWS: ReadonlyArray<{
 		thrown: { code: "ECONNREFUSED", message: "connection refused" },
 		expected: "connection refused",
 	},
+	// cd-planner review, #458 task 1.12: the constructor-name rung and the
+	// `String()` fallback both assume every object has a normal prototype
+	// chain -- these three don't. `Object.create(null)` has no
+	// `.constructor` at all, and `String()` on a null-prototype object
+	// throws `TypeError: Cannot convert object to primitive value`
+	// (measured) -- a crash this task must not leave in place while
+	// fixing the ErrorEvent row right next to it.
+	{
+		label: "a null-prototype object with no message",
+		thrown: Object.create(null),
+		expected: "[object Object]",
+	},
+	{
+		label: "a null-prototype object with an empty message",
+		thrown: Object.assign(Object.create(null), { message: "" }),
+		expected: "[object Object]",
+	},
+	{
+		label: "an object whose own constructor property is not a function",
+		thrown: { constructor: 1 },
+		expected: "[object Object]",
+	},
 ];
 
 describe("describeDriverError", () => {

@@ -23,12 +23,33 @@ const errorConstructorName = (error: unknown): string | undefined => {
 	if (typeof error !== "object" || error === null) {
 		return undefined;
 	}
-	const name = (error as { readonly constructor?: { readonly name?: unknown } })
-		.constructor?.name;
+	const errorClass = (error as { readonly constructor?: unknown }).constructor;
+	if (typeof errorClass !== "function") {
+		return undefined;
+	}
+	const name = errorClass.name;
 	if (typeof name !== "string" || name === "" || name === "Object") {
 		return undefined;
 	}
 	return name;
+};
+
+/**
+ * The last resort's own last resort (#458 review round 1, task 1.12,
+ * measured): `String(error)` throws `TypeError: Cannot convert object to
+ * primitive value` for an object with no prototype (`Object.create(null)`),
+ * a crash this module had before task 1.12 ever touched this function --
+ * fixing the ladder above it must not leave that crash sitting one rung
+ * down. `Object.prototype.toString.call` never throws on any object
+ * (prototype-less or not) and still renders a plain `{}` as
+ * `"[object Object]"`, unchanged. A primitive (including `null`) keeps
+ * `String()`'s own existing rendering (`"null"`, a bare string, ...).
+ */
+const describeUnknownShape = (error: unknown): string => {
+	if (typeof error !== "object" || error === null) {
+		return String(error);
+	}
+	return Object.prototype.toString.call(error);
 };
 
 /** Only ever called from inside {@link describeDriverError}'s own body, at runtime after module evaluation -- never at module-load time -- so the forward reference to a `const` declared below it is not a TDZ hazard (mirrors packages/pg/src/driver.ts's own `ensurePinned`/`driver` forward reference). */
@@ -53,8 +74,8 @@ const flattenAggregateError = (error: AggregateError): string =>
  * non-empty own `message` wins first (the common case, plain `Error`);
  * an `AggregateError`'s flattened `.errors` next; a `.code` after that;
  * a more specific constructor name after that (task 1.12, e.g. a real
- * `ErrorEvent`, empty `message` and no `code`); `String(error)` only as
- * the last resort.
+ * `ErrorEvent`, empty `message` and no `code`); {@link describeUnknownShape}
+ * only as the last resort.
  */
 export const describeDriverError = (error: unknown): string => {
 	if (hasStringMessage(error) && error.message !== "") {
@@ -74,5 +95,5 @@ export const describeDriverError = (error: unknown): string => {
 	if (constructorName !== undefined) {
 		return constructorName;
 	}
-	return String(error);
+	return describeUnknownShape(error);
 };

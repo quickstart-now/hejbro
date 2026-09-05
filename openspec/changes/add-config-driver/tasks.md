@@ -133,6 +133,54 @@ other, both on 1.2b) → 1.5 → 1.6. 1.2b is inserted by lead ruling
       three preset references, `brownfield-adoption.md`,
       `.changeset/*.md`.
 
+### Review round 2 (reviewer at f8b1f078)
+
+- [x] 1.12 (~6m) **[design]** The real `ErrorEvent` is described, not
+      the one we imagined. 1.9 exists because the WebSocket path
+      `neon-preset.md` recommends throws `ErrorEvent` on a failed
+      connection — and it still renders as `[object ErrorEvent]`,
+      because a real `ErrorEvent`'s `message` is the **empty string**
+      (measured against `@neondatabase/serverless`: `message` `""`,
+      no `code`, no own keys, `error` present but its message empty
+      too). 1.9's guard requires a non-empty `message`, so the one
+      input the task was written for falls straight through. The test
+      passed on a hand-built `{ message: "connection reset", type:
+      "error" }` — an object more generous than the class it stood for,
+      and the reviewer supplied that example, so the gap is in the
+      input table rather than in anyone's reading of it.
+      Settles the last rung: when nothing readable is left, name the
+      value's **constructor** (`ErrorEvent`) rather than let JavaScript
+      coerce it (`[object ErrorEvent]`) — but never for a plain
+      `Object`, whose constructor name says nothing the coercion does
+      not. No recursion into `error`: it was measured empty, and its
+      constructor (`Error`) is *less* specific than the outer one.
+      The comment at `error-message.ts:1` asserts the opposite of the
+      measurement and is corrected in the same task.
+      Red: the thrown-value table gains a row built from a **real
+      `ErrorEvent` instance** (empty `message`), keeping the hand-built
+      row beside it — one covers the shape, the other the class, and
+      only the class reproduces the bug. The other eleven rows are
+      unchanged and prove it (`{code}` → `ECONN`, `AggregateError`
+      flattening, `new Error("")` → `Error`, plain `{}` still
+      `[object Object]`). Files:
+      `packages/cli/src/check/error-message.ts`, its test.
+      *Two crash guards belong to the same rung.* Reading a
+      constructor assumes every value has one: `Object.create(null)`
+      has no prototype, so `error.constructor.name` throws the very
+      `TypeError` 1.7 just removed, and `{ constructor: 1 }` yields
+      `undefined` as the described text. The constructor is therefore
+      read defensively — a function, with a non-empty string `name`,
+      not `"Object"` — or the rung is skipped. And the last resort
+      itself already throws today: `String(Object.create(null))` is a
+      `TypeError` (cannot convert to primitive), so a factory throwing
+      that value crashes the CLI on `f8b1f078` and before. Split it:
+      primitives keep `String(error)` (so `null` stays `"null"`),
+      objects use `Object.prototype.toString.call(error)`, which is
+      safe on a null-prototype object and still renders a plain `{}`
+      as `[object Object]`. Three neighbour rows pin it:
+      `Object.create(null)`, that with an empty `message`, and
+      `{ constructor: 1 }` — all three red before the fix.
+
 ### Review round 1 (reviewer at 0311f061)
 
 Three tasks the piece review turned up. Each one is the delta's own
