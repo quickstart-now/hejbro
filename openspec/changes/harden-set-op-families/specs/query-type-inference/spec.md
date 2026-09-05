@@ -19,7 +19,11 @@ mismatch is refused today; no runtime check is added.
 This rule sees families, not types. A divergence inside one family —
 `integer` against `bigint`, `numeric` against `bigint` — is invisible
 to it by construction and stays uncaught (#489); this requirement SHALL
-NOT be read as closing that gap.
+NOT be read as closing that gap. The same granularity also lets through
+four same-family pairs the server refuses — `json` against `jsonb`,
+`time` or `timetz` against `timestamptz`, `macaddr` against `inet`, an
+enum against `text` — tracked as #977; this requirement states the gap
+and does not close it.
 
 #### Scenario: A refused pair fails to type-check
 - **WHEN** a select projecting a `text` column unions a select
@@ -37,9 +41,11 @@ NOT be read as closing that gap.
   the one Postgres accepts by typing the untyped side against the other
 
 #### Scenario: A pair the server unifies stays accepted
-- **WHEN** the two branches' families differ but the measured table
-  marks the pair as unified by the server
-- **THEN** the combination type-checks, unchanged from today
+- **WHEN** the two branches' families for a key are the same, or either
+  side's family is `"unknown"` — the only pairs the server unifies
+  (measured: no cross-family pair unifies on postgres:17)
+- **THEN** the combinator accepts the branches and the key's result type
+  is unchanged
 
 #### Scenario: A family added without a row is caught
 - **WHEN** a family is added to `sqlTypeFamilies` without a row in the
