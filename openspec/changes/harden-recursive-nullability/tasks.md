@@ -95,7 +95,7 @@ file, that goes back to the planner, not into the diff.
       non-null could not be stated there at all. Files:
       `types/select-result.ts`, tests.
 
-- [ ] 1.2b (~6m) The delivered value and the chain surface agree. Red:
+- [x] 1.2b (~6m) The delivered value and the chain surface agree. Red:
       one execution through a recording driver where the recursive
       term's row carries `null` — the delivered value is `null` and the
       row type admits it — plus a pinned assertion that the chain form

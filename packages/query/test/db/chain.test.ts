@@ -1,9 +1,12 @@
+import type { CteBuilder } from "@hejbro/core";
 import {
 	bigint,
 	deleteFrom,
 	eq,
 	insert,
+	integer,
 	interval,
+	isNull,
 	numeric,
 	roleName,
 	schema,
@@ -14,9 +17,10 @@ import {
 	uuid,
 	withCte,
 } from "@hejbro/core";
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 import { compile } from "../../src/compile/compile";
 import { db } from "../../src/db/db";
+import type { SelectResult } from "../../src/types/select-result";
 import { recordingTransactionalDriver } from "./recording-driver";
 
 const app = schema("app");
@@ -527,6 +531,70 @@ describe("db().with chain (add-ctes task 5.4)", () => {
 
 		expect(rows).toEqual([{ id: rawRow.id, amount: 9007199254740993n }]);
 		expect(topLevelSent).toHaveLength(1);
+	});
+});
+
+// #500/R2-R4: a recursive CTE's outward null actually arrives, and the
+// chain and core builder agree on the row type carrying it -- shares one
+// `build` callback with both `handle.with(...)` and `withCte(...)` (task
+// 1.2b), rather than two separately written ones, so "identical row
+// type" is checked against the same generic instantiation, not two
+// copies that could drift. This execution proves the null arrives and
+// the type admits it; it is not a before/after widening contrast --
+// `db.with(...)`'s own row is already nullable for every key regardless
+// (#942, narrow-join-nullability's absorption), so there is no
+// "before" state left to contrast against on this surface (#500/R4).
+describe("a recursive CTE's delivered null and the chain's row type (#500/R2-R4, task 1.2b)", () => {
+	const tree = table(app, "tree", {
+		id: integer().primaryKey(),
+		parent: integer(),
+		v: integer(),
+	});
+
+	const build = (w: CteBuilder) => {
+		const r = w.asRecursive(
+			"r",
+			select({ id: tree.id, v: tree.id }, tree).where(isNull(tree.parent)),
+			(self) =>
+				select({ id: self.id, v: tree.v }, self).innerJoin(
+					tree,
+					eq(self.id, tree.parent),
+				),
+		);
+		return select({ id: r.id, v: r.v }, r);
+	};
+
+	it("the recursive term's null arrives through the chain, and the row type admits it", async () => {
+		const { driver } = recordingTransactionalDriver({
+			rows: [
+				{ id: 1, v: 1 },
+				{ id: 2, v: null },
+			],
+		});
+		const handle = db({ tree }, driver);
+
+		const chain = handle.with(build);
+		const rows = await chain;
+
+		expect(rows).toEqual([
+			{ id: 1, v: 1 },
+			{ id: 2, v: null },
+		]);
+
+		type ChainRow = Awaited<typeof chain>[number];
+		expectTypeOf<ChainRow["v"]>().toEqualTypeOf<number | null>();
+	});
+
+	it("the chain form and the core builder produce the identical row type", () => {
+		const { driver } = recordingTransactionalDriver();
+		const handle = db({ tree }, driver);
+
+		const chain = handle.with(build);
+		const coreStage = withCte(build);
+
+		type ChainRow = Awaited<typeof chain>[number];
+		type CoreRow = SelectResult<typeof coreStage.projectionInput>;
+		expectTypeOf<ChainRow>().toEqualTypeOf<CoreRow>();
 	});
 });
 
