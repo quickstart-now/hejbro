@@ -304,13 +304,17 @@ the left branch).
 Branches must also agree in type family, key by key: a pair Postgres
 cannot unify fails to type-check at the combinator's parameter. The
 refused pairs are measured, not assumed — on postgres:17, across the ten
-concrete type families, no cross-family pair unifies. A `sql` fragment
+concrete type families, no cross-family pair of placed expressions
+unifies (a `literal()` travels as an untyped bind parameter the server
+resolves against the other branch, and is still refused here by its
+declared `boolean` family against `text`, `bytea` or `json`). A `sql` fragment
 or a literal the type layer cannot place (family `"unknown"`) matches
 every family on either side, because its type is not visible here — an
 untyped literal inside the fragment is resolved by the server against
 the other branch at type resolution (whether the literal's own text
 parses as the resolved type is a value-level question the server
-answers at execution, `22P02`/`22007`), while a fragment the server
+answers when it evaluates the statement — for a constant, already in
+the analysis of the first round trip — `22P02`/`22007`), while a fragment the server
 types on its own (`sql` with `1`, `now()`) is compared there and may be
 refused; this layer does not see it either way. The rule sees families,
 not types — `integer` against `bigint` still type-checks (#489). The

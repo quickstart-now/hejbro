@@ -12,11 +12,17 @@ carried as the test's input table, not assumed). A branch whose family
 is `"unknown"` — a `sql` fragment, or a literal the type layer cannot
 place — SHALL match every family on the other side: the type layer
 cannot see what type such an expression has, and this rule SHALL refuse
-only what it can prove the server refuses. What the server does with it
+only pairs of families it can see — cross-family pairs of placed
+expressions. A `literal()` is placed (`boolean`) even though it travels
+as an untyped bind parameter the server resolves against the other
+branch, so against `text`, `bytea` or `json` this rule refuses by
+declaration what the server's parameter resolution would accept; the
+declared family is the contract, not the parameter's wire form. What
+the server does with an unplaced expression
 afterwards is the server's: an untyped literal is resolved against the
 other branch, while a fragment the server types on its own is compared
-there and may be refused. Every pair the server unifies is a
-same-family one; those SHALL stay accepted. A branch whose family is
+there and may be refused. Every pair of placed expressions the server
+unifies is a same-family one; those SHALL stay accepted. A branch whose family is
 `"unknown"` is accepted for the visibility reason above, not because
 the server is known to unify it. A cross-family unification measured
 later is added to the table, not to this sentence. The refusal is
@@ -64,8 +70,11 @@ than closing it.
 
 #### Scenario: A pair the server unifies stays accepted
 - **WHEN** the two branches' families for a key are the same — the only
-  cross-branch pairs the server is known to unify (measured: no
-  cross-family pair unifies on postgres:17)
+  cross-branch pairs of placed expressions the server is known to unify
+  (measured: no cross-family pair of placed expressions unifies on
+  postgres:17; a `literal()` against `text`, `bytea` or `json` is
+  resolved by the server as an untyped parameter and refused here by its
+  declared family)
 - **THEN** the combinator accepts the branches and the key's result type
   is unchanged
 

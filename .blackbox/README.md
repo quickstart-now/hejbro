@@ -59,7 +59,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#500](500/) | recursive CTE row type stays non-null-inferred even when the recursive term is nullable | closed | #956 #968 | 0 | 8 (3 pending) |
 | ↳ [#501](501/) | add a real FILTER (WHERE …) aggregate constructor | closed | #963 #976 | 0 | 8 (1 pending) |
 | ↳ [#502](502/) | audit server-behavior assertions across openspec/specs | closed | #910 | 0 | 0 (0 pending) |
-| ↳ [#503](503/) | reject cross-family set-operation branches at build time | closed | #992 | 0 | 13 (5 pending) |
+| ↳ [#503](503/) | reject cross-family set-operation branches at build time | closed | #992 | 0 | 14 (5 pending) |
 | ↳ [#510](510/) | cross-check MODIFIED requirement titles against the base spec in CI | closed | #884 | 0 | 0 (0 pending) |
 | ↳ [#514](514/) | references() cannot express referential actions (onDelete/onUpdate) | closed | #979 #980 | 0 | 7 (1 pending) |
 | ↳ [#515](515/) | core-internal traversal helpers presets/query can't fold without a public export | closed | #988 #991 | 0 | 5 (2 pending) |
@@ -205,10 +205,13 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | [#986](986/) | core: replaceExprChildren accepts a children array of the wrong length and returns a silently damaged node | open | #991 | 0 | 0 (0 pending) |
 | [#989](989/) | core: exprChildren/replaceExprChildren throw a raw TypeError on an unregistered node or a DSL wrapper | open | #991 | 0 | 0 (0 pending) |
 | [#990](990/) | core: literal(7) builds a boolean literal that renders true | open | #991 | 0 | 0 (0 pending) |
+| [#996](996/) | query: a nested set operation with an unknown left head hides the right branch's family from the outer combinator | open |  | 0 | 0 (0 pending) |
+| [#997](997/) | query: deduplicating set operations on a json key pass the type layer and fail on the server with 42883 | open |  | 0 | 0 (0 pending) |
+| [#998](998/) | spec: the set-operation family scenario over sqlTypeFamilies is not verifiable from the public surface | open |  | 0 | 0 (0 pending) |
 
 ## Totals
 
-Owner decisions 93 · rulings 273 (interpretation 184, extension 87, stop 2) · pending extensions 49 · rejected 2
+Owner decisions 93 · rulings 274 (interpretation 185, extension 87, stop 2) · pending extensions 49 · rejected 2
 
 ## Conventions
 

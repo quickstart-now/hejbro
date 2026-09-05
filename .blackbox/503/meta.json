@@ -151,6 +151,20 @@
       "at": "2026-09-05T20:40Z",
       "title": "arrays unify when their elements do; enums refuse each other; a sql fragment is unseen, not a wildcard",
       "ratified": null
+    },
+    {
+      "id": "R14",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "D106 (evaluation.md round 1",
+        "B1",
+        "N5); 503/R13 (unknown is not a wildcard for sql fragments); packages/core/src/expr/operators.ts literal(): Expr<boolean>; server measurement in evaluation.md (rows [{k:x}",
+        "{k:true}] via pgDriver; $1::boolean refused 42804)"
+      ],
+      "at": "2026-09-05T23:22Z",
+      "title": "D106 B1: literal() is refused by its declared family although it travels untyped; delta sentences scoped to placed expressions",
+      "ratified": null
     }
   ],
   "work": [
