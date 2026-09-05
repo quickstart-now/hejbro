@@ -1,0 +1,41 @@
+{
+  "version": 3,
+  "number": 888,
+  "ref": "quickstart-now/hejbro#888",
+  "title": "chore(skills): mark the repository's own skills internal (#834)",
+  "head": "ecd06a5e1e5beba9ee896f90b8d9784f4604a3b0",
+  "headRef": "chore-internal-skills",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-05T05:17Z",
+  "refs": [
+    {
+      "path": ".claude/skills/openspec-apply-change/SKILL.md",
+      "blob": "560deafa830073dca7367e242a2368c22801e862"
+    },
+    {
+      "path": ".claude/skills/openspec-archive-change/SKILL.md",
+      "blob": "c3137d70a3770675bbebfb2a5ccf90492485c25f"
+    },
+    {
+      "path": ".claude/skills/openspec-explore/SKILL.md",
+      "blob": "d81df4695889a200d1ba8406c33e5e835bf0d2b7"
+    },
+    {
+      "path": ".claude/skills/openspec-propose/SKILL.md",
+      "blob": "b9951111b043941bf0adca143001edb6d57c1b71"
+    },
+    {
+      "path": ".claude/skills/openspec-sync-specs/SKILL.md",
+      "blob": "f62183673ae8bb20e839f0645e2a1f1e396950ae"
+    },
+    {
+      "path": ".claude/skills/openspec-update-change/SKILL.md",
+      "blob": "bd055e89c8437ef8704c70bb15be8bec1ac45840"
+    },
+    {
+      "path": ".claude/skills/roundtrip-verification/SKILL.md",
+      "blob": "7de6eb7e8f0e5182bf9046552849d63935108315"
+    }
+  ]
+}

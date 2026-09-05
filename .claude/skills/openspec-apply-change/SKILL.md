@@ -8,6 +8,8 @@ metadata:
   author: openspec
   version: "1.0"
   generatedBy: "1.11.0"
+metadata:
+  internal: true
 ---
 
 Implement tasks from an OpenSpec change.

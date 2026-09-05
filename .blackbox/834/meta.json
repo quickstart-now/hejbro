@@ -1,0 +1,29 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#834",
+  "title": "skills: the bare npx skills add still installs the seven internal .claude/skills — metadata.internal hides them (measured on skills 1.5.23)",
+  "parent": null,
+  "status": "closed",
+  "opened": "2026-09-05",
+  "closed": "2026-09-05",
+  "decisions": [],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-05T05:17Z",
+      "title": "metadata.internal hides the seven repository skills from the skills CLI",
+      "pr": null,
+      "decisions": []
+    }
+  ],
+  "prs": [
+    {
+      "number": 888,
+      "role": "closes",
+      "pinnedAt": "2026-09-05T05:17Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}
