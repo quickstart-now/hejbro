@@ -23,10 +23,13 @@ This rule sees families, not types. A divergence inside one family —
 `integer` against `bigint`, `numeric` against `bigint` — is invisible
 to it by construction and stays uncaught (#489); this requirement SHALL
 NOT be read as closing that gap. The same granularity also lets through
-four same-family pairs the server refuses — `json` against `jsonb`,
-`time` or `timetz` against `timestamptz`, `macaddr` against `inet`, an
-enum against `text` — tracked as #977; this requirement states the gap
-and does not close it.
+the same-family pairs the server itself refuses — an array against an
+array of a different element type (`text[]` against `integer[]`), a
+time-of-day type (`time`, `timetz`) against a date or timestamp type,
+`json` against `jsonb`, `macaddr` against `inet` or `cidr`, and an enum
+against `text`, `varchar` or `char` — measured on postgres:17; they are
+tracked as #977, and this requirement states the gap rather than
+closing it.
 
 #### Scenario: A refused pair fails to type-check
 - **WHEN** a select projecting a `text` column unions a select
