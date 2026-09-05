@@ -1,0 +1,81 @@
+{
+  "version": 3,
+  "number": 876,
+  "ref": "quickstart-now/hejbro#876",
+  "title": "chore(openspec): archive harden-config-paths-2 after d106 round 1",
+  "head": "29cccc948e4805157acd08eb30688a9ea1c8b704",
+  "headRef": "archive-config-paths-2",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-05T01:40Z",
+  "refs": [
+    {
+      "path": ".changeset/harden-config-paths-2.md",
+      "blob": "0bb86a8b4bbcc76117a8a5628e7bd749dafb54d3"
+    },
+    {
+      "path": "README.md",
+      "blob": "e0ab53855ca3743654824475044a1fe977f251da"
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-05-harden-config-paths-2/design.md",
+      "blob": "ac11f74370907766afc51ff1f3a54cfd57fc9efe"
+    },
+    {
+      "path": "openspec/changes/harden-config-paths-2/design.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-05-harden-config-paths-2/evaluation.md",
+      "blob": "0cf0cd6ad59ff94354799405943261c61da28242"
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-05-harden-config-paths-2/proposal.md",
+      "blob": "70714bda50d645dcb089ee16ad38992fb0887831"
+    },
+    {
+      "path": "openspec/changes/harden-config-paths-2/proposal.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-05-harden-config-paths-2/specs/cli-commands/spec.md",
+      "blob": "0ec24d57db32566c0cdbdfda444b173ad7d447ba"
+    },
+    {
+      "path": "openspec/changes/harden-config-paths-2/specs/cli-commands/spec.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-05-harden-config-paths-2/tasks.md",
+      "blob": "6dde6b7fbbb2049ccd6d7cc1eaa0d30d70392537"
+    },
+    {
+      "path": "openspec/changes/harden-config-paths-2/tasks.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/specs/cli-commands/spec.md",
+      "blob": "2ed07460ab453a5ab4a6693aa7ebe10ae9f16d10"
+    },
+    {
+      "path": "openspec/task-times.csv",
+      "blob": "59909b84b8db468c25ea091a4acf9ca0f571f8a3"
+    },
+    {
+      "path": "packages/cli/src/commands/generate.ts",
+      "blob": "d571ce89a95ee9ba629ff2d82588e513dfd1a5c9"
+    },
+    {
+      "path": "packages/cli/src/loader.ts",
+      "blob": "f55d5ba317fa2a2f038d018fa30f482647f43842"
+    },
+    {
+      "path": "packages/cli/test/generate-command.test.ts",
+      "blob": "92a5632566f36e4550a9a0b07161d628a121574c"
+    },
+    {
+      "path": "packages/cli/test/loader.test.ts",
+      "blob": "5dab308ca45771a8504a1d5f9a07348cff90a1d3"
+    }
+  ]
+}

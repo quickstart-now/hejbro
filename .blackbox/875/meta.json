@@ -1,0 +1,21 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#875",
+  "title": "config: an unreadable configuration file is reported as config-load-failed with import advice",
+  "parent": "quickstart-now/hejbro#815",
+  "status": "open",
+  "opened": "2026-09-05",
+  "closed": null,
+  "decisions": [],
+  "work": [],
+  "prs": [
+    {
+      "number": 876,
+      "role": "refs",
+      "pinnedAt": "2026-09-05T01:40Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

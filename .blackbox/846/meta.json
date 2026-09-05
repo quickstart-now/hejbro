@@ -121,6 +121,11 @@
       "number": 868,
       "role": "closes",
       "pinnedAt": "2026-09-05T00:49Z"
+    },
+    {
+      "number": 876,
+      "role": "refs",
+      "pinnedAt": "2026-09-05T01:40Z"
     }
   ],
   "origin": null,
