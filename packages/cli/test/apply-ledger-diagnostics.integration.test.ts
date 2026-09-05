@@ -584,10 +584,12 @@ describe("hejbro ledger diagnostics — live witness (#836/#823, task 1.9)", () 
 			// (2 of 2 deterministic): terminating the backend a ledger read is
 			// blocked on used to kill the whole `status` process with an
 			// unhandled `'error'` event -- `@hejbro/pg`'s pool had no listener
-			// of its own (836/R4/R5, #864). Fixed by giving the pool one
-			// (`silenceUnhandledPoolError`); this is the live witness that a
-			// terminated connection now surfaces as this coded diagnostic
-			// instead.
+			// of its own, and neither did the checked-out client the read was
+			// running on (836/R4/R5, #864, measured: two listeners needed, not
+			// one). Fixed by `silenceUnhandledPoolError` (idle clients) and
+			// `silenceUnhandledClientError` (a checked-out client's own
+			// connection failure); this is the live witness that a terminated
+			// connection now surfaces as this coded diagnostic instead.
 			psqlCommand("postgres", `select pg_terminate_backend(${pid});`);
 			const status = await statusPromise;
 			holder.release();
@@ -595,6 +597,21 @@ describe("hejbro ledger diagnostics — live witness (#836/#823, task 1.9)", () 
 			expect(status.exitCode).not.toBe(0);
 			expect(status.stderr).toContain("error[apply-ledger-unreadable]");
 			expect(status.stderr).not.toMatch(STACK_FRAME_PATTERN);
+			// Measured: `pg_terminate_backend` on a backend blocked waiting for
+			// a lock delivers a proper `FATAL` `ErrorResponse` (`57P01`,
+			// "terminating connection due to administrator command") to the
+			// query that was waiting *before* the socket itself closes -- the
+			// query's own rejection already carries a real SQLSTATE, node-
+			// postgres's protocol-level path, not its "no code at all" one.
+			// What used to crash the process was a *second*, separate `'error'`
+			// emission the client raises once the socket then closes for real
+			// (`Client._handleErrorEvent`, unconditional) -- harmless once
+			// `silenceUnhandledClientError` exists to receive it, since by then
+			// the one query in flight already has its own answer.
+			expect(status.stderr).toContain("57P01");
+			expect(status.stderr).toContain(
+				"terminating connection due to administrator command",
+			);
 		} finally {
 			await removeCliFixtureDir(cwd);
 		}
