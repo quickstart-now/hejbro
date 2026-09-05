@@ -210,12 +210,24 @@ const rows = await drafts.union(published).orderBy(posts.status).limit(10);
 ```
 
 Branches must be row-compatible — mismatched key sets fail to
-type-check (the database would reject the statement). The result types
-as the LEFT branch's keys with per-column unions (a column nullable in
+type-check. That refusal is TypeScript's own name-keyed row type, not
+the server's: Postgres accepts branches whose columns are named
+differently (it matches them by position), so hejbro's rule is stricter
+than the database's on purpose. The chain surface types the result as
+the LEFT branch's keys with per-column unions (a column nullable in
 either branch is nullable in the result), and rows arrive converted
 per the left branch's declarations. A set-operation query is also a
 valid view body (`defineView` accepts it; the view's columns come from
 the left branch).
+
+A set operation built with the core builder's own combinators
+(`select(a).union(select(b))` from `hejbro`, not through a handle) and
+executed with `handle.execute(...)` reads back as the LEFT branch's
+declared row only — the core combinators carry no type for the right
+branch, so the per-column union above is not computed there; an object
+projection widens with `null` the way a select that never called
+`leftJoin` does. Build the set operation on the handle when the union
+of both branches' types is what you want.
 
 ## Common table expressions (CTEs)
 
