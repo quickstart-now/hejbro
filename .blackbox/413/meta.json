@@ -4,9 +4,9 @@
   "ref": "quickstart-now/hejbro#413",
   "title": "snapshot format upgrade path across released versions",
   "parent": "quickstart-now/hejbro#412",
-  "status": "open",
+  "status": "closed",
   "opened": "2026-09-05",
-  "closed": null,
+  "closed": "2026-09-05",
   "decisions": [
     {
       "id": "R1",
@@ -155,7 +155,13 @@
       "decisions": []
     }
   ],
-  "prs": [],
+  "prs": [
+    {
+      "number": 923,
+      "role": "closes",
+      "pinnedAt": "2026-09-05T12:33Z"
+    }
+  ],
   "origin": null,
   "followUps": []
 }
