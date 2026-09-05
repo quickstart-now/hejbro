@@ -30,3 +30,10 @@ _lead · extension · basis 412/D24, D25, D13; 458/R3; cd planner measurement (b
 
 Option (b): the delta returns to the universal sentence — every driver hejbro ships exposes the member; for a driver that holds nothing open (Neon HTTP) closing does nothing and is documented so. The member's shape is settled as [design] in 1.11 consistently with 1.10. Ratification: owner on return.
 
+<a id="r5"></a>
+## R5 — R5 — D106 round 1 B1: the no-factory parity scenario carves out pull's corrected --db-url hints
+
+_lead · interpretation · 2026-09-05T12:15Z · ratified: pending_
+
+D106 round 1 (context-free session, fable; evaluation.md) found the delta scenario "No factory, no change" ("behaves byte-for-byte as before") contradicted by the shipped pull command: with no factory configured, pull's two connection diagnostics (pull-connection-missing, pull-connection-failed) now name --db-url where the parent build (99b9554d) said --url; the other six connecting commands are byte-identical with and without @hejbro/pg present (161 input rows, 167 CLI runs). The new text is the correct one and the delta's own ADDED requirement ("fails naming both ways", pull's flag being --db-url) demands it, so the delta was internally inconsistent about pull rather than the code wrong. Ruling: repair the scenario text with a carve-out naming exactly those two diagnostics and that one byte class; no code change. Basis: D106 R1 report; owner ratification pending.
+

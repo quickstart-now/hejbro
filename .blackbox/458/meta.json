@@ -57,6 +57,15 @@
       "at": "2026-09-05T09:15Z",
       "title": "The Neon HTTP driver exposes a no-op close so read-only CLI commands run over HTTP (task 1.11)",
       "ratified": null
+    },
+    {
+      "id": "R5",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [],
+      "at": "2026-09-05T12:15Z",
+      "title": "R5 — D106 round 1 B1: the no-factory parity scenario carves out pull's corrected --db-url hints",
+      "ratified": null
     }
   ],
   "work": [
