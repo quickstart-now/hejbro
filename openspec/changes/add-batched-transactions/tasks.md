@@ -23,21 +23,22 @@ neon-preset.md`, `skills/hejbro/references/query-layer.md`, one
 If a task appears to need any other file, that goes back to the planner,
 not into the diff.
 
-**Ordering.** 1.1 → 1.2a → 1.3 → 1.3b → 1.5 → 1.6 → 1.2b → 1.4 (486/R5,
+**Ordering.** 1.1 → 1.3 → 1.3b → 1.2a → 1.2b → 1.5 → 1.6 → 1.4 (486/R5,
 R9). 1.3b reopens the contract 1.3 settled and touches only
-`db/context.ts`, so it may run before 1.2a where a rebase is pending. 1.2a
-lands before 1.5; 1.2b waits on the `feat-config-driver` piece (#458),
-which owns `packages/neon/src/{http,driver}.ts` until it merges and this
-branch is rebased. Splitting 1.2 is an external file-ownership boundary,
-not a work-size decision: a required `batch` member breaks every driver
-value at once, so leaving all five to the end would keep the whole
-repository red through 1.3, 1.5 and 1.6 and a real regression would
-arrive invisible behind the known failures. After 1.2a the red is
-isolated to `@hejbro/neon` alone.
+`db/context.ts`, so it ran before 1.2a while a rebase onto
+`feat-config-driver` (#458) was pending. #458 has since merged, clearing
+1.2b's wait on `packages/neon/src/{http,driver}.ts`; 1.2b now lands
+right after 1.2a, ahead of 1.5 and 1.6, so those two later tasks touch
+the neon files once each instead of three times. Splitting 1.2 is an
+external file-ownership boundary, not a work-size decision: a required
+`batch` member breaks every driver value at once, so leaving all five to
+the end would keep the whole repository red through 1.3, 1.5 and 1.6 and
+a real regression would arrive invisible behind the known failures.
+After 1.2a the red is isolated to `@hejbro/neon` alone.
 
 ## 1. Batched transactions
 
-- [ ] 1.1 (~7m) **[design]** The key and the member. Settles the
+- [x] 1.1 (~7m) **[design]** The key and the member. Settles the
       `batch` signature and the two-key missing-capability message. Red:
       `packages/query/test/driver/{contract,errors}.test.ts` — a
       declaration omitting `batched-transactions` and one naming a fifth
@@ -79,7 +80,7 @@ isolated to `@hejbro/neon` alone.
       `packages/neon/src/driver.ts`, `packages/neon/test/**` (the test
       sweep admitted by 486/R8, same reasoning as 1.2a's).
 
-- [ ] 1.3 (~10m) The context runs in a batch. Red: `packages/query/test/
+- [x] 1.3 (~10m) The context runs in a batch. Red: `packages/query/test/
       db/context*.test.ts` — a table over {interactive `true` (unchanged
       statements, `transaction` used), interactive `false` + batched
       `true` (one `batch` call: rendering statements then the caller's,
@@ -89,7 +90,7 @@ isolated to `@hejbro/neon` alone.
       batched-only driver (interactive error, unchanged)} for `execute`,
       the provider handle and `fn`. Files: `context.ts`, tests.
 
-- [ ] 1.3b (~6m) **[design]** A failing batch is reported as a batch
+- [x] 1.3b (~6m) **[design]** A failing batch is reported as a batch
       (486/R9). Measured on the batched path: a failing context
       statement surfaced as `query execution failed for this "select"
       statement`, naming the caller's statement — the interactive path,
