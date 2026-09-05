@@ -289,3 +289,26 @@ records for `raise-not-empty` (one fact, two discovery paths). The
 `hejbroError` call is an inline literal in `status.ts` so
 `check:next-marker` resolves it in the same file.
 
+<a id="r12"></a>
+## R12 — the planner decides non-contract questions on the spot; instructions carry both branches
+
+_lead · extension · basis R8 · 2026-09-05T19:16Z · ratified: pending_
+
+Nine message crossings in one piece, every one handled by the brief's
+rule (re-send the whole instruction, never ask back), and the rule
+bounded the damage without lowering the rate: each crossing costs a
+re-sent instruction and an implementer judgement "was this already done".
+The cause is the length of the loop implementer -> planner -> lead ->
+planner -> implementer while the implementer waits. Ruling. (A) The
+planner answers on the spot every question that is not a contract: test
+sufficiency, which mutation covers which row, fixture shape, whether a
+control row needs a witness, the order of guards. Only contracts go to
+the lead -- externally observable behaviour (message text, exit codes,
+spec sentences), file boundaries, and anything that would change or
+extend a recorded ruling. (B) An instruction whose next step forks
+carries both branches as executable payload with the condition that
+selects one ("if mutation 6 reddens row 6 continue to the gates;
+otherwise stop and report"), and a re-sent instruction marks the steps
+already done. Both apply to every piece team from now on; the lead adds
+them to the next brief.
+

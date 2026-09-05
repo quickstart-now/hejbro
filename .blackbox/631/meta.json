@@ -129,6 +129,17 @@
       "at": "2026-09-05T18:51Z",
       "title": "status compares bodies on a run with no disagreement; a disagreement is reported alone, as today",
       "ratified": null
+    },
+    {
+      "id": "R12",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "R8"
+      ],
+      "at": "2026-09-05T19:16Z",
+      "title": "the planner decides non-contract questions on the spot; instructions carry both branches",
+      "ratified": null
     }
   ],
   "work": [],
