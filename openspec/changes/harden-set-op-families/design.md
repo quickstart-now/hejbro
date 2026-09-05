@@ -3,14 +3,20 @@
 Settled by the lead under the owner's full delegation for this pass
 (412/D24, D25); recorded as R1 on #503 for ratification.
 
-## Q1 — `"unknown"` is a wildcard
+## Q1 — `"unknown"` is accepted because it is invisible here, not a confirmed wildcard (R13)
 
 A `sql` fragment or an unplaceable literal resolves to family
-`"unknown"`. Postgres types an untyped side against the other branch
-at parse time, so a `text` anchor against a `sql` term is accepted
-there; refusing it here would be stricter than the database (the
-plpgsql-function-bodies precedent: hejbro never becomes stricter than
-Postgres). `"unknown"` on either side matches every family.
+`"unknown"` because the type layer cannot see what type the expression
+has, not because the server is known to unify it with anything: an
+untyped literal is resolved by Postgres against the other branch at
+parse time, while a fragment the server types on its own (`sql`1``
+is `integer`) is compared there and may be refused (measured: `sql`1``
+against `text` is accepted here and refused on postgres:17 with
+`42804`, #977). Refusing `"unknown"` on the theory that the server
+usually unifies it would still risk being stricter than the database in
+the cases it does (the plpgsql-function-bodies precedent: hejbro never
+becomes stricter than Postgres), so this rule accepts `"unknown"` on
+either side and proves nothing more than that.
 
 ## Q2 — Which pairs are refused
 

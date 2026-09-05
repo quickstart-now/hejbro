@@ -15,12 +15,13 @@ cannot see what type such an expression has, and this rule SHALL refuse
 only what it can prove the server refuses. What the server does with it
 afterwards is the server's: an untyped literal is resolved against the
 other branch, while a fragment the server types on its own is compared
-there and may be refused. The pairs the server unifies
-are the same-family ones and any pair with `"unknown"` on either side;
-those SHALL stay accepted. A cross-family unification measured later is
-added to the table, not to this sentence. The refusal is TypeScript's
-own, at the combinator's parameter, exactly as a key-set mismatch is
-refused today; no runtime check is added.
+there and may be refused. The pairs the server unifies are the
+same-family ones; those SHALL stay accepted. A branch whose family is
+`"unknown"` is accepted for the visibility reason above, not because
+the server is known to unify it. A cross-family unification measured
+later is added to the table, not to this sentence. The refusal is
+TypeScript's own, at the combinator's parameter, exactly as a key-set
+mismatch is refused today; no runtime check is added.
 
 This rule sees families, not types. A divergence inside one family —
 `integer` against `bigint`, `numeric` against `bigint` — is invisible
@@ -60,9 +61,9 @@ than closing it.
   refused there
 
 #### Scenario: A pair the server unifies stays accepted
-- **WHEN** the two branches' families for a key are the same, or either
-  side's family is `"unknown"` — the only pairs the server unifies
-  (measured: no cross-family pair unifies on postgres:17)
+- **WHEN** the two branches' families for a key are the same — the only
+  cross-branch pairs the server is known to unify (measured: no
+  cross-family pair unifies on postgres:17)
 - **THEN** the combinator accepts the branches and the key's result type
   is unchanged
 
