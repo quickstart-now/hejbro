@@ -3,11 +3,11 @@
   "number": 894,
   "ref": "quickstart-now/hejbro#894",
   "title": "feat(query,pg,neon,supabase): prepared statements behind a driver capability (#303)",
-  "head": "274f1ff7333d3f0c846b30d217b3129fa044564a",
+  "head": "6b19d368a4db588e5f0d24b17d0d6bca194771a6",
   "headRef": "feat-prepared-statements",
   "base": "dev",
   "merged": null,
-  "pinnedAt": "2026-09-05T06:45Z",
+  "pinnedAt": "2026-09-05T07:41Z",
   "refs": [
     {
       "path": ".changeset/add-prepared-statements.md",
@@ -223,7 +223,7 @@
     },
     {
       "path": "skills/hejbro/references/query-layer.md",
-      "blob": "16eaed1aeb057f66ee6dc58b06756f0c68e5b381"
+      "blob": "1183378b4a6a4af1b1c87534fcf004d91db48e79"
     },
     {
       "path": "skills/hejbro/references/supabase-preset.md",
