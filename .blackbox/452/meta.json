@@ -4,9 +4,9 @@
   "ref": "quickstart-now/hejbro#452",
   "title": "promote the cast/revive drift guard to a ratchet over the aggregate vocabulary",
   "parent": "quickstart-now/hejbro#412",
-  "status": "open",
+  "status": "closed",
   "opened": "2026-09-05",
-  "closed": null,
+  "closed": "2026-09-05",
   "decisions": [
     {
       "id": "R1",
@@ -60,7 +60,13 @@
       "decisions": []
     }
   ],
-  "prs": [],
+  "prs": [
+    {
+      "number": 901,
+      "role": "closes",
+      "pinnedAt": "2026-09-05T09:04Z"
+    }
+  ],
   "origin": null,
   "followUps": []
 }
