@@ -972,3 +972,74 @@ describe("defaultContextRendering is reachable from @hejbro/query's public entry
 		expect(texts[4]).toContain("items");
 	});
 });
+
+// D106 round 1 of harden-ledger-diagnostics: N1 (one listener per client,
+// never one per checkout) and B1 (a client whose connection died must not
+// go back into the pool, or the next statement -- the classifier's own
+// `select current_user` -- runs on a dead connection).
+describe("pgDriver keeps the pool honest after a checkout (D106 R1 B1/N1)", () => {
+	it("attaches the client error listener once per client object, however many checkouts hand it back", async () => {
+		const { pool } = stubPoolWithClient();
+		const driver = pgDriver(pool);
+		await driver.execute({ sql: "select 1", params: [], kind: "sql" });
+		await driver.execute({ sql: "select 2", params: [], kind: "sql" });
+		await driver.execute({ sql: "select 3", params: [], kind: "sql" });
+		const client = await pool.connect();
+		const errorAttaches = (
+			client.on as ReturnType<typeof vi.fn>
+		).mock.calls.filter((call) => call[0] === "error");
+		expect(errorAttaches).toHaveLength(1);
+	});
+
+	it.each([
+		[
+			"a terminated backend (57P01)",
+			Object.assign(
+				new Error("terminating connection due to administrator command"),
+				{ code: "57P01" },
+			),
+		],
+		[
+			"a connection exception (08006)",
+			Object.assign(new Error("connection failure"), { code: "08006" }),
+		],
+		[
+			"a driver-level loss with no server code",
+			new Error("Connection terminated unexpectedly"),
+		],
+	])(
+		"discards the client when the statement failed with %s",
+		async (_label, error) => {
+			const { pool, releaseCalls } = stubPoolWithClient((call) => {
+				if (sqlTextOf(call) === "select 1") {
+					return error;
+				}
+				return undefined;
+			});
+			const driver = pgDriver(pool);
+			await expect(
+				driver.execute({ sql: "select 1", params: [], kind: "sql" }),
+			).rejects.toBe(error);
+			expect(releaseCalls).toHaveLength(1);
+			expect(releaseCalls[0]).toEqual([true]);
+		},
+	);
+
+	it("returns the client to the pool after an ordinary statement error (42501): the connection is still good", async () => {
+		const error = Object.assign(new Error("permission denied for table t"), {
+			code: "42501",
+		});
+		const { pool, releaseCalls } = stubPoolWithClient((call) => {
+			if (sqlTextOf(call) === "select 1") {
+				return error;
+			}
+			return undefined;
+		});
+		const driver = pgDriver(pool);
+		await expect(
+			driver.execute({ sql: "select 1", params: [], kind: "sql" }),
+		).rejects.toBe(error);
+		expect(releaseCalls).toHaveLength(1);
+		expect(releaseCalls[0]).toEqual([]);
+	});
+});

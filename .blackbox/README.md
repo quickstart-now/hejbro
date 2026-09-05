@@ -113,14 +113,14 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | [#573](573/) | nile preset: measure identity columns and keyless tables on tenant-aware tables (D106 F9) | closed | #578 | 1 | 0 (0 pending) |
 | [#603](603/) | Apply engine (D12 revised): hejbro owns migrate and reset, production included | closed | #628 | 0 | 0 (0 pending) |
 | [#714](714/) | add a brownfield corpus: a database hejbro did not create, with a standing import→baseline→check witness | open | #851 #858 #868 #871 #878 | 0 | 0 (0 pending) |
-| [#815](815/) | 0.2.x: post-release commitments (2) | open | #867 #868 #871 #878 #840 (via #819) #876 (via #820) #835 (via #823) #833 (via #832) #838 (via #836) #851 (via #841) #855 (via #841) #849 (via #845) #850 (via #845) #847 (via #846) #858 (via #856) #861 (via #856) | 0 | 0 (0 pending) |
+| [#815](815/) | 0.2.x: post-release commitments (2) | open | #867 #868 #871 #878 #840 (via #819) #876 (via #820) #835 (via #823) #877 (via #823) #833 (via #832) #838 (via #836) #851 (via #841) #855 (via #841) #849 (via #845) #850 (via #845) #847 (via #846) #858 (via #856) #861 (via #856) | 0 | 0 (0 pending) |
 | ↳ [#819](819/) | cli: --config is honoured by every command and one root resolves every configured path | open | #840 | 0 | 0 (0 pending) |
 | ↳ [#820](820/) | cli: a migrationsDir that is a file crashes generate with a raw ENOTDIR | closed | #840 #868 #876 | 0 | 1 (1 pending) |
-| ↳ [#823](823/) | migrate: a failed ledger insert is reported as the migration's failure | closed | #835 #871 | 0 | 1 (0 pending) |
+| ↳ [#823](823/) | migrate: a failed ledger insert is reported as the migration's failure | closed | #835 #871 #877 | 0 | 1 (0 pending) |
 | ↳ [#830](830/) | cli: config-not-found Next names hejbro.config.ts even when --config pointed elsewhere | closed | #840 #868 #876 | 0 | 1 (1 pending) |
 | ↳ [#831](831/) | cli: the directory-at-config-path refusal repeats the file name twice | closed | #840 #868 #876 | 0 | 1 (0 pending) |
 | ↳ [#832](832/) | core: category-C keywords fail as argument names but are not refused; the stated class does not match the list | open | #833 | 0 | 0 (0 pending) |
-| ↳ [#836](836/) | status: a permission error on a real ledger reaches the user as a raw node-postgres object | closed | #838 #871 | 0 | 7 (1 pending) |
+| ↳ [#836](836/) | status: a permission error on a real ledger reaches the user as a raw node-postgres object | closed | #838 #871 #877 | 0 | 8 (1 pending) |
 | ↳ [#837](837/) | raise --file with an absolute path is joined onto the cwd and dies with a raw ENOENT | open | #838 | 0 | 0 (0 pending) |
 | ↳ [#839](839/) | test: core cross-instance-symbols times out under load from parallel worktrees | open | #868 | 0 | 0 (0 pending) |
 | ↳ [#841](841/) | check: the backtick delimiter around expression texts collides with a backtick inside a string literal | open | #851 #855 | 0 | 0 (0 pending) |
@@ -138,8 +138,8 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#859](859/) | check: DB-only primary-key, unique, foreign-key and exclusion constraints on managed tables are not named as constraints | open | #878 | 0 | 0 (0 pending) |
 | ↳ [#860](860/) | loader: stripAbsolutePrefixes misses the bare cwd, so a config-load-failed can still carry an absolute path | open | #868 | 0 | 0 (0 pending) |
 | ↳ [#862](862/) | apply-live integration: "a second runner waits for the first" is timing-dependent (waitedCount 0 once) | open | #871 | 0 | 0 (0 pending) |
-| ↳ [#864](864/) | pg driver: a lost connection kills the process through an unhandled pool 'error' event, dumping a raw stack | closed | #871 | 0 | 0 (0 pending) |
-| ↳ [#865](865/) | ledger: forced row-level security hides the ledger's rows and migrate re-applies the chain instead of refusing | open | #871 | 0 | 0 (0 pending) |
+| ↳ [#864](864/) | pg driver: a lost connection kills the process through an unhandled pool 'error' event, dumping a raw stack | closed | #871 #877 | 0 | 0 (0 pending) |
+| ↳ [#865](865/) | ledger: forced row-level security hides the ledger's rows and migrate re-applies the chain instead of refusing | open | #871 #877 | 0 | 0 (0 pending) |
 | ↳ [#866](866/) | chore: vendor dd-blackbox meta v3 and migrate the record (pins once per PR) | closed | #867 | 0 | 0 (0 pending) |
 | ↳ [#869](869/) | cli integration suites are excluded from pnpm test, so the done-gates never run the live witnesses | open | #878 | 0 | 0 (0 pending) |
 | ↳ [#870](870/) | cli integration suite: 14 concurrent postgres containers contend and a failed run leaves orphans | open | #871 | 0 | 0 (0 pending) |
@@ -150,7 +150,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 
 ## Totals
 
-Owner decisions 84 · rulings 175 (interpretation 121, extension 52, stop 2) · pending extensions 14 · rejected 2
+Owner decisions 84 · rulings 176 (interpretation 122, extension 52, stop 2) · pending extensions 14 · rejected 2
 
 ## Conventions
 

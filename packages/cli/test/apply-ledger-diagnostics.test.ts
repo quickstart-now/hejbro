@@ -239,7 +239,7 @@ describe("a ledger write the database refuses names the ledger and what was bein
 				thrown.message.includes("42501") &&
 				thrown.message.includes(error.message) &&
 				thrown.message.includes("the ledger's own bootstrap") &&
-				thrown.message.includes("no migration statement was sent.") &&
+				thrown.message.includes("no statement from any file was sent.") &&
 				/Next:/.test(thrown.message) &&
 				causeOf(thrown) === error
 			);
@@ -269,7 +269,7 @@ describe("a ledger write the database refuses names the ledger and what was bein
 					thrown.code === "apply-ledger-unwritable" &&
 					thrown.message.includes('the row recording "0001_init.sql"') &&
 					thrown.message.includes(
-						'the statements from that file ran in the same transaction and rolled back with it, so nothing from "0001_init.sql" is applied and the ledger records nothing new.',
+						'the statements from that file ran in the same transaction and rolled back with it, so nothing from "0001_init.sql" is applied and the ledger records nothing for that file.',
 					) &&
 					!thrown.message.includes("no identity and no default") &&
 					/Next:/.test(thrown.message) &&
@@ -437,4 +437,56 @@ describe("a ledger write the database refuses names the ledger and what was bein
 		expect(calls).toHaveLength(1);
 		expect(calls[0]?.sql.toLowerCase()).toContain("current_user");
 	});
+});
+
+// D106 round 1 N2: a remedy that fits the reason class -- no grant can
+// answer a lost connection, a cancelled statement or a server that went away.
+describe("a ledger read that failed for a reason no grant can fix gets a rerun remedy (D106 R1 N2)", () => {
+	const commandName = "hejbro status";
+	it.each<[string, unknown]>([
+		[
+			"a terminated backend (57P01)",
+			Object.assign(
+				new Error("terminating connection due to administrator command"),
+				{ code: "57P01" },
+			),
+		],
+		[
+			"a cancelled statement (57014)",
+			Object.assign(new Error("canceling statement due to statement timeout"), {
+				code: "57014",
+			}),
+		],
+		[
+			"a connection exception (08006)",
+			Object.assign(new Error("connection failure"), { code: "08006" }),
+		],
+		[
+			"a driver-level loss with no code",
+			new Error("Connection terminated unexpectedly"),
+		],
+	])(
+		"%s -> Next: rerun once the server answers, never a grant",
+		async (_label, error) => {
+			const failure = taggedFailure("read", "read", error);
+			const { driver } = makeScriptedDriver([
+				{ rows: [{ currentUser: "app" }] },
+			]);
+			await expect(
+				throwLedgerReadFailure(driver, failure, commandName),
+			).rejects.toSatisfy((thrown: unknown) => {
+				if (!(thrown instanceof HejbroError)) {
+					return false;
+				}
+				return (
+					thrown.code === "apply-ledger-unreadable" &&
+					thrown.message.includes('as the role "app"') &&
+					/Next:/.test(thrown.message) &&
+					!thrown.message.includes("grant") &&
+					thrown.message.includes("rerun") &&
+					thrown.message.includes(commandName)
+				);
+			});
+		},
+	);
 });

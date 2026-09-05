@@ -58,10 +58,14 @@ hejbro sends to the ledger — a role that may connect but may not select
 from the table, a schema whose `usage` is withheld, a failure carrying no
 server code at all — SHALL be reported with the one shared code
 `apply-ledger-unreadable`, naming the ledger by its qualified name, the
-role the connection authenticated as, and the server's own code and
-message unsummarized, ending with a `Next:` line that offers both ways
-out: grant that role what the read needs, or connect as the role that
-applied. No error the server raised on the ledger SHALL reach the user as
+role the connection authenticated as (read on a fresh connection once
+the failing one is discarded, omitted only when no connection can answer
+for it), and the server's own code and message unsummarized, ending
+with a `Next:` line whose remedy fits the reason: a refused permission
+offers both ways out — grant that role what the read needs, or connect
+as the role that applied — while a connection that died, a cancelled
+statement or a failure carrying no server code offers a rerun once the
+server answers, since no grant fixes those. No error the server raised on the ledger SHALL reach the user as
 a driver object or a stack trace, on any command that reads it —
 `status`, `migrate` and `raise` — and the rule is one rule, made where
 the read is sent rather than at each command that sends one.
