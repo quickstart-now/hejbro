@@ -379,7 +379,7 @@ text that says something untrue. Every repair keeps the delta as approved.
       visible through `runReset`, so the pin runs that path, not
       `applyResetReport` alone).
 
-- [ ] 2.5 (~6m) A raised snapshot file is not called a migration.
+- [x] 2.5 (~6m) A raised snapshot file is not called a migration.
       Measured: `raise`'s write refusal says "the row recording
       "…/20260904224853_add_app.sql" … the migration ran in the same
       transaction", but `raise`'s input is a snapshot SQL file, which the
