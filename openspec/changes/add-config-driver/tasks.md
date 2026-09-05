@@ -9,16 +9,33 @@ the constraint only).
 
 **Files edited**: `packages/cli/src/config.ts`, `packages/cli/test/
 config*.test.ts` (1.1); `packages/cli/src/check/driver.ts`,
-`packages/cli/test/check-driver.test.ts` (1.2); the seven command files
-under `packages/cli/src/commands/` (and the apply-engine site that opens
-their connection, if it is shared) with their in-process tests (1.3,
-1.4); `examples/cli-smoke/test/*.test.ts` + a fixture config (1.5);
-`skills/hejbro/references/{supabase,neon,nile}-preset.md`, one
-`.changeset/*.md` (1.6). If a task appears to need any other file, that
-goes back to the planner, not into the diff.
+`packages/cli/test/check-driver.test.ts`, `packages/cli/src/apply/
+capability.ts` (1.2 — `APPLY_CONNECTION_CODES` is the four apply
+commands' shared literal set and needs the fourth code); `packages/cli/
+src/loader.ts` + `packages/cli/test/loader.test.ts` (1.3, the lenient load
+— see below); the seven command files under `packages/cli/src/commands/`
+with their in-process tests (1.3, 1.4); `examples/cli-smoke/test/
+*.test.ts` + a fixture config (1.5); `skills/hejbro/references/
+{supabase,neon,nile}-preset.md`, one `.changeset/*.md` (1.6). If a task
+appears to need any other file, that goes back to the planner, not into
+the diff.
 
-**Ordering.** 1.1 → 1.2 → 1.3 and 1.4 (independent of each other) →
-1.5 → 1.6.
+**`loader.ts` is in the list by lead ruling 458/R2** (planner check
+before 1.1: `runImport`, `runPull` and `runRaise` never call
+`loadConfig` at all — only `check`, `status`, `migrate` and `reset` do).
+The delta requires all seven to honour the field, and `loadConfig`
+throws `config-not-found` when the file is absent — which is the normal
+state for the very commands that bootstrap a project from a database.
+The lenient load (absent file → no factory; every other load failure →
+refuse) is one helper shared by the three, so it lives in `loader.ts`
+next to `loadConfig` rather than being written three times in
+`commands/`. There is no shared apply-engine connection site: the four
+apply commands each call `withCheckConnection` directly.
+
+**Ordering.** 1.1 → 1.2 → 1.2b → 1.3 and 1.4 (independent of each
+other, both on 1.2b) → 1.5 → 1.6. 1.2b is inserted by lead ruling
+458/R2; the numbering keeps 1.3–1.6 as they were so commits and
+`task-times.csv` rows already spelled against them stay valid.
 
 ## 1. A configured driver factory
 
@@ -47,20 +64,42 @@ goes back to the planner, not into the diff.
       before the factory runs}. Files: `packages/cli/src/check/driver.ts`,
       the test.
 
+- [ ] 1.2b (~6m) **[design]** The lenient configuration load, for the
+      three commands that never read one (lead ruling 458/R2). Settles
+      the helper's name and return shape (the configuration when it
+      loads, `null` when no file is there — never a partial
+      `HejbroConfig`). Red: `packages/cli/test/loader.test.ts`, a table:
+      {no `hejbro.config.ts` in `cwd` → `null`, no throw}; {a valid
+      config → the same `HejbroConfig` `loadConfig` returns, `driver`
+      included}; {a config whose `driver` is a string → throws
+      `invalid-config`, the message unchanged from `loadConfig`'s};
+      {a config path that is a directory → `config-not-a-file`
+      unchanged}; {an unreadable config → `config-unreadable`
+      unchanged}. Only `config-not-found` is absorbed, and only when no
+      `--config` was given — a `--config` naming a file that isn't
+      there is still a refusal (`loadConfig` already distinguishes the
+      two). Files: `packages/cli/src/loader.ts`, its test.
+
 - [ ] 1.3 (~9m) `check`, `status`, `pull` thread the configured factory.
       Red: each command's in-process test gains a case: a config whose
-      `driver` is a recording factory → the factory is called with the
-      `--url` string, the command's statements reach the recording
-      driver, the importer is never consulted; and the existing
-      no-factory cases stay green. Files: the three command files, their
-      tests.
+      `driver` is a recording factory → the factory is called with that
+      command's own connection flag value (`--db-url` for `pull`,
+      `--url` for the other two), the command's statements reach the
+      recording driver, the importer is never consulted; and the
+      existing no-factory cases stay green. `pull` reads no
+      configuration today, so it gains 1.2b's lenient load and one more
+      case: {no config file → the vanilla importer path, byte-identical
+      to today}. Files: the three command files, their tests.
 
 - [ ] 1.4 (~9m) `migrate`, `raise`, `reset`, `import` thread it too.
       Same red shape as 1.3 per command; plus, for one apply command, a
       recording driver declaring `interactive-transactions: false` is
       refused by the existing capability check exactly as an imported
-      one would be. Files: the four command files (and the shared
-      apply-engine connection site if there is one), their tests.
+      one would be. `raise` and `import` read no configuration today —
+      both gain 1.2b's lenient load and `pull`'s extra case (no config
+      file → unchanged vanilla path). Neither gains a `--config` flag:
+      that gap is real and belongs to `harden-config-root`, not here.
+      Files: the four command files, their tests.
 
 - [ ] 1.5 (~8m) End to end over the built CLI. Red: `examples/cli-smoke/
       test/config-driver.e2e.test.ts` (subprocess, `assertBuiltCli`): a

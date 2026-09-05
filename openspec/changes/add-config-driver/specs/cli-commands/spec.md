@@ -120,8 +120,10 @@ difference's, and exit two.
 string to a contract driver, returned directly or as a promise. Every
 command that connects — `check`, `status`, `migrate`, `raise`, `reset`,
 `import` and `pull` — SHALL use the configured factory when one is set:
-it resolves the connection string from `--url`, else `DATABASE_URL`,
-exactly as before, calls the factory once with that string, probes the
+it resolves the connection string from its own connection flag
+(`--db-url` for `pull`, `--url` for the other six), else
+`DATABASE_URL`, exactly as before, calls the factory once with that
+string, probes the
 returned driver with one trivial read, runs its work, and closes the
 driver afterwards. `@hejbro/pg` is neither imported nor required on
 that path. A factory that throws SHALL surface as the command's own
@@ -138,19 +140,39 @@ did before the field existed. The configuration loader SHALL accept a
 function and nothing else for the field and SHALL name it in its shape
 hint.
 
+Three of these commands — `import`, `pull` and `raise` — did not read
+the configuration at all before this field existed. They SHALL read it
+now, and a missing configuration file SHALL mean "no factory" rather
+than a refusal: these are the commands a project runs before it has a
+`hejbro.config.ts`, so refusing them for its absence would take away
+the bootstrap they exist for. A configuration file that exists but
+fails to load SHALL refuse the command with that load error, exactly as
+it already does for the other four — a misspelled `driver` is not
+silently ignored anywhere.
+
 #### Scenario: Each connecting command uses the configured factory
 - **WHEN** the configuration names a factory that records what it is
   called with and returns a recording driver, and each of `check`,
   `status`, `migrate`, `raise`, `reset`, `import` and `pull` runs with
-  `--url`
-- **THEN** each command calls the factory exactly once with the `--url`
-  string, every statement it sends reaches the recording driver, the
-  driver is closed when the command ends, and `@hejbro/pg` is never
-  imported
+  its own connection flag (`--db-url` for `pull`, `--url` for the other
+  six)
+- **THEN** each command calls the factory exactly once with the string
+  that flag carried, every statement it sends reaches the recording
+  driver, the driver is closed when the command ends, and `@hejbro/pg`
+  is never imported
+
+#### Scenario: A command that never read the configuration still runs without one
+- **WHEN** `import`, `pull` or `raise` runs in a project that has no
+  `hejbro.config.ts`
+- **THEN** it connects through the vanilla driver exactly as it did
+  before the field existed; and when a configuration file is present but
+  fails to load, that command refuses with the load error and the
+  factory is never consulted
 
 #### Scenario: The environment names the database for the factory too
-- **WHEN** a factory is configured and a command runs with no `--url`
-  but `DATABASE_URL` set
+- **WHEN** a factory is configured and a command runs with its own
+  connection flag absent (`--db-url` for `pull`, `--url` for the other
+  six) but `DATABASE_URL` set
 - **THEN** the factory receives the environment's string; with neither
   set the command fails naming both ways, and the factory is never
   called
