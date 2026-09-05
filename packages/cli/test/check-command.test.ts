@@ -10,6 +10,7 @@ import {
 	index,
 	isNotNull,
 	numeric,
+	renderSnapshot,
 	schema,
 	sql,
 	table,
@@ -21,6 +22,7 @@ import type { CompileResult, DriverRow, DriverSession } from "@hejbro/query";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { Catalog } from "../src/check/catalog";
 import type { Finding } from "../src/check/compare";
+import type { CheckDriverConnection } from "../src/check/driver";
 import type { Inventory } from "../src/check/inventory";
 import { buildInventory } from "../src/check/inventory";
 import {
@@ -28,6 +30,7 @@ import {
 	compareCheckAgainstCatalog,
 	EMPTY_INVENTORY,
 	renderCheckReport,
+	runCheck,
 } from "../src/commands/check";
 import {
 	assertBuiltCli,
@@ -1471,5 +1474,121 @@ describe("compareCheckAgainstCatalog / 1.10 every declared index reaches the key
 				call.sql.trim().toLowerCase().startsWith("explain"),
 			),
 		).toEqual([]);
+	});
+});
+
+// add-config-driver, #458, task 1.3: a fixture `hejbro.config.ts` runs
+// in-process through jiti (the same process as this test), so it can
+// reach a per-test recording driver only through a globalThis seam --
+// there is no other channel from a file on disk back into this test's
+// own closures. Cleared in `afterEach` so no run leaks into the next.
+const FACTORY_SEAM_KEY = "__hejbroCheckConfigDriverFactorySeam458__";
+
+type FactorySeam = {
+	readonly calls: string[];
+	readonly driver: CheckDriverConnection;
+};
+
+const globalRecord = globalThis as Record<string, unknown>;
+
+const installFactorySeam = (seam: FactorySeam): void => {
+	globalRecord[FACTORY_SEAM_KEY] = seam;
+};
+
+const clearFactorySeam = (): void => {
+	delete globalRecord[FACTORY_SEAM_KEY];
+};
+
+const FACTORY_CONFIG_SOURCE = `import { defineConfig } from "hejbro";
+
+export default defineConfig({
+	entry: ["src/**/*.schema.ts"],
+	snapshotPath: "hejbro.snapshot.json",
+	driver: (connectionString) => {
+		const seam = globalThis[${JSON.stringify(FACTORY_SEAM_KEY)}];
+		seam.calls.push(connectionString);
+		return seam.driver;
+	},
+});
+`;
+
+const buildRecordingDriver = (): {
+	readonly driver: CheckDriverConnection;
+	readonly executed: CompileResult[];
+	readonly closed: number[];
+} => {
+	const executed: CompileResult[] = [];
+	const closed: number[] = [];
+	const driver: CheckDriverConnection = {
+		capabilities: {
+			"interactive-transactions": false,
+			"session-state": false,
+			"prepared-statements": false,
+		},
+		execute: async (compiled) => {
+			executed.push(compiled);
+			return [];
+		},
+		transaction: async () => {
+			throw new Error("transaction should not be called by this test");
+		},
+		setupSession: async () => {
+			throw new Error("setupSession should not be called by this test");
+		},
+		client: {
+			end: async () => {
+				closed.push(1);
+			},
+		},
+	};
+	return { driver, executed, closed };
+};
+
+describe("hejbro check / the configured driver factory threads through (#458 task 1.3)", () => {
+	let cwd: string;
+
+	beforeEach(async () => {
+		cwd = await createCliFixtureDir();
+		await writeFixtureFile(cwd, "hejbro.config.ts", FACTORY_CONFIG_SOURCE);
+		await writeFixtureFile(
+			cwd,
+			"src/app.schema.ts",
+			`import { schema, table, uuid } from "hejbro";
+
+export const app = schema("app");
+
+export const posts = table(app, "posts", {
+	id: uuid().primaryKey().defaultRandom(),
+});
+`,
+		);
+		await writeFixtureFile(
+			cwd,
+			"hejbro.snapshot.json",
+			renderSnapshot(emptySnapshot),
+		);
+	});
+
+	afterEach(async () => {
+		clearFactorySeam();
+		await removeCliFixtureDir(cwd);
+	});
+
+	it("calls the factory exactly once with --url's string, sends check's statements to the recording driver, closes it, and never imports @hejbro/pg", async () => {
+		const { driver, executed, closed } = buildRecordingDriver();
+		const calls: string[] = [];
+		installFactorySeam({ calls, driver });
+		const importerCalls: string[] = [];
+		const importer = async (): Promise<never> => {
+			importerCalls.push("called");
+			throw new Error("the importer must not run when a factory is configured");
+		};
+
+		await runCheck(cwd, ["--url", "postgres://factory-test"], importer);
+
+		expect(calls).toEqual(["postgres://factory-test"]);
+		expect(importerCalls).toHaveLength(0);
+		expect(executed.length).toBeGreaterThan(0);
+		expect(closed).toHaveLength(1);
 	});
 });

@@ -715,10 +715,12 @@ export const runCheck = async (
 			process.env,
 			{
 				commandName: "hejbro check",
+				connectionFlag: "--url",
 				codes: {
 					connectionMissing: "check-connection-missing",
 					driverMissing: "check-driver-missing",
 					connectionFailed: "check-connection-failed",
+					driverUnclosable: "check-driver-unclosable",
 				},
 			},
 			async (driver) => {
@@ -734,6 +736,7 @@ export const runCheck = async (
 				return renderCheckReport(findings, inventory, registry, snapshot, mode);
 			},
 			importer,
+			config.driver,
 		);
 	} catch (error) {
 		return preconditionErrorReport(error);

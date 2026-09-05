@@ -38,10 +38,14 @@ export type ConnectionCodes = {
 	readonly connectionMissing: string;
 	readonly driverMissing: string;
 	readonly connectionFailed: string;
+	/** Fourth literal (add-config-driver, #458, design Q2 (i)): a configured factory's driver with no way to close is refused under this code, spelled at each call site like the other three. */
+	readonly driverUnclosable: string;
 };
 
 export type ConnectionContext = {
 	readonly commandName: string;
+	/** The flag this command reads a connection string from (add-config-driver, #458 review round 1, task 1.8) -- `"--url"` for six commands, `"--db-url"` for `pull` -- named here, beside `commandName`, so the connection-missing/connection-failed messages point at the flag this command actually accepts, never a hardcoded one a caller ignores. Supplied as a literal at each call site, exactly like `codes`. */
+	readonly connectionFlag: string;
 	readonly codes: ConnectionCodes;
 };
 
@@ -64,7 +68,7 @@ export const resolveConnectionString = (
 	}
 	return throwHejbroError(
 		context.codes.connectionMissing,
-		`${context.commandName} needs a database connection, but neither --url nor the DATABASE_URL environment variable is set. Next: pass --url <connection-string>, or set DATABASE_URL, then rerun \`${context.commandName}\`.`,
+		`${context.commandName} needs a database connection, but neither ${context.connectionFlag} nor the DATABASE_URL environment variable is set. Next: pass ${context.connectionFlag} <connection-string>, or set DATABASE_URL, then rerun \`${context.commandName}\`.`,
 	);
 };
 
@@ -83,6 +87,11 @@ export const CHECK_DRIVER_PACKAGE = "@hejbro/pg";
 export type CheckDriverConnection = Driver & {
 	readonly client: { end(): Promise<void> };
 };
+
+/** `HejbroConfig.driver` itself (add-config-driver, #458, design Q1): a factory, never an instance -- called once, per command, with the resolved connection string. */
+export type DriverFactory = (
+	connectionString: string,
+) => Driver | Promise<Driver>;
 
 type PgDriverFactory = (connectionString: string) => CheckDriverConnection;
 
@@ -126,14 +135,75 @@ export const loadCheckDriver = async (
 	}
 };
 
-/** Resolves the connection string and the driver together, and opens the connection. `importer` threads through to {@link loadCheckDriver}, defaulting the same way. */
+/** The `client.end` member every closable driver carries (design Q2 (i)) -- named here once so the refusal message and the runtime check never drift apart. */
+const CLOSE_MEMBER = "client.end";
+
+/** Runtime narrowing only: the driver contract has no closing member, so a factory-built driver is checked for one at the moment it would be used, never assumed from its declared type -- including the shape a factory returns when its own arrow function forgot `return` (#458 review round 1, task 1.7). */
+const hasClosableClient = (driver: Driver): driver is CheckDriverConnection => {
+	if (typeof driver !== "object" || driver === null) {
+		return false;
+	}
+	const client = (driver as { readonly client?: unknown }).client;
+	if (typeof client !== "object" || client === null) {
+		return false;
+	}
+	return typeof (client as { readonly end?: unknown }).end === "function";
+};
+
+/** Refuses, before any statement is sent, a configured factory's driver with no way to close (design Q2 (i)) -- an open pool with nothing to close it is a hang, not a driver. */
+const assertClosable = (
+	driver: Driver,
+	context: ConnectionContext,
+): CheckDriverConnection => {
+	if (hasClosableClient(driver)) {
+		return driver;
+	}
+	return throwHejbroError(
+		context.codes.driverUnclosable,
+		`${context.commandName}'s configured driver (hejbro.config.ts's "driver" field) has no "${CLOSE_MEMBER}" to close it, and an unclosable connection would hang the process. Next: return a driver whose "${CLOSE_MEMBER}" closes the connection from "driver", then rerun \`${context.commandName}\`.`,
+	);
+};
+
+/** Calls the configured factory once with the resolved connection string; a thrown error surfaces as the command's own connection-failed diagnostic (design Q3) -- from the command's point of view the driver could not be opened, the same as a refused connection. */
+const callConfiguredFactory = async (
+	connectionString: string,
+	factory: DriverFactory,
+	context: ConnectionContext,
+): Promise<Driver> => {
+	try {
+		return await factory(connectionString);
+	} catch (error) {
+		return throwHejbroError(
+			context.codes.connectionFailed,
+			`${context.commandName} could not connect to the database: ${describeDriverError(error)}. Next: confirm the configured driver (hejbro.config.ts's "driver" field) can open a connection, then rerun \`${context.commandName}\`.`,
+		);
+	}
+};
+
+/**
+ * Resolves the connection string and the driver together, and opens the
+ * connection. `factory` is `HejbroConfig.driver` threaded in by the
+ * caller; when set it is preferred over the dynamic `@hejbro/pg` import
+ * and `importer` is never consulted (design Q1/Q3). `importer` threads
+ * through to {@link loadCheckDriver} only on the no-factory path,
+ * defaulting the same way it always has.
+ */
 export const connectForCheck = async (
 	url: string | undefined,
 	env: ConnectionEnv,
 	context: ConnectionContext,
 	importer?: CheckDriverImporter,
+	factory?: DriverFactory,
 ): Promise<CheckDriverConnection> => {
 	const connectionString = resolveConnectionString(url, env, context);
+	if (factory !== undefined) {
+		const driver = await callConfiguredFactory(
+			connectionString,
+			factory,
+			context,
+		);
+		return assertClosable(driver, context);
+	}
 	const pgDriver = await loadCheckDriver(context, importer);
 	return pgDriver(connectionString);
 };
@@ -165,7 +235,7 @@ export const assertConnected = async (
 	} catch (error) {
 		throwHejbroError(
 			context.codes.connectionFailed,
-			`${context.commandName} could not connect to the database: ${describeDriverError(error)}. Next: confirm --url/DATABASE_URL is correct and the database is reachable, then rerun \`${context.commandName}\`.`,
+			`${context.commandName} could not connect to the database: ${describeDriverError(error)}. Next: confirm ${context.connectionFlag}/DATABASE_URL is correct and the database is reachable, then rerun \`${context.commandName}\`.`,
 		);
 	}
 };
@@ -185,8 +255,9 @@ export const withCheckConnection = async <T>(
 	context: ConnectionContext,
 	body: (driver: CheckDriverConnection) => Promise<T>,
 	importer?: CheckDriverImporter,
+	factory?: DriverFactory,
 ): Promise<T> => {
-	const driver = await connectForCheck(url, env, context, importer);
+	const driver = await connectForCheck(url, env, context, importer, factory);
 	try {
 		await assertConnected(driver, context);
 		return await body(driver);

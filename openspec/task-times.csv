@@ -930,3 +930,16 @@ date,change-id,task-id,group,est_min,actual_min,waited_user_min,notes
 2026-09-05,harden-aggregate-vocabulary,review-fix,1,0,55,0,"lead review fix pass after e7016828: N2 read-shape.test.ts reverse containment + named diagnostics (~10m), N3 select.test.ts alias-scoped cast assertions + db.fn schema-qualified guard promotion (~15m), N4 nested-revive.test.ts text-argument coverage widened 2->9 rows + windowed user-cast promotion (~15m), real partitionBy/orderBy replacing {} across all table-driven cases in both files (~15m); R2 spec-prose alignment was zero-code (lead's own fix, committed as-is)"
 2026-09-05,harden-aggregate-vocabulary,review-fix-2,1,0,15,0,"lead review re-check after 92ac3db3: N6 schemaQualifiedCall carried no typeNode so 2 of 4 db.fn rows were vacuous, added typeNode to make all 4 load-bearing (verified: guard removed -> all 4 red, restored); N3 comment's own rationale was wrong (outer uuid projection is not the mechanism), corrected to the real one (a cast sibling cell in the same nested projection) with a dedicated pinning test; last empty {} window spec replaced in the windowed user-cast test; R3 spec-scenario WHEN wording committed as-is (zero code)"
 2026-09-05,harden-aggregate-vocabulary,review-fix-3,1,0,4,0,"reviewer's final check found the sibling-cell test called renderSelect directly, never exercising rendersCastFor's own alias-scoped check -- reverting the scoping to a whole-statement check still passed all 85 cases; added an optional sibling-projection param and a row that goes through the helper itself, verified by reverting scoping (this one row red) and restoring"
+2026-09-05,add-config-driver,1.1,1,7,12,0,config driver field: schema + shape hint; times reconstructed from commit timestamps
+2026-09-05,add-config-driver,1.2,1,9,12,0,factory-preferring procurement + fourth code; span includes the 458/R2 artifact commits
+2026-09-05,add-config-driver,1.2b,1,6,7,0,lenient config load in loader.ts; task inserted mid-group by ruling 458/R2
+2026-09-05,add-config-driver,1.3,1,9,15,0,check/status/pull wiring; over estimate on the globalThis test seam design
+2026-09-05,add-config-driver,1.4,1,9,19,0,migrate/raise/reset/import wiring; over estimate on the happy-path recording driver
+2026-09-05,add-config-driver,1.5,1,8,8,0,subprocess e2e over the built CLI
+2026-09-05,add-config-driver,1.6,1,6,4,0,four skill docs + changeset; final gate runs excluded (verification is not a task)
+2026-09-05,add-config-driver,1.7,1,6,22,0,null/undefined factory driver refused; span includes reading the three-task brief
+2026-09-05,add-config-driver,1.8,1,9,8,0,connectionFlag literal on ConnectionContext; seven call sites forced by the required field
+2026-09-05,add-config-driver,1.9,1,5,8,0,shape-based error describer; includes the rewind measurement and the code+message neighbour
+2026-09-05,add-config-driver,1.10,1,6,14,0,neon websocket exposes client; first entry into packages/neon
+2026-09-05,add-config-driver,1.11,1,5,20,0,neon http no-op close incl. the offline cli-smoke e2e; times reconstructed from commit timestamps
+2026-09-05,add-config-driver,1.12,1,6,44,0,real ErrorEvent has an empty message; grew two crash guards found after the first commit (String() on a null-prototype throw); times partly reconstructed

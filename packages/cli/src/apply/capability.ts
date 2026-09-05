@@ -18,7 +18,11 @@ export const APPLY_CONNECTION_CODES: ConnectionCodes = {
 	connectionMissing: "apply-connection-missing",
 	driverMissing: "apply-driver-missing",
 	connectionFailed: "apply-connection-failed",
+	driverUnclosable: "apply-driver-unclosable",
 };
+
+/** The connection flag all four apply-engine commands accept (add-config-driver, #458 review round 1, task 1.8) -- shared here for the same reason `APPLY_CONNECTION_CODES` is: one literal, not one per command. */
+export const APPLY_CONNECTION_FLAG = "--url";
 
 /**
  * [task 7.3] `migrate`, `reset`, and `raise` all send DDL inside

@@ -92,7 +92,9 @@ const runBatch = async (
  * before anything is sent (task 2.4) -- this driver supplies no
  * substitute behavior for the capability it lacks, on its own, ever.
  */
-export const buildHttpDriver = (sql: HttpQueryable): Driver => ({
+export const buildHttpDriver = (
+	sql: HttpQueryable,
+): Driver & { readonly client: { end(): Promise<void> } } => ({
 	capabilities: CAPABILITIES,
 	execute: (compiled) => runBatch(sql, compiled),
 	transaction: async () => {
@@ -103,4 +105,8 @@ export const buildHttpDriver = (sql: HttpQueryable): Driver => ({
 		// the two session pins ride with every execution instead
 		// (runBatch above), never once per connection.
 	},
+	// #458 review round 1, task 1.11, lead ruling 458/R4: this path opens
+	// nothing, so there is nothing to close -- `end` is a no-op the CLI's
+	// own close path can still call, never a stand-in for `sql` itself.
+	client: { end: async () => {} },
 });

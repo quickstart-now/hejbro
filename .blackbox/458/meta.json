@@ -1,0 +1,115 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#458",
+  "title": "config-injected driver factory for db-connected cli commands",
+  "parent": "quickstart-now/hejbro#412",
+  "status": "closed",
+  "opened": "2026-09-05",
+  "closed": "2026-09-05",
+  "decisions": [
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "412/D24",
+        "412/D25; D95 (any conforming driver executes); the 2026-08-29 add-check-schema ruling that parked this as its own design round; read on 2026-09-05: seven commands connect through check/driver.ts's withCheckConnection",
+        "and the loader's z.object strips an unknown driver key silently"
+      ],
+      "at": "2026-09-05T04:55Z",
+      "title": "hejbro.config.ts gains a driver factory that every connecting command prefers over the dynamic @hejbro/pg import",
+      "ratified": null
+    },
+    {
+      "id": "R2",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "458/R1 (every connecting command prefers the factory); cd-planner's measurement (three commands never call loadConfig; import/pull bootstrap projects that have no declarations yet); design Q4 (a misspelled driver is never ignored silently)"
+      ],
+      "at": "2026-09-05T06:50Z",
+      "title": "raise, import and pull read the configuration leniently: an absent file means no factory; any other load failure refuses; pull's flag is --db-url",
+      "ratified": null
+    },
+    {
+      "id": "R3",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "412/D24",
+        "D25",
+        "D13 (complete within the purpose: a shipped preset must satisfy the delta's own closing promise); cd 1.6 measurement (buildWebSocketDriver carries no client member)"
+      ],
+      "at": "2026-09-05T09:10Z",
+      "title": "neonDriver(pool) exposes its Pool as client so the configured driver closes on every shipped preset (task 1.10); design Q2 restated",
+      "ratified": null
+    },
+    {
+      "id": "R4",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "412/D24",
+        "D25",
+        "D13; 458/R3; cd planner measurement (buildHttpDriver has no client; nothing is held open)"
+      ],
+      "at": "2026-09-05T09:15Z",
+      "title": "The Neon HTTP driver exposes a no-op close so read-only CLI commands run over HTTP (task 1.11)",
+      "ratified": null
+    }
+  ],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-05T06:58Z",
+      "title": "Three connecting commands never read the configuration",
+      "pr": null,
+      "decisions": []
+    },
+    {
+      "id": "W2",
+      "at": "2026-09-05T06:58Z",
+      "title": "import, pull and raise take no --config flag",
+      "pr": null,
+      "decisions": []
+    },
+    {
+      "id": "W3",
+      "at": "2026-09-05T08:31Z",
+      "title": "One unreproduced packages/cli test failure under full-suite load",
+      "pr": null,
+      "decisions": []
+    },
+    {
+      "id": "W4",
+      "at": "2026-09-05T10:46Z",
+      "title": "task 1.12: describe an errorevent-shaped throw, plus a pre-existing null-prototype crash",
+      "pr": null,
+      "decisions": []
+    },
+    {
+      "id": "W5",
+      "at": "2026-09-05T11:34Z",
+      "title": "W5 — CI: cli-smoke's neon e2e failed because @hejbro/neon was never built before the test",
+      "pr": null,
+      "decisions": []
+    },
+    {
+      "id": "W6",
+      "at": "2026-09-05T11:44Z",
+      "title": "W6 — CI: error-message.test.ts used the ErrorEvent global, absent on Node 22/24",
+      "pr": null,
+      "decisions": []
+    }
+  ],
+  "prs": [
+    {
+      "number": 909,
+      "role": "closes",
+      "pinnedAt": "2026-09-05T11:44Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

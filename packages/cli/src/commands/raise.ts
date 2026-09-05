@@ -4,6 +4,7 @@ import { throwHejbroError } from "@hejbro/core";
 import { defineCommand } from "citty";
 import {
 	APPLY_CONNECTION_CODES,
+	APPLY_CONNECTION_FLAG,
 	assertInteractiveTransactions,
 } from "../apply/capability";
 import {
@@ -17,6 +18,7 @@ import { withCheckConnection } from "../check/driver";
 import { fromHejbroError, renderDiagnostics } from "../diagnostics";
 import { asHejbroError } from "../errors";
 import { normalizeEqualsFlags } from "../flags";
+import { loadConfigIfPresent } from "../loader";
 
 const RAISE_DESCRIPTION =
 	"Stand an empty database up from a vendored snapshot SQL file.";
@@ -119,16 +121,26 @@ export const runRaise = async (
 		const sql = readFileSync(join(cwd, fileName), "utf8");
 		const snapshotFile: SnapshotFile = { fileName, sql, origin: "raised" };
 
+		// raise never read hejbro.config.ts before this field existed
+		// (add-config-driver, #458, lead ruling 458/R2): a project with none
+		// yet still runs through the vanilla driver, so absence is never a
+		// refusal here.
+		const loaded = await loadConfigIfPresent(cwd);
 		return await withCheckConnection(
 			urlFlag,
 			process.env,
-			{ commandName: RAISE_COMMAND, codes: APPLY_CONNECTION_CODES },
+			{
+				commandName: RAISE_COMMAND,
+				connectionFlag: APPLY_CONNECTION_FLAG,
+				codes: APPLY_CONNECTION_CODES,
+			},
 			async (driver) => {
 				assertInteractiveTransactions(driver, RAISE_COMMAND);
 				await applyRaise(driver, snapshotFile, RAISE_COMMAND);
 				return { exitCode: 0, stdout: [successLine(fileName)], stderr: null };
 			},
 			importer,
+			loaded?.config.driver,
 		);
 	} catch (error) {
 		return preconditionResult(error);

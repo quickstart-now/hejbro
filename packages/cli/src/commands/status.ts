@@ -1,7 +1,10 @@
 import { join } from "node:path";
 import type { Driver } from "@hejbro/query";
 import { defineCommand } from "citty";
-import { APPLY_CONNECTION_CODES } from "../apply/capability";
+import {
+	APPLY_CONNECTION_CODES,
+	APPLY_CONNECTION_FLAG,
+} from "../apply/capability";
 import type { LedgerState } from "../apply/ledger";
 import { asLedgerAccessFailure, readLedger } from "../apply/ledger";
 import {
@@ -246,7 +249,11 @@ export const runStatus = async (
 		return await withCheckConnection(
 			urlFlag,
 			process.env,
-			{ commandName: STATUS_COMMAND, codes: APPLY_CONNECTION_CODES },
+			{
+				commandName: STATUS_COMMAND,
+				connectionFlag: APPLY_CONNECTION_FLAG,
+				codes: APPLY_CONNECTION_CODES,
+			},
 			async (driver) => {
 				const identity = await probeLedgerIdentity(driver, STATUS_COMMAND);
 				assertLedgerNotOccupied(identity, STATUS_COMMAND);
@@ -265,6 +272,7 @@ export const runStatus = async (
 				}
 			},
 			importer,
+			config.driver,
 		);
 	} catch (error) {
 		return preconditionResult(error);

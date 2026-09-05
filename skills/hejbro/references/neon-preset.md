@@ -18,6 +18,46 @@ const driver = neonDriver(pool);
 const auth = neonAuth("claims"); // or "jwt" -- see "Authentication modes" below
 ```
 
+## The CLI's own connection
+
+`hejbro.config.ts` can name a `driver` factory so the seven CLI commands
+that connect — `check`, `status`, `migrate`, `raise`, `reset`, `import`
+and `pull` — go through this preset's own driver instead of the vanilla
+`@hejbro/pg` import each falls back to when the field is absent:
+
+```ts
+import { neonDriver } from "@hejbro/neon";
+import { Pool } from "@neondatabase/serverless";
+import { defineConfig } from "hejbro";
+
+export default defineConfig({
+	entry: ["src/app.schema.ts"],
+	migrationsDir: "migrations",
+	snapshotPath: "hejbro.snapshot.json",
+	prefixStrategy: "index",
+	presets: [],
+	driver: (connectionString) => neonDriver(new Pool({ connectionString })),
+});
+```
+
+The factory receives only the connection string each command already
+resolved from `--url`/`DATABASE_URL` — `hejbro.config.ts` itself never
+carries one. The WebSocket `Pool` path is the one to configure here:
+`migrate`/`raise`/`reset` need `interactive-transactions`, which only it
+declares (see the table below). The driver it returns is closable
+(`client.end`) the same way `@hejbro/pg`'s own connection-string form
+is — `neonDriver(pool)`'s own `client` member *is* the `Pool` itself, so
+there is nothing to add here.
+
+The HTTP path (`driver: (connectionString) => neonDriver(neon(connectionString))`)
+works here too, for `check`/`status`/`import`/`pull` — the four commands
+that never need `interactive-transactions`. `migrate`/`raise`/`reset`
+still refuse it with the driver contract's own missing-capability error,
+exactly as they refuse it when built by hand: configuring it as `driver`
+changes nothing about that. `neonDriver(sql)`'s own `client.end` is a
+no-op — the HTTP path holds no connection open between requests, so
+there is nothing for the CLI's close step to do.
+
 ## The two connection paths
 
 `neonDriver` is overloaded on the client it is handed, and the two
@@ -41,7 +81,9 @@ pass the client whose capabilities you need:
   Every execution still carries the same session pins (`IntervalStyle`,
   `bytea_output`) `@hejbro/pg` applies once per connection, batched with
   each statement instead — arrival shape for `interval`/`bytea`/etc. is
-  identical to the WebSocket path.
+  identical to the WebSocket path. Opens nothing between requests, so
+  its own `client.end` (used when this is configured as the CLI's
+  `driver`, above) is a documented no-op, not a missing member.
 
 **A failed HTTP batch carries no member index.** The pins and the
 caller's own statement travel as one batch; if a pin statement ever

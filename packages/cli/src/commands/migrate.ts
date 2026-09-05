@@ -5,6 +5,7 @@ import type { Driver } from "@hejbro/query";
 import { defineCommand } from "citty";
 import {
 	APPLY_CONNECTION_CODES,
+	APPLY_CONNECTION_FLAG,
 	assertInteractiveTransactions,
 } from "../apply/capability";
 import type { Migration } from "../apply/execute";
@@ -465,7 +466,11 @@ export const runMigrate = async (
 		return await withCheckConnection(
 			urlFlag,
 			process.env,
-			{ commandName: MIGRATE_COMMAND, codes: APPLY_CONNECTION_CODES },
+			{
+				commandName: MIGRATE_COMMAND,
+				connectionFlag: APPLY_CONNECTION_FLAG,
+				codes: APPLY_CONNECTION_CODES,
+			},
 			async (driver) => {
 				assertInteractiveTransactions(driver, MIGRATE_COMMAND);
 				const identity = await probeLedgerIdentity(driver, MIGRATE_COMMAND);
@@ -530,6 +535,7 @@ export const runMigrate = async (
 				}
 			},
 			importer,
+			config.driver,
 		);
 	} catch (error) {
 		return preconditionResult(error);
