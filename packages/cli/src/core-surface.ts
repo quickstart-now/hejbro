@@ -201,6 +201,7 @@ export const ENGINE = [
 	"triggerKind",
 	"viewKind",
 	// Expression traversal and rewriting
+	"BUILDER_READ_SHAPES",
 	"SELECT_CLAUSE_TRAVERSALS",
 	"assertSameSetOpKeyOrder",
 	"collectColumnRefs",

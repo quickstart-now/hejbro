@@ -9,8 +9,8 @@ the constraint only).
 
 **Files edited**: `packages/core/src/expr/read-shape.ts` (new),
 `packages/core/src/index.ts`, `packages/core/test/expr/read-shape.test.ts`
-(new), `packages/core/test/exports.test.ts` (1.1); `packages/core/src/
-query/select.ts`, `packages/core/test/query/*nested*.test.ts` (1.2);
+(new), `packages/cli/src/core-surface.ts` (1.1); `packages/core/src/
+query/select.ts`, `packages/core/test/query/select.test.ts` (1.2);
 `packages/query/src/db/convert.ts`, `packages/query/test/db/
 nested-revive.test.ts` (1.3, 1.4); `packages/pg/test/integration.test.ts`,
 `skills/hejbro/references/query-layer.md`, one `.changeset/*.md` (1.5).
@@ -35,12 +35,16 @@ needs both; 1.5 last.
       argument is required, read the node's `functionName`, expect a
       row; a type-level case (`// @ts-expect-error`) that a
       `satisfies` over a union missing one name fails; the exports pin
-      gains the name. Files: `packages/core/src/expr/read-shape.ts`,
-      `packages/core/src/index.ts`, the two tests.
+      (`packages/cli/src/core-surface.ts`'s `ENGINE`, the
+      `SELECT_CLAUSE_TRAVERSALS` precedent) gains the name. Files:
+      `packages/core/src/expr/read-shape.ts`, `packages/core/src/index.ts`,
+      `packages/core/test/expr/read-shape.test.ts`,
+      `packages/cli/src/core-surface.ts`.
 
 - [ ] 1.2 (~8m) The cast side reads the table and unwraps a window
-      node. Red: the nested-read cast test in `packages/core/test/query/`
-      (the file that pins `count()` → `::text` today), an `it.each` over
+      node. Red: `packages/core/test/query/select.test.ts` (the file that
+      pins `count()` → `::text` today, *"casts an at-risk aggregate cell
+      in a nested read"*), an `it.each` over
       the table's rows × {unwindowed, windowed}: `int8` rows cast
       `::text`; `argument` rows over a `bigint` column cast `::text`
       and over a `text` column cast nothing; `own` rows cast nothing;
