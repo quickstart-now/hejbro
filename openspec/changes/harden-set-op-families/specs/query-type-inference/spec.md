@@ -16,8 +16,11 @@ only pairs of families it can see — cross-family pairs of placed
 expressions. A `literal()` is placed (`boolean`) even though it travels
 as an untyped bind parameter the server resolves against the other
 branch, so against `text`, `bytea` or `json` this rule refuses by
-declaration what the server's parameter resolution would accept; the
-declared family is the contract, not the parameter's wire form. What
+declaration what the server's parameter resolution would accept in a
+plain set operation (as a recursive CTE's anchor the parameter is fixed
+to `text` from the anchor alone, and the server itself refuses a
+non-`text` term); the declared family is the contract, not the
+parameter's wire form. What
 the server does with an unplaced expression
 afterwards is the server's: an untyped literal is resolved against the
 other branch, while a fragment the server types on its own is compared
