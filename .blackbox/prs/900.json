@@ -1,0 +1,61 @@
+{
+  "version": 3,
+  "number": 900,
+  "ref": "quickstart-now/hejbro#900",
+  "title": "fix(core): re-issue schema-wide grants after create view; constructor-review corpus (#899, #742)",
+  "head": "4cb1eb4282c5a0c4df568e73b9fc9cd9d47db941",
+  "headRef": "corpus-742",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-05T09:01Z",
+  "refs": [
+    {
+      "path": ".changeset/view-grant-catch-up-742.md",
+      "blob": "c7ae47d3613e83902211f153423edf3f2027cd40"
+    },
+    {
+      "path": "examples/postgres/hejbro.snapshot.json",
+      "blob": "8af88b95d37cd12dc15d40fc1541a1da3f488822"
+    },
+    {
+      "path": "examples/postgres/migrations/0010_add_task_projects.sql",
+      "blob": "d11804c7aec34a047ab29156d7113ddb85dded8a"
+    },
+    {
+      "path": "examples/postgres/src/app.schema.ts",
+      "blob": "99f0fe526d49bffcd46701fb3208038fedd37f4e"
+    },
+    {
+      "path": "examples/postgres/src/steps/step-10.schema.ts",
+      "blob": "99f0fe526d49bffcd46701fb3208038fedd37f4e"
+    },
+    {
+      "path": "examples/postgres/test/chain.test.ts",
+      "blob": "0a6d4e11d5b682c3d9b9a34e5ab04d02191b1013"
+    },
+    {
+      "path": "examples/postgres/test/cli.test.ts",
+      "blob": "387b652e22aac8a2871e81663f9179710293d292"
+    },
+    {
+      "path": "packages/cli/test/contract-emit.test.ts",
+      "blob": "f33f2338cedd37954d7e96a217a56fa6a27736fa"
+    },
+    {
+      "path": "packages/core/src/kinds/grant-kind.ts",
+      "blob": "884aa314cf3dfa201b0c4d151393012580986be1"
+    },
+    {
+      "path": "packages/core/src/kinds/table-kind-emit.ts",
+      "blob": "687345effcf1e5d976feffff00ffa4cec03cde14"
+    },
+    {
+      "path": "packages/core/src/kinds/view-kind.ts",
+      "blob": "51eeab93a44ec39105e8a6c5392bc7d790e9af86"
+    },
+    {
+      "path": "packages/core/test/view-kind.test.ts",
+      "blob": "10a479b2a5dea0022dacb9649dc21bddd9a7d545"
+    }
+  ]
+}

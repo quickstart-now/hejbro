@@ -4,9 +4,9 @@
   "ref": "quickstart-now/hejbro#742",
   "title": "Add the constructor-review corpus to `examples/brownfield`",
   "parent": "quickstart-now/hejbro#412",
-  "status": "open",
+  "status": "closed",
   "opened": "2026-09-05",
-  "closed": null,
+  "closed": "2026-09-05",
   "decisions": [
     {
       "id": "R1",
@@ -31,7 +31,13 @@
       "decisions": []
     }
   ],
-  "prs": [],
+  "prs": [
+    {
+      "number": 900,
+      "role": "closes",
+      "pinnedAt": "2026-09-05T09:01Z"
+    }
+  ],
   "origin": null,
   "followUps": []
 }
