@@ -139,6 +139,15 @@
         "R7",
         "R8"
       ]
+    },
+    {
+      "id": "W4",
+      "at": "2026-09-05T16:06Z",
+      "title": "N2: object read under a set-op recursive term measured nullable too",
+      "pr": null,
+      "decisions": [
+        "R8"
+      ]
     }
   ],
   "prs": [],

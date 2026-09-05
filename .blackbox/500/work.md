@@ -142,3 +142,17 @@ E6/E8 reclassified to E2u/E11/E12 after the reviewer's own
 self-corrections) -- the lead's rework cost, recorded in
 task-times.csv.
 
+<a id="w4"></a>
+## W4 — N2: object read under a set-op recursive term measured nullable too
+
+_2026-09-05T16:06Z · per R8_
+
+Reviewer measurement: a set-op recursive term's own object-read key
+(jsonObjectFrom) also reads null on postgres:17, consistent with both
+parenthetical clauses of the exception sentence (an array read never
+null, an object read nullable) -- no new source change and no new test
+row, since E12 already pins the object-read axis (anchor array read,
+recursive object read) and E5 already pins jsonObjectFrom's own rule
+independent of set-op. Recorded for completeness of the reviewer's
+own measurement pass, not as an open question.
+
