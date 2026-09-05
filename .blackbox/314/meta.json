@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 3,
   "kind": "issue",
   "ref": "quickstart-now/hejbro#314",
   "title": "Polyrepo schema distribution: git channel (link/vendor), IR export, flat contract emit",
@@ -12,7 +12,7 @@
     {
       "id": "W1",
       "at": "2026-09-01T00:00Z",
-      "title": "D106 isolated spec-only review of add-polyrepo-sync \u2014 2 blocking / 8 major / 12 minor",
+      "title": "D106 isolated spec-only review of add-polyrepo-sync — 2 blocking / 8 major / 12 minor",
       "pr": null,
       "decisions": []
     }
@@ -20,32 +20,8 @@
   "prs": [
     {
       "number": 617,
-      "ref": "quickstart-now/hejbro#617",
-      "title": "fix(spec): d106 correction round for add-polyrepo-sync",
-      "head": "fdb73c5b202de99eecb52cc04b650ca82e1a38ec",
-      "headRef": "feat-polyrepo-d106",
-      "base": "dev",
-      "merged": "2026-09-01T19:02:54Z",
-      "pinnedAt": "2026-09-01T00:00Z",
-      "migrated": true,
-      "refs": [
-        {
-          "path": "openspec/changes/add-polyrepo-sync/specs/schema-vendoring/spec.md",
-          "blob": "7435ac8491f39d2b0d838cd4296a1b7105b74bf5"
-        },
-        {
-          "path": "packages/query/test/client/roles.test.ts",
-          "blob": "14aece3f06b59f67830d01affb1c54d00a6a44d8"
-        },
-        {
-          "path": "openspec/changes/add-polyrepo-sync/tasks.md",
-          "blob": "99942f7a329d0cf325b6bc6c5f709aeda06d8485"
-        },
-        {
-          "path": "packages/query/src/client/name-keyed-db.ts",
-          "blob": "c82fea48ce34d3a0d90ab34708d9b85e24121ab6"
-        }
-      ]
+      "role": "closes",
+      "pinnedAt": "2026-09-01T00:00Z"
     }
   ],
   "origin": null,

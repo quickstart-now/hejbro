@@ -1,0 +1,258 @@
+{
+  "version": 3,
+  "number": 492,
+  "ref": "quickstart-now/hejbro#492",
+  "title": "feat(core): common table expressions across the query surface",
+  "head": "f6618b782ccafafb8c1293dd23402b25fee21384",
+  "headRef": "feat-add-ctes",
+  "base": "dev",
+  "merged": "2026-08-29T14:19:22Z",
+  "pinnedAt": "2026-08-29T00:00Z",
+  "migrated": true,
+  "refs": [
+    {
+      "path": ".changeset/add-ctes.md",
+      "blob": "e3f38825d0cae5e1134beb6247ccad7d3379f4fc"
+    },
+    {
+      "path": "openspec/changes/add-ctes/design.md",
+      "blob": "68ffb4793c394f8c1e82fcf56c8d5b4ce229e3bd"
+    },
+    {
+      "path": "openspec/changes/add-ctes/proposal.md",
+      "blob": "bf0ee2caac79a3e1cdad4ffc06b09da9eb1f1e8c"
+    },
+    {
+      "path": "openspec/changes/add-ctes/specs/query-builder/spec.md",
+      "blob": "beb9245dc34870f1ef8051c0c9d2bb22d50e6035"
+    },
+    {
+      "path": "openspec/changes/add-ctes/specs/query-execution/spec.md",
+      "blob": "c8992c8f5769e274dabe7e6795aca44413d44d82"
+    },
+    {
+      "path": "openspec/changes/add-ctes/specs/query-type-inference/spec.md",
+      "blob": "d2472e74150ba6cce3cdc8d42b6101d19a38d944"
+    },
+    {
+      "path": "openspec/changes/add-ctes/specs/snapshot-format/spec.md",
+      "blob": "4cf2e617f6b0995655a456945e3aa676e6887d45"
+    },
+    {
+      "path": "openspec/changes/add-ctes/tasks.md",
+      "blob": "58bc58b982cf2d890c1b5b4d9a5232b612cda105"
+    },
+    {
+      "path": "openspec/task-times.csv",
+      "blob": "810e633254d6287dbfaa094efb2cd025c6943222"
+    },
+    {
+      "path": "packages/cli/test/exports.test.ts",
+      "blob": "3a5c782fb72ff10c858edfde9f3a488592199579"
+    },
+    {
+      "path": "packages/core/src/array-identity.ts",
+      "blob": "071ea77b12b9732cde3f1c1759f28963a1ed5768"
+    },
+    {
+      "path": "packages/core/src/dsl/define-view.ts",
+      "blob": "ed586a1181cc506426389707fec135566e45b554"
+    },
+    {
+      "path": "packages/core/src/dsl/index-builder.ts",
+      "blob": "5da8b6eba9b93eba6aab84c8af9479c5366fe50d"
+    },
+    {
+      "path": "packages/core/src/dsl/rls.ts",
+      "blob": "e9455448fd7c5495ba9fa3d98261f2e176758530"
+    },
+    {
+      "path": "packages/core/src/dsl/table.ts",
+      "blob": "2e982837978c40b8ca5dca4d86c0231246c0d7e5"
+    },
+    {
+      "path": "packages/core/src/engine/rename/retarget.ts",
+      "blob": "eb56db2cad921909eb87dba26b0130516a8697c4"
+    },
+    {
+      "path": "packages/core/src/expr/ast.ts",
+      "blob": "e5324cd39479ab75f638c86cc141617428682717"
+    },
+    {
+      "path": "packages/core/src/expr/codec.ts",
+      "blob": "cc214b08ffd431ae0ba57baea6a2e9d4ea0cec2f"
+    },
+    {
+      "path": "packages/core/src/expr/render-sql.ts",
+      "blob": "9f20fb8f9dfa4646e64f6a42ca9abca9d9067bf7"
+    },
+    {
+      "path": "packages/core/src/expr/retarget.ts",
+      "blob": "9307ffc2a662ddc6aba961e7f11d98367a3cab9b"
+    },
+    {
+      "path": "packages/core/src/expr/walk.ts",
+      "blob": "4989232c9aea91e2e28e5190fbab00298e723a50"
+    },
+    {
+      "path": "packages/core/src/index.ts",
+      "blob": "01e01e4a0fed0211b96e44c521dd956bafe466a2"
+    },
+    {
+      "path": "packages/core/src/kinds/view-kind.ts",
+      "blob": "0d9608bb929a730696da9856687245b009070dc2"
+    },
+    {
+      "path": "packages/core/src/query/select.ts",
+      "blob": "5982e04e38ce5875c1613e1929ed0f9ce890c5a1"
+    },
+    {
+      "path": "packages/core/src/query/with-recursive.ts",
+      "blob": "7251772911d06614e0e5ee048d3963f778737020"
+    },
+    {
+      "path": "packages/core/src/query/with.ts",
+      "blob": "b52b91fa36923550a15709b0e23a91e3d7a4d78f"
+    },
+    {
+      "path": "packages/core/src/snapshot/column-order.ts",
+      "blob": "6a30e8bc9fb61e06a5d51084f796845be878fb0c"
+    },
+    {
+      "path": "packages/core/test/column-order.test.ts",
+      "blob": "fe92a3b81985fd85c322ef8648412360ee0c18e2"
+    },
+    {
+      "path": "packages/core/test/dsl/cte-column-ref.test.ts",
+      "blob": "cdcee011d2a80c8a14a1267df890fe86451c7be7"
+    },
+    {
+      "path": "packages/core/test/dsl/rls-binding.test.ts",
+      "blob": "e86b4b1e6c1da8778845ce1092c5d303e1fa0166"
+    },
+    {
+      "path": "packages/core/test/engine/rename-with.test.ts",
+      "blob": "d7f05c7c29c4469848a2531fa9831dc6c3a1c847"
+    },
+    {
+      "path": "packages/core/test/expr/codec.test.ts",
+      "blob": "aac95500340c417e3cc9d59b0ee24fd69a44de04"
+    },
+    {
+      "path": "packages/core/test/expr/reachable-kinds.ts",
+      "blob": "99d95fee596bf0d5df2f43f215e6f56667c28a68"
+    },
+    {
+      "path": "packages/core/test/expr/retarget.test.ts",
+      "blob": "cd5b852b65bf1604faf58fd33bfb7557b074485c"
+    },
+    {
+      "path": "packages/core/test/expr/walk.test.ts",
+      "blob": "3bc76f8478fff2aba7883a01d1c213d931e4716c"
+    },
+    {
+      "path": "packages/core/test/expr/with-node.test.ts",
+      "blob": "ec70227a0149d9175d18f3695ab44d0240b427c5"
+    },
+    {
+      "path": "packages/core/test/expr/with-scope.test.ts",
+      "blob": "21aa2f733ff87b0cd28fbd2ca7b414af253d4127"
+    },
+    {
+      "path": "packages/core/test/kinds/view-with.test.ts",
+      "blob": "cef1b832dc5004ad8a344ceee0a10c061ec11840"
+    },
+    {
+      "path": "packages/core/test/naming-conventions.test.ts",
+      "blob": "2a6a412046afee50bf234a965f36395e0049cbc9"
+    },
+    {
+      "path": "packages/core/test/query/with-recursive.test.ts",
+      "blob": "b0f44b0254a623ccd8dbe144a1259cfee7c9e46a"
+    },
+    {
+      "path": "packages/core/test/query/with.test.ts",
+      "blob": "282b8496b09ba987d56f8d3aee239028116d1e59"
+    },
+    {
+      "path": "packages/pg/test/integration.test.ts",
+      "blob": "265f334bf02bcb93d21376e190bdc855fa375d97"
+    },
+    {
+      "path": "packages/query/src/compile/compile.ts",
+      "blob": "cac8886db96282e3dbe18c15e7977fbaeec9e0c7"
+    },
+    {
+      "path": "packages/query/src/compile/params.ts",
+      "blob": "c725ef5ad091ea27f41e494da7de3ea90d2e6871"
+    },
+    {
+      "path": "packages/query/src/compile/select.ts",
+      "blob": "5069a838db46cfb8337ea915e5b90c5aba5b0b3b"
+    },
+    {
+      "path": "packages/query/src/db/chain.ts",
+      "blob": "ca90a6dcfa8c10a5aa8c31b213f22c85138826ad"
+    },
+    {
+      "path": "packages/query/src/db/convert.ts",
+      "blob": "44c62859c6b6cd11099930c828d642658c38b7c6"
+    },
+    {
+      "path": "packages/query/src/db/db.ts",
+      "blob": "ef4e18a9568374b42ae62c2af685558e263bd54c"
+    },
+    {
+      "path": "packages/query/src/index.ts",
+      "blob": "19c0e13a17eab86efa34fcb44d848bef112416b4"
+    },
+    {
+      "path": "packages/query/src/types/set-op.ts",
+      "blob": "8b22ecbbc86a304a8b6e9a79f018f71e3f79de11"
+    },
+    {
+      "path": "packages/query/test/compile/with.test.ts",
+      "blob": "fa4ce4172a04410b30a47c408c1dc1fa567306a0"
+    },
+    {
+      "path": "packages/query/test/db/chain.test.ts",
+      "blob": "ce1e641d2a81889f20bb5e21ab35f57e5816f53a"
+    },
+    {
+      "path": "packages/query/test/db/convert.test.ts",
+      "blob": "7e22a456cf0ec56c5fb05b6a195ff376ef0cf5c8"
+    },
+    {
+      "path": "packages/query/test/db/with.test.ts",
+      "blob": "0316d4a6c6e1393e319581b3b7a7ac47a6ccc85b"
+    },
+    {
+      "path": "packages/query/test/exports.test.ts",
+      "blob": "ec5497022d12d1674cb0830ab97ea161a3793fe9"
+    },
+    {
+      "path": "packages/query/test/types/select-result.test.ts",
+      "blob": "670f6b922f4ab167ef800ee128d74772c86b9067"
+    },
+    {
+      "path": "packages/skills/test/fixtures/preludes/query-handle.ts",
+      "blob": "2d0ca5913c495b2fd57bd0cd9e6226b7ca3293f7"
+    },
+    {
+      "path": "packages/supabase/src/validators/view-security-invoker.ts",
+      "blob": "b4431d2a0c71c3c00e8ea07db20e94d6baa9c757"
+    },
+    {
+      "path": "packages/supabase/test/view-security-invoker.test.ts",
+      "blob": "9928dbc30f39463ab7bcd2948c7363c27e0c6a5e"
+    },
+    {
+      "path": "README.md",
+      "blob": "4c6cba15b8987643545256b86f4cde51b692cbf2"
+    },
+    {
+      "path": "skills/hejbro/references/query-layer.md",
+      "blob": "d0a58c34e2f27fd09be6c9ff73270ac585396af3"
+    }
+  ]
+}

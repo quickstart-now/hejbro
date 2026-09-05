@@ -1,0 +1,46 @@
+{
+  "version": 3,
+  "number": 355,
+  "ref": "quickstart-now/hejbro#355",
+  "title": "docs(openspec): propose add-array-ergonomics (d99)",
+  "head": "0a302a2c876d39dd9b43c7161c9e1e7be29d4b05",
+  "headRef": "phase10-array-ergonomics",
+  "base": "dev",
+  "merged": "2026-08-27T16:32:55Z",
+  "pinnedAt": "2026-08-28T00:00Z",
+  "migrated": true,
+  "refs": [
+    {
+      "path": "openspec/changes/add-array-ergonomics/proposal.md",
+      "blob": "dc18882ee21861cc57f41125a6b4032d11c13cc0"
+    },
+    {
+      "path": "openspec/changes/add-array-ergonomics/design.md",
+      "blob": "27326013342cb3b1e19d9d9108ec16af4c4bc1bd"
+    },
+    {
+      "path": "openspec/changes/add-array-ergonomics/tasks.md",
+      "blob": "044d427cb087c4cdc24bab4fff5c7ebf359c7000"
+    },
+    {
+      "path": "openspec/changes/add-array-ergonomics/specs/table-declaration/spec.md",
+      "blob": "1f3c4a0d07bec7777c9544715da107010ce791d1"
+    },
+    {
+      "path": "openspec/changes/add-array-ergonomics/specs/value-utilities/spec.md",
+      "blob": "ac65d35450993c1d2b3f3a39d94f9b8c651b7167"
+    },
+    {
+      "path": "openspec/changes/add-array-ergonomics/specs/query-type-inference/spec.md",
+      "blob": "9cb583fed42a1bfa48ea9682f7692929b9e6a36c"
+    },
+    {
+      "path": "openspec/changes/add-array-ergonomics/specs/query-execution/spec.md",
+      "blob": "9fffb489fc28cdfc452a776666256429a595117a"
+    },
+    {
+      "path": "docs/specs/2026-08-19-hejbro-design.md",
+      "blob": "a879b576608de2cfb9cc38f2c4e2874607085b01"
+    }
+  ]
+}

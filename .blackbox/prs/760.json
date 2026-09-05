@@ -1,0 +1,57 @@
+{
+  "version": 3,
+  "number": 760,
+  "ref": "quickstart-now/hejbro#760",
+  "title": "chore(openspec): archive harden-query-conformance (d106 round 1 clean)",
+  "head": "f200df6a789e294f8f8526e76bb312646badf143",
+  "headRef": "archive-harden-query-conformance",
+  "base": "dev",
+  "merged": "2026-09-03T15:26:59Z",
+  "pinnedAt": "2026-09-04T04:46Z",
+  "refs": [
+    {
+      "path": "openspec/changes/archive/2026-09-04-harden-query-conformance/evaluation.md",
+      "blob": "56016ff6b5ba779d89c506453b9fbd044577c5b9"
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-04-harden-query-conformance/proposal.md",
+      "blob": "c5c487e3d39ec0667ac1ace4ebb1ba9c6c1a09d8"
+    },
+    {
+      "path": "openspec/changes/harden-query-conformance/proposal.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-04-harden-query-conformance/specs/driver-contract/spec.md",
+      "blob": "d5103e80739d36367c39f738f44ab9aee0a31d58"
+    },
+    {
+      "path": "openspec/changes/harden-query-conformance/specs/driver-contract/spec.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-04-harden-query-conformance/specs/query-type-inference/spec.md",
+      "blob": "6ff1a63c2868a52bbd41841b008f7277137a934a"
+    },
+    {
+      "path": "openspec/changes/harden-query-conformance/specs/query-type-inference/spec.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-04-harden-query-conformance/tasks.md",
+      "blob": "be0af599eb2772d6b3fab6bb6bea0f8780a6373f"
+    },
+    {
+      "path": "openspec/changes/harden-query-conformance/tasks.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/specs/driver-contract/spec.md",
+      "blob": "956cb3fe3829d405e6252496ffdea80ebb3ebc31"
+    },
+    {
+      "path": "openspec/specs/query-type-inference/spec.md",
+      "blob": "0c4834a28dfa7e9030cca06f2b64a3e74cd25258"
+    }
+  ]
+}

@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 3,
   "kind": "issue",
   "ref": "quickstart-now/hejbro#810",
   "title": "ci: comment the ci-approval link on a gated pr so the owner can find the review",
@@ -22,19 +22,8 @@
   "prs": [
     {
       "number": 811,
-      "ref": "quickstart-now/hejbro#811",
-      "title": "ci: comment the ci-approval link on a gated pr (#810)",
-      "head": "c34288a0cb6835b443cec32edb472216630cde50",
-      "headRef": "ci-approval-notice",
-      "base": "dev",
-      "merged": null,
-      "pinnedAt": "2026-09-04T09:27Z",
-      "refs": [
-        {
-          "path": ".github/workflows/ci.yml",
-          "blob": "cc70d9707e9aff0a3117376077ee155a41c5d81a"
-        }
-      ]
+      "role": "closes",
+      "pinnedAt": "2026-09-04T09:27Z"
     }
   ],
   "origin": null,

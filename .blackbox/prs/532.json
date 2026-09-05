@@ -1,0 +1,66 @@
+{
+  "version": 3,
+  "number": 532,
+  "ref": "quickstart-now/hejbro#532",
+  "title": "feat(supabase): take the connection endpoint as a driver option",
+  "head": "4a6257fc5fd9e397fbb5f47cf58f276441eefdf4",
+  "headRef": "feat-extend-supabase-driver",
+  "base": "dev",
+  "merged": "2026-08-30T15:49:55Z",
+  "pinnedAt": "2026-08-31T00:00Z",
+  "migrated": true,
+  "refs": [
+    {
+      "path": "packages/supabase/src/driver.ts",
+      "blob": "981080052269ef0c4d90d26f4c18e50d594caa11"
+    },
+    {
+      "path": "packages/supabase/src/pooler.ts",
+      "blob": "7af8583f485f8e3eb42d5f234828174243092fe2"
+    },
+    {
+      "path": "packages/supabase/src/index.ts",
+      "blob": "0c79dfdb16712b185f65aad4da11f0b77475bb75"
+    },
+    {
+      "path": "packages/supabase/test/driver.test.ts",
+      "blob": "8ea4afcce55a9591830b92b87078cae5ab392290"
+    },
+    {
+      "path": "packages/supabase/test/pooler.test.ts",
+      "blob": "3bc43d6ad7a930265b8c4c29c71df50a98fe7538"
+    },
+    {
+      "path": "packages/supabase/test/smoke.test.ts",
+      "blob": "daf234663154022dc68628816c9a346443a88c54"
+    },
+    {
+      "path": "openspec/changes/extend-supabase-driver/proposal.md",
+      "blob": "6588b0cfb5ea884a9e0042f7460b658d9fcf8cc9"
+    },
+    {
+      "path": "openspec/changes/extend-supabase-driver/design.md",
+      "blob": "a66b99abdb5b574cacf99c945a78d3b754bfb26a"
+    },
+    {
+      "path": "openspec/changes/extend-supabase-driver/tasks.md",
+      "blob": "5068e3ae628310f117caed3994641ef77c145dde"
+    },
+    {
+      "path": "openspec/changes/extend-supabase-driver/specs/driver-contract/spec.md",
+      "blob": "22fa215fecb8507f10381be136b857f81a960134"
+    },
+    {
+      "path": "skills/hejbro/references/supabase-preset.md",
+      "blob": "c648b560308a96321628c0bbe146ad477d579c8b"
+    },
+    {
+      "path": "skills/hejbro/references/query-layer.md",
+      "blob": "e0e76f2e13a2e9ce10b01425c499dacf4a57129f"
+    },
+    {
+      "path": ".changeset/add-supabase-pooler-endpoint.md",
+      "blob": "3a6e13dbfaf62a11017001340dd9af3f5bb12ff5"
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "version": 3,
+  "number": 387,
+  "ref": "quickstart-now/hejbro#387",
+  "title": "feat(core): snapshot v6 with identity and computed column emit and diff",
+  "head": "9ed17e4ebbec4f15e6c9dbd0dd790c0a4263b15b",
+  "headRef": "phase10-gen-g2",
+  "base": "dev",
+  "merged": "2026-08-28T03:29:10Z",
+  "pinnedAt": "2026-08-28T00:00Z",
+  "migrated": true,
+  "refs": [
+    {
+      "path": "packages/core/src/kinds/table-kind.ts",
+      "blob": "25ae16afa4ddd5a1e6d39dfa2bd64411db042f6e"
+    },
+    {
+      "path": "packages/core/src/kinds/table-kind-emit-sql.ts",
+      "blob": "40aa4360eebfc515b20f939f443295b00190c748"
+    },
+    {
+      "path": "packages/core/src/snapshot/snapshot.ts",
+      "blob": "231d4827f4240b221ebf223d06bf92d90426daea"
+    },
+    {
+      "path": "packages/core/src/snapshot/column-order.ts",
+      "blob": "fb5a364e025b8ce5392fd40693bf115166d41d76"
+    }
+  ]
+}

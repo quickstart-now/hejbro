@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 3,
   "kind": "issue",
   "ref": "quickstart-now/hejbro#787",
   "title": "blackbox: migrate the lead ruling ledger R1–R90 into issue folders (first ratification queue of 0.2.1)",
@@ -20,14 +20,8 @@
   "prs": [
     {
       "number": 789,
-      "ref": "quickstart-now/hejbro#789",
-      "title": "chore(blackbox): migrate the lead ruling ledger R1–R91 into issue folders",
-      "head": "b5d369730acf1bcb277227099ae6d89d3ca44581",
-      "headRef": "migrate-rulings",
-      "base": "dev",
-      "merged": null,
-      "pinnedAt": "2026-09-04T04:47Z",
-      "refs": []
+      "role": "closes",
+      "pinnedAt": "2026-09-04T04:47Z"
     }
   ],
   "origin": null,

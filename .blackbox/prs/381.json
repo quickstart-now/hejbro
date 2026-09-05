@@ -1,0 +1,26 @@
+{
+  "version": 3,
+  "number": 381,
+  "ref": "quickstart-now/hejbro#381",
+  "title": "feat(query): exclude always-generated columns from write input types",
+  "head": "da3d7162fc29bcd6af451402888c29352ebcdd22",
+  "headRef": "phase10-gen-g3",
+  "base": "dev",
+  "merged": "2026-08-28T01:55:12Z",
+  "pinnedAt": "2026-08-28T00:00Z",
+  "migrated": true,
+  "refs": [
+    {
+      "path": "packages/query/src/types/insert-input.ts",
+      "blob": "db6c0f4e31dbf69097eefa5a0bb4a97962e47857"
+    },
+    {
+      "path": "packages/query/test/types/insert-input.test.ts",
+      "blob": "2ad3d56063872b71113cb0938683479161add51e"
+    },
+    {
+      "path": "packages/query/test/types/chain-mutation-input.test.ts",
+      "blob": "82dbe701d6ae49db963ad83dbafc6790b31f2a62"
+    }
+  ]
+}

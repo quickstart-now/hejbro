@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 3,
   "kind": "issue",
   "ref": "quickstart-now/hejbro#378",
   "title": "defect-leakage metric over escaped defects",
@@ -20,7 +20,7 @@
     {
       "id": "W1",
       "at": "2026-08-28T00:00Z",
-      "title": "fix-defect-metric \u2014 the number that grades the process (#378)",
+      "title": "fix-defect-metric — the number that grades the process (#378)",
       "pr": null,
       "decisions": []
     }
@@ -28,20 +28,8 @@
   "prs": [
     {
       "number": 384,
-      "ref": "quickstart-now/hejbro#384",
-      "title": "docs(readme): defect-leakage rollup over the escaped-defect label",
-      "head": "a872550ee02d592129d5191579c29a806e65f48a",
-      "headRef": "fix-defect-metric",
-      "base": "dev",
-      "merged": "2026-08-28T02:48:24Z",
-      "pinnedAt": "2026-08-28T00:00Z",
-      "migrated": true,
-      "refs": [
-        {
-          "path": "README.md",
-          "blob": "2e876c1bcb17a144e7b927bc570b2e879cb1860b"
-        }
-      ]
+      "role": "closes",
+      "pinnedAt": "2026-08-28T00:00Z"
     }
   ],
   "origin": null,

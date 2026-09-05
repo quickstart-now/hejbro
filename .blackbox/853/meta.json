@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 3,
   "kind": "issue",
   "ref": "quickstart-now/hejbro#853",
   "title": "check: a not-compared Next: blames EXPLAIN privilege for a non-privilege server reason",
@@ -12,55 +12,8 @@
   "prs": [
     {
       "number": 855,
-      "ref": "quickstart-now/hejbro#855",
-      "title": "chore(openspec): archive harden-check-expressions after d106 round 1",
-      "head": "42bbb3c7dc3e9e86be73659a27c2653b0ecaf5d0",
-      "headRef": "archive-check-expressions",
-      "base": "dev",
-      "merged": null,
-      "pinnedAt": "2026-09-04T21:45Z",
-      "refs": [
-        {
-          "path": "openspec/changes/archive/2026-09-05-harden-check-expressions/design.md",
-          "blob": "6307ddcedc302f6af89c5abe449e60b9659c6b1c"
-        },
-        {
-          "path": "openspec/changes/harden-check-expressions/design.md",
-          "blob": null
-        },
-        {
-          "path": "openspec/changes/archive/2026-09-05-harden-check-expressions/evaluation.md",
-          "blob": "6d4a5c25b2ee90460ac7e688cdc7c4219beb6ea4"
-        },
-        {
-          "path": "openspec/changes/archive/2026-09-05-harden-check-expressions/proposal.md",
-          "blob": "346b4ffae0cb8a38bc9e53c2162211a4b995e37f"
-        },
-        {
-          "path": "openspec/changes/harden-check-expressions/proposal.md",
-          "blob": null
-        },
-        {
-          "path": "openspec/changes/archive/2026-09-05-harden-check-expressions/specs/cli-commands/spec.md",
-          "blob": "a0a50cf0cbd3746ef07d7fff807660420a2f62b0"
-        },
-        {
-          "path": "openspec/changes/harden-check-expressions/specs/cli-commands/spec.md",
-          "blob": null
-        },
-        {
-          "path": "openspec/changes/archive/2026-09-05-harden-check-expressions/tasks.md",
-          "blob": "096ba7047acacd7f8b43b113e1c5c1ce5d7d1982"
-        },
-        {
-          "path": "openspec/changes/harden-check-expressions/tasks.md",
-          "blob": null
-        },
-        {
-          "path": "openspec/specs/cli-commands/spec.md",
-          "blob": "6ab6af922d0911efb2395d2ff31d6a6f5b686ddc"
-        }
-      ]
+      "role": "refs",
+      "pinnedAt": "2026-09-04T21:45Z"
     }
   ],
   "origin": null,

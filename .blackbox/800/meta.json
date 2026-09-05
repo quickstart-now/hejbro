@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 3,
   "kind": "issue",
   "ref": "quickstart-now/hejbro#800",
   "title": "amend D99: notNullElements check renders its column by table, not fully qualified",
@@ -24,19 +24,8 @@
   "prs": [
     {
       "number": 822,
-      "ref": "quickstart-now/hejbro#822",
-      "title": "docs(spec): amend d99 to the shipped table-bound column rendering (#800)",
-      "head": "ebe15d22275b74e79a7d37081c5cdba62d0ad177",
-      "headRef": "amend-d99",
-      "base": "dev",
-      "merged": null,
-      "pinnedAt": "2026-09-04T13:54Z",
-      "refs": [
-        {
-          "path": "docs/specs/2026-08-19-hejbro-design.md",
-          "blob": "ddf2fa730ec61e8cf5cec6429a190ef7b25c1de8"
-        }
-      ]
+      "role": "closes",
+      "pinnedAt": "2026-09-04T13:54Z"
     }
   ],
   "origin": null,

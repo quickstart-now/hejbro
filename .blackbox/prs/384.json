@@ -1,0 +1,18 @@
+{
+  "version": 3,
+  "number": 384,
+  "ref": "quickstart-now/hejbro#384",
+  "title": "docs(readme): defect-leakage rollup over the escaped-defect label",
+  "head": "a872550ee02d592129d5191579c29a806e65f48a",
+  "headRef": "fix-defect-metric",
+  "base": "dev",
+  "merged": "2026-08-28T02:48:24Z",
+  "pinnedAt": "2026-08-28T00:00Z",
+  "migrated": true,
+  "refs": [
+    {
+      "path": "README.md",
+      "blob": "2e876c1bcb17a144e7b927bc570b2e879cb1860b"
+    }
+  ]
+}

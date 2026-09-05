@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 3,
   "kind": "issue",
   "ref": "quickstart-now/hejbro#368",
   "title": "add-generated-columns group 1: declaration surface",
@@ -12,7 +12,7 @@
     {
       "id": "W1",
       "at": "2026-08-28T00:00Z",
-      "title": "generated-columns group 1 \u2014 the surface, and a probe that caught a gap before review",
+      "title": "generated-columns group 1 — the surface, and a probe that caught a gap before review",
       "pr": null,
       "decisions": []
     }
@@ -20,28 +20,8 @@
   "prs": [
     {
       "number": 369,
-      "ref": "quickstart-now/hejbro#369",
-      "title": "feat(core): declare identity and computed columns on the builder",
-      "head": "1b09cd4a7db100a279c76091076ee84aae06ef5e",
-      "headRef": "phase10-gen-g1",
-      "base": "dev",
-      "merged": "2026-08-28T00:54:04Z",
-      "pinnedAt": "2026-08-28T00:00Z",
-      "migrated": true,
-      "refs": [
-        {
-          "path": "packages/core/src/types/column-builder.ts",
-          "blob": "7de884913efdc4221e1b7f121f5a1f662c2cbf12"
-        },
-        {
-          "path": "packages/core/src/dsl/table.ts",
-          "blob": "4a7eec82df57a34c2143a4399be23a4df0241c48"
-        },
-        {
-          "path": "packages/core/test/generated-columns.test.ts",
-          "blob": "e370a76f6cb2b0317e0179c613c2985fc87b5704"
-        }
-      ]
+      "role": "closes",
+      "pinnedAt": "2026-08-28T00:00Z"
     }
   ],
   "origin": null,

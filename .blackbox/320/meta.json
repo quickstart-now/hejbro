@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 3,
   "kind": "issue",
   "ref": "quickstart-now/hejbro#320",
   "title": "array columns have no result-conversion path (moded numeric/bigint, interval[])",
@@ -12,7 +12,7 @@
     {
       "id": "W1",
       "at": "2026-08-27T00:00Z",
-      "title": "harden-query-layer group 1 \u2014 array conversion and driver override",
+      "title": "harden-query-layer group 1 — array conversion and driver override",
       "pr": null,
       "decisions": []
     }
@@ -20,56 +20,8 @@
   "prs": [
     {
       "number": 343,
-      "ref": "quickstart-now/hejbro#343",
-      "title": "fix(query): element-wise array conversion and late-bound driver hook",
-      "head": "a0f37be68ce08830d8a41b6206edfaa84c78d4fb",
-      "headRef": "phase10-harden-g1",
-      "base": "dev",
-      "merged": "2026-08-27T10:57:48Z",
-      "pinnedAt": "2026-08-27T00:00Z",
-      "migrated": true,
-      "refs": [
-        {
-          "path": "openspec/changes/harden-query-layer/specs/driver-contract/spec.md",
-          "blob": "b68ef025e4a22265d175057166f0b439852068ab"
-        },
-        {
-          "path": "openspec/changes/harden-query-layer/specs/query-execution/spec.md",
-          "blob": "a3f8bc81f69992a7e6792cfa786a5a0c635a441f"
-        },
-        {
-          "path": "openspec/changes/harden-query-layer/tasks.md",
-          "blob": "9e37662f76061be29bed6112fab70362ae9565fb"
-        },
-        {
-          "path": "packages/pg/src/driver.ts",
-          "blob": "d2c0eb0121d26983a8ee42965d6bc93dd5bc0cce"
-        },
-        {
-          "path": "packages/pg/test/driver.test.ts",
-          "blob": "4456fdec156b49ef39623d53d672d52c3ea9da0a"
-        },
-        {
-          "path": "packages/pg/test/integration.test.ts",
-          "blob": "08fb86b09d979730475a8c00269348ba8fb9a418"
-        },
-        {
-          "path": "packages/query/src/db/convert.ts",
-          "blob": "0ee26618bd73d5097460ec216a8c70da13857286"
-        },
-        {
-          "path": "packages/query/src/types/array-text.ts",
-          "blob": "6a76226837d5020c1da8eddbd1431251413d3bd6"
-        },
-        {
-          "path": "packages/query/test/db/convert.test.ts",
-          "blob": "1567d57f667ff9729be9c29052791c9b37ca76fc"
-        },
-        {
-          "path": "packages/query/test/types/array-text.test.ts",
-          "blob": "88192edf6452294b6e939d1f333f04012c93b59b"
-        }
-      ]
+      "role": "closes",
+      "pinnedAt": "2026-08-27T00:00Z"
     }
   ],
   "origin": null,

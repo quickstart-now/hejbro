@@ -1,0 +1,70 @@
+{
+  "version": 3,
+  "number": 309,
+  "ref": "quickstart-now/hejbro#309",
+  "title": "feat(query): pure compiler and sql escape hatch (#293 group 2)",
+  "head": "1b095b75772d1bf51774e507009f4bf69a21167a",
+  "headRef": "phase10-query-g2",
+  "base": "dev",
+  "merged": "2026-08-26T10:52:38Z",
+  "pinnedAt": "2026-08-26T00:00Z",
+  "migrated": true,
+  "refs": [
+    {
+      "path": "packages/query/src/compile/compile.ts",
+      "blob": "6316a61ff7491bd5b139320768c72c2f1a39fec2"
+    },
+    {
+      "path": "packages/query/src/compile/select.ts",
+      "blob": "cc9e2ec3755481ba0e91d66994401775c7e176d6"
+    },
+    {
+      "path": "packages/query/src/compile/mutation.ts",
+      "blob": "51e2887442530b64e9ea59d73485e07a5b61a2d0"
+    },
+    {
+      "path": "packages/query/src/compile/params.ts",
+      "blob": "e2bd6ea06f9cb9b7bf756a30b5d04b011f33d590"
+    },
+    {
+      "path": "packages/query/src/sql.ts",
+      "blob": "fe34a8ff57c68daf6b1c2c3516d71e6236002c58"
+    },
+    {
+      "path": "openspec/changes/add-query-layer/specs/query-builder/spec.md",
+      "blob": "a26a896f9c0dcc2484a1c177adc74dd868b85696"
+    },
+    {
+      "path": "openspec/changes/add-query-layer/design.md",
+      "blob": "ca53b3e990990b088932f321325337e163266855"
+    },
+    {
+      "path": "openspec/changes/add-query-layer/tasks.md",
+      "blob": "a9ffbeecfd34ce0417fe1b3a73c546e9b56e6120"
+    },
+    {
+      "path": "openspec/task-times.csv",
+      "blob": "6c64d12dbc2b9e4824ee621d9984b4861d1cc2e0"
+    },
+    {
+      "path": "openspec/task-tokens.csv",
+      "blob": "e04d2e50b6d7532b8477aaf72884f4be91b40dd6"
+    },
+    {
+      "path": "docs/specs/2026-08-19-hejbro-design.md",
+      "blob": "72ef77497abc79fb4df695d2670ffde97a88f1fa"
+    },
+    {
+      "path": "README.md",
+      "blob": "0758388cb26c13a258f8b49dccb14d3faeb381cc"
+    },
+    {
+      "path": "scripts/crap-report.mjs",
+      "blob": "d3837bea3ec562f9e7f51f478876b4f90319246d"
+    },
+    {
+      "path": "scripts/update-crap-readme.mjs",
+      "blob": "8c5f89104a46bcea4e1970202fdce74faf0c7db5"
+    }
+  ]
+}

@@ -6,17 +6,17 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 
 | Item | Title | Status | PRs | Owner decisions | Rulings |
 |---|---|---|---|---|---|
-| [#293](293/) | Design spec: PostgreSQL/serverless ORM direction (query layer, drivers, RLS context) | closed | #304 #306 #309 #312 #316 #319 #321 #324 | 8 | 0 (0 pending) |
+| [#293](293/) | Design spec: PostgreSQL/serverless ORM direction (query layer, drivers, RLS context) | closed | #304 #306 #309 #312 #316 #319 #321 #324 #327 (via #325) | 8 | 0 (0 pending) |
 | ↳ [#325](325/) | add-query-layer group 7: public surface, docs, release wiring | closed | #327 | 0 | 0 (0 pending) |
 | [#294](294/) | Adopt blackbox provenance records at the repository root | closed | #295 | 2 | 0 (0 pending) |
 | [#296](296/) | Adopt Claude Code large-codebases guide settings (fit-tested) | closed | #297 | 1 | 0 (0 pending) |
 | [#298](298/) | Relational query layer on top of the query builder | closed | #399 | 1 | 0 (0 pending) |
 | [#300](300/) | @hejbro/neon preset with driver | closed |  | 1 | 0 (0 pending) |
-| [#301](301/) | @hejbro/nile preset with driver and tenant context | closed | #572 | 1 | 0 (0 pending) |
+| [#301](301/) | @hejbro/nile preset with driver and tenant context | closed | #572 #592 (via #561) | 1 | 0 (0 pending) |
 | ↳ [#561](561/) | context-required boundary: vacuous contexts and operation naming (D106 gca F6/F7) | open | #592 | 1 | 0 (0 pending) |
 | [#302](302/) | Startup verify assertion on the db handle | closed | #535 | 0 | 0 (0 pending) |
 | [#307](307/) | Left-join nullability widening in query type inference | closed | #550 | 1 | 0 (0 pending) |
-| [#308](308/) | Generated and identity column declarations | closed | #367 | 1 | 0 (0 pending) |
+| [#308](308/) | Generated and identity column declarations | closed | #367 #369 (via #368) #387 (via #370) #381 (via #371) #392 (via #388) | 1 | 0 (0 pending) |
 | ↳ [#368](368/) | add-generated-columns group 1: declaration surface | closed | #369 | 0 | 0 (0 pending) |
 | ↳ [#370](370/) | add-generated-columns group 2: snapshot v6, emit, diff | closed | #387 | 0 | 0 (0 pending) |
 | ↳ [#371](371/) | add-generated-columns group 3: write-side typing | closed | #381 | 0 | 0 (0 pending) |
@@ -34,7 +34,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | [#341](341/) | integration seed still bypasses the typed insert() it now could use | closed | #348 | 1 | 0 (0 pending) |
 | [#342](342/) | array literal writer and parser lack a shared inverse property test | closed | #350 | 1 | 0 (0 pending) |
 | [#349](349/) | array element types deny the null elements the grammar round-trips | closed | #353 | 1 | 0 (0 pending) |
-| [#354](354/) | constraint-backed non-null array elements and an honest narrowing utility | closed | #355 | 1 | 0 (0 pending) |
+| [#354](354/) | constraint-backed non-null array elements and an honest narrowing utility | closed | #355 #359 (via #356) #358 (via #357) #362 (via #360) #364 (via #363) | 1 | 0 (0 pending) |
 | ↳ [#356](356/) | add-array-ergonomics group 1: declaration surface and type narrowing | closed | #359 | 0 | 0 (0 pending) |
 | ↳ [#357](357/) | add-array-ergonomics group 2: assertNoNulls utility and exports | closed | #358 | 1 | 0 (0 pending) |
 | ↳ [#360](360/) | add-array-ergonomics group 3: NULL-element conversion guard | closed | #362 | 0 | 0 (0 pending) |
@@ -45,7 +45,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | [#374](374/) | adversarial spec-only review stage in the opsx cycle | closed | #539 | 1 | 0 (0 pending) |
 | [#377](377/) | snapshot format stability policy for 1.0 | closed | #383 | 1 | 0 (0 pending) |
 | [#378](378/) | defect-leakage metric over escaped defects | closed | #384 | 1 | 0 (0 pending) |
-| [#412](412/) | 0.2.x: post-release commitments | open | #715 #808 #824 #835 #840 #849 #851 #858 | 19 | 28 (0 pending) |
+| [#412](412/) | 0.2.x: post-release commitments | open | #715 #808 #824 #835 #840 #849 #851 #858 #850 (via #449) #737 (via #528) #760 (via #528) #773 (via #533) #733 (via #679) #758 (via #679) #739 (via #687) #759 (via #687) #770 (via #687) #861 (via #701) #847 (via #741) #833 (via #748) #784 (via #750) #802 (via #750) #775 (via #752) #799 (via #752) #780 (via #754) #795 (via #754) #855 (via #778) #838 (via #783) #786 (via #785) #789 (via #787) #790 (via #788) #792 (via #791) #794 (via #793) #822 (via #800) #806 (via #804) #813 (via #807) #811 (via #810) | 19 | 28 (0 pending) |
 | ↳ [#449](449/) | concurrent tx.execute beside a nested transaction is unguarded | closed | #849 #850 | 0 | 3 (2 pending) |
 | ↳ [#528](528/) | driver-conformance kit mis-observes transaction-wrapping session-state:false drivers | closed | #737 #760 | 0 | 6 (0 pending) |
 | ↳ [#531](531/) | pg checkout reads its own setupSession; the spec's late-binding scenario fails for spread decorators | closed | #737 | 0 | 3 (0 pending) |
@@ -141,7 +141,7 @@ Owner decisions 84 · rulings 152 (interpretation 101, extension 49, stop 2) · 
 
 - One folder per work item, named by its tracker number; a follow-up is a new number linked through `meta.json`, never a second folder.
 - `decisions.md` records every decision as it is made: owner decisions (`D#`) as faithful English rewrites of the owner's words, AI rulings (`R#`) with kind (interpretation, extension, stop), basis and ratification. `work.md` (`W#`) records what was built, measured and reversed. Both are append-only; a correction is a new entry.
-- Every PR is pinned before merge: each changed file's blob SHA, checked both ways (every pin matches the PR head, every changed file is pinned) by the pre-merge hook and by CI.
+- Every PR is pinned before merge: each changed file's blob SHA, stored once per item in `prs/<N>.json` and checked both ways (every pin matches the PR head, every changed file is pinned) by the pre-merge hook and by CI. A folder's `meta.json` holds one line per PR (`closes`, `refs` or `own`); a parent's PR column is derived from its children.
 - Never read this directory during normal work. It answers provenance questions only.
 
 Merged but not closed: #412, #533, #561

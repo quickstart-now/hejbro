@@ -1,0 +1,22 @@
+{
+  "version": 3,
+  "number": 362,
+  "ref": "quickstart-now/hejbro#362",
+  "title": "feat(query): reject a null element in an array declared without nulls",
+  "head": "7e45c008aca5fc47f48c50f7577b758b9bdb0988",
+  "headRef": "phase10-array-g3",
+  "base": "dev",
+  "merged": "2026-08-27T18:37:12Z",
+  "pinnedAt": "2026-08-28T00:00Z",
+  "migrated": true,
+  "refs": [
+    {
+      "path": "packages/query/src/db/convert.ts",
+      "blob": "ce6bb7dfb328e52e65513f7f33eeecfb5a6069aa"
+    },
+    {
+      "path": "packages/query/test/db/convert.test.ts",
+      "blob": "e2bbb3a6e9c0411dbfffb5e8a5ff1ae05ae448f2"
+    }
+  ]
+}

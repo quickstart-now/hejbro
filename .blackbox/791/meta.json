@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 3,
   "kind": "issue",
   "ref": "quickstart-now/hejbro#791",
   "title": "blackbox: vendor the tool with the harness wake-up fix (agent-skills #18)",
@@ -20,14 +20,8 @@
   "prs": [
     {
       "number": 792,
-      "ref": "quickstart-now/hejbro#792",
-      "title": "chore(blackbox): vendor the tool with the harness wake-up fix (agent-skills #18)",
-      "head": "e94bd14022696b3ea2fdc21a3ffc225871034be4",
-      "headRef": "vendor-blackbox-tool",
-      "base": "dev",
-      "merged": null,
-      "pinnedAt": "2026-09-04T05:20Z",
-      "refs": []
+      "role": "closes",
+      "pinnedAt": "2026-09-04T05:20Z"
     }
   ],
   "origin": null,

@@ -1,0 +1,66 @@
+{
+  "version": 3,
+  "number": 306,
+  "ref": "quickstart-now/hejbro#306",
+  "title": "feat(core): left join and returning projection (#293 group 1)",
+  "head": "83a8a15b3480e463b3fa5de6834e2c52ce06a1a4",
+  "headRef": "phase10-query-ir",
+  "base": "dev",
+  "merged": "2026-08-26T09:21:26Z",
+  "pinnedAt": "2026-08-26T00:00Z",
+  "migrated": true,
+  "refs": [
+    {
+      "path": "packages/core/src/expr/ast.ts",
+      "blob": "4b863e498a024303465536c34057292401adc289"
+    },
+    {
+      "path": "packages/core/src/expr/codec.ts",
+      "blob": "57512a960239a093166dcada6034b7216d23f118"
+    },
+    {
+      "path": "packages/core/src/expr/render-sql.ts",
+      "blob": "17b4948922781e4e48d417ce637313cb616489b0"
+    },
+    {
+      "path": "packages/core/src/query/select.ts",
+      "blob": "4e4f69be8573e701dde5b36b5a98b3f7eda7f129"
+    },
+    {
+      "path": "packages/core/src/query/mutate.ts",
+      "blob": "11d682235f06468ab7f855829bf23d70292a4a3c"
+    },
+    {
+      "path": "packages/core/src/index.ts",
+      "blob": "4ba7af3a1667de60ddd52d03fad116ee59608c7e"
+    },
+    {
+      "path": "packages/query/package.json",
+      "blob": "d543b98afffe31270e01c982b0a1574e413b08ed"
+    },
+    {
+      "path": "packages/query/vitest.config.ts",
+      "blob": "869d3b27c118804cb49cdc8e693b6d6df28031f4"
+    },
+    {
+      "path": "openspec/changes/add-query-layer/tasks.md",
+      "blob": "75e48cf01089d06b20ce6300f414c64cdf99ae12"
+    },
+    {
+      "path": "openspec/changes/add-query-layer/design.md",
+      "blob": "bfb5ec7c859ad40f59ffd74367923fd7d7774f20"
+    },
+    {
+      "path": "openspec/changes/add-query-layer/proposal.md",
+      "blob": "470bd5b09893c88b91030f337acd0655c2d9ffb8"
+    },
+    {
+      "path": "docs/specs/2026-08-19-hejbro-design.md",
+      "blob": "2c6672457300b728893d0f6d928173192c4c2e86"
+    },
+    {
+      "path": "openspec/task-times.csv",
+      "blob": "a5b6e4513db9f3ef71095fc91952d77147aacfdb"
+    }
+  ]
+}

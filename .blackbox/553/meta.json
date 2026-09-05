@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 3,
   "kind": "issue",
   "ref": "quickstart-now/hejbro#553",
   "title": "query: driver-owned context application (generalize the execution-context contract)",
@@ -20,7 +20,7 @@
     {
       "id": "W1",
       "at": "2026-08-31T00:00Z",
-      "title": "generalize-context-application \u2014 the driver owns the sentence (#553)",
+      "title": "generalize-context-application — the driver owns the sentence (#553)",
       "pr": null,
       "decisions": []
     }
@@ -28,100 +28,8 @@
   "prs": [
     {
       "number": 560,
-      "ref": "quickstart-now/hejbro#560",
-      "title": "feat(query): let drivers own how a context becomes statements",
-      "head": "e5534e7ed864a18e82366aa2f99da9df3f39cb27",
-      "headRef": "feat-generalize-context-application",
-      "base": "dev",
-      "merged": "2026-08-31T06:26:04Z",
-      "pinnedAt": "2026-08-31T00:00Z",
-      "migrated": true,
-      "refs": [
-        {
-          "path": ".changeset/generalize-context-application.md",
-          "blob": "751680b8eac3f7240ff482543eddf8dede226aff"
-        },
-        {
-          "path": "README.md",
-          "blob": "ad87f4372793c5e39f4fa9b959dbde12465e417a"
-        },
-        {
-          "path": "openspec/changes/archive/2026-08-31-generalize-context-application/proposal.md",
-          "blob": "f4410978b0901a5b023b85676a9755d75fadfc93"
-        },
-        {
-          "path": "openspec/changes/archive/2026-08-31-generalize-context-application/specs/driver-contract/spec.md",
-          "blob": "7791ef57b231bc3826e83ab002116dd66f775dc0"
-        },
-        {
-          "path": "openspec/changes/archive/2026-08-31-generalize-context-application/specs/rls-execution-context/spec.md",
-          "blob": "1e3c0c8ace1da93136e36fc9eaf4b1a2cb0269c6"
-        },
-        {
-          "path": "openspec/changes/archive/2026-08-31-generalize-context-application/tasks.md",
-          "blob": "90444d4389c444c30bb02f756a2c9e2ac1eacc05"
-        },
-        {
-          "path": "openspec/task-times.csv",
-          "blob": "f0e5514da13ff65c42904ae731a3b803f1d5cd76"
-        },
-        {
-          "path": "packages/neon/test/driver.test.ts",
-          "blob": "edbb81f594ad112dbfb7cb38492231ae3b5d5b65"
-        },
-        {
-          "path": "packages/pg/test/driver.test.ts",
-          "blob": "ed5c3cea081d8609ae757251eddff52cc4e5aca0"
-        },
-        {
-          "path": "packages/query/src/db/context.ts",
-          "blob": "ab894816422c346430bbac5826963db0ffb91a28"
-        },
-        {
-          "path": "packages/query/src/db/db.ts",
-          "blob": "64fa922469745a7f747d67200472ce2a0caf0b8c"
-        },
-        {
-          "path": "packages/query/src/driver/contract.ts",
-          "blob": "95d828c09ca1096c510503dc8183a5d753791a09"
-        },
-        {
-          "path": "packages/query/src/index.ts",
-          "blob": "9bb143fd495749e5013f3fbd9d7c359c09ba1690"
-        },
-        {
-          "path": "packages/query/test/db/context-provider.test.ts",
-          "blob": "65c88edcc659d31f07ab78f5e365e2a0c4db1855"
-        },
-        {
-          "path": "packages/query/test/db/context-required.test.ts",
-          "blob": "374bf725f799b51cab069533fe8c863978d7d345"
-        },
-        {
-          "path": "packages/query/test/db/context.test.ts",
-          "blob": "dce151b5751595f5e6695a3ae20dd05ca85bace0"
-        },
-        {
-          "path": "packages/query/test/db/recording-driver.ts",
-          "blob": "245f437a744534a0ca0f336c9792b3b837cb996d"
-        },
-        {
-          "path": "packages/query/test/driver/contract.test.ts",
-          "blob": "7dcb2d7f58352d81bf7f2d78be511bda73d28ad2"
-        },
-        {
-          "path": "packages/query/test/exports.test.ts",
-          "blob": "3b8db25d59f4dda21526fe91c05b56c095652370"
-        },
-        {
-          "path": "packages/supabase/test/driver.test.ts",
-          "blob": "e985caf9fea2cd073b27ff81be59296d08811968"
-        },
-        {
-          "path": "skills/hejbro/references/query-layer.md",
-          "blob": "e894a4e06a97febaccc78cc40ece15a808c2f3ec"
-        }
-      ]
+      "role": "closes",
+      "pinnedAt": "2026-08-31T00:00Z"
     }
   ],
   "origin": null,

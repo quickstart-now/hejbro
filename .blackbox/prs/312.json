@@ -1,0 +1,62 @@
+{
+  "version": 3,
+  "number": 312,
+  "ref": "quickstart-now/hejbro#312",
+  "title": "feat(core): declaration-driven query type inference (#293 group 3)",
+  "head": "085fd7fe4aa3c44ec26081ad2cca4efa7e3cafa9",
+  "headRef": "phase10-query-g3",
+  "base": "dev",
+  "merged": "2026-08-26T13:14:52Z",
+  "pinnedAt": "2026-08-26T00:00Z",
+  "migrated": true,
+  "refs": [
+    {
+      "path": "packages/core/src/types/column-builder.ts",
+      "blob": "a09150fc6ae6fc708bc39a96f2459e9ac5adae16"
+    },
+    {
+      "path": "packages/core/src/types/column-builder-factories.ts",
+      "blob": "ab213f38c6ad7b0d5eb8a373115f521faa2e7171"
+    },
+    {
+      "path": "packages/core/src/types/ts-type-map.ts",
+      "blob": "a54ff096705aac24164b6d82d79ff14b0064e162"
+    },
+    {
+      "path": "packages/core/src/index.ts",
+      "blob": "1332250c6360f923f3e6bccd6d2ba87257062be1"
+    },
+    {
+      "path": "packages/query/src/types/select-result.ts",
+      "blob": "ab2b3939f7f932ec8fe0c1cca2a6a55bb564054e"
+    },
+    {
+      "path": "packages/query/src/types/numeric-mode.ts",
+      "blob": "a596083998fc59b8ba7404939f7bfa9d456215b4"
+    },
+    {
+      "path": "packages/query/src/types/interval.ts",
+      "blob": "49f27411719cf6f29c32bf9bc7cbb918ad7235e0"
+    },
+    {
+      "path": "openspec/changes/add-query-layer/specs/query-type-inference/spec.md",
+      "blob": "54650fcb0427cde3cb4e6ca22dafbbd8813a70fe"
+    },
+    {
+      "path": "openspec/changes/add-query-layer/tasks.md",
+      "blob": "5ace98e870a65b394a0e7bb19d8ee9b765d5e5a0"
+    },
+    {
+      "path": "openspec/task-times.csv",
+      "blob": "187da6586038d96f8bf83be9fa8d626a9b5c315f"
+    },
+    {
+      "path": "openspec/task-tokens.csv",
+      "blob": "f40700d15c9ed1fa8d7682648a23a479008f8267"
+    },
+    {
+      "path": "docs/specs/2026-08-19-hejbro-design.md",
+      "blob": "c40345d29d757a8d506cb60496382ecb8035c4a7"
+    }
+  ]
+}

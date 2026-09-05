@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 3,
   "kind": "issue",
   "ref": "quickstart-now/hejbro#866",
   "title": "chore: vendor dd-blackbox meta v3 and migrate the record (pins once per PR)",
@@ -8,7 +8,15 @@
   "opened": "2026-09-05",
   "closed": null,
   "decisions": [],
-  "work": [],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-05T00:21Z",
+      "title": "vendored dd-blackbox meta v3 and migrated 126 folders: meta 617KB → 139KB, pins once per PR (97 files, 200KB)",
+      "pr": null,
+      "decisions": []
+    }
+  ],
   "prs": [],
   "origin": null,
   "followUps": []

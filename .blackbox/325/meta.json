@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 3,
   "kind": "issue",
   "ref": "quickstart-now/hejbro#325",
   "title": "add-query-layer group 7: public surface, docs, release wiring",
@@ -12,7 +12,7 @@
     {
       "id": "W1",
       "at": "2026-08-27T00:00Z",
-      "title": "add-query-layer group 7 \u2014 public surface, thenable chains, release wiring",
+      "title": "add-query-layer group 7 — public surface, thenable chains, release wiring",
       "pr": null,
       "decisions": []
     }
@@ -20,56 +20,8 @@
   "prs": [
     {
       "number": 327,
-      "ref": "quickstart-now/hejbro#327",
-      "title": "feat(query): thenable chains, hejbro facade, and release wiring (#293 group 7)",
-      "head": "1585e5d363841f4af271398a577f72b385c3fdaa",
-      "headRef": "phase10-query-g7",
-      "base": "dev",
-      "merged": "2026-08-27T07:09:10Z",
-      "pinnedAt": "2026-08-27T00:00Z",
-      "migrated": true,
-      "refs": [
-        {
-          "path": "packages/query/src/db/chain.ts",
-          "blob": "125f4d6bbcaf917a422eefe3d846715cdca97d26"
-        },
-        {
-          "path": "packages/query/src/index.ts",
-          "blob": "90e9ac289bfacd15fc080f3df7bfc0a57b8b91e6"
-        },
-        {
-          "path": "packages/cli/src/index.ts",
-          "blob": "af20d2f1b3b2706d5bd5a77a760084b479f60d44"
-        },
-        {
-          "path": "packages/query/package.json",
-          "blob": "ada90dd734cec7e2526ada66e4871afb1e1c329d"
-        },
-        {
-          "path": "packages/pg/package.json",
-          "blob": "3f8df7e0322d705eb0830677099eb718b699de66"
-        },
-        {
-          "path": ".changeset/config.json",
-          "blob": "6f873cc4df9d1eba14eca72240f56e1cf06c8eb5"
-        },
-        {
-          "path": "scripts/pack-install-smoke.sh",
-          "blob": "d95b90b90f971973f1e66771f3e82e931db0d714"
-        },
-        {
-          "path": "openspec/changes/add-query-layer/specs/query-builder/spec.md",
-          "blob": "1d03a9c2a9d3b4416dfd20f14ab77485fb1ea3db"
-        },
-        {
-          "path": "openspec/changes/add-query-layer/tasks.md",
-          "blob": "2e0c7faae3aabcf1fe672ab21f0ed11310f8144b"
-        },
-        {
-          "path": "openspec/config.yaml",
-          "blob": "7853df659d9d42d15df6e29556b36622c3a31914"
-        }
-      ]
+      "role": "closes",
+      "pinnedAt": "2026-08-27T00:00Z"
     }
   ],
   "origin": null,

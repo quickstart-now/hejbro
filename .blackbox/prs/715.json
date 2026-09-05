@@ -1,0 +1,26 @@
+{
+  "version": 3,
+  "number": 715,
+  "ref": "quickstart-now/hejbro#715",
+  "title": "docs(process): adopt three amendments after the round-5 review (D110)",
+  "head": "3d376c6c7daa646c1d98aee245174bb0ca9e9c73",
+  "headRef": "docs-process-three-rules",
+  "base": "dev",
+  "merged": "2026-09-02T23:28:38Z",
+  "pinnedAt": "2026-09-03T00:00Z",
+  "migrated": true,
+  "refs": [
+    {
+      "path": "docs/specs/2026-08-19-hejbro-design.md",
+      "blob": "7e734d5a86c8b44e0fee0fd1a4cfc9f50bf85ceb"
+    },
+    {
+      "path": "AGENTS.md",
+      "blob": "fe0b0ce6e9d27939ae9d2119a474a489a1330bfa"
+    },
+    {
+      "path": "openspec/config.yaml",
+      "blob": "ac06240b67e82b06b92df55cda0985017b1e57c9"
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "version": 3,
+  "number": 790,
+  "ref": "quickstart-now/hejbro#790",
+  "title": "chore(blackbox): migrate the legacy single-file entries into issue folders",
+  "head": "9f7fcd6b35a496dac7f6b2c016e23f5da921eb89",
+  "headRef": "migrate-legacy",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-04T05:02Z",
+  "refs": []
+}

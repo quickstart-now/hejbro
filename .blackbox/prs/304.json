@@ -1,0 +1,58 @@
+{
+  "version": 3,
+  "number": 304,
+  "ref": "quickstart-now/hejbro#304",
+  "title": "docs(spec): propose add-query-layer orm change (d91-d98)",
+  "head": "6bd0310c103dfd0ce5e1aaba32c1417302c7966c",
+  "headRef": "phase10-orm-spec",
+  "base": "dev",
+  "merged": "2026-08-26T08:56:08Z",
+  "pinnedAt": "2026-08-26T00:00Z",
+  "migrated": true,
+  "refs": [
+    {
+      "path": "openspec/changes/add-query-layer/.openspec.yaml",
+      "blob": "701445b8918c5053f1ef1286eca58370ff4029e7"
+    },
+    {
+      "path": "openspec/changes/add-query-layer/proposal.md",
+      "blob": "6351dd439e008bffc040cb1dc2747deb65a6c60d"
+    },
+    {
+      "path": "openspec/changes/add-query-layer/design.md",
+      "blob": "383e001bfed2abb820c5bed12dc4dd7c857ea1ef"
+    },
+    {
+      "path": "openspec/changes/add-query-layer/tasks.md",
+      "blob": "c47413ed2ef95a29eba48816b1287b216c4a224b"
+    },
+    {
+      "path": "openspec/changes/add-query-layer/specs/query-builder/spec.md",
+      "blob": "c8682d9d8df4ce64bf4029a4f7f8c37479545f1f"
+    },
+    {
+      "path": "openspec/changes/add-query-layer/specs/query-type-inference/spec.md",
+      "blob": "e3ed6b3f5cd3ed239ab866a036869e97386261d2"
+    },
+    {
+      "path": "openspec/changes/add-query-layer/specs/driver-contract/spec.md",
+      "blob": "23a384bead03ddc03071b6d467edacdbb9df86d9"
+    },
+    {
+      "path": "openspec/changes/add-query-layer/specs/query-execution/spec.md",
+      "blob": "ec3ba541a949ece22f6b769f3e96619e835b4b92"
+    },
+    {
+      "path": "openspec/changes/add-query-layer/specs/rls-execution-context/spec.md",
+      "blob": "6b4b79bc8ec1e045407df8d8cfbcafb67a102ee8"
+    },
+    {
+      "path": "openspec/changes/add-query-layer/specs/typed-function-execution/spec.md",
+      "blob": "cce8b6daf78cc731ff469915a32436bdcb4795a4"
+    },
+    {
+      "path": "docs/specs/2026-08-19-hejbro-design.md",
+      "blob": "4b0be05440880e3ba344370ccae04673635f8c3f"
+    }
+  ]
+}

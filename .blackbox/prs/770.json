@@ -1,0 +1,61 @@
+{
+  "version": 3,
+  "number": 770,
+  "ref": "quickstart-now/hejbro#770",
+  "title": "chore(openspec): archive fix-cli-init-and-vendoring (d106 round 2 clean)",
+  "head": "303c034ba35266efa0273d7850dfda7989d7f8da",
+  "headRef": "archive-fix-cli-init-and-vendoring",
+  "base": "dev",
+  "merged": "2026-09-03T15:33:40Z",
+  "pinnedAt": "2026-09-04T04:45Z",
+  "refs": [
+    {
+      "path": "openspec/changes/archive/2026-09-04-fix-cli-init-and-vendoring/evaluation.md",
+      "blob": "9a1ceace0ab2df8a90eeaf396b7b98f91d744f6b"
+    },
+    {
+      "path": "openspec/changes/fix-cli-init-and-vendoring/evaluation.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-04-fix-cli-init-and-vendoring/proposal.md",
+      "blob": "bb55fda04d16e31bec024d84379d26eb48384e2a"
+    },
+    {
+      "path": "openspec/changes/fix-cli-init-and-vendoring/proposal.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-04-fix-cli-init-and-vendoring/specs/cli-commands/spec.md",
+      "blob": "7637466f7e6d2694a2e74866557a711be7f273b8"
+    },
+    {
+      "path": "openspec/changes/fix-cli-init-and-vendoring/specs/cli-commands/spec.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-04-fix-cli-init-and-vendoring/specs/schema-vendoring/spec.md",
+      "blob": "72a51630334d6b4387e8fac84a9d6abd7072f9d6"
+    },
+    {
+      "path": "openspec/changes/fix-cli-init-and-vendoring/specs/schema-vendoring/spec.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-04-fix-cli-init-and-vendoring/tasks.md",
+      "blob": "5e9c25979131c57d921922c53a12d94980a98ac0"
+    },
+    {
+      "path": "openspec/changes/fix-cli-init-and-vendoring/tasks.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/specs/cli-commands/spec.md",
+      "blob": "809c1ff0cf7990fcb771f5c4fc39e4f3336f789d"
+    },
+    {
+      "path": "openspec/specs/schema-vendoring/spec.md",
+      "blob": "d789958c6aabce5a91a59a972babe9361c8daabd"
+    }
+  ]
+}
