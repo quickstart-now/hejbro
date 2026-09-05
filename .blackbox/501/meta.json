@@ -120,6 +120,15 @@
       "decisions": [
         "R2"
       ]
+    },
+    {
+      "id": "W5",
+      "at": "2026-09-05T15:19Z",
+      "title": "review round 2 (501/R7): filter's refusal message and its condition's window guard",
+      "pr": null,
+      "decisions": [
+        "R7"
+      ]
     }
   ],
   "prs": [],
