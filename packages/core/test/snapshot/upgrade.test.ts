@@ -1,14 +1,21 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { defineView } from "../../src/dsl/define-view";
+import { schema } from "../../src/dsl/schema";
+import { getTableMeta, table } from "../../src/dsl/table";
 import { HejbroError } from "../../src/error";
 import { createDefaultRegistry } from "../../src/kind/registry";
+import { select } from "../../src/query/select";
+import { withCte } from "../../src/query/with";
 import {
+	buildSnapshot,
 	emptySnapshot,
 	parseSnapshot,
 	renderSnapshot,
 	upgradeSnapshot,
 } from "../../src/snapshot/snapshot";
+import { text, uuid } from "../../src/types/column-builder-factories";
 
 const registry = createDefaultRegistry();
 const FIXTURES_DIR = join(import.meta.dirname, "../fixtures/format-5");
@@ -45,6 +52,27 @@ const FORMAT_5_FIXTURES: ReadonlyArray<{
 	{ label: "golden-view-lifecycle", file: "golden-view-lifecycle.json" },
 ];
 
+/**
+ * Measured (#413 Stage A, cross-checked with su-planner's own independent
+ * count): every golden case present at the `hejbro@0.1.1` tag has a
+ * `declarations.ts` byte-identical to today's — none diverged — so all ten
+ * qualify for the byte-identical oracle. None is held back as a skipped
+ * table; that path only fires if a future re-measurement finds a
+ * divergent case.
+ */
+const BYTE_IDENTICAL_GOLDEN_CASES: ReadonlyArray<string> = [
+	"app-posts",
+	"app-security",
+	"column-insert-mid",
+	"comments-single-depth",
+	"grants-delta",
+	"rls-policies",
+	"sequence-lifecycle",
+	"table-constraints",
+	"table-indexes",
+	"view-lifecycle",
+];
+
 /** Every golden case's current-format expected snapshot, plus the empty snapshot — the fixed-point table (T3): a diverse current-format input set (views, generated/identity columns, grants, sequences, offset/distinct) covering the shapes #413's re-encoding must leave untouched. */
 const CURRENT_FORMAT_GOLDEN_CASES: ReadonlyArray<string> = [
 	"app-posts",
@@ -79,6 +107,78 @@ const captureHejbroError = (fn: () => unknown): HejbroError => {
 	throw new Error("expected a HejbroError to be thrown, but nothing was");
 };
 
+const memoryApp = schema("app");
+const memoryPosts = table(memoryApp, "posts", {
+	id: uuid().primaryKey(),
+	status: text().notNull(),
+});
+
+/**
+ * #413 1.1b: `queryKind: "with"` and `queryKind: "set-op"` never appear in
+ * any committed snapshot (measured — spike W3: 0.1.1 predates CTEs, and no
+ * golden case's view uses a set operation), so the fixed point for those
+ * two discriminator shapes can only be exercised from a snapshot built in
+ * memory, never a vendored file.
+ */
+const QUERY_KIND_FIXED_POINTS: ReadonlyArray<{
+	readonly label: string;
+	readonly declarations: ReadonlyArray<
+		Parameters<typeof buildSnapshot>[0][number]
+	>;
+}> = [
+	{
+		label: "a view body that is a with query",
+		declarations: [
+			memoryApp,
+			getTableMeta(memoryPosts),
+			defineView(
+				memoryApp,
+				"ranked_posts",
+				withCte((w) => {
+					const ranked = w.as("ranked", select(memoryPosts));
+					return select({ id: ranked.id }, ranked);
+				}),
+			),
+		],
+	},
+	{
+		label: "a view body that is a union",
+		declarations: [
+			memoryApp,
+			getTableMeta(memoryPosts),
+			defineView(
+				memoryApp,
+				"posts_union",
+				select(memoryPosts).union(select(memoryPosts)),
+			),
+		],
+	},
+	{
+		label: "a view body that is an except",
+		declarations: [
+			memoryApp,
+			getTableMeta(memoryPosts),
+			defineView(
+				memoryApp,
+				"posts_except",
+				select(memoryPosts).except(select(memoryPosts)),
+			),
+		],
+	},
+	{
+		label: "a view body that is an intersect",
+		declarations: [
+			memoryApp,
+			getTableMeta(memoryPosts),
+			defineView(
+				memoryApp,
+				"posts_intersect",
+				select(memoryPosts).intersect(select(memoryPosts)),
+			),
+		],
+	},
+];
+
 describe("upgradeSnapshot", () => {
 	describe("re-encodes every format-5 snapshot the first release wrote", () => {
 		it.each(FORMAT_5_FIXTURES)(
@@ -98,6 +198,33 @@ describe("upgradeSnapshot", () => {
 				expect(twice.text).toBe(once.text);
 			},
 		);
+	});
+
+	describe("a golden case with unchanged declarations reproduces the writer's bytes", () => {
+		it.each(BYTE_IDENTICAL_GOLDEN_CASES)(
+			"%s: upgrading the tag's format-5 expected snapshot equals today's expected snapshot byte for byte",
+			(caseName) => {
+				const v5Raw = readFixture(`golden-${caseName}.json`);
+				const currentExpected = readGoldenExpected(caseName);
+
+				const result = upgradeSnapshot(v5Raw, registry);
+
+				expect(result.text).toBe(currentExpected);
+			},
+		);
+	});
+
+	describe("a queryKind shape absent from every committed snapshot is still a fixed point", () => {
+		it.each(QUERY_KIND_FIXED_POINTS)("$label", ({ declarations }) => {
+			const currentText = renderSnapshot(
+				buildSnapshot(declarations, registry, emptySnapshot),
+			);
+
+			const result = upgradeSnapshot(currentText, registry);
+
+			expect(result.fromVersion).toBe(8);
+			expect(result.text).toBe(currentText);
+		});
 	});
 
 	describe("the current format is a fixed point", () => {
@@ -139,7 +266,11 @@ describe("upgradeSnapshot", () => {
 			],
 			[
 				"a non-numeric formatVersion",
-				JSON.stringify({ formatVersion: "2", dialect: "postgres", objects: {} }),
+				JSON.stringify({
+					formatVersion: "2",
+					dialect: "postgres",
+					objects: {},
+				}),
 			],
 		])("%s", (_label, raw) => {
 			const ordinary = captureHejbroError(() => parseSnapshot(raw));

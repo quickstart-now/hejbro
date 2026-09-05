@@ -1,5 +1,13 @@
 import type { RenameSpec } from "../engine/rename-plan";
 import { throwHejbroError } from "../error";
+import {
+	decodeExprNode,
+	decodeQueryNode,
+	decodeWithNode,
+	encodeExprNode,
+	encodeQueryNode,
+	encodeWithNode,
+} from "../expr/codec";
 import type { HejbroDeclaration, SerializeContext } from "../kind/object-kind";
 import type { KindRegistry, RegisteredObjectKind } from "../kind/registry";
 import { compareKeys } from "../sort";
@@ -596,14 +604,76 @@ export type SnapshotUpgrade = {
 	readonly fromVersion: number;
 };
 
+/** A JSON value that is a plain object (not `null`, not an array) — narrows a {@link JsonValue} before probing it for a node discriminator. */
+const isJsonRecord = (
+	value: JsonValue,
+): value is { readonly [key: string]: JsonValue } =>
+	value !== null && typeof value === "object" && !Array.isArray(value);
+
+/**
+ * Round-trips a `queryKind`-bearing node through its own codec — `with`
+ * needs its own decode/encode pair since {@link decodeQueryNode}/
+ * {@link encodeQueryNode} deliberately excludes it (a `WithEntryNode.
+ * query`/`SetOpNode.left`/`right` can never itself be a `WithNode`, so
+ * widening that shared dispatcher would let a value that must never exist
+ * type-check). Split out of {@link normalizeDiscriminatedNodes} to keep
+ * that function's own branch count under the CRAP gate.
+ */
+const normalizeQueryNode = (value: {
+	readonly [key: string]: JsonValue;
+}): JsonValue => {
+	if (value.queryKind === "with") {
+		return encodeWithNode(decodeWithNode(value));
+	}
+	return encodeQueryNode(decodeQueryNode(value));
+};
+
+/**
+ * #413's own re-encoding step, distinct from {@link canonicalizeSnapshot}
+ * (which only reorders set-shaped arrays): recursively finds the
+ * outermost `nodeKind`- or `queryKind`-bearing subtree in `value` and
+ * round-trips it through its own codec (decode, then re-encode) — this is
+ * what makes a field an older shape lacks (e.g. a stored select missing
+ * `offset`/`distinct`/`groupBy`/`having`) decode to its current empty
+ * value. A node is recognised by its own discriminator field only, never
+ * a per-kind field list, so a preset's own expression or query node is
+ * covered without a core special case. Once a discriminated subtree is
+ * round-tripped this does not recurse into its result — the codec's own
+ * decode/encode already normalizes everything nested beneath it — but it
+ * does recurse through ordinary object/array structure to reach a node
+ * nested under an arbitrary kind-specific field name (`checks[].
+ * expression`, `columns[].default`, a policy's `using`, …).
+ */
+const normalizeDiscriminatedNodes = (value: JsonValue): JsonValue => {
+	if (Array.isArray(value)) {
+		return value.map(normalizeDiscriminatedNodes);
+	}
+	if (!isJsonRecord(value)) {
+		return value;
+	}
+	if (typeof value.nodeKind === "string") {
+		return encodeExprNode(decodeExprNode(value));
+	}
+	if (typeof value.queryKind === "string") {
+		return normalizeQueryNode(value);
+	}
+	return Object.fromEntries(
+		Object.entries(value).map(([key, entryValue]) => [
+			key,
+			normalizeDiscriminatedNodes(entryValue),
+		]),
+	);
+};
+
 /**
  * Re-encodes a snapshot whose format is one a released hejbro wrote (the
  * floor {@link HEJBRO_UPGRADABLE_SNAPSHOT_FLOOR} through
  * {@link HEJBRO_SNAPSHOT_VERSION}, inclusive) into the current format
  * (#413). Reads it through the same lenient shape rules
- * {@link parseSnapshot} uses — an older shape's absent field decodes to
- * its empty value — brings every object to its own kind's canonical form
- * via `registry` (a real {@link KindRegistry}, not just
+ * {@link parseSnapshot} uses, runs {@link normalizeDiscriminatedNodes} —
+ * the step that makes an older shape's absent field decode to its empty
+ * value — then brings every object to its own kind's canonical form via
+ * `registry` (a real {@link KindRegistry}, not just
  * `requiredKeysByKind`'s plain map: the canonical form a format bump
  * folds in, e.g. the v6→v7 foreign-key order, lives in a kind's own
  * `canonicalize`, which only a real registry can run for every kind a
@@ -631,7 +701,12 @@ export const upgradeSnapshot = (
 	const snapshot: Snapshot = {
 		formatVersion: HEJBRO_SNAPSHOT_VERSION,
 		dialect: "postgres",
-		objects,
+		objects: Object.fromEntries(
+			Object.entries(objects).map(([key, node]) => [
+				key,
+				normalizeDiscriminatedNodes(node),
+			]),
+		),
 	};
 	return {
 		text: renderSnapshot(canonicalizeSnapshot(snapshot, registry)),

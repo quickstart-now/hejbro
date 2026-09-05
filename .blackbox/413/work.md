@@ -41,3 +41,16 @@ Follow-up measurement on W2's spike: grepped all 16 current-format snapshots (14
 
 Consequence: the spike's Result 2 (fixed point over all 16 current-format files) never exercised the generic walker's `with`/`set-op` dispatch branches -- both are unverified by any file-based oracle available in this repo today, not just `with` alone as first noted. Neither branch can ever be exercised by a vendored fixture (0.1.1 predates CTEs, and no golden case's declarations use a set operation), so covering them needs an in-memory constructed input (buildSnapshot over a declaration set that includes a CTE view and a union/except/intersect view), not a file. Held pending the lead's ruling on (A) vs (B); if (B) ships, this coverage gap becomes its own task.
 
+<a id="w4"></a>
+## W4 — 1.1b: generic discriminator-driven normalization closes the byte oracle
+
+_2026-09-05T07:13Z_
+
+Implemented the recursive normalization pass ruled on in R2 (lead ruling via su-planner): normalizeDiscriminatedNodes walks a parsed snapshot's objects and, on encountering an object literal carrying `nodeKind` (an ExprNode) or `queryKind` (a query node), round-trips it through its own codec (decodeExprNode/encodeExprNode; decodeQueryNode/encodeQueryNode for select/set-op; decodeWithNode/encodeWithNode for with) and replaces the subtree, run inside upgradeSnapshot before canonicalizeSnapshot. Node recognition is by discriminator field only, no per-kind field list.
+
+Refactor during green (su-planner review): the first working version imported view-kind.ts's own encodeViewQueryNode/decodeViewQueryNode wrapper for the with/non-with dispatch -- functionally correct (same underlying codec calls) but made the generic normalizer depend on a specific kinds/ module, contradicting 1.1b's own "recognise by discriminator only, no kind-specific dependency" constraint. Replaced with the same three-way dispatch built directly from expr/codec.ts's own exports (decodeQueryNode/encodeQueryNode, decodeWithNode/encodeWithNode), removing the kinds/view-kind import entirely -- snapshot.ts now only depends on expr/codec.ts for both the expression and query axes, symmetric.
+
+CRAP gate caught a second issue after that refactor: folding the with/non-with dispatch into normalizeDiscriminatedNodes's own body raised its cyclomatic complexity to 6 (CRAP 6.00 at 100% coverage -- complexity alone over the threshold, not a coverage gap, so no test could fix it). Split the queryKind dispatch into its own normalizeQueryNode helper; both functions now sit at exactly complexity 5 (CRAP 5.00, at the gate's own threshold, matching the pattern already used elsewhere in this file, e.g. applyCanonicalize split out of buildEntry).
+
+Result: 45/45 tests green (T1 12 + T2 10 golden byte-oracle + 4 in-memory queryKind fixed points [with/union/except/intersect, none present in any committed snapshot] + T3 15 + T4 4 refusal rows), full pnpm test (@hejbro/core: 101 files / 1726 passed + 1 todo), all custom gates (bans, next-marker, diagnostic-xref, crap) green.
+

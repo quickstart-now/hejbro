@@ -69,6 +69,13 @@
       "title": "spike addendum: neither with nor set-op queryKind appears in any current-format file",
       "pr": null,
       "decisions": []
+    },
+    {
+      "id": "W4",
+      "at": "2026-09-05T07:13Z",
+      "title": "1.1b: generic discriminator-driven normalization closes the byte oracle",
+      "pr": null,
+      "decisions": []
     }
   ],
   "prs": [],
