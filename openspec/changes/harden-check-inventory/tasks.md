@@ -155,7 +155,7 @@ delta scenarios of `openspec show harden-check-inventory --diff` hold.
   Files: `packages/cli/src/infer/loss-report.ts`,
   `packages/cli/test/infer-loss-report.test.ts`,
   `packages/cli/test/infer-omitted-names.integration.test.ts`.
-- [ ] 1.12 ~6m — The omitted-*table* line is the fourth sibling of the
+- [x] 1.12 ~6m — The omitted-*table* line is the fourth sibling of the
   same defect and was left behind by 1.7 and 1.11 (review round 2, B1):
   it still ends "until it is renamed in the database", and a renamed
   table is a table no declaration carries, which `check` goes on naming.
