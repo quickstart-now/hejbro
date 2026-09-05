@@ -18,3 +18,18 @@ Four mutations against `packages/query/src/db/context.ts`, each applied, run thr
 
 The first mutation, run before the identity test was strengthened, initially left one test green: "the same statements, from the same rendering, in the same order travel through both paths" compared two `undefined` slices to each other (both sides' recording arrays stayed empty because the mutation sent both drivers through the same, wrong branch), so the equality check passed vacuously. Fixed by adding explicit call-count/length assertions on each side before the equality comparison (`packages/query/test/db/context.test.ts`, committed separately as `d3bf3766`). Re-running the same mutation afterward turned that test red along with the rest (27 total). All four mutations were re-run once more after that fix, confirmed still red, then reverted; `git diff --stat packages/query/src/db/context.ts` was empty and the full suite returned to 1048 passed after each revert.
 
+<a id="w2"></a>
+## W2 — task 1.2b rewrote #557's boundary test -- before and after titles, per 486/R12
+
+_2026-09-05T13:53Z · per R12_
+
+Task 1.2b (#486) rewrote the boundary test #557 added, since the driver it guards now declares a real `batched-transactions` capability (per 486/R12). Both titles, in full, from the commit that changed them (`e110a078`, `packages/neon/test/driver.test.ts`):
+
+Before (task 4.3, #557):
+> `buildHttpDriver + db.as(context) still refused with missing-capability (task 4.3, #557 -- the boundary this change must not move: a context-rendering contribution point existing on the contract does not widen who may run a context)`
+
+After (task 1.2b, #486):
+> `buildHttpDriver + db.as(context) now runs as one batch (task 1.2b, #486 -- #557/D95's boundary was drawn for a mere contribution point on a driver declaring no relevant capability; this driver now declares batched-transactions:true, the capability that specific boundary predates)`
+
+The nested `it` title changed with it: from "db.as(context) on the HTTP driver fails with the same missing-capability error it failed with before, and never sends a request" to "db.as(context) on the HTTP driver succeeds, sending the context statements and the caller's own statement as one batch, in order". #557's own proposition (a contribution point alone does not widen a capability) is unchanged and unaffected -- only this specific driver's capability declaration changed, which is what the rewritten title states.
+

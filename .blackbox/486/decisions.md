@@ -58,3 +58,31 @@ _lead · extension · 2026-09-05T11:49Z · ratified: pending_
 
 Task 1.2a's file list admits `packages/{cli,supabase,nile}/test/**` and 1.2b's admits `packages/neon/test/**`. Making `batch` a required member breaks every fake `Driver` literal in the test suites (33 in the CLI, 13 in Supabase, 2 in Nile, 1 in Neon); the sweep is the fourth key's direct consequence and belongs with the declaration that causes it. Split into a task of its own it would have no red to start from, which D88 forbids. All five `examples/*` packages stayed green throughout, since they use built driver values rather than assembling literals.
 
+<a id="r9"></a>
+## R9 — a failing batch is reported as a batch, never as one member's failure
+
+_lead · interpretation · 2026-09-05T13:18Z · ratified: pending_
+
+The batched path reported a failing context statement as the caller's own: `query execution failed for this "select" statement`, with `kind` and the statement text both naming the caller. The interactive path, which sends one statement at a time, names the failing statement correctly -- so the two paths diverged exactly where the delta says they agree. Neon's batch error carries no member index (already recorded in `packages/neon/src/http.ts`), so which member failed is not knowable: the report states what was sent and refuses to claim more. `code` stays `query-execution-failed` and `kind` stays the caller's operation kind -- the operation did fail; only the sentence was false. The message names the batch, lists every member in order, says the driver does not report which member failed, and preserves the driver's error as `cause`. The `rls-execution-context` delta gains one scenario for the batch report and one asserting the interactive path still names its single failing statement. Reopened as task 1.3b, marked `[design]`, red-first from a two-row input table (the failing member is a context statement / the caller's own).
+
+<a id="r10"></a>
+## R10 — task 1.3's missing red-first evidence is supplied by mutation
+
+_lead · interpretation · 2026-09-05T13:51Z · ratified: pending_
+
+Task 1.3's tests were written after the implementation, self-reported by the implementer. Rather than redoing the task, the evidence red-first would have produced is supplied by mutation: each of four mutations was applied to `packages/query/src/db/context.ts`, the query suite run, and the source reverted. Three conditions attach: the mutation table is recorded as a work entry (W1), the reopened task and every task after it hold to red-first, and the deviation is handed to the reviewer rather than left for them to find. The mutations also found a hole instead of merely confirming coverage -- with the path guard inverted, the "same statements, same order" identity test stayed green because both paths yielded `undefined` and the comparison passed vacuously; it now asserts that each path ran before comparing, and the mutation turns it red. That defect is of a kind red-first would not have caught, since red-first shows a test fails without the code, not that it fails under wrong code. Self-reporting the deviation is not penalised by reverting the work.
+
+<a id="r11"></a>
+## R11 — batch([]) sends nothing over the wire, not even the driver's own pins
+
+_lead · interpretation · 2026-09-05T13:51Z · ratified: pending_
+
+`batch([])` calls the client not at all and resolves an empty list -- the driver's own session pins are not sent either. The normal path cannot reach it (`runContextInBatch` always includes the caller's own statement), and `Driver.batch` is public surface, so a request to execute nothing must not carry a network side effect of its own. Measured: Neon's client sends whatever array it is given, empty included, and hands the empty result back -- so the refusal is a choice, not a limitation. The `driver-contract` delta states it in the batch requirement's own body.
+
+<a id="r12"></a>
+## R12 — rewriting #557's boundary test is admitted; D95 is unchanged
+
+_lead · interpretation · 2026-09-05T13:53Z · ratified: pending_
+
+#557's proposition -- a `renderContext` contribution alone does not widen a capability -- is still true, and its proper home is the query layer's own input table (task 1.3's "both `false`" row), not a fact about Neon. The Neon HTTP driver now carries a real capability declaration (`batched-transactions: true`), so it stands outside the boundary #557 drew for a driver declaring no relevant capability; its test was deliberately rewritten to assert the batch succeeds, per 486/R1. D95 is unchanged: a declaration is the truth and a contribution point does not widen one -- this change adds a declaration on top of D95 rather than bending it. Pending owner ratification.
+

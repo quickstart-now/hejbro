@@ -96,6 +96,42 @@
       "at": "2026-09-05T11:49Z",
       "title": "R8 — 1.2a/1.2b admit their own test fixture sweeps, not a separate task",
       "ratified": null
+    },
+    {
+      "id": "R9",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [],
+      "at": "2026-09-05T13:18Z",
+      "title": "a failing batch is reported as a batch, never as one member's failure",
+      "ratified": null
+    },
+    {
+      "id": "R10",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [],
+      "at": "2026-09-05T13:51Z",
+      "title": "task 1.3's missing red-first evidence is supplied by mutation",
+      "ratified": null
+    },
+    {
+      "id": "R11",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [],
+      "at": "2026-09-05T13:51Z",
+      "title": "batch([]) sends nothing over the wire, not even the driver's own pins",
+      "ratified": null
+    },
+    {
+      "id": "R12",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [],
+      "at": "2026-09-05T13:53Z",
+      "title": "rewriting #557's boundary test is admitted; D95 is unchanged",
+      "ratified": null
     }
   ],
   "work": [
@@ -106,6 +142,15 @@
       "pr": null,
       "decisions": [
         "R10"
+      ]
+    },
+    {
+      "id": "W2",
+      "at": "2026-09-05T13:53Z",
+      "title": "task 1.2b rewrote #557's boundary test -- before and after titles, per 486/R12",
+      "pr": null,
+      "decisions": [
+        "R12"
       ]
     }
   ],
