@@ -1,0 +1,15 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#652",
+  "title": "ci: changeset gate never checks the PR itself while unreleased changesets cover the fixed group",
+  "parent": "quickstart-now/hejbro#412",
+  "status": "open",
+  "opened": "2026-09-05",
+  "closed": null,
+  "decisions": [],
+  "work": [],
+  "prs": [],
+  "origin": null,
+  "followUps": []
+}

@@ -136,7 +136,10 @@ same `assertBuiltCli` dist-freshness guard (`packages/cli/test/loader-cycle.test
   status` enforces exactly this scope — a docs-only or private-package-only
   PR (`@hejbro/skills`, `examples/`, this file) doesn't need one and the
   gate doesn't ask for one; use `pnpm changeset add --empty` if you want an
-  explicit record anyway. Run `pnpm changeset` and answer its prompts; pick
+  explicit record anyway. The flag-less `changeset status` never checks the
+  PR itself while unreleased changesets cover the fixed group; CI's
+  `pnpm check:pr-changeset` (#652) counts this PR's own added
+  `.changeset/*.md` files against its published `src/` changes instead. Run `pnpm changeset` and answer its prompts; pick
   `minor` for a new capability, `patch` for a fix, and `major` is not used
   before 1.0 (see the design spec's decision log). The seven published
   packages (`@hejbro/core`, `hejbro`, `@hejbro/supabase`, `@hejbro/query`,

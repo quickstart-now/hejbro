@@ -56,6 +56,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#533](533/) | cli restore-command test flakes on first heavy parallel run after install | open | #773 | 0 | 1 (0 pending) |
 | ↳ [#551](551/) | execute() of a core-built set operation loses per-key result typing | closed | #737 | 0 | 2 (0 pending) |
 | ↳ [#552](552/) | whole-table projection renders unqualified columns under a join | closed | #737 | 0 | 3 (0 pending) |
+| ↳ [#652](652/) | ci: changeset gate never checks the PR itself while unreleased changesets cover the fixed group | open |  | 0 | 0 (0 pending) |
 | ↳ [#673](673/) | test: subprocess-spawning suites time out under a full parallel pnpm test and pass in isolation | closed | #773 | 0 | 7 (0 pending) |
 | ↳ [#679](679/) | core: function argument names bypass D36 and are emitted unquoted in DDL | closed | #733 #758 | 0 | 3 (0 pending) |
 | ↳ [#686](686/) | ctx.return accepts a mutation with no returning() and renders invalid plpgsql | closed | #733 | 0 | 3 (0 pending) |
