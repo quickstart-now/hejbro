@@ -77,6 +77,13 @@
       "title": "Read side judges paths as init does; config artifact ancestors first; nesting wording; empty --config refused",
       "pr": null,
       "decisions": []
+    },
+    {
+      "id": "W2",
+      "at": "2026-09-05T00:09Z",
+      "title": "Review round 1: header identity, ancestor OS codes, next-marker gate, config subject on every init branch",
+      "pr": null,
+      "decisions": []
     }
   ],
   "prs": [
