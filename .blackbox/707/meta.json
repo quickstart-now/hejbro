@@ -45,6 +45,18 @@
       "at": "2026-09-05T01:20Z",
       "title": "cv review round 1: N1/N3 repaired in the piece, the column line's clause too; #872 #873 #874 filed; narrow re-review",
       "ratified": null
+    },
+    {
+      "id": "R4",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R3",
+        "412/D13"
+      ],
+      "at": "2026-09-05T02:19Z",
+      "title": "cv (c) accepted at 75429d9f: round 3 clean; two planner lessons recorded; PR by the lead",
+      "ratified": null
     }
   ],
   "work": [
