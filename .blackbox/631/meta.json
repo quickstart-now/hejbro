@@ -30,6 +30,39 @@
       "at": "2026-09-05T16:52Z",
       "title": "the banner boundary, the normalization and the checksum's stored form",
       "ratified": null
+    },
+    {
+      "id": "R3",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R1"
+      ],
+      "at": "2026-09-05T17:13Z",
+      "title": "the working-directory pattern: one cd per call, never a persistent one",
+      "ratified": null
+    },
+    {
+      "id": "R4",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R2"
+      ],
+      "at": "2026-09-05T17:13Z",
+      "title": "the banner literal stays local to the ledger; the live witness is its drift detector",
+      "ratified": null
+    },
+    {
+      "id": "R5",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "R4"
+      ],
+      "at": "2026-09-05T17:14Z",
+      "title": "test fakes that identify statements by prefix gain one alter-table branch; production is untouched",
+      "ratified": null
     }
   ],
   "work": [],

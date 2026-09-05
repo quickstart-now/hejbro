@@ -59,3 +59,74 @@ docs/changeset task 1.6 when it is 1.7. The per-task Files lines and the
 team's file boundary are correct; the header is repaired to match them.
 No file boundary changes.
 
+<a id="r3"></a>
+## R3 — the working-directory pattern: one cd per call, never a persistent one
+
+_lead · interpretation · basis R1 · 2026-09-05T17:13Z · ratified: pending_
+
+The brief said "absolute paths only, never cd". The team measured why
+that fails here: `blackbox.mjs` resolves the repository root from
+`process.cwd()` and reports "no work-item folder for 631" when run by
+absolute path from the main checkout, and pnpm, turbo and vitest resolve
+the workspace from cwd the same way; the Bash cwd resets to the main
+checkout on every call. Followed literally, the rule makes commands run
+in the main checkout -- the exact thing it exists to prevent. Ruling:
+every Bash call a piece team makes starts with `cd <worktree absolute
+path> &&` inside that single call; a persistent cd is still banned (the
+reset makes it meaningless anyway); once per group the main checkout is
+checked for pollution (`git status --short` clean, `git log --oneline -1`
+at the recorded base). The lead propagates the same pattern to the ra
+team and to every future brief; the brief's sentence was the lead's
+error, not the team's.
+
+<a id="r4"></a>
+## R4 — the banner literal stays local to the ledger; the live witness is its drift detector
+
+_lead · interpretation · basis R2 · 2026-09-05T17:13Z · ratified: pending_
+
+`bodyChecksum` judges the first line against the literal
+`-- hejbro migration`, which `@hejbro/core`'s `renderBanner`
+(`packages/core/src/sql/migration-file.ts`) prints but does not export.
+Option (B), exporting it from core, edits a file outside this piece's
+boundary for a one-line constant. Ruling: option (A) -- the literal is a
+local constant in `packages/cli/src/apply/ledger.ts` with a one-line
+constraint comment (it must equal `renderBanner`'s first line; if the two
+drift, the banner is hashed as body). The pair that keeps the drift from
+returning is task 1.5's live witness, which hashes the real `generate`
+output, not a hand-written string -- so a drift fails a test rather than
+a review. The existing `apply-ledger` tests that count bootstrap
+statements are this task's own tests (tasks.md: "and their tests");
+updating their expected counts from the old number to the new one is in
+scope, and the implementer reports the before/after assertion lines
+rather than asking.
+
+<a id="r5"></a>
+## R5 — test fakes that identify statements by prefix gain one alter-table branch; production is untouched
+
+_lead · extension · basis R4 · 2026-09-05T17:14Z · ratified: pending_
+
+The bootstrap now sends a third statement, `alter table ... add column if
+not exists "checksum" text`. Fifteen cases in
+`packages/cli/test/apply-reset.test.ts` failed with "ledger statement
+failed": that file's fake session identifies statements by prefix and
+treats any unrecognised statement as the DROP DDL reset sends, so once a
+drop failure is configured the fake throws it at the bootstrap's alter
+instead. The planner confirmed the cause in the fixture's source, not by
+inference; production is correct. Ruling: the piece's file boundary
+extends to that file by one branch -- `alter table` is recognised above
+the fallback and returns no rows -- plus a one-line constraint on the
+fallback (every statement sent to the ledger must match above it, or a
+bootstrap statement is mistaken for the DROP). The fake does not set
+`bootstrapped` (the `create table` branch already does; a fake never
+gains a second way to be bootstrapped) and does not throw 42P01, because
+that file's fake is loose by design and each file keeps its own fixture
+idiom. The same rule covers every other fake under `packages/cli/test`
+that breaks the same way: one `alter table` branch, no production change,
+the file added to the tasks.md Files-edited header and named in the
+task's report. Any other shape of breakage still stops and reports.
+`reset` sending the alter as part of its bootstrap is intended -- the
+delta does not limit the bootstrap to one command, and an unprivileged
+role still lands on `apply-ledger-unwritable` at the `bootstrap` site --
+and the live witness pins it with one row: after `reset`, the ledger has
+the `checksum` column.
+
