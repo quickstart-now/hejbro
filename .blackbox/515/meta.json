@@ -19,6 +19,17 @@
       "at": "2026-09-05T05:44Z",
       "title": "Core exports its expression traversal registry and kind-change guards as extension surface; the four copies fold",
       "ratified": null
+    },
+    {
+      "id": "R2",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R1"
+      ],
+      "at": "2026-09-05T18:55Z",
+      "title": "folded guards name the kind token; expr-children.ts joins task 1.1; the lifter keeps three branches",
+      "ratified": null
     }
   ],
   "work": [],
