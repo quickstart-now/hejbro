@@ -84,6 +84,13 @@
       "title": "review outcome: b1 repeated references() fix, n1 cheatsheet restore, n2-n4 dispositioned",
       "pr": null,
       "decisions": []
+    },
+    {
+      "id": "W3",
+      "at": "2026-09-05T18:02Z",
+      "title": "review outcome supplement: #970/#971/#972 filed, reviewer's independent verification",
+      "pr": null,
+      "decisions": []
     }
   ],
   "prs": [],

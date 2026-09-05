@@ -117,3 +117,48 @@ with `extras`, which validates only at the type level too) and N3 (a
 derived foreign-key name silently truncates past 63 bytes, undocumented
 either form).
 
+<a id="w3"></a>
+## W3 — review outcome supplement: #970/#971/#972 filed, reviewer's independent verification
+
+_2026-09-05T18:02Z_
+
+Supplement to W2 (review outcome) -- issue numbers for the two
+out-of-scope findings, a third filed issue, and three facts from the
+reviewer's own independent, deeper verification.
+
+Filed issues (registered under #815, not fixed in this piece):
+- #970 -- N2: no runtime validation of an action string on either form;
+  a raw string reaches the rendered DDL unchecked, same on `.references()`
+  and `extras.foreignKeys`.
+- #971 -- N3: a derived foreign-key name longer than 63 bytes is silently
+  truncated by Postgres, leaving the snapshot and the catalog's actual
+  constraint name to disagree; same on both forms.
+- #972 -- whether a second `.references()` call should be refused at
+  declaration time, and the pre-existing behavior of a repeated call
+  silently dropping the first target, is filed as its own `[design]`
+  task under #815. This piece implements only R6's option (a): the last
+  call replaces the reference as a whole, target and actions together --
+  no refusal is added.
+
+Reviewer's independent verification (beyond the gate run already
+recorded in W1/W2):
+1. Full cross-check of the committed `hejbro.snapshot.json`'s seven
+   foreign-key entries against the converted declarations: 7 of 7 match
+   on target, both actions, and the derived constraint name --
+   `projects_owner_id_fk` (the only entry carrying `onUpdate`) keeps both
+   keys -- and the self-referencing entry stays on `extras`, so the count
+   agrees too.
+2. Independent evidence the artifacts did not move: `git log -1 --
+   examples/postgres/migrations` and `git log -1 -- examples/postgres/
+   hejbro.snapshot.json` both point to `99b9554d` (#900), not `e14d7265`
+   (this piece's example-conversion commit). Running the built CLI's own
+   `hejbro verify` directly reports `verify: 5 checks passed (10
+   migrations, snapshot sha256:88394459665c...)`.
+3. The self-referencing foreign key staying on `extras` is enforced by
+   the type layer itself -- a column-level self-reference fails to
+   type-check (TS7022/TS7024). There is no runtime refusal, and bypassing
+   the type system, a self-referencing column form would render
+   byte-identical DDL to the equivalent `extras` form -- the reviewer's
+   judgment is that this is a correct result, not a wrong one, and no new
+   guard is needed.
+
