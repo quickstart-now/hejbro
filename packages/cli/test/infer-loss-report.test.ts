@@ -429,12 +429,16 @@ describe("buildLossReport / 1.7", () => {
 		expect(line).toContain("Rename the schema in the database");
 	});
 
-	// harden-check-inventory, task 1.7 (#726): regression pins, byte for
-	// byte, against the two lines this change does NOT touch -- the
-	// column line already promised what `check` now actually does
-	// (#726's own fix is in `check`'s behavior, not this sentence), and
-	// the table line already named `check`'s own inventory correctly.
-	it("pins the omitted-column line's exact text (regression, unchanged by this change)", () => {
+	// harden-check-inventory, task 1.7 (#726) / task 1.11 (review round 1
+	// N3, lead ruling 707/R3): byte-for-byte pins for both column-line
+	// variants. The `import` variant now ends "renamed in the database
+	// and declared" -- renaming alone only makes the name declarable,
+	// the same over-promise N3 fixed for the index/check lines, in the
+	// very line #726 was filed about. The `pull` variant is unchanged:
+	// its way out is linking the schema repository, which does carry
+	// the column, so "renamed in the database" was never an
+	// over-promise there.
+	it("pins the omitted-column line's exact text for import (renamed and declared, not renamed alone)", () => {
 		const report = buildLossReport({
 			...emptyFacts("import"),
 			undeclarableNameColumns: [
@@ -449,7 +453,26 @@ describe("buildLossReport / 1.7", () => {
 
 		const line = report.find((entry) => entry.includes("_id"));
 		expect(line).toBe(
-			'Omitted: column "app.widgets._id" -- a key does produce this name back, but it is not a valid hejbro SQL identifier. The table "app.widgets" is only partly declared, and `check` reports this column until it is renamed in the database.',
+			'Omitted: column "app.widgets._id" -- a key does produce this name back, but it is not a valid hejbro SQL identifier. The table "app.widgets" is only partly declared, and `check` reports this column until it is renamed in the database and declared.',
+		);
+	});
+
+	it("pins the omitted-column line's exact text for pull (regression, unchanged by this change)", () => {
+		const report = buildLossReport({
+			...emptyFacts("pull"),
+			undeclarableNameColumns: [
+				{
+					schema: "app",
+					table: "widgets",
+					sqlName: "_id",
+					cause: "identifierRuleRejects",
+				},
+			],
+		});
+
+		const line = report.find((entry) => entry.includes("_id"));
+		expect(line).toBe(
+			'Omitted: column "app.widgets._id" -- a key does produce this name back, but it is not a valid hejbro SQL identifier, so it cannot be carried in the contract. Rename the column in the database, then link the schema repository.',
 		);
 	});
 

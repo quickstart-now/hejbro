@@ -443,9 +443,9 @@ describe.each(PG_IMAGES)("brownfield corpus / %s", (image) => {
 				expect(checkResult.stdout).not.toContain("Marketing");
 				// harden-check-inventory, task 1.9 (#726): the loss report's own
 				// column-line promise, end to end -- both columns `import`
-				// named as "check reports this column until it is renamed" (the
-				// LOSS_REPORT_ROWS entries above) actually appear in this same
-				// run's `check` inventory.
+				// named as "check reports this column until it is renamed and
+				// declared" (the LOSS_REPORT_ROWS entries above) actually
+				// appear in this same run's `check` inventory.
 				expect(checkResult.stdout).toContain(
 					"unmanaged column (not covered by any declaration): catalog.products.a*/b",
 				);

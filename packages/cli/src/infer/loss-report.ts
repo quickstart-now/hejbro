@@ -372,11 +372,11 @@ const undeclarableColumnReason = (
 	return "no declaration key produces this SQL name back";
 };
 
-/** import's own consequence: the table is left only partly declared, and `check` keeps reporting the column until it is renamed in the database -- the only remedy that exists for either cause (D106 R6-N1: "declared by hand" never was one). */
+/** import's own consequence: the table is left only partly declared, and `check` keeps reporting the column until it is renamed in the database -- the only remedy that exists for either cause (D106 R6-N1: "declared by hand" never was one). Review round 1 N3, lead ruling 707/R3: renaming alone only makes the name one a declaration can carry -- `check` goes on naming the column as unmanaged until a declaration actually covers it, so the line names the whole exit condition. */
 const undeclarableNameLineForImport = (
 	column: UndeclarableNameColumn,
 ): string =>
-	`Omitted: column "${column.schema}.${column.table}.${column.sqlName}" -- ${undeclarableColumnReason(column.cause)}. The table "${column.schema}.${column.table}" is only partly declared, and \`check\` reports this column until it is renamed in the database.`;
+	`Omitted: column "${column.schema}.${column.table}.${column.sqlName}" -- ${undeclarableColumnReason(column.cause)}. The table "${column.schema}.${column.table}" is only partly declared, and \`check\` reports this column until it is renamed in the database and declared.`;
 
 /** pull's own consequence (CI-G1-R1-16): `contract/from-catalog.ts`'s own `computeTable`/`buildColumnEntries` iterate the snapshot's columns, never the description's, so a column excluded from the snapshot never reaches the contract -- renaming in the database, then linking the schema repository, is the only way out (D106 R6-N1: not "declared by hand", for either cause). */
 const undeclarableNameLineForPull = (column: UndeclarableNameColumn): string =>
