@@ -646,7 +646,12 @@ describe("a cast aggregate cell actually revives, not just compiles cast (#444 F
 				id: posts.id,
 				stats: jsonArrayFrom(
 					select(
-						{ maxViews: sql`${over(max(comments.viewCount), {})}::text` },
+						{
+							maxViews: sql`${over(max(comments.viewCount), {
+								partitionBy: [comments.postId],
+								orderBy: [comments.createdAt],
+							})}::text`,
+						},
 						comments,
 					).where(eq(comments.postId, posts.id)),
 				),
