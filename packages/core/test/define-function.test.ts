@@ -2,6 +2,7 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 import type { ColumnBuilder, FunctionDeclaration } from "../src/index";
 import {
 	bigint,
+	coalesce,
 	defineFunction,
 	defineTrigger,
 	eq,
@@ -673,6 +674,59 @@ describe("next and query are refused as body locals (#832/R6, review-born)", () 
 					{ args: { next: text() }, returns: { typeName: "text" } },
 					(ctx, a) => {
 						ctx.return(a.next);
+					},
+				),
+			),
+		).toBe("reserved-local-name");
+	});
+
+	// The server accepts both of these shapes -- a setof body renders
+	// `return query <select>`, never putting the name right after
+	// `return`, and `coalesce(...)` isn't the first token either -- but
+	// the refusal is uniform by name, not by which expression the body
+	// happens to write around it, so both still refuse (832/R6 review).
+	it.each(setofStatementWordCases)(
+		"refuses an argument named $argName even under returns: <table> (setof) -- harmless on the server, refused because the refusal is uniform by name",
+		({ argName }) => {
+			expect(
+				codeOf(() =>
+					defineFunction(
+						app,
+						"echo_setof_word_table",
+						{ args: { [argName]: uuid() }, returns: posts },
+						(ctx) => {
+							ctx.return(select(posts));
+						},
+					),
+				),
+			).toBe("reserved-local-name");
+		},
+	);
+
+	it("refuses an argument named next even inside coalesce(...) -- not the first token after return, still refused by name", () => {
+		expect(
+			codeOf(() =>
+				defineFunction(
+					app,
+					"echo_next_coalesce",
+					{ args: { next: text() }, returns: { typeName: "text" } },
+					(ctx, a) => {
+						ctx.return(coalesce(a.next, "d"));
+					},
+				),
+			),
+		).toBe("reserved-local-name");
+	});
+
+	it("refuses an argument named query even inside coalesce(...) -- not the first token after return, still refused by name", () => {
+		expect(
+			codeOf(() =>
+				defineFunction(
+					app,
+					"echo_query_coalesce",
+					{ args: { query: text() }, returns: { typeName: "text" } },
+					(ctx, a) => {
+						ctx.return(coalesce(a.query, "d"));
 					},
 				),
 			),
