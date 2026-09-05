@@ -92,11 +92,18 @@ names it and points here), so no `cli-commands` delta is needed;
 
 ## Impact
 
-- **Affected code**: `packages/cli`, plus one line of `packages/pg`
-  (836/R4: its pool had no `error` listener, so a connection lost during
-  a ledger read killed the process before any `catch` could report it —
-  the delta's "no error reaches the user raw" sentence cannot hold
-  without it; the driver contract never promised a crash) —
+- **Affected code**: `packages/cli`, plus two no-op `error` listeners in
+  `packages/pg` (836/R4: a connection lost during a ledger read killed
+  the process before any `catch` could report it — the delta's "no error
+  reaches the user raw" sentence cannot hold without them; the driver
+  contract never promised a crash). Two, not one, and measured: the
+  pool's own `error` event covers **idle** clients only, so silencing it
+  alone still crashed with `Emitted 'error' event on Client instance` —
+  a checked-out client raises its own. The second listener is therefore
+  attached per checkout, in `execute` and in `transaction`. Both are
+  no-ops: the waiting query still rejects through its own promise and
+  travels the ordinary tagged-failure path, and the listeners' only job
+  is to stop Node from treating the event as fatal —
   `src/apply/ledger.ts` (the classification and its two codes),
   `src/apply/execute.ts` (which half of the transaction failed),
   `src/apply/raise.ts`, `src/apply/reset.ts`, `src/commands/status.ts`,

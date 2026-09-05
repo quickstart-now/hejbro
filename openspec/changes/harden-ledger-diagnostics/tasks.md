@@ -395,7 +395,7 @@ text that says something untrue. Every repair keeps the delta as approved.
       still states the rollback, regression). Files:
       `packages/cli/src/apply/ledger-diagnostics.ts`, the two tests.
 
-- [ ] 2.6 (~9m) **[design]** A lost connection is refused, not fatal
+- [x] 2.6 (~9m) **[design]** A lost connection is refused, not fatal
       (836/R4, R5 — scope widened to `@hejbro/pg`, recorded; **closes
       #864**, which carries the defect's real size: the pool's missing
       listener kills every command, not only a ledger read). Measured by the
@@ -411,7 +411,15 @@ text that says something untrue. Every repair keeps the delta as approved.
       classifier renders it from the driver's own message with no
       SQLSTATE clause (the `no code at all` row 1.1 and 1.2 already carry
       in their input tables). This is not a driver-contract change: the
-      contract never promised a crash. Red:
+      contract never promised a crash. **Measured during implementation:
+      one listener is not enough.** `pool.on("error")` covers idle
+      clients only — with just that, the reviewer's reproduction still
+      crashed, on `Emitted 'error' event on Client instance`, because a
+      checked-out client raises its own. A second no-op listener is
+      attached per checkout in `execute` and `transaction`. Both are
+      no-ops by design: the waiting query rejects through its own promise
+      and travels the ordinary tagged path, which the integration witness
+      proves end to end. Red:
       `packages/pg/test/driver.test.ts` — a pool `'error'` event does not
       end the process and the query in flight rejects; plus the
       integration witness for the terminated backend, asserting
