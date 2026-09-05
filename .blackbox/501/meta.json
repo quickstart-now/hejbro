@@ -148,6 +148,16 @@
         "R7",
         "R8"
       ]
+    },
+    {
+      "id": "W7",
+      "at": "2026-09-05T16:12Z",
+      "title": "R8 addendum and review round 3 closure: thenable boundary pins, snapshot stability, crap timeout",
+      "pr": null,
+      "decisions": [
+        "R7",
+        "R8"
+      ]
     }
   ],
   "prs": [],

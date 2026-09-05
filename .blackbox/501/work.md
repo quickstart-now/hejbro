@@ -72,3 +72,18 @@ Review round 3 (501/R8): the reviewer's own request to prove the db.fn refusal r
 
 packages/query/test/db/fn.test.ts now asserts filter()'s exact message against a REAL db(schema, driver) handle's own handle.fn.countPosts({}) call (not core's bare-Promise stand-in), closing the gap the reviewer named directly: a message previously proven only against a hand-built shape, never the real public path it claims to describe.
 
+<a id="w7"></a>
+## W7 — R8 addendum and review round 3 closure: thenable boundary pins, snapshot stability, crap timeout
+
+_2026-09-05T16:12Z · per R7, R8_
+
+R8 addendum (the tool has no append; recorded here and cross-referenced against R8, not a rewrite of it): the identifier branch is removed -- no public constructor produces a value carrying functionName/schemaName without an exprNode, and this piece already met a branch kept green by synthetic inputs only (B1). Exact naming is #953. The dispatch is now three-way: exprNode, then thenable, then "a value without an expression node".
+
+The lead's boundary-row request (four rows: `{ then: 1 }`, `Promise.resolve(1)`, `{ then: () => {} }`, `{}`) was checked directly: all four were green on arrival, confirming the R8 dispatch's own boundary rather than finding a new defect. They landed as regression pins (commit 032ab600) with no source change.
+
+Review round 3's own harness ran 28/28, the refusal table was unchanged, and the snapshot hash matched round 1 and round 2 exactly -- the fix changed no generated output.
+
+check:crap --force's first failure was a 5000ms timeout in cross-instance-symbols, not a real regression: four isolated retries passed 4/4. The cause was load (bt and rn's worktrees running concurrently), not this change's own code; the lead connected it to #920 as a data point, not a reopening of #839 and not a defect of this change.
+
+Neighbor issue numbers from this review's own findings: #945, #947, #948, #949, #950, #951, #953, #954.
+
