@@ -318,31 +318,47 @@ const projectionPlanEntry = (
 			},
 		};
 	}
-	// A CTE column that is itself a nested read carries the entry's own
-	// nested plan through (D106 R1 B1 of harden-aggregate-vocabulary): the
-	// cast happened inside the WITH body, so the revive must follow it out,
-	// or the cell arrives as the cast's text.
-	const inner = uncast(expr);
-	if (inner.nodeKind === "columnRef" && inner.schemaName === null) {
-		const entry = ctePlanEntry(
-			inner.tableName,
-			inner.columnName,
-			tables,
-			cteQueryByName,
-		);
-		if (entry?.nested !== undefined) {
-			return {
-				alias,
-				resultKey: resultKey ?? alias,
-				columnState: undefined,
-				nested: entry.nested,
-			};
+	return (
+		cteNestedPlanEntry(alias, resultKey, expr, tables, cteQueryByName) ?? {
+			alias,
+			resultKey: resultKey ?? alias,
+			columnState: columnStateForExpr(uncast(expr), tables, cteQueryByName),
 		}
+	);
+};
+
+/**
+ * A CTE column that is itself a nested read carries the entry's own
+ * nested plan through (D106 R1 B1 of harden-aggregate-vocabulary): the
+ * cast happened inside the WITH body, so the revive must follow it out,
+ * or the cell arrives as the cast's text. `undefined` for every other
+ * expression.
+ */
+const cteNestedPlanEntry = (
+	alias: string,
+	resultKey: string | undefined,
+	expr: ExprNode,
+	tables: Declarations["tables"],
+	cteQueryByName: CteQueryByName,
+): ColumnPlanEntry | undefined => {
+	const inner = uncast(expr);
+	if (inner.nodeKind !== "columnRef" || inner.schemaName !== null) {
+		return undefined;
+	}
+	const entry = ctePlanEntry(
+		inner.tableName,
+		inner.columnName,
+		tables,
+		cteQueryByName,
+	);
+	if (entry?.nested === undefined) {
+		return undefined;
 	}
 	return {
 		alias,
 		resultKey: resultKey ?? alias,
-		columnState: columnStateForExpr(uncast(expr), tables, cteQueryByName),
+		columnState: undefined,
+		nested: entry.nested,
 	};
 };
 
