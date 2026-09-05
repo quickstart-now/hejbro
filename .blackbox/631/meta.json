@@ -164,7 +164,15 @@
       "ratified": null
     }
   ],
-  "work": [],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-05T20:52Z",
+      "title": "the ledger's body checksum, and the live witness that found the gap the fakes could not",
+      "pr": null,
+      "decisions": []
+    }
+  ],
   "prs": [],
   "origin": null,
   "followUps": []

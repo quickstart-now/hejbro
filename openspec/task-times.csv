@@ -995,6 +995,6 @@ date,change-id,task-id,group,est_min,actual_min,waited_user_min,notes
 2026-09-06,add-ledger-checksum,1.2,1,8,87,0,a required argument and a new required field reached existing assertions and seeding calls across five test files
 2026-09-06,add-ledger-checksum,1.3,1,9,141,0,five command classes plus a pure comparison, seven mutations, two delta edits
 2026-09-06,add-ledger-checksum,1.4,1,6,94,0,six command rows, six mutations, two fixture redesigns
-2026-09-06,add-ledger-checksum,1.5,1,8,125,0,a witness task that found a real defect (a ledger predating the column could never be upgraded); the repair belongs to 1.2 and is counted here; reconstructed, only the fixture-redesign round (~20m) was separately self-timed
+2026-09-06,add-ledger-checksum,1.5,1,8,125,0,a witness task that found a real defect (a ledger predating the column could never be upgraded); the repair belongs to 1.2 and is counted here; reconstructed, not self-timed: only the fixture-redesign round (~20m) was measured; the rest is estimated against 1.4 (94m) and 1.6 (60m) by step count
 2026-09-06,add-ledger-checksum,1.6,1,8,60,0,a new diagnostic, a second catalog statement, five mutations and a live witness
 2026-09-06,add-ledger-checksum,1.7,1,5,20,0,docs and changeset

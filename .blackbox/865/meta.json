@@ -21,7 +21,15 @@
       "ratified": null
     }
   ],
-  "work": [],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-05T20:52Z",
+      "title": "a ledger carrying row-level security is refused where its identity is judged",
+      "pr": null,
+      "decisions": []
+    }
+  ],
   "prs": [
     {
       "number": 871,
