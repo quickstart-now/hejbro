@@ -312,3 +312,37 @@ otherwise stop and report"), and a re-sent instruction marks the steps
 already done. Both apply to every piece team from now on; the lead adds
 them to the next brief.
 
+<a id="r13"></a>
+## R13 — an old ledger is read through a four-column fallback and upgraded by the first command that writes
+
+_lead · interpretation · basis R5 · 2026-09-05T19:32Z · ratified: pending_
+
+The live witness found what no fake could: every ledger-touching command
+reads the ledger before it bootstraps, task 1.2 added `"checksum"` to
+that read, and on a ledger created before the column the select fails
+with `42703` (column missing), not the `42P01` (table missing)
+`readLedger` tolerates -- so `exists` is never false, the bootstrap's
+`alter table ... add column if not exists` is never reached, and the old
+ledger is refused with `apply-ledger-unreadable` on every run. The
+delta's promise runs backwards. Ruling, two halves. (a) Reading:
+`readLedger` treats `42703` as it treats `42P01` -- a state, not a
+failure -- and re-reads with the four original columns, folding every row
+to `checksum: null`; the predicate is safe because every command has
+already passed `probeLedgerIdentity`/`assertLedgerNotOccupied`, which
+guarantee the four bootstrap columns, so `checksum` is the only column
+that can be missing (stated as the caller invariant in one comment).
+(b) Writing: a command that writes to the ledger (`migrate`, `raise`,
+both through `execute.ts`) runs the same idempotent `alter table ... add
+column if not exists "checksum" text` once, before its first write,
+whenever the ledger already exists -- one shared function in `ledger.ts`,
+same `exec(..., "write", "bootstrap")` path, so an unwritable role lands
+on `apply-ledger-unwritable` at the `bootstrap` site as R5 already
+states. A read-only command (`status`) never alters the ledger and keeps
+reading through the fallback. Rejected: bootstrapping first in `migrate`
+alone (leaves `status` broken), `select *` (owner rule), and the
+catalog-informed select (changes `LedgerIdentity` and four callers for
+what one code check does). The repair lands inside task 1.5 -- the task
+that found it -- with one paragraph added to tasks.md 1.5; files
+`ledger.ts`, `execute.ts` or `migrate.ts`/`raise.ts` as the write site
+requires, all inside the header.
+

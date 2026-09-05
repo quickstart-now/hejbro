@@ -69,7 +69,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#544](544/) | query-execution: qualify the preview-equals-executed scenario for provider handles | closed | #901 #906 | 0 | 1 (0 pending) |
 | ↳ [#551](551/) | execute() of a core-built set operation loses per-key result typing | closed | #737 | 0 | 2 (0 pending) |
 | ↳ [#552](552/) | whole-table projection renders unqualified columns under a join | closed | #737 | 0 | 3 (0 pending) |
-| ↳ [#631](631/) | migrate: record a body checksum in the ledger and refuse an applied migration whose SQL changed | open |  | 0 | 12 (5 pending) |
+| ↳ [#631](631/) | migrate: record a body checksum in the ledger and refuse an applied migration whose SQL changed | open |  | 0 | 13 (5 pending) |
 | ↳ [#652](652/) | ci: changeset gate never checks the PR itself while unreleased changesets cover the fixed group | closed | #886 | 0 | 0 (0 pending) |
 | ↳ [#663](663/) | test: the scoped vendored fn observer never asserts the context SQL | closed | #896 | 0 | 0 (0 pending) |
 | ↳ [#667](667/) | test: the vendored read of an existing table is witnessed only under Docker | closed | #896 | 0 | 0 (0 pending) |
@@ -213,7 +213,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 
 ## Totals
 
-Owner decisions 93 · rulings 288 (interpretation 192, extension 94, stop 2) · pending extensions 56 · rejected 2
+Owner decisions 93 · rulings 289 (interpretation 193, extension 94, stop 2) · pending extensions 56 · rejected 2
 
 ## Conventions
 

@@ -140,6 +140,17 @@
       "at": "2026-09-05T19:16Z",
       "title": "the planner decides non-contract questions on the spot; instructions carry both branches",
       "ratified": null
+    },
+    {
+      "id": "R13",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R5"
+      ],
+      "at": "2026-09-05T19:32Z",
+      "title": "an old ledger is read through a four-column fallback and upgraded by the first command that writes",
+      "ratified": null
     }
   ],
   "work": [],
