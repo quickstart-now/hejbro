@@ -524,6 +524,15 @@ describe("group 2 review rulings (F1/F2) and the at-risk table", () => {
 	])("%s casts nothing (own shape)", (_label, build) => {
 		expect(rendersCastFor(build(), ledgerBigint)).toBe(false);
 	});
+
+	// An "argument" row's cast still needs its own argument's typeNode
+	// (atRiskCastSuffix reads it off the chain's projectionInput, exactly
+	// as a bare columnRef would) -- an argument with no typeNode at all
+	// (a raw sql`` fragment, which carries no fixed type) has nothing to
+	// check against, so it is never cast, whatever its shape says.
+	it("an argument-shape aggregate over an operand with no typeNode casts nothing (no typeNode to check)", () => {
+		expect(rendersCastFor(min(sql`1`), ledgerBigint)).toBe(false);
+	});
 });
 
 describe("set operations (add-set-operations tasks 1.1-1.2)", () => {
