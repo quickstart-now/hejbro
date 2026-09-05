@@ -1,0 +1,17 @@
+{
+  "version": 3,
+  "number": 882,
+  "ref": "quickstart-now/hejbro#882",
+  "title": "docs(skills): document the distinct-on literal placeholder shape (#450)",
+  "head": "592515a23dbb4804ae57453ecd7a12abdd36f393",
+  "headRef": "docs-distinct-on-literals",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-05T06:09Z",
+  "refs": [
+    {
+      "path": "skills/hejbro/references/query-layer.md",
+      "blob": "a6726e0a61a16d53404732d031a0dc0ce63e33f8"
+    }
+  ]
+}

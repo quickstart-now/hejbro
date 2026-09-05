@@ -79,6 +79,17 @@ const latestPerStatus = await handle
 	.distinctOn(posts.status)
 	.orderBy(posts.status, desc(posts.publishedAt, { nulls: "last" }));
 
+// A literal shared by `distinctOn` and the leading `orderBy` is a shape
+// Postgres refuses: every literal is lifted to its own bind parameter, in
+// order, with no deduplication (the compiler contract), so a computed
+// distinct-on term repeated in the order by — `distinctOn(sql`round(${t.x}, 2)`)`
+// with `.orderBy(sql`round(${t.x}, 2)`)` — reaches the server as `round($1, 2)`
+// and `round($2, 2)`, two different expressions, and the statement fails
+// with `DISTINCT ON expressions must match initial ORDER BY expressions`.
+// Column references are never lifted, so the ordinary pairing above is
+// unaffected. Order by the column the distinct-on term is computed from,
+// or move the computed term into a CTE and distinct/order on its column.
+
 // asc(...) is the explicit-direction, ascending counterpart — useful
 // mainly to pair with a nulls placement, since a bare column already
 // orders ascending with no placement:

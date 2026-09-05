@@ -1,0 +1,36 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#450",
+  "title": "identical literals in distinct on and order by lift to different placeholders",
+  "parent": "quickstart-now/hejbro#412",
+  "status": "closed",
+  "opened": "2026-09-05",
+  "closed": "2026-09-05",
+  "decisions": [
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "412/D24",
+        "412/D25; the owner-settled compiler contract of 2026-08-26 (sequential placeholders",
+        "no deduplication",
+        "restated in packages/query/src/compile/params.ts); the issue's own text: documented-and-loud is a legitimate permanent answer"
+      ],
+      "at": "2026-09-05T04:46Z",
+      "title": "The no-deduplication placeholder contract stands; the distinct-on/order-by literal shape is documented for users and the issue closes",
+      "ratified": null
+    }
+  ],
+  "work": [],
+  "prs": [
+    {
+      "number": 882,
+      "role": "closes",
+      "pinnedAt": "2026-09-05T06:09Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}
