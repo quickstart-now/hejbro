@@ -375,34 +375,57 @@ describe("nested revive follows BUILDER_READ_SHAPES (#452 task 1.3)", () => {
 		projected: TProjection,
 	) => select(projected, items).where(eq(items.postId, posts.id));
 
+	// A real partitionBy+orderBy, not an empty spec -- {} proved nothing
+	// about a real window's own clauses; the revived value must be the
+	// same either way (#452 review).
+	const itemsSpec = { partitionBy: [items.postId], orderBy: [items.amount] };
+
 	it.each([
 		["count", () => itemsFor({ cell: count() })],
-		["count (windowed)", () => itemsFor({ cell: over(count(), {}) })],
-		["row_number (windowed)", () => itemsFor({ cell: over(rowNumber(), {}) })],
-		["rank (windowed)", () => itemsFor({ cell: over(rank(), {}) })],
-		["dense_rank (windowed)", () => itemsFor({ cell: over(denseRank(), {}) })],
+		["count (windowed)", () => itemsFor({ cell: over(count(), itemsSpec) })],
+		[
+			"row_number (windowed)",
+			() => itemsFor({ cell: over(rowNumber(), itemsSpec) }),
+		],
+		["rank (windowed)", () => itemsFor({ cell: over(rank(), itemsSpec) })],
+		[
+			"dense_rank (windowed)",
+			() => itemsFor({ cell: over(denseRank(), itemsSpec) }),
+		],
 	])("%s revives as bigint (int8 shape)", async (_label, build) => {
 		expect(await revive(build(), pastPrecision)).toBe(9007199254740993n);
 	});
 
 	it.each([
 		["min", () => itemsFor({ cell: min(items.amount) })],
-		["min (windowed)", () => itemsFor({ cell: over(min(items.amount), {}) })],
+		[
+			"min (windowed)",
+			() => itemsFor({ cell: over(min(items.amount), itemsSpec) }),
+		],
 		["max", () => itemsFor({ cell: max(items.amount) })],
-		["max (windowed)", () => itemsFor({ cell: over(max(items.amount), {}) })],
-		["lag (windowed)", () => itemsFor({ cell: over(lag(items.amount), {}) })],
-		["lead (windowed)", () => itemsFor({ cell: over(lead(items.amount), {}) })],
+		[
+			"max (windowed)",
+			() => itemsFor({ cell: over(max(items.amount), itemsSpec) }),
+		],
+		[
+			"lag (windowed)",
+			() => itemsFor({ cell: over(lag(items.amount), itemsSpec) }),
+		],
+		[
+			"lead (windowed)",
+			() => itemsFor({ cell: over(lead(items.amount), itemsSpec) }),
+		],
 		[
 			"first_value (windowed)",
-			() => itemsFor({ cell: over(firstValue(items.amount), {}) }),
+			() => itemsFor({ cell: over(firstValue(items.amount), itemsSpec) }),
 		],
 		[
 			"last_value (windowed)",
-			() => itemsFor({ cell: over(lastValue(items.amount), {}) }),
+			() => itemsFor({ cell: over(lastValue(items.amount), itemsSpec) }),
 		],
 		[
 			"nth_value (windowed)",
-			() => itemsFor({ cell: over(nthValue(items.amount, 1), {}) }),
+			() => itemsFor({ cell: over(nthValue(items.amount, 1), itemsSpec) }),
 		],
 	])(
 		"%s revives per its bigint argument (argument shape)",
@@ -413,9 +436,34 @@ describe("nested revive follows BUILDER_READ_SHAPES (#452 task 1.3)", () => {
 
 	it.each([
 		["min over a text argument", () => itemsFor({ cell: min(items.label) })],
+		["max over a text argument", () => itemsFor({ cell: max(items.label) })],
+		[
+			"min over a text argument (windowed)",
+			() => itemsFor({ cell: over(min(items.label), itemsSpec) }),
+		],
+		[
+			"max over a text argument (windowed)",
+			() => itemsFor({ cell: over(max(items.label), itemsSpec) }),
+		],
 		[
 			"lag over a text argument (windowed)",
-			() => itemsFor({ cell: over(lag(items.label), {}) }),
+			() => itemsFor({ cell: over(lag(items.label), itemsSpec) }),
+		],
+		[
+			"lead over a text argument (windowed)",
+			() => itemsFor({ cell: over(lead(items.label), itemsSpec) }),
+		],
+		[
+			"first_value over a text argument (windowed)",
+			() => itemsFor({ cell: over(firstValue(items.label), itemsSpec) }),
+		],
+		[
+			"last_value over a text argument (windowed)",
+			() => itemsFor({ cell: over(lastValue(items.label), itemsSpec) }),
+		],
+		[
+			"nth_value over a text argument (windowed)",
+			() => itemsFor({ cell: over(nthValue(items.label, 1), itemsSpec) }),
 		],
 	])(
 		"%s revives per its text argument, not forced to bigint",
@@ -426,15 +474,24 @@ describe("nested revive follows BUILDER_READ_SHAPES (#452 task 1.3)", () => {
 
 	it.each([
 		["sum", () => itemsFor({ cell: sum(items.amount) })],
-		["sum (windowed)", () => itemsFor({ cell: over(sum(items.amount), {}) })],
+		[
+			"sum (windowed)",
+			() => itemsFor({ cell: over(sum(items.amount), itemsSpec) }),
+		],
 		["avg", () => itemsFor({ cell: avg(items.amount) })],
-		["avg (windowed)", () => itemsFor({ cell: over(avg(items.amount), {}) })],
+		[
+			"avg (windowed)",
+			() => itemsFor({ cell: over(avg(items.amount), itemsSpec) }),
+		],
 		[
 			"percent_rank (windowed)",
-			() => itemsFor({ cell: over(percentRank(), {}) }),
+			() => itemsFor({ cell: over(percentRank(), itemsSpec) }),
 		],
-		["cume_dist (windowed)", () => itemsFor({ cell: over(cumeDist(), {}) })],
-		["ntile (windowed)", () => itemsFor({ cell: over(ntile(4), {}) })],
+		[
+			"cume_dist (windowed)",
+			() => itemsFor({ cell: over(cumeDist(), itemsSpec) }),
+		],
+		["ntile (windowed)", () => itemsFor({ cell: over(ntile(4), itemsSpec) })],
 	])(
 		"%s is never revived (own shape) -- the raw arrival passes through",
 		async (_label, build) => {
@@ -571,6 +628,33 @@ describe("a cast aggregate cell actually revives, not just compiles cast (#444 F
 		);
 		expect(rows[0]?.stats[0]?.maxViews).toBe("9007199254740993");
 	});
+
+	// Same instruction, windowed target -- the "two-chunk cast shape" logic
+	// castTarget/uncast rely on has no reason to differ by windowing, but
+	// this exact input (a user's own template wrapping an over(...) cell)
+	// had no test until now (#452 neighbor-input promotion).
+	it("a user-authored sql cast interpolating a WINDOWED aggregate stays text, not revived", async () => {
+		const rawRow = {
+			id: "0b0e5b3e-0000-4000-8000-000000000001",
+			// biome-ignore lint/style/useNamingConvention: models the real json child key (the projection's own rendered SQL alias, snake_case).
+			stats: [{ max_views: "9007199254740993" }],
+		};
+		const { driver } = recordingTransactionalDriver({ rows: [rawRow] });
+		const handle = db({ app, posts, comments }, driver);
+		const rows = await handle.select(
+			{
+				id: posts.id,
+				stats: jsonArrayFrom(
+					select(
+						{ maxViews: sql`${over(max(comments.viewCount), {})}::text` },
+						comments,
+					).where(eq(comments.postId, posts.id)),
+				),
+			},
+			posts,
+		);
+		expect(rows[0]?.stats[0]?.maxViews).toBe("9007199254740993");
+	});
 });
 
 /**
@@ -640,6 +724,13 @@ describe("select.ts casts iff convert.ts revives (#452 task 1.4 ratchet)", () =>
 		projected: TProjection,
 	) => select(projected, comments).where(eq(comments.postId, posts.id));
 
+	// A real partitionBy+orderBy, not an empty spec (#452 review) -- the
+	// agreement outcome must be identical either way.
+	const commentsSpec = {
+		partitionBy: [comments.postId],
+		orderBy: [comments.createdAt],
+	};
+
 	type BuilderCase = {
 		readonly unwindowed?: () => ReturnType<typeof cellFor>;
 		readonly windowed: () => ReturnType<typeof cellFor>;
@@ -648,57 +739,69 @@ describe("select.ts casts iff convert.ts revives (#452 task 1.4 ratchet)", () =>
 	const builderCases: Record<BuilderFunctionName, BuilderCase> = {
 		count: {
 			unwindowed: () => cellFor({ cell: count() }),
-			windowed: () => cellFor({ cell: over(count(), {}) }),
+			windowed: () => cellFor({ cell: over(count(), commentsSpec) }),
 		},
 		// biome-ignore lint/style/useNamingConvention: BuilderFunctionName's own Postgres names (D57).
-		row_number: { windowed: () => cellFor({ cell: over(rowNumber(), {}) }) },
-		rank: { windowed: () => cellFor({ cell: over(rank(), {}) }) },
+		row_number: {
+			windowed: () => cellFor({ cell: over(rowNumber(), commentsSpec) }),
+		},
+		rank: { windowed: () => cellFor({ cell: over(rank(), commentsSpec) }) },
 		// biome-ignore lint/style/useNamingConvention: BuilderFunctionName's own Postgres names (D57).
-		dense_rank: { windowed: () => cellFor({ cell: over(denseRank(), {}) }) },
+		dense_rank: {
+			windowed: () => cellFor({ cell: over(denseRank(), commentsSpec) }),
+		},
 		min: {
 			unwindowed: () => cellFor({ cell: min(comments.viewCount) }),
-			windowed: () => cellFor({ cell: over(min(comments.viewCount), {}) }),
+			windowed: () =>
+				cellFor({ cell: over(min(comments.viewCount), commentsSpec) }),
 		},
 		max: {
 			unwindowed: () => cellFor({ cell: max(comments.viewCount) }),
-			windowed: () => cellFor({ cell: over(max(comments.viewCount), {}) }),
+			windowed: () =>
+				cellFor({ cell: over(max(comments.viewCount), commentsSpec) }),
 		},
 		lag: {
-			windowed: () => cellFor({ cell: over(lag(comments.viewCount), {}) }),
+			windowed: () =>
+				cellFor({ cell: over(lag(comments.viewCount), commentsSpec) }),
 		},
 		lead: {
-			windowed: () => cellFor({ cell: over(lead(comments.viewCount), {}) }),
+			windowed: () =>
+				cellFor({ cell: over(lead(comments.viewCount), commentsSpec) }),
 		},
 		// biome-ignore lint/style/useNamingConvention: BuilderFunctionName's own Postgres names (D57).
 		first_value: {
 			windowed: () =>
-				cellFor({ cell: over(firstValue(comments.viewCount), {}) }),
+				cellFor({ cell: over(firstValue(comments.viewCount), commentsSpec) }),
 		},
 		// biome-ignore lint/style/useNamingConvention: BuilderFunctionName's own Postgres names (D57).
 		last_value: {
 			windowed: () =>
-				cellFor({ cell: over(lastValue(comments.viewCount), {}) }),
+				cellFor({ cell: over(lastValue(comments.viewCount), commentsSpec) }),
 		},
 		// biome-ignore lint/style/useNamingConvention: BuilderFunctionName's own Postgres names (D57).
 		nth_value: {
 			windowed: () =>
-				cellFor({ cell: over(nthValue(comments.viewCount, 1), {}) }),
+				cellFor({ cell: over(nthValue(comments.viewCount, 1), commentsSpec) }),
 		},
 		sum: {
 			unwindowed: () => cellFor({ cell: sum(comments.viewCount) }),
-			windowed: () => cellFor({ cell: over(sum(comments.viewCount), {}) }),
+			windowed: () =>
+				cellFor({ cell: over(sum(comments.viewCount), commentsSpec) }),
 		},
 		avg: {
 			unwindowed: () => cellFor({ cell: avg(comments.viewCount) }),
-			windowed: () => cellFor({ cell: over(avg(comments.viewCount), {}) }),
+			windowed: () =>
+				cellFor({ cell: over(avg(comments.viewCount), commentsSpec) }),
 		},
 		// biome-ignore lint/style/useNamingConvention: BuilderFunctionName's own Postgres names (D57).
 		percent_rank: {
-			windowed: () => cellFor({ cell: over(percentRank(), {}) }),
+			windowed: () => cellFor({ cell: over(percentRank(), commentsSpec) }),
 		},
 		// biome-ignore lint/style/useNamingConvention: BuilderFunctionName's own Postgres names (D57).
-		cume_dist: { windowed: () => cellFor({ cell: over(cumeDist(), {}) }) },
-		ntile: { windowed: () => cellFor({ cell: over(ntile(4), {}) }) },
+		cume_dist: {
+			windowed: () => cellFor({ cell: over(cumeDist(), commentsSpec) }),
+		},
+		ntile: { windowed: () => cellFor({ cell: over(ntile(4), commentsSpec) }) },
 	};
 
 	type RatchetRow = readonly [
