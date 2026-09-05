@@ -10,9 +10,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { HejbroInput } from "@hejbro/core";
 import { isTable } from "@hejbro/core";
-<<<<<<< HEAD
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { loadConfig, loadDeclarations } from "../src/loader";
+import {
+	loadConfig,
+	loadConfigIfPresent,
+	loadDeclarations,
+} from "../src/loader";
 import { assertBuiltCli } from "./support/cli-runner";
 
 // #695 (R2-NB1): this file's fixtures import "hejbro" through jiti, which
@@ -20,14 +23,6 @@ import { assertBuiltCli } from "./support/cli-runner";
 // the loader-cycle precedent) -- a stale dist would surface here as an
 // import failure, not as "stale build".
 beforeAll(assertBuiltCli);
-=======
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import {
-	loadConfig,
-	loadConfigIfPresent,
-	loadDeclarations,
-} from "../src/loader";
->>>>>>> 0a75462b (feat(cli): load the configuration leniently for import, pull and raise)
 
 const schemaNameOf = (declaration: HejbroInput): string | null => {
 	if (typeof declaration !== "object" || declaration === null) {
