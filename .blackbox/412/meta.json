@@ -464,6 +464,70 @@
       "raw": [
         "ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#120"
       ]
+    },
+    {
+      "id": "R27",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "D12",
+        "D13",
+        "R1",
+        "R2",
+        "R3"
+      ],
+      "at": "2026-09-04T20:51Z",
+      "title": "next batch: #836 + #823 as harden-ledger-diagnostics; check-area issues wait for #851",
+      "ratified": null
+    },
+    {
+      "id": "R28",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "D12",
+        "D13",
+        "R27"
+      ],
+      "at": "2026-09-04T22:06Z",
+      "title": "next batch: #707 + #726 as harden-check-inventory (column/index/check inventory on managed tables, option b)",
+      "ratified": null
+    },
+    {
+      "id": "D16",
+      "by": "owner",
+      "at": "2026-09-04T23:36Z",
+      "title": "parent-issue meta.json grows without bound and repeats the same PR pin; ask for an improvement",
+      "raw": [
+        "ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#190"
+      ]
+    },
+    {
+      "id": "D17",
+      "by": "owner",
+      "at": "2026-09-04T23:37Z",
+      "title": "is there database theory for this record shape; likely well studied",
+      "raw": [
+        "ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#191"
+      ]
+    },
+    {
+      "id": "D18",
+      "by": "owner",
+      "at": "2026-09-04T23:45Z",
+      "title": "blackbox v3: the migration must be versioned (v2 → v3); wants a theory-based architecture and an understandable direction",
+      "raw": [
+        "ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#192"
+      ]
+    },
+    {
+      "id": "D19",
+      "by": "owner",
+      "at": "2026-09-04T23:52Z",
+      "title": "start blackbox v3 now: build it in agent-skills, then vendor into hejbro",
+      "raw": [
+        "ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#193"
+      ]
     }
   ],
   "work": [

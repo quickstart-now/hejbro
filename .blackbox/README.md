@@ -45,7 +45,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | [#374](374/) | adversarial spec-only review stage in the opsx cycle | closed | #539 | 1 | 0 (0 pending) |
 | [#377](377/) | snapshot format stability policy for 1.0 | closed | #383 | 1 | 0 (0 pending) |
 | [#378](378/) | defect-leakage metric over escaped defects | closed | #384 | 1 | 0 (0 pending) |
-| [#412](412/) | 0.2.x: post-release commitments | open | #715 #808 #824 #835 #840 #849 #851 #858 | 15 | 26 (0 pending) |
+| [#412](412/) | 0.2.x: post-release commitments | open | #715 #808 #824 #835 #840 #849 #851 #858 | 19 | 28 (0 pending) |
 | ↳ [#449](449/) | concurrent tx.execute beside a nested transaction is unguarded | closed | #849 #850 | 0 | 3 (2 pending) |
 | ↳ [#528](528/) | driver-conformance kit mis-observes transaction-wrapping session-state:false drivers | closed | #737 #760 | 0 | 6 (0 pending) |
 | ↳ [#531](531/) | pg checkout reads its own setupSession; the spec's late-binding scenario fails for spread decorators | closed | #737 | 0 | 3 (0 pending) |
@@ -131,10 +131,11 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | [#854](854/) | check: the declared expression is spelled differently by mode and surface | open | #855 | 0 | 0 (0 pending) |
 | [#856](856/) | core: a trigger with a duplicated event or update column commits a migration postgres refuses | open | #858 #861 | 0 | 0 (0 pending) |
 | [#857](857/) | core: a policy with a repeated role renders a duplicate the catalog keeps | open | #858 | 0 | 0 (0 pending) |
+| [#866](866/) | chore: vendor dd-blackbox meta v3 and migrate the record (pins once per PR) | open |  | 0 | 0 (0 pending) |
 
 ## Totals
 
-Owner decisions 80 · rulings 150 (interpretation 99, extension 49, stop 2) · pending extensions 11 · rejected 2
+Owner decisions 84 · rulings 152 (interpretation 101, extension 49, stop 2) · pending extensions 11 · rejected 2
 
 ## Conventions
 
