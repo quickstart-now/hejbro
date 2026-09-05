@@ -327,7 +327,7 @@ text that says something untrue. Every repair keeps the delta as approved.
       `packages/cli/test/migrate-command.test.ts`,
       `packages/cli/test/apply-ledger-diagnostics.integration.test.ts`.
 
-- [ ] 2.3 (~8m) **[design]** The `23502` hint names what the bootstrap
+- [x] 2.3 (~8m) **[design]** The `23502` hint names what the bootstrap
       actually declares for *that* column (836/R4). Measured: dropping the
       default from `applied_at` — or from an extra `not null` column the
       identity rule explicitly tolerates — produces "The ledger's
