@@ -167,7 +167,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#860](860/) | loader: stripAbsolutePrefixes misses the bare cwd, so a config-load-failed can still carry an absolute path | open | #868 | 0 | 0 (0 pending) |
 | ↳ [#862](862/) | apply-live integration: "a second runner waits for the first" is timing-dependent (waitedCount 0 once) | open | #871 | 0 | 0 (0 pending) |
 | ↳ [#864](864/) | pg driver: a lost connection kills the process through an unhandled pool 'error' event, dumping a raw stack | closed | #871 #877 | 0 | 0 (0 pending) |
-| ↳ [#865](865/) | ledger: forced row-level security hides the ledger's rows and migrate re-applies the chain instead of refusing | open | #871 #877 | 0 | 0 (0 pending) |
+| ↳ [#865](865/) | ledger: forced row-level security hides the ledger's rows and migrate re-applies the chain instead of refusing | open | #871 #877 | 0 | 1 (1 pending) |
 | ↳ [#866](866/) | chore: vendor dd-blackbox meta v3 and migrate the record (pins once per PR) | closed | #867 | 0 | 0 (0 pending) |
 | ↳ [#869](869/) | cli integration suites are excluded from pnpm test, so the done-gates never run the live witnesses | open | #878 | 0 | 0 (0 pending) |
 | ↳ [#870](870/) | cli integration suite: 14 concurrent postgres containers contend and a failed run leaves orphans | open | #871 | 0 | 0 (0 pending) |
@@ -184,7 +184,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 
 ## Totals
 
-Owner decisions 93 · rulings 231 (interpretation 154, extension 75, stop 2) · pending extensions 37 · rejected 2
+Owner decisions 93 · rulings 232 (interpretation 154, extension 76, stop 2) · pending extensions 38 · rejected 2
 
 ## Conventions
 

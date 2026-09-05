@@ -15,7 +15,7 @@ apply/execute.ts`, `packages/cli/src/apply/raise.ts` and their tests
 `.changeset/*.md` (1.6). If a task appears to need any other file, that
 goes back to the planner, not into the diff.
 
-**Ordering.** 1.1 → 1.2 → 1.3 → 1.4 → 1.5 → 1.6.
+**Ordering.** 1.1 → 1.2 → 1.3 → 1.4 → 1.5 → 1.6 → 1.7.
 
 ## 1. The body checksum
 
@@ -56,6 +56,14 @@ goes back to the planner, not into the diff.
       the column is upgraded by the bootstrap and the next apply records
       a checksum. Files: the integration test.
 
-- [ ] 1.6 (~5m) Docs and changeset. The reference states "verify: the
+- [ ] 1.6 (~8m) A filtered ledger is refused. Red: the ledger identity
+      tests — a fake catalog row with `relrowsecurity` true, with
+      `relforcerowsecurity` true, and with both false → the first two
+      refused with `apply-ledger-filtered` naming ledger, role and the
+      policies listed for it, before any read; the live witness adds a
+      forced-RLS ledger against `status` and `migrate`. Files:
+      `ledger.ts`, `ledger-identity.ts`, tests, the integration test.
+
+- [ ] 1.7 (~5m) Docs and changeset. The reference states "verify: the
       chain; migrate/status: the bodies"; `pnpm changeset` → `minor`.
       Files: the reference, `.changeset/*.md`.

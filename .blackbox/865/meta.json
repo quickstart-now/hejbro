@@ -7,7 +7,20 @@
   "status": "open",
   "opened": "2026-09-05",
   "closed": null,
-  "decisions": [],
+  "decisions": [
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "412/D24",
+        "D25; the ld reviewer's constructor finding; the identity judgement already reads the ledger's pg_class row"
+      ],
+      "at": "2026-09-05T06:18Z",
+      "title": "#865 folds into add-ledger-checksum: a ledger carrying row-level security is refused from the catalog before any row is read",
+      "ratified": null
+    }
+  ],
   "work": [],
   "prs": [
     {

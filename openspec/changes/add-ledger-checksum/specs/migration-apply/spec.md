@@ -376,3 +376,25 @@ generate/verify reference says which half answers which question.
 #### Scenario: A raised database records the whole file's checksum
 - **WHEN** `raise --file snapshot.sql` succeeds
 - **THEN** the ledger row carries the SHA-256 of the whole file
+
+### Requirement: A ledger whose rows are filtered is refused
+hejbro never enables row-level security on its own ledger, so a
+relation at the ledger's name that carries row-level security — enabled
+or forced — is a ledger whose rows may be hidden from the connecting
+role, and reading it would answer "nothing applied" for a database
+that applied everything. Every command that touches the ledger —
+`migrate`, `status`, `reset` and `raise` — SHALL make that judgement
+where it makes the identity judgement, from the catalog, before any row
+is read, and SHALL refuse with `apply-ledger-filtered`, naming the
+ledger, the connecting role and the policies the catalog holds on it,
+ending with a `Next:` line naming both ways out: disable row-level
+security on the ledger, or connect as the role that applied the chain.
+
+#### Scenario: A ledger under forced row-level security is refused before it is read
+- **WHEN** row-level security is forced on `"hejbro"."migration_ledger"`
+  with a policy that hides its rows from the connecting role, and
+  `status` and `migrate` each run
+- **THEN** each exits non-zero with `apply-ledger-filtered`, naming the
+  ledger, the role and the policy, no ledger row is read and nothing
+  is applied — never an empty ledger and a chain re-applied from the
+  start

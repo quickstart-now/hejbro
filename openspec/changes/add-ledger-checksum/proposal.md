@@ -1,4 +1,4 @@
-# Proposal: add-ledger-checksum (#631)
+# Proposal: add-ledger-checksum (#631, #865)
 
 ## Why
 
@@ -12,6 +12,12 @@ and refuses on mismatch. hejbro's ledger records the filename and the
 origin, and nothing about the body. Nothing is published on a stable
 line yet, so the column is cheap today; after 0.2.0 it is a change
 hejbro must make to its own table.
+
+A neighbour on the same table (#865): with row-level security forced on
+`"hejbro"."migration_ledger"` and a policy hiding its rows from the
+connecting role, `status` reads an empty ledger without complaint and
+the next `migrate` re-applies the chain from the start, failing at
+`42P06`. The ledger lies instead of refusing.
 
 ## What Changes
 
@@ -32,6 +38,14 @@ hejbro must make to its own table.
   compared.
 - **`status` reports a changed body as its own line**, exiting non-zero
   like every other disagreement, never as "applied".
+- **A ledger whose rows are filtered for this role is refused.** The
+  identity judgement reads `relrowsecurity`/`relforcerowsecurity` on
+  the ledger relation; a ledger with row-level security enabled is not
+  one hejbro created, and every ledger-touching command refuses with
+  `apply-ledger-filtered`, naming the ledger, the role and the policies
+  found, with a `Next:` (disable row-level security on the ledger, or
+  connect as the role that applied). A ledger hejbro can read
+  unfiltered is unaffected.
 - The generate/verify workflow reference states which half answers
   which question; one `minor` changeset.
 
