@@ -7,6 +7,7 @@ import type {
 	SelectNode,
 	SetOpNode,
 	Table,
+	TypeNode,
 } from "../../src/index";
 import {
 	and,
@@ -21,7 +22,6 @@ import {
 	desc,
 	eq,
 	exists,
-	expr,
 	firstValue,
 	gt,
 	interval,
@@ -465,10 +465,13 @@ describe("group 2 review rulings (F1/F2) and the at-risk table", () => {
 
 	// Scoped to the projected cell's own alias (`::text as "cell"`), not a
 	// bare `.includes("::text")` over the whole rendered statement -- a
-	// whole-statement check is only sound while the outer projection
-	// (`posts.id`, a uuid) happens to need no cast of its own; scoping to
-	// the cell's alias keeps the "own rows never cast" assertions below
-	// meaningful even if that outer shape ever changes (the
+	// whole-statement check goes wrong the moment a SIBLING cell in the
+	// same nested projection is cast: checking `sum(x)` (own shape, never
+	// cast) for the substring "::text" would still find it if a sibling
+	// `count()` cell in that same projection is cast, reading "cast" for
+	// a cell that isn't (the "sibling cell" test below pins exactly this
+	// with `own`'s own `sum` case). Scoping to the cell's alias is what
+	// keeps the "own rows never cast" assertions meaningful (the
 	// `packages/pg/test/integration.test.ts` live witness already asserts
 	// its own casts this same alias-scoped way).
 	const rendersCastFor = (projected: Expr, from: Table): boolean =>
@@ -481,6 +484,29 @@ describe("group 2 review rulings (F1/F2) and the at-risk table", () => {
 				posts,
 			).selectQuery,
 		).includes('::text as "cell"');
+
+	// Pins the exact failure mode alias-scoping closes (#452 review N3):
+	// a cast sibling cell in the same nested projection would make a
+	// whole-statement `::text` search misreport an uncast `own`-shape
+	// cell as cast.
+	it("a cast sibling cell would fool a whole-statement check, alias-scoping is not fooled", () => {
+		const rendered = renderSelect(
+			select(
+				{
+					id: posts.id,
+					nested: jsonArrayFrom(
+						select(
+							{ cell: sum(ledgerBigint.value), sibling: count() },
+							ledgerBigint,
+						),
+					),
+				},
+				posts,
+			).selectQuery,
+		);
+		expect(rendered).toContain('::text as "sibling"');
+		expect(rendered).not.toContain('::text as "cell"');
+	});
 
 	// A real partitionBy+orderBy, not an empty spec -- {} was true only
 	// because over()'s cast decision doesn't look at the spec at all; a
@@ -582,17 +608,24 @@ describe("group 2 review rulings (F1/F2) and the at-risk table", () => {
 	// AFTER the window-unwrap this change introduced, so a windowed
 	// db.fn call is a regression risk this change specifically created,
 	// not one that predates it -- covered here windowed and unwindowed
-	// alike (#452 neighbor-input promotion).
+	// alike (#452 neighbor-input promotion). Carries a `typeNode` (a real
+	// column ref always does) so the `max` rows are load-bearing too: an
+	// `argument`-shape lookup exits at the missing-typeNode branch before
+	// it ever reaches the schemaName guard, so without one the guard is
+	// only exercised by the `count` rows (#452 review N6).
 	const schemaQualifiedCall = (
 		functionName: string,
 		args: ReadonlyArray<ExprNode> = [],
-	): Expr =>
-		expr("numeric", {
+	): Expr & { readonly typeNode: TypeNode } => ({
+		family: "numeric",
+		exprNode: {
 			nodeKind: "functionCall",
 			schemaName: "app",
 			functionName,
 			args,
-		});
+		},
+		typeNode: { typeName: "bigint" },
+	});
 
 	it.each([
 		[
