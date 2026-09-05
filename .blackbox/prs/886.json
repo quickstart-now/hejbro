@@ -3,23 +3,23 @@
   "number": 886,
   "ref": "quickstart-now/hejbro#886",
   "title": "ci: require one changeset per pr touching published src (#652)",
-  "head": "d7d394411c03ca4ee2a656324c1b794b68d57f6a",
+  "head": "5ebfe370cccd74af9701f1bbc7b89c0b775b3a6a",
   "headRef": "chore-pr-changeset",
   "base": "dev",
   "merged": null,
-  "pinnedAt": "2026-09-05T06:10Z",
+  "pinnedAt": "2026-09-05T06:18Z",
   "refs": [
     {
       "path": ".github/workflows/ci.yml",
-      "blob": "34118f408dbd26a12677ede46f554b0b25603988"
+      "blob": "003bc05bbe6aa05ac74ceafcbd4dce0c005bf454"
     },
     {
       "path": "AGENTS.md",
-      "blob": "56f0153b1d6eea56e99c7fa4a4464a4021c51c2a"
+      "blob": "5c3e46a1196d0d50778bacc3c5afd8537363c088"
     },
     {
       "path": "package.json",
-      "blob": "a48225633663687f44b60ad020cc5ae2efe3d5df"
+      "blob": "5cb597f999b8ffac0c0e7c29802fadc8395fdc26"
     },
     {
       "path": "scripts/check-pr-changeset.mjs",
