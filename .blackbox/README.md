@@ -45,7 +45,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | [#374](374/) | adversarial spec-only review stage in the opsx cycle | closed | #539 | 1 | 0 (0 pending) |
 | [#377](377/) | snapshot format stability policy for 1.0 | closed | #383 | 1 | 0 (0 pending) |
 | [#378](378/) | defect-leakage metric over escaped defects | closed | #384 | 1 | 0 (0 pending) |
-| [#412](412/) | 0.2.x: post-release commitments | open | #715 #808 #824 #835 #840 #849 #851 #858 #867 #868 #871 #878 #850 (via #449) #737 (via #528) #760 (via #528) #773 (via #533) #733 (via #679) #758 (via #679) #739 (via #687) #759 (via #687) #770 (via #687) #861 (via #701) #879 (via #707) #847 (via #741) #833 (via #748) #784 (via #750) #802 (via #750) #775 (via #752) #799 (via #752) #780 (via #754) #795 (via #754) #855 (via #778) #838 (via #783) #786 (via #785) #789 (via #787) #790 (via #788) #792 (via #791) #794 (via #793) #822 (via #800) #806 (via #804) #813 (via #807) #811 (via #810) | 19 | 28 (0 pending) |
+| [#412](412/) | 0.2.x: post-release commitments | open | #715 #808 #824 #835 #840 #849 #851 #858 #867 #868 #871 #878 #850 (via #449) #737 (via #528) #760 (via #528) #773 (via #533) #733 (via #679) #758 (via #679) #739 (via #687) #759 (via #687) #770 (via #687) #861 (via #701) #879 (via #707) #847 (via #741) #833 (via #748) #784 (via #750) #802 (via #750) #775 (via #752) #799 (via #752) #780 (via #754) #795 (via #754) #855 (via #778) #838 (via #783) #786 (via #785) #789 (via #787) #790 (via #788) #792 (via #791) #794 (via #793) #822 (via #800) #806 (via #804) #813 (via #807) #811 (via #810) | 22 | 28 (0 pending) |
 | ↳ [#449](449/) | concurrent tx.execute beside a nested transaction is unguarded | closed | #849 #850 | 0 | 3 (2 pending) |
 | ↳ [#528](528/) | driver-conformance kit mis-observes transaction-wrapping session-state:false drivers | closed | #737 #760 | 0 | 6 (0 pending) |
 | ↳ [#531](531/) | pg checkout reads its own setupSession; the spec's late-binding scenario fails for spread decorators | closed | #737 | 0 | 3 (0 pending) |
@@ -150,7 +150,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 
 ## Totals
 
-Owner decisions 84 · rulings 177 (interpretation 123, extension 52, stop 2) · pending extensions 14 · rejected 2
+Owner decisions 87 · rulings 177 (interpretation 123, extension 52, stop 2) · pending extensions 14 · rejected 2
 
 ## Conventions
 
@@ -159,4 +159,4 @@ Owner decisions 84 · rulings 177 (interpretation 123, extension 52, stop 2) · 
 - Every PR is pinned before merge: each changed file's blob SHA, stored once per item in `prs/<N>.json` and checked both ways (every pin matches the PR head, every changed file is pinned) by the pre-merge hook and by CI. A folder's `meta.json` holds one line per PR (`closes`, `refs` or `own`); a parent's PR column is derived from its children.
 - Never read this directory during normal work. It answers provenance questions only.
 
-Merged but not closed: #412, #533, #561
+Merged but not closed: #412, #533, #561, #819, #837
