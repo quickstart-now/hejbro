@@ -71,7 +71,7 @@ needs both; 1.5 last.
       three hand-written cases fold into the table. Files: `packages/
       query/test/db/nested-revive.test.ts`.
 
-- [ ] 1.5 (~10m) Live witness, docs, changeset. Red: `packages/pg/test/
+- [x] 1.5 (~10m) Live witness, docs, changeset. Red: `packages/pg/test/
       integration.test.ts`, new case *"a windowed cell in a nested read
       survives past 2^53"*: `over(count(), …)`, `over(max(col), …)`
       and `over(lag(col), …)` in a nested collection over a `bigint`
