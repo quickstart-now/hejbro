@@ -107,6 +107,15 @@
       "decisions": [
         "R6"
       ]
+    },
+    {
+      "id": "W2",
+      "at": "2026-09-05T18:50Z",
+      "title": "the family fold's compile cost measured against the pre-rule baseline",
+      "pr": null,
+      "decisions": [
+        "R4"
+      ]
     }
   ],
   "prs": [],
