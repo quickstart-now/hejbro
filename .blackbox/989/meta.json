@@ -1,0 +1,21 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#989",
+  "title": "core: exprChildren/replaceExprChildren throw a raw TypeError on an unregistered node or a DSL wrapper",
+  "parent": null,
+  "status": "open",
+  "opened": "2026-09-05",
+  "closed": null,
+  "decisions": [],
+  "work": [],
+  "prs": [
+    {
+      "number": 991,
+      "role": "refs",
+      "pinnedAt": "2026-09-05T22:38Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

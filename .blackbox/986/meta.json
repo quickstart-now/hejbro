@@ -1,0 +1,21 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#986",
+  "title": "core: replaceExprChildren accepts a children array of the wrong length and returns a silently damaged node",
+  "parent": null,
+  "status": "open",
+  "opened": "2026-09-05",
+  "closed": null,
+  "decisions": [],
+  "work": [],
+  "prs": [
+    {
+      "number": 991,
+      "role": "refs",
+      "pinnedAt": "2026-09-05T22:38Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}
