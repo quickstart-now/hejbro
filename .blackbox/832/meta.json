@@ -104,6 +104,13 @@
       "title": "harden-function-locals 1.6: next and query refused after the piece review's server-side witness",
       "pr": null,
       "decisions": []
+    },
+    {
+      "id": "W3",
+      "at": "2026-09-05T11:31Z",
+      "title": "harden-function-locals 1.6: setof and non-first-token regression lock added",
+      "pr": null,
+      "decisions": []
     }
   ],
   "prs": [

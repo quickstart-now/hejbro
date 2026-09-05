@@ -30,3 +30,12 @@ The lead's ruling (832/R6) added `next`/`query` to `reservedPlpgsqlNames` (195 -
 
 Measured: red first -- `next`/`query` refused as an argument and as a loop name; the reviewer's exact repro (`args: { next }` + `ctx.return(a.next)`) refused at declaration time; a row read named `next` accepted (row names take no reserved check); the nineteen-name control table accepted in all three positions (argument, loop, row read) -- five failures, all controls green. Genuinely verified red by `git stash`-ing `reserved.ts` alone and re-running the new tests before restoring it. Green after the two-entry addition. Full `pnpm test` green afterward, no collateral against the wider set. Pure work ~12 min against an 8 min estimate (implementer-stamped).
 
+<a id="w3"></a>
+## W3 — harden-function-locals 1.6: setof and non-first-token regression lock added
+
+_2026-09-05T11:31Z_
+
+Change `harden-function-locals`, group 1, task 1.6, addendum (commit 45d5328e on branch `harden-function-locals`).
+
+Two more input-table rows pin the reviewer's own re-check expectations: an argument named `next`/`query` under `returns: <table>` (setof) still refused with `reserved-local-name`, even though a setof body renders `return query <select>` and never puts the name right after `return` (server-harmless); and an argument named `next`/`query` used inside `coalesce(...)` (not the first token after `return`) still refused the same way. Both shapes are accepted by the server -- the refusal is a deliberate uniform-by-name choice the requirement already states, and without a test pinning it the choice does not stay a contract. No `reserved.ts` change was needed (regression lock only). `openspec/task-times.csv`'s 1.6 row actual raised 12 -> 15 to include this addendum.
+
