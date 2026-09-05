@@ -75,6 +75,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#726](726/) | loss report promises check will report an omitted column, but check has no column-level inventory | closed | #878 | 0 | 1 (0 pending) |
 | ↳ [#740](740/) | Vendored contract column order follows JS key order, not the snapshot's physical order | closed | #858 #861 | 0 | 2 (0 pending) |
 | ↳ [#741](741/) | `hejbro init --config <path>` is ignored and scaffolds a competing project | closed | #840 #847 | 0 | 4 (0 pending) |
+| ↳ [#742](742/) | Add the constructor-review corpus to `examples/brownfield` | open |  | 0 | 1 (0 pending) |
 | ↳ [#743](743/) | `init` and `generate` name the same file two different ways | closed | #840 #847 | 0 | 1 (1 pending) |
 | ↳ [#744](744/) | `docker-rm-hygiene` can fail on a temporary file another test is deleting | closed | #773 | 0 | 1 (0 pending) |
 | ↳ [#745](745/) | Configuration paths reach the user as raw stacks and absolute paths | closed | #889 | 0 | 0 (0 pending) |
@@ -164,11 +165,12 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#873](873/) | import: a foreign key referencing an omitted column makes the starter declaration fail to load | open | #878 | 0 | 0 (0 pending) |
 | ↳ [#874](874/) | loss report: sortedBy uses localeCompare, so import/pull output order depends on the locale | open | #878 | 0 | 0 (0 pending) |
 | ↳ [#875](875/) | config: an unreadable configuration file is reported as config-load-failed with import advice | open | #876 | 0 | 0 (0 pending) |
+| ↳ [#899](899/) | core: a view created after a schema-wide table grant is never granted by the chain | open |  | 0 | 0 (0 pending) |
 | [#834](834/) | skills: the bare npx skills add still installs the seven internal .claude/skills — metadata.internal hides them (measured on skills 1.5.23) | closed | #888 | 0 | 0 (0 pending) |
 
 ## Totals
 
-Owner decisions 91 · rulings 194 (interpretation 134, extension 58, stop 2) · pending extensions 20 · rejected 2
+Owner decisions 91 · rulings 195 (interpretation 135, extension 58, stop 2) · pending extensions 20 · rejected 2
 
 ## Conventions
 

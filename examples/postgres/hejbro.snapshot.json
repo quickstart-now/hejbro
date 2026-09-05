@@ -1251,6 +1251,97 @@
 			},
 			"schema": "app",
 			"securityInvoker": true
+		},
+		"view:app.task_projects": {
+			"columns": [
+				"task_id",
+				"task_title",
+				"project_id",
+				"project_name"
+			],
+			"name": "task_projects",
+			"query": {
+				"distinct": null,
+				"from": {
+					"schema": "app",
+					"table": "tasks"
+				},
+				"groupBy": [],
+				"having": null,
+				"joins": [
+					{
+						"joinKind": "inner",
+						"on": {
+							"left": {
+								"column": "project_id",
+								"nodeKind": "column-ref",
+								"schema": "app",
+								"table": "tasks"
+							},
+							"nodeKind": "comparison",
+							"operator": "=",
+							"right": {
+								"column": "id",
+								"nodeKind": "column-ref",
+								"schema": "app",
+								"table": "projects"
+							}
+						},
+						"table": {
+							"schema": "app",
+							"table": "projects"
+						}
+					}
+				],
+				"limit": null,
+				"offset": null,
+				"orderBy": [],
+				"projection": {
+					"columns": [
+						{
+							"alias": "task_id",
+							"expr": {
+								"column": "id",
+								"nodeKind": "column-ref",
+								"schema": "app",
+								"table": "tasks"
+							}
+						},
+						{
+							"alias": "task_title",
+							"expr": {
+								"column": "title",
+								"nodeKind": "column-ref",
+								"schema": "app",
+								"table": "tasks"
+							}
+						},
+						{
+							"alias": "project_id",
+							"expr": {
+								"column": "id",
+								"nodeKind": "column-ref",
+								"schema": "app",
+								"table": "projects"
+							}
+						},
+						{
+							"alias": "project_name",
+							"expr": {
+								"column": "name",
+								"nodeKind": "column-ref",
+								"schema": "app",
+								"table": "projects"
+							}
+						}
+					],
+					"projectionKind": "columns"
+				},
+				"queryKind": "select",
+				"where": null
+			},
+			"schema": "app",
+			"securityInvoker": true
 		}
 	}
 }

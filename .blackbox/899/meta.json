@@ -1,0 +1,23 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#899",
+  "title": "core: a view created after a schema-wide table grant is never granted by the chain",
+  "parent": "quickstart-now/hejbro#815",
+  "status": "open",
+  "opened": "2026-09-05",
+  "closed": null,
+  "decisions": [],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-05T09:01Z",
+      "title": "catchUpStandingGrants shared by tableKind and viewKind",
+      "pr": null,
+      "decisions": []
+    }
+  ],
+  "prs": [],
+  "origin": null,
+  "followUps": []
+}

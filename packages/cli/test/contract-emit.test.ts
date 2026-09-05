@@ -919,6 +919,90 @@ describe("contractMetadata's emitted keys survive as own properties (#697, R2-N2
 	);
 });
 
+/**
+ * #742 (constructor-review corpus): a hand-written export whose one
+ * function argument is keyed by `argKey` -- the argument axis is a list,
+ * so `__proto__` is the control here; the quoted-key axis (`a"b`, a
+ * newline, `${danger}`) is what the emitter's escaping is measured on.
+ */
+const buildArgKeyPayload = (argKey: string): ValidatedExportPayload => {
+	const snapshot: Snapshot = {
+		formatVersion: 8,
+		dialect: "postgres",
+		objects: {},
+	};
+	const functionFact: ValidatedFunctionFact = {
+		schemaName: "app",
+		functionName: "a_function",
+		exportName: "aFunction",
+		args: [
+			{
+				key: argKey,
+				sqlName: "arg",
+				typeNode: { typeName: "uuid" },
+				mode: null,
+				notNullElements: false,
+			},
+		],
+		returns: { kind: "scalar", typeNode: { typeName: "uuid" }, mode: null },
+	};
+	return { tables: [], functions: [functionFact], roles: [], snapshot };
+};
+
+describe("a function argument key survives the emitter's quoting (#742)", () => {
+	type ArgKeyRow = {
+		readonly label: string;
+		readonly key: string;
+		readonly quoted: boolean;
+	};
+
+	const rows: ReadonlyArray<ArgKeyRow> = [
+		{
+			label: "__proto__ (list carrier, control)",
+			key: "__proto__",
+			quoted: false,
+		},
+		{ label: "constructor (control)", key: "constructor", quoted: false },
+		{ label: 'a"b (a double quote)', key: 'a"b', quoted: true },
+		{ label: "a\\nb (a newline)", key: "a\nb", quoted: true },
+		// Spelled in two halves so the test file itself carries no template
+		// placeholder (Biome's noTemplateCurlyInString) -- the emitted key is
+		// the joined text.
+		{
+			label: "a template hole",
+			key: ["$", "{danger}"].join(""),
+			quoted: true,
+		},
+	];
+
+	it.each(rows)(
+		"carries $label in the Args type and in contractMetadata",
+		async ({ key, quoted }) => {
+			const source = emitContract(buildArgKeyPayload(key), ORIGIN);
+			const { contractMetadata } = await importEmittedMetadata(source);
+
+			const functions = contractMetadata.functions as Record<
+				string,
+				{ readonly args: ReadonlyArray<{ readonly key: string }> }
+			>;
+			expect(functions.aFunction?.args.map((arg) => arg.key)).toEqual([key]);
+
+			// The Args type names the key exactly once, JSON-quoted when it is
+			// not an identifier -- a raw `a"b` or a raw newline would leave
+			// the generated file unparseable.
+			const argsLine = source
+				.split("\n")
+				.find((line) => line.includes("readonly Args:"));
+			expect(argsLine).toBeDefined();
+			if (quoted) {
+				expect(argsLine).toContain(`readonly ${JSON.stringify(key)}:`);
+			} else {
+				expect(argsLine).toContain(`readonly ${key}:`);
+			}
+		},
+	);
+});
+
 const VALIDATE_EXPORT_FORMAT_TEXT =
 	'{"descriptionFormat":1,"snapshotFormat":8}';
 

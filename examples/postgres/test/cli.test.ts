@@ -147,6 +147,6 @@ describe("hejbro cli (built CLI, tmp copy of examples/postgres with its committe
 		const migrationFiles = (await readdir(join(cwd, "migrations"))).filter(
 			(name) => name.endsWith(".sql"),
 		);
-		expect(migrationFiles).toHaveLength(9);
+		expect(migrationFiles).toHaveLength(10);
 	});
 });

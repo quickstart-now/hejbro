@@ -18,6 +18,7 @@ import { declarations as step6 } from "../src/steps/step-6.schema";
 import { declarations as step7 } from "../src/steps/step-7.schema";
 import { declarations as step8 } from "../src/steps/step-8.schema";
 import { declarations as step9 } from "../src/steps/step-9.schema";
+import { declarations as step10 } from "../src/steps/step-10.schema";
 
 const root = join(import.meta.dirname, "..");
 const migrationFiles = readdirSync(join(root, "migrations"))
@@ -68,6 +69,7 @@ describe("examples/postgres migration chain", () => {
 			step7,
 			step8,
 			step9,
+			step10,
 		];
 		const outcome = steps.reduce(
 			(state, declarations, i) => {
