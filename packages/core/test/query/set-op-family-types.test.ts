@@ -7,6 +7,7 @@ import {
 	eq,
 	integer,
 	isNull,
+	renderSetOp,
 	schema,
 	select,
 	sql,
@@ -174,6 +175,19 @@ describe("the rule reaches the core combinator's own parameter (task 1.2a, core 
 		// above.
 		select({ v: sql`1` }, numericRows).union(
 			select({ v: numericRows.v }, numericRows),
+		);
+	});
+
+	it("the compiled statement is the one Postgres accepts (an untyped branch's runtime counterpart to the row above)", () => {
+		// Type-checking alone is only half the scenario's claim -- this
+		// closes the other half: the untyped side and the concrete column
+		// both render into one ordinary union, not a placeholder for
+		// either branch.
+		const stage = select({ v: sql`1` }, numericRows).union(
+			select({ v: numericRows.v }, numericRows),
+		);
+		expect(renderSetOp(stage.setOpQuery)).toBe(
+			'select 1 as "v" from "app"."numeric_rows" union select "app"."numeric_rows"."v" as "v" from "app"."numeric_rows"',
 		);
 	});
 });
