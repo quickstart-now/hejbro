@@ -75,8 +75,9 @@ row type SHALL carry that key as nullable: the anchor's type kept, with
 null added wherever the recursive term's own projection is nullable. For
 every key, whether that projection is nullable is decided by the
 projection's own rule — a column by its declaration and by its stage's
-tracked left-joined set, a nested read by the nested-read rule — never
-by the anchor's. A plain set operation does not do this — its result keeps the left
+tracked left-joined set, a nested read by the nested-read rule, any
+other expression by the family fallback, which is nullable — never by
+the anchor's. A plain set operation does not do this — its result keeps the left
 branch's projection unchanged — so this rule is the recursive form's
 own, stricter than the set-operation result it is often compared to. The rule that the row type is the
 anchor's governs the *type* (which Postgres resolves and enforces with
