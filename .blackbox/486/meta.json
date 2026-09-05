@@ -132,6 +132,15 @@
       "at": "2026-09-05T13:53Z",
       "title": "rewriting #557's boundary test is admitted; D95 is unchanged",
       "ratified": null
+    },
+    {
+      "id": "R13",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [],
+      "at": "2026-09-05T14:19Z",
+      "title": "the supabase preset's capability table is widened in this PR",
+      "ratified": null
     }
   ],
   "work": [
@@ -151,6 +160,15 @@
       "pr": null,
       "decisions": [
         "R12"
+      ]
+    },
+    {
+      "id": "W3",
+      "at": "2026-09-05T14:19Z",
+      "title": "task 1.4's file pointer was wrong; the artifacts corrected it (486/R13)",
+      "pr": null,
+      "decisions": [
+        "R13"
       ]
     }
   ],

@@ -33,3 +33,10 @@ After (task 1.2b, #486):
 
 The nested `it` title changed with it: from "db.as(context) on the HTTP driver fails with the same missing-capability error it failed with before, and never sends a request" to "db.as(context) on the HTTP driver succeeds, sending the context statements and the caller's own statement as one batch, in order". #557's own proposition (a contribution point alone does not widen a capability) is unchanged and unaffected -- only this specific driver's capability declaration changed, which is what the rewritten title states.
 
+<a id="w3"></a>
+## W3 — task 1.4's file pointer was wrong; the artifacts corrected it (486/R13)
+
+_2026-09-05T14:19Z · per R13_
+
+Task 1.4 pointed at a capability table in `query-layer.md` that does not exist; the literal table is in `supabase-preset.md`. Following the task text alone would have updated nothing and missed the real defect: `query-layer.md`'s RLS section still said a context fails without `interactive-transactions`, which this change had already made false. The task's wording was corrected to the artifacts as they are (486/R13).
+

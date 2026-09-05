@@ -86,3 +86,10 @@ _lead · interpretation · 2026-09-05T13:53Z · ratified: pending_
 
 #557's proposition -- a `renderContext` contribution alone does not widen a capability -- is still true, and its proper home is the query layer's own input table (task 1.3's "both `false`" row), not a fact about Neon. The Neon HTTP driver now carries a real capability declaration (`batched-transactions: true`), so it stands outside the boundary #557 drew for a driver declaring no relevant capability; its test was deliberately rewritten to assert the batch succeeds, per 486/R1. D95 is unchanged: a declaration is the truth and a contribution point does not widen one -- this change adds a declaration on top of D95 rather than bending it. Pending owner ratification.
 
+<a id="r13"></a>
+## R13 — the supabase preset's capability table is widened in this PR
+
+_lead · interpretation · 2026-09-05T14:19Z · ratified: pending_
+
+The only literal per-path capability table in the references lives in `skills/hejbro/references/supabase-preset.md`, not in `query-layer.md` as task 1.4 stated. A fourth capability key leaves that table incomplete, so it is widened here -- one column, `false` on both paths (`pgDriver` declares `false`; the pooler builds its own capability record and declares `false` under 486/R7). The file list is extended to reach it, on R8's reasoning: the update is the direct consequence of the declaration this change makes, and splitting it into a separate PR would leave a reference lying from the moment this one merges -- a stale skill is a broken user contract, not a docs nit. Task 1.4's own wording is corrected to name what exists: `query-layer.md`'s RLS section states the three branches, `supabase-preset.md`'s table gains the fourth column.
+
