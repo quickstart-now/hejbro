@@ -1,0 +1,165 @@
+{
+  "version": 3,
+  "number": 909,
+  "ref": "quickstart-now/hejbro#909",
+  "title": "feat(cli,neon): a driver factory in hejbro.config.ts for every db-connected command (#458)",
+  "head": "c63067539bf1a96419772477f97b7796f5b9789f",
+  "headRef": "feat-config-driver",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-05T11:18Z",
+  "refs": [
+    {
+      "path": ".changeset/add-config-driver.md",
+      "blob": "17f98813bcb0c9275e42116f9d6aca267b96946a"
+    },
+    {
+      "path": "README.md",
+      "blob": "259203cb1b62a2256f343ef42911c26c93bc26e4"
+    },
+    {
+      "path": "examples/cli-smoke/test/config-driver.e2e.test.ts",
+      "blob": "c888cdab35fcf6d05ad3636fc43dc420712c849f"
+    },
+    {
+      "path": "openspec/changes/add-config-driver/design.md",
+      "blob": "80992fcd08961be6df0902bb8ec6231914f2bc2c"
+    },
+    {
+      "path": "openspec/changes/add-config-driver/proposal.md",
+      "blob": "64667d3a3eff47260966639a899c9c8a1203e5b3"
+    },
+    {
+      "path": "openspec/changes/add-config-driver/specs/cli-commands/spec.md",
+      "blob": "7bc918de326c75d2e94ed42a4f361f081d41f240"
+    },
+    {
+      "path": "openspec/changes/add-config-driver/tasks.md",
+      "blob": "4ae835cbbe47637b83c08e2553226a5fb263431a"
+    },
+    {
+      "path": "openspec/task-times.csv",
+      "blob": "c23ebe023d4d88e7337434329805fc7f05bd5a90"
+    },
+    {
+      "path": "packages/cli/src/apply/capability.ts",
+      "blob": "b477650af62f34bc2974af51e2f926b9edd686de"
+    },
+    {
+      "path": "packages/cli/src/check/driver.ts",
+      "blob": "4587b4c5c9c6e43fbe3462457c6e62d79860b00c"
+    },
+    {
+      "path": "packages/cli/src/check/error-message.ts",
+      "blob": "403061b45ad272010b895e681da7e75964428dd2"
+    },
+    {
+      "path": "packages/cli/src/commands/check.ts",
+      "blob": "89558bb4e4f49cc006a15ecee1e4934022dd9885"
+    },
+    {
+      "path": "packages/cli/src/commands/import.ts",
+      "blob": "003d31ad93f563fc42ee082c140a245ea885463c"
+    },
+    {
+      "path": "packages/cli/src/commands/migrate.ts",
+      "blob": "ba7b1b9a9c64a60b830a8275bc6c047d8e8f42ba"
+    },
+    {
+      "path": "packages/cli/src/commands/pull.ts",
+      "blob": "040ec5b9669aabf985e4f3670c8fe2a3768cf1a9"
+    },
+    {
+      "path": "packages/cli/src/commands/raise.ts",
+      "blob": "8448b3867fa10934d1acf7723277680664c3a443"
+    },
+    {
+      "path": "packages/cli/src/commands/reset.ts",
+      "blob": "59410ba9a8951dac62664c85e3417baf9fe24156"
+    },
+    {
+      "path": "packages/cli/src/commands/status.ts",
+      "blob": "964321794b07613dda23934bc031083a45dfe6eb"
+    },
+    {
+      "path": "packages/cli/src/config.ts",
+      "blob": "c2aac777589a450f4f4c0b6529a04fbabbefbd5a"
+    },
+    {
+      "path": "packages/cli/src/loader.ts",
+      "blob": "4d52d1215d16fcbd26af1b6fbf70d61e5ecdc637"
+    },
+    {
+      "path": "packages/cli/test/check-command.test.ts",
+      "blob": "0f08c72a749ac3f29c0f67a72a7c10028458e5a5"
+    },
+    {
+      "path": "packages/cli/test/check-driver.test.ts",
+      "blob": "28bf07f2c3803a188a9730029ac8c8202089276a"
+    },
+    {
+      "path": "packages/cli/test/config.test.ts",
+      "blob": "9dffe4c31986c6a5ca451cf1c001e6a48522579d"
+    },
+    {
+      "path": "packages/cli/test/error-message.test.ts",
+      "blob": "122768f35741e76bb6fcef06a56e992e76d638fb"
+    },
+    {
+      "path": "packages/cli/test/import-command.test.ts",
+      "blob": "4494472db1bfd16ecbcaffff58264a3f40d3b5be"
+    },
+    {
+      "path": "packages/cli/test/loader.test.ts",
+      "blob": "e06777c18498cbf6cbeef3e275f93eba5f820426"
+    },
+    {
+      "path": "packages/cli/test/migrate-command.test.ts",
+      "blob": "c5e03d55b319b1541bc33138187d5d356f120014"
+    },
+    {
+      "path": "packages/cli/test/pull-command.test.ts",
+      "blob": "d419671a558634a7c585e68d44edaee532a80a73"
+    },
+    {
+      "path": "packages/cli/test/raise-command.test.ts",
+      "blob": "a388262335125919a53ca34c71d42056befdbd8a"
+    },
+    {
+      "path": "packages/cli/test/reset-command.test.ts",
+      "blob": "ed70e0fcfe8216e85d081be7a8dc60773a8ea9dd"
+    },
+    {
+      "path": "packages/cli/test/status-command.test.ts",
+      "blob": "92468342db3cb3175bcd03e014513639cf18f354"
+    },
+    {
+      "path": "packages/neon/src/driver.ts",
+      "blob": "d5dcd6237addfcc2169bcb7d7a57f2fa12e51f54"
+    },
+    {
+      "path": "packages/neon/src/http.ts",
+      "blob": "ac03eb5820898a31ffa55766755e92237fc9f859"
+    },
+    {
+      "path": "packages/neon/test/driver.test.ts",
+      "blob": "338a7f198457453c8963dec564ba6888974249fa"
+    },
+    {
+      "path": "skills/hejbro/references/brownfield-adoption.md",
+      "blob": "c3ed943781664becb5fcd46883f284351df86481"
+    },
+    {
+      "path": "skills/hejbro/references/neon-preset.md",
+      "blob": "82ea617c512c7057fdd802fbec107d79aa49684b"
+    },
+    {
+      "path": "skills/hejbro/references/nile-preset.md",
+      "blob": "23fa6b3e7465f4fd7d026b7fe5ba4d6aa10a5013"
+    },
+    {
+      "path": "skills/hejbro/references/supabase-preset.md",
+      "blob": "57c68476da22f89cbeaa682806501272d7685dc4"
+    }
+  ]
+}

@@ -4,9 +4,9 @@
   "ref": "quickstart-now/hejbro#458",
   "title": "config-injected driver factory for db-connected cli commands",
   "parent": "quickstart-now/hejbro#412",
-  "status": "open",
+  "status": "closed",
   "opened": "2026-09-05",
-  "closed": null,
+  "closed": "2026-09-05",
   "decisions": [
     {
       "id": "R1",
@@ -89,7 +89,13 @@
       "decisions": []
     }
   ],
-  "prs": [],
+  "prs": [
+    {
+      "number": 909,
+      "role": "closes",
+      "pinnedAt": "2026-09-05T11:18Z"
+    }
+  ],
   "origin": null,
   "followUps": []
 }
