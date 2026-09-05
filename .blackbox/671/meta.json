@@ -44,6 +44,22 @@
       "at": "2026-09-05T23:16Z",
       "title": "adoption-creates is a cli Diagnostic literal rendered by renderDiagnostics; cited in brownfield-adoption.md; gate gaps are neighbours",
       "ratified": null
+    },
+    {
+      "id": "R4",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "671/R1 (design Q1-Q2); 671/R2 (columns untouched",
+        "plain children); D57 (TypeScript-only unions camelCase); .claude/rules/provider-preset.md; measured: core index.ts exports KindChange and ObjectKind",
+        "exports.test.ts six-field fixture",
+        "bucket-kind.ts and preset-smoke implement ObjectKind",
+        "diff-engine.ts:420 ownerIsExisting",
+        "notes consumed only by migration-file.ts banner"
+      ],
+      "at": "2026-09-05T23:19Z",
+      "title": "task 1.1 design: KindChange.transition optional field marks an adopted owner; adoption flows the alter path with children only",
+      "ratified": null
     }
   ],
   "work": [],
