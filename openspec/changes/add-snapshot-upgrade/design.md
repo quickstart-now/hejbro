@@ -83,10 +83,18 @@ the tip is bound to the file on disk.
   against both and reports `ok`.
 - `restore` rebuilds the snapshot from the declarations at the
   candidate commit **under the current hejbro** and compares the
-  rendered bytes with the banner's current hash — after the upgrade
-  that is the new hash, and the rebuild renders the current format, so
-  the comparison holds without reading the new line. Measured in task
-  1.5, not assumed.
+  rendered bytes with the banner's current hash — after the upgrade that
+  is the new hash, and the rebuild renders the current format. The
+  rebuild is not declarations alone, though: D81 has it parse that
+  commit's own stored snapshot as the parent, so an old-format blob
+  stops the comparison before it runs. When the tip's banner carries
+  `upgraded-from`, that blob is re-encoded through `upgradeSnapshot` in
+  memory (no file is written) and used as the parent; when it does not,
+  the existing format guard and its note stay. The trigger is the
+  presence of `upgraded-from`, never the format alone — a migration that
+  was never upgraded has a banner hash in the old format, and rebuilding
+  it under the current one would report drift that is not there.
+  Measured in task 1.5, not assumed.
 
 ## Q5 — The command's surface
 

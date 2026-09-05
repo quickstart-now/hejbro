@@ -73,7 +73,9 @@ None.
 
 - `@hejbro/core`: `snapshot/snapshot.ts` (the re-encoding entry and the
   split older-format message), `sql/migration-file.ts` (the banner line
-  and its parser), the barrel and its export pin.
+  and its parser), `kinds/table-kind.ts` (the canonical form completes
+  over foreign keys, which the serializer's own ordering had left it
+  treating as already sorted), the barrel and its export pin.
 - `hejbro` (CLI): a new `commands/upgrade.ts`, `main.ts` registration,
   `history-state.ts` and `commands/restore.ts` reading the new line.
 - Fixtures: the 0.1.1 release's own format-5 snapshots (the two

@@ -4,8 +4,9 @@
 `hejbro upgrade` SHALL move a project whose committed snapshot is in an
 older released format forward without a reset: it rewrites the snapshot
 file in the current format and rewrites the tip migration's own
-snapshot-hash banner line to the new file's hash, recording the hash it
-replaced on an `upgraded-from` banner line directly under it, so that
+snapshot-hash banner line to the new file's hash, recording the hash the
+tip first recorded on an `upgraded-from` banner line directly under it —
+one line, kept across any later upgrade — so that
 `verify` accepts the chain afterwards and the next generated migration
 chains onto the new hash. Before writing anything it SHALL check that
 the tip's recorded hash matches the snapshot as stored, and refuse with

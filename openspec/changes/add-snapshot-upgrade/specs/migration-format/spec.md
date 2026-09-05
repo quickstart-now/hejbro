@@ -11,7 +11,11 @@ whether to run the migration or register it as applied, hejbro's own
 apply path among them, and — on a tip migration whose snapshot hash was
 rewritten by a format upgrade only — the `-- upgraded-from:` line
 carrying the hash the tip recorded before the upgrade, whose consumer is
-the tool resolving which commit originally carried that snapshot. hejbro
+the tool resolving which commit originally carried that snapshot. A tip
+carried forward by more than one upgrade SHALL still carry exactly one
+such line, naming the hash the tip recorded when it was first written —
+the commit that added the file holds those bytes, and those are the
+bytes the resolving tool has to match. hejbro
 SHALL expose public parsers for these lines, so that decision never
 requires string-matching the banner — including when hejbro is the one
 making it. Each parser SHALL read its line by its own known prefix only
@@ -51,3 +55,10 @@ migration that must only be registered.
 - **THEN** the exported parser returns the replaced hash for the first
   and `null` for the second, and the hash-chain parser returns the
   current hash for both
+
+#### Scenario: A second upgrade keeps the first recorded hash
+- **WHEN** a tip that already carries an `upgraded-from` line is carried
+  through another format upgrade
+- **THEN** the file still carries exactly one such line, its value is the
+  hash the tip recorded when it was first written rather than the hash
+  the second upgrade replaced, and the exported parser returns that value
