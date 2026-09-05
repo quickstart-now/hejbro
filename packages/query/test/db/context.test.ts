@@ -693,6 +693,13 @@ describe("the context runs in a batch when interactive transactions are absent (
 		await db(appSchema, batched.driver).as(context).execute(select(posts));
 		const batchContextStatements = batched.batchCalls[0]?.slice(0, -1);
 
+		// each side ran through its OWN path (not both accidentally taking
+		// the same one, which would make the equality below pass vacuously):
+		// role + one setting, two statements, on each side independently.
+		expect(interactive.sentPerTransaction).toHaveLength(1);
+		expect(interactiveContextStatements).toHaveLength(2);
+		expect(batched.batchCalls).toHaveLength(1);
+		expect(batchContextStatements).toHaveLength(2);
 		expect(batchContextStatements).toEqual(interactiveContextStatements);
 	});
 
