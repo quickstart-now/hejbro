@@ -30,6 +30,17 @@
       "at": "2026-09-05T18:55Z",
       "title": "folded guards name the kind token; expr-children.ts joins task 1.1; the lifter keeps three branches",
       "ratified": null
+    },
+    {
+      "id": "R3",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R1"
+      ],
+      "at": "2026-09-05T19:06Z",
+      "title": "the five exports: a new core exports pin, five barrel-absence lines, engine placement, values only, tsdoc rewrite, two-stage red",
+      "ratified": null
     }
   ],
   "work": [],
