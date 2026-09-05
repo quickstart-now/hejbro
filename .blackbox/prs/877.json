@@ -3,11 +3,11 @@
   "number": 877,
   "ref": "quickstart-now/hejbro#877",
   "title": "chore(openspec): archive harden-ledger-diagnostics after d106 round 1",
-  "head": "848de1f0fcdc16e81ae765063024ec65ff7560c6",
+  "head": "ccc17494b736a955dc5a33c01444c546165acf4d",
   "headRef": "archive-ledger-diagnostics",
   "base": "dev",
   "merged": null,
-  "pinnedAt": "2026-09-05T02:07Z",
+  "pinnedAt": "2026-09-05T02:47Z",
   "refs": [
     {
       "path": ".changeset/harden-ledger-diagnostics.md",
@@ -15,7 +15,7 @@
     },
     {
       "path": "README.md",
-      "blob": "4cda47f52756d563cbd4f4c3805bd45260e3497c"
+      "blob": "5f103aab1d03ac62ee778055fa13376147423713"
     },
     {
       "path": "openspec/changes/archive/2026-09-05-harden-ledger-diagnostics/design.md",
@@ -59,11 +59,11 @@
     },
     {
       "path": "openspec/task-times.csv",
-      "blob": "09fee9789808f2e75e2d5f5164a8f7b855f10980"
+      "blob": "d500aa949e32e5cf56172faa5ff7664010125298"
     },
     {
       "path": "packages/cli/src/apply/ledger-diagnostics.ts",
-      "blob": "47bf0a86c1923a6caa0c64b1237cbdaffad965be"
+      "blob": "4ca2efbadfcd051a9247fe5cd2f19cd1fecd11ed"
     },
     {
       "path": "packages/cli/test/apply-ledger-diagnostics.test.ts",
