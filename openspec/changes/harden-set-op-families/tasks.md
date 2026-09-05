@@ -81,7 +81,9 @@ planner, not into the diff.
       `SelectChainLimited` turns the chain's refusal row green and
       nothing else. Files: `packages/query/src/db/chain.ts`,
       `packages/query/test/types/*.test.ts`, `packages/core/src/query/
-      select.ts`, `packages/core/src/index.ts`.
+      select.ts`, `packages/core/src/index.ts`. Both positions (the
+      first stage and the combined stage) share one combinator
+      declaration (503/R11).
 
 - [x] 1.3 (~5m) Reference and changeset. `query-layer.md`'s
       set-operation and recursive-CTE sections state the family rule,
