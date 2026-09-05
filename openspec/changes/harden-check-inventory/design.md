@@ -279,14 +279,23 @@ exactly the one the measurement lacked.
 
 `packages/cli/test/infer-omitted-names.integration.test.ts` asserts the
 loss-report wording against a live database, and it does **not** run
-under `pnpm test`: there is no `test:integration` task in `turbo.json`,
-so the suite is reachable only through its own vitest config. A wording
-change therefore passes every gate in `AGENTS.md`'s "Before claiming
-done" list while leaving that file asserting text the product no longer
-prints. It was found here by reading, not by a gate. The same is true of
-`check-live.integration.test.ts`, which this change's own live witness
-lands in — both are run explicitly and their output is quoted in the
-completion report.
+under `pnpm test`. That is deliberate, not an oversight:
+`packages/cli/vitest.config.ts` excludes `test/**/*integration.test.ts`
+by pattern, the same Docker-gated split `packages/pg` makes, and
+`turbo.json` carries no `test:integration` task — the suites are
+reachable only through their own vitest config.
+
+The consequence is what matters here. A change to a loss-report sentence
+passes every gate in `AGENTS.md`'s "Before claiming done" list while
+leaving that file asserting text the product no longer prints; this
+change found it by reading the file, not by a gate failing. The same
+holds for `check-live.integration.test.ts`, where this change's own live
+witness lands — and M6 below is the proof that the missing coverage is
+not theoretical: the defect it records is invisible to every unit test
+by construction, because those inject `constraintName` as a fixture.
+
+Both suites are therefore run explicitly for this change and their
+output is quoted in the completion report.
 
 ## Measurements
 
