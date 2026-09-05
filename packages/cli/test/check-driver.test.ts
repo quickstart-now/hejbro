@@ -552,6 +552,32 @@ describe("withCheckConnection / configured factory (#458 task 1.2)", () => {
 		},
 	);
 
+	// #458 review round 1, task 1.7 guardrail: the new non-null-object
+	// guard must never refuse a *legitimate* driver -- an async factory,
+	// and the exact shape the preset docs show (a base driver spread,
+	// then a decorator field added, mirroring `supabaseDriver`/
+	// `nileDriver`'s own `{ ...driver, contributedRoles: [...] }`).
+	it("still admits an async factory returning a spread-decorated driver, the shape the preset docs show", async () => {
+		const ends: number[] = [];
+		const base: CheckDriverConnection = buildClosableDriver(ends);
+		const factory = async () => ({
+			...base,
+			contributedRoles: ["anon", "authenticated"],
+		});
+
+		const result = await withCheckConnection(
+			"postgres://from-flag",
+			{},
+			CHECK_CONTEXT,
+			async () => "report",
+			undefined,
+			factory,
+		);
+
+		expect(result).toBe("report");
+		expect(ends).toHaveLength(1);
+	});
+
 	it("still closes the connection after a failing body when a factory is configured", async () => {
 		const ends: number[] = [];
 		const factory = () => buildClosableDriver(ends);
