@@ -51,3 +51,12 @@ Basis: R3, R4.
 
 Adding a variant to ExprNode breaks every exhaustive registry in the repository, including the two child-traversal tables restated outside @hejbro/core that expr-children.ts's own comment names: @hejbro/query's liftExprNode (task 1.4) and @hejbro/supabase's ChildrenOfHandlers in validators/rls-uncached-auth-call.ts. The supabase entry is this change's own compile failure, not a follow-up: pnpm check-types is a group-completion gate and a monorepo that does not compile cannot ship. The file boundary that reserves packages/supabase/src/** for another slice is waived for this one file, confirmed against what that slice is editing (pooler.ts). The proposal's Impact list is corrected to enumerate the sites the type forces -- window.ts, expr-children.ts, params.ts and this one -- because three of them were found by a crash rather than by reading the list.
 
+<a id="r6"></a>
+## R6 — filter belongs to the hejbro package vocabulary
+
+_lead · interpretation · 2026-09-05T13:50Z · ratified: pending_
+
+Basis: R1.
+
+filter is the user-facing wrapper this change ships, so it belongs to the hejbro package's vocabulary: packages/cli/src/index.ts re-exports values by hand alongside export type * from @hejbro/core, and a new core value export missing from that list exists in hejbro as a type only -- a user cannot import the function at all. The barrel curation gate (packages/cli/test/exports.test.ts, #471) and the skill's snippet compile test were both red from task 1.1 onward and went unseen because verification ran package by package. packages/cli/src/{index,core-surface}.ts join task 1.5's files; packages/cli/test/exports.test.ts is touched only if it asks for a change. This is the fourth site the proposal's Impact list failed to enumerate, corrected there together with window.ts, expr-children.ts and the supabase traversal table.
+

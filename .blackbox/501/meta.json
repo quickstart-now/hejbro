@@ -57,6 +57,15 @@
       "at": "2026-09-05T13:42Z",
       "title": "the traversal table restated in supabase is this change's own",
       "ratified": null
+    },
+    {
+      "id": "R6",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [],
+      "at": "2026-09-05T13:50Z",
+      "title": "filter belongs to the hejbro package vocabulary",
+      "ratified": null
     }
   ],
   "work": [

@@ -13,9 +13,12 @@ as each task names them), `packages/core/src/
 query/select.ts`, `packages/core/src/index.ts`, `packages/core/test/expr/
 reachable-kinds.ts` and the tests beside each (1.1–1.3); `packages/query/
 src/compile/params.ts`, `packages/query/src/db/convert.ts` and tests
-(1.4); `skills/hejbro/references/query-layer.md`, one `.changeset/*.md`
-(1.5). If a task appears to need any other file, that goes back to the
-planner, not into the diff.
+(1.4); `packages/supabase/src/validators/rls-uncached-auth-call.ts` and
+its test (the child-traversal table restated outside core, waived onto
+this change because the package stops compiling without it);
+`skills/hejbro/references/query-layer.md`, `packages/cli/src/{index,
+core-surface}.ts`, one `.changeset/*.md` (1.5). If a task appears to
+need any other file, that goes back to the planner, not into the diff.
 
 **Ordering.** 1.1 → 1.2 → 1.3 → 1.4 → 1.5.
 
