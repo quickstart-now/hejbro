@@ -1,4 +1,4 @@
-import type { DriverCapabilities, DriverSession } from "@hejbro/query";
+import type { Driver, DriverCapabilities, DriverSession } from "@hejbro/query";
 import { describe, expect, it, vi } from "vitest";
 import type {
 	CheckDriverConnection,
@@ -14,7 +14,7 @@ import {
 
 // `commandName`/`codes` are required everywhere in this module (no
 // default -- see its own doc comment on `ConnectionContext`); this file's
-// own fixture is `hejbro check`'s real context (its three codes as
+// own fixture is `hejbro check`'s real context (its four codes as
 // literals, not assembled from a prefix -- #613), since this suite tests
 // this module's own behavior for its one existing caller. Group 7's own
 // apply-side context (`APPLY_CONNECTION_CODES`, `apply/capability.ts`)
@@ -26,6 +26,7 @@ const CHECK_CONTEXT: ConnectionContext = {
 		connectionMissing: "check-connection-missing",
 		driverMissing: "check-driver-missing",
 		connectionFailed: "check-connection-failed",
+		driverUnclosable: "check-driver-unclosable",
 	},
 };
 
@@ -243,5 +244,183 @@ describe("assertConnected / 1.5 connection failures", () => {
 		).rejects.toEqual(
 			expect.objectContaining({ code: "check-catalog-unreadable" }),
 		);
+	});
+});
+
+describe("withCheckConnection / configured factory (#458 task 1.2)", () => {
+	// The same driver shape group 7's own fake used, so unrelated methods
+	// still throw if a bug reaches them instead of silently passing.
+	const fakeCapabilities: DriverCapabilities = {
+		"interactive-transactions": false,
+		"session-state": false,
+	};
+
+	const buildClosableDriver = (ends: number[]): CheckDriverConnection => ({
+		capabilities: fakeCapabilities,
+		execute: async () => [],
+		transaction: async () => {
+			throw new Error("transaction should not be called by this test");
+		},
+		setupSession: async () => {
+			throw new Error("setupSession should not be called by this test");
+		},
+		client: {
+			end: async () => {
+				ends.push(1);
+			},
+		},
+	});
+
+	it("calls a sync factory exactly once with the resolved string, never the importer, and closes it after the body", async () => {
+		const ends: number[] = [];
+		const calls: string[] = [];
+		const factory = (connectionString: string) => {
+			calls.push(connectionString);
+			return buildClosableDriver(ends);
+		};
+		const importer = vi.fn(async () => {
+			throw new Error("the importer must not run when a factory is configured");
+		});
+
+		const result = await withCheckConnection(
+			"postgres://from-flag",
+			{},
+			CHECK_CONTEXT,
+			async () => "report",
+			importer,
+			factory,
+		);
+
+		expect(result).toBe("report");
+		expect(calls).toEqual(["postgres://from-flag"]);
+		expect(importer).not.toHaveBeenCalled();
+		expect(ends).toHaveLength(1);
+	});
+
+	it("awaits an async factory the same way", async () => {
+		const ends: number[] = [];
+		const factory = async (connectionString: string) => {
+			expect(connectionString).toBe("postgres://from-flag");
+			return buildClosableDriver(ends);
+		};
+
+		const result = await withCheckConnection(
+			"postgres://from-flag",
+			{},
+			CHECK_CONTEXT,
+			async () => "report",
+			undefined,
+			factory,
+		);
+
+		expect(result).toBe("report");
+		expect(ends).toHaveLength(1);
+	});
+
+	it("surfaces a throwing factory as the command's own connection-failed diagnostic, never calling the importer", async () => {
+		const importer = vi.fn();
+		const factory = () => {
+			throw new Error("boom from the configured factory");
+		};
+
+		await expect(
+			withCheckConnection(
+				"postgres://from-flag",
+				{},
+				CHECK_CONTEXT,
+				async () => "report",
+				importer,
+				factory,
+			),
+		).rejects.toEqual(
+			expect.objectContaining({
+				code: "check-connection-failed",
+				message: expect.stringContaining("boom from the configured factory"),
+			}),
+		);
+		expect(importer).not.toHaveBeenCalled();
+	});
+
+	it("refuses a driver with no client.end before any statement is sent, naming the field and the missing member", async () => {
+		const executed = vi.fn(async () => []);
+		const unclosable: Driver = {
+			capabilities: fakeCapabilities,
+			execute: executed,
+			transaction: async () => {
+				throw new Error("transaction should not be called by this test");
+			},
+			setupSession: async () => {
+				throw new Error("setupSession should not be called by this test");
+			},
+		};
+		const factory = () => unclosable;
+
+		await expect(
+			withCheckConnection(
+				"postgres://from-flag",
+				{},
+				CHECK_CONTEXT,
+				async () => "report",
+				undefined,
+				factory,
+			),
+		).rejects.toEqual(
+			expect.objectContaining({
+				code: "check-driver-unclosable",
+				message: expect.stringContaining("driver"),
+			}),
+		);
+		await expect(
+			withCheckConnection(
+				"postgres://from-flag",
+				{},
+				CHECK_CONTEXT,
+				async () => "report",
+				undefined,
+				factory,
+			),
+		).rejects.toEqual(
+			expect.objectContaining({
+				message: expect.stringContaining("client.end"),
+			}),
+		);
+		expect(executed).not.toHaveBeenCalled();
+	});
+
+	it("still closes the connection after a failing body when a factory is configured", async () => {
+		const ends: number[] = [];
+		const factory = () => buildClosableDriver(ends);
+
+		await expect(
+			withCheckConnection(
+				"postgres://from-flag",
+				{},
+				CHECK_CONTEXT,
+				async () => {
+					throw new Error("body failed");
+				},
+				undefined,
+				factory,
+			),
+		).rejects.toThrow("body failed");
+		expect(ends).toHaveLength(1);
+	});
+
+	it("refuses a missing connection before the factory ever runs", async () => {
+		const factory = vi.fn();
+
+		await expect(
+			withCheckConnection(
+				undefined,
+				{},
+				CHECK_CONTEXT,
+				async () => "report",
+				undefined,
+				factory,
+			),
+		).rejects.toEqual(
+			expect.objectContaining({ code: "check-connection-missing" }),
+		);
+		expect(factory).not.toHaveBeenCalled();
 	});
 });

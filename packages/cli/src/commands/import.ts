@@ -358,6 +358,7 @@ export const runImport = async (
 					connectionMissing: "import-connection-missing",
 					driverMissing: "import-driver-missing",
 					connectionFailed: "import-connection-failed",
+					driverUnclosable: "import-driver-unclosable",
 				},
 			},
 			async (driver) => {

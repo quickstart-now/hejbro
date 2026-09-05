@@ -719,6 +719,7 @@ export const runCheck = async (
 					connectionMissing: "check-connection-missing",
 					driverMissing: "check-driver-missing",
 					connectionFailed: "check-connection-failed",
+					driverUnclosable: "check-driver-unclosable",
 				},
 			},
 			async (driver) => {

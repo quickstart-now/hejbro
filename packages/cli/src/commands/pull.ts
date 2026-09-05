@@ -153,6 +153,7 @@ export const runPull = async (
 					connectionMissing: "pull-connection-missing",
 					driverMissing: "pull-driver-missing",
 					connectionFailed: "pull-connection-failed",
+					driverUnclosable: "pull-driver-unclosable",
 				},
 			},
 			async (driver) => {

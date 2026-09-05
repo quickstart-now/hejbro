@@ -18,6 +18,7 @@ export const APPLY_CONNECTION_CODES: ConnectionCodes = {
 	connectionMissing: "apply-connection-missing",
 	driverMissing: "apply-driver-missing",
 	connectionFailed: "apply-connection-failed",
+	driverUnclosable: "apply-driver-unclosable",
 };
 
 /**
