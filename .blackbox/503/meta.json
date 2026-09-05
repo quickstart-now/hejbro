@@ -194,6 +194,15 @@
       "decisions": [
         "R13"
       ]
+    },
+    {
+      "id": "W5",
+      "at": "2026-09-05T22:39Z",
+      "title": "the last two precision fixes: a one-way inclusion and a type-resolution limit",
+      "pr": null,
+      "decisions": [
+        "R13"
+      ]
     }
   ],
   "prs": [],

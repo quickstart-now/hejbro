@@ -105,3 +105,5 @@ The re-review measured the corrected sentences. (B2) "an array against an array 
 
 Two more sentences carried the same overstatement and were corrected: the opening's "pairs the server unifies" clause and scenario 3's WHEN, which now speak of same-family pairs only and leave `"unknown"` to scenarios 2a/2b.
 
+Two last precision fixes followed the second re-check: the opening now says every pair the server unifies is a same-family one (the equality claimed the converse, which the next paragraph's own list refutes), and scenario 2a's THEN limits "the one Postgres accepts" to type resolution, leaving the literal's own text a value-level question the server answers at execution (`22P02`, `22007`).
+
