@@ -19,6 +19,17 @@
       "at": "2026-09-05T05:46Z",
       "title": "The ledger records a body checksum; migrate refuses an applied migration whose body changed; status reports it",
       "ratified": null
+    },
+    {
+      "id": "R2",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R1"
+      ],
+      "at": "2026-09-05T16:52Z",
+      "title": "the banner boundary, the normalization and the checksum's stored form",
+      "ratified": null
     }
   ],
   "work": [],
