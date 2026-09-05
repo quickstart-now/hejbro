@@ -62,7 +62,7 @@ needs both; 1.5 last.
       lookup in `BUILDER_READ_SHAPES`. Files: `packages/query/src/db/
       convert.ts`, the test.
 
-- [ ] 1.4 (~7m) The drift guard becomes a ratchet. Red: the describe
+- [x] 1.4 (~7m) The drift guard becomes a ratchet. Red: the describe
       *"select.ts casts iff convert.ts revives"* rewritten as one
       `it.each` over `BUILDER_READ_SHAPES` × {windowed, unwindowed}
       through the existing `agreementFor` helper: `own` rows expect

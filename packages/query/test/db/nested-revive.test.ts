@@ -1,6 +1,7 @@
-import type { SelectProjection } from "@hejbro/core";
+import type { BuilderFunctionName, SelectProjection } from "@hejbro/core";
 import {
 	avg,
+	BUILDER_READ_SHAPES,
 	bigint,
 	bytea,
 	count,
@@ -573,33 +574,23 @@ describe("a cast aggregate cell actually revives, not just compiles cast (#444 F
 });
 
 /**
- * #444 F6 group-8 follow-up: `select.ts`'s cast decision
- * (`atRiskCastSuffix`) and `convert.ts`'s revive decision
- * (`columnStateForExpr`/`aggregateColumnState`) are two hand-written
- * classifications of the same vocabulary (`count`/`min`/`max` cast+
- * revive, `sum`/`avg` neither) living in two different packages with no
- * shared source — exactly the kind of duplication this whole change
- * exists to close everywhere else. There is no single export either
- * side could re-derive the other from without crossing the core/query
- * purity boundary (`select.ts`'s classification is core-only;
- * `convert.ts`'s is query-only, keyed off `Declarations["tables"]` core
- * never sees), so this test asserts their AGREEMENT observably instead
- * of unifying the source: for each of the three shapes below,
- * "select.ts cast it" and "convert.ts revived it to bigint" must be the
- * same boolean.
+ * #452 task 1.4: `select.ts`'s cast decision (`atRiskCastSuffix`) and
+ * `convert.ts`'s revive decision (`columnStateForExpr`/
+ * `aggregateColumnState`) each read `BUILDER_READ_SHAPES` now, but the
+ * two sides still cannot share a function (core is pure, this side
+ * works over declared tables) -- this test asserts their AGREEMENT
+ * observably instead: for every row in the table, "select.ts cast it"
+ * and "convert.ts revived it to bigint" must be the same boolean.
  *
- * **This is a fixed-shape regression test, not a ratchet** — unlike
- * `select-children.ts`'s type-level guarantee elsewhere in this change,
- * nothing here is derived from either side's actual classification set,
- * because neither is exported. It catches the two known sides
- * disagreeing about `count`/`max`/`sum` specifically; it does NOT catch
- * a genuinely new aggregate shape being taught to one side (a cast
- * added to `select.ts`, say) without a matching case added here AND to
- * `convert.ts` — that drift needs a human to remember to extend this
- * file, the same manual-sync risk this whole piece exists to close
- * everywhere it *can* be closed structurally.
+ * **This is a ratchet, not a fixed-shape regression test** — `expected`
+ * is derived from `BUILDER_READ_SHAPES` itself (`shape !== "own"`), and
+ * `builderCases` is a `Record<BuilderFunctionName, …>`: a constructor
+ * added to the vocabulary without a matching case here fails `tsc` at
+ * that record's own declaration, and the `it.each` below iterates the
+ * table's actual rows, not a hand-copied list -- the windowed `count`
+ * row is the one that was red before task 1.2's fix and green after.
  */
-describe("select.ts casts iff convert.ts revives (#444 F6 drift guard)", () => {
+describe("select.ts casts iff convert.ts revives (#452 task 1.4 ratchet)", () => {
 	// a past-2^53 value, delivered as text: distinguishes "revived as
 	// bigint" (exact) from "passed through as a plain JS value" (a
 	// string arriving un-revived stays exactly this string, never
@@ -639,40 +630,122 @@ describe("select.ts casts iff convert.ts revives (#444 F6 drift guard)", () => {
 		};
 	};
 
-	it("count(): cast and revive both true", async () => {
-		const result = await agreementFor(
-			"total",
-			select({ total: count() }, comments).where(eq(comments.postId, posts.id)),
-		);
-		expect(result.wasCast).toBe(true);
-		expect(result.wasRevivedToBigint).toBe(true);
+	// single-word aliases throughout (no camelCase hump) so the raw
+	// driver row's own key and the converted row's resultKey are spelled
+	// identically -- a hump (e.g. "maxViews") renders as a different
+	// snake_case SQL alias ("max_views") than the camelCase resultKey
+	// the converted row carries, a separate naming-translation concern
+	// this ratchet isn't about.
+	const cellFor = <TProjection extends SelectProjection>(
+		projected: TProjection,
+	) => select(projected, comments).where(eq(comments.postId, posts.id));
+
+	type BuilderCase = {
+		readonly unwindowed?: () => ReturnType<typeof cellFor>;
+		readonly windowed: () => ReturnType<typeof cellFor>;
+	};
+
+	const builderCases: Record<BuilderFunctionName, BuilderCase> = {
+		count: {
+			unwindowed: () => cellFor({ cell: count() }),
+			windowed: () => cellFor({ cell: over(count(), {}) }),
+		},
+		// biome-ignore lint/style/useNamingConvention: BuilderFunctionName's own Postgres names (D57).
+		row_number: { windowed: () => cellFor({ cell: over(rowNumber(), {}) }) },
+		rank: { windowed: () => cellFor({ cell: over(rank(), {}) }) },
+		// biome-ignore lint/style/useNamingConvention: BuilderFunctionName's own Postgres names (D57).
+		dense_rank: { windowed: () => cellFor({ cell: over(denseRank(), {}) }) },
+		min: {
+			unwindowed: () => cellFor({ cell: min(comments.viewCount) }),
+			windowed: () => cellFor({ cell: over(min(comments.viewCount), {}) }),
+		},
+		max: {
+			unwindowed: () => cellFor({ cell: max(comments.viewCount) }),
+			windowed: () => cellFor({ cell: over(max(comments.viewCount), {}) }),
+		},
+		lag: {
+			windowed: () => cellFor({ cell: over(lag(comments.viewCount), {}) }),
+		},
+		lead: {
+			windowed: () => cellFor({ cell: over(lead(comments.viewCount), {}) }),
+		},
+		// biome-ignore lint/style/useNamingConvention: BuilderFunctionName's own Postgres names (D57).
+		first_value: {
+			windowed: () =>
+				cellFor({ cell: over(firstValue(comments.viewCount), {}) }),
+		},
+		// biome-ignore lint/style/useNamingConvention: BuilderFunctionName's own Postgres names (D57).
+		last_value: {
+			windowed: () =>
+				cellFor({ cell: over(lastValue(comments.viewCount), {}) }),
+		},
+		// biome-ignore lint/style/useNamingConvention: BuilderFunctionName's own Postgres names (D57).
+		nth_value: {
+			windowed: () =>
+				cellFor({ cell: over(nthValue(comments.viewCount, 1), {}) }),
+		},
+		sum: {
+			unwindowed: () => cellFor({ cell: sum(comments.viewCount) }),
+			windowed: () => cellFor({ cell: over(sum(comments.viewCount), {}) }),
+		},
+		avg: {
+			unwindowed: () => cellFor({ cell: avg(comments.viewCount) }),
+			windowed: () => cellFor({ cell: over(avg(comments.viewCount), {}) }),
+		},
+		// biome-ignore lint/style/useNamingConvention: BuilderFunctionName's own Postgres names (D57).
+		percent_rank: {
+			windowed: () => cellFor({ cell: over(percentRank(), {}) }),
+		},
+		// biome-ignore lint/style/useNamingConvention: BuilderFunctionName's own Postgres names (D57).
+		cume_dist: { windowed: () => cellFor({ cell: over(cumeDist(), {}) }) },
+		ntile: { windowed: () => cellFor({ cell: over(ntile(4), {}) }) },
+	};
+
+	type RatchetRow = readonly [
+		name: string,
+		form: "unwindowed" | "windowed",
+		expected: boolean,
+		build: () => ReturnType<typeof cellFor>,
+	];
+
+	/** `builderCases` is total over `BuilderFunctionName` -- every key `Object.entries(BUILDER_READ_SHAPES)` can produce resolves, `noUncheckedIndexedAccess`'s own conservative `| undefined` aside. */
+	const caseFor = (name: BuilderFunctionName): BuilderCase => {
+		const found = builderCases[name];
+		if (found === undefined) {
+			throw new Error(`no builderCases entry for ${name}`);
+		}
+		return found;
+	};
+
+	const ratchetRows: ReadonlyArray<RatchetRow> = Object.entries(
+		BUILDER_READ_SHAPES,
+	).flatMap(([name, shape]) => {
+		const builderCase = caseFor(name as BuilderFunctionName);
+		const expected = shape !== "own";
+		const windowedRow: RatchetRow = [
+			name,
+			"windowed",
+			expected,
+			builderCase.windowed,
+		];
+		if (builderCase.unwindowed === undefined) {
+			return [windowedRow];
+		}
+		const unwindowedRow: RatchetRow = [
+			name,
+			"unwindowed",
+			expected,
+			builderCase.unwindowed,
+		];
+		return [unwindowedRow, windowedRow];
 	});
 
-	// single-word aliases throughout this describe (no camelCase hump) so
-	// the raw driver row's own key and the converted row's resultKey are
-	// spelled identically -- a hump (e.g. "maxViews") renders as a
-	// different snake_case SQL alias ("max_views") than the camelCase
-	// resultKey the converted row carries, which is a real, separate
-	// naming-translation concern this drift guard isn't about.
-	it("max(bigintColumn): cast and revive both true", async () => {
-		const result = await agreementFor(
-			"biggest",
-			select({ biggest: max(comments.viewCount) }, comments).where(
-				eq(comments.postId, posts.id),
-			),
-		);
-		expect(result.wasCast).toBe(true);
-		expect(result.wasRevivedToBigint).toBe(true);
-	});
-
-	it("sum(bigintColumn): cast and revive both false", async () => {
-		const result = await agreementFor(
-			"summed",
-			select({ summed: sum(comments.viewCount) }, comments).where(
-				eq(comments.postId, posts.id),
-			),
-		);
-		expect(result.wasCast).toBe(false);
-		expect(result.wasRevivedToBigint).toBe(false);
-	});
+	it.each(ratchetRows)(
+		"%s (%s): cast and revive agree (expected %s)",
+		async (_name, _form, expected, build) => {
+			const result = await agreementFor("cell", build());
+			expect(result.wasCast).toBe(expected);
+			expect(result.wasRevivedToBigint).toBe(expected);
+		},
+	);
 });
