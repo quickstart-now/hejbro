@@ -1,0 +1,33 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#814",
+  "title": "release: changesets leaves the pre dist-tag stale on packages without a stable version",
+  "parent": "quickstart-now/hejbro#815",
+  "status": "open",
+  "opened": "2026-09-05",
+  "closed": null,
+  "decisions": [
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "run 33868831782 (four young packages landed on latest); OIDC trusted publishing leaves no credential for a post-publish dist-tag step; changesets' own pre-mode tagging for packages with a stable history"
+      ],
+      "at": "2026-09-05T06:31Z",
+      "title": "A pre-mode publish passes --tag pre; the change is owner-gated and PR #893 waits for the owner",
+      "ratified": null
+    }
+  ],
+  "work": [],
+  "prs": [
+    {
+      "number": 893,
+      "role": "refs",
+      "pinnedAt": "2026-09-05T06:31Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

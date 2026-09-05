@@ -25,7 +25,7 @@
 		"verify:supabase-image": "bash scripts/verify-supabase-image.sh",
 		"changeset": "changeset",
 		"version-packages": "changeset version",
-		"release": "pnpm build && changeset publish",
+		"release": "pnpm build && changeset publish $([ -f .changeset/pre.json ] && echo --tag pre)",
 		"prepare": "husky"
 	},
 	"devDependencies": {

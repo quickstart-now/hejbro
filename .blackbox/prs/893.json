@@ -1,0 +1,17 @@
+{
+  "version": 3,
+  "number": 893,
+  "ref": "quickstart-now/hejbro#893",
+  "title": "build(release): publish under --tag pre while in pre mode (#814)",
+  "head": "717b19ba15129a9d1ac386ce89f03b92fea9008a",
+  "headRef": "release-pre-tag",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-05T06:31Z",
+  "refs": [
+    {
+      "path": "package.json",
+      "blob": "3e77cb05dee286d0e419adb53c7a941eae4adaf7"
+    }
+  ]
+}
