@@ -4,9 +4,9 @@
   "ref": "quickstart-now/hejbro#798",
   "title": "generation order: pin where an unconstrained object lands in the wave sort",
   "parent": "quickstart-now/hejbro#412",
-  "status": "open",
+  "status": "closed",
   "opened": "2026-09-05",
-  "closed": null,
+  "closed": "2026-09-05",
   "decisions": [
     {
       "id": "R1",
@@ -26,7 +26,13 @@
     }
   ],
   "work": [],
-  "prs": [],
+  "prs": [
+    {
+      "number": 890,
+      "role": "closes",
+      "pinnedAt": "2026-09-05T06:07Z"
+    }
+  ],
   "origin": null,
   "followUps": []
 }

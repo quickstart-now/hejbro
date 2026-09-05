@@ -1,0 +1,41 @@
+{
+  "version": 3,
+  "number": 890,
+  "ref": "quickstart-now/hejbro#890",
+  "title": "docs(openspec): pin the wave sort tie-break (#798)",
+  "head": "f2591288a67bc5d7e30539f9e79a92c1326d8932",
+  "headRef": "pin-wave-tie-break",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-05T06:07Z",
+  "refs": [
+    {
+      "path": "README.md",
+      "blob": "f5dc348316b50f2058d08f8aa6d3aaff89ec3611"
+    },
+    {
+      "path": "openspec/changes/pin-wave-tie-break/design.md",
+      "blob": "9478ab0ebdb19ea3fa9a538d864545910b381881"
+    },
+    {
+      "path": "openspec/changes/pin-wave-tie-break/proposal.md",
+      "blob": "f66cc7d16c1a1b925f6055514d9161cd149942be"
+    },
+    {
+      "path": "openspec/changes/pin-wave-tie-break/specs/cli-commands/spec.md",
+      "blob": "31edff5df6b1d4bb88f10d7274f834e49e663129"
+    },
+    {
+      "path": "openspec/changes/pin-wave-tie-break/tasks.md",
+      "blob": "713c2a34f07b6466a4b6287ee3301728eea651d6"
+    },
+    {
+      "path": "openspec/task-times.csv",
+      "blob": "2ff52e254f697c3fdbb1d2851df737612bba5a38"
+    },
+    {
+      "path": "packages/core/test/diff-engine.test.ts",
+      "blob": "2b676c031ab2ec12666775295e9b5826969d503d"
+    }
+  ]
+}
