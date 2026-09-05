@@ -34,7 +34,10 @@ describe("loadConfig", () => {
 	// every message it writes.
 	it("names the config file by its relative label in invalid-config, never by absolute path", async () => {
 		const cwd = await mkdtemp(join(tmpdir(), "hejbro-745-"));
-		await writeFile(join(cwd, "hejbro.config.ts"), "export default { entry: 42 };\n");
+		await writeFile(
+			join(cwd, "hejbro.config.ts"),
+			"export default { entry: 42 };\n",
+		);
 		try {
 			await loadConfig(cwd, undefined);
 			throw new Error("expected loadConfig to throw");
