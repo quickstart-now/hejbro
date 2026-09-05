@@ -19,6 +19,20 @@
       "at": "2026-09-05T05:53Z",
       "title": "harden-adoption: adoption creates the table's additive children, normalizes a leftover sequence idempotently, and generate names what it will create",
       "ratified": null
+    },
+    {
+      "id": "R2",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "671/R1; design.md Q1-Q2; delta table-declaration (children enumerated: indexes",
+        "checks",
+        "foreign keys",
+        "primary key); base scenarios 'An existing declaration produces no statement'; delta cli-commands 'print nothing under this code'"
+      ],
+      "at": "2026-09-05T23:11Z",
+      "title": "adoption boundary: plain ALTER-time children, columns untouched, two sequence alters, code-scoped silence",
+      "ratified": null
     }
   ],
   "work": [],
