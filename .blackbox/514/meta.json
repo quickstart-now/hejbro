@@ -1,0 +1,28 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#514",
+  "title": "references() cannot express referential actions (onDelete/onUpdate)",
+  "parent": "quickstart-now/hejbro#412",
+  "status": "open",
+  "opened": "2026-09-05",
+  "closed": null,
+  "decisions": [
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "412/D24",
+        "412/D25; #514's measurement (identical DDL but for the dropped on delete clause; 0 of 7 example FKs expressible); D102 (one declaration feeds DDL and types)"
+      ],
+      "at": "2026-09-05T05:40Z",
+      "title": ".references() takes the referential actions as a second argument; parity with extras is the contract; the example converts as the witness",
+      "ratified": null
+    }
+  ],
+  "work": [],
+  "prs": [],
+  "origin": null,
+  "followUps": []
+}

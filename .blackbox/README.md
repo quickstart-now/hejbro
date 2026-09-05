@@ -60,6 +60,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#501](501/) | add a real FILTER (WHERE …) aggregate constructor | closed | #963 #976 | 0 | 8 (1 pending) |
 | ↳ [#502](502/) | audit server-behavior assertions across openspec/specs | closed | #910 | 0 | 0 (0 pending) |
 | ↳ [#510](510/) | cross-check MODIFIED requirement titles against the base spec in CI | closed | #884 | 0 | 0 (0 pending) |
+| ↳ [#514](514/) | references() cannot express referential actions (onDelete/onUpdate) | open |  | 0 | 1 (1 pending) |
 | ↳ [#528](528/) | driver-conformance kit mis-observes transaction-wrapping session-state:false drivers | closed | #737 #760 | 0 | 6 (0 pending) |
 | ↳ [#531](531/) | pg checkout reads its own setupSession; the spec's late-binding scenario fails for spread decorators | closed | #737 | 0 | 3 (0 pending) |
 | ↳ [#533](533/) | cli restore-command test flakes on first heavy parallel run after install | closed | #773 | 0 | 1 (0 pending) |
@@ -196,7 +197,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 
 ## Totals
 
-Owner decisions 93 · rulings 247 (interpretation 166, extension 79, stop 2) · pending extensions 41 · rejected 2
+Owner decisions 93 · rulings 248 (interpretation 166, extension 80, stop 2) · pending extensions 42 · rejected 2
 
 ## Conventions
 
