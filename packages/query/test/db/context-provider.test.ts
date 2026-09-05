@@ -384,3 +384,57 @@ describe("db() context provider -- non-execution members stay uncontexted", () =
 		expect(topLevelSent).toHaveLength(1);
 	});
 });
+
+describe("db() context provider -- 1.7 the context runs in a batch when interactive transactions are absent (task 1.3, #486)", () => {
+	it("interactive false, batched true: batch runs exactly once with [...context statements, caller statement], and transaction never runs", async () => {
+		const { driver, batchCalls } = recordingTransactionalDriver({
+			interactiveTransactions: false,
+			batchedTransactions: true,
+		});
+		const resolver = vi.fn(() => ({ role: roleName("grant_reader") }));
+		const handle = makeHandle(driver, resolver);
+
+		await handle.execute(select(posts));
+
+		expect(resolver).toHaveBeenCalledTimes(1);
+		expect(driver.batch).toHaveBeenCalledTimes(1);
+		expect(driver.transaction).not.toHaveBeenCalled();
+		expect(batchCalls[0]?.[0]?.sql).toBe('set local role "grant_reader"');
+	});
+
+	it("both capabilities false: the resolver never runs, and the error names both keys", async () => {
+		const { driver } = recordingTransactionalDriver({
+			interactiveTransactions: false,
+			batchedTransactions: false,
+		});
+		const resolver = vi.fn(() => ({ role: roleName("grant_reader") }));
+		const handle = makeHandle(driver, resolver);
+
+		await expect(handle.execute(select(posts))).rejects.toMatchObject({
+			code: "driver-missing-capability",
+			capabilities: ["interactive-transactions", "batched-transactions"],
+		});
+
+		expect(resolver).not.toHaveBeenCalled();
+		expect(driver.batch).not.toHaveBeenCalled();
+	});
+
+	it("batched-only: a provider handle's own db.transaction still asserts only interactive-transactions (a callback is inherently interactive)", async () => {
+		const { driver } = recordingTransactionalDriver({
+			interactiveTransactions: false,
+			batchedTransactions: true,
+		});
+		const resolver = vi.fn(() => ({ role: roleName("grant_reader") }));
+		const handle = makeHandle(driver, resolver);
+
+		await expect(
+			handle.transaction(async (tx) => tx.execute(select(posts))),
+		).rejects.toMatchObject({
+			code: "driver-missing-capability",
+			capability: "interactive-transactions",
+		});
+
+		expect(driver.batch).not.toHaveBeenCalled();
+		expect(resolver).not.toHaveBeenCalled();
+	});
+});

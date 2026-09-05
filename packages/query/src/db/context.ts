@@ -5,6 +5,8 @@ import type {
 	ContextRendering,
 	DbContext,
 	Driver,
+	DriverCapabilityKey,
+	DriverRow,
 	DriverSession,
 } from "../driver/contract";
 import { assertCapability } from "../driver/errors";
@@ -205,18 +207,37 @@ export const defaultContextRendering: ContextRendering = (context) => [
 ];
 
 /**
- * Applies `context` on `session` (task 2.2, #555): `driver`'s own
- * rendering when it contributes one, `defaultContextRendering` otherwise
- * (spec: "Contributing nothing keeps the existing statements") — the
- * driver's own rendering fully replaces the default, never runs
- * alongside it. Every returned statement is sent one at a time, in the
- * rendering's own order (a `reduce`-chained sequential await, not
- * `Promise.all` — these share one connection, and issuing them
- * concurrently would race on it, task 2.6). Every statement here goes
- * through `sendCompiled` (task 4.5's `query-execution-failed` contract),
- * never a bespoke error path. `operation` is threaded through only to
- * name an empty-rendering refusal's surface (task 1.9) -- it never
- * reaches a statement or the rendering itself.
+ * `context`'s own statements (task 1.3, #486): `driver`'s own rendering
+ * when it contributes one, `defaultContextRendering` otherwise (spec:
+ * "Contributing nothing keeps the existing statements") -- the driver's
+ * own rendering fully replaces the default, never runs alongside it.
+ * Shared by the interactive path ({@link applyContext}) and the batch
+ * path (`runContextInBatch`) so both send "the same statements, from the
+ * same built-in or contributed rendering, in the same order" (delta) by
+ * construction, never by two call sites happening to agree. `operation`
+ * is threaded through only to name an empty-rendering refusal's surface
+ * (task 1.9) -- it never reaches a statement or the rendering itself.
+ */
+const contextStatements = (
+	driver: Driver,
+	context: DbContext,
+	operation: string,
+): ReadonlyArray<CompileResult> => {
+	const rendering = driver.renderContext ?? defaultContextRendering;
+	const statements = rendering(context);
+	if (statements.length === 0 && driver.contextRequired === true) {
+		throwContextRenderingEmpty(operation);
+	}
+	return statements;
+};
+
+/**
+ * Applies `context` on `session` (task 2.2, #555): every statement from
+ * {@link contextStatements} sent one at a time, in the rendering's own
+ * order (a `reduce`-chained sequential await, not `Promise.all` — these
+ * share one connection, and issuing them concurrently would race on it,
+ * task 2.6). Every statement here goes through `sendCompiled` (task
+ * 4.5's `query-execution-failed` contract), never a bespoke error path.
  */
 const applyContext = async (
 	driver: Driver,
@@ -224,11 +245,7 @@ const applyContext = async (
 	context: DbContext,
 	operation: string,
 ): Promise<void> => {
-	const rendering = driver.renderContext ?? defaultContextRendering;
-	const statements = rendering(context);
-	if (statements.length === 0 && driver.contextRequired === true) {
-		throwContextRenderingEmpty(operation);
-	}
+	const statements = contextStatements(driver, context, operation);
 	await statements.reduce<Promise<void>>(
 		(previous, statement) =>
 			previous.then(async () => {
@@ -239,16 +256,94 @@ const applyContext = async (
 };
 
 /**
+ * The last entry of a driver batch result (task 1.3, #486) -- `results`
+ * always holds at least one entry (the caller's own statement, appended
+ * last by {@link runContextInBatch}), so a missing last entry is an
+ * internal-invariant failure, not a user-reachable path (mirrors
+ * `@hejbro/neon`'s own `lastResultOf`, #303).
+ */
+const lastBatchRows = (
+	results: ReadonlyArray<ReadonlyArray<DriverRow>>,
+): ReadonlyArray<DriverRow> => {
+	const last = results[results.length - 1];
+	if (last === undefined) {
+		throw new Error(
+			"driver.batch returned zero results. Next: this is an internal invariant failure, not a user-reachable path -- file an issue.",
+		);
+	}
+	return last;
+};
+
+/**
+ * Runs `send` on a single-`execute` session backed by one `driver.batch`
+ * call (task 1.3, #486): the context's own statements ({@link
+ * contextStatements}) plus `send`'s one caller statement, sent as one
+ * batch, resolving to the last member's rows. Never a second
+ * implementation of the context-application sequence -- the batch path's
+ * only difference from {@link applyContext}'s interactive path is where
+ * the statements travel, not what they are or what order they're in.
+ */
+const runContextInBatch = async <T>(
+	driver: Driver,
+	context: DbContext,
+	operation: string,
+	send: (session: DriverSession) => Promise<T>,
+): Promise<T> => {
+	const statements = contextStatements(driver, context, operation);
+	return send({
+		execute: async (compiled) =>
+			lastBatchRows(await driver.batch([...statements, compiled])),
+	});
+};
+
+/**
+ * Opens one fresh, context-applied transaction and runs `send` on it —
+ * the interactive path both {@link createProviderRun} and
+ * {@link createAsApi} share (task 1.3, #486), so a capability check
+ * choosing this path can never diverge from what actually runs.
+ */
+const runContextInteractively = <T>(
+	driver: Driver,
+	context: DbContext,
+	operation: string,
+	send: (session: DriverSession) => Promise<T>,
+): Promise<T> =>
+	driver.transaction(async (session) => {
+		await applyContext(driver, session, context, operation);
+		return send(session);
+	});
+
+/**
+ * The capability keys a given operation may run under (task 1.3, #486):
+ * `"transaction"` is the callback-scoped surface (`db.transaction`/
+ * `db.as(context).transaction`) -- inherently interactive, so it is
+ * never a batch candidate and asserts the single legacy key. Every other
+ * operation (execute, chain, `db.fn`) can run either way, preferring
+ * interactive where both are declared (delta: "Interactive transactions
+ * win where both are declared"), so it asserts both, interactive first.
+ */
+const capabilitiesForOperation = (
+	operation: string,
+): ReadonlyArray<DriverCapabilityKey> => {
+	if (operation === "transaction") {
+		return ["interactive-transactions"];
+	}
+	return ["interactive-transactions", "batched-transactions"];
+};
+
+/**
  * The primitive a registered `context` provider runs every execution
- * surface through (add-context-provider, task 1.1/1.2): asserts the
- * interactive-transaction capability *before* consulting the resolver (so
+ * surface through (add-context-provider, task 1.1/1.2; batch path, task
+ * 1.3, #486): asserts capability *before* consulting the resolver (so
  * the failure belongs to the driver alone, task 1.6), resolves the
  * context, rejects fail-closed if the resolver yielded nothing, validates
  * the resolved role through the exact same {@link assertDeclaredRole}
- * `db.as(context)` uses, then applies it via the exact same
- * {@link applyContext} inside one fresh `driver.transaction` -- the same
- * two functions the explicit path calls, never a second implementation of
- * either (the invariant every task in this group serves).
+ * `db.as(context)` uses, then runs it either interactively or as one
+ * batch -- declaration alone decides which (never a runtime probe of
+ * `driver.batch`'s presence): `"transaction"` (routed here by
+ * `transaction.ts`'s `guardedProviderTransactionOpener`) always runs
+ * interactively, every other operation follows
+ * `driver.capabilities["interactive-transactions"]`.
  */
 export type ProviderRun = <T>(
 	operation: string,
@@ -264,16 +359,19 @@ export const createProviderRun = (
 		operation: string,
 		send: (session: DriverSession) => Promise<T>,
 	): Promise<T> => {
-		assertCapability(driver, ["interactive-transactions"], operation);
+		assertCapability(driver, capabilitiesForOperation(operation), operation);
 		const context = await provider();
 		if (context === undefined || context === null) {
 			throwProviderContextEmpty();
 		}
 		assertContextRole(driver, context.role, declaredRoles);
-		return driver.transaction(async (session) => {
-			await applyContext(driver, session, context, operation);
-			return send(session);
-		});
+		if (
+			operation === "transaction" ||
+			driver.capabilities["interactive-transactions"]
+		) {
+			return runContextInteractively(driver, context, operation, send);
+		}
+		return runContextInBatch(driver, context, operation, send);
 	};
 };
 
@@ -304,23 +402,37 @@ export const createAsApi = <
 	return (context: DbContext): ScopedDb<TFunctions, TSchema> => {
 		assertContextRole(driver, context.role, declaredRoles);
 		/**
-		 * Opens one fresh, context-applied transaction and runs `send` on
-		 * it — the single primitive `execute`/`fn`/`transaction` (task 4.7
-		 * × 4.9) all build on, so context application can never cover some
-		 * and miss another. `operation` names the caller for
-		 * `assertCapability`'s error, so folding three call sites into one
-		 * doesn't blur "which member did this" out of the missing-
-		 * capability message.
+		 * Runs `send` interactively or as one batch (task 4.7 × 4.9; batch
+		 * path task 1.3, #486) — the single primitive `execute`/`fn`/chain
+		 * all build on, so context application can never cover some and
+		 * miss another. `operation` names the caller for `assertCapability`'s
+		 * error, so folding these call sites into one doesn't blur "which
+		 * member did this" out of the missing-capability message. Never
+		 * used for `transaction` (see {@link scopedRunInteractive} below):
+		 * a callback is inherently interactive, so it must not fall through
+		 * to the batch path just because both keys are asserted here.
 		 */
 		const scopedRun = async <T>(
 			operation: string,
 			send: (session: DriverSession) => Promise<T>,
 		): Promise<T> => {
+			assertCapability(
+				driver,
+				["interactive-transactions", "batched-transactions"],
+				operation,
+			);
+			if (driver.capabilities["interactive-transactions"]) {
+				return runContextInteractively(driver, context, operation, send);
+			}
+			return runContextInBatch(driver, context, operation, send);
+		};
+		/** `transaction`'s own primitive (task 1.3, #486): a callback is inherently interactive, so this asserts the single legacy key and never falls through to the batch path. */
+		const scopedRunInteractive = async <T>(
+			operation: string,
+			send: (session: DriverSession) => Promise<T>,
+		): Promise<T> => {
 			assertCapability(driver, ["interactive-transactions"], operation);
-			return driver.transaction(async (session) => {
-				await applyContext(driver, session, context, operation);
-				return send(session);
-			});
+			return runContextInteractively(driver, context, operation, send);
 		};
 		const scopedExecute = (statement: CompileInput): Promise<unknown> =>
 			scopedRun("db.execute", (session) =>
@@ -329,7 +441,7 @@ export const createAsApi = <
 		const scopedTransaction = <T>(
 			callback: (tx: Tx) => Promise<T>,
 		): Promise<T> =>
-			scopedRun("transaction", (session) =>
+			scopedRunInteractive("transaction", (session) =>
 				runCallbackWithTx(session, tables, callback),
 			);
 		return {

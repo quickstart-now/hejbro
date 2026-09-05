@@ -1,4 +1,5 @@
 import { vi } from "vitest";
+import type { CompileResult } from "../../src/compile/compile";
 import type {
 	ContextRendering,
 	Driver,
@@ -14,8 +15,10 @@ export type SentStatement = {
 
 export type RecordingTransactionalDriverOptions = {
 	readonly interactiveTransactions?: boolean;
+	/** Declares `"batched-transactions"` (task 1.3, #486) -- defaults `false`, same reasoning as `interactiveTransactions` above. */
+	readonly batchedTransactions?: boolean;
 	readonly contributedRoles?: ReadonlyArray<string>;
-	/** Rows every `execute()` call resolves to -- top-level and every transactional session alike (a fixture, not per-call scripting; tests that need a poisoned/varying row build a bespoke `Driver` instead, same as `context.test.ts`'s own fail-stop scenario). */
+	/** Rows every `execute()` call resolves to -- top-level and every transactional session alike (a fixture, not per-call scripting; tests that need a poisoned/varying row build a bespoke `Driver` instead, same as `context.test.ts`'s own fail-stop scenario). Also what the default `batch` implementation resolves its own last member to. */
 	readonly rows?: ReadonlyArray<DriverRow>;
 	/** The driver's own context-rendering contribution (task 2.2, #555) -- omitted means the driver contributes none, so the query layer applies its own default rendering instead. */
 	readonly renderContext?: ContextRendering;
@@ -23,6 +26,10 @@ export type RecordingTransactionalDriverOptions = {
 	readonly roleLessPlatform?: true;
 	/** Declares that no statement may run against this driver without an execution context (task 3.1, #556). */
 	readonly contextRequired?: true;
+	/** Overrides `batch`'s own behavior entirely (task 1.3, #486) -- default records the call into `batchCalls` and resolves the last member to `rows`, every earlier member to `[]` (mirrors a real driver: pins/context statements return no rows, the caller's own statement does). A poisoned/erroring batch test supplies this instead of the default. */
+	readonly batchImpl?: (
+		statements: ReadonlyArray<CompileResult>,
+	) => Promise<ReadonlyArray<ReadonlyArray<DriverRow>>>;
 };
 
 /** `{ contributedRoles }` when given a value, or `{}` when omitted -- avoids ever spreading an explicit `contributedRoles: undefined` (`exactOptionalPropertyTypes`); no ternary (house style), a guard clause per branch instead. */
@@ -79,22 +86,50 @@ const contextRequiredField = (
  * has to prove: role/settings and the chain's own SQL landing in the
  * *same* `sentPerTransaction` entry, in order.
  */
+/** `rows` for the batch's own last member, `[]` for every earlier one (a guard clause, not a ternary -- house style). */
+const rowsForBatchMember = (
+	index: number,
+	length: number,
+	rows: ReadonlyArray<DriverRow>,
+): ReadonlyArray<DriverRow> => {
+	if (index === length - 1) {
+		return rows;
+	}
+	return [];
+};
+
 export const recordingTransactionalDriver = (
 	options: RecordingTransactionalDriverOptions = {},
 ): {
 	readonly driver: Driver;
 	readonly sentPerTransaction: Array<Array<SentStatement>>;
 	readonly topLevelSent: Array<SentStatement>;
+	/** Every `driver.batch()` call's own argument, as sent statements, in call order. */
+	readonly batchCalls: Array<ReadonlyArray<SentStatement>>;
 } => {
 	const rows = options.rows ?? [];
 	const sentPerTransaction: Array<Array<SentStatement>> = [];
 	const topLevelSent: Array<SentStatement> = [];
+	const batchCalls: Array<ReadonlyArray<SentStatement>> = [];
+	const defaultBatchImpl = async (
+		statements: ReadonlyArray<CompileResult>,
+	): Promise<ReadonlyArray<ReadonlyArray<DriverRow>>> => {
+		batchCalls.push(
+			statements.map((statement) => ({
+				sql: statement.sql,
+				params: statement.params,
+			})),
+		);
+		return statements.map((_, index) =>
+			rowsForBatchMember(index, statements.length, rows),
+		);
+	};
 	const driver: Driver = {
 		capabilities: {
 			"interactive-transactions": options.interactiveTransactions ?? true,
 			"session-state": true,
 			"prepared-statements": false,
-			"batched-transactions": false,
+			"batched-transactions": options.batchedTransactions ?? false,
 		},
 		execute: vi.fn(async (compiled) => {
 			topLevelSent.push({ sql: compiled.sql, params: compiled.params });
@@ -111,12 +146,12 @@ export const recordingTransactionalDriver = (
 			};
 			return callback(session);
 		}),
-		batch: vi.fn(async () => []),
+		batch: vi.fn(options.batchImpl ?? defaultBatchImpl),
 		setupSession: vi.fn(async () => {}),
 		...contributedRolesField(options.contributedRoles),
 		...renderContextField(options.renderContext),
 		...roleLessPlatformField(options.roleLessPlatform),
 		...contextRequiredField(options.contextRequired),
 	};
-	return { driver, sentPerTransaction, topLevelSent };
+	return { driver, sentPerTransaction, topLevelSent, batchCalls };
 };

@@ -575,3 +575,150 @@ describe("db.as(context) -- the operation named on a missing-capability refusal 
 		});
 	});
 });
+
+describe("the context runs in a batch when interactive transactions are absent (task 1.3, #486)", () => {
+	it("interactive true (even with batched also true): the same statements run in one transaction() call, and batch is never called -- interactive wins where both are declared", async () => {
+		const { driver, sentPerTransaction } = recordingTransactionalDriver({
+			interactiveTransactions: true,
+			batchedTransactions: true,
+		});
+		const handle = db(appSchema, driver);
+
+		await handle.as({ role: roleName("grant_reader") }).execute(select(posts));
+
+		expect(driver.transaction).toHaveBeenCalledTimes(1);
+		expect(driver.batch).not.toHaveBeenCalled();
+		expect(sentPerTransaction[0]).toHaveLength(2); // role, statement
+	});
+
+	it("interactive false, batched true: batch runs exactly once with [...context statements, caller statement], resolving to the last member's rows, and transaction never runs", async () => {
+		const row = {
+			id: "33333333-3333-3333-3333-333333333333",
+			status: "draft",
+		};
+		const { driver, batchCalls } = recordingTransactionalDriver({
+			interactiveTransactions: false,
+			batchedTransactions: true,
+			rows: [row],
+		});
+		const handle = db(appSchema, driver);
+
+		const result = await handle
+			.as({ role: roleName("grant_reader") })
+			.execute(select(posts));
+
+		expect(driver.batch).toHaveBeenCalledTimes(1);
+		expect(driver.transaction).not.toHaveBeenCalled();
+		expect(batchCalls).toHaveLength(1);
+		expect(batchCalls[0]).toHaveLength(2); // role statement, then the caller's own
+		expect(batchCalls[0]?.[0]?.sql).toBe('set local role "grant_reader"');
+		expect(batchCalls[0]?.[1]?.sql).toContain("posts");
+		expect(result).toHaveLength(1);
+		expect(result[0]).toMatchObject({ status: "draft" });
+	});
+
+	it("both capabilities false: the error names both keys, in the order asserted, and no driver member runs", async () => {
+		const { driver } = recordingTransactionalDriver({
+			interactiveTransactions: false,
+			batchedTransactions: false,
+		});
+		const handle = db(appSchema, driver);
+
+		await expect(
+			handle.as({ role: roleName("grant_reader") }).execute(select(posts)),
+		).rejects.toMatchObject({
+			code: "driver-missing-capability",
+			capabilities: ["interactive-transactions", "batched-transactions"],
+		});
+
+		expect(driver.transaction).not.toHaveBeenCalled();
+		expect(driver.execute).not.toHaveBeenCalled();
+		expect(driver.batch).not.toHaveBeenCalled();
+	});
+
+	it("contextRequired + an empty rendering + batched-only: context-rendering-empty is thrown before batch is ever called", async () => {
+		const rendering: ContextRendering = () => [];
+		const { driver } = recordingTransactionalDriver({
+			interactiveTransactions: false,
+			batchedTransactions: true,
+			renderContext: rendering,
+			contextRequired: true,
+		});
+		const handle = db(appSchema, driver);
+
+		await expect(
+			handle.as({ role: roleName("grant_reader") }).execute(select(posts)),
+		).rejects.toMatchObject({ code: "context-rendering-empty" });
+
+		expect(driver.batch).not.toHaveBeenCalled();
+	});
+
+	it("batched-only: db.as(context).transaction(cb) still asserts only interactive-transactions, naming just that key (a callback is inherently interactive)", async () => {
+		const { driver } = recordingTransactionalDriver({
+			interactiveTransactions: false,
+			batchedTransactions: true,
+		});
+		const handle = db(appSchema, driver);
+
+		await expect(
+			handle
+				.as({ role: roleName("grant_reader") })
+				.transaction(async (tx) => tx.execute(select(posts))),
+		).rejects.toMatchObject({
+			code: "driver-missing-capability",
+			capability: "interactive-transactions",
+		});
+
+		expect(driver.batch).not.toHaveBeenCalled();
+		expect(driver.transaction).not.toHaveBeenCalled();
+	});
+
+	it("the same statements, from the same rendering, in the same order travel through both paths (delta wording) -- the batch's own context-statement prefix equals the interactive path's own sent prefix", async () => {
+		const context = {
+			role: roleName("grant_reader"),
+			settings: { "app.claim": "value" },
+		};
+
+		const interactive = recordingTransactionalDriver({
+			interactiveTransactions: true,
+		});
+		await db(appSchema, interactive.driver).as(context).execute(select(posts));
+		const interactiveContextStatements =
+			interactive.sentPerTransaction[0]?.slice(0, -1);
+
+		const batched = recordingTransactionalDriver({
+			interactiveTransactions: false,
+			batchedTransactions: true,
+		});
+		await db(appSchema, batched.driver).as(context).execute(select(posts));
+		const batchContextStatements = batched.batchCalls[0]?.slice(0, -1);
+
+		expect(batchContextStatements).toEqual(interactiveContextStatements);
+	});
+
+	it("invariant: the batch path's send executes exactly one statement, measured as driver.batch's own call count -- a send that grows to call session.execute more than once would call driver.batch more than once too", async () => {
+		const { driver } = recordingTransactionalDriver({
+			interactiveTransactions: false,
+			batchedTransactions: true,
+		});
+		const handle = db(appSchema, driver);
+
+		await handle.as({ role: roleName("grant_reader") }).execute(select(posts));
+
+		expect(driver.batch).toHaveBeenCalledTimes(1);
+	});
+
+	it("interactive false, batched true: db.fn also runs through the batch path, not just execute", async () => {
+		const { driver, batchCalls } = recordingTransactionalDriver({
+			interactiveTransactions: false,
+			batchedTransactions: true,
+		});
+		const handle = db(appSchema, driver);
+
+		await handle.as({ role: roleName("grant_reader") }).fn.helloWorld({});
+
+		expect(driver.batch).toHaveBeenCalledTimes(1);
+		expect(driver.transaction).not.toHaveBeenCalled();
+		expect(batchCalls[0]?.[0]?.sql).toBe('set local role "grant_reader"');
+	});
+});
