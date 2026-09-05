@@ -59,8 +59,9 @@ table's `Tables` key; a key that would be both, or that names one of the
 table's own columns, is omitted; a composite foreign key and a foreign
 key onto a table the contract does not carry yield none.
 
-The name-keyed client SHALL expose `.related(spec)` on the whole-table
-select of every table whose map is non-empty, and on no other table:
+The name-keyed client's type layer SHALL offer `.related(spec)` on the
+whole-table select of every table whose map is non-empty, and on no
+other table:
 each requested key adds a field to the row — the target's `Row` or
 `null` for `"one"`, `ReadonlyArray` of the target's `Row` for `"many"` —
 a key outside the map fails to type-check, and the result chain keeps
@@ -68,8 +69,10 @@ a key outside the map fails to type-check, and the result chain keeps
 the one the declaring repository's `related()` compiles for the same
 spec, so a scoped handle (`client.as(context)`) applies its context to
 the nested reads as it does to the row itself. A contract emitted before
-this map existed SHALL still build a client, on which no table has
-`.related`.
+this map existed SHALL still build a client, on which the type layer
+offers `.related` for no table; the chain the client forwards keeps its
+own `unknown-relation`/`ambiguous-relation` guards for a JavaScript
+caller that reaches past the types.
 
 #### Scenario: A forward relation reads one parent
 - **WHEN** a vendored `posts` table has a single-column foreign key
@@ -96,8 +99,8 @@ this map existed SHALL still build a client, on which no table has
 #### Scenario: A table with no relation has no member
 - **WHEN** a vendored table's `Relations` is empty, or the contract was
   emitted before `Relations` existed
-- **THEN** its select chain has no `.related` member, and the client
-  still builds
+- **THEN** the type layer offers no `.related` member on its select
+  chain, and the client still builds
 
 #### Scenario: The nested read is scoped like the row
 - **WHEN** the consumer follows a relation through `client.as(context)`
