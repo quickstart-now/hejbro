@@ -16,3 +16,10 @@ _lead · interpretation · basis 412/D24, D25; 832/R1; fl (a) tripwire: tasks 1.
 
 Variable space = argument SQL names, loop record names, row-derived scalars; block space = loop names and row names (a loop name sits in both). duplicate-local-name stays the one code, its text naming the colliding constructs. Row names take the SQL-name and duplicate checks only (they never render); loop names and row-derived scalars take all three. design.md Q2 restated by the planner. Ratification: owner on return.
 
+<a id="r3"></a>
+## R3 — The reserved class states three sources; the set never loosens in this change
+
+_lead · extension · basis 412/D24, D25; 832/R1; fl measurement: catcode C = 63 (61 new), 16 names in the set outside R/T/C and the declared-variable list, new/old missing from that list · 2026-09-05T09:15Z · ratified: pending_
+
+(A): the requirement's class = R+T+C keywords, plpgsql's own declared variables (found, sqlstate, sqlerrm, tg_*, and new/old in trigger bodies), and the measured list of plpgsql statement-opening words that fail in a rendered position; exit/elsif stay out by measurement. Names measured harmless are not removed here (loosening is another change) and are recorded in W#. proposal's 63/61 sentence corrected by the planner. Ratification: owner on return.
+

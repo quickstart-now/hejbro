@@ -31,6 +31,20 @@
       "at": "2026-09-05T09:15Z",
       "title": "Two name spaces for body locals; the reserved check applies to rendered names only",
       "ratified": null
+    },
+    {
+      "id": "R3",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "412/D24",
+        "D25; 832/R1; fl measurement: catcode C = 63 (61 new)",
+        "16 names in the set outside R/T/C and the declared-variable list",
+        "new/old missing from that list"
+      ],
+      "at": "2026-09-05T09:15Z",
+      "title": "The reserved class states three sources; the set never loosens in this change",
+      "ratified": null
     }
   ],
   "work": [],
