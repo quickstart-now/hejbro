@@ -45,7 +45,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | [#374](374/) | adversarial spec-only review stage in the opsx cycle | closed | #539 | 1 | 0 (0 pending) |
 | [#377](377/) | snapshot format stability policy for 1.0 | closed | #383 | 1 | 0 (0 pending) |
 | [#378](378/) | defect-leakage metric over escaped defects | closed | #384 | 1 | 0 (0 pending) |
-| [#412](412/) | 0.2.x: post-release commitments | open | #715 #808 #824 #835 #840 #849 #851 #858 #867 #868 #871 #878 #880 #850 (via #449) #883 (via #491) #885 (via #497) #737 (via #528) #760 (via #528) #773 (via #533) #733 (via #679) #758 (via #679) #739 (via #687) #759 (via #687) #770 (via #687) #861 (via #701) #879 (via #707) #847 (via #741) #833 (via #748) #784 (via #750) #802 (via #750) #775 (via #752) #799 (via #752) #780 (via #754) #795 (via #754) #887 (via #765) #855 (via #778) #838 (via #783) #786 (via #785) #789 (via #787) #790 (via #788) #792 (via #791) #794 (via #793) #822 (via #800) #806 (via #804) #813 (via #807) #811 (via #810) | 22 | 28 (0 pending) |
+| [#412](412/) | 0.2.x: post-release commitments | open | #715 #808 #824 #835 #840 #849 #851 #858 #867 #868 #871 #878 #880 #850 (via #449) #883 (via #491) #885 (via #497) #737 (via #528) #760 (via #528) #773 (via #533) #733 (via #679) #758 (via #679) #739 (via #687) #759 (via #687) #770 (via #687) #861 (via #701) #879 (via #707) #847 (via #741) #889 (via #745) #833 (via #748) #784 (via #750) #802 (via #750) #775 (via #752) #799 (via #752) #780 (via #754) #795 (via #754) #887 (via #765) #855 (via #778) #838 (via #783) #786 (via #785) #789 (via #787) #790 (via #788) #792 (via #791) #794 (via #793) #822 (via #800) #806 (via #804) #813 (via #807) #811 (via #810) | 22 | 28 (0 pending) |
 | ↳ [#449](449/) | concurrent tx.execute beside a nested transaction is unguarded | closed | #849 #850 | 0 | 3 (2 pending) |
 | ↳ [#491](491/) | align third-party client version ranges across published packages (catalog policy) | closed | #883 | 0 | 1 (0 pending) |
 | ↳ [#497](497/) | crap gate output misstates its side effects and cache-induced failures | closed | #885 | 0 | 0 (0 pending) |
@@ -66,7 +66,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#741](741/) | `hejbro init --config <path>` is ignored and scaffolds a competing project | closed | #840 #847 | 0 | 4 (0 pending) |
 | ↳ [#743](743/) | `init` and `generate` name the same file two different ways | closed | #840 #847 | 0 | 1 (1 pending) |
 | ↳ [#744](744/) | `docker-rm-hygiene` can fail on a temporary file another test is deleting | closed | #773 | 0 | 1 (0 pending) |
-| ↳ [#745](745/) | Configuration paths reach the user as raw stacks and absolute paths | open |  | 0 | 0 (0 pending) |
+| ↳ [#745](745/) | Configuration paths reach the user as raw stacks and absolute paths | closed | #889 | 0 | 0 (0 pending) |
 | ↳ [#748](748/) | core: "found" is missing from the plpgsql reserved-name list and shadows PL/pgSQL's FOUND silently | closed | #824 #833 | 0 | 6 (1 pending) |
 | ↳ [#749](749/) | a projected .returning() under returns setof <table> must cover the table's column list | closed | #858 #861 | 0 | 2 (1 pending) |
 | ↳ [#750](750/) | 0.2.0-pre.0: five findings from applying one declaration to Postgres 18, Neon, Nile and Supabase | closed | #784 #802 | 7 | 2 (0 pending) |
