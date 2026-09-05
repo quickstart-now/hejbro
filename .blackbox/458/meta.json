@@ -1,0 +1,29 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#458",
+  "title": "config-injected driver factory for db-connected cli commands",
+  "parent": "quickstart-now/hejbro#412",
+  "status": "open",
+  "opened": "2026-09-05",
+  "closed": null,
+  "decisions": [
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "412/D24",
+        "412/D25; D95 (any conforming driver executes); the 2026-08-29 add-check-schema ruling that parked this as its own design round; read on 2026-09-05: seven commands connect through check/driver.ts's withCheckConnection",
+        "and the loader's z.object strips an unknown driver key silently"
+      ],
+      "at": "2026-09-05T04:55Z",
+      "title": "hejbro.config.ts gains a driver factory that every connecting command prefers over the dynamic @hejbro/pg import",
+      "ratified": null
+    }
+  ],
+  "work": [],
+  "prs": [],
+  "origin": null,
+  "followUps": []
+}
