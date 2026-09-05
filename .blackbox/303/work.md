@@ -90,3 +90,31 @@ file. Full gate green: TURBO_FORCE=1 pnpm check-types (18/18), pnpm
 check, pnpm check:bans, TURBO_FORCE=1 pnpm test (all packages passing,
 @hejbro/supabase 145/145, no regressions).
 
+<a id="w5"></a>
+## W5 — task 1.5: live witness on postgres:17-alpine
+
+_2026-09-05T05:15Z_
+
+Docker-gated live proof in packages/pg/test/integration.test.ts: a
+fresh max:1 Pool, wrapped first by a driver without the option
+(confirms pg_prepared_statements starts and stays empty across two
+executions of the same built statement), then by a second driver over
+the SAME physical connection with preparedStatements:true (confirms
+exactly one pg_prepared_statements row after two executions of the
+same text, whose statement column is that exact text), then a
+sql-kind two-command text under the true declaration (confirms it
+still runs -- naming it would have made Postgres reject the Parse
+message with "cannot insert multiple commands into a prepared
+statement"). Found along the way: node-postgres's multi-statement
+simple-query result is an array of per-statement results, not a
+single {rows} object -- pre-existing, unrelated to this change (no
+test before this one ever inspected the return value of a
+multi-statement sql execute), so the new test's own assertion only
+checks resolution, not the multi-statement return shape.
+
+Verified: `pnpm --filter @hejbro/pg test:integration` against a real
+postgres:17 container -- 27/27 pass including the new case. Full
+non-integration gate green too: TURBO_FORCE=1 pnpm check-types
+(18/18), pnpm check, pnpm check:bans, TURBO_FORCE=1 pnpm test (all
+packages passing, no regressions).
+

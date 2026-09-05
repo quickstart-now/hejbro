@@ -2650,4 +2650,88 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 		]);
 		expect(typeof sameFamilyWalked[1]?.amount).toBe("number");
 	});
+
+	it("a prepared statement is reused on its connection (add-prepared-statements, task 1.5, #303)", async () => {
+		const port = hostPort.current;
+		if (port === undefined) {
+			throw new Error("beforeAll did not set up the host port");
+		}
+		// `max: 1` (not the shared suite pool above) -- the one thing this
+		// test needs a real server to prove is that two executions of the
+		// SAME built statement, on the SAME physical connection, leave
+		// exactly one row in that connection's own pg_prepared_statements;
+		// a pool that could hand out a second physical connection would
+		// make that guarantee unprovable.
+		const singleConnectionPool = new Pool({
+			host: "localhost",
+			port,
+			user: "postgres",
+			password: "postgres",
+			database: "postgres",
+			max: 1,
+		});
+		try {
+			const preparedStatementsText = "select 42 as answer";
+			// without the option, first: proves the connection starts clean
+			// and that a driver declaring nothing prepares nothing on it.
+			const unnamedDriver = pgDriver(singleConnectionPool);
+			await unnamedDriver.execute({
+				sql: preparedStatementsText,
+				params: [],
+				kind: "select",
+			});
+			await unnamedDriver.execute({
+				sql: preparedStatementsText,
+				params: [],
+				kind: "select",
+			});
+			const emptyCatalog = (await unnamedDriver.execute({
+				sql: "select statement from pg_prepared_statements",
+				params: [],
+				kind: "sql",
+			})) as ReadonlyArray<{ readonly statement: string }>;
+			expect(emptyCatalog).toEqual([]);
+
+			// same physical connection (same pool, max: 1), a second driver
+			// declaring the option: executes the same built statement twice.
+			const namedDriver = pgDriver(singleConnectionPool, {
+				preparedStatements: true,
+			});
+			await namedDriver.execute({
+				sql: preparedStatementsText,
+				params: [],
+				kind: "select",
+			});
+			await namedDriver.execute({
+				sql: preparedStatementsText,
+				params: [],
+				kind: "select",
+			});
+			const catalogAfterTwoExecutions = (await namedDriver.execute({
+				sql: "select statement from pg_prepared_statements",
+				params: [],
+				kind: "sql",
+			})) as ReadonlyArray<{ readonly statement: string }>;
+			expect(catalogAfterTwoExecutions).toHaveLength(1);
+			expect(catalogAfterTwoExecutions[0]?.statement).toBe(
+				preparedStatementsText,
+			);
+
+			// a sql-kind text carrying two commands still runs under the
+			// option -- always sent unnamed, whatever the declaration; a
+			// named Parse message may carry only one command, so naming it
+			// would have made this call reject with the server's own
+			// "cannot insert multiple commands into a prepared statement"
+			// error instead of resolving. This assertion is about that
+			// resolution, not about the multi-statement return shape (a
+			// pre-existing, separately-scoped driver property).
+			await namedDriver.execute({
+				sql: "select 1 as one; select 2 as two",
+				params: [],
+				kind: "sql",
+			});
+		} finally {
+			await singleConnectionPool.end();
+		}
+	});
 });

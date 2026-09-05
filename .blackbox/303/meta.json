@@ -53,6 +53,13 @@
       "title": "task 1.4: transaction-pooler path refuses a preparing base",
       "pr": null,
       "decisions": []
+    },
+    {
+      "id": "W5",
+      "at": "2026-09-05T05:15Z",
+      "title": "task 1.5: live witness on postgres:17-alpine",
+      "pr": null,
+      "decisions": []
     }
   ],
   "prs": [],
