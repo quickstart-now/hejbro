@@ -1,0 +1,55 @@
+# Tasks: add-batched-transactions
+
+One group, one team, sequential. Estimates are pure work minutes (D88).
+Every task is test-first: the named test goes red first (inputs as wide
+as the scenario's sentence — a table, not one example, D110), then the
+minimal green, then refactor. Every source rule of this repository
+applies (`any`/`let`/`var`/`for`/`while`/ternary banned; comments state
+the constraint only). Lands after `add-prepared-statements` archives.
+
+**Files edited**: `packages/query/src/driver/contract.ts`, `packages/
+query/src/driver/missing-capability.ts` and their tests (1.1);
+`packages/neon/src/http.ts`, `packages/neon/src/driver.ts`, `packages/
+pg/src/*.ts`, `packages/supabase/src/driver.ts`, `packages/nile/src/
+driver.ts` and the tier-obligation tests (1.2); `packages/query/src/db/
+context.ts` and tests (1.3); `skills/hejbro/references/neon-preset.md`,
+`skills/hejbro/references/query-layer.md`, one `.changeset/*.md` (1.4).
+If a task appears to need any other file, that goes back to the planner,
+not into the diff.
+
+**Ordering.** 1.1 → 1.2 → 1.3 → 1.4.
+
+## 1. Batched transactions
+
+- [ ] 1.1 (~7m) **[design]** The key and the member. Settles the
+      `batch` signature and the two-key missing-capability message. Red:
+      `packages/query/test/driver-contract*.test.ts` — a declaration
+      omitting `batched-transactions` and one naming a fifth key fail
+      `tsc` (type test), `assertCapability(driver, ["interactive-
+      transactions", "batched-transactions"])` throws the one error
+      naming both. Files: `contract.ts`, `missing-capability.ts`, tests.
+
+- [ ] 1.2 (~10m) The drivers declare and implement. Red: the tier tests
+      — an input table over the five shipped drivers {pg, neon ws, neon
+      http, supabase over pg, nile over pg} asserting each declaration
+      and that `batch` on a `false` driver throws the contract error
+      before any statement; the HTTP driver's `batch` sends `[…pins,
+      …members]` through `sql.transaction` in order and returns one row
+      list per member (recorded `HttpQueryable`); a failing member
+      rejects the whole call. Files: the five driver files, tests.
+
+- [ ] 1.3 (~10m) The context runs in a batch. Red: `packages/query/test/
+      context*.test.ts` — a table over {interactive `true` (unchanged
+      statements, `transaction` used), interactive `false` + batched
+      `true` (one `batch` call: rendering statements then the caller's,
+      last member's rows resolved), both `false` (the two-key error, the
+      provider never called), `contextRequired` driver on the batched
+      path, `fn` call under context, `as(context).transaction(cb)` on a
+      batched-only driver (interactive error, unchanged)} for `execute`,
+      the provider handle and `fn`. Files: `context.ts`, tests.
+
+- [ ] 1.4 (~5m) References and changeset. `neon-preset.md`'s two-paths
+      section states the HTTP path applies a context in one batch and
+      still refuses `transaction(cb)`; `query-layer.md`'s capability
+      table gains the key; `pnpm changeset` → `minor`. Files: the two
+      references, `.changeset/*.md`.
