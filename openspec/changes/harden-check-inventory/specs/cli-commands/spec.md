@@ -59,9 +59,16 @@ one where nothing true can be said:
   backs a constraint, its line SHALL name that constraint, so that a
   reader is not sent looking for an index nobody wrote.
 
-The inventory SHALL be ordered by the identity each line names, so two
-runs against the same database print the same report and two databases
-holding the same objects print them in the same order.
+The inventory SHALL be ordered by the identity each line names, and
+ordered by that identity's code points — not by a collation, whether
+the database's or the machine's. A report ordered by a collation is
+ordered differently on two machines that disagree about locale, and two
+identities a collation treats as equal have no order at all between
+them, which is the same defect one step further in. Every axis of the
+inventory follows this one rule, so that two runs against the same
+database print the same report, and two databases holding the same
+objects print them in the same order whatever order the catalog
+returned them in.
 
 Extensions are reported because their absence is silent and expensive: a
 declaration whose default calls `gen_random_uuid()` needs `pgcrypto`, and
@@ -115,3 +122,10 @@ nothing in the declared set records that.
 - **WHEN** `hejbro check` runs twice against a database holding several
   unmanaged columns, indexes and check constraints
 - **THEN** both runs print the same inventory lines in the same order
+
+#### Scenario: The order does not depend on a collation
+- **WHEN** two databases hold the same unmanaged objects, created in
+  different orders — including two whose names a collation treats as
+  equal without being the same name — and `hejbro check` runs against
+  each, under two different locales
+- **THEN** all four runs print the inventory lines in the same order

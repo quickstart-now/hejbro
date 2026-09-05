@@ -25,7 +25,10 @@ mention the object again where `check` will keep naming it, and SHALL
 NOT promise that `check` will report it where `check` will not: the loss
 report is the one place a user is told what the omission costs, and a
 report that is wrong about that costs more than the omission it
-announces. Which objects `check` keeps naming is `check`'s own
+announces. A line that names the way out SHALL name the whole of it: a
+remedy stated short — renaming an object whose name a declaration could
+not carry, without declaring it afterwards — reads as a promise that the
+reporting stops there, and it does not. Which objects `check` keeps naming is `check`'s own
 inventory rule (`cli-commands`), not a second rule stated here.
 
 #### Scenario: The report names the way out
@@ -38,5 +41,8 @@ inventory rule (`cli-commands`), not a second rule stated here.
   names no declaration can carry, on a table it still declares, and the
   loss report is printed
 - **THEN** each line names the object and states that `check` keeps
-  listing it as unmanaged until it is renamed in the database, rather
-  than that hejbro will not mention it again
+  listing it as unmanaged until it is renamed in the database **and
+  declared** — never that hejbro will not mention it again, and never
+  that renaming alone ends the listing, which it does not: renaming
+  makes the name one a declaration can carry, and the object is
+  unmanaged until a declaration carries it
