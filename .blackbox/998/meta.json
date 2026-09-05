@@ -1,0 +1,21 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#998",
+  "title": "spec: the set-operation family scenario over sqlTypeFamilies is not verifiable from the public surface",
+  "parent": "quickstart-now/hejbro#995",
+  "status": "open",
+  "opened": "2026-09-05",
+  "closed": null,
+  "decisions": [],
+  "work": [],
+  "prs": [
+    {
+      "number": 999,
+      "role": "refs",
+      "pinnedAt": "2026-09-05T23:36Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

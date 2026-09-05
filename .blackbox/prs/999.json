@@ -1,0 +1,57 @@
+{
+  "version": 3,
+  "number": 999,
+  "ref": "quickstart-now/hejbro#999",
+  "title": "chore(openspec): archive harden-set-op-families after d106 round 2 (#503)",
+  "head": "a5c7005d4ca49b7b9f14ea5417822484ce15f9c4",
+  "headRef": "archive-harden-set-op-families",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-05T23:36Z",
+  "refs": [
+    {
+      "path": "openspec/changes/archive/2026-09-06-harden-set-op-families/design.md",
+      "blob": "283258a8556e15159b9a202c71aff481577e8bea"
+    },
+    {
+      "path": "openspec/changes/harden-set-op-families/design.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-06-harden-set-op-families/evaluation.md",
+      "blob": "b90d05a44a9323f24cb48c74683e0aa695f8b143"
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-06-harden-set-op-families/proposal.md",
+      "blob": "4fa1c4d9021a6ce6007b4d9fc9235ada98f6110b"
+    },
+    {
+      "path": "openspec/changes/harden-set-op-families/proposal.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-06-harden-set-op-families/specs/query-type-inference/spec.md",
+      "blob": "785dac381c564e8185e7d904ea703011950c4c6f"
+    },
+    {
+      "path": "openspec/changes/harden-set-op-families/specs/query-type-inference/spec.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-06-harden-set-op-families/tasks.md",
+      "blob": "3835567c0e735c30002df93dc37ce04acef2c6dd"
+    },
+    {
+      "path": "openspec/changes/harden-set-op-families/tasks.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/specs/query-type-inference/spec.md",
+      "blob": "7b6b0430d0e3bdf531a8e9e6b1ae521b2d113672"
+    },
+    {
+      "path": "skills/hejbro/references/query-layer.md",
+      "blob": "3140c1b38f57c3e91dc28eafb9704a98af61fed6"
+    }
+  ]
+}
