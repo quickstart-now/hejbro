@@ -897,6 +897,20 @@ describe("loop and row names are hejbro SQL names, checked before duplicate (#81
 		);
 	});
 
+	it("a row read named Row -- the same spelling, but a row read takes no reserved check -- fails with invalid-sql-name instead (contrast)", () => {
+		expect(() =>
+			defineTrigger(comments, triggerConfig, (ctx, { new: row }) => {
+				ctx.row(
+					select({ postId: comments.postId }, comments).where(
+						eq(comments.id, row.parentId),
+					),
+					"Row",
+				);
+				ctx.return(row);
+			}),
+		).toThrowError(/is not a valid hejbro SQL identifier/);
+	});
+
 	it("two spellings that fold to one row name never both pass -- row_a then Row_a fails with invalid-sql-name, before any duplicate check", () => {
 		expect(() =>
 			defineTrigger(comments, triggerConfig, (ctx, { new: row }) => {
