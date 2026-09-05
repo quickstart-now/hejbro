@@ -46,6 +46,17 @@
       "at": "2026-09-05T16:56Z",
       "title": "history-rewriting commands are out of the implementer's hands; the retitling of the first two commits stands",
       "ratified": null
+    },
+    {
+      "id": "R5",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R1"
+      ],
+      "at": "2026-09-05T17:10Z",
+      "title": "the d102 amendment lands in the row's own revision parenthesis",
+      "ratified": null
     }
   ],
   "work": [],

@@ -104,3 +104,23 @@ tables are proven by swapping in the pre-1.1 source and measuring -- 60 of
 restoring. A swap that fails nothing means the table is vacuous and goes
 back to the planner.
 
+<a id="r5"></a>
+## R5 — the d102 amendment lands in the row's own revision parenthesis
+
+_lead · interpretation · basis R1 · 2026-09-05T17:10Z · ratified: pending_
+
+D102's row already records its revisions outside the bold decision
+sentence, in the trailing parenthesis ("amended at group 1 review,
+owner-ruled: ..."). The brief's instruction to append "(amended under
+delegation, 514/R1; owner ratification pending)" was read two ways:
+nested inside the bold sentence at the clause it corrects (A), or in the
+row's revision parenthesis in the row's own format (B). Ruling: B. The
+bold sentence loses only the words "and actions" so it states the current
+contract; the revision parenthesis gains, before "; v6 was never
+released": "; amended under delegation, 514/R1: `.references()` takes an
+optional second argument naming the referential actions, so actions no
+longer stay on `extras` -- owner ratification pending". Nothing else in
+the decision log moves; the owner ratifies or reverts this one sentence
+on return. The decision log is an owner hard gate, so this ruling is
+itself in the ratification queue.
+
