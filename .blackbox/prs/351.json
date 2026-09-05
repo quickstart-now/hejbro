@@ -1,0 +1,34 @@
+{
+  "version": 3,
+  "number": 351,
+  "ref": "quickstart-now/hejbro#351",
+  "title": "fix(query): chain mutation inputs enforce insert/update input types",
+  "head": "7aea25e96b6a33058288c55c36cc268598ae0330",
+  "headRef": "fix-chain-mutation-input",
+  "base": "dev",
+  "merged": "2026-08-27T13:13:13Z",
+  "pinnedAt": "2026-08-27T00:00Z",
+  "migrated": true,
+  "refs": [
+    {
+      "path": "packages/query/src/db/chain.ts",
+      "blob": "af46d2525fcb40c909cab2d6efb31dc31070def1"
+    },
+    {
+      "path": "packages/query/src/types/insert-input.ts",
+      "blob": "2a252ac93d888d7b40ee935f0a1d263d27207f56"
+    },
+    {
+      "path": "packages/query/test/types/chain-mutation-input.test.ts",
+      "blob": "8a30ecdb9a3a815d7bb84d608573ebf6293e946c"
+    },
+    {
+      "path": "packages/query/test/types/insert-input.test.ts",
+      "blob": "626142a9c51202f4f402c4661a13dceb7adecad8"
+    },
+    {
+      "path": "packages/query/test/types/inline-inference.test.ts",
+      "blob": "f2f2ec5b565a14106d5a45b9e0bb92e7f6e0ba44"
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "version": 3,
+  "number": 321,
+  "ref": "quickstart-now/hejbro#321",
+  "title": "feat(supabase): rls context surface and driver decorator (#293 group 6)",
+  "head": "e2de12f6f06462cbe1aa0783341a55d87f025a78",
+  "headRef": "phase10-query-g6",
+  "base": "dev",
+  "merged": "2026-08-27T01:52:18Z",
+  "pinnedAt": "2026-08-27T00:00Z",
+  "migrated": true,
+  "refs": [
+    {
+      "path": "packages/supabase/src/driver.ts",
+      "blob": "01f166a206ef74e44a281b9309db40f3cbf8c601"
+    },
+    {
+      "path": "packages/supabase/src/context.ts",
+      "blob": "7b44e8a30ab6b59f23a5075bbe15a7fb1f9029b2"
+    },
+    {
+      "path": "packages/supabase/src/index.ts",
+      "blob": "3b58656354de3977583bb715388d4b3f7282d5da"
+    },
+    {
+      "path": "openspec/changes/add-query-layer/specs/rls-execution-context/spec.md",
+      "blob": "53c7f5d12a0346ac538c84feaffb8078cdd786b1"
+    },
+    {
+      "path": ".claude/rules/supabase-preset.md",
+      "blob": "ebfc35edcf359b0072cc40a234c7b472182083f1"
+    },
+    {
+      "path": ".changeset/config.json",
+      "blob": "42df85d29497dfd3f415589efe061a2ceaef891d"
+    },
+    {
+      "path": "openspec/changes/add-query-layer/tasks.md",
+      "blob": "f755f299944093e99724aa0f01920cd665360f68"
+    }
+  ]
+}

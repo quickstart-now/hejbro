@@ -32,7 +32,9 @@ import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const VERSION = "1.0.0";
-const META_VERSION = 1;
+const META_VERSION = 3;
+const PIN_VERSION = 3;
+const PIN_ROLES = ["closes", "refs", "own"];
 const RULING_KINDS = ["interpretation", "extension", "stop"];
 const STATUSES = ["open", "merged-pending", "closed"];
 const INTEGRATION_BRANCHES = ["dev", "develop", "development", "staging"];
@@ -331,9 +333,55 @@ const loadState = (reader) => {
 			.filter((rest) => !rest.includes("/") && rest.endsWith(".md"))
 			.filter((rest) => rest !== "README.md")
 			.sort();
-		return { rel, bb, folders, legacy };
+		// v3: a PR's pin is one fact about the PR, stored once per item under
+		// prs/<N>.json; folders hold one line per PR and never the file list.
+		const pins = new Map(
+			inside
+				.map((rest) => rest.split("/"))
+				.filter(
+					(parts) =>
+						parts.length === 2 &&
+						parts[0] === "prs" &&
+						/^\d+\.json$/.test(parts[1]),
+				)
+				.map((parts) => {
+					const path = `${bb}/prs/${parts[1]}`;
+					return [
+						Number(parts[1].slice(0, -5)),
+						{ path, pin: parseMeta(reader.read(path), path) },
+					];
+				}),
+		);
+		return { rel, bb, folders, legacy, pins };
 	});
 	return { items, folders: items.flatMap((item) => item.folders) };
+};
+
+const itemOf = (state, folder) =>
+	state.items.find((item) => item.rel === folder.item);
+
+const pinPath = (item, number) => `${item.bb}/prs/${number}.json`;
+
+const pinOf = (state, folder, number) =>
+	itemOf(state, folder)?.pins.get(number)?.pin ?? null;
+
+const sameRefs = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
+/** The history a rewritten pin keeps: earlier pins of the same PR that disagreed. */
+const carriedHistory = (pin) => {
+	if (Array.isArray(pin?.history) && pin.history.length > 0) {
+		return { history: pin.history };
+	}
+	return {};
+};
+
+const writePin = (root, item, pin) => {
+	mkdirSync(join(root, item.bb, "prs"), { recursive: true });
+	writeFileSync(
+		join(root, pinPath(item, pin.number)),
+		`${JSON.stringify(pin, null, 2)}\n`,
+	);
+	item.pins.set(pin.number, { path: pinPath(item, pin.number), pin });
 };
 
 const findFolder = (state, key, context = {}) => {
@@ -395,7 +443,10 @@ const kindCounts = (meta) => {
 	};
 };
 
-const mergedPrs = (meta) => meta.prs.filter((pr) => pr.merged);
+const mergedPrs = (item, folder) =>
+	folder.meta.prs
+		.map((entry) => item.pins.get(entry.number)?.pin)
+		.filter((pin) => pin?.merged);
 
 const anchor = (file, id) => `[${id}](${file}#${id.toLowerCase()})`;
 
@@ -416,7 +467,7 @@ const describeDecision = (entry) => {
 	)} · ${ratificationState(entry)}`;
 };
 
-const timelineRows = (meta) => {
+const timelineRows = (meta, pins) => {
 	const rows = [[meta.opened, "opened"]];
 	meta.decisions.forEach((entry) => {
 		rows.push([
@@ -439,13 +490,20 @@ const timelineRows = (meta) => {
 			`${anchor("work.md", entry.id)} ${entry.title}${iff(entry.pr !== null, ` · PR #${entry.pr}`)}`,
 		]);
 	});
-	meta.prs.forEach((pr) => {
+	meta.prs.forEach((entry) => {
+		const pin = pins.get(entry.number)?.pin ?? null;
+		const what = (() => {
+			if (pin === null) {
+				return "pin file missing";
+			}
+			return `${pin.refs.length} file(s) · head ${pin.head.slice(0, 8)}`;
+		})();
 		rows.push([
-			pr.pinnedAt,
-			`PR #${pr.number} pinned · ${pr.refs.length} file(s) · head ${pr.head.slice(0, 8)}`,
+			entry.pinnedAt,
+			`PR #${entry.number} pinned · ${what} · ${entry.role}`,
 		]);
-		if (pr.merged) {
-			rows.push([pr.merged, `PR #${pr.number} merged`]);
+		if (pin?.merged) {
+			rows.push([pin.merged, `PR #${entry.number} merged`]);
 		}
 	});
 	if (meta.closed) {
@@ -457,7 +515,7 @@ const timelineRows = (meta) => {
 const countsLine = (counts) =>
 	`Owner decisions ${counts.owner} · rulings ${counts.rulings} (interpretation ${counts.interpretation}, extension ${counts.extension}, stop ${counts.stop}) · pending extensions ${counts.pendingExtensions} · rejected ${counts.rejected}`;
 
-const renderFolderReadme = (folder) => {
+const renderFolderReadme = (folder, item) => {
 	const { meta } = folder;
 	const pending = rulingsOf(meta)
 		.filter(isPendingExtension)
@@ -471,7 +529,9 @@ const renderFolderReadme = (folder) => {
 		"",
 		"| When | Entry |",
 		"|---|---|",
-		...timelineRows(meta).map(([when, what]) => `| ${when} | ${what} |`),
+		...timelineRows(meta, item.pins).map(
+			([when, what]) => `| ${when} | ${what} |`,
+		),
 		"",
 		countsLine(kindCounts(meta)),
 		"",
@@ -486,19 +546,38 @@ const itemRows = (item) => {
 	const refs = new Set(item.folders.map((folder) => folder.meta.ref));
 	const hasParentHere = (folder) =>
 		folder.meta.parent !== null && refs.has(folder.meta.parent);
-	const row = (folder, indent) => {
+	// A parent's PR column is a view over its children: nothing is written
+	// into the parent for a PR that only a child pinned.
+	const prColumn = (folder, children) => {
+		const own = new Set(folder.meta.prs.map((entry) => entry.number));
+		const seen = new Set();
+		const via = children.flatMap((child) =>
+			child.meta.prs
+				.filter((entry) => !own.has(entry.number) && !seen.has(entry.number))
+				.map((entry) => {
+					seen.add(entry.number);
+					return `#${entry.number} (via ${shortRef(child.meta.ref)})`;
+				}),
+		);
+		return [...folder.meta.prs.map((entry) => `#${entry.number}`), ...via].join(
+			" ",
+		);
+	};
+	const row = (folder, indent, children = []) => {
 		const { meta } = folder;
 		const counts = kindCounts(meta);
-		const prs = meta.prs.map((pr) => `#${pr.number}`).join(" ");
+		const prs = prColumn(folder, children);
 		return `| ${indent}[${shortRef(meta.ref)}](${folder.name}/) | ${meta.title} | ${meta.status} | ${prs} | ${counts.owner} | ${counts.rulings} (${counts.pendingExtensions} pending) |`;
 	};
 	if (!item.folders.some(hasParentHere)) {
 		return item.folders.map((folder) => row(folder, ""));
 	}
+	const childrenOf = (root) =>
+		item.folders.filter((folder) => folder.meta.parent === root.meta.ref);
 	return item.folders
 		.filter((folder) => !hasParentHere(folder))
 		.flatMap((root) => [
-			row(root, ""),
+			row(root, "", childrenOf(root)),
 			...item.folders
 				.filter((folder) => folder.meta.parent === root.meta.ref)
 				.map((folder) => row(folder, "↳ ")),
@@ -522,7 +601,7 @@ const sumCounts = (folders) => {
 const renderItemReadme = (item, itemLabel) => {
 	const stalled = item.folders.filter(
 		(folder) =>
-			folder.meta.status !== "closed" && mergedPrs(folder.meta).length > 0,
+			folder.meta.status !== "closed" && mergedPrs(item, folder).length > 0,
 	);
 	const lines = [
 		`# Blackbox — ${itemLabel}`,
@@ -543,7 +622,7 @@ const renderItemReadme = (item, itemLabel) => {
 		"",
 		"- One folder per work item, named by its tracker number; a follow-up is a new number linked through `meta.json`, never a second folder.",
 		"- `decisions.md` records every decision as it is made: owner decisions (`D#`) as faithful English rewrites of the owner's words, AI rulings (`R#`) with kind (interpretation, extension, stop), basis and ratification. `work.md` (`W#`) records what was built, measured and reversed. Both are append-only; a correction is a new entry.",
-		"- Every PR is pinned before merge: each changed file's blob SHA, checked both ways (every pin matches the PR head, every changed file is pinned) by the pre-merge hook and by CI.",
+		"- Every PR is pinned before merge: each changed file's blob SHA, stored once per item in `prs/<N>.json` and checked both ways (every pin matches the PR head, every changed file is pinned) by the pre-merge hook and by CI. A folder's `meta.json` holds one line per PR (`closes`, `refs` or `own`); a parent's PR column is derived from its children.",
 		"- Never read this directory during normal work. It answers provenance questions only.",
 		"",
 	];
@@ -579,7 +658,7 @@ const expectedReadmes = (state, repo) =>
 		[`${item.bb}/README.md`, renderItemReadme(item, itemLabelFor(item, repo))],
 		...item.folders.map((folder) => [
 			`${folder.dir}/README.md`,
-			renderFolderReadme(folder),
+			renderFolderReadme(folder, item),
 		]),
 	]);
 
@@ -589,7 +668,18 @@ const validateMeta = (folder, problems) => {
 	const { meta, dir } = folder;
 	const problem = (text) => problems.push(`${dir}: ${text}`);
 	if (meta.version !== META_VERSION) {
-		problem(`meta version ${meta.version}, expected ${META_VERSION}`);
+		problem(
+			`meta version ${meta.version}, expected ${META_VERSION}. Next: blackbox migrate --to ${META_VERSION}`,
+		);
+	}
+	if (meta.version === META_VERSION) {
+		(meta.prs ?? []).forEach((entry) => {
+			if (!Number.isInteger(entry.number) || !PIN_ROLES.includes(entry.role)) {
+				problem(
+					`prs entry must be {number, role: ${PIN_ROLES.join("|")}, pinnedAt} (got ${JSON.stringify(entry)})`,
+				);
+			}
+		});
 	}
 	if (!["issue", "pr"].includes(meta.kind)) {
 		problem(`kind must be issue or pr (got ${meta.kind})`);
@@ -660,12 +750,49 @@ const validateReadmes = (state, reader, repo, problems) => {
 };
 
 /** Structural checks shared by every mode. */
+const validatePins = (state, problems) => {
+	state.items.forEach((item) => {
+		item.pins.forEach(({ path, pin }, number) => {
+			if (pin.version !== PIN_VERSION) {
+				problems.push(
+					`${path}: pin version ${pin.version}, expected ${PIN_VERSION}`,
+				);
+			}
+			if (pin.number !== number) {
+				problems.push(
+					`${path}: pin number ${pin.number} does not match the file name`,
+				);
+			}
+			const held = item.folders.some((folder) =>
+				folder.meta.prs.some((entry) => entry.number === number),
+			);
+			if (!held) {
+				problems.push(
+					`${path}: pinned by no folder. Next: blackbox pin <folder> --pr ${number}, or delete the file`,
+				);
+			}
+		});
+		item.folders
+			.filter((folder) => folder.meta.version === META_VERSION)
+			.forEach((folder) => {
+				folder.meta.prs.forEach((entry) => {
+					if (!item.pins.has(entry.number)) {
+						problems.push(
+							`${folder.dir}: PR #${entry.number} has no pin file at ${pinPath(item, entry.number)}. Next: blackbox pin ${folder.name} --pr ${entry.number}`,
+						);
+					}
+				});
+			});
+	});
+};
+
 const validateState = (state, reader, repo) => {
 	const problems = [];
 	state.folders.forEach((folder) => {
 		validateMeta(folder, problems);
 		validateAnchors(folder, reader, problems);
 	});
+	validatePins(state, problems);
 	validateUniqueness(state, problems);
 	validateReadmes(state, reader, repo, problems);
 	return problems;
@@ -805,7 +932,9 @@ const validateRelease = (state, repo) => {
 	state.folders.forEach((folder) => {
 		if (folder.meta.status === "merged-pending") {
 			const merged = folder.meta.prs.filter(
-				(pr) => pr.merged || prInfo(repo, pr.number).merged,
+				(entry) =>
+					pinOf(state, folder, entry.number)?.merged ||
+					prInfo(repo, entry.number).merged,
 			);
 			problems.push(
 				`${folder.meta.ref} is merged-pending (${merged.map((pr) => `#${pr.number}`).join(", ") || "no merged PR recorded"}): close it, or set it back to open on purpose (blackbox close <folder> --status open)`,
@@ -828,14 +957,17 @@ const checkPins = ({ state, reader, holders, number, changed, problems }) => {
 	const itemRels = state.items.map((item) => item.rel);
 	const pinned = new Map();
 	holders.forEach((folder) => {
-		const block = folder.meta.prs.find((entry) => entry.number === number);
-		if (!block) {
+		const entry = folder.meta.prs.find(
+			(candidate) => candidate.number === number,
+		);
+		const pin = pinOf(state, folder, number);
+		if (!entry || pin === null) {
 			problems.push(
 				`${folder.dir}: no pin block for PR #${number}. Next: blackbox pin ${folder.name} --pr ${number}`,
 			);
 			return;
 		}
-		block.refs.forEach((ref) => {
+		pin.refs.forEach((ref) => {
 			if (!ownedBy(ref.path, folder.item, itemRels)) {
 				problems.push(
 					`${folder.dir}: pin ${ref.path} belongs to item "${ownerItemOf(ref.path, itemRels) ?? "(none)"}", not "${folder.item}"`,
@@ -1101,10 +1233,15 @@ const listOpt = (text) => {
 		.filter(Boolean);
 };
 
-const refreshMerges = (folder, repo) => {
-	folder.meta.prs.forEach((pr) => {
-		if (!pr.merged) {
-			pr.merged = prInfo(repo, pr.number).merged;
+const refreshMerges = (root, state, folder, repo) => {
+	const item = itemOf(state, folder);
+	folder.meta.prs.forEach((entry) => {
+		const pin = item.pins.get(entry.number)?.pin;
+		if (pin && !pin.merged) {
+			const merged = prInfo(repo, entry.number).merged;
+			if (merged) {
+				writePin(root, item, { ...pin, merged });
+			}
 		}
 	});
 };
@@ -1439,11 +1576,32 @@ const pinFolder = ({
 	const refs = changed.filter((file) =>
 		ownedBy(file.path, folder.item, itemRels),
 	);
-	const existing = folder.meta.prs.find((entry) => entry.number === number);
-	if (existing && JSON.stringify(existing.refs) === JSON.stringify(refs)) {
-		return { changed: false, refs, head: existing.head };
+	const item = itemOf(state, folder);
+	const existingPin = item.pins.get(number)?.pin ?? null;
+	const existingEntry = folder.meta.prs.find(
+		(entry) => entry.number === number,
+	);
+	if (existingPin && existingEntry && sameRefs(existingPin.refs, refs)) {
+		return { changed: false, refs, head: existingPin.head };
 	}
-	const block = {
+	// "Closes #N" in the PR body is the author's declaration that merging this
+	// PR finishes the issue, so the record closes with the PR instead of
+	// needing a separate commit after the merge.
+	const own = Number(folder.meta.ref.split("#")[1]);
+	const closesHere = referencedIssues(pr.body).some(
+		(entry) => entry.number === own && entry.closes,
+	);
+	const role = (() => {
+		if (folder.meta.kind === "pr" && own === number) {
+			return "own";
+		}
+		if (closesHere) {
+			return "closes";
+		}
+		return "refs";
+	})();
+	const pin = {
+		version: PIN_VERSION,
 		number,
 		ref: `${repo}#${number}`,
 		title: pr.title,
@@ -1453,21 +1611,19 @@ const pinFolder = ({
 		merged: pr.merged,
 		pinnedAt: at,
 		refs,
+		...carriedHistory(existingPin),
 	};
+	if (existingPin === null || !sameRefs(existingPin.refs, refs)) {
+		writePin(root, item, pin);
+	}
+	const block = item.pins.get(number).pin;
 	folder.meta.prs = [
 		...folder.meta.prs.filter((entry) => entry.number !== number),
-		block,
+		{ number, role, pinnedAt: at },
 	].sort((a, b) => a.number - b.number);
 	if (pr.merged && folder.meta.status === "open") {
 		folder.meta.status = "merged-pending";
 	}
-	// "Closes #N" in the PR body is the author's declaration that merging this
-	// PR finishes the issue, so the record closes with the PR instead of
-	// needing a separate commit after the merge.
-	const own = Number(folder.meta.ref.split("#")[1]);
-	const closesHere = referencedIssues(pr.body).some(
-		(entry) => entry.number === own && entry.closes,
-	);
 	if (
 		closesHere &&
 		folder.meta.ref.startsWith(`${repo}#`) &&
@@ -1777,7 +1933,162 @@ const parseLegacyEntry = (text, fileName) => {
 	};
 };
 
+/** v1 → v3: the inline pin blocks of every folder become one pin file per PR
+ * per item; a folder keeps one line per PR. Idempotent: a folder already at
+ * the target version is left alone, a pin file already holding the same
+ * refs is not rewritten. Two folders that pinned the same PR with different
+ * refs: the later pin is the body, the earlier goes to its history. */
+const roleForMigration = (folder, block) => {
+	const own = Number(folder.meta.ref.split("#")[1]);
+	if (folder.meta.kind === "pr" && own === block.number) {
+		return "own";
+	}
+	if (
+		folder.meta.closed !== null &&
+		String(block.pinnedAt).slice(0, 10) === folder.meta.closed
+	) {
+		return "closes";
+	}
+	return "refs";
+};
+
+const historyOf = (pin) => ({
+	head: pin.head,
+	pinnedAt: pin.pinnedAt,
+	refs: pin.refs,
+});
+
+const pinFromBlock = (block) => ({
+	version: PIN_VERSION,
+	number: block.number,
+	ref: block.ref,
+	title: block.title,
+	head: block.head,
+	headRef: block.headRef,
+	base: block.base,
+	merged: block.merged ?? null,
+	pinnedAt: block.pinnedAt,
+	...iff(block.migrated === true, { migrated: true }),
+	refs: block.refs,
+	...carriedHistory(block),
+});
+
+const mergePinCandidates = (candidates, pin) => {
+	const current = candidates.get(pin.number);
+	if (current === undefined) {
+		candidates.set(pin.number, pin);
+		return;
+	}
+	if (sameRefs(current.refs, pin.refs)) {
+		return;
+	}
+	const [later, earlier] = (() => {
+		if (pin.pinnedAt > current.pinnedAt) {
+			return [pin, current];
+		}
+		return [current, pin];
+	})();
+	const history = [
+		...(later.history ?? []),
+		...(earlier.history ?? []),
+		historyOf(earlier),
+	];
+	const seen = new Set();
+	candidates.set(pin.number, {
+		...later,
+		history: history.filter((entry) => {
+			const key = JSON.stringify(entry);
+			if (seen.has(key)) {
+				return false;
+			}
+			seen.add(key);
+			return true;
+		}),
+	});
+};
+
+const migrateTo = (opts) => {
+	const target = Number(opts.to);
+	if (target !== META_VERSION) {
+		fail(
+			`blackbox migrate --to ${opts.to}: this tool writes meta version ${META_VERSION}`,
+		);
+	}
+	const root = repoRoot();
+	const repo = repoSlug(root);
+	const state = loadState(fsReader(root));
+	const plans = state.items.map((item) => {
+		const stale = item.folders.filter(
+			(folder) => folder.meta.version !== META_VERSION,
+		);
+		const candidates = new Map();
+		item.pins.forEach(({ pin }) => {
+			mergePinCandidates(candidates, pin);
+		});
+		stale.forEach((folder) => {
+			(folder.meta.prs ?? []).forEach((block) => {
+				if (Array.isArray(block.refs)) {
+					mergePinCandidates(candidates, pinFromBlock(block));
+				}
+			});
+		});
+		const writes = [...candidates.values()].filter((pin) => {
+			const existing = item.pins.get(pin.number)?.pin;
+			return existing === undefined || !sameRefs(existing, pin);
+		});
+		return { item, stale, writes };
+	});
+	const folders = plans.reduce((sum, plan) => sum + plan.stale.length, 0);
+	const files = plans.reduce((sum, plan) => sum + plan.writes.length, 0);
+	if (folders === 0 && files === 0) {
+		process.stdout.write(
+			`nothing to migrate: every folder is at version ${META_VERSION}\n`,
+		);
+		return;
+	}
+	const versions = [
+		...new Set(
+			plans.flatMap((plan) => plan.stale.map((folder) => folder.meta.version)),
+		),
+	].join("/");
+	if (opts["dry-run"]) {
+		process.stdout.write(
+			`${folders} folder(s) at version ${versions} → ${META_VERSION}, ${files} pin file(s) to write\n`,
+		);
+		return;
+	}
+	plans.forEach(({ item, stale, writes }) => {
+		writes.forEach((pin) => {
+			writePin(root, item, pin);
+		});
+		stale.forEach((folder) => {
+			folder.meta.prs = (folder.meta.prs ?? [])
+				.map((block) => {
+					if (Array.isArray(block.refs)) {
+						return {
+							number: block.number,
+							role: roleForMigration(folder, block),
+							pinnedAt: block.pinnedAt,
+						};
+					}
+					return block;
+				})
+				.sort((a, b) => a.number - b.number);
+			folder.meta.version = META_VERSION;
+			writeMeta(root, folder);
+		});
+	});
+	writeIndex(root, repo);
+	process.stdout.write(
+		`migrated ${folders} folder(s), wrote ${files} pin file(s)\n`,
+	);
+};
+
 const cmdMigrate = (positional, opts) => {
+	if (opts.to !== undefined) {
+		migrateTo(opts);
+		return;
+	}
 	const file =
 		positional[0] ??
 		fail(
@@ -1839,20 +2150,22 @@ const cmdMigrate = (positional, opts) => {
 	if (opts.pr && entry.refs.length > 0) {
 		const number = Number(opts.pr);
 		const pr = prInfo(repo, number);
+		writePin(root, itemOf(state, folder), {
+			version: PIN_VERSION,
+			number,
+			ref: `${repo}#${number}`,
+			title: pr.title,
+			head: pr.head,
+			headRef: pr.headRef,
+			base: pr.base,
+			merged: pr.merged,
+			pinnedAt: at,
+			migrated: true,
+			refs: entry.refs,
+		});
 		folder.meta.prs = [
 			...folder.meta.prs.filter((block) => block.number !== number),
-			{
-				number,
-				ref: `${repo}#${number}`,
-				title: pr.title,
-				head: pr.head,
-				headRef: pr.headRef,
-				base: pr.base,
-				merged: pr.merged,
-				pinnedAt: at,
-				migrated: true,
-				refs: entry.refs,
-			},
+			{ number, role: "refs", pinnedAt: at },
 		].sort((a, b) => a.number - b.number);
 	}
 	mkdirSync(join(root, folder.dir, "artifacts"), { recursive: true });
@@ -1867,7 +2180,8 @@ const cmdClose = (positional, opts) => {
 		positional[0] ?? fail("usage: blackbox close <folder> [--status S]");
 	const root = repoRoot();
 	const repo = repoSlug(root);
-	const folder = findFolder(loadState(fsReader(root)), key, {
+	const state = loadState(fsReader(root));
+	const folder = findFolder(state, key, {
 		root,
 		cwd: process.cwd(),
 	});
@@ -1879,7 +2193,7 @@ const cmdClose = (positional, opts) => {
 		process.stdout.write(`${folder.meta.ref}: already ${status}\n`);
 		return;
 	}
-	refreshMerges(folder, repo);
+	refreshMerges(root, state, folder, repo);
 	folder.meta.status = status;
 	folder.meta.closed = (() => {
 		if (status === "closed") {
@@ -2271,6 +2585,7 @@ const HELP = `blackbox ${VERSION} — flight recorder for AI-built work
   ci --pr N                             CI entry: pin every folder the PR belongs to (pinned, keyed, or linked by
                                         Closes/Refs #N in the body); commit + push when BLACKBOX_TOKEN is set; then check
   migrate <legacy.md> --into <folder> [--pr N] [--dry-run]
+  migrate --to 3 [--dry-run]                  meta v1 → v3: pins into prs/<N>.json
                                         split a single-file entry into D#/W# entries, keep the original under artifacts/
   close <folder> [--status closed|merged-pending|open]
   index [--check]                       regenerate (or verify) every README

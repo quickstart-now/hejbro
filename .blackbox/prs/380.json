@@ -1,0 +1,38 @@
+{
+  "version": 3,
+  "number": 380,
+  "ref": "quickstart-now/hejbro#380",
+  "title": "fix(ci): derive gate source roots from the workspace, add policy lines",
+  "head": "0b0dd497f4a4a9ff485679329abca9ebac1d401f",
+  "headRef": "fix-policy-roots",
+  "base": "dev",
+  "merged": "2026-08-28T01:31:44Z",
+  "pinnedAt": "2026-08-28T00:00Z",
+  "migrated": true,
+  "refs": [
+    {
+      "path": "scripts/source-roots.mjs",
+      "blob": "1d67c413920bf276be42101b3f1a5b52053897dc"
+    },
+    {
+      "path": "scripts/check-diagnostic-xref.mjs",
+      "blob": "b2462aa7879f3e663b2ab08798c8ed5db9c7ae4c"
+    },
+    {
+      "path": "scripts/check-next-marker.mjs",
+      "blob": "7dc2f2b6c9f0c41e0ab4f53b27bd25f17094818d"
+    },
+    {
+      "path": "AGENTS.md",
+      "blob": "5c97705c868bf992e4c8aea5ac4afcb3416dac51"
+    },
+    {
+      "path": ".claude/rules/query-purity.md",
+      "blob": "8051afb91e883e20b9d73ef8b7b21b306b1cfe8c"
+    },
+    {
+      "path": ".claude/rules/pg-driver.md",
+      "blob": "1b40c2b853c8ce210f29e4f5d00e42afec3111e6"
+    }
+  ]
+}

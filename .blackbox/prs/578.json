@@ -1,0 +1,74 @@
+{
+  "version": 3,
+  "number": 578,
+  "ref": "quickstart-now/hejbro#578",
+  "title": "feat(nile): refuse identity columns in tenant-aware tables",
+  "head": "99366af0406fab517c38cd54275407aeda304140",
+  "headRef": "feat-nile-identity-refusal",
+  "base": "dev",
+  "merged": "2026-08-31T13:31:22Z",
+  "pinnedAt": "2026-08-31T00:00Z",
+  "migrated": true,
+  "refs": [
+    {
+      "path": ".changeset/refuse-nile-identity-columns.md",
+      "blob": "200e6c92442d38e0f26d82b5a54fe2d4a11b124e"
+    },
+    {
+      "path": "openspec/changes/archive/2026-08-31-refuse-nile-identity-columns/proposal.md",
+      "blob": "481c567c5cb07b9260a8b1aa7bb0b10837e79fae"
+    },
+    {
+      "path": "openspec/changes/archive/2026-08-31-refuse-nile-identity-columns/specs/preset-validation/spec.md",
+      "blob": "e03e77c5c014b8061e1855a4bd945bbfcbeee108"
+    },
+    {
+      "path": "openspec/changes/archive/2026-08-31-refuse-nile-identity-columns/tasks.md",
+      "blob": "f6983a5091d1e440811d8f2722873855067029e7"
+    },
+    {
+      "path": "openspec/task-times.csv",
+      "blob": "c046bd6f29810240aad1211f29080b888005d66d"
+    },
+    {
+      "path": "packages/nile/src/preset.ts",
+      "blob": "9d7ad1b82b45d7e8c51b74205e96479c99b0b1b0"
+    },
+    {
+      "path": "packages/nile/src/validators.ts",
+      "blob": "e475b0b3dc6bb4ddbcd560164a11e6f97a6d9113"
+    },
+    {
+      "path": "packages/nile/test/preset.test.ts",
+      "blob": "6ce3149e3d860b800568fbaa8135ae04d0f85f3e"
+    },
+    {
+      "path": "packages/nile/test/validators.test.ts",
+      "blob": "4239ff114fe442de6445c2883e0051f5ac81285d"
+    },
+    {
+      "path": "README.md",
+      "blob": "d183c190e19f01a4fe3154682708f8c3ccac880c"
+    },
+    {
+      "path": "packages/skills/test/nile-preset-doc.test.ts",
+      "blob": "266b9d65debf75ca951a63c06020e4edd1e0734b"
+    },
+    {
+      "path": "skills/hejbro/references/nile-preset.md",
+      "blob": "95aa894daf3232868c8c049c2f044f6c9fe67490"
+    },
+    {
+      "path": "openspec/changes/archive/2026-08-31-refuse-nile-identity-columns/evaluation.md",
+      "blob": "75e1cec9b32f61e5797d04d7cd1876d2a5a6f4c2"
+    },
+    {
+      "path": "packages/nile/test/integration/nile.integration.test.ts",
+      "blob": "29c1d1737ee668445151a613fe611d192dec2015"
+    },
+    {
+      "path": ".changeset/fix-nile-identity-witness.md",
+      "blob": "0d05d78b2a82a41e3d2f0843aad81ca2c849c9b0"
+    }
+  ]
+}

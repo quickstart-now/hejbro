@@ -1,0 +1,61 @@
+{
+  "version": 3,
+  "number": 759,
+  "ref": "quickstart-now/hejbro#759",
+  "title": "fix(cli): close the d106 round-1 findings on init path kinds and the vendored client guard",
+  "head": "ff708d741296774769a45e4bd32a1d24df2157af",
+  "headRef": "fix-cli-init-d106-r1",
+  "base": "dev",
+  "merged": "2026-09-03T14:12:12Z",
+  "pinnedAt": "2026-09-04T04:45Z",
+  "refs": [
+    {
+      "path": ".changeset/fix-cli-init-d106-r1.md",
+      "blob": "9cadd70c23a0c834285e33611e0dfd6cfcf70351"
+    },
+    {
+      "path": "README.md",
+      "blob": "97e08d5f9ca1ac8211b56368287d1c7969beeb4b"
+    },
+    {
+      "path": "openspec/changes/fix-cli-init-and-vendoring/evaluation.md",
+      "blob": "4090682f3a136541501d6bad8fb11402ea606ba9"
+    },
+    {
+      "path": "openspec/changes/fix-cli-init-and-vendoring/specs/cli-commands/spec.md",
+      "blob": "7637466f7e6d2694a2e74866557a711be7f273b8"
+    },
+    {
+      "path": "openspec/changes/fix-cli-init-and-vendoring/tasks.md",
+      "blob": "5e9c25979131c57d921922c53a12d94980a98ac0"
+    },
+    {
+      "path": "openspec/task-times.csv",
+      "blob": "94f3397ca65a59f476bbfd9be4197abc417fbb6d"
+    },
+    {
+      "path": "packages/cli/src/commands/init.ts",
+      "blob": "be3fba83fd96bfd5a7e176cb0a4e223c68c3e5a6"
+    },
+    {
+      "path": "packages/cli/test/init.test.ts",
+      "blob": "3871a6677550c92b095345b248306ef9aaf0f71a"
+    },
+    {
+      "path": "packages/query/src/client/name-keyed-db.ts",
+      "blob": "042c080e828036eaaad00e064b55b8a7e0383f15"
+    },
+    {
+      "path": "packages/query/test/client/errors.test.ts",
+      "blob": "edaf7034a43bb05616df6a8a191c2b2dd6e4f36c"
+    },
+    {
+      "path": "skills/hejbro/references/polyrepo.md",
+      "blob": "6a55dedb7bf4e7e6df1137765e45d8f43eca4197"
+    },
+    {
+      "path": "skills/hejbro/references/query-layer.md",
+      "blob": "45df905667a3c9a4b060574f16228e28fc7633c9"
+    }
+  ]
+}

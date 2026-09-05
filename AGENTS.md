@@ -195,7 +195,8 @@ rejected (decided 2026-08-26):
 `.blackbox/` at the repository root is the flight recorder (D89; folder
 form since #785). One folder per work item, keyed by its issue number
 (`.blackbox/785/`), holds `meta.json` (machine-owned: kind, parent,
-status, per-PR content pins), `decisions.md` (every decision as it is
+status, one line per PR — `closes`, `refs` or `own`; the PR's content
+pin itself lives once under `.blackbox/prs/<N>.json`, meta v3 since #866), `decisions.md` (every decision as it is
 made — owner decisions `D#` as English rewrites of the owner's words, AI
 rulings `R#` with kind interpretation/extension/stop, basis and
 ratification) and `work.md` (what was built and measured, `W#`). Entries

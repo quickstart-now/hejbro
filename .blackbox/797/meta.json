@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 3,
   "kind": "issue",
   "ref": "quickstart-now/hejbro#797",
   "title": "reset: a cycle longer than two tables gets the outside-dependent advice",
@@ -32,171 +32,13 @@
   "prs": [
     {
       "number": 835,
-      "ref": "quickstart-now/hejbro#835",
-      "title": "fix(cli): judge the ledger by identity; status and cycle advice (#783, #796, #797)",
-      "head": "42dfcc016531e9f0331b7bb9ac6dc061024e3ccb",
-      "headRef": "fix-ledger-identity",
-      "base": "dev",
-      "merged": null,
-      "pinnedAt": "2026-09-04T15:04Z",
-      "refs": [
-        {
-          "path": ".changeset/harden-ledger-identity.md",
-          "blob": "e43cdf2da49ae53011a251479ef7e8ff3ac56777"
-        },
-        {
-          "path": "README.md",
-          "blob": "56bfb7445a5082310e2abda7caa59c8dcbd71676"
-        },
-        {
-          "path": "openspec/changes/harden-ledger-identity/design.md",
-          "blob": "95fe719edd7ea8b4758279aad6358ff2eba9e509"
-        },
-        {
-          "path": "openspec/changes/harden-ledger-identity/proposal.md",
-          "blob": "6687878291751b1a89623ad0ce34da855a0330dc"
-        },
-        {
-          "path": "openspec/changes/harden-ledger-identity/specs/migration-apply/spec.md",
-          "blob": "697d14ebeb36aa1ca0b3db59a8e938a1f8635c2a"
-        },
-        {
-          "path": "openspec/changes/harden-ledger-identity/tasks.md",
-          "blob": "b57b6ee42eeeeffb407830892741d36337dff51e"
-        },
-        {
-          "path": "openspec/task-times.csv",
-          "blob": "e91438341fa8b8b742984c37fbdd8f1d2d52f583"
-        },
-        {
-          "path": "packages/cli/src/apply/ledger-identity.ts",
-          "blob": "34c00cc1c5f99b925c6c3867417e9d75e77f2281"
-        },
-        {
-          "path": "packages/cli/src/apply/ledger.ts",
-          "blob": "41a3c47e53a9e59fc37144ef5aba95988afa394f"
-        },
-        {
-          "path": "packages/cli/src/apply/raise.ts",
-          "blob": "007e8a7451b83d82969ed442255296c258c25da9"
-        },
-        {
-          "path": "packages/cli/src/apply/reset.ts",
-          "blob": "2b9c24bd539c72b5632730e9220061450cfcf392"
-        },
-        {
-          "path": "packages/cli/src/commands/migrate.ts",
-          "blob": "a4e8695960d0ba361c45b3ac6a15b0c410bf67ca"
-        },
-        {
-          "path": "packages/cli/src/commands/status.ts",
-          "blob": "262285a39d089b1e4e9e82c3b352b2859795efd6"
-        },
-        {
-          "path": "packages/cli/test/apply-ledger-identity.test.ts",
-          "blob": "7cdd84b93dcf277334becd90f7aee82f4472b48b"
-        },
-        {
-          "path": "packages/cli/test/apply-ledger.test.ts",
-          "blob": "c6e5de5c4ad1071231b050df091f29f4af4389e8"
-        },
-        {
-          "path": "packages/cli/test/apply-raise.test.ts",
-          "blob": "b0f52df23a2cb94b9828a3039407038cb4f60666"
-        },
-        {
-          "path": "packages/cli/test/apply-reset.integration.test.ts",
-          "blob": "7d1a53d0e23d03040a0287deae192910c3599050"
-        },
-        {
-          "path": "packages/cli/test/apply-reset.test.ts",
-          "blob": "5d08520dfc936d1d61daf3f72d5a0bad72d33c90"
-        },
-        {
-          "path": "packages/cli/test/migrate-command.test.ts",
-          "blob": "5dcf3d8042714b01310360f4dcd4574b31a0ce52"
-        },
-        {
-          "path": "packages/cli/test/reset-command.test.ts",
-          "blob": "25259c6389c0916bf009219b4d39596042ebe20f"
-        },
-        {
-          "path": "packages/cli/test/status-command.test.ts",
-          "blob": "8ed4f83111a33b27f1461f21b1fa58d11116a9c3"
-        },
-        {
-          "path": "skills/hejbro/references/generate-verify-workflow.md",
-          "blob": "4af39177c734122ef1c68516fb1f54c28c3ca9bc"
-        }
-      ]
+      "role": "closes",
+      "pinnedAt": "2026-09-04T15:04Z"
     },
     {
       "number": 838,
-      "ref": "quickstart-now/hejbro#838",
-      "title": "chore(openspec): archive harden-ledger-identity after d106 round 1",
-      "head": "7807f35415909d0091ca2e4abf7d2a3aafc9491a",
-      "headRef": "archive-ledger-identity",
-      "base": "dev",
-      "merged": null,
-      "pinnedAt": "2026-09-04T15:45Z",
-      "refs": [
-        {
-          "path": "README.md",
-          "blob": "2c4930fd9ba6a43eb48a33088058017969777e0f"
-        },
-        {
-          "path": "openspec/changes/archive/2026-09-05-harden-ledger-identity/design.md",
-          "blob": "95fe719edd7ea8b4758279aad6358ff2eba9e509"
-        },
-        {
-          "path": "openspec/changes/harden-ledger-identity/design.md",
-          "blob": null
-        },
-        {
-          "path": "openspec/changes/archive/2026-09-05-harden-ledger-identity/evaluation.md",
-          "blob": "c23123f49779ad766e7d5df6e583c0457ef54a75"
-        },
-        {
-          "path": "openspec/changes/archive/2026-09-05-harden-ledger-identity/proposal.md",
-          "blob": "6687878291751b1a89623ad0ce34da855a0330dc"
-        },
-        {
-          "path": "openspec/changes/harden-ledger-identity/proposal.md",
-          "blob": null
-        },
-        {
-          "path": "openspec/changes/archive/2026-09-05-harden-ledger-identity/specs/migration-apply/spec.md",
-          "blob": "a0a27b75282fa9309b7e3e6a9d993a1ab4d05e18"
-        },
-        {
-          "path": "openspec/changes/harden-ledger-identity/specs/migration-apply/spec.md",
-          "blob": null
-        },
-        {
-          "path": "openspec/changes/archive/2026-09-05-harden-ledger-identity/tasks.md",
-          "blob": "bb988df4b66c30fd21993e07160dfaf37a6ddb28"
-        },
-        {
-          "path": "openspec/changes/harden-ledger-identity/tasks.md",
-          "blob": null
-        },
-        {
-          "path": "openspec/specs/migration-apply/spec.md",
-          "blob": "f5246ab8ffa2bf517d357f49c10e532876565392"
-        },
-        {
-          "path": "openspec/task-times.csv",
-          "blob": "9a765b3679d3cf5802c0256fd895e1b91d2ab3fb"
-        },
-        {
-          "path": "packages/cli/src/apply/ledger-identity.ts",
-          "blob": "0a7b2ad0489a582a5af5d4d2354c73ba36e76e59"
-        },
-        {
-          "path": "packages/cli/test/apply-ledger-identity.test.ts",
-          "blob": "6db38bee0d6909f6098a1bb51cce5e1035635a94"
-        }
-      ]
+      "role": "closes",
+      "pinnedAt": "2026-09-04T15:45Z"
     }
   ],
   "origin": null,

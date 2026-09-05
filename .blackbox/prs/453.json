@@ -1,0 +1,50 @@
+{
+  "version": 3,
+  "number": 453,
+  "ref": "quickstart-now/hejbro#453",
+  "title": "fix(core): the savepoint lifecycle keeps its promises",
+  "head": "754b38aee569b8ff7d240e89c6aae5271ad2bcf2",
+  "headRef": "fix-lifecycle-review",
+  "base": "dev",
+  "merged": "2026-08-29T02:41:24Z",
+  "pinnedAt": "2026-08-29T00:00Z",
+  "migrated": true,
+  "refs": [
+    {
+      "path": "openspec/changes/archive/2026-08-29-fix-lifecycle-review/proposal.md",
+      "blob": "710dbc2f14f50ab9d4df6c49bb61f01991dc2c9c"
+    },
+    {
+      "path": "openspec/changes/archive/2026-08-29-fix-lifecycle-review/tasks.md",
+      "blob": "4e36b64b174794c2a21e27db6498f644b2f27d9b"
+    },
+    {
+      "path": "openspec/changes/archive/2026-08-29-fix-lifecycle-review/specs/query-execution/spec.md",
+      "blob": "55630e07a8919908eef863663117fa24839abecd"
+    },
+    {
+      "path": "openspec/changes/archive/2026-08-29-fix-lifecycle-review/specs/cli-commands/spec.md",
+      "blob": "58d1eea4cc4c09267c87c5b74e3290852fb5b7c1"
+    },
+    {
+      "path": "openspec/changes/archive/2026-08-29-fix-lifecycle-review/specs/plpgsql-function-bodies/spec.md",
+      "blob": "3bdc14caada0b0f6872f926edb23c145cbe5182e"
+    },
+    {
+      "path": "packages/query/src/db/transaction.ts",
+      "blob": "ba3a9c4d719126bcff612f263fcd708c235b4ffa"
+    },
+    {
+      "path": "packages/cli/src/commands/generate.ts",
+      "blob": "4ca6099a9039842455b3b4c326643dc04e844590"
+    },
+    {
+      "path": "packages/core/src/sql/migration-file.ts",
+      "blob": "d642455d5871e259f232d2bb5701de5bf04b2741"
+    },
+    {
+      "path": "packages/core/src/plpgsql/body-context.ts",
+      "blob": "d67fab6d063c765ea2609692f4b8768e61b3d9f6"
+    }
+  ]
+}

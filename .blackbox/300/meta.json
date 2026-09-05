@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 3,
   "kind": "issue",
   "ref": "quickstart-now/hejbro#300",
   "title": "@hejbro/neon preset with driver",
@@ -20,7 +20,7 @@
     {
       "id": "W1",
       "at": "2026-08-29T00:00Z",
-      "title": "2026-08-29 \u2014 `@hejbro/neon`, the second provider preset",
+      "title": "2026-08-29 — `@hejbro/neon`, the second provider preset",
       "pr": null,
       "decisions": []
     }

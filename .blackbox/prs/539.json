@@ -1,0 +1,26 @@
+{
+  "version": 3,
+  "number": 539,
+  "ref": "quickstart-now/hejbro#539",
+  "title": "docs(openspec): gate archives behind adversarial spec-only review",
+  "head": "0038929b5f1ac1fd34cec0aa3e13cfab1f6e7c99",
+  "headRef": "docs-adversarial-review",
+  "base": "dev",
+  "merged": "2026-08-30T21:14:06Z",
+  "pinnedAt": "2026-08-31T00:00Z",
+  "migrated": true,
+  "refs": [
+    {
+      "path": "openspec/config.yaml",
+      "blob": "8894c4dcb247b7248e9d0a74ce97ca20a3842bc7"
+    },
+    {
+      "path": "docs/specs/2026-08-19-hejbro-design.md",
+      "blob": "5a693f3ca3a6aab7169ac7150c9275253ab89ced"
+    },
+    {
+      "path": "AGENTS.md",
+      "blob": "9eb02bd2a41b8282b4dd947a5fc5788ef1dcf114"
+    }
+  ]
+}

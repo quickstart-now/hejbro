@@ -1,0 +1,77 @@
+{
+  "version": 3,
+  "number": 758,
+  "ref": "quickstart-now/hejbro#758",
+  "title": "chore(openspec): archive harden-function-dsl after its spec-only review",
+  "head": "d2de7f9f2dd07c07b7f95fbb72c9bfe5e2c1df5f",
+  "headRef": "archive-harden-function-dsl",
+  "base": "dev",
+  "merged": "2026-09-03T13:18:51Z",
+  "pinnedAt": "2026-09-04T04:45Z",
+  "refs": [
+    {
+      "path": "README.md",
+      "blob": "1214c02a51a95c055b1e245202a05b85aca2665a"
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-03-harden-function-dsl/evaluation.md",
+      "blob": "66f30a9e0d3316ae8a3ca28a6893db17e275cf50"
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-03-harden-function-dsl/proposal.md",
+      "blob": "f08718a0783e3c2758697deea4bc981426910a22"
+    },
+    {
+      "path": "openspec/changes/harden-function-dsl/proposal.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-03-harden-function-dsl/specs/function-declaration/spec.md",
+      "blob": "2336870cab34137fd29d1e62143a2f70d525dcd2"
+    },
+    {
+      "path": "openspec/changes/harden-function-dsl/specs/function-declaration/spec.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-03-harden-function-dsl/specs/plpgsql-function-bodies/spec.md",
+      "blob": "305ef27dc248a5bc1aba5d334634eb4e4c3572ad"
+    },
+    {
+      "path": "openspec/changes/harden-function-dsl/specs/plpgsql-function-bodies/spec.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-03-harden-function-dsl/specs/schema-vendoring/spec.md",
+      "blob": "fdb46577a8d36b3cc7134c0632e7c15d8db1e3dc"
+    },
+    {
+      "path": "openspec/changes/harden-function-dsl/specs/schema-vendoring/spec.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-03-harden-function-dsl/tasks.md",
+      "blob": "509f8095c338e2fc6fb7f33a250b83783c09defd"
+    },
+    {
+      "path": "openspec/changes/harden-function-dsl/tasks.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/specs/function-declaration/spec.md",
+      "blob": "3a9949f13995c123875294a77f4f510ef3cb8558"
+    },
+    {
+      "path": "openspec/specs/plpgsql-function-bodies/spec.md",
+      "blob": "e5a59dab79d1bd49afff84db0ae3cdcd4c889190"
+    },
+    {
+      "path": "openspec/specs/schema-vendoring/spec.md",
+      "blob": "f955544de7953f8a12afda2796c349be91f13da4"
+    },
+    {
+      "path": "openspec/task-times.csv",
+      "blob": "7ff5bb15e8f255f4303255e05f8b8116ea44b645"
+    }
+  ]
+}

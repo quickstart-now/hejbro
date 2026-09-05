@@ -1,0 +1,70 @@
+{
+  "version": 3,
+  "number": 526,
+  "ref": "quickstart-now/hejbro#526",
+  "title": "docs(openspec): align spec corpus with the external evaluation (P1-P18)",
+  "head": "39d34daf319b6c1d4e5f00b4f99c21ac23597d8e",
+  "headRef": "align-spec-corpus",
+  "base": "dev",
+  "merged": "2026-08-30T10:28:50Z",
+  "pinnedAt": "2026-08-30T00:00Z",
+  "migrated": true,
+  "refs": [
+    {
+      "path": "openspec/config.yaml",
+      "blob": "0e9a3ed52ca538f09e049d1a6fe9d593a3180a5b"
+    },
+    {
+      "path": "AGENTS.md",
+      "blob": "8ae0060037c53e73cc2286c2a9c5157095af2c8b"
+    },
+    {
+      "path": "README.md",
+      "blob": "ba91194c8bd32da2d0d8412eeb5a98c9b7ff0b07"
+    },
+    {
+      "path": "packages/core/src/query/mutate.ts",
+      "blob": "7e7f663880ed1b4ce26515266ecf4eb5688f4478"
+    },
+    {
+      "path": "packages/core/test/query/mutate.test.ts",
+      "blob": "6faacba4e99a200cc8d023585781512caf979681"
+    },
+    {
+      "path": "packages/query/test/db/chain.test.ts",
+      "blob": "ec331ac98a7fc70a46584137bb241fe6d53c5582"
+    },
+    {
+      "path": "packages/cli/test/generate-command.test.ts",
+      "blob": "fe38e6b3958c6f187318c01822da9c3f1afc62c9"
+    },
+    {
+      "path": "packages/skills/test/neon-mode-mismatch.test.ts",
+      "blob": "0c1f5299ac786759bb1fd96fafcb96ac45a2fab1"
+    },
+    {
+      "path": "skills/hejbro/references/neon-preset.md",
+      "blob": "adafd068b073e984f9f8c928d9267a929d489f29"
+    },
+    {
+      "path": "skills/hejbro/references/query-layer.md",
+      "blob": "1239e9b80e7cfb3a224275fd24b6a58ea9d0c644"
+    },
+    {
+      "path": "openspec/specs/cli-commands/spec.md",
+      "blob": "ccb49e5119f4b21f7aafd9895a520005235770ad"
+    },
+    {
+      "path": "openspec/specs/query-builder/spec.md",
+      "blob": "538de73296633bfd36675e093ad5521764413350"
+    },
+    {
+      "path": "openspec/changes/align-spec-corpus/proposal.md",
+      "blob": "242583cfa25006abcd4ff6faec2d0bcde6045ae2"
+    },
+    {
+      "path": "openspec/changes/align-spec-corpus/tasks.md",
+      "blob": "6beb922aa6fb43b36e4762abdeb12e544d507106"
+    }
+  ]
+}

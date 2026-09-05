@@ -1,0 +1,42 @@
+{
+  "version": 3,
+  "number": 367,
+  "ref": "quickstart-now/hejbro#367",
+  "title": "docs(openspec): propose add-generated-columns (d100)",
+  "head": "5add62669f76444244eac595f7d624037936da95",
+  "headRef": "phase10-generated-spec",
+  "base": "dev",
+  "merged": "2026-08-28T00:02:47Z",
+  "pinnedAt": "2026-08-28T00:00Z",
+  "migrated": true,
+  "refs": [
+    {
+      "path": "openspec/changes/add-generated-columns/proposal.md",
+      "blob": "e54b97352e44973593d64b0b0229abfa2a4a134c"
+    },
+    {
+      "path": "openspec/changes/add-generated-columns/design.md",
+      "blob": "10781beaa4c453c3c8ce50e6360ba2e2cd6a3a5e"
+    },
+    {
+      "path": "openspec/changes/add-generated-columns/tasks.md",
+      "blob": "e1e624add9e5356526c96f1affa8c69125f1c2dd"
+    },
+    {
+      "path": "openspec/changes/add-generated-columns/specs/table-declaration/spec.md",
+      "blob": "a1ca59692141a43a5fefddc05f676f1801b8e1ec"
+    },
+    {
+      "path": "openspec/changes/add-generated-columns/specs/query-type-inference/spec.md",
+      "blob": "ccde94c891a0b4b11e0826599a1ddbb45cf76e88"
+    },
+    {
+      "path": "openspec/changes/add-generated-columns/specs/snapshot-format/spec.md",
+      "blob": "13937be1adac29cd1764f183a5b2ae03b430bae2"
+    },
+    {
+      "path": "docs/specs/2026-08-19-hejbro-design.md",
+      "blob": "883c685f3d74c7f52747af80e44a49dfbef5716c"
+    }
+  ]
+}

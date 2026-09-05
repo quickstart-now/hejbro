@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 3,
   "kind": "issue",
   "ref": "quickstart-now/hejbro#318",
   "title": "query layer: generic execution-context provider (+ supabase adapter)",
@@ -20,7 +20,7 @@
     {
       "id": "W1",
       "at": "2026-08-31T00:00Z",
-      "title": "add-context-provider \u2014 the generic context provider (#318)",
+      "title": "add-context-provider — the generic context provider (#318)",
       "pr": null,
       "decisions": []
     }
@@ -28,92 +28,8 @@
   "prs": [
     {
       "number": 543,
-      "ref": "quickstart-now/hejbro#543",
-      "title": "feat(query): add a generic execution-context provider",
-      "head": "604eb63cbd14c99525fe809f9e4189ea748a4232",
-      "headRef": "feat-add-context-provider",
-      "base": "dev",
-      "merged": "2026-08-30T22:38:34Z",
-      "pinnedAt": "2026-08-31T00:00Z",
-      "migrated": true,
-      "refs": [
-        {
-          "path": ".changeset/add-context-provider.md",
-          "blob": "863cd79a1096375e3d3fb62a69c4378599344bd8"
-        },
-        {
-          "path": ".changeset/harden-query-layer.md",
-          "blob": "3685b350ecc1cd2d25b69bf8655434d3d3df2fdd"
-        },
-        {
-          "path": ".changeset/harden-query-surface.md",
-          "blob": "94d6a67525724cc5ae2b4edac51b788e527b5160"
-        },
-        {
-          "path": "AGENTS.md",
-          "blob": "3b1a4f58a628cd3929d1e4eaa4834ec843617ed7"
-        },
-        {
-          "path": "README.md",
-          "blob": "9de4fc3c625840eaec1622614b81f4854b537ee5"
-        },
-        {
-          "path": "openspec/changes/archive/2026-08-31-add-context-provider/proposal.md",
-          "blob": "69eceb37d85834d7a472498182a4c3a8924f7231"
-        },
-        {
-          "path": "openspec/changes/archive/2026-08-31-add-context-provider/specs/rls-execution-context/spec.md",
-          "blob": "6a9bbc18576d1b86cf29e9d194d49bcc20208a5e"
-        },
-        {
-          "path": "openspec/changes/archive/2026-08-31-add-context-provider/tasks.md",
-          "blob": "ed54b487ccd20cef187cc4b0831b657b50edbccc"
-        },
-        {
-          "path": "openspec/task-times.csv",
-          "blob": "f0e5f4f5327d3d52159a1a4b7be777f505f93060"
-        },
-        {
-          "path": "packages/cli/test/exports.test.ts",
-          "blob": "ea3cbff3cf1e1bc37dfd91dfddf310ab849c1925"
-        },
-        {
-          "path": "packages/query/src/db/context.ts",
-          "blob": "b5e81d870771dca9aa81ec1b930023ea166109aa"
-        },
-        {
-          "path": "packages/query/src/db/db.ts",
-          "blob": "f92cc04aa2d70ba2343c6ed6711ed505f45d65da"
-        },
-        {
-          "path": "packages/query/src/db/transaction.ts",
-          "blob": "066aba31d05353f52e17068ddff21d7687b39b14"
-        },
-        {
-          "path": "packages/query/src/index.ts",
-          "blob": "da80cfc77a55a7c7e18555420b6f02cd486b7062"
-        },
-        {
-          "path": "packages/query/test/db/context-provider.test.ts",
-          "blob": "de03b298181d3799f61fa3c11f25a7b0231d72b0"
-        },
-        {
-          "path": "packages/query/test/exports.test.ts",
-          "blob": "0b7ddf95a9adc79fba8a6d0be97fd8226b78c46c"
-        },
-        {
-          "path": "packages/supabase/test/context-provider.test.ts",
-          "blob": "fa3972a2c57d1a1b0520f9d24ef09655c71c4787"
-        },
-        {
-          "path": "skills/hejbro/SKILL.md",
-          "blob": "df6fc914f00ebfe836406662ad992b16f83c3928"
-        },
-        {
-          "path": "skills/hejbro/references/query-layer.md",
-          "blob": "af2901a68cf3ccead58b606912dfb4f874c7298d"
-        }
-      ]
+      "role": "refs",
+      "pinnedAt": "2026-08-31T00:00Z"
     }
   ],
   "origin": null,

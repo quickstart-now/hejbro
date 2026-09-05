@@ -1,0 +1,94 @@
+{
+  "version": 3,
+  "number": 592,
+  "ref": "quickstart-now/hejbro#592",
+  "title": "feat(query): refuse empty context renderings and name surfaces",
+  "head": "10f80a1a38ddd4f9aedce22e9420dac7a127b1ba",
+  "headRef": "feat-context-boundary",
+  "base": "dev",
+  "merged": "2026-08-31T16:13:25Z",
+  "pinnedAt": "2026-09-01T00:00Z",
+  "migrated": true,
+  "refs": [
+    {
+      "path": "openspec/changes/archive/2026-09-01-harden-context-boundary/proposal.md",
+      "blob": "df7b3f7d686583bc2d02dbfb91499fdf97761c61"
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-01-harden-context-boundary/tasks.md",
+      "blob": "f9edfd086dbbd58fad342b17cfe1e439e1f74e17"
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-01-harden-context-boundary/specs/rls-execution-context/spec.md",
+      "blob": "74b87b728d711d905e9fad940e1ef44c08c57742"
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-01-harden-context-boundary/specs/driver-contract/spec.md",
+      "blob": "7c559dd336823c2c9400e690dbc95ab8b4fbaf55"
+    },
+    {
+      "path": ".changeset/harden-context-boundary.md",
+      "blob": "8b2f5d2840bd9ab2d056a919ec925249dc185f52"
+    },
+    {
+      "path": "openspec/task-times.csv",
+      "blob": "1f792479a2a4599287cf1bbcbef6d1e66d0550fd"
+    },
+    {
+      "path": "README.md",
+      "blob": "d522a764188b1a05810afd8759419fc381ee091a"
+    },
+    {
+      "path": "packages/query/src/db/context.ts",
+      "blob": "8249a8a68e28dda9960d2a646cc481af70251d9a"
+    },
+    {
+      "path": "packages/query/src/db/db.ts",
+      "blob": "4eb47e20dfe9d83b8c35ab81c57e2ad7ade48aa7"
+    },
+    {
+      "path": "packages/query/src/db/chain.ts",
+      "blob": "40dc740443751d835040528e43a48447deb8d66c"
+    },
+    {
+      "path": "packages/query/src/db/fn.ts",
+      "blob": "4b82c080561ae55d92c5bd5a0f32727e7eda59fc"
+    },
+    {
+      "path": "packages/query/src/db/transaction.ts",
+      "blob": "5c38dd6d96853aa24bdc7c8cd1458b8d53b62af3"
+    },
+    {
+      "path": "packages/query/test/db/context-required.test.ts",
+      "blob": "80ecdcd924b22a64868f35bf3b487c4964b2255a"
+    },
+    {
+      "path": "packages/query/test/db/context.test.ts",
+      "blob": "0de274321893d0d68fb792157dac600b4af99fd0"
+    },
+    {
+      "path": "packages/query/test/db/context-provider.test.ts",
+      "blob": "716317388897af9b458ec517207b105766770466"
+    },
+    {
+      "path": "packages/query/test/db/chain.test.ts",
+      "blob": "df372357d602d7a19f19ecf262ab7092455e0deb"
+    },
+    {
+      "path": "packages/nile/test/context.test.ts",
+      "blob": "edf81c444fbfbaeb6df650c3d1bea44beb5f1911"
+    },
+    {
+      "path": "packages/neon/test/driver.test.ts",
+      "blob": "02ccc477a2b09b4e50edbb150c4a5a06ee6b0215"
+    },
+    {
+      "path": "skills/hejbro/references/query-layer.md",
+      "blob": "93e5b14438fc1f51e09994861f7e4c80af101cfe"
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-01-harden-context-boundary/evaluation.md",
+      "blob": "52a7c7950d645b59cffc7f40b953391873066624"
+    }
+  ]
+}

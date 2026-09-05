@@ -43,7 +43,7 @@
 	},
 	"overrides": [
 		{
-			"includes": ["**/.blackbox/**/meta.json"],
+			"includes": ["**/.blackbox/**/meta.json", "**/.blackbox/prs/*.json"],
 			"formatter": {
 				"enabled": false
 			},

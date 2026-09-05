@@ -1,0 +1,85 @@
+{
+  "version": 3,
+  "number": 733,
+  "ref": "quickstart-now/hejbro#733",
+  "title": "fix(core): harden the function DSL's argument names and returned mutations",
+  "head": "216420cec9b249a5a3647d2c4d48fef89b85586e",
+  "headRef": "harden-function-dsl",
+  "base": "dev",
+  "merged": "2026-09-03T12:51:58Z",
+  "pinnedAt": "2026-09-04T04:45Z",
+  "refs": [
+    {
+      "path": ".changeset/harden-function-dsl.md",
+      "blob": "f58991786b0f3b24c537089ef7a6b34843300b2a"
+    },
+    {
+      "path": "README.md",
+      "blob": "4a72379fff7fb82f762202895a247d6b4f66ab44"
+    },
+    {
+      "path": "examples/cli-smoke/test/vendored-contract.test.ts",
+      "blob": "d68d8d085fabdeb40296ac7027950ece88010b85"
+    },
+    {
+      "path": "openspec/changes/harden-function-dsl/proposal.md",
+      "blob": "f08718a0783e3c2758697deea4bc981426910a22"
+    },
+    {
+      "path": "openspec/changes/harden-function-dsl/specs/function-declaration/spec.md",
+      "blob": "2336870cab34137fd29d1e62143a2f70d525dcd2"
+    },
+    {
+      "path": "openspec/changes/harden-function-dsl/specs/plpgsql-function-bodies/spec.md",
+      "blob": "2a20be32dd81998c6f2fb5233a88b23723f1801f"
+    },
+    {
+      "path": "openspec/changes/harden-function-dsl/specs/schema-vendoring/spec.md",
+      "blob": "fdb46577a8d36b3cc7134c0632e7c15d8db1e3dc"
+    },
+    {
+      "path": "openspec/changes/harden-function-dsl/tasks.md",
+      "blob": "decd6065f5f4562249eb230b54c90870f154da9f"
+    },
+    {
+      "path": "openspec/task-times.csv",
+      "blob": "8e2750d7e09e65732125be1a39aee97b35fbcffc"
+    },
+    {
+      "path": "packages/cli/test/contract-emit.test.ts",
+      "blob": "e340e5d2496012bf60591dfb157258da97c8ca1d"
+    },
+    {
+      "path": "packages/core/src/dsl/define-function.ts",
+      "blob": "301bba78afeb47cc67ac0048d3447642889f3227"
+    },
+    {
+      "path": "packages/core/src/index.ts",
+      "blob": "dff3a18187a9cda5db418a1c04a2ab058e9d984f"
+    },
+    {
+      "path": "packages/core/src/plpgsql/body-context.ts",
+      "blob": "7c41a2f1a4733814a4ae93eb32e4f9f8fb3b8bc5"
+    },
+    {
+      "path": "packages/core/src/query/mutate.ts",
+      "blob": "36f7f6b50389069fcf7e1a7571d28548185b77f0"
+    },
+    {
+      "path": "packages/core/test/define-function.test.ts",
+      "blob": "4980fd0bbc84662f6c804d78970635e055f1d6aa"
+    },
+    {
+      "path": "packages/core/test/plpgsql/body-context.test.ts",
+      "blob": "45822737c908ca2121613ccfcb2d32da31533dbe"
+    },
+    {
+      "path": "packages/core/test/plpgsql/render-body.test.ts",
+      "blob": "fc0a828831b8a36203616688ad3931a499648068"
+    },
+    {
+      "path": "skills/hejbro/references/function-builder-pitfalls.md",
+      "blob": "af49c88c284de447b817704208d99a73ca275cbe"
+    }
+  ]
+}

@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 3,
   "kind": "issue",
   "ref": "quickstart-now/hejbro#412",
   "title": "0.2.x: post-release commitments",
@@ -464,6 +464,70 @@
       "raw": [
         "ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#120"
       ]
+    },
+    {
+      "id": "R27",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "D12",
+        "D13",
+        "R1",
+        "R2",
+        "R3"
+      ],
+      "at": "2026-09-04T20:51Z",
+      "title": "next batch: #836 + #823 as harden-ledger-diagnostics; check-area issues wait for #851",
+      "ratified": null
+    },
+    {
+      "id": "R28",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "D12",
+        "D13",
+        "R27"
+      ],
+      "at": "2026-09-04T22:06Z",
+      "title": "next batch: #707 + #726 as harden-check-inventory (column/index/check inventory on managed tables, option b)",
+      "ratified": null
+    },
+    {
+      "id": "D16",
+      "by": "owner",
+      "at": "2026-09-04T23:36Z",
+      "title": "parent-issue meta.json grows without bound and repeats the same PR pin; ask for an improvement",
+      "raw": [
+        "ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#190"
+      ]
+    },
+    {
+      "id": "D17",
+      "by": "owner",
+      "at": "2026-09-04T23:37Z",
+      "title": "is there database theory for this record shape; likely well studied",
+      "raw": [
+        "ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#191"
+      ]
+    },
+    {
+      "id": "D18",
+      "by": "owner",
+      "at": "2026-09-04T23:45Z",
+      "title": "blackbox v3: the migration must be versioned (v2 → v3); wants a theory-based architecture and an understandable direction",
+      "raw": [
+        "ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#192"
+      ]
+    },
+    {
+      "id": "D19",
+      "by": "owner",
+      "at": "2026-09-04T23:52Z",
+      "title": "start blackbox v3 now: build it in agent-skills, then vendor into hejbro",
+      "raw": [
+        "ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#193"
+      ]
     }
   ],
   "work": [
@@ -478,768 +542,48 @@
   "prs": [
     {
       "number": 715,
-      "ref": "quickstart-now/hejbro#715",
-      "title": "docs(process): adopt three amendments after the round-5 review (D110)",
-      "head": "3d376c6c7daa646c1d98aee245174bb0ca9e9c73",
-      "headRef": "docs-process-three-rules",
-      "base": "dev",
-      "merged": "2026-09-02T23:28:38Z",
-      "pinnedAt": "2026-09-03T00:00Z",
-      "migrated": true,
-      "refs": [
-        {
-          "path": "docs/specs/2026-08-19-hejbro-design.md",
-          "blob": "7e734d5a86c8b44e0fee0fd1a4cfc9f50bf85ceb"
-        },
-        {
-          "path": "AGENTS.md",
-          "blob": "fe0b0ce6e9d27939ae9d2119a474a489a1330bfa"
-        },
-        {
-          "path": "openspec/config.yaml",
-          "blob": "ac06240b67e82b06b92df55cda0985017b1e57c9"
-        }
-      ]
+      "role": "refs",
+      "pinnedAt": "2026-09-03T00:00Z"
     },
     {
       "number": 808,
-      "ref": "quickstart-now/hejbro#808",
-      "title": "ci: approval-gated verify on long-lived prs, one run per head (#807, #809)",
-      "head": "edd67cafbad895bec80816bd60a1ee2f5e87b92e",
-      "headRef": "fix-ci-duplicate-runs",
-      "base": "dev",
-      "merged": null,
-      "pinnedAt": "2026-09-04T08:58Z",
-      "refs": [
-        {
-          "path": ".github/workflows/ci.yml",
-          "blob": "542c664a547c064ad9bd795c026ff58c0cec5052"
-        },
-        {
-          "path": "AGENTS.md",
-          "blob": "e665d68453e0fc66a9bc90fbb23832edb03105aa"
-        }
-      ]
+      "role": "refs",
+      "pinnedAt": "2026-09-04T08:58Z"
     },
     {
       "number": 824,
-      "ref": "quickstart-now/hejbro#824",
-      "title": "fix(core): reserved plpgsql names, duplicate arguments, same-identity diff (#748, #751, #774)",
-      "head": "2cbbbb0a190c234b2d838956481d6262382fad59",
-      "headRef": "fix-core-derivations",
-      "base": "dev",
-      "merged": null,
-      "pinnedAt": "2026-09-04T14:16Z",
-      "refs": [
-        {
-          "path": ".changeset/harden-core-derivations.md",
-          "blob": "4777d7f239b61182e44756d978daa58107be2939"
-        },
-        {
-          "path": "README.md",
-          "blob": "2c928810fcfe75b90c634228a6934edebf76360d"
-        },
-        {
-          "path": "openspec/changes/harden-core-derivations/design.md",
-          "blob": "1b70b1365bbad3cb56d3589c95153a2274341282"
-        },
-        {
-          "path": "openspec/changes/harden-core-derivations/proposal.md",
-          "blob": "ecf74f15da4395c318fa04f597f75e33c3cfd0c5"
-        },
-        {
-          "path": "openspec/changes/harden-core-derivations/specs/function-declaration/spec.md",
-          "blob": "3e4706ff17aed3caa8b41b425294cb603c58c2ad"
-        },
-        {
-          "path": "openspec/changes/harden-core-derivations/specs/plpgsql-function-bodies/spec.md",
-          "blob": "3e434a73081809573bfbb2abc4f7f179ae31b02a"
-        },
-        {
-          "path": "openspec/changes/harden-core-derivations/specs/snapshot-diff/spec.md",
-          "blob": "2b1e8ebc329bd512749bf1a01e489ff239569b95"
-        },
-        {
-          "path": "openspec/changes/harden-core-derivations/tasks.md",
-          "blob": "7dfb4730710e212bd9bfbd6811bb1dab89671458"
-        },
-        {
-          "path": "openspec/task-times.csv",
-          "blob": "ee9f6d4148292751b8f4aa4308f5d90d1abdd07e"
-        },
-        {
-          "path": "packages/core/src/dsl/define-function.ts",
-          "blob": "4678d1a502ee6d5a59d78f30eaf709b82c379500"
-        },
-        {
-          "path": "packages/core/src/engine/diff-engine.ts",
-          "blob": "703484db6e301824f77d39a0e1fd6c73cbe5b02a"
-        },
-        {
-          "path": "packages/core/src/plpgsql/reserved.ts",
-          "blob": "00c7b25c800519b453c3ee48a4a23b8b47421100"
-        },
-        {
-          "path": "packages/core/test/define-function.test.ts",
-          "blob": "a0b5e6994f08ac6af656e8e8369720315054a315"
-        },
-        {
-          "path": "packages/core/test/diff-engine.test.ts",
-          "blob": "9971f15cf804086bd3f8c9112a50f3a831aba61d"
-        },
-        {
-          "path": "packages/core/test/plpgsql/body-context.test.ts",
-          "blob": "1c2bfc1d8b60319ef0770c352bbc22f43229d1c3"
-        },
-        {
-          "path": "skills/hejbro/references/function-builder-pitfalls.md",
-          "blob": "253c53c682793664c0d986756c2af2cf87ae70ae"
-        }
-      ]
+      "role": "refs",
+      "pinnedAt": "2026-09-04T14:16Z"
     },
     {
       "number": 835,
-      "ref": "quickstart-now/hejbro#835",
-      "title": "fix(cli): judge the ledger by identity; status and cycle advice (#783, #796, #797)",
-      "head": "42dfcc016531e9f0331b7bb9ac6dc061024e3ccb",
-      "headRef": "fix-ledger-identity",
-      "base": "dev",
-      "merged": null,
-      "pinnedAt": "2026-09-04T15:04Z",
-      "refs": [
-        {
-          "path": ".changeset/harden-ledger-identity.md",
-          "blob": "e43cdf2da49ae53011a251479ef7e8ff3ac56777"
-        },
-        {
-          "path": "README.md",
-          "blob": "56bfb7445a5082310e2abda7caa59c8dcbd71676"
-        },
-        {
-          "path": "openspec/changes/harden-ledger-identity/design.md",
-          "blob": "95fe719edd7ea8b4758279aad6358ff2eba9e509"
-        },
-        {
-          "path": "openspec/changes/harden-ledger-identity/proposal.md",
-          "blob": "6687878291751b1a89623ad0ce34da855a0330dc"
-        },
-        {
-          "path": "openspec/changes/harden-ledger-identity/specs/migration-apply/spec.md",
-          "blob": "697d14ebeb36aa1ca0b3db59a8e938a1f8635c2a"
-        },
-        {
-          "path": "openspec/changes/harden-ledger-identity/tasks.md",
-          "blob": "b57b6ee42eeeeffb407830892741d36337dff51e"
-        },
-        {
-          "path": "openspec/task-times.csv",
-          "blob": "e91438341fa8b8b742984c37fbdd8f1d2d52f583"
-        },
-        {
-          "path": "packages/cli/src/apply/ledger-identity.ts",
-          "blob": "34c00cc1c5f99b925c6c3867417e9d75e77f2281"
-        },
-        {
-          "path": "packages/cli/src/apply/ledger.ts",
-          "blob": "41a3c47e53a9e59fc37144ef5aba95988afa394f"
-        },
-        {
-          "path": "packages/cli/src/apply/raise.ts",
-          "blob": "007e8a7451b83d82969ed442255296c258c25da9"
-        },
-        {
-          "path": "packages/cli/src/apply/reset.ts",
-          "blob": "2b9c24bd539c72b5632730e9220061450cfcf392"
-        },
-        {
-          "path": "packages/cli/src/commands/migrate.ts",
-          "blob": "a4e8695960d0ba361c45b3ac6a15b0c410bf67ca"
-        },
-        {
-          "path": "packages/cli/src/commands/status.ts",
-          "blob": "262285a39d089b1e4e9e82c3b352b2859795efd6"
-        },
-        {
-          "path": "packages/cli/test/apply-ledger-identity.test.ts",
-          "blob": "7cdd84b93dcf277334becd90f7aee82f4472b48b"
-        },
-        {
-          "path": "packages/cli/test/apply-ledger.test.ts",
-          "blob": "c6e5de5c4ad1071231b050df091f29f4af4389e8"
-        },
-        {
-          "path": "packages/cli/test/apply-raise.test.ts",
-          "blob": "b0f52df23a2cb94b9828a3039407038cb4f60666"
-        },
-        {
-          "path": "packages/cli/test/apply-reset.integration.test.ts",
-          "blob": "7d1a53d0e23d03040a0287deae192910c3599050"
-        },
-        {
-          "path": "packages/cli/test/apply-reset.test.ts",
-          "blob": "5d08520dfc936d1d61daf3f72d5a0bad72d33c90"
-        },
-        {
-          "path": "packages/cli/test/migrate-command.test.ts",
-          "blob": "5dcf3d8042714b01310360f4dcd4574b31a0ce52"
-        },
-        {
-          "path": "packages/cli/test/reset-command.test.ts",
-          "blob": "25259c6389c0916bf009219b4d39596042ebe20f"
-        },
-        {
-          "path": "packages/cli/test/status-command.test.ts",
-          "blob": "8ed4f83111a33b27f1461f21b1fa58d11116a9c3"
-        },
-        {
-          "path": "skills/hejbro/references/generate-verify-workflow.md",
-          "blob": "4af39177c734122ef1c68516fb1f54c28c3ca9bc"
-        }
-      ]
+      "role": "refs",
+      "pinnedAt": "2026-09-04T15:04Z"
     },
     {
       "number": 840,
-      "ref": "quickstart-now/hejbro#840",
-      "title": "fix(cli): init honours --config, refuses bad paths, undoes partial creates (#741 #743 #766 #767 #768)",
-      "head": "1e943512070c8783e7c1edaf0e196aaf8335e011",
-      "headRef": "fix-init-paths",
-      "base": "dev",
-      "merged": null,
-      "pinnedAt": "2026-09-04T16:03Z",
-      "refs": [
-        {
-          "path": ".changeset/harden-init-paths.md",
-          "blob": "dd367c5f1b993d0100f35f2931668aa34a84c421"
-        },
-        {
-          "path": "README.md",
-          "blob": "e8daaa2cf13a078bd06c409459a814eedb719a09"
-        },
-        {
-          "path": "openspec/changes/harden-init-paths/design.md",
-          "blob": "49953ae155c375cbd7f2afacbbdc96ba9e804448"
-        },
-        {
-          "path": "openspec/changes/harden-init-paths/proposal.md",
-          "blob": "f13466438140a2bb9e1ad7140e12115dd002f37b"
-        },
-        {
-          "path": "openspec/changes/harden-init-paths/specs/cli-commands/spec.md",
-          "blob": "16dae7ec87159f727170d20ec296b86312d10f09"
-        },
-        {
-          "path": "openspec/changes/harden-init-paths/tasks.md",
-          "blob": "8a91c6d01129b7814f2b1476c485c9950b94f25a"
-        },
-        {
-          "path": "openspec/task-times.csv",
-          "blob": "e5827ff853e042b609a2a31a8aaa1377fc82c616"
-        },
-        {
-          "path": "packages/cli/src/commands/init.ts",
-          "blob": "db4a7c7882e0ab63f5ca4d17c9180c3774dd52c6"
-        },
-        {
-          "path": "packages/cli/src/config.ts",
-          "blob": "c987da912b4df17a5095452e174dd16ea5bc302a"
-        },
-        {
-          "path": "packages/cli/src/loader.ts",
-          "blob": "bbeb8d4b5b175541fa337dd168af505df651355f"
-        },
-        {
-          "path": "packages/cli/src/path-probe.ts",
-          "blob": "d9d287f952ea42eaeda506a28d2cff25426fdd14"
-        },
-        {
-          "path": "packages/cli/src/snapshot-file.ts",
-          "blob": "db9af7996450afd37dea9c4a2eebd61b9b10fa56"
-        },
-        {
-          "path": "packages/cli/test/config.test.ts",
-          "blob": "c9d31b4fea20f6c78719599ff1ee0096519f33e3"
-        },
-        {
-          "path": "packages/cli/test/generate-command.test.ts",
-          "blob": "9e3aba70b47db3453301e62cf3098fb6a193ae21"
-        },
-        {
-          "path": "packages/cli/test/help.test.ts",
-          "blob": "858a53218ed430390373ee60e6b624b7e6328dbb"
-        },
-        {
-          "path": "packages/cli/test/init.test.ts",
-          "blob": "9949ad9a8366c7c61ebf1c15aff71beb706fc9f5"
-        },
-        {
-          "path": "skills/hejbro/references/generate-verify-workflow.md",
-          "blob": "22cbd2ff0453726b3c56c285795173fe52a82c62"
-        }
-      ]
+      "role": "refs",
+      "pinnedAt": "2026-09-04T16:03Z"
     },
     {
       "number": 849,
-      "ref": "quickstart-now/hejbro#849",
-      "title": "fix(query): scoped-handle guard, kit leading word, transaction-tree guards (#769 #761 #449)",
-      "head": "b27203900329088746d9cb3c0475817a3a964f73",
-      "headRef": "fix-query-guards",
-      "base": "dev",
-      "merged": null,
-      "pinnedAt": "2026-09-04T16:57Z",
-      "refs": [
-        {
-          "path": ".changeset/harden-query-guards.md",
-          "blob": "c60cd4accc377063bb1b0cbbc34c35bcb62ff893"
-        },
-        {
-          "path": "README.md",
-          "blob": "e2dc8f69509b334519c1aa9334131190a79e28be"
-        },
-        {
-          "path": "openspec/changes/harden-query-guards/design.md",
-          "blob": "3d1910cf6db1f363f677a14fa73517a11a1cf128"
-        },
-        {
-          "path": "openspec/changes/harden-query-guards/proposal.md",
-          "blob": "cc53640daac0d477a445e060157cdd7c1faef85f"
-        },
-        {
-          "path": "openspec/changes/harden-query-guards/specs/driver-contract/spec.md",
-          "blob": "5da52b7859d6a33e3746558de5b06ae846dd4276"
-        },
-        {
-          "path": "openspec/changes/harden-query-guards/specs/query-execution/spec.md",
-          "blob": "9d437cc4dcb2bdcf69aafd9e0008eeed1310968a"
-        },
-        {
-          "path": "openspec/changes/harden-query-guards/specs/schema-vendoring/spec.md",
-          "blob": "0dd03b47474498751d579caa0676619457d9a1b2"
-        },
-        {
-          "path": "openspec/changes/harden-query-guards/tasks.md",
-          "blob": "1c0f8b08fd75c6ef2874735a7a711f372ca00993"
-        },
-        {
-          "path": "openspec/task-times.csv",
-          "blob": "6840b589a9183b9bf4c59157c509f30f9461d526"
-        },
-        {
-          "path": "packages/pg/test/integration.test.ts",
-          "blob": "f6264f8e303c166611948b2bb072ec84584c6ff7"
-        },
-        {
-          "path": "packages/query/src/client/name-keyed-db.ts",
-          "blob": "6642f18e854745a1f92de58132babd4b45664c48"
-        },
-        {
-          "path": "packages/query/src/db/context.ts",
-          "blob": "f7d0a3e88bcac1b4ce827bac35b4a469ca6ad9fd"
-        },
-        {
-          "path": "packages/query/src/db/db.ts",
-          "blob": "277d6930944ed993e6cbd97a3176c0295a556f02"
-        },
-        {
-          "path": "packages/query/src/db/transaction.ts",
-          "blob": "f640f2d77572eef7e2b9950067ede3f4af04462d"
-        },
-        {
-          "path": "packages/query/src/testing/driver-conformance.ts",
-          "blob": "18b91dbd3d7783133eed5e4e499f73c6f7a6fa64"
-        },
-        {
-          "path": "packages/query/test/client/errors.test.ts",
-          "blob": "81538ec33fa758196be1964d1c8e335663c9c65b"
-        },
-        {
-          "path": "packages/query/test/db/transaction.test.ts",
-          "blob": "e5b51e5025d226ffa27dad2ef415f018f5ea045a"
-        },
-        {
-          "path": "packages/query/test/driver/conformance.test.ts",
-          "blob": "14e1752f4c2024ba72601bed519effed03f35951"
-        },
-        {
-          "path": "skills/hejbro/references/query-layer.md",
-          "blob": "aa83b674a90c02bac22aca654c9cd7c9af035ebe"
-        }
-      ]
+      "role": "refs",
+      "pinnedAt": "2026-09-04T16:57Z"
     },
     {
       "number": 851,
-      "ref": "quickstart-now/hejbro#851",
-      "title": "fix(cli): compare every table-bound expression through the server's rendering (#778, #779, #781)",
-      "head": "09f57799895548cf0e7d37cf2edddc8a30299b05",
-      "headRef": "fix-check-expressions",
-      "base": "dev",
-      "merged": null,
-      "pinnedAt": "2026-09-04T21:13Z",
-      "refs": [
-        {
-          "path": ".changeset/harden-check-expressions.md",
-          "blob": "3a714e4ad63db000955ad4f917e31b290c87a7e6"
-        },
-        {
-          "path": "README.md",
-          "blob": "b3b8a44b023aba5348ab44000a94c7af331110c3"
-        },
-        {
-          "path": "openspec/changes/harden-check-expressions/design.md",
-          "blob": "6307ddcedc302f6af89c5abe449e60b9659c6b1c"
-        },
-        {
-          "path": "openspec/changes/harden-check-expressions/proposal.md",
-          "blob": "346b4ffae0cb8a38bc9e53c2162211a4b995e37f"
-        },
-        {
-          "path": "openspec/changes/harden-check-expressions/specs/cli-commands/spec.md",
-          "blob": "a0a50cf0cbd3746ef07d7fff807660420a2f62b0"
-        },
-        {
-          "path": "openspec/changes/harden-check-expressions/tasks.md",
-          "blob": "096ba7047acacd7f8b43b113e1c5c1ce5d7d1982"
-        },
-        {
-          "path": "openspec/task-times.csv",
-          "blob": "3a98cca3f60368b945dc4713682599ed7a253b22"
-        },
-        {
-          "path": "packages/cli/src/check/catalog.ts",
-          "blob": "57f5ed08a33a89d4d8f1786d8da4609977ba93d1"
-        },
-        {
-          "path": "packages/cli/src/check/compare.ts",
-          "blob": "4e65a2d54ac02f78d674f0665bde123bb9146015"
-        },
-        {
-          "path": "packages/cli/src/check/expression.ts",
-          "blob": "b1443b907938309f828036351d67f6fb7ecf880e"
-        },
-        {
-          "path": "packages/cli/src/commands/check.ts",
-          "blob": "e39bb94665dd3e13e6b504e0fe8a738b04538c12"
-        },
-        {
-          "path": "packages/cli/test/assert-schema.test.ts",
-          "blob": "0d469ee9de607946363a4bd7b8d566c66eb9397c"
-        },
-        {
-          "path": "packages/cli/test/check-catalog.test.ts",
-          "blob": "86a85421fcf26c86229ce86011fda24613e8a079"
-        },
-        {
-          "path": "packages/cli/test/check-command.test.ts",
-          "blob": "05c8cead6f90b0f5c6b60b5e712a9defa4b55646"
-        },
-        {
-          "path": "packages/cli/test/check-compare.test.ts",
-          "blob": "a242ceb7d6ad9f6e988d5fcd1fbb6d4da272ebf1"
-        },
-        {
-          "path": "packages/cli/test/check-expression.test.ts",
-          "blob": "95b42c5956630b4fdc27d0dae000454ac12f57c0"
-        },
-        {
-          "path": "packages/cli/test/check-live.integration.test.ts",
-          "blob": "986df46edb37a011ea0be12df892422b57b68ae1"
-        },
-        {
-          "path": "packages/cli/test/infer-adapter.test.ts",
-          "blob": "3c0a2371ab634b47b3b1acb22cad4afa0d7a1c92"
-        },
-        {
-          "path": "packages/cli/test/infer-constraints.test.ts",
-          "blob": "a4208dfdba3e9b519930a5998c49c95b32f297ac"
-        },
-        {
-          "path": "packages/cli/test/infer-description.test.ts",
-          "blob": "9ff3f24acbe1fd6cb8a79639aec833b3322e63c7"
-        },
-        {
-          "path": "packages/cli/test/infer-unique-on-omitted-table.test.ts",
-          "blob": "d28fc6aae9cc6aa56203432e1bfec0caf2a303d1"
-        },
-        {
-          "path": "skills/hejbro/references/brownfield-adoption.md",
-          "blob": "c8f79cdb37b55abcaa112e6789fc9cfea73137c2"
-        },
-        {
-          "path": "skills/hejbro/references/nile-preset.md",
-          "blob": "f3d0fd53a6edbec31cb3db78a0ce7ab357bfe405"
-        }
-      ]
+      "role": "refs",
+      "pinnedAt": "2026-09-04T21:13Z"
     },
     {
       "number": 858,
-      "ref": "quickstart-now/hejbro#858",
-      "title": "fix(core,cli,query): canonical set order, physical vendor columns, whole-row setof (#701, #740, #749)",
-      "head": "2e2ae27e8b2e84c2b37b862c7919c30712f72d3c",
-      "headRef": "fix-snapshot-order",
-      "base": "dev",
-      "merged": null,
-      "pinnedAt": "2026-09-04T22:04Z",
-      "refs": [
-        {
-          "path": ".changeset/harden-snapshot-and-vendor-order.md",
-          "blob": "d20751401295de4be6d5cceb20195a7c1f0c511f"
-        },
-        {
-          "path": "README.md",
-          "blob": "4ddebda7b4c3bb10fc31c37eae649fe23bc9f0e3"
-        },
-        {
-          "path": "examples/postgres/hejbro.snapshot.json",
-          "blob": "cadac2628279265be40b875b471d116ec350397a"
-        },
-        {
-          "path": "examples/postgres/migrations/0001_add_app.sql",
-          "blob": "7d2fbe763ee33ec11d1529d2fa71fa2cb3f9418d"
-        },
-        {
-          "path": "examples/postgres/migrations/0002_alter_tasks.sql",
-          "blob": "7e3170475ba12245aff34719cb00afca572c5b34"
-        },
-        {
-          "path": "examples/postgres/migrations/0003_alter_projects.sql",
-          "blob": "c274fa55c3aa9f33be5bdb3a682e2bbde900e9b0"
-        },
-        {
-          "path": "examples/postgres/migrations/0004_add_task_schedules.sql",
-          "blob": "102fa5c1d770313f91be5ee93ca2c49e5fac9d32"
-        },
-        {
-          "path": "examples/postgres/migrations/0005_add_task_tags.sql",
-          "blob": "6d025eb7ef6c21eb7beea7d0cb48b1d5944e64d0"
-        },
-        {
-          "path": "examples/postgres/migrations/0006_alter_task_tags.sql",
-          "blob": "f574a105465a6da55fac287bbb26a9f43901ecbe"
-        },
-        {
-          "path": "examples/postgres/migrations/0007_add_task_labels.sql",
-          "blob": "ec32e03d33e10c112a318cb32c38fed7fd5cad2a"
-        },
-        {
-          "path": "examples/postgres/migrations/0008_alter_members.sql",
-          "blob": "848a3b1f3aa3294e7ccd96c62956f70e16ea8c97"
-        },
-        {
-          "path": "examples/postgres/migrations/0009_add_task_status_audit.sql",
-          "blob": "cfbdf01f50a16e1fc96a7ec7e63cd451cce80f65"
-        },
-        {
-          "path": "examples/supabase/hejbro.snapshot.json",
-          "blob": "fb4ed54896cdcf8dad066f635599988d036a35e4"
-        },
-        {
-          "path": "examples/supabase/migrations/0002_alter_attachments.sql",
-          "blob": "e6bb367e9ab4e65e8f3b988c25f4382c022a4d64"
-        },
-        {
-          "path": "examples/supabase/migrations/0003_alter_attachments.sql",
-          "blob": "e46bd2c04b12ef0aa9d30740378cc89c724f4e3a"
-        },
-        {
-          "path": "examples/supabase/migrations/0004_add_attachment_blobs.sql",
-          "blob": "6f8a5ca21df9856f77e107eebf4b947c222e69c4"
-        },
-        {
-          "path": "openspec/changes/harden-snapshot-and-vendor-order/.openspec.yaml",
-          "blob": "34f54d2e6ce21c1e2a51ccf1f07d6210960ef329"
-        },
-        {
-          "path": "openspec/changes/harden-snapshot-and-vendor-order/design.md",
-          "blob": "ad6fb6f8230ce6e25a58022f069d44472cd36200"
-        },
-        {
-          "path": "openspec/changes/harden-snapshot-and-vendor-order/proposal.md",
-          "blob": "a974efedb6cef2d8a53359912fee3c3d926920d6"
-        },
-        {
-          "path": "openspec/changes/harden-snapshot-and-vendor-order/specs/cli-commands/spec.md",
-          "blob": "5dbd4d071489094a5758ad3bca0ed8788375d113"
-        },
-        {
-          "path": "openspec/changes/harden-snapshot-and-vendor-order/specs/plpgsql-function-bodies/spec.md",
-          "blob": "d62a02f2976f4c98b7585cf4e142f7a22c517fb8"
-        },
-        {
-          "path": "openspec/changes/harden-snapshot-and-vendor-order/specs/schema-vendoring/spec.md",
-          "blob": "cced488d8c94901a9b9030230dd8504854a0b568"
-        },
-        {
-          "path": "openspec/changes/harden-snapshot-and-vendor-order/specs/snapshot-diff/spec.md",
-          "blob": "2e65a6ee25a80095d3f6f32b379637af572f3b48"
-        },
-        {
-          "path": "openspec/changes/harden-snapshot-and-vendor-order/specs/snapshot-format/spec.md",
-          "blob": "4079396c59e54fd21d0d4f5c65aeabafca1c73b4"
-        },
-        {
-          "path": "openspec/changes/harden-snapshot-and-vendor-order/tasks.md",
-          "blob": "588b251bbff4e8f487a58ce2e61391edaa129122"
-        },
-        {
-          "path": "openspec/task-times.csv",
-          "blob": "2ce55b21623b290102b5c518117722d5e354d2f4"
-        },
-        {
-          "path": "packages/cli/src/commands/verify.ts",
-          "blob": "2ece01ea3390649716075f87bc7cf71359fb27fe"
-        },
-        {
-          "path": "packages/cli/src/contract/emit.ts",
-          "blob": "ecadaa7cb59deb744a8dc57773852daf25d52104"
-        },
-        {
-          "path": "packages/cli/src/contract/tables.ts",
-          "blob": "c818724572b392507ef02cf29dacf1159dc01813"
-        },
-        {
-          "path": "packages/cli/src/core-surface.ts",
-          "blob": "e20e3af207a219ce24d9308410561e82b2fcb904"
-        },
-        {
-          "path": "packages/cli/test/contract-emit.test.ts",
-          "blob": "0ea265fc274f7457b5568df8abc32fa31e88d78e"
-        },
-        {
-          "path": "packages/cli/test/contract-from-catalog.test.ts",
-          "blob": "66a3bfe2b72748b947a9dd4271b71dbe0ca2bae5"
-        },
-        {
-          "path": "packages/cli/test/contract-origin.test.ts",
-          "blob": "96852e53247edd8e2223f99daf4e2d3f45191e5f"
-        },
-        {
-          "path": "packages/cli/test/generate-command.test.ts",
-          "blob": "1b3b1c3036fc496666e65bb6aa06cde910ae862f"
-        },
-        {
-          "path": "packages/cli/test/verify.test.ts",
-          "blob": "ec92daae5e049be90e4b3987d94adff5c69f456f"
-        },
-        {
-          "path": "packages/core/src/dsl/define-function.ts",
-          "blob": "e0fed12301cd038c46ee03d68fce2b1c85f28c1a"
-        },
-        {
-          "path": "packages/core/src/dsl/define-trigger.ts",
-          "blob": "40daa65f624a6e4a0d200a148cfe8860dbf25da3"
-        },
-        {
-          "path": "packages/core/src/engine/diff-engine.ts",
-          "blob": "dba1a48d3e8bee56ff5b3a1c5f74456aa6410b4a"
-        },
-        {
-          "path": "packages/core/src/engine/generate.ts",
-          "blob": "08265679b6169727be7c563058a5af167ad7a428"
-        },
-        {
-          "path": "packages/core/src/index.ts",
-          "blob": "83027c08e616aa4fb8b322eb13120891ddea1f1a"
-        },
-        {
-          "path": "packages/core/src/kind/object-kind.ts",
-          "blob": "b2eb9b7f52271bb81df493953c759379a637f204"
-        },
-        {
-          "path": "packages/core/src/kinds/policy-kind.ts",
-          "blob": "476dc3c227fc5243a27ebdbda8085407e6d3c46a"
-        },
-        {
-          "path": "packages/core/src/kinds/table-kind.ts",
-          "blob": "166a360e0436e15bbe2d586bc51e15df75cba833"
-        },
-        {
-          "path": "packages/core/src/kinds/trigger-kind.ts",
-          "blob": "74499ff4e8d4c2990ace704b5a136f26bc81c4e8"
-        },
-        {
-          "path": "packages/core/src/plpgsql/body-context.ts",
-          "blob": "197722761c399d76a0f3d715de12c1b10c5beb86"
-        },
-        {
-          "path": "packages/core/src/snapshot/snapshot.ts",
-          "blob": "ba8b46bf589a80e36a687cc9a5bbdd54bee305f7"
-        },
-        {
-          "path": "packages/core/test/diff-engine.test.ts",
-          "blob": "20ca1aca6130410a8dc7c23952657807476b3ae7"
-        },
-        {
-          "path": "packages/core/test/generate.test.ts",
-          "blob": "e30097ce9d300d44ad5bf6a63a874cb864c5deac"
-        },
-        {
-          "path": "packages/core/test/golden/cases/table-constraints/expected/from-empty.sql",
-          "blob": "c0c0954252e25bcce8555b84423b5f1bbf75570d"
-        },
-        {
-          "path": "packages/core/test/golden/cases/table-constraints/expected/snapshot.json",
-          "blob": "5e5c608bd692298afb56ae48ad404433a4b7d6dd"
-        },
-        {
-          "path": "packages/core/test/golden/cases/table-index-methods/expected/from-empty.sql",
-          "blob": "a236377c83896e93ce45287c4df38d3d211d8317"
-        },
-        {
-          "path": "packages/core/test/golden/cases/table-index-methods/expected/snapshot.json",
-          "blob": "6117d844b018d140bad51276a7b37ea20d105307"
-        },
-        {
-          "path": "packages/core/test/plpgsql/body-context.test.ts",
-          "blob": "80207cd8923d9a8e621d613e3c68d76bdd16ac80"
-        },
-        {
-          "path": "packages/core/test/plpgsql/render-body.test.ts",
-          "blob": "1f840a724be21abcccbd7f59c99b8eaa10d26c0e"
-        },
-        {
-          "path": "packages/core/test/policy-kind.test.ts",
-          "blob": "2b24191861378f44b592874e130953be4efd2f83"
-        },
-        {
-          "path": "packages/core/test/table-kind-diff.test.ts",
-          "blob": "1e2db5f3a7e85ffc1d6ea14c960573e8bda0de46"
-        },
-        {
-          "path": "packages/core/test/trigger-kind.test.ts",
-          "blob": "8c2fc7aad9c84697112d46127dd1e51c0c19c8c9"
-        },
-        {
-          "path": "packages/query/src/client/contract-types.ts",
-          "blob": "4ddcb18fe272446dd2aa5af2ef3d3d90aa9e3065"
-        },
-        {
-          "path": "packages/query/src/client/synthesize.ts",
-          "blob": "ed670727beb5765a017ea2d3e7be7af7c22155e0"
-        },
-        {
-          "path": "packages/query/test/client/select.test.ts",
-          "blob": "fee1f9fb58a36a80bd4394caab330f217d7bf56b"
-        },
-        {
-          "path": "packages/query/test/client/synthesize.test.ts",
-          "blob": "c0296e5fff6004115e5b711c08c1425e21478c88"
-        },
-        {
-          "path": "packages/skills/test/fixtures/preludes/polyrepo-contract.ts",
-          "blob": "61bd9d8081bfcc30ca03ea11eb39d84838db3b5b"
-        },
-        {
-          "path": "skills/hejbro/references/extension-interface.md",
-          "blob": "f5c92e72796af1d93050d95f27651a884feea251"
-        },
-        {
-          "path": "skills/hejbro/references/function-builder-pitfalls.md",
-          "blob": "1970c874a0143a9e68c9ca5f374279baa4ff60ae"
-        },
-        {
-          "path": "skills/hejbro/references/polyrepo.md",
-          "blob": "0680f1beb8fea7a929cca09959b50b07ec7ee340"
-        }
-      ]
+      "role": "refs",
+      "pinnedAt": "2026-09-04T22:04Z"
+    },
+    {
+      "number": 867,
+      "role": "refs",
+      "pinnedAt": "2026-09-05T00:30Z"
     }
   ],
   "origin": null,

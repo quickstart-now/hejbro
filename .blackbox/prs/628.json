@@ -1,0 +1,50 @@
+{
+  "version": 3,
+  "number": 628,
+  "ref": "quickstart-now/hejbro#628",
+  "title": "feat: the apply engine (migrate, status, reset, raise)",
+  "head": "e8e0aee91aa551f0c69d0686c47ef98eaaa794d9",
+  "headRef": "feat-apply-engine",
+  "base": "dev",
+  "merged": "2026-09-01T23:41:14Z",
+  "pinnedAt": "2026-09-02T00:00Z",
+  "migrated": true,
+  "refs": [
+    {
+      "path": "docs/specs/2026-08-19-hejbro-design.md",
+      "blob": "a7200550b8114fcfb9abce0d1366887206bf3711"
+    },
+    {
+      "path": "openspec/changes/add-apply-engine/proposal.md",
+      "blob": "481e8941ff8d3ba69e4878314f7af9bd0bece370"
+    },
+    {
+      "path": "openspec/changes/add-apply-engine/tasks.md",
+      "blob": "f376cd7a5d40cf1776e605c92d47274c8fdad993"
+    },
+    {
+      "path": "packages/core/src/engine/split.ts",
+      "blob": "6eb5d531cf9b6f684c5c7839a15140bf15883554"
+    },
+    {
+      "path": "packages/cli/src/apply/execute.ts",
+      "blob": "cd3e0f05842e01a53cc5ea7a3e6dc3034063ca73"
+    },
+    {
+      "path": "packages/cli/src/apply/plan.ts",
+      "blob": "818651594fdb3ed96a4f45369e34725ca38d2b7c"
+    },
+    {
+      "path": "packages/cli/src/commands/migrate.ts",
+      "blob": "1c3324c60cfe67179dc9156dfb309151672714b2"
+    },
+    {
+      "path": "packages/core/src/sql/migration-file.ts",
+      "blob": "d642455d5871e259f232d2bb5701de5bf04b2741"
+    },
+    {
+      "path": "skills/hejbro/references/brownfield-adoption.md",
+      "blob": "85b5c2ee97c9b7ee0853304aff827f9191d9fabe"
+    }
+  ]
+}

@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 3,
   "kind": "issue",
   "ref": "quickstart-now/hejbro#373",
   "title": "skills/hejbro: query-layer coverage, snippet-compile test, brownfield and apply-failure guides",
@@ -20,7 +20,7 @@
     {
       "id": "W1",
       "at": "2026-08-28T00:00Z",
-      "title": "skills overhaul \u2014 the user-facing surface catches up, and learns to prove itself (#373)",
+      "title": "skills overhaul — the user-facing surface catches up, and learns to prove itself (#373)",
       "pr": null,
       "decisions": []
     }
@@ -28,36 +28,8 @@
   "prs": [
     {
       "number": 391,
-      "ref": "quickstart-now/hejbro#391",
-      "title": "docs(skills): query layer skill, brownfield guide, and snippet compile harness",
-      "head": "bcda64f329f41eafcb0776127494dea93e84f08d",
-      "headRef": "fix-skills-overhaul",
-      "base": "dev",
-      "merged": "2026-08-28T04:09:55Z",
-      "pinnedAt": "2026-08-28T00:00Z",
-      "migrated": true,
-      "refs": [
-        {
-          "path": "skills/hejbro/SKILL.md",
-          "blob": "0c52853f55120cfec96423df957713da7d05c54a"
-        },
-        {
-          "path": "skills/hejbro/references/query-layer.md",
-          "blob": "7bf8e25af9bc0888329e25fb614d4d2f9fef0c42"
-        },
-        {
-          "path": "skills/hejbro/references/brownfield-adoption.md",
-          "blob": "85fff0b57b3a51628a24dcf6e4cca4a352563e9f"
-        },
-        {
-          "path": "packages/skills/test/snippet-check.ts",
-          "blob": "a6e60f0208a6f2d6a817dddf07120f0f36d4da31"
-        },
-        {
-          "path": "packages/skills/README.md",
-          "blob": "1d100c4e72d2c5d0ab996d20bfff4e47bfe60b64"
-        }
-      ]
+      "role": "closes",
+      "pinnedAt": "2026-08-28T00:00Z"
     }
   ],
   "origin": null,

@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 3,
   "kind": "issue",
   "ref": "quickstart-now/hejbro#341",
   "title": "integration seed still bypasses the typed insert() it now could use",
@@ -20,7 +20,7 @@
     {
       "id": "W1",
       "at": "2026-08-27T00:00Z",
-      "title": "fix-integration-seed \u2014 the typed insert() seed and the first raw grammar capture (#341)",
+      "title": "fix-integration-seed — the typed insert() seed and the first raw grammar capture (#341)",
       "pr": null,
       "decisions": []
     }
@@ -28,24 +28,8 @@
   "prs": [
     {
       "number": 348,
-      "ref": "quickstart-now/hejbro#348",
-      "title": "test(pg): typed insert() seed and raw output-grammar capture",
-      "head": "49c36eaca7a4402cd0a2174455bf6e8f5880734d",
-      "headRef": "fix-integration-seed",
-      "base": "dev",
-      "merged": "2026-08-27T12:41:57Z",
-      "pinnedAt": "2026-08-27T00:00Z",
-      "migrated": true,
-      "refs": [
-        {
-          "path": "packages/pg/test/integration.test.ts",
-          "blob": "84262e6e72de16e7f5c1fd7f89d4afdc99ffe1c2"
-        },
-        {
-          "path": "packages/pg/test/driver.test.ts",
-          "blob": "8a1dce14ca70a81bea6a4b9df82a286afae1b277"
-        }
-      ]
+      "role": "closes",
+      "pinnedAt": "2026-08-27T00:00Z"
     }
   ],
   "origin": null,

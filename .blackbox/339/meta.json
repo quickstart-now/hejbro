@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 3,
   "kind": "issue",
   "ref": "quickstart-now/hejbro#339",
   "title": "whole-table select rows are keyed by SQL names while the row type promises declared keys",
@@ -12,7 +12,7 @@
     {
       "id": "W1",
       "at": "2026-08-27T00:00Z",
-      "title": "fix-row-keys \u2014 result rows arrive keyed by their declared keys (#339)",
+      "title": "fix-row-keys — result rows arrive keyed by their declared keys (#339)",
       "pr": null,
       "decisions": []
     }
@@ -20,52 +20,8 @@
   "prs": [
     {
       "number": 352,
-      "ref": "quickstart-now/hejbro#352",
-      "title": "fix(query): result rows are keyed by declared column keys",
-      "head": "238790f22694db1aea45e21c7a702539dd961ce7",
-      "headRef": "fix-row-keys",
-      "base": "dev",
-      "merged": "2026-08-27T13:33:16Z",
-      "pinnedAt": "2026-08-27T00:00Z",
-      "migrated": true,
-      "refs": [
-        {
-          "path": "packages/core/src/expr/ast.ts",
-          "blob": "1ee116203361297d61f8174fd33b7779deea9abf"
-        },
-        {
-          "path": "packages/core/src/query/select.ts",
-          "blob": "6c638ccbb521a800eed2cbd8c77340852a06df5d"
-        },
-        {
-          "path": "packages/core/src/query/mutate.ts",
-          "blob": "d7ac47eb1a03a4f1a5128a44069d0ab9f2dac2dd"
-        },
-        {
-          "path": "packages/core/src/dsl/table.ts",
-          "blob": "a0450e0ec3e0d7957ab5b88553d70431340eb40c"
-        },
-        {
-          "path": "packages/core/src/dsl/existing-table.ts",
-          "blob": "c4f116083e25c40a92becb9e7abac0e9cd6b57de"
-        },
-        {
-          "path": "packages/query/src/db/convert.ts",
-          "blob": "686399fd41de77be0e92e6cccf9eae51631ffd0f"
-        },
-        {
-          "path": "packages/query/src/db/fn.ts",
-          "blob": "9f16911c1233ff8ce510cafe01906fcb30842fad"
-        },
-        {
-          "path": "packages/query/test/db/row-keys.test.ts",
-          "blob": "3b2cf3080905e4754195aaecb945eba379dedd1f"
-        },
-        {
-          "path": "packages/pg/test/integration.test.ts",
-          "blob": "90d5775a537a4dac9abd362f156b5c7444ae7458"
-        }
-      ]
+      "role": "closes",
+      "pinnedAt": "2026-08-27T00:00Z"
     }
   ],
   "origin": null,

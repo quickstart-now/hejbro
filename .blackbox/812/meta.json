@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 3,
   "kind": "issue",
   "ref": "quickstart-now/hejbro#812",
   "title": "ci: drop the push run on dev; the pr merge-ref run and the approved release run cover it",
@@ -41,19 +41,8 @@
   "prs": [
     {
       "number": 813,
-      "ref": "quickstart-now/hejbro#813",
-      "title": "ci: no push run on dev; revendor the blackbox tool (#812)",
-      "head": "5864ed89008375148ede079eb9a9490d0d06a3e7",
-      "headRef": "ci-no-dev-push",
-      "base": "dev",
-      "merged": null,
-      "pinnedAt": "2026-09-04T10:33Z",
-      "refs": [
-        {
-          "path": ".github/workflows/ci.yml",
-          "blob": "01152a6f01bf4ceb33fdf41542809463bc9d20c0"
-        }
-      ]
+      "role": "closes",
+      "pinnedAt": "2026-09-04T10:33Z"
     }
   ],
   "origin": null,

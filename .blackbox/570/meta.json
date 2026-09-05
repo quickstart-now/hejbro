@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 3,
   "kind": "issue",
   "ref": "quickstart-now/hejbro#570",
   "title": "relicense from MIT to Apache License 2.0 (owner decision 2026-08-31)",
@@ -20,7 +20,7 @@
     {
       "id": "W1",
       "at": "2026-08-31T00:00Z",
-      "title": "relicense-apache-2 \u2014 from MIT to the Apache License 2.0 (#570)",
+      "title": "relicense-apache-2 — from MIT to the Apache License 2.0 (#570)",
       "pr": null,
       "decisions": []
     }
@@ -28,140 +28,8 @@
   "prs": [
     {
       "number": 571,
-      "ref": "quickstart-now/hejbro#571",
-      "title": "chore(license): relicense from MIT to Apache-2.0",
-      "head": "0780abc445ff0c6cff818a4e37133cd21aa584f4",
-      "headRef": "chore-relicense-apache",
-      "base": "dev",
-      "merged": "2026-08-31T10:33:18Z",
-      "pinnedAt": "2026-08-31T00:00Z",
-      "migrated": true,
-      "refs": [
-        {
-          "path": ".changeset/relicense-apache-2.md",
-          "blob": "f0064149fa58e742713e50e2af40a0ca73dd9efd"
-        },
-        {
-          "path": "AGENTS.md",
-          "blob": "145030248294d8cd17cdd54b378eeda87701b217"
-        },
-        {
-          "path": "docs/specs/2026-08-19-hejbro-design.md",
-          "blob": "71767bcfcbd48f54062dbdf7544159084afbeb12"
-        },
-        {
-          "path": "LICENSE",
-          "blob": "d645695673349e3947e8e5ae42332d0ac3164cd7"
-        },
-        {
-          "path": "NOTICE",
-          "blob": "9066b7c4d796cc6261529dfd6feca8e55ff06c20"
-        },
-        {
-          "path": "packages/cli/LICENSE",
-          "blob": "d645695673349e3947e8e5ae42332d0ac3164cd7"
-        },
-        {
-          "path": "packages/cli/NOTICE",
-          "blob": "9066b7c4d796cc6261529dfd6feca8e55ff06c20"
-        },
-        {
-          "path": "packages/cli/package.json",
-          "blob": "4f84ccaf921869c817b9db9b646a80c631aed856"
-        },
-        {
-          "path": "packages/cli/README.md",
-          "blob": "5a21e68ac0594eb505ca711defda610974794d46"
-        },
-        {
-          "path": "packages/core/LICENSE",
-          "blob": "d645695673349e3947e8e5ae42332d0ac3164cd7"
-        },
-        {
-          "path": "packages/core/NOTICE",
-          "blob": "9066b7c4d796cc6261529dfd6feca8e55ff06c20"
-        },
-        {
-          "path": "packages/core/package.json",
-          "blob": "0d009e903cf2094c848389fbdf8eaa81b224828d"
-        },
-        {
-          "path": "packages/neon/LICENSE",
-          "blob": "d645695673349e3947e8e5ae42332d0ac3164cd7"
-        },
-        {
-          "path": "packages/neon/NOTICE",
-          "blob": "9066b7c4d796cc6261529dfd6feca8e55ff06c20"
-        },
-        {
-          "path": "packages/neon/package.json",
-          "blob": "450b6f32b648512624ce487fd9eb48a463ca64e2"
-        },
-        {
-          "path": "packages/nile/LICENSE",
-          "blob": "d645695673349e3947e8e5ae42332d0ac3164cd7"
-        },
-        {
-          "path": "packages/nile/NOTICE",
-          "blob": "9066b7c4d796cc6261529dfd6feca8e55ff06c20"
-        },
-        {
-          "path": "packages/nile/package.json",
-          "blob": "8103362015e8d2ad330c29435d2d3b84d92e7b17"
-        },
-        {
-          "path": "packages/pg/LICENSE",
-          "blob": "d645695673349e3947e8e5ae42332d0ac3164cd7"
-        },
-        {
-          "path": "packages/pg/NOTICE",
-          "blob": "9066b7c4d796cc6261529dfd6feca8e55ff06c20"
-        },
-        {
-          "path": "packages/pg/package.json",
-          "blob": "3ecaea36cfb331dac097a38a65367dd04acf8599"
-        },
-        {
-          "path": "packages/query/LICENSE",
-          "blob": "d645695673349e3947e8e5ae42332d0ac3164cd7"
-        },
-        {
-          "path": "packages/query/NOTICE",
-          "blob": "9066b7c4d796cc6261529dfd6feca8e55ff06c20"
-        },
-        {
-          "path": "packages/query/package.json",
-          "blob": "3923fe283dc541b8c366af00ac5ec22d54ebcd16"
-        },
-        {
-          "path": "packages/skills/package.json",
-          "blob": "caaec7d51f97b9a6754d361a2efb46c490ab98f7"
-        },
-        {
-          "path": "packages/supabase/LICENSE",
-          "blob": "d645695673349e3947e8e5ae42332d0ac3164cd7"
-        },
-        {
-          "path": "packages/supabase/NOTICE",
-          "blob": "9066b7c4d796cc6261529dfd6feca8e55ff06c20"
-        },
-        {
-          "path": "packages/supabase/package.json",
-          "blob": "f188eedee7d6ca76364eb15d07e2f6c34beefe64"
-        },
-        {
-          "path": "README.md",
-          "blob": "d22b3e9d9d8015cc5945e981003828b82a394109"
-        },
-        {
-          "path": "scripts/pack-install-smoke.sh",
-          "blob": "bcac1ec8b67190da120df8c4e931d7aaf4f6ac48"
-        },
-        {
-          "path": "skills/hejbro/SKILL.md",
-          "blob": "7a8b971208b5c1f7cc380156bcba28bc9df159cd"
-        }
-      ]
+      "role": "closes",
+      "pinnedAt": "2026-08-31T00:00Z"
     }
   ],
   "origin": null,

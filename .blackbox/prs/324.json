@@ -1,0 +1,38 @@
+{
+  "version": 3,
+  "number": 324,
+  "ref": "quickstart-now/hejbro#324",
+  "title": "feat(pg): vanilla tcp driver with interval override and session pin (#293 group 5)",
+  "head": "79ed4648bc4ea87a7b4168eb6d24c3ad2ef05aba",
+  "headRef": "phase10-query-g5",
+  "base": "dev",
+  "merged": "2026-08-27T02:08:14Z",
+  "pinnedAt": "2026-08-27T00:00Z",
+  "migrated": true,
+  "refs": [
+    {
+      "path": "packages/pg/src/driver.ts",
+      "blob": "9c481e4a918b94ea06147d42538875adafffe2fa"
+    },
+    {
+      "path": "packages/pg/package.json",
+      "blob": "baaa7c06c3bb9b9bb0ff8f3b9ae7c7692970a85b"
+    },
+    {
+      "path": "packages/pg/test/driver.test.ts",
+      "blob": "59cbd11f3eae56f413a2bdee4ae25d82c3b5294a"
+    },
+    {
+      "path": "openspec/changes/add-query-layer/specs/driver-contract/spec.md",
+      "blob": "ddc33d72dc0144c8538506c90dea8e3c45b23943"
+    },
+    {
+      "path": "scripts/crap-report.mjs",
+      "blob": "9d48e3c47a38cdb50d1507d2ec2765d062de8470"
+    },
+    {
+      "path": "openspec/changes/add-query-layer/tasks.md",
+      "blob": "f755f299944093e99724aa0f01920cd665360f68"
+    }
+  ]
+}

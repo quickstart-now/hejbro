@@ -1,0 +1,53 @@
+{
+  "version": 3,
+  "number": 795,
+  "ref": "quickstart-now/hejbro#795",
+  "title": "fix(cli): text-mode check leaves string literals alone and keeps reserved words quoted (d106 round-1 correction of #780)",
+  "head": "5013a5744e08de672e2cca21d7c1a9f4f3a80730",
+  "headRef": "fix-nile-d106-r1",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-04T06:47Z",
+  "refs": [
+    {
+      "path": ".changeset/fix-nile-d106-r1.md",
+      "blob": "15a1c5bf3e43292035918acddc2cb99f60657313"
+    },
+    {
+      "path": "README.md",
+      "blob": "64ebbc42b9aa4856525fa93a9e44a85c2aef8672"
+    },
+    {
+      "path": "openspec/changes/fix-nile-findings/evaluation.md",
+      "blob": "4a08457b62e8937a2c879c36ff33950d0ead7a8f"
+    },
+    {
+      "path": "openspec/changes/fix-nile-findings/specs/cli-commands/spec.md",
+      "blob": "608aef756cebf6b05bbf8e87ad7b1f64908cd75e"
+    },
+    {
+      "path": "openspec/changes/fix-nile-findings/tasks.md",
+      "blob": "d3b3afa5e1515f408500f39b38d8eaa0493dc067"
+    },
+    {
+      "path": "openspec/task-times.csv",
+      "blob": "5781d451cb53135d9de0b9afd4b7993004421f72"
+    },
+    {
+      "path": "packages/cli/src/check/expression.ts",
+      "blob": "43df3f16465329b541873794bf12c92df9231591"
+    },
+    {
+      "path": "packages/cli/test/check-expression.test.ts",
+      "blob": "7c42c64ca2845f78e11a058d551ef02f383dfc60"
+    },
+    {
+      "path": "packages/skills/test/nile-preset-doc.test.ts",
+      "blob": "274ec4de50faab391ce4add9240f698871ee24ac"
+    },
+    {
+      "path": "skills/hejbro/references/nile-preset.md",
+      "blob": "bf76e46b2cfb2365299921e476ecbfc788842564"
+    }
+  ]
+}

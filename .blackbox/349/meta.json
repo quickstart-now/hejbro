@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 3,
   "kind": "issue",
   "ref": "quickstart-now/hejbro#349",
   "title": "array element types deny the null elements the grammar round-trips",
@@ -20,7 +20,7 @@
     {
       "id": "W1",
       "at": "2026-08-28T00:00Z",
-      "title": "fix-array-null-elements \u2014 array element types stop denying null (#349)",
+      "title": "fix-array-null-elements — array element types stop denying null (#349)",
       "pr": null,
       "decisions": []
     }
@@ -28,48 +28,8 @@
   "prs": [
     {
       "number": 353,
-      "ref": "quickstart-now/hejbro#353",
-      "title": "fix(core): array element types carry the null the grammar round-trips",
-      "head": "dcfe9cc9a2fa8828275f2c4a5e4087ca811b4824",
-      "headRef": "fix-array-null-elements",
-      "base": "dev",
-      "merged": "2026-08-27T15:24:32Z",
-      "pinnedAt": "2026-08-28T00:00Z",
-      "migrated": true,
-      "refs": [
-        {
-          "path": "packages/core/src/types/ts-type-map.ts",
-          "blob": "94baed4f522ac989a99e9e366cccf94477ee4b03"
-        },
-        {
-          "path": "packages/core/src/types/column-builder.ts",
-          "blob": "e26b0bd375321bbfc2dccd2cea674ca339026c45"
-        },
-        {
-          "path": "packages/query/test/types/array-roundtrip.test.ts",
-          "blob": "fa0dd2f278d22a8412dcb0dadac27f35de5ce25b"
-        },
-        {
-          "path": "packages/query/test/types/insert-input.test.ts",
-          "blob": "330a10aebd79bfbd0600eab7331f5c28a5f70d87"
-        },
-        {
-          "path": "packages/query/test/types/column-map.test.ts",
-          "blob": "df430904a3a4b1d2ca3063abceb0f0daf9c11afb"
-        },
-        {
-          "path": "packages/query/test/types/select-result.test.ts",
-          "blob": "e30760024cb5a40d581517c65c9a9e2edf28a999"
-        },
-        {
-          "path": "packages/core/test/inline-inference.test.ts",
-          "blob": "1697b9120e6e55a0868459daafba8be63afd469f"
-        },
-        {
-          "path": "packages/pg/test/integration.test.ts",
-          "blob": "077f32b3e41f0a2eac348b030e4ae8077ef8d199"
-        }
-      ]
+      "role": "refs",
+      "pinnedAt": "2026-08-28T00:00Z"
     }
   ],
   "origin": null,

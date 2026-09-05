@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 3,
   "kind": "issue",
   "ref": "quickstart-now/hejbro#533",
   "title": "cli restore-command test flakes on first heavy parallel run after install",
@@ -24,111 +24,8 @@
   "prs": [
     {
       "number": 773,
-      "ref": "quickstart-now/hejbro#773",
-      "title": "fix(cli): move tsc-spawning suites out of the contended test phase, harden the docker-rm scan, land the #533 capture harness",
-      "head": "62902480a7c5d878b4290a3619078e293917f254",
-      "headRef": "fix-test-infra-contention",
-      "base": "dev",
-      "merged": "2026-09-03T17:42:25Z",
-      "pinnedAt": "2026-09-04T04:45Z",
-      "refs": [
-        {
-          "path": "AGENTS.md",
-          "blob": "386a335939eef28a2c0b8395a73ff19c8bbb4b57"
-        },
-        {
-          "path": "README.md",
-          "blob": "859e46debfce777de647c19489c476ad1ea22ac5"
-        },
-        {
-          "path": "examples/cli-smoke/package.json",
-          "blob": "e18b453bc8ab790aac494d36646e32df3c475fea"
-        },
-        {
-          "path": "examples/cli-smoke/test/e2e.types.test.ts",
-          "blob": "82406a8c55d84477812ed4034767b440c34889c7"
-        },
-        {
-          "path": "examples/cli-smoke/test/e2e.test.ts",
-          "blob": null
-        },
-        {
-          "path": "examples/cli-smoke/vitest.config.ts",
-          "blob": "5dc4d53e4d327b8121ffa573bd9c1699c4230b12"
-        },
-        {
-          "path": "examples/cli-smoke/vitest.types.config.ts",
-          "blob": "1d385145885f363990936dc893df365f3bcf1827"
-        },
-        {
-          "path": "openspec/task-times.csv",
-          "blob": "402ada36b0d9d64420ac0c35d186d24b856d13e9"
-        },
-        {
-          "path": "package.json",
-          "blob": "7a5de4490d8161e67de6e5a7e1017b0b924a6821"
-        },
-        {
-          "path": "packages/cli/package.json",
-          "blob": "145e921a4a0e11347d31f12e1ba9bf32ff363a6d"
-        },
-        {
-          "path": "packages/cli/test/declare-emit-callback-shadow.types.test.ts",
-          "blob": "de0d0cd6e133b03c6cf2810b94a3fc64b16de91f"
-        },
-        {
-          "path": "packages/cli/test/declare-emit-callback-shadow.test.ts",
-          "blob": null
-        },
-        {
-          "path": "packages/cli/test/docker-rm-hygiene.test.ts",
-          "blob": "0605da1e8cbe3a9b169ca78d574bf98135d683c5"
-        },
-        {
-          "path": "packages/cli/test/restore-command.test.ts",
-          "blob": "4e41f9d125dd265e896c964246002d60ca2ba3b2"
-        },
-        {
-          "path": "packages/cli/test/support/call-transcript.test.ts",
-          "blob": "c3fd6d1a62dd4ff3cc20250f0b5513e1cf597855"
-        },
-        {
-          "path": "packages/cli/test/support/call-transcript.ts",
-          "blob": "7f89492fa8a6f3a465d36425224ea05b212db8c1"
-        },
-        {
-          "path": "packages/cli/test/support/cli-runner.ts",
-          "blob": "b2db032c6c8c8cb09976e9331038ca32975ea3d1"
-        },
-        {
-          "path": "packages/cli/test/support/failure-capture-setup.ts",
-          "blob": "d29dbf19d65a7464030dc5caef5a07704b1e00c8"
-        },
-        {
-          "path": "packages/cli/test/support/failure-capture.test.ts",
-          "blob": "4ef473683785501e93445b7db3ece0425d89b68b"
-        },
-        {
-          "path": "packages/cli/test/support/failure-capture.ts",
-          "blob": "312900b8d4e623f2900ca7ff75f941c414ba3454"
-        },
-        {
-          "path": "packages/cli/test/support/repo-test-file-scan.ts",
-          "blob": "2a02e8c4dc50e5b52aa9ca137c4d8365e94f9006"
-        },
-        {
-          "path": "packages/cli/vitest.config.ts",
-          "blob": "5e92e3b74b3c94618ea8314a27f6cfa53b108829"
-        },
-        {
-          "path": "packages/cli/vitest.types.config.ts",
-          "blob": "aa3578a8169b01061a24bc0bd9e69defd9e810c9"
-        },
-        {
-          "path": "turbo.json",
-          "blob": "d293c20621098d374f6c5a39cb40366ea574cd4c"
-        }
-      ]
+      "role": "refs",
+      "pinnedAt": "2026-09-04T04:45Z"
     }
   ],
   "origin": null,

@@ -1,0 +1,74 @@
+{
+  "version": 3,
+  "number": 316,
+  "ref": "quickstart-now/hejbro#316",
+  "title": "feat(query): execution layer, driver contract, and typed db.fn",
+  "head": "e12079cda84fb58443c835756aff48c86ef3ef91",
+  "headRef": "phase10-query-g4",
+  "base": "dev",
+  "merged": "2026-08-26T22:29:13Z",
+  "pinnedAt": "2026-08-26T00:00Z",
+  "migrated": true,
+  "refs": [
+    {
+      "path": "packages/query/src/driver/contract.ts",
+      "blob": "1cfff5dea92332b682faccde28b8c0c52ed21e4a"
+    },
+    {
+      "path": "packages/query/src/driver/errors.ts",
+      "blob": "ce847af9811bac2ba972907703c5f061de666cf8"
+    },
+    {
+      "path": "packages/query/src/db/db.ts",
+      "blob": "e3f72783d37df223d4211c0f716c4388871eec46"
+    },
+    {
+      "path": "packages/query/src/db/execute.ts",
+      "blob": "6cd9778e349685c5cf80bc5b36e5e395369647b7"
+    },
+    {
+      "path": "packages/query/src/db/convert.ts",
+      "blob": "6d9c8ee409428ca04efdf56daf34cd87c2b573ca"
+    },
+    {
+      "path": "packages/query/src/db/context.ts",
+      "blob": "a83e32589c4ece82653c167da2da28e51cacb1c0"
+    },
+    {
+      "path": "packages/query/src/db/transaction.ts",
+      "blob": "fe7e6bc6edf3b4cb89929a936db655bc5192c0c0"
+    },
+    {
+      "path": "packages/query/src/db/fn.ts",
+      "blob": "6da2af1a44a166956bf1eaa3954375a60e17501b"
+    },
+    {
+      "path": "packages/query/src/db/fn-types.ts",
+      "blob": "9080eb3815d15db79b034d39f82ec828c4a9f8c3"
+    },
+    {
+      "path": "packages/core/src/dsl/define-function.ts",
+      "blob": "192a64216d447f0c493a41feabb69f2e1356c5fb"
+    },
+    {
+      "path": "packages/core/src/query/mutate.ts",
+      "blob": "6e919a0b152ded93e06ca8970e8e556832dd2c4b"
+    },
+    {
+      "path": "openspec/changes/add-query-layer/specs/driver-contract/spec.md",
+      "blob": "7184fd7e2ee8367328496a06a27268aa983cf1e4"
+    },
+    {
+      "path": "openspec/changes/add-query-layer/specs/query-execution/spec.md",
+      "blob": "966fe62e7a4e79cf08dcf6bbaf333080910e9b11"
+    },
+    {
+      "path": "openspec/changes/add-query-layer/specs/rls-execution-context/spec.md",
+      "blob": "5bf14dbe335113409f4029f7c4b7af98ccc8a1e9"
+    },
+    {
+      "path": "openspec/changes/add-query-layer/tasks.md",
+      "blob": "63bb656ec23e9e3320da6565e8c5b09003a391ed"
+    }
+  ]
+}

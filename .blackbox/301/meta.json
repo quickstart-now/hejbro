@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 3,
   "kind": "issue",
   "ref": "quickstart-now/hejbro#301",
   "title": "@hejbro/nile preset with driver and tenant context",
@@ -20,7 +20,7 @@
     {
       "id": "W1",
       "at": "2026-08-31T00:00Z",
-      "title": "add-nile-preset \u2014 the third preset, and the test the contract was waiting for (#301)",
+      "title": "add-nile-preset — the third preset, and the test the contract was waiting for (#301)",
       "pr": null,
       "decisions": []
     }
@@ -28,164 +28,8 @@
   "prs": [
     {
       "number": 572,
-      "ref": "quickstart-now/hejbro#572",
-      "title": "feat(nile): add the nile provider preset",
-      "head": "d3fb1d99aea9868a8f27d19812c8c01608896d2a",
-      "headRef": "feat-add-nile-preset",
-      "base": "dev",
-      "merged": "2026-08-31T10:17:36Z",
-      "pinnedAt": "2026-08-31T00:00Z",
-      "migrated": true,
-      "refs": [
-        {
-          "path": ".changeset/add-nile-preset.md",
-          "blob": "4e8adaac24e8443aeb628989681f7d0476bb2ddb"
-        },
-        {
-          "path": ".changeset/config.json",
-          "blob": "e1a91a451d75eec6ebfaba9ff6e6f5410cfd77f7"
-        },
-        {
-          "path": ".claude/rules/provider-preset.md",
-          "blob": "c312df80ad4bd03afbb4b7bdf9f837b80373fd38"
-        },
-        {
-          "path": "AGENTS.md",
-          "blob": "145030248294d8cd17cdd54b378eeda87701b217"
-        },
-        {
-          "path": "openspec/changes/archive/2026-08-31-add-nile-preset/proposal.md",
-          "blob": "6b664707703087d20fc0892f720eb01eb0345978"
-        },
-        {
-          "path": "openspec/changes/archive/2026-08-31-add-nile-preset/specs/driver-contract/spec.md",
-          "blob": "328651c229eb1b8777b86cd5e94329752cb073cc"
-        },
-        {
-          "path": "openspec/changes/archive/2026-08-31-add-nile-preset/specs/preset-validation/spec.md",
-          "blob": "3bd75440ffdb9e1daba5510a742e29c8de2d218e"
-        },
-        {
-          "path": "openspec/changes/archive/2026-08-31-add-nile-preset/specs/rls-execution-context/spec.md",
-          "blob": "99ea6af17814c67466fb4a7390960b2abe7b8ee3"
-        },
-        {
-          "path": "openspec/changes/archive/2026-08-31-add-nile-preset/tasks.md",
-          "blob": "fa1388370ec48ff5ab1d6a9aea5980c10ed67a14"
-        },
-        {
-          "path": "openspec/task-times.csv",
-          "blob": "200403cae6d695f80eb45f6915f2768409f16e15"
-        },
-        {
-          "path": "packages/nile/LICENSE",
-          "blob": "d645695673349e3947e8e5ae42332d0ac3164cd7"
-        },
-        {
-          "path": "packages/nile/package.json",
-          "blob": "8103362015e8d2ad330c29435d2d3b84d92e7b17"
-        },
-        {
-          "path": "packages/nile/README.md",
-          "blob": "dafb4e665b19ae81331c0e37ee921c8c1d4efa68"
-        },
-        {
-          "path": "packages/nile/src/context.ts",
-          "blob": "e078cc75a09603df779d9f9f9c4e5fe88d0e75cf"
-        },
-        {
-          "path": "packages/nile/src/driver.ts",
-          "blob": "af6c2ff39c08575883f985b7372edc93aa6bd449"
-        },
-        {
-          "path": "packages/nile/src/index.ts",
-          "blob": "ebd64a886830ab3929b9b880d48d639838878d51"
-        },
-        {
-          "path": "packages/nile/src/preset.ts",
-          "blob": "3bbf568ce16a3f12e03110289e4d0cfe9df05f32"
-        },
-        {
-          "path": "packages/nile/src/validators.ts",
-          "blob": "56a820b6db6b53057ce1b661f7b24fc2e8d6c496"
-        },
-        {
-          "path": "packages/nile/test/context.test.ts",
-          "blob": "37ca30b78bcd63726d706a19796b5a40b7638871"
-        },
-        {
-          "path": "packages/nile/test/driver.test.ts",
-          "blob": "61d564feb5b7004363fd32541c1c74e9d2f88bb2"
-        },
-        {
-          "path": "packages/nile/test/exports.test.ts",
-          "blob": "45cffb2bb91d040baa5b9474a3a31b0a9acceed9"
-        },
-        {
-          "path": "packages/nile/test/integration/nile.integration.test.ts",
-          "blob": "59ff07b92c1f4ceaca3176bd77c1475999ac4d76"
-        },
-        {
-          "path": "packages/nile/test/preset.test.ts",
-          "blob": "c6935eb730505e76f566c5cf68970643a6d0d24b"
-        },
-        {
-          "path": "packages/nile/test/validators.test.ts",
-          "blob": "5e0c4e795534d834044924f3d1f4dd10d8250575"
-        },
-        {
-          "path": "packages/nile/tsconfig.json",
-          "blob": "aa088dcc2b5d56c3fb3265c3dc21dc67a2dc312c"
-        },
-        {
-          "path": "packages/nile/tsdown.config.ts",
-          "blob": "2c54079c897adf725ff778fb15dc13adce558d43"
-        },
-        {
-          "path": "packages/nile/vitest.config.ts",
-          "blob": "d64031095d92c4104082384819fedcc2120d3fd4"
-        },
-        {
-          "path": "packages/nile/vitest.integration.config.ts",
-          "blob": "83aace3e1d8f96d5cae8d1936655ee5f2ee35fe1"
-        },
-        {
-          "path": "packages/nile/vitest.shared.ts",
-          "blob": "bc9af68215e6e62d544f3ca4e476e355935c461b"
-        },
-        {
-          "path": "packages/skills/test/nile-preset-doc.test.ts",
-          "blob": "456ec1f50ff6237f9cb61bb8070d90b3877a5bed"
-        },
-        {
-          "path": "packages/skills/test/snippet-check.ts",
-          "blob": "7d7694d474452cedfe4a485023c0a54703a15fad"
-        },
-        {
-          "path": "pnpm-lock.yaml",
-          "blob": "de48ad22db5756775e0f61f60ba11d4cbc75917c"
-        },
-        {
-          "path": "README.md",
-          "blob": "394243e15687a33c287cee58193a8d38080fc358"
-        },
-        {
-          "path": "scripts/pack-install-smoke.sh",
-          "blob": "bcac1ec8b67190da120df8c4e931d7aaf4f6ac48"
-        },
-        {
-          "path": "skills/hejbro/references/nile-preset.md",
-          "blob": "22fab6b3f0289ad5eacdb071b45c90a54c65a58a"
-        },
-        {
-          "path": "skills/hejbro/references/query-layer.md",
-          "blob": "3dec5cb84dea2334f452333aeea27b6f61713e81"
-        },
-        {
-          "path": "skills/hejbro/SKILL.md",
-          "blob": "7a8b971208b5c1f7cc380156bcba28bc9df159cd"
-        }
-      ]
+      "role": "closes",
+      "pinnedAt": "2026-08-31T00:00Z"
     }
   ],
   "origin": null,

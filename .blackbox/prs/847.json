@@ -1,0 +1,61 @@
+{
+  "version": 3,
+  "number": 847,
+  "ref": "quickstart-now/hejbro#847",
+  "title": "chore(openspec): archive harden-init-paths after d106 round 1",
+  "head": "29acd2ec2be675e259975395f4f412f7dafbca18",
+  "headRef": "archive-init-paths",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-04T16:38Z",
+  "refs": [
+    {
+      "path": "README.md",
+      "blob": "ced3ca3bfbd5d94a52d8653ec14bd109d58dac09"
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-05-harden-init-paths/design.md",
+      "blob": "49953ae155c375cbd7f2afacbbdc96ba9e804448"
+    },
+    {
+      "path": "openspec/changes/harden-init-paths/design.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-05-harden-init-paths/evaluation.md",
+      "blob": "d94e6b6649ccc75ccf87d7f6c27004524417061b"
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-05-harden-init-paths/proposal.md",
+      "blob": "f13466438140a2bb9e1ad7140e12115dd002f37b"
+    },
+    {
+      "path": "openspec/changes/harden-init-paths/proposal.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-05-harden-init-paths/specs/cli-commands/spec.md",
+      "blob": "833b0b18ad42bd4d8ba0add8961d338e6423baae"
+    },
+    {
+      "path": "openspec/changes/harden-init-paths/specs/cli-commands/spec.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-05-harden-init-paths/tasks.md",
+      "blob": "d6a932eff3ebe1b009836f9e8deb8673fbeae438"
+    },
+    {
+      "path": "openspec/changes/harden-init-paths/tasks.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/specs/cli-commands/spec.md",
+      "blob": "8d7d222148d169cf365e4a457e844a0612966435"
+    },
+    {
+      "path": "openspec/task-times.csv",
+      "blob": "b27259c3a8c6231d77708950e703983eb6bace07"
+    }
+  ]
+}

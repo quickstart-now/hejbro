@@ -1,0 +1,26 @@
+{
+  "version": 3,
+  "number": 319,
+  "ref": "quickstart-now/hejbro#319",
+  "title": "docs(openspec): re-plan query groups 5/6 (design pre-settlement)",
+  "head": "5c9f90f844b956b4bede38155afb83442be9b400",
+  "headRef": "phase10-query-g5g6-replan",
+  "base": "dev",
+  "merged": "2026-08-27T00:11:05Z",
+  "pinnedAt": "2026-08-27T00:00Z",
+  "migrated": true,
+  "refs": [
+    {
+      "path": "openspec/changes/add-query-layer/tasks.md",
+      "blob": "0f75edca54b8eeceb93678ba14019f38cec0b185"
+    },
+    {
+      "path": "packages/query/src/index.ts",
+      "blob": "2d8bd5b68616cb4c8512c43c8d69aa3aa6b239b0"
+    },
+    {
+      "path": "packages/query/package.json",
+      "blob": "f52474656f0e98dd733a553a83d88f1d09937580"
+    }
+  ]
+}

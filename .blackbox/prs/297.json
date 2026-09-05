@@ -1,0 +1,30 @@
+{
+  "version": 3,
+  "number": 297,
+  "ref": "quickstart-now/hejbro#297",
+  "title": "chore(process): large-codebases guide fit-test — deny rules, skill (d90)",
+  "head": "08bcac15f986c26237606ee9255b61bd84143b93",
+  "headRef": "phase10-repo-setup",
+  "base": "dev",
+  "merged": "2026-08-26T08:34:29Z",
+  "pinnedAt": "2026-08-26T00:00Z",
+  "migrated": true,
+  "refs": [
+    {
+      "path": ".claude/settings.json",
+      "blob": "9b105895c853abd772d9fce14ececcd95aad85db"
+    },
+    {
+      "path": ".claude/skills/roundtrip-verification/SKILL.md",
+      "blob": "03a5e513e0c342304155be17b46300e775221066"
+    },
+    {
+      "path": "AGENTS.md",
+      "blob": "ee19aa976a683e646f0fae978019c22ebeaa68ed"
+    },
+    {
+      "path": "docs/specs/2026-08-19-hejbro-design.md",
+      "blob": "e319003e6030b0265ebdd003d3ff59312747c82c"
+    }
+  ]
+}

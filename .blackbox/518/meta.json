@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 3,
   "kind": "issue",
   "ref": "quickstart-now/hejbro#518",
   "title": "codify opsx layer boundaries and divergence tripwires",
@@ -28,24 +28,8 @@
   "prs": [
     {
       "number": 519,
-      "ref": "quickstart-now/hejbro#519",
-      "title": "docs(openspec): codify opsx layer boundaries and divergence tripwires",
-      "head": "e2c84c88725f2758ae606801def242730d3fcc3d",
-      "headRef": "codify-opsx-boundaries",
-      "base": "dev",
-      "merged": "2026-08-30T08:25:58Z",
-      "pinnedAt": "2026-08-30T00:00Z",
-      "migrated": true,
-      "refs": [
-        {
-          "path": "openspec/config.yaml",
-          "blob": "9512d6568b30fc0f95e19771ec9ac51bf5f6b069"
-        },
-        {
-          "path": "CLAUDE.md",
-          "blob": "7b04b7e9f9e58c6cd8188c4fdb631e2750cee179"
-        }
-      ]
+      "role": "closes",
+      "pinnedAt": "2026-08-30T00:00Z"
     }
   ],
   "origin": null,

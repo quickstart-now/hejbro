@@ -1,0 +1,22 @@
+{
+  "version": 3,
+  "number": 350,
+  "ref": "quickstart-now/hejbro#350",
+  "title": "test(query): shared inverse property for the array-literal grammar",
+  "head": "b398461fe5eb4c7e9f83f32bfe95c5b7ddf7b892",
+  "headRef": "fix-array-roundtrip",
+  "base": "dev",
+  "merged": "2026-08-27T12:55:22Z",
+  "pinnedAt": "2026-08-27T00:00Z",
+  "migrated": true,
+  "refs": [
+    {
+      "path": "packages/query/test/types/array-roundtrip.test.ts",
+      "blob": "aa1ed3e8d84df85acbe77a3df2262b938987a292"
+    },
+    {
+      "path": "packages/core/src/types/interval-serialize.ts",
+      "blob": "b71b9622ea7dc6b8d9f5d8fb49151c1bd4d69e95"
+    }
+  ]
+}
