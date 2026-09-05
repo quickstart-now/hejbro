@@ -194,11 +194,12 @@ export type CteEntryOptions = {
  * Only the *compatibility check* is shared with a plain union — the
  * *result type* is not: `SetOpResult`'s own union-of-both-branches typing
  * is used here purely to decide `never`-or-not, and is discarded rather
- * than propagated into `asRecursive`'s own return type ({@link CteReference}
- * `<TProjection>`, the anchor's type — see `asRecursive`'s own docstring).
- * That split matches Postgres: an ordinary `union` widens a mismatched
- * column type (`int` and `bigint` resolve to `bigint`), but a recursive
- * CTE refuses to (measured, `42804`, "column N has type integer in
+ * than propagated into `asRecursive`'s own return type ({@link
+ * RecursiveCteReference}, the anchor's type per key plus that key's
+ * {@link WidenedBy} carriage — see `asRecursive`'s own docstring). That
+ * split matches Postgres: an ordinary `union` widens a mismatched column
+ * type (`int` and `bigint` resolve to `bigint`), but a recursive CTE
+ * refuses to (measured, `42804`, "column N has type integer in
  * non-recursive term but type bigint overall") — its row type is always
  * the anchor's, not a union. The gap this leaves — a recursive term whose
  * column types resolve differently from the anchor's type-checks here and
@@ -209,15 +210,18 @@ export type CteEntryOptions = {
  * an exact match, so nullability rides inside that union same as any
  * other divergence — a nullable recursive term against a non-null
  * anchor still type-checks here, on purpose (measured accepted by
- * Postgres, group 1's M4). The residue this leaves — the CTE's declared
- * row type stays the anchor's non-null type while a real null can reach
- * the rows (measured, M4 addendum: `v_is_null = t`) — is not closed
- * here; widening the declared type to cover it is D105 territory this
- * slice has no standing to revisit. Tracked at #500 (a `#412` sub-issue)
- * and in the `query-type-inference` spec delta. Elision covers
- * nullability only — a `.$type<T>()` brand (TS-only, invisible to
- * Postgres) is a separate axis this fork does not address, recorded as
- * a stated boundary in that same spec delta.
+ * Postgres, group 1's M4). The compatibility check still elides null this
+ * way (a nullability-only divergence is never the reason a recursive term
+ * is refused); the outward reference's own nullability is no longer left
+ * to lie about it (#500/R2) — `asRecursive`'s outward reference carries
+ * {@link WidenedBy} the recursive term's own projected value per key, and
+ * `@hejbro/query`'s `ProjectedColumnResult` is the one place that
+ * resolves that key's actual null dimension, unioning the anchor's and
+ * the recursive term's (left joins included — the reason this core
+ * builder does not decide it itself). Elision covers nullability only —
+ * a `.$type<T>()` brand (TS-only, invisible to Postgres) is a separate
+ * axis this fork does not address, recorded as a stated boundary in the
+ * `query-type-inference` spec delta.
  */
 type CompatibleRecursiveTerm<TProjection, TRecursiveProjection> = [
 	SetOpResult<TProjection, TRecursiveProjection>,
@@ -242,10 +246,15 @@ export type CteBuilder = {
 	) => CteReference<TProjection>;
 	/**
 	 * Declares a recursive entry (add-ctes, task 6.1): `anchor` fixes the
-	 * CTE's own row type (`CteReference<TProjection>` — Postgres takes a
-	 * recursive CTE's column names/types from its anchor, never the
-	 * recursive term), and `recursiveTerm` is written inside a callback
-	 * receiving a reference typed from it. `recursiveTerm`'s own projection
+	 * CTE's own row *type* (Postgres takes a recursive CTE's column names/
+	 * types from its anchor, never the recursive term); the outward
+	 * reference's *nullability* still widens by the recursive term's, per
+	 * key, resolved in `@hejbro/query` rather than decided here (#500/R2)
+	 * — the return type is {@link RecursiveCteReference}, an anchor-typed
+	 * reference with the recursive term's own projected value carried per
+	 * key, not a bare {@link CteReference}. `recursiveTerm` is written
+	 * inside a callback receiving a reference typed from the anchor alone.
+	 * `recursiveTerm`'s own projection
 	 * must be union-compatible with the anchor's (task 6.5, via
 	 * {@link CompatibleRecursiveTerm}): missing or extra keys don't
 	 * type-check (task 6.2), but a key both sides carry may be computed
