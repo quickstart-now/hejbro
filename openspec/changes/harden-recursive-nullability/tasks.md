@@ -28,8 +28,14 @@ this change (an untested boundary, not a fixed behavior).
 type tests (1.1, 1.1b); `packages/query/src/types/select-result.ts` and
 the query CTE type tests (1.2), the query execution test (1.2b);
 `skills/hejbro/references/query-layer.md`, one `.changeset/*.md` (1.3).
-`packages/query/src/db/chain.ts` is expected to need **no source
-change** — `ChainApi.with` takes core's own `CteBuilder` and resolves
+`packages/cli/src/core-surface.ts` (#500/R5): a new runtime export of
+`@hejbro/core` must be classified as vocabulary or engine before it
+ships (#471), so 1.1's `widenedByBrand` forces this one file open —
+classified **engine**, being the type layer's carrying mechanism and
+not something `hejbro` re-exports. `packages/cli/test/exports.test.ts`
+is not edited: its type-only presence list is a selective smoke check,
+not a completeness requirement. `packages/query/src/db/chain.ts` is
+expected to need **no source change** — `ChainApi.with` takes core's own `CteBuilder` and resolves
 rows through `SelectResult`, so the widening reaches the chain
 structurally — and it is the only further source file this change may
 touch if that expectation fails. If a task appears to need any other

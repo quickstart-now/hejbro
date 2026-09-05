@@ -966,3 +966,8 @@ date,change-id,task-id,group,est_min,actual_min,waited_user_min,notes
 2026-09-05,add-batched-transactions,1.5,1,6,14,0,one shared preparedStatementName export, pg/neon deduplicated; reconstructed from commit timestamps
 2026-09-05,add-batched-transactions,1.6,1,7,31,0,lastRows/QueryResultLike export incl. red-then-green revert/restore on both drivers and repeated full-gate runs; reconstructed from commit timestamps, over estimate on gate overhead
 2026-09-05,add-batched-transactions,1.4,1,5,26,0,three reference docs (incl. one stale RLS paragraph this change had made false, and the actual literal capability table in supabase-preset.md, not query-layer.md) + changeset + reviewer-handoff test-name fix; self-timed from session start to commit
+2026-09-05,harden-recursive-nullability,1.1,1,6,6,0,core WidenedBy carrier; structural core assertions only
+2026-09-05,harden-recursive-nullability,1.1b,1,6,5,0,recursive left-joined set carried; tuple-encoded brand
+2026-09-05,harden-recursive-nullability,1.2,1,7,13,0,untracked-default discovery and the R4 re-design; the code itself was short
+2026-09-05,harden-recursive-nullability,1.2b,1,6,3,0,tests only; chain.ts unchanged as tasks.md predicted
+2026-09-05,harden-recursive-nullability,1.3,1,6,3,0,skill CTE sentence citing #942; changeset patch
