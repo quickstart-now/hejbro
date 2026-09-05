@@ -18,7 +18,8 @@ context.ts` and tests (1.3, 1.3b); `packages/query/src/driver/statement-name.ts`
 (new), `packages/pg/src/*.ts`, `packages/neon/src/driver.ts` (1.5);
 `packages/query/src/driver/result-rows.ts` (new), `packages/pg/src/*.ts`,
 `packages/neon/src/driver.ts` (1.6); `skills/hejbro/references/
-neon-preset.md`, `skills/hejbro/references/query-layer.md`, one
+neon-preset.md`, `skills/hejbro/references/query-layer.md`,
+`skills/hejbro/references/supabase-preset.md` (486/R13), one
 `.changeset/*.md` (1.4).
 If a task appears to need any other file, that goes back to the planner,
 not into the diff.
@@ -69,7 +70,7 @@ After 1.2a the red is isolated to `@hejbro/neon` alone.
       fourth key's direct consequence — split out, it would be a task
       with no red of its own).
 
-- [ ] 1.2b (~6m) The one-shot driver implements (486/R5). #458 has
+- [x] 1.2b (~6m) The one-shot driver implements (486/R5). #458 has
       merged and this branch was rebased onto it, so `packages/neon` is
       this change's to edit; this task builds on what that piece left
       there (`neonDriver`'s overloads, `buildWebSocketDriver`,
@@ -111,20 +112,27 @@ After 1.2a the red is isolated to `@hejbro/neon` alone.
       row asserting its per-statement report is unchanged. Files:
       `packages/query/src/db/context.ts`, tests.
 
-- [ ] 1.4 (~5m) References and changeset. `neon-preset.md`'s two-paths
+- [x] 1.4 (~5m) References and changeset. `neon-preset.md`'s two-paths
       section states the HTTP path applies a context in one batch and
-      still refuses `transaction(cb)`; `query-layer.md`'s capability
-      table gains the key; `pnpm changeset` → `minor`. Files: the two
-      references, `.changeset/*.md`.
+      still refuses `transaction(cb)`; `query-layer.md`'s RLS section
+      states the three branches (interactive, batched, neither — the
+      last naming both keys), correcting a paragraph this change had
+      already made false; `supabase-preset.md`'s per-path capability
+      table gains a fourth column (`false` on both paths). That table is
+      the only literal capability table in the references — the file
+      list is widened to reach it (486/R13, R8's reasoning), because a
+      reference left stale is a broken user contract, not a docs nit.
+      `pnpm changeset` → `minor`. Files: the three references,
+      `.changeset/*.md`.
 
-- [ ] 1.5 (~6m) One statement-name helper (#891). Red: `packages/query/
+- [x] 1.5 (~6m) One statement-name helper (#891). Red: `packages/query/
       test/driver/statement-name.test.ts` — the export yields the two
       drivers' existing goldens for their golden texts, and a grep test
       that neither `packages/pg/src` nor `packages/neon/src` defines a
       `hejbro_` prefix of its own. Files: `statement-name.ts`,
       `contract.ts` (re-export), the two drivers, tests.
 
-- [ ] 1.6 (~7m) **[design]** A multi-command text (#892). Settles the
+- [x] 1.6 (~7m) **[design]** A multi-command text (#892). Settles the
       rule (last command's rows, psql's own) and its wording. Red: a
       `packages/query/test/driver/result-rows.test.ts` input table over
       the recorded node-postgres shapes {`select 1; select 2`, a DDL then

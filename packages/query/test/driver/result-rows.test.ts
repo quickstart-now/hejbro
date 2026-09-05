@@ -44,7 +44,7 @@ describe("lastRows (task 1.6, #892)", () => {
 		);
 	});
 
-	it("never keys off `rows === undefined` -- `Array.isArray` alone decides the multi-command path", () => {
+	it("never keys off `rows === undefined` -- a hand-built shape no real driver produces, since `Array.isArray` alone decides the multi-command path", () => {
 		// A single Result whose own `rows` happens to be missing (a shape no
 		// real driver produces, built by hand to prove the point) must still
 		// take the single-result path -- there is no fold to try since

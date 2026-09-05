@@ -697,10 +697,15 @@ vendoring loop.
 everything it runs shares one wrapping transaction that applies the role
 and settings with transaction-local scope before the statement runs, so
 nothing persists on the connection afterwards, and the unscoped handle
-stays untouched. Executing under a context on a driver without the
-interactive-transaction capability fails immediately with the explicit
-missing-capability error (see "Errors" below), before anything reaches
-the database.
+stays untouched. A driver declaring `interactive-transactions` runs it
+this way, on one held connection; a driver declaring
+`batched-transactions` instead (and not `interactive-transactions`) runs
+the context and the caller's own statement as one batch in a single
+round trip — the role and settings are still transaction-local to that
+one batch, never a held session (task 1.3, #486). Executing under a
+context on a driver declaring **neither** capability fails immediately
+with the explicit missing-capability error naming both keys (see
+"Errors" below), before anything reaches the database.
 
 **There is no `asRole()`/`roleContext()` helper on the vanilla surface.**
 `DbContext` is a plain object literal — `{ role, settings? }` — passed
