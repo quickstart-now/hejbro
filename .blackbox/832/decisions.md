@@ -37,3 +37,10 @@ _lead · interpretation · basis 412/D24, D25; 832/R2; the kept #748 scenario (f
 
 (a): loop names and row-derived scalars run reserved (case-folded) → SQL name → duplicate; row names run SQL name → duplicate. The delta's "before any other check" becomes "before the duplicate check; the reserved check folds case and runs first"; the invalid-spelling example `Row` (now a category-C variant) is replaced by a non-reserved upper-case name, and an input row pins that an upper-case reserved spelling reports reserved-local-name. Ratification: owner on return.
 
+<a id="r6"></a>
+## R6 — N-1: next and query join the enumerated third source (task 1.6); the source stays an enumeration; the 18 measured-safe words are named as outside the class
+
+_lead · extension · basis 412/D24, D25; 832/R3, R4; fl review (constructor mode, 3, 328 rendered functions created on postgres 17.11: next/query the only accepted-then-refused names); the delta's own 'relaxing a refusal is a change of its own' applied symmetrically to needless new refusals · 2026-09-05T11:10Z · ratified: pending_
+
+Processed in this piece: reserved set gains next and query with the measurement; the third source's definition remains the enumeration (16 names), never a descriptive widening; the 18 words measured harmless in every rendered position are named in the requirement as outside the class; the reviewer re-runs the full 573-name × 8-form sweep after the rebuild and must find exactly {next, query} newly refused. N-2/N-3 wording corrected by the planner; N-4 and the generate-command load flake filed by the lead. Ratification: owner on return.
+

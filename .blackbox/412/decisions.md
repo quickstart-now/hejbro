@@ -601,3 +601,10 @@ _owner · 2026-09-05T11:08Z · raw 9d9e9165-53a6-4428-bebf-45e47e987321#79_
 
 The owner restates D27 precisely: the only issues to skip are the umbrellas that merely group sub-issues (#412, #815); every other open issue is processed in ascending number order, oldest first, regardless of which umbrella it hangs under.
 
+<a id="r32"></a>
+## R32 — Reproduction inputs a reviewer hands over are measured from the real library, never synthesized
+
+_lead · extension · basis 412/D24, D25; D110; cd review round 2 (a synthesized ErrorEvent with a non-empty message let task 1.9 pass while the real one has an empty message) · 2026-09-05T11:10Z · ratified: pending_
+
+Process rule for every future brief: when a review or a task cites a value an external library throws or returns, the input table carries the value as measured from that library on this machine (or a container), not a hand-built lookalike; a synthesized example that is more lenient than the real class turns a red test green. Recorded here so the next brief template carries it. Ratification: owner on return.
+

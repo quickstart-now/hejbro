@@ -647,6 +647,18 @@
       "raw": [
         "9d9e9165-53a6-4428-bebf-45e47e987321#79"
       ]
+    },
+    {
+      "id": "R32",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "412/D24",
+        "D25; D110; cd review round 2 (a synthesized ErrorEvent with a non-empty message let task 1.9 pass while the real one has an empty message)"
+      ],
+      "at": "2026-09-05T11:10Z",
+      "title": "Reproduction inputs a reviewer hands over are measured from the real library, never synthesized",
+      "ratified": null
     }
   ],
   "work": [
