@@ -16,3 +16,10 @@ _lead · interpretation · basis 303/R1; ps-reviewer round 1 (B 0 / N 5, 18 scen
 
 (1) Delta sentence: "two different texts never share a name" -> "two different texts do not share a name -- the name is a 128-bit digest of the text, so a collision is not a practical possibility"; applied in the closing commit. (2) `export type { PgDriverOptions }` (and neon's) ratified -- the repository's convention for option types. (3) The duplicated name helper's home is @hejbro/query; a follow-up under #815, not this piece (cross pins hold the regression). (4) Follow-ups under #815: multi-command `sql` text returns undefined from the pg driver (pre-existing); the reviewer's three corpus items go to #714 (examples/brownfield). Ratification: owner on return.
 
+<a id="r3"></a>
+## R3 — D106 R1 for add-prepared-statements: B0/N5/OK16 — N2 N4 N5 fixed in the archive, N3 fixed with a patch, N1 = #892
+
+_lead · extension · basis D106; 412/D24, D25; evaluation.md (fable, context-free; PgBouncer transaction mode and a wsproxy Neon path exercised) · 2026-09-05T09:19Z · ratified: pending_
+
+N1 (multi-command sql text → undefined / uncoded TypeError) is #892, folded into add-batched-transactions. N2: the delta and query-layer.md now state that a db.fn call compiles as the sql kind and is never named. N3: pg and neon read preparedStatements with === true and freeze the capabilities object (patch changeset, tests). N4: prepared-statements-without-session added to query-layer.md's error table. N5: the delta states that no query-layer operation requires prepared-statements, so the fails-closed scenario has no input for it by design. Archived as 2026-09-05-add-prepared-statements. Ratification: owner on return.
+

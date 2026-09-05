@@ -25,11 +25,11 @@ export type HttpQueryable = NeonQueryFunction<false, false>;
  * own note on why "the pins hold within one batch" does not make
  * `session-state` true.
  */
-const CAPABILITIES: DriverCapabilities = {
+const CAPABILITIES: DriverCapabilities = Object.freeze({
 	"interactive-transactions": false,
 	"session-state": false,
 	"prepared-statements": false,
-};
+});
 
 /**
  * The two session pins `@hejbro/pg` sends once per connection

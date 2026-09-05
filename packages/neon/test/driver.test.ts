@@ -86,6 +86,23 @@ describe("neonDriver -- the overload fixes the capability set (task 3.1)", () =>
 		});
 	});
 
+	it.each([
+		["a string", "true"],
+		["a number", 1],
+	])(
+		"a non-boolean preparedStatements (%s) declares false on the Pool path, frozen (D106 R1 N3)",
+		(_label, value) => {
+			const pool = new Pool({
+				connectionString: "postgres://localhost/does-not-need-to-connect",
+			});
+			const driver = neonDriver(pool, {
+				preparedStatements: value as unknown as boolean,
+			});
+			expect(driver.capabilities["prepared-statements"]).toBe(false);
+			expect(Object.isFrozen(driver.capabilities)).toBe(true);
+		},
+	);
+
 	it("a neon() query function declares both capabilities false", () => {
 		const sql = neon(HTTP_CONNECTION_STRING);
 		const driver = neonDriver(sql);

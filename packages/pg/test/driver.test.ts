@@ -177,6 +177,27 @@ describe("pgDriver(pool) (owner decision ①, task 5.1)", () => {
 		});
 	});
 
+	// D106 R1 N3 (add-prepared-statements): an untyped caller's `"true"`
+	// or `1` must not reach a declaration typed boolean, and the
+	// declaration is data a caller cannot edit.
+	it.each([
+		["a string", "true"],
+		["a number", 1],
+		["an object", {}],
+	])(
+		"a non-boolean preparedStatements (%s) declares false, and the declaration is frozen",
+		(_label, value) => {
+			const pool = new Pool({
+				connectionString: "postgres://localhost/does-not-need-to-connect",
+			});
+			const driver = pgDriver(pool, {
+				preparedStatements: value as unknown as boolean,
+			});
+			expect(driver.capabilities["prepared-statements"]).toBe(false);
+			expect(Object.isFrozen(driver.capabilities)).toBe(true);
+		},
+	);
+
 	it("exposes the caller's own pool as client, the same reference -- one surface, no divergence (owner decision ②)", () => {
 		const pool = new Pool({
 			connectionString: "postgres://localhost/does-not-need-to-connect",

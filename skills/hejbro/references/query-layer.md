@@ -39,7 +39,8 @@ every time. The name is derived from the statement text alone
 same text always gets the same name, on every connection and in every
 process, and two different texts do not share a name — the name is a
 128-bit digest of the text, so a collision is not a practical
-possibility. Once a statement is
+possibility. A `db.fn` call compiles as the `sql` kind and is therefore
+never named, exactly like the escape hatch. Once a statement is
 prepared it stays prepared for the connection's life — hejbro evicts
 nothing, so the set of distinct texts an application compiles (bounded
 by its own code; parameters are placeholders) is what accumulates,
@@ -1166,6 +1167,7 @@ concrete next step.
 | `context-rendering-empty` | The active driver declared a context mandatory, and the rendering in effect for it — its own contribution, or the default rendering — produced no statement for the context at hand; the transaction the query layer had already opened carries none. Fires after the rendering runs, from the number of statements it returned alone, never from reading them. The `operation` field names the surface the caller invoked, on the scoped path and the provider path alike. |
 | `claims-subject-missing` | `@hejbro/supabase`'s `asUser(claims)` was called without a `sub` claim. |
 | `nile-context-value-invalid` | `@hejbro/nile`'s rendering refused a tenant/user value that isn't a canonical UUID, before producing any statement — see `references/nile-preset.md`. |
+| `prepared-statements-without-session` | `@hejbro/supabase`'s `supabaseDriver(base, { endpoint: "transaction-pooler" })` refused a base driver whose `capabilities["prepared-statements"]` reads `true`, at construction and before any connection — a name prepared on one pooled backend does not exist on the next; build the base without `preparedStatements` or use the `"session"` endpoint. See `references/supabase-preset.md`. |
 | `nile-context-unsupported` | `@hejbro/nile`'s rendering refused a context naming a role, or carrying a setting outside its own tenant/user keys — this platform has neither — before producing any statement. |
 | `context-provider-empty` | A registered `context` provider's resolver yielded no context — only reachable by a caller who bypassed the resolver's non-nullable return type. |
 
