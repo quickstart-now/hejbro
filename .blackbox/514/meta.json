@@ -59,7 +59,15 @@
       "ratified": null
     }
   ],
-  "work": [],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-05T17:17Z",
+      "title": "group 1 closes: references() takes referential actions, parity through diff and rename, example converts",
+      "pr": null,
+      "decisions": []
+    }
+  ],
   "prs": [],
   "origin": null,
   "followUps": []
