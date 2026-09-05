@@ -100,9 +100,9 @@ const readRemedy = (
 	commandName: string,
 ): string => {
 	if (isTransientReadFailure(code)) {
-		return `Next: the connection or the statement did not survive -- nothing about the ledger's permissions changed; rerun \`${commandName}\` once the server answers again.`;
+		return `the connection or the statement did not survive -- nothing about the ledger's permissions changed; rerun \`${commandName}\` once the server answers again.`;
 	}
-	return `Next: grant ${grantSubject(role)} \`select\` on \`${QUALIFIED_LEDGER_TABLE}\` and \`usage\` on the \`"${LEDGER_SCHEMA}"\` schema, or connect as the role that applied, then rerun \`${commandName}\`.`;
+	return `grant ${grantSubject(role)} \`select\` on \`${QUALIFIED_LEDGER_TABLE}\` and \`usage\` on the \`"${LEDGER_SCHEMA}"\` schema, or connect as the role that applied, then rerun \`${commandName}\`.`;
 };
 
 const roleClause = (role: string | null): string => {
@@ -165,7 +165,7 @@ export const throwLedgerReadFailure = async (
 	throw Object.assign(
 		hejbroError(
 			"apply-ledger-unreadable",
-			`${readOpeningClause(context)}${roleClause(role)}${codeSuffix(code)}: ${reason}. hejbro reads its own ledger before it can say what this database has applied. ${readRemedy(code, role, commandName)}`,
+			`${readOpeningClause(context)}${roleClause(role)}${codeSuffix(code)}: ${reason}. hejbro reads its own ledger before it can say what this database has applied. Next: ${readRemedy(code, role, commandName)}`,
 		),
 		{ cause },
 	);
