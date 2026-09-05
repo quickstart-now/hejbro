@@ -1,0 +1,29 @@
+{
+  "version": 3,
+  "number": 884,
+  "ref": "quickstart-now/hejbro#884",
+  "title": "ci: hold delta requirement titles to the base spec (#510)",
+  "head": "205bef54a78c8af186ab368e0d018d3c30c7c90f",
+  "headRef": "chore-modified-titles",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-05T05:04Z",
+  "refs": [
+    {
+      "path": ".github/workflows/ci.yml",
+      "blob": "7a7d712a833acf3f25b9e6a2a4ef2aecb047bd0e"
+    },
+    {
+      "path": "AGENTS.md",
+      "blob": "fac129b32d333cdf1defd941b6d04ff9a4fc9dd0"
+    },
+    {
+      "path": "package.json",
+      "blob": "0181f2a003c3eebd580859d7b305b48d33ac2844"
+    },
+    {
+      "path": "scripts/check-modified-titles.mjs",
+      "blob": "90d04d12d89ad367bcf6ffc09dee586c49d3ffec"
+    }
+  ]
+}
