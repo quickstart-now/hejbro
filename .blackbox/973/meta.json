@@ -1,0 +1,21 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#973",
+  "title": "core: filter()/where() on a non-object target crash with a bare TypeError on the type-check-free path",
+  "parent": null,
+  "status": "open",
+  "opened": "2026-09-05",
+  "closed": null,
+  "decisions": [],
+  "work": [],
+  "prs": [
+    {
+      "number": 976,
+      "role": "refs",
+      "pinnedAt": "2026-09-05T17:52Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

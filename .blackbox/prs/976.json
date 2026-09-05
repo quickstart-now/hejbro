@@ -1,0 +1,65 @@
+{
+  "version": 3,
+  "number": 976,
+  "ref": "quickstart-now/hejbro#976",
+  "title": "chore(openspec): archive add-aggregate-filter after d106 round 1 (#501)",
+  "head": "41efb3df0b1921b1084bac6d6468f40cdd768904",
+  "headRef": "archive-add-aggregate-filter",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-05T17:52Z",
+  "refs": [
+    {
+      "path": "openspec/changes/archive/2026-09-06-add-aggregate-filter/design.md",
+      "blob": "e6d05bbb762f0cdca12350afc8bd07e0da182e69"
+    },
+    {
+      "path": "openspec/changes/add-aggregate-filter/design.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-06-add-aggregate-filter/evaluation.md",
+      "blob": "fa0db66b049662170b52ae81af2c318664b910f4"
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-06-add-aggregate-filter/proposal.md",
+      "blob": "ac0a1903917c141da4303559f6a8c5fc136a2fef"
+    },
+    {
+      "path": "openspec/changes/add-aggregate-filter/proposal.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-06-add-aggregate-filter/specs/query-builder/spec.md",
+      "blob": "32945cad6257b172f70cbe5ae87b37e04241d1e0"
+    },
+    {
+      "path": "openspec/changes/add-aggregate-filter/specs/query-builder/spec.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-06-add-aggregate-filter/specs/snapshot-format/spec.md",
+      "blob": "703e74ae7f086d15d6c67cf670428e35c6a70f7f"
+    },
+    {
+      "path": "openspec/changes/add-aggregate-filter/specs/snapshot-format/spec.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-06-add-aggregate-filter/tasks.md",
+      "blob": "d43300f29d296a3182762b5c402947f2ec09d866"
+    },
+    {
+      "path": "openspec/changes/add-aggregate-filter/tasks.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/specs/query-builder/spec.md",
+      "blob": "cacbe94c80e3e88788d88d6813af514e4b244fac"
+    },
+    {
+      "path": "openspec/specs/snapshot-format/spec.md",
+      "blob": "21e3fdb901afca7e3dcaeb2fc1ca4a2170b194ae"
+    }
+  ]
+}

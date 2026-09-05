@@ -1,8 +1,8 @@
 {
   "version": 3,
   "kind": "issue",
-  "ref": "quickstart-now/hejbro#931",
-  "title": "core: an aggregate call inside a filter() condition is accepted at build time and refused by Postgres (42803)",
+  "ref": "quickstart-now/hejbro#953",
+  "title": "core/query: a db.fn call refused by filter() or over() cannot be named exactly -- the thenable carries no brand core can read",
   "parent": "quickstart-now/hejbro#815",
   "status": "open",
   "opened": "2026-09-05",
@@ -10,11 +10,6 @@
   "decisions": [],
   "work": [],
   "prs": [
-    {
-      "number": 963,
-      "role": "refs",
-      "pinnedAt": "2026-09-05T16:55Z"
-    },
     {
       "number": 976,
       "role": "refs",
