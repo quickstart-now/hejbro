@@ -318,8 +318,9 @@ happened.
 `hejbro migrate` also compares an already-applied migration's body
 against what the ledger recorded when it was applied — not a chain-hash
 check (`hejbro verify`'s own job, which never sees a body edit), but a
-byte-for-byte comparison of the SQL below its banner. A file the ledger
-recorded whose body on disk no longer matches surfaces as the coded
+comparison of the SQL below its banner, with line endings normalised. A
+file the ledger recorded whose body on disk no longer matches surfaces
+as the coded
 `apply-migration-body-changed` error before anything pending is sent,
 naming every such file with the checksum the ledger holds and the
 checksum on disk now, each abbreviated to twelve hex digits. A row

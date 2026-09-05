@@ -13,10 +13,14 @@ schema. Reading the catalog to judge the declarations is a different
 question and is not part of this capability. A row's columns are a
 database-assigned identity, the migration's full filename, the origin
 recorded below, the timestamp the database assigned it, and the
-checksum of the body that ran — the SHA-256 of the text below the
-banner block with line endings normalized, or of the whole file for a
-raised snapshot — so the ledger can later say whether the file on disk
-is the file that ran. The bootstrap SHALL create the checksum column and
+checksum of the body that ran — the SHA-256 of the body with line
+endings normalized, or of the whole file for a raised snapshot — so the
+ledger can later say whether the file on disk is the file that ran. The
+banner is the first line `-- hejbro migration` together with the
+maximal leading run of comment and blank lines that follows it; the
+body is everything from the first line that is neither a comment nor
+blank. A comment or a blank line inside the body stays body. The
+bootstrap SHALL create the checksum column and
 SHALL add it to a ledger written before the column existed; a row
 recorded then carries no checksum and is never compared.
 Reading a ledger that predates the column SHALL succeed with every row's
@@ -342,7 +346,8 @@ what is wrong, so it is the last place a raw driver failure may surface.
 - **WHEN** a recorded migration's body on disk differs from what ran and
   `status` runs
 - **THEN** it reports that file as changed since it was applied, with
-  the same code `migrate` refuses under, and exits non-zero
+  the same code `migrate` refuses under, exits non-zero, and is not
+  listed among the applied files
 
 #### Scenario: A disagreement is reported before bodies are compared
 - **WHEN** the ledger disagrees with the chain (an orphan row, an
