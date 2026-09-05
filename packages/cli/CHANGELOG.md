@@ -1,5 +1,132 @@
 # hejbro
 
+## 0.2.0-pre.2
+
+### Minor Changes
+
+- 8d79eb0: The driver capability set gains a fourth key, `batched-transactions`: a
+  driver that declares it can run a pre-assembled list of statements as
+  one transaction, in one round trip where possible, returning one row
+  list per member. Every `Driver` now implements a mandatory `batch`
+  member — a driver declaring the capability `false` still implements it,
+  by refusing before sending anything, the same pattern `transaction`
+  already uses on a non-interactive driver.
+  
+  `db.as(context)` picks a driver's declared capability to decide how it
+  runs: `interactive-transactions` still wins where declared, otherwise a
+  driver declaring `batched-transactions` runs the context and the
+  caller's own statement as one batch. This makes `@hejbro/neon`'s HTTP
+  path (`neonDriver(sql)`, built from a `neon()` query function) usable
+  with `db.as(context)` for the first time — role and settings apply
+  transaction-local to that one batch. `db.transaction(callback)` is
+  unaffected and still requires `interactive-transactions`, since a
+  callback is interactive by definition.
+  
+  A batch failure is reported as a batch: every member statement, in
+  order, with a statement that the driver does not report which member
+  failed — never naming only the caller's own statement, which may not
+  have been the actual cause. A driver whose `batch` resolves the wrong
+  number of row lists (fewer, more, or none) is refused with the new
+  `batch-result-count-mismatch`, naming both counts, rather than silently
+  handing a context statement's own rows back as the caller's.
+  
+  A multi-command `sql`-kind text (`select 1; select 2`, only reachable
+  through the `sql` escape hatch) now resolves to the **last** command's
+  rows — psql's own convention — instead of `undefined` or a crash.
+  `@hejbro/pg` and `@hejbro/neon`'s own session-setup statement is itself
+  multi-command, so this rule is exercised on every connection. `@hejbro/
+  query` exports this fold itself as `lastRows(result)`. It also newly
+  exports `preparedStatementName(sql)` — the prepared-statement naming
+  rule `@hejbro/pg` and `@hejbro/neon` both call, so neither driver holds
+  its own copy of it anymore.
+- 8b6258c: `hejbro.config.ts` can now name a `driver`: a factory from the resolved connection string to a contract driver, returned directly or as a promise. Every command that connects — `check`, `status`, `migrate`, `raise`, `reset`, `import` and `pull` — prefers the configured factory when one is set: it calls it once with the connection string already resolved from the command's own flag (`--url` for six of them, `--db-url` for `pull`) or `DATABASE_URL`, and `@hejbro/pg` is neither imported nor required on that path. A driver the factory returns that offers no way to close (`client.end`) is refused before any statement is sent, naming the `driver` field. Without a configured factory every command behaves exactly as it did before the field existed. `@hejbro/neon`'s `neonDriver(pool)` (the WebSocket path) now exposes that same `Pool` as `driver.client`, mirroring `@hejbro/pg`'s own connection-string form, so it closes the same way when used as a configured `driver` factory; `neonDriver(sql)` (the HTTP path) now exposes a `driver.client.end` that resolves without doing anything, since that path never holds a connection open to begin with.
+- 6cbedf2: The driver capability set gains a third key, `prepared-statements`, and
+  `pgDriver`/`neonDriver`'s session-oriented (`Pool`) path can now name
+  every built statement (`select`/`insert`/`update`/`delete`/a set
+  operation) it sends, so a connection parses and plans each distinct
+  text once instead of on every execution:
+  
+  ```ts
+  const driver = pgDriver(pool, { preparedStatements: true });
+  ```
+  
+  Opt-in, defaulting to `false` — an existing caller's driver sends
+  exactly what it always did. A `sql`-kind statement (the escape hatch, a
+  context's own applied statements, a migration body) is always sent
+  unnamed regardless of the option, since hejbro parses no SQL and a
+  `sql`-kind text may carry more than one command. `@hejbro/supabase`'s
+  `supabaseDriver` now refuses, at construction, a base driver that
+  declares `prepared-statements: true` for its `"transaction-pooler"`
+  endpoint — a name prepared on one pooled backend does not exist on the
+  next one the pooler hands out for a later transaction. Every other
+  existing driver (`@hejbro/nile`'s decorator, `hejbro`'s CLI paths) is
+  unaffected and declares `false`.
+- 727a6f8: `hejbro check` now reports the columns, indexes and check constraints a
+  database holds on a table the declarations manage and no declaration
+  covers, beside the unmanaged tables it already reported: informational,
+  never a difference, and never affecting the exit code. An index that
+  backs a declared primary key or unique column is not among them — the
+  declaration accounts for it — while an index backing any other
+  constraint names that constraint on its line. The loss report no longer says
+  hejbro will not mention an omitted index or check constraint again:
+  `import` says `check` keeps listing them, and `pull` says the object
+  cannot be carried in the contract.
+- f58203c: Add `hejbro upgrade`, moving a project whose committed snapshot is in an
+  older released format (floor: format 5, 0.1.1's own shipped format)
+  forward without a reset: it rewrites the snapshot file at the current
+  format and re-chains the tip migration's own banner by rewriting its
+  `-- snapshot:` line and inserting a new `-- upgraded-from:` line under
+  it naming the pre-upgrade hash — no other migration file changes. It
+  refuses with `chain-tip-mismatch` if the tip's recorded hash doesn't
+  match the snapshot as stored, before writing anything; a snapshot
+  already at the current format is a no-op. `hejbro history` and `hejbro
+  restore` resolve an upgraded tip transparently, and every other command
+  meeting an older released format now names `hejbro upgrade` as the next
+  step.
+
+### Patch Changes
+
+- 949ac2a: `invalid-config` names the configuration file by its relative label (`hejbro.config.ts`), never by the resolved absolute path.
+- 67fc7b5: Fix a precision bug in nested reads: a windowed cell (`over(count(), …)`, `over(max(col), …)`, `over(lag(col), …)`, …) inside a `jsonArrayFrom`/`jsonObjectFrom`/`related()` projection now keeps its precision past `Number.MAX_SAFE_INTEGER`, exactly as its unwindowed form already did. The compiler's own cast decision and the query layer's own revive decision now read one shared vocabulary (every builder aggregate and window function, closed over the builder's own constructors) instead of two independently hand-kept lists that had drifted apart — a windowed `count()`/`row_number()`/`rank()`/`dense_rank()`/`min`/`max`/`lag`/`lead`/`firstValue`/`lastValue`/`nthValue` cell used to compile without the `::text` cast that carries a `bigint` through JSON transport losslessly.
+- 3437086: `hejbro check` now compares an index's partial predicate and its own
+  expression columns, and a generated column's expression, through the
+  server's own rendering — the same probe a check constraint's expression
+  already used — instead of reporting an index as present regardless of
+  its predicate or expression, and a generated column as always missing
+  its (nonexistent) default (#778, #781). A matching generated column no
+  longer produces a finding at all. Under a registered preset that
+  declares the platform cannot plan a statement (e.g. `@hejbro/nile`), the
+  same normalized-text fallback now applies to all four surfaces, and the
+  report's coverage-boundary line names them together.
+  
+  A not-compared or differing finding's expression text is now delimited
+  with backticks instead of double quotes, so a declared expression that
+  itself begins with a quoted identifier (a table-bound column reference)
+  no longer collides with the message's own delimiter (#779). Finding
+  codes and `Next:` remedies are unchanged.
+- 11aea79: A `snapshotPath` spelled as a directory (a trailing `/`, an empty value, or a last segment of `.`/`..`) is now refused with `invalid-config` naming the field when the configuration is read, by every command — `init` no longer answers the same misspelling differently from `generate`/`verify`/`check`/`baseline`. `init` now judges the configuration file's own path — and every planned artifact's ancestors — before checking its own kind, so `--config f/h.ts` with `f` a file names `f` instead of a bare `ENOTDIR` on the non-existent leaf. The snapshot reader now judges a dangling symbolic link or a file/link ancestor on the way to the configured `snapshotPath` the same way `init` does, instead of reading a dangling link as an absent snapshot or reporting an ancestor fault as an unrelated permissions failure. A `migrationsDir` that is a file or a dangling link is refused by every command that lists it (`generate`, `verify`, `baseline`, `history`, `migrate`, `status`, `restore`) with the new error codes `migrations-dir-not-a-directory`/`migrations-dir-unreadable`, instead of a raw `ENOTDIR`/`EACCES` crash. `--config` names a file consistently for `init`, `generate`, `baseline` and `history`: an empty value (`--config=`, or a trailing `--config` with nothing after it) is refused with the new code `invalid-config-flag` instead of silently resolving to the working directory; a missing configuration under `--config` now names the path actually looked up in its `Next:` instead of always suggesting the default `hejbro.config.ts`; a directory or a dangling link at the configuration path is refused with the new codes `config-not-a-file`/`config-unreadable` instead of reaching the loader and surfacing as a confusing import-resolution failure. `init`'s refusal for a directory sitting where the configuration file belongs now names that path once, as the configuration path, instead of repeating the file's own name; a planned file that would have to hold another planned artifact now states which kind that artifact actually is (a file cannot hold a file, either), instead of always saying "directory". `generate` judges the migrations directory before deciding there is nothing to do; a `--config` value naming the working directory is answered with the file to pass, and the value echoed in `Next:` is quoted for the shell.
+- 2b7fd90: `hejbro init` now honours `--config <path>` exactly as `generate` does, reading or scaffolding the configuration file it names instead of always the default `hejbro.config.ts` at the working directory. An absolute-looking `migrationsDir` or `snapshotPath` (e.g. `"/db/migrations"`) is refused with `invalid-config` instead of being silently re-rooted under the working directory. `init` refuses, before creating anything, a configuration whose snapshot path would have to hold the migrations directory. A directory sitting at the configured snapshot path is now refused by `generate`/`verify`/`check`/`baseline` with the new error code `snapshot-not-a-file`, instead of a raw `EISDIR` crash. A permission-denied check during `init` now names the directory that actually blocks it, instead of the leaf path or an unrelated ancestor. `init` also refuses a dangling symbolic link at a configured path (instead of writing through it to a target the report never named), checks that a parent directory is writable before creating anything in it, and — if a creation still fails partway through (an ACL, an immutable flag, a race) — undoes everything it created and reports the coded failure, rather than leaving a partial tree behind. An unreadable snapshot file (permissions, or a blocked ancestor on the way) is now refused by every reading command with the new error code `snapshot-unreadable`, instead of a raw `EACCES` crash.
+- 36c4e1a: Attribute every ledger failure to the ledger. A read or a write the database refuses on `"hejbro"."migration_ledger"` is now a coded diagnostic naming the ledger, the connected role and the server's own code and message, with a `Next:` line — never a raw driver object or a stack trace. A refused ledger write is never reported as the failure of the migration being applied, and the report states that the migration rolled back with it.
+  
+  `@hejbro/pg`'s connection pool no longer crashes the process when a checked-out or idle client's own connection fails (e.g. a terminated backend) — the failure now reaches the caller as a normal rejection, which the coded diagnostic above renders instead of a raw, unhandled `'error'` event. `@hejbro/pg` attaches its client error listener once per client (no MaxListeners warning on long runs) and discards a client whose connection died, so the ledger diagnostic names the role after a terminated backend; a lost connection or cancelled statement is answered with a rerun, never a grant.
+- f548272: `migrate`, `status`, `reset` and `raise` now recognize hejbro's ledger by identity, not by the existence of anything at `"hejbro"."migration_ledger"`: a table of another shape, a view, a materialized view, a foreign table, a sequence or a partitioned table at that name is refused with `apply-ledger-occupied` and left untouched — `reset` no longer deletes the rows of an unrelated table under that name, `status` no longer crashes with a raw error, and `migrate` never writes into a table it did not create. `reset`'s dependency advice now recognizes a cycle of any length among the declared tables, not only a mutually referencing pair.
+- Updated dependencies [6e2c8ae]
+- Updated dependencies [8d79eb0]
+- Updated dependencies [6cbedf2]
+- Updated dependencies [6ff7b7f]
+- Updated dependencies [9e4fd05]
+- Updated dependencies [a2ae603]
+- Updated dependencies [419c8fa]
+- Updated dependencies [700f71f]
+- Updated dependencies [98e9965]
+- Updated dependencies [30564a6]
+- Updated dependencies [116e13f]
+- Updated dependencies [31e951f]
+- Updated dependencies [761567b]
+- Updated dependencies [99b9554]
+  - @hejbro/core@0.2.0-pre.2
+  - @hejbro/query@0.2.0-pre.2
+
 ## 0.2.0-pre.1
 
 ### Patch Changes
