@@ -15,3 +15,16 @@ Task 1.2's own red: render-sql.test.ts (10 assertions, handler-not-a-function / 
 
 Postgres 17 verification (R32): af-pg on port 55520, the exact strings vitest's renderExpr produced (no retyping) applied against a real table with mixed rows -- count(*) filter (where ...) returned 3 against an unfiltered 5, sum(...) filter (where ...) over () returned 18 against an unfiltered 119, and a create view using the same fragment round-tripped through select * correctly.
 
+<a id="w2"></a>
+## W2 — task 1.3: scope-check, retarget and cast the aggregate-filter node
+
+_2026-09-05T13:29Z · per R2, R3, R4_
+
+Task 1.3 landed (commit 9310bd46). retarget.ts and read-shape.ts needed no source change: retargetExprNode's generic fallback (exprChildren/replaceExprChildren) already recurses correctly through an aggregateFilter node once task 1.2 registered its two children ([fn, where]) in expr-children.ts's registry, and the accepted-set split (AGGREGATE_READ_SHAPES) task 1.1 already built into read-shape.ts covered filter()'s own needs with no further change. Both scenarios are recorded as regression pins that were green on arrival, not red-then-green cycles -- stated as fact, not smoothed into "implemented" alongside the files that did change.
+
+walk.ts's missing scopeViolationHandlers entry was a crash (TypeError: handler is not a function), not a silent miss: a scope violation inside a filtered aggregate's condition would have thrown before this task, never silently passed undetected.
+
+query/select.ts's cast-agreement table had an empty-green gap for sum/avg and the windowed row: "unwrap succeeded, own shape never casts" and "unwrap failed, nothing recognized as a builder aggregate" both render with no cast suffix, so a regression in the two-step unwrap (window, then aggregateFilter) would have passed those rows silently. Closed by exporting builderAggregateFunctionName (test-only, not in the public barrel) and asserting the unwrapped name directly across all five aggregates plus the windowed case -- six assertions that, once added, genuinely failed red (TypeError: builderAggregateFunctionName is not a function) before the two-step unwrap existed.
+
+Per 412/R35 (stash banned across worktrees, a shared stash stack), the select.ts fix was set aside to capture that red without touching git stash: `git diff > select-ts.patch && git checkout -- select.ts`, ran the suite for the genuine pre-implementation failures, then `git apply select-ts.patch` to restore the fix.
+
