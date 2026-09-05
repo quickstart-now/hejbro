@@ -51,7 +51,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#449](449/) | concurrent tx.execute beside a nested transaction is unguarded | closed | #849 #850 | 0 | 3 (2 pending) |
 | ↳ [#450](450/) | identical literals in distinct on and order by lift to different placeholders | closed | #882 | 0 | 1 (0 pending) |
 | ↳ [#452](452/) | promote the cast/revive drift guard to a ratchet over the aggregate vocabulary | closed | #901 #906 | 0 | 4 (2 pending) |
-| ↳ [#458](458/) | config-injected driver factory for db-connected cli commands | open |  | 0 | 2 (1 pending) |
+| ↳ [#458](458/) | config-injected driver factory for db-connected cli commands | open |  | 0 | 3 (2 pending) |
 | ↳ [#491](491/) | align third-party client version ranges across published packages (catalog policy) | closed | #883 | 0 | 1 (0 pending) |
 | ↳ [#497](497/) | crap gate output misstates its side effects and cache-induced failures | closed | #885 | 0 | 0 (0 pending) |
 | ↳ [#510](510/) | cross-check MODIFIED requirement titles against the base spec in CI | closed | #884 | 0 | 0 (0 pending) |
@@ -171,7 +171,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 
 ## Totals
 
-Owner decisions 91 · rulings 196 (interpretation 135, extension 59, stop 2) · pending extensions 21 · rejected 2
+Owner decisions 91 · rulings 197 (interpretation 135, extension 60, stop 2) · pending extensions 22 · rejected 2
 
 ## Conventions
 

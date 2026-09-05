@@ -16,3 +16,10 @@ _lead · interpretation · basis 458/R1 (every connecting command prefers the fa
 
 (a): the three commands load hejbro.config.ts when it exists and treat config-not-found alone as "no factory configured" -- byte-identical to today for a project without a configuration; invalid-config, config-not-a-file and config-unreadable refuse as they do elsewhere (a present-but-broken configuration is never ignored). The delta's ADDED requirement gains that sentence and a scenario (no configuration: import/pull/raise proceed through the vanilla driver; a broken one: refused); the seven-command scenario names each command's own connection flag (`--db-url` for pull). loader.ts joins the file list (intent unchanged). Interaction noted for harden-config-root: once these three read the configuration they take --config too. Ratification: owner on return.
 
+<a id="r3"></a>
+## R3 — neonDriver(pool) exposes its Pool as client so the configured driver closes on every shipped preset (task 1.10); design Q2 restated
+
+_lead · extension · basis 412/D24, D25, D13 (complete within the purpose: a shipped preset must satisfy the delta's own closing promise); cd 1.6 measurement (buildWebSocketDriver carries no client member) · 2026-09-05T09:10Z · ratified: pending_
+
+Option (c) inside this change rather than a documented workaround: buildWebSocketDriver exposes the Pool it was handed as `client`, the delta states which drivers expose it, the preset doc's hand-wrapped object is removed, red tests pin `neonDriver(pool).client === pool` and the documented one-liner reaching close in e2e. design.md Q2's premise sentence becomes the measured fact. Reviewer's re-check gains the neon close path. Ratification: owner on return.
+
