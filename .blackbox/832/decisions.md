@@ -30,3 +30,10 @@ _lead · interpretation · basis 412/D24, D25; 832/R1, R3; the requirement's own
 
 (A): the scenario's rationale clause is replaced by the measured facts; the `out` sentence becomes "parsed as OUT mode, refused 42P13 against returns void". The third class source is an enumeration (9 failing + 5 historically refused; exit/elsif named as outside the class); new/old belong to the declared-variable source and get a trigger-context measurement. Ratification: owner on return.
 
+<a id="r5"></a>
+## R5 — Loop names: reserved (case-folded) before the SQL-name check, so an upper-case reserved spelling keeps its existing code
+
+_lead · interpretation · basis 412/D24, D25; 832/R2; the kept #748 scenario (found/FOUND/Found → reserved-local-name); a regression of an existing error code is an observable contract change · 2026-09-05T09:50Z · ratified: pending_
+
+(a): loop names and row-derived scalars run reserved (case-folded) → SQL name → duplicate; row names run SQL name → duplicate. The delta's "before any other check" becomes "before the duplicate check; the reserved check folds case and runs first"; the invalid-spelling example `Row` (now a category-C variant) is replaced by a non-reserved upper-case name, and an input row pins that an upper-case reserved spelling reports reserved-local-name. Ratification: owner on return.
+

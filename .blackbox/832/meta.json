@@ -61,6 +61,18 @@
       "at": "2026-09-05T09:25Z",
       "title": "Uniform refusal stands: category C stays refused in loop and row positions although the server accepts it there",
       "ratified": null
+    },
+    {
+      "id": "R5",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "412/D24",
+        "D25; 832/R2; the kept #748 scenario (found/FOUND/Found → reserved-local-name); a regression of an existing error code is an observable contract change"
+      ],
+      "at": "2026-09-05T09:50Z",
+      "title": "Loop names: reserved (case-folded) before the SQL-name check, so an upper-case reserved spelling keeps its existing code",
+      "ratified": null
     }
   ],
   "work": [],
