@@ -78,6 +78,9 @@ importers:
         specifier: workspace:*
         version: link:../../packages/cli
     devDependencies:
+      '@hejbro/neon':
+        specifier: workspace:*
+        version: link:../../packages/neon
       typescript:
         specifier: 'catalog:'
         version: 5.9.3

@@ -76,7 +76,11 @@ const linkHejbro = async (cwd: string): Promise<void> => {
  * overrides.ts`'s own runtime `import { types } from "@neondatabase/
  * serverless"`) resolves from the symlink's own real location, walking
  * up through `packages/neon/node_modules` the same way `hejbro`'s own
- * workspace dependencies already do -- no second symlink needed. */
+ * workspace dependencies already do -- no second symlink needed.
+ * `@hejbro/neon` is also a declared devDependency of this package: the
+ * path symlink alone is invisible to turbo, so without the declaration
+ * `^build` never builds neon before this suite and CI's `pnpm test`
+ * (which runs before `pnpm build`) fails at the config import. */
 const linkNeon = async (cwd: string): Promise<void> => {
 	await mkdir(join(cwd, "node_modules", "@hejbro"), { recursive: true });
 	await symlink(
