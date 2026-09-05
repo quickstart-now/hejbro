@@ -1,5 +1,178 @@
 # @hejbro/core
 
+## 0.2.0-pre.2
+
+### Minor Changes
+
+- 6e2c8ae: Add `filter(aggregate, condition)`, a real `FILTER (WHERE …)` constructor for `count()`/`min()`/`max()`/`sum()`/`avg()` — the aggregate keeps its own declared result type and conversion, the condition's runtime values lift to bind parameters like any other condition, and it composes with `over(...)` in the one order SQL allows (`over(filter(count(), condition), spec)` renders `count(*) filter (where …) over (…)`).
+- 8d79eb0: The driver capability set gains a fourth key, `batched-transactions`: a
+  driver that declares it can run a pre-assembled list of statements as
+  one transaction, in one round trip where possible, returning one row
+  list per member. Every `Driver` now implements a mandatory `batch`
+  member — a driver declaring the capability `false` still implements it,
+  by refusing before sending anything, the same pattern `transaction`
+  already uses on a non-interactive driver.
+  
+  `db.as(context)` picks a driver's declared capability to decide how it
+  runs: `interactive-transactions` still wins where declared, otherwise a
+  driver declaring `batched-transactions` runs the context and the
+  caller's own statement as one batch. This makes `@hejbro/neon`'s HTTP
+  path (`neonDriver(sql)`, built from a `neon()` query function) usable
+  with `db.as(context)` for the first time — role and settings apply
+  transaction-local to that one batch. `db.transaction(callback)` is
+  unaffected and still requires `interactive-transactions`, since a
+  callback is interactive by definition.
+  
+  A batch failure is reported as a batch: every member statement, in
+  order, with a statement that the driver does not report which member
+  failed — never naming only the caller's own statement, which may not
+  have been the actual cause. A driver whose `batch` resolves the wrong
+  number of row lists (fewer, more, or none) is refused with the new
+  `batch-result-count-mismatch`, naming both counts, rather than silently
+  handing a context statement's own rows back as the caller's.
+  
+  A multi-command `sql`-kind text (`select 1; select 2`, only reachable
+  through the `sql` escape hatch) now resolves to the **last** command's
+  rows — psql's own convention — instead of `undefined` or a crash.
+  `@hejbro/pg` and `@hejbro/neon`'s own session-setup statement is itself
+  multi-command, so this rule is exercised on every connection. `@hejbro/
+  query` exports this fold itself as `lastRows(result)`. It also newly
+  exports `preparedStatementName(sql)` — the prepared-statement naming
+  rule `@hejbro/pg` and `@hejbro/neon` both call, so neither driver holds
+  its own copy of it anymore.
+- 6cbedf2: The driver capability set gains a third key, `prepared-statements`, and
+  `pgDriver`/`neonDriver`'s session-oriented (`Pool`) path can now name
+  every built statement (`select`/`insert`/`update`/`delete`/a set
+  operation) it sends, so a connection parses and plans each distinct
+  text once instead of on every execution:
+  
+  ```ts
+  const driver = pgDriver(pool, { preparedStatements: true });
+  ```
+  
+  Opt-in, defaulting to `false` — an existing caller's driver sends
+  exactly what it always did. A `sql`-kind statement (the escape hatch, a
+  context's own applied statements, a migration body) is always sent
+  unnamed regardless of the option, since hejbro parses no SQL and a
+  `sql`-kind text may carry more than one command. `@hejbro/supabase`'s
+  `supabaseDriver` now refuses, at construction, a base driver that
+  declares `prepared-statements: true` for its `"transaction-pooler"`
+  endpoint — a name prepared on one pooled backend does not exist on the
+  next one the pooler hands out for a later transaction. Every other
+  existing driver (`@hejbro/nile`'s decorator, `hejbro`'s CLI paths) is
+  unaffected and declares `false`.
+- 6ff7b7f: The column-level `.references()` sugar now takes an optional second
+  argument carrying the foreign key's referential actions:
+  `ownerId: uuid().notNull().references(() => users.id, { onDelete: "restrict", onUpdate: "cascade" })`.
+  Both `onDelete` and `onUpdate` are optional and accept the same five
+  values the `extras.foreignKeys` form already does. The generated DDL,
+  snapshot, and diff are byte-identical to the equivalent `extras`
+  declaration, including for a change to just the action (a drop and
+  re-add of the constraint) and for a rename of the referenced table.
+  Self-referencing and composite (multi-column) foreign keys are
+  unaffected and stay on the `extras.foreignKeys` form. Calling
+  `.references()` more than once on the same column replaces the
+  reference as a whole -- the last call's target and the last call's
+  actions, with no action from an earlier call left over.
+- a2ae603: Export the expression traversal (`exprChildren`, `replaceExprChildren`)
+  and the kind-change guards (`requireNext`, `requirePrevious`,
+  `requireBoth`) as extension surface, so a preset or sibling package walks
+  and rebuilds expressions, and reads a change's sides, through core
+  instead of restating them.
+  
+  The storage-bucket kind that folded onto the guards now names the change
+  by its kind token when it refuses: `supabase-storage-bucket …` instead
+  of its former display label. The refusal code is unchanged
+  (`invalid-kind-change`).
+- 116e13f: Set-operation branches must agree in type family. A combinator (core's, the chain's) and a recursive CTE's anchor/recursive-term pair now fail to type-check when one projected key's two families are a pair Postgres refuses to unify, measured on postgres:17. A `sql` fragment or an unplaceable literal (family `"unknown"`) matches any family, and a divergence inside one family (`integer` against `bigint`) is invisible to the rule by construction.
+
+### Patch Changes
+
+- 419c8fa: `defineFunction`'s reserved-name check now refuses the variables plpgsql
+  declares on its own, not only its keywords — `found`, `sqlstate`,
+  `sqlerrm`, and the twelve `tg_*` trigger variables, compared
+  case-insensitively the way an unquoted identifier folds — since an
+  argument under one of those names was unreachable behind plpgsql's own
+  variable, and a declared local hid it, with no error at all, and the keywords Postgres reserves for
+  function and type names (`left`, `is`, `join`, `current_schema`, …)
+  (#748).
+  
+  Two `defineFunction` argument keys that derive to the same SQL name
+  (`userId` beside `user_id`) are now refused at declaration time with
+  `duplicate-argument`, naming both keys and the shared name — the same
+  refusal a table's colliding column keys already get. Previously the
+  declaration succeeded and rendered a parameter list Postgres refuses at
+  `CREATE FUNCTION` (#751).
+  
+  The same-kind dependency refinement inside `diffSnapshots` no longer
+  drops a kind's second change for one identity in one direction — two
+  creates, two alters, or two drops for a single object. No built-in kind
+  produces that shape, but a preset kind implementing
+  `ObjectKind.dependsOnIdentities` can, and the loss was silent: one fewer
+  statement in the generated migration, with no error (#774).
+- 700f71f: `defineFunction`/`defineTrigger`'s reserved-name check now also refuses
+  Postgres's category-C column-name keywords (`int`, `row`, `values`,
+  `time`, `json`, `out`, `trim`, and the rest of the category) as a body
+  local, in every position a body renders one — an argument, a
+  `ctx.forEach` loop's record name, or a `ctx.row`/`ctx.rowOrNull` read's
+  derived scalar. Postgres accepts most of these in a loop or a
+  row-declared local; hejbro refuses them there too, since the
+  reserved-name refusal is uniform (#832).
+  
+  A `ctx.forEach` loop's record name and a `ctx.row`/`ctx.rowOrNull`
+  read's own name now take the same hejbro-SQL-name check
+  (`invalid-sql-name`) an argument key's derived name already does, before
+  any duplicate check — a loop or row name with a hyphen, an upper-case
+  letter, a leading digit or a non-ASCII letter is refused at declaration
+  time instead of reaching Postgres unquoted (#817).
+  
+  A loop's record name or a row read's derived scalar that carries an
+  already-declared argument's name is now refused with
+  `duplicate-local-name`, naming the argument it would shadow — previously
+  the loop or row variable silently won, and the argument was unreachable
+  for the rest of the body (#816). Two loops, or a loop and a row read,
+  sharing one name are refused the same way, naming both constructs.
+  
+  `duplicate-column` now names both colliding TypeScript keys and their
+  shared derived SQL name, the same way `duplicate-argument` already does,
+  instead of naming only the derived name (#818).
+  
+  An argument named `next` or `query`, or a loop named either, is now
+  refused with `reserved-local-name` too — plpgsql reads `return next;`/
+  `return query;` as its own `RETURN NEXT`/`RETURN QUERY`, so a
+  non-`setof` function using one previously generated a migration that
+  failed to apply at creation (42804) (#832).
+- 30564a6: A recursive CTE's outward row now reads a key as nullable when either the anchor or the recursive term projects it nullable, closing a gap where a non-null anchor beside a nullable recursive term still typed the outward row as non-null even though a real `null` from the recursive term reaches the rows.
+- 31e951f: A snapshot's set-shaped arrays — `policy.roles`, `trigger.events` (fixed
+  rank insert, update, delete), `trigger.events[].columns`, `table.indexes`,
+  `table.checks` — now compare and record in a canonical order, not
+  declaration order, through a new optional `ObjectKind.canonicalize`
+  member. `diffSnapshots`, `generate`'s "did the snapshot move" check, and
+  `verify`'s check 2 (declarations against the file) all read through the
+  canonical form, so reordering one of these arrays in a declaration is no
+  longer a spurious diff, migration, or `verify` failure — only a hand edit
+  still trips `verify`'s tip-hash check (#701).
+  
+  A vendored contract's client metadata now carries each table's columns
+  as a physical-order list instead of a plain object, so consumers
+  (`@hejbro/query`'s `synthesize.ts`) no longer read column order through
+  JavaScript's own key enumeration, which reorders integer-like keys ahead
+  of every other key regardless of insertion order. A contract vendored
+  before this change, whose metadata still carries the object-keyed shape,
+  keeps type-checking and reading correctly (#740).
+  
+  Under `returns setof <table>`, `ctx.return()` inside a `defineFunction`
+  body now accepts only that table's whole row — a `select(<table>)` or a
+  mutation on it ending in a bare `.returning()` — and refuses every
+  projection, including one naming every column in a different order, with
+  the new error code `return-expects-whole-row`. Postgres's `return query`
+  matches result columns by position, never by name, so a complete but
+  reordered projection previously compiled and shipped a function whose
+  every call failed at runtime with "structure of query does not match
+  function result type" (#749). `unsupported-return-value` now names the forms `ctx.return()` accepts.
+- 761567b: Internal: `foldColumnReferences` is no longer exported from the table module (it was never part of the public surface; #695).
+- 99b9554: A view created after a schema-wide table grant (`grant(schema).tables(...)`) now has that grant re-issued right after `create view`, exactly as a table does (#121/D78): Postgres's `grant ... on all tables in schema` covers views too, so a migration chain that skipped it left the view ungranted where a fresh migration granted it (#742).
+
 ## 0.2.0-pre.1
 
 ### Patch Changes
