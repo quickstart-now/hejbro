@@ -1,0 +1,38 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#491",
+  "title": "align third-party client version ranges across published packages (catalog policy)",
+  "parent": "quickstart-now/hejbro#412",
+  "status": "open",
+  "opened": "2026-09-05",
+  "closed": null,
+  "decisions": [
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "412/D24",
+        "412/D25; measured 2026-09-05: changeset publish selects pnpm here (check:pnpm-publish-tool)",
+        "and pnpm pack rewrites catalog: to the resolved range in peerDependencies and devDependencies of the packed manifest (@hejbro/pg -> pg ^8.23.0",
+        "@types/pg ^8.23.1; @hejbro/neon -> @neondatabase/serverless ^1.1.0)"
+      ],
+      "at": "2026-09-05T05:00Z",
+      "title": "Client ranges move to the pnpm catalog, guarded by check:client-ranges",
+      "ratified": null
+    }
+  ],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-05T05:00Z",
+      "title": "pnpm pack resolves catalog: ranges in the packed manifest",
+      "pr": null,
+      "decisions": []
+    }
+  ],
+  "prs": [],
+  "origin": null,
+  "followUps": []
+}

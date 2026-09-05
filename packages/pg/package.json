@@ -41,16 +41,16 @@
 		"prepack": "pnpm build"
 	},
 	"peerDependencies": {
-		"pg": "^8.23.0"
+		"pg": "catalog:"
 	},
 	"dependencies": {
 		"@hejbro/query": "workspace:*"
 	},
 	"devDependencies": {
 		"@hejbro/core": "workspace:*",
-		"@types/pg": "^8.23.1",
+		"@types/pg": "catalog:",
 		"@vitest/coverage-v8": "catalog:",
-		"pg": "^8.23.0",
+		"pg": "catalog:",
 		"tsdown": "catalog:",
 		"typescript": "catalog:",
 		"vitest": "catalog:"

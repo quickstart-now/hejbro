@@ -14,6 +14,7 @@
 		"check:diagnostic-xref": "node scripts/check-diagnostic-xref.mjs",
 		"check:bans": "node scripts/check-bans.mjs",
 		"check:fixed-group": "node scripts/check-fixed-group.mjs",
+		"check:client-ranges": "node scripts/check-client-ranges.mjs",
 		"check:pnpm-publish-tool": "node scripts/verify-pnpm-publish-tool.mjs",
 		"check:crap": "node scripts/crap-gate.mjs",
 		"check:tasktime": "node scripts/tasktime-badges.mjs",

@@ -42,14 +42,14 @@
 		"prepack": "pnpm build"
 	},
 	"peerDependencies": {
-		"@neondatabase/serverless": "^1.1.0"
+		"@neondatabase/serverless": "catalog:"
 	},
 	"dependencies": {
 		"@hejbro/core": "workspace:*",
 		"@hejbro/query": "workspace:*"
 	},
 	"devDependencies": {
-		"@neondatabase/serverless": "^1.1.0",
+		"@neondatabase/serverless": "catalog:",
 		"@vitest/coverage-v8": "catalog:",
 		"tsdown": "catalog:",
 		"typescript": "catalog:",
