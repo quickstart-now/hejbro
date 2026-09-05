@@ -915,8 +915,8 @@ date,change-id,task-id,group,est_min,actual_min,waited_user_min,notes
 2026-09-05,harden-ledger-diagnostics,3.1,3,10,16,0,D106 R1: dead client discarded (role on fresh connection); listener once per client; remedy by reason class; two sentences
 2026-09-05,harden-check-inventory,2.1,2,6,9,0,"lead (D106 R1 B1+N1): pull-mode text for the omitted index/check lines, the old same-line-for-both-commands pin retired, skill loss section corrected"
 2026-09-05,add-prepared-statements,1.1,1,9,35,0,third capability key; 40 fixture files mechanically updated (scripted edit + diff review)
-2026-09-05,add-prepared-statements,1.2,1,9,20,0,pgDriver preparedStatements option; sha256 name; built-kind allowlist
-2026-09-05,add-prepared-statements,1.3,1,6,12,0,neonDriver Pool overload; naming duplicated per preset boundary
+2026-09-05,add-prepared-statements,1.2,1,9,29,0,pgDriver preparedStatements option; sha256 name; built-kind allowlist; includes rework to allowlist/uniform threading/strict config pin
+2026-09-05,add-prepared-statements,1.3,1,6,18,0,neonDriver Pool overload; naming duplicated per preset boundary; includes the same rework applied pre-emptively
 2026-09-05,add-prepared-statements,1.4,1,7,12,0,transaction-pooler refuses a preparing base at construction
 2026-09-05,add-prepared-statements,1.5,1,8,15,0,docker live witness on postgres:17; container lifecycle included
 2026-09-05,add-prepared-statements,1.6,1,6,12,0,skill references + minor changeset

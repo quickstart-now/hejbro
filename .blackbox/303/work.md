@@ -200,3 +200,17 @@ Verified: @hejbro/neon's 28/28 tests still pass; full gate green
 (TURBO_FORCE=1 pnpm check-types 18/18, pnpm check, pnpm check:bans,
 TURBO_FORCE=1 pnpm test all packages, no regressions).
 
+<a id="w9"></a>
+## W9 — group 1: task-times.csv actual_min correction for 1.2/1.3
+
+_2026-09-05T05:45Z_
+
+Planner-directed correction: 1.2's and 1.3's actual_min in
+openspec/task-times.csv now absorb the planner-reviewed rework time
+(allowlist instead of denylist, uniform makeSession threading instead
+of a hardcoded checkout-pin special case, toStrictEqual instead of
+toEqual, public PgDriverOptions/NeonDriverOptions export) rather than
+tracking it as separate rows -- 1.2: 20 -> 29 min, 1.3: 12 -> 18 min.
+Per planner: task-times records what a task actually cost, and this
+rework was part of task 1.2's/1.3's own cost, not a new task.
+
