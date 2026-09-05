@@ -43,6 +43,17 @@ const THROWN_VALUE_ROWS: ReadonlyArray<{
 		thrown: { message: "connection reset", type: "error" },
 		expected: "connection reset",
 	},
+	// cd-planner review, #458 task 1.9: the neighbour the seven-row table
+	// left uncovered -- a plain object carrying BOTH a code and a
+	// non-empty message. Not decided here which one this function should
+	// prefer; this row only pins whichever the current implementation
+	// actually returns, so a rewind against the pre-1.9 implementation
+	// can show whether that answer changed.
+	{
+		label: "a plain object carrying both a code and a message",
+		thrown: { code: "ECONNREFUSED", message: "connection refused" },
+		expected: "connection refused",
+	},
 ];
 
 describe("describeDriverError", () => {
