@@ -184,7 +184,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#866](866/) | chore: vendor dd-blackbox meta v3 and migrate the record (pins once per PR) | closed | #867 | 0 | 0 (0 pending) |
 | ↳ [#869](869/) | cli integration suites are excluded from pnpm test, so the done-gates never run the live witnesses | open | #878 | 0 | 0 (0 pending) |
 | ↳ [#870](870/) | cli integration suite: 14 concurrent postgres containers contend and a failed run leaves orphans | open | #871 | 0 | 0 (0 pending) |
-| ↳ [#872](872/) | import: a non-default primary-key constraint name is dropped with no loss-report line | open | #878 | 0 | 0 (0 pending) |
+| ↳ [#872](872/) | import: a non-default primary-key constraint name is dropped with no loss-report line | open | #878 | 0 | 1 (1 pending) |
 | ↳ [#873](873/) | import: a foreign key referencing an omitted column makes the starter declaration fail to load | open | #878 | 0 | 0 (0 pending) |
 | ↳ [#874](874/) | loss report: sortedBy uses localeCompare, so import/pull output order depends on the locale | open | #878 | 0 | 0 (0 pending) |
 | ↳ [#875](875/) | config: an unreadable configuration file is reported as config-load-failed with import advice | open | #876 | 0 | 0 (0 pending) |
@@ -235,7 +235,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 
 ## Totals
 
-Owner decisions 95 · rulings 310 (interpretation 205, extension 103, stop 2) · pending extensions 65 · rejected 2
+Owner decisions 95 · rulings 311 (interpretation 205, extension 104, stop 2) · pending extensions 66 · rejected 2
 
 ## Conventions
 

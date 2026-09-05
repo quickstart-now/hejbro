@@ -26,3 +26,22 @@ is inferred; the requirement's not-inferred list is unchanged.
   and named on the same line; `check` then lists the column and the
   enum as unmanaged until both are renamed and declared — the line says
   so, per the existing rule for omission lines.
+
+## Q3 — The primary-key name (#872)
+
+The DSL cannot carry it (a neighbour of #859's `unmanaged constraint`);
+the reading keeps deriving the name and announces the drop. The way
+out is stated whole: rename the constraint to the derived name, or keep
+it and read `check`'s inventory line as expected.
+
+## Q4 — A foreign key at an omitted column (#873)
+
+An omission takes its foreign keys with it in both directions, as the
+requirement already says for an omitted table or schema; the report
+names each foreign key and the column that took it out.
+
+## Q5 — One comparator (#874)
+
+`check`'s inventory settled "code points, not a collation" and pinned
+it with the NFC/NFD pair; the loss report reuses that comparator through
+one shared export, so the two can never diverge.

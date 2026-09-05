@@ -46,7 +46,9 @@ fails both halves, while a leading-underscore `_id` passes the round
 trip and fails the rule — the very case a rule predicting the DSL's
 answer got wrong — and both are omitted and named. A table or schema left out for a name
 no declaration can carry takes the objects it holds with it, and the
-foreign keys that point at it: a surviving declaration SHALL never
+foreign keys that point at it; a column left out takes with it every
+foreign key that references it or is referenced through it, so a
+starter declaration always loads: a surviving declaration SHALL never
 reference an object this reading omitted for its name, and the report
 SHALL never announce an approximation for one. A target that lies
 outside the schemas the run named is a different case and SHALL be
@@ -145,6 +147,14 @@ the snapshot records what a declaration can express.
   as not inferred, and it names that column with its type and that
   sequence by name
 
+#### Scenario: A foreign key at an omitted column is omitted with it
+- **WHEN** a table holds a column `"UserId"` no declaration can carry,
+  a foreign key from that column to another table, and a foreign key
+  from a third table into that column
+- **THEN** neither foreign key reaches the starter declarations or the
+  contract, the starter loads, and the loss report names both foreign
+  keys and the column that took them out
+
 #### Scenario: A role named only by a policy is inferred
 - **WHEN** a database holds a policy `to app_reader` on a table no grant
   names that role on, a policy `to public`, and grants naming `app_writer`
@@ -169,7 +179,10 @@ does not own is kept as a raw default, naming that sequence;
 expressions are carried as raw SQL text rather than as the typed
 builders a hand-written declaration would use; a foreign key whose own
 catalog name D36 cannot carry is declared under the derived name,
-naming both — and the command that
+naming both; a primary key whose catalog name is not the derived one is
+declared under the derived name, naming the name it dropped and the way
+out whole (rename the constraint to the derived name, or keep it and
+read `check`'s inventory line as expected) — and the command that
 removes the loss:
 linking the schema repository for `pull`, hand-editing the starter
 declarations for `import`.
@@ -185,12 +198,27 @@ announces. A line that names the way out SHALL name the whole of it: a
 remedy stated short — renaming an object whose name a declaration could
 not carry, without declaring it afterwards — reads as a promise that the
 reporting stops there, and it does not. Which objects `check` keeps naming is `check`'s own
-inventory rule (`cli-commands`), not a second rule stated here.
+inventory rule (`cli-commands`), not a second rule stated here. The
+report's lines SHALL be ordered by code points, never by a collation —
+the same comparator `check`'s inventory uses, shared, so two locales
+and an NFC/NFD pair print the same order.
 
 #### Scenario: The report names the way out
 - **WHEN** `pull --db-url` completes
 - **THEN** its output names the guessed facts and says the loss ends
   when the consumer links the schema repository
+
+#### Scenario: A dropped primary-key name is announced with the way out
+- **WHEN** a table's primary key is named `pk_orders` in the catalog and
+  the reading infers it under the derived `orders_pkey`
+- **THEN** the loss report names `pk_orders` as dropped and states both
+  ways out, and `check` after `baseline` lists `pk_orders` under its
+  inventory as the report said it would
+
+#### Scenario: The report's order does not depend on the locale
+- **WHEN** the same database is imported under two locales, holding two
+  omitted objects whose names a collation treats as equal
+- **THEN** both runs print the loss report's lines in the same order
 
 #### Scenario: An omitted enum's line names its columns and what check will do
 - **WHEN** a reading omits an enum type for its name, and with it the
