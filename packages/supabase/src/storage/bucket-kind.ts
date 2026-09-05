@@ -225,8 +225,7 @@ const emitUpsertOrThrow = (change: KindChange): ReadonlyArray<SqlStatement> => {
 };
 
 /**
- * One handler per {@link ChangeOperation}, same technique as
- * `rls-uncached-auth-call.ts`'s `childrenOfHandlers`/core's own
+ * One handler per {@link ChangeOperation}, same technique as core's own
  * `someExprNodeHandlers`: a mapped type over the closed operation union, so
  * a missing entry is a compile error. Applied here for coverage, not
  * complexity (#154 ratchet-5): the former `switch`'s `default:
