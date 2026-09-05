@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 3,
   "kind": "issue",
   "ref": "quickstart-now/hejbro#864",
   "title": "pg driver: a lost connection kills the process through an unhandled pool 'error' event, dumping a raw stack",
