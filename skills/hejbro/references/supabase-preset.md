@@ -131,7 +131,7 @@ absent:
 
 ```ts
 import { pgDriver } from "@hejbro/pg";
-import { supabaseDriver } from "@hejbro/supabase";
+import { supabaseDriver, supabasePreset } from "@hejbro/supabase";
 import { defineConfig } from "hejbro";
 
 export default defineConfig({
@@ -139,6 +139,7 @@ export default defineConfig({
 	migrationsDir: "migrations",
 	snapshotPath: "hejbro.snapshot.json",
 	prefixStrategy: "index",
+	presets: [supabasePreset],
 	driver: (connectionString) =>
 		supabaseDriver(pgDriver(connectionString), {
 			endpoint: "transaction-pooler",

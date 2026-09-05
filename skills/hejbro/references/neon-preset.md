@@ -35,6 +35,7 @@ export default defineConfig({
 	migrationsDir: "migrations",
 	snapshotPath: "hejbro.snapshot.json",
 	prefixStrategy: "index",
+	presets: [],
 	driver: (connectionString) => {
 		const pool = new Pool({ connectionString });
 		return { ...neonDriver(pool), client: { end: () => pool.end() } };

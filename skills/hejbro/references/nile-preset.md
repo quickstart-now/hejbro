@@ -69,7 +69,7 @@ the vanilla `@hejbro/pg` import each falls back to when the field is
 absent:
 
 ```ts
-import { nileDriver } from "@hejbro/nile";
+import { nileDriver, nilePreset } from "@hejbro/nile";
 import { pgDriver } from "@hejbro/pg";
 import { defineConfig } from "hejbro";
 
@@ -78,6 +78,7 @@ export default defineConfig({
 	migrationsDir: "migrations",
 	snapshotPath: "hejbro.snapshot.json",
 	prefixStrategy: "index",
+	presets: [nilePreset],
 	driver: (connectionString) => nileDriver(pgDriver(connectionString)),
 });
 ```
