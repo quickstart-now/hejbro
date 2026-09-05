@@ -40,3 +40,14 @@ compared — the next applied migration records one.
 current checksum (short form), and the remedy: restore the file from
 version control, or if the edit was deliberate, write it as a new
 migration — hejbro never rewrites applied history.
+
+## Q5 — A filtered ledger (#865)
+
+The identity judgement already reads the relation's kind, persistence
+and columns from the catalog; `relrowsecurity` and `relforcerowsecurity`
+sit on the same row. hejbro never enables row-level security on its own
+table, so a ledger carrying it is a ledger someone changed — refused
+under its own code before any row is read, with the policies named, by
+every command that touches the ledger. A row count the catalog
+contradicts is not used: `pg_class.reltuples` is an estimate and a
+freshly vacuumed ledger has none.
