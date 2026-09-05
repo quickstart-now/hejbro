@@ -920,3 +920,4 @@ date,change-id,task-id,group,est_min,actual_min,waited_user_min,notes
 2026-09-05,add-prepared-statements,1.4,1,7,12,0,transaction-pooler refuses a preparing base at construction
 2026-09-05,add-prepared-statements,1.5,1,8,15,0,docker live witness on postgres:17; container lifecycle included
 2026-09-05,add-prepared-statements,1.6,1,6,12,0,skill references + minor changeset
+2026-09-05,pin-wave-tie-break,1.1,1,6,9,0,"lead-direct: spec sentence + unit pin; the first drop-side expectation was a guess the test corrected (self-reference never blocks)"

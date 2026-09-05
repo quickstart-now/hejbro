@@ -161,7 +161,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 
 ## Totals
 
-Owner decisions 91 · rulings 185 (interpretation 130, extension 53, stop 2) · pending extensions 15 · rejected 2
+Owner decisions 91 · rulings 186 (interpretation 131, extension 53, stop 2) · pending extensions 15 · rejected 2
 
 ## Conventions
 
