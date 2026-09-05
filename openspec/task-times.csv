@@ -863,17 +863,17 @@ date,change-id,task-id,group,est_min,actual_min,waited_user_min,notes
 2026-09-05,harden-check-expressions,1.8,1,6,25,0,brownfield + nile-preset docs updated; line-wrap broke a skill test string match once, fixed
 2026-09-05,harden-check-expressions,1.9,1,10,70,0,review round 1 R3: index compared as ordered key list; declaredSql closures replace JsonValue for plain-key rendering; old expressions-based attempt discarded and redone
 2026-09-05,harden-check-expressions,1.10,1,9,55,0,review B1/B2: hasExpressionSurface filter removed; docker witness round-trips bare/paren/collate keys live and catches db-only expression/predicate in both directions; brownfield doc updated
-2026-09-05,harden-check-inventory,1.1,1,8,29,0,anchor + column axis; owner ruling added a 5th input row (existingTable-only schema) after the first pass; stash/pop used to confirm red before the fix existed
-2026-09-05,harden-check-inventory,1.2,1,9,28,0,constraintName via conindid join; fixture sweep hit a file the plan missed (infer-adapter.test.ts) and a runtime-only zod failure invisible to tsc (infer-unique-on-omitted-table.test.ts)
+2026-09-05,harden-check-inventory,1.1,1,8,12,0,anchor + column axis; owner ruling added a 5th input row (existingTable-only schema) after the first pass -- wall-clock 29m including coordination wait
+2026-09-05,harden-check-inventory,1.2,1,9,27,0,multi-file fixture sweep + runtime-only zod regression; estimate was too narrow -- constraintName via conindid join, fixture sweep hit a file the plan missed (infer-adapter.test.ts) and a runtime-only failure invisible to tsc (infer-unique-on-omitted-table.test.ts)
 2026-09-05,harden-check-inventory,1.3,1,8,7,0,column-kind axis already worked with no src change; describe pinned it
 2026-09-05,harden-check-inventory,1.4,1,10,10,0,index axis + exclusion rule; 9-row single input table on one managed table
 2026-09-05,harden-check-inventory,1.5,1,7,6,0,check-constraint axis; type filter drawn first to keep p/u/f out of scope
 2026-09-05,harden-check-inventory,1.6,1,9,8,0,rendering layer; sortedBy idiom reused from infer/loss-report.ts
 2026-09-05,harden-check-inventory,1.7,1,7,9,0,loss-report wording; a file outside the task's own file list (infer-omitted-names.integration.test.ts) also asserted the old string and needed the same fix
-2026-09-05,harden-check-inventory,1.8,1,9,20,0,live witness against examples/postgres; writing it surfaced the conindid/foreign-key defect (see 1.2b) before the assertions could pass
+2026-09-05,harden-check-inventory,1.8,1,9,18,0,live witness against examples/postgres; conindid defect found here (see 1.2b) before the assertions could pass -- wall-clock much higher, most of it coordination wait for the fix's approval
 2026-09-05,harden-check-inventory,1.9,1,8,9,0,brownfield corpus witness; the corpus already held an undeclarable index and check, so the 1.7 wording got an end-to-end live proof for free
-2026-09-05,harden-check-inventory,1.10,1,7,10,0,per-table/schema-qualified column identity rows plus a realistic adopted-database PK-name-mismatch row; both new column rows were green from the start (no defect)
-2026-09-05,harden-check-inventory,1.2b,1,,15,0,conindid join also matched foreign keys pointing at the index; found by 1.8's live witness against a schema with real foreign keys, invisible to fixture-injected unit tests; fixed with contype in ('p','u','x')
+2026-09-05,harden-check-inventory,1.10,1,7,8,0,per-table/schema-qualified column identity rows plus a realistic adopted-database PK-name-mismatch row; both new column rows were green from the start (no defect) -- wall-clock far higher, almost entirely coordination wait for the instruction to land
+2026-09-05,harden-check-inventory,1.2b,1,,15,0,conindid join also matched foreign keys; found by 1.8's live witness, invisible to fixture-injected unit tests; fixed with contype in ('p','u','x')
 2026-09-05,harden-check-expressions,1.11,1,6,40,0,review R2 B4: include columns excluded from keys; boundary line says keys
 2026-09-05,harden-snapshot-and-vendor-order,1.1,1,8,25,0,"so team (#701): ObjectKind.canonicalize hook applied by buildSnapshot; table indexes/checks sorted by name; 6-row table, red 3 -> green 43. Implementer-stamped working span"
 2026-09-05,harden-snapshot-and-vendor-order,1.2,1,7,30,0,"so team (#701): policy roles sorted, trigger events ranked insert/update/delete with update columns sorted; red 10 -> green 36; declaration-path rows added through generateMigration (+5m). Implementer-stamped working span"
