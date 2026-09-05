@@ -1,9 +1,19 @@
-import { and, eq, ne, schema, select, table, text, uuid } from "@hejbro/core";
+import {
+	and,
+	eq,
+	ne,
+	roleName,
+	schema,
+	select,
+	table,
+	text,
+	uuid,
+} from "@hejbro/core";
 import { describe, expect, it, vi } from "vitest";
 import type { CompileResult } from "../../src/compile/compile";
 import { compile } from "../../src/compile/compile";
 import { db } from "../../src/db/db";
-import type { Driver } from "../../src/driver/contract";
+import type { Driver, DriverSession } from "../../src/driver/contract";
 import { sql } from "../../src/sql";
 
 const app = schema("app");
@@ -93,5 +103,65 @@ describe("db().execute (task 4.3)", () => {
 		await handle.execute(bareNode);
 
 		expect(received[0]).toEqual(compile(bareNode));
+	});
+});
+
+/**
+ * Same recording contract as {@link recordingDriver} above, but models one
+ * BEGIN/COMMIT per `driver.transaction()` call and records every statement
+ * sent on that connection, in order, as a full `CompileResult` (kind
+ * included) -- needed to prove a context-applied handle's own statement is
+ * unchanged relative to `compile()` AND that the context's own statements
+ * precede it on the SAME transaction (task 1.6, #452, the context-applied
+ * half of the preview-equals-executed claim `recordingDriver`'s own
+ * `transaction` stub can't observe: that stub never records what runs
+ * inside it at all).
+ */
+const recordingContextDriver = (): {
+	readonly driver: Driver;
+	readonly sentPerTransaction: Array<Array<CompileResult>>;
+} => {
+	const sentPerTransaction: Array<Array<CompileResult>> = [];
+	const driver: Driver = {
+		capabilities: { "interactive-transactions": true, "session-state": true },
+		execute: vi.fn(async () => []),
+		transaction: vi.fn(async (callback) => {
+			const sent: Array<CompileResult> = [];
+			sentPerTransaction.push(sent);
+			const session: DriverSession = {
+				execute: vi.fn(async (compiled: CompileResult) => {
+					sent.push(compiled);
+					return [];
+				}),
+			};
+			return callback(session);
+		}),
+		setupSession: vi.fn(async () => {}),
+	};
+	return { driver, sentPerTransaction };
+};
+
+describe("db().execute under an applied execution context (task 1.6, #452)", () => {
+	it("executed SQL equals previewed compile output under an applied execution context", async () => {
+		const { driver, sentPerTransaction } = recordingContextDriver();
+		const handle = db({ posts }, driver, { roles: [roleName("app_admin")] });
+		// a statement that actually carries params, not the empty-array
+		// vacuous case -- same reasoning as the context-less case above.
+		const statement = select(posts).where(
+			and(eq(posts.status, "published"), ne(posts.id, "not-this-one")),
+		);
+		const preview = compile(statement);
+
+		await handle.as({ role: roleName("app_admin") }).execute(statement);
+
+		expect(sentPerTransaction).toHaveLength(1);
+		const sent = sentPerTransaction[0] ?? [];
+		// the context's own role statement precedes the caller's statement
+		// on the same transaction, rather than altering it -- the caller's
+		// own statement is byte-identical to compile()'s preview, sql,
+		// params and kind all three.
+		expect(sent).toHaveLength(2);
+		expect(sent[0]?.sql).toBe('set local role "app_admin"');
+		expect(sent[1]).toEqual(preview);
 	});
 });
