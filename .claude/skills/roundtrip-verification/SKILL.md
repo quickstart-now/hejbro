@@ -3,6 +3,8 @@ name: roundtrip-verification
 description: Run and interpret the local Docker round-trip for examples. Use when changing anything under examples/ — declarations, steps, migration chains, seeds — before claiming the change done.
 paths:
   - "examples/**"
+metadata:
+  internal: true
 ---
 
 # Round-trip verification
