@@ -1,0 +1,12 @@
+{
+  "version": 3,
+  "number": 895,
+  "ref": "quickstart-now/hejbro#895",
+  "title": "chore(blackbox): refresh merge state for #868 and closed items",
+  "head": "0addcb04da2668224eb3ac87eab179480c5737d4",
+  "headRef": "chore-blackbox-state",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-05T08:21Z",
+  "refs": []
+}
