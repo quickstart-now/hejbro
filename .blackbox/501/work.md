@@ -63,3 +63,12 @@ B2's basis correction: the equivalence between filter's condition and where's ow
 
 Six neighbor defects the same review round found, all outside this change's own scope and filed as separate issues, untouched here: #945 (snapshot decode never checks an aggregate-filter node's own call identity, only that fn/where are present -- a corrupted call name silently re-renders), #947 (applyColumnOrderToViewQuery throws a bare TypeError on a defineView thunk, reaching a user who skipped type-checking via the jiti load path), #948 (defineFunction's args-prototype-key guard misfires on a bare array, blaming a missing __proto__), #949 (isColumnBuilder crashes via `in` on a string returns value), #950 (ctx.return(literal(1))'s diagnostic doesn't say literal() is boolean-only), #951 (inArray(column, <subselect>) throws a bare "values.map is not a function").
 
+<a id="w6"></a>
+## W6 — review round 3 (501/R8): naming a thenable target honestly
+
+_2026-09-05T15:42Z · per R7, R8_
+
+Review round 3 (501/R8): the reviewer's own request to prove the db.fn refusal row against the real public path (not a synthetic stand-in) surfaced a further inaccuracy the identifier-lookup approach (R7 B1 follow-up) still had -- a real handle.fn.*(...) call exposes no functionName/schemaName of its own (confirmed directly: Object.keys() on the real Promise is empty), so the identifier-lookup path always fell through to the generic phrase for the real input, making the lookup itself dead code for the one case it was built for. Replaced with a direct thenable check: a thenable is named "a thenable, not an expression -- a function called through db.fn is one" (states the fact, points at the most common cause); anything else without exprNode is "a value without an expression node". Naming the function exactly needs a brand core defines and db.fn's own thenable stamps -- filed as a follow-up, #953 (under #815), out of this change's file boundary (packages/query/db/** is bt's).
+
+packages/query/test/db/fn.test.ts now asserts filter()'s exact message against a REAL db(schema, driver) handle's own handle.fn.countPosts({}) call (not core's bare-Promise stand-in), closing the gap the reviewer named directly: a message previously proven only against a hand-built shape, never the real public path it claims to describe.
+

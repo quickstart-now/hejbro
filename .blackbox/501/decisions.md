@@ -71,3 +71,12 @@ B1. describeFilterTarget must name a functionCall node that is not a builder agg
 
 B2. The equivalence with where lived in the skill reference and the proposal, not in the delta, so the user-facing contract promised more than the spec stated; that promise together with where's actual build-time refusal is what makes this a defect. The delta now states it and carries its own scenario. The nested-aggregate case (42803) stays out and narrows issue #931.
 
+<a id="r8"></a>
+## R8 — filter names a thenable target as what it is
+
+_lead · interpretation · 2026-09-05T15:28Z · ratified: pending_
+
+Basis: R2, R7.
+
+A db.fn call is a thenable built by @hejbro/query, and core's filter() has no marker that identifies it, so calling it "a declared function call" would assert what core cannot know -- the same mistake as calling a missing exprNode a window function. describeFilterTarget therefore names a thenable as "a thenable, not an expression -- a function called through db.fn is one" and any other node-less value as "a value without an expression node". The delta's refusal scenario lists a db.fn call in its WHEN and requires the diagnostic to name the target it was given; this phrasing satisfies it by stating the fact and pointing at the most common cause. Naming the function exactly needs a brand defined in core and stamped by query's db.fn thenable, filed as a follow-up; it is out of this change's file boundary.
+

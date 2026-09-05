@@ -75,6 +75,15 @@
       "at": "2026-09-05T14:43Z",
       "title": "filter's refusal names the target it got, and its condition refuses window functions",
       "ratified": null
+    },
+    {
+      "id": "R8",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [],
+      "at": "2026-09-05T15:28Z",
+      "title": "filter names a thenable target as what it is",
+      "ratified": null
     }
   ],
   "work": [
@@ -128,6 +137,16 @@
       "pr": null,
       "decisions": [
         "R7"
+      ]
+    },
+    {
+      "id": "W6",
+      "at": "2026-09-05T15:42Z",
+      "title": "review round 3 (501/R8): naming a thenable target honestly",
+      "pr": null,
+      "decisions": [
+        "R7",
+        "R8"
       ]
     }
   ],
