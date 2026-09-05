@@ -11,11 +11,14 @@ conflict expected).
 
 **Files edited**: `packages/core/src/query/select.ts`, `packages/core/
 src/query/with.ts`, `packages/core/test/query/*set-op*-types.test.ts`
-and the recursive-term type test (1.1, 1.2a); `packages/query/src/db/
-chain.ts`, `packages/query/test/types/*.test.ts` (1.2b); `skills/hejbro/
-references/query-layer.md`, one `.changeset/*.md` (1.3). If a task
-appears to need any other file, that goes back to the planner, not into
-the diff.
+and the recursive-term type test, `packages/core/test/query/
+select.test.ts` (1.2a — the one call site the new rule refuses); `packages/
+query/src/db/chain.ts`, `packages/query/test/types/*.test.ts` (1.2b);
+`skills/hejbro/references/query-layer.md`, one `.changeset/*.md` (1.3).
+A task that tightens a type also repairs the existing call sites the
+new rule refuses; the repo-wide `check-types` run is that list, and
+each such file is named here. If a task appears to need any other
+file, that goes back to the planner, not into the diff.
 
 **Ordering.** 1.1 → 1.2a → 1.2b → 1.3.
 
