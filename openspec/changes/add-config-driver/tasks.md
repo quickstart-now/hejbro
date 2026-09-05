@@ -9,10 +9,14 @@ the constraint only).
 
 **Files edited**: `packages/cli/src/config.ts`, `packages/cli/test/
 config*.test.ts` (1.1); `packages/cli/src/check/driver.ts`,
-`packages/cli/test/check-driver.test.ts`, `packages/cli/src/apply/
-capability.ts` (1.2 — `APPLY_CONNECTION_CODES` is the four apply
-commands' shared literal set and needs the fourth code); `packages/cli/
-src/loader.ts` + `packages/cli/test/loader.test.ts` (1.3, the lenient load
+`packages/cli/test/check-driver.test.ts`, and the four sites that build
+a `ConnectionCodes` literal — `packages/cli/src/apply/capability.ts`
+(`APPLY_CONNECTION_CODES`, shared by `migrate`/`status`/`reset`/
+`raise`) plus the inline literals in `commands/{check,import,pull}.ts`
+(1.2, one code string each and nothing else: a fourth *required* field
+stops those files compiling until they carry it, and making it optional
+would reopen the defaulted-code channel `check/driver.ts`'s own header
+forbids); `packages/cli/src/loader.ts` + `packages/cli/test/loader.test.ts` (1.3, the lenient load
 — see below); the seven command files under `packages/cli/src/commands/`
 with their in-process tests (1.3, 1.4); `examples/cli-smoke/test/
 *.test.ts` + a fixture config (1.5); `skills/hejbro/references/

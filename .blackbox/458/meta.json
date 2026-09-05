@@ -20,9 +20,35 @@
       "at": "2026-09-05T04:55Z",
       "title": "hejbro.config.ts gains a driver factory that every connecting command prefers over the dynamic @hejbro/pg import",
       "ratified": null
+    },
+    {
+      "id": "R2",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "458/R1 (every connecting command prefers the factory); cd-planner's measurement (three commands never call loadConfig; import/pull bootstrap projects that have no declarations yet); design Q4 (a misspelled driver is never ignored silently)"
+      ],
+      "at": "2026-09-05T06:50Z",
+      "title": "raise, import and pull read the configuration leniently: an absent file means no factory; any other load failure refuses; pull's flag is --db-url",
+      "ratified": null
     }
   ],
-  "work": [],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-05T06:58Z",
+      "title": "Three connecting commands never read the configuration",
+      "pr": null,
+      "decisions": []
+    },
+    {
+      "id": "W2",
+      "at": "2026-09-05T06:58Z",
+      "title": "import, pull and raise take no --config flag",
+      "pr": null,
+      "decisions": []
+    }
+  ],
   "prs": [],
   "origin": null,
   "followUps": []
