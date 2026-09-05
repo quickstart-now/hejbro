@@ -1,0 +1,53 @@
+{
+  "version": 3,
+  "number": 911,
+  "ref": "quickstart-now/hejbro#911",
+  "title": "chore(openspec): archive add-config-driver after d106 round 1 (#458)",
+  "head": "10dcd24f9e7703f0794767edae70c00d98301aae",
+  "headRef": "archive-add-config-driver",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-05T12:16Z",
+  "refs": [
+    {
+      "path": "openspec/changes/archive/2026-09-05-add-config-driver/design.md",
+      "blob": "80992fcd08961be6df0902bb8ec6231914f2bc2c"
+    },
+    {
+      "path": "openspec/changes/add-config-driver/design.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-05-add-config-driver/evaluation.md",
+      "blob": "f27e0bc4224d7581c54ba55c9bce97c1f4363ac5"
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-05-add-config-driver/proposal.md",
+      "blob": "64667d3a3eff47260966639a899c9c8a1203e5b3"
+    },
+    {
+      "path": "openspec/changes/add-config-driver/proposal.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-05-add-config-driver/specs/cli-commands/spec.md",
+      "blob": "e58a621736a0cd02efa7de8bcf518f12f3e682a4"
+    },
+    {
+      "path": "openspec/changes/add-config-driver/specs/cli-commands/spec.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-05-add-config-driver/tasks.md",
+      "blob": "4ae835cbbe47637b83c08e2553226a5fb263431a"
+    },
+    {
+      "path": "openspec/changes/add-config-driver/tasks.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/specs/cli-commands/spec.md",
+      "blob": "941c1373b69aba080e79b9494ba30e067937e178"
+    }
+  ]
+}

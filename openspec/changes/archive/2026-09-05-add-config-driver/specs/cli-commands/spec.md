@@ -198,7 +198,11 @@ silently ignored anywhere.
 #### Scenario: No factory, no change
 - **WHEN** the configuration names no factory
 - **THEN** every connecting command imports the vanilla driver on
-  demand and behaves byte-for-byte as before
+  demand and behaves byte-for-byte as before, except that `pull`'s two
+  connection diagnostics (`pull-connection-missing`,
+  `pull-connection-failed`) now name its own `--db-url` flag where they
+  used to say `--url` -- the correction the "fails naming both ways"
+  requirement above demands, and the only byte that moves
 
 #### Scenario: A decorated driver reaches the commands
 - **WHEN** a Supabase project configures `driver: (url) =>
