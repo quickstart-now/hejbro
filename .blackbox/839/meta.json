@@ -4,9 +4,9 @@
   "ref": "quickstart-now/hejbro#839",
   "title": "test: core cross-instance-symbols times out under load from parallel worktrees",
   "parent": "quickstart-now/hejbro#815",
-  "status": "open",
+  "status": "closed",
   "opened": "2026-09-05",
-  "closed": null,
+  "closed": "2026-09-05",
   "decisions": [],
   "work": [],
   "prs": [

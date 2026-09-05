@@ -4,9 +4,9 @@
   "ref": "quickstart-now/hejbro#533",
   "title": "cli restore-command test flakes on first heavy parallel run after install",
   "parent": "quickstart-now/hejbro#412",
-  "status": "open",
+  "status": "closed",
   "opened": "2026-09-04",
-  "closed": null,
+  "closed": "2026-09-05",
   "decisions": [
     {
       "id": "R1",
