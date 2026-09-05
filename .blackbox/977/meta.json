@@ -1,0 +1,21 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#977",
+  "title": "query: same-family type pairs the server refuses (26 measured classes, arrays of different element types first) pass the type layer",
+  "parent": null,
+  "status": "open",
+  "opened": "2026-09-05",
+  "closed": null,
+  "decisions": [],
+  "work": [],
+  "prs": [
+    {
+      "number": 992,
+      "role": "refs",
+      "pinnedAt": "2026-09-05T22:58Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

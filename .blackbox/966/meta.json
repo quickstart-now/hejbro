@@ -4,9 +4,9 @@
   "ref": "quickstart-now/hejbro#966",
   "title": "query: a cross-family type divergence on a recursive-cte key passes the type layer and fails on the server",
   "parent": "quickstart-now/hejbro#815",
-  "status": "open",
+  "status": "closed",
   "opened": "2026-09-05",
-  "closed": null,
+  "closed": "2026-09-05",
   "decisions": [
     {
       "id": "R1",
@@ -26,6 +26,11 @@
       "number": 968,
       "role": "refs",
       "pinnedAt": "2026-09-05T17:06Z"
+    },
+    {
+      "number": 992,
+      "role": "closes",
+      "pinnedAt": "2026-09-05T22:58Z"
     }
   ],
   "origin": null,
