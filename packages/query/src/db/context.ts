@@ -17,7 +17,7 @@ import { executeOn, sendCompiled } from "./execute";
 import { createFnApi } from "./fn";
 import type { TypedFnApi } from "./fn-types";
 import type { Tx } from "./transaction";
-import { runCallbackWithTx } from "./transaction";
+import { runCallbackWithTx, TRANSACTION_OPERATION } from "./transaction";
 
 /**
  * `db.as(context)`'s own argument (task 2.10, #554/#555): re-exported
@@ -325,7 +325,7 @@ const runContextInteractively = <T>(
 const capabilitiesForOperation = (
 	operation: string,
 ): ReadonlyArray<DriverCapabilityKey> => {
-	if (operation === "transaction") {
+	if (operation === TRANSACTION_OPERATION) {
 		return ["interactive-transactions"];
 	}
 	return ["interactive-transactions", "batched-transactions"];
@@ -366,7 +366,7 @@ export const createProviderRun = (
 		}
 		assertContextRole(driver, context.role, declaredRoles);
 		if (
-			operation === "transaction" ||
+			operation === TRANSACTION_OPERATION ||
 			driver.capabilities["interactive-transactions"]
 		) {
 			return runContextInteractively(driver, context, operation, send);
@@ -441,7 +441,7 @@ export const createAsApi = <
 		const scopedTransaction = <T>(
 			callback: (tx: Tx) => Promise<T>,
 		): Promise<T> =>
-			scopedRunInteractive("transaction", (session) =>
+			scopedRunInteractive(TRANSACTION_OPERATION, (session) =>
 				runCallbackWithTx(session, tables, callback),
 			);
 		return {

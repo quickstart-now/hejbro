@@ -8,6 +8,17 @@ import type { Declarations, ExecuteResult } from "./db";
 import { executeOn, sendCompiled } from "./execute";
 
 /**
+ * The operation name every interactive-only transaction surface asserts
+ * and reports under (task 1.3, #486): `context.ts`'s
+ * `capabilitiesForOperation` compares against this same constant (not a
+ * repeated string literal) to decide the single-key vs. two-key assert,
+ * so renaming this can never silently let the callback-scoped surface
+ * fall through to the batch-eligible two-key path -- a callback is
+ * inherently interactive.
+ */
+export const TRANSACTION_OPERATION = "transaction";
+
+/**
  * What a `transaction()` callback receives — `execute` plus the same
  * thenable chain members every other surface carries (task 7.4, group 7
  * decision ③: the chain surface is identical on the unscoped handle,
@@ -481,7 +492,11 @@ export const createTransactionApi = (
 ): (<T>(callback: (tx: Tx) => Promise<T>) => Promise<T>) => {
 	const guardedOpen = guardNestedTransaction(
 		<T>(callback: (session: DriverSession) => Promise<T>): Promise<T> => {
-			assertCapability(driver, ["interactive-transactions"], "transaction");
+			assertCapability(
+				driver,
+				["interactive-transactions"],
+				TRANSACTION_OPERATION,
+			);
 			return driver.transaction(callback);
 		},
 	);
@@ -505,4 +520,6 @@ export const guardedProviderTransactionOpener = (
 		send: (session: DriverSession) => Promise<T>,
 	) => Promise<T>,
 ): (<T>(callback: (session: DriverSession) => Promise<T>) => Promise<T>) =>
-	guardNestedTransaction((callback) => providerRun("transaction", callback));
+	guardNestedTransaction((callback) =>
+		providerRun(TRANSACTION_OPERATION, callback),
+	);
