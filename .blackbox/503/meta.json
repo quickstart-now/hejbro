@@ -1,0 +1,28 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#503",
+  "title": "reject cross-family set-operation branches at build time",
+  "parent": "quickstart-now/hejbro#412",
+  "status": "open",
+  "opened": "2026-09-05",
+  "closed": null,
+  "decisions": [
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "412/D24",
+        "D25; the 42804 measurement in #503; hejbro never stricter than Postgres (plpgsql-function-bodies precedent); #489's within-family scope"
+      ],
+      "at": "2026-09-05T11:00Z",
+      "title": "Cross-family set-operation branches are refused at build time by a measured pair table; unknown is a wildcard; #489 stays separate",
+      "ratified": null
+    }
+  ],
+  "work": [],
+  "prs": [],
+  "origin": null,
+  "followUps": []
+}
