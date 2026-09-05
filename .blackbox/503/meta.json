@@ -74,6 +74,17 @@
       "at": "2026-09-05T18:00Z",
       "title": "the unified-pair scenario names the pairs that exist; the within-family paragraph names the four refusals",
       "ratified": null
+    },
+    {
+      "id": "R7",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "R1"
+      ],
+      "at": "2026-09-05T18:22Z",
+      "title": "the chain carries its projection so the family rule reaches the primary surface; 1.2 splits; chain.ts joins the boundary",
+      "ratified": null
     }
   ],
   "work": [
