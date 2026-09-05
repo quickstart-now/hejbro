@@ -45,17 +45,19 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | [#374](374/) | adversarial spec-only review stage in the opsx cycle | closed | #539 | 1 | 0 (0 pending) |
 | [#377](377/) | snapshot format stability policy for 1.0 | closed | #383 | 1 | 0 (0 pending) |
 | [#378](378/) | defect-leakage metric over escaped defects | closed | #384 | 1 | 0 (0 pending) |
-| [#412](412/) | 0.2.x: post-release commitments | open | #715 #808 #824 #835 #840 #849 #851 #858 #867 #868 #871 #878 #880 #895 #894 (via #303) #881 (via #375) #850 (via #449) #882 (via #450) #883 (via #491) #885 (via #497) #884 (via #510) #737 (via #528) #760 (via #528) #773 (via #533) #886 (via #652) #896 (via #663) #897 (via #674) #733 (via #679) #758 (via #679) #739 (via #687) #759 (via #687) #770 (via #687) #861 (via #701) #879 (via #707) #847 (via #741) #889 (via #745) #833 (via #748) #784 (via #750) #802 (via #750) #775 (via #752) #799 (via #752) #780 (via #754) #795 (via #754) #887 (via #765) #855 (via #778) #838 (via #783) #786 (via #785) #789 (via #787) #790 (via #788) #792 (via #791) #794 (via #793) #890 (via #798) #898 (via #798) #822 (via #800) #806 (via #804) #813 (via #807) #811 (via #810) | 26 | 31 (0 pending) |
+| [#412](412/) | 0.2.x: post-release commitments | open | #715 #808 #824 #835 #840 #849 #851 #858 #867 #868 #871 #878 #880 #895 #894 (via #303) #881 (via #375) #850 (via #449) #882 (via #450) #901 (via #452) #883 (via #491) #885 (via #497) #884 (via #510) #737 (via #528) #760 (via #528) #773 (via #533) #886 (via #652) #896 (via #663) #897 (via #674) #733 (via #679) #758 (via #679) #739 (via #687) #759 (via #687) #770 (via #687) #861 (via #701) #879 (via #707) #847 (via #741) #889 (via #745) #833 (via #748) #784 (via #750) #802 (via #750) #775 (via #752) #799 (via #752) #780 (via #754) #795 (via #754) #887 (via #765) #855 (via #778) #838 (via #783) #786 (via #785) #789 (via #787) #790 (via #788) #792 (via #791) #794 (via #793) #890 (via #798) #898 (via #798) #822 (via #800) #806 (via #804) #813 (via #807) #811 (via #810) | 26 | 31 (0 pending) |
 | ↳ [#303](303/) | Prepared-statement caching behind the driver capability contract | closed | #894 | 0 | 2 (1 pending) |
 | ↳ [#375](375/) | run the d49 round-trip witness in ci | closed | #881 | 0 | 1 (1 pending) |
 | ↳ [#449](449/) | concurrent tx.execute beside a nested transaction is unguarded | closed | #849 #850 | 0 | 3 (2 pending) |
 | ↳ [#450](450/) | identical literals in distinct on and order by lift to different placeholders | closed | #882 | 0 | 1 (0 pending) |
+| ↳ [#452](452/) | promote the cast/revive drift guard to a ratchet over the aggregate vocabulary | closed | #901 | 0 | 3 (1 pending) |
 | ↳ [#491](491/) | align third-party client version ranges across published packages (catalog policy) | closed | #883 | 0 | 1 (0 pending) |
 | ↳ [#497](497/) | crap gate output misstates its side effects and cache-induced failures | closed | #885 | 0 | 0 (0 pending) |
 | ↳ [#510](510/) | cross-check MODIFIED requirement titles against the base spec in CI | closed | #884 | 0 | 0 (0 pending) |
 | ↳ [#528](528/) | driver-conformance kit mis-observes transaction-wrapping session-state:false drivers | closed | #737 #760 | 0 | 6 (0 pending) |
 | ↳ [#531](531/) | pg checkout reads its own setupSession; the spec's late-binding scenario fails for spread decorators | closed | #737 | 0 | 3 (0 pending) |
 | ↳ [#533](533/) | cli restore-command test flakes on first heavy parallel run after install | closed | #773 | 0 | 1 (0 pending) |
+| ↳ [#544](544/) | query-execution: qualify the preview-equals-executed scenario for provider handles | closed | #901 | 0 | 1 (0 pending) |
 | ↳ [#551](551/) | execute() of a core-built set operation loses per-key result typing | closed | #737 | 0 | 2 (0 pending) |
 | ↳ [#552](552/) | whole-table projection renders unqualified columns under a join | closed | #737 | 0 | 3 (0 pending) |
 | ↳ [#652](652/) | ci: changeset gate never checks the PR itself while unreleased changesets cover the fixed group | closed | #886 | 0 | 0 (0 pending) |
@@ -166,7 +168,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 
 ## Totals
 
-Owner decisions 91 · rulings 188 (interpretation 131, extension 55, stop 2) · pending extensions 17 · rejected 2
+Owner decisions 91 · rulings 192 (interpretation 134, extension 56, stop 2) · pending extensions 18 · rejected 2
 
 ## Conventions
 

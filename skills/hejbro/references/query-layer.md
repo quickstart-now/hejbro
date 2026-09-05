@@ -250,8 +250,13 @@ filters them inside the same read). Values arrive revived: a nested
 `bigint` is a `bigint` (text-cast in SQL so precision survives the
 JSON round trip), datetimes arrive as `Date` (`date` at local
 midnight), `interval` and `bytea` ride the driver's session pins. A
-relation key that collides with a projected column, mixes in a typo,
-or matches nothing fails to type-check — and the runtime throws
+nested `count()`/`min`/`max` cell keeps that same precision, and a
+windowed cell (`over(count(), …)`, `over(min(x), …)`, …) keeps it too —
+it is cast and revived exactly as its unwindowed form would be, so a
+running count or a windowed `max` past 2^53 arrives as the exact
+`bigint`, not a rounded JSON number. A relation key that collides with
+a projected column, mixes in a typo, or matches nothing fails to
+type-check — and the runtime throws
 `ambiguous-relation`/`unknown-relation` rather than guessing.
 
 ## Set operations

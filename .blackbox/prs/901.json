@@ -1,0 +1,85 @@
+{
+  "version": 3,
+  "number": 901,
+  "ref": "quickstart-now/hejbro#901",
+  "title": "feat(core,query): the cast/revive ratchet over the aggregate vocabulary (#452, #544)",
+  "head": "194cf3d0cfc4ba3f55eb908d343b36f9bab3614e",
+  "headRef": "harden-aggregate-vocabulary",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-05T09:04Z",
+  "refs": [
+    {
+      "path": ".changeset/harden-aggregate-vocabulary.md",
+      "blob": "1f6effdfc12fa66051c83fd627960696e071154c"
+    },
+    {
+      "path": "README.md",
+      "blob": "667844a83c2b6353c0daca093b97e0970f10bf45"
+    },
+    {
+      "path": "openspec/changes/harden-aggregate-vocabulary/design.md",
+      "blob": "8f00504965cfd1fa31d6cb167a36930555f18354"
+    },
+    {
+      "path": "openspec/changes/harden-aggregate-vocabulary/proposal.md",
+      "blob": "f5a9ded35c427bb669da82d786712976e392ab99"
+    },
+    {
+      "path": "openspec/changes/harden-aggregate-vocabulary/specs/query-execution/spec.md",
+      "blob": "b8533dfca4d08c416c58f5e89911a31f78ca45bf"
+    },
+    {
+      "path": "openspec/changes/harden-aggregate-vocabulary/tasks.md",
+      "blob": "b8f7170206d702c5e47b2a547455d9aba5342982"
+    },
+    {
+      "path": "openspec/task-times.csv",
+      "blob": "997f395ed263aae31b8535f4851a4f9850a2170b"
+    },
+    {
+      "path": "packages/cli/src/core-surface.ts",
+      "blob": "8a6698b19af700c795497d4da7de50d09eceabdb"
+    },
+    {
+      "path": "packages/core/src/expr/read-shape.ts",
+      "blob": "78a5adbd6c5e077ab46a2ae4b1834f78f866f421"
+    },
+    {
+      "path": "packages/core/src/index.ts",
+      "blob": "305fdcbca47085c83f784151ef912c657a404544"
+    },
+    {
+      "path": "packages/core/src/query/select.ts",
+      "blob": "8bbc72dd481d6f0a098d76fc7b943e9476cd8604"
+    },
+    {
+      "path": "packages/core/test/expr/read-shape.test.ts",
+      "blob": "dab3dd55c1fb40b704433bfa4d4443ffbc644c0f"
+    },
+    {
+      "path": "packages/core/test/query/select.test.ts",
+      "blob": "00a4f10a8fe6c7521c31c97ee5b9092d3589f3b7"
+    },
+    {
+      "path": "packages/pg/test/integration.test.ts",
+      "blob": "f6f1a7895f885999789b4c582c48a7358bc3b0b4"
+    },
+    {
+      "path": "packages/query/src/db/convert.ts",
+      "blob": "d91467761e226e4747cfab51acba2609fc75744c"
+    },
+    {
+      "path": "packages/query/test/db/execute.test.ts",
+      "blob": "44366af4323ef67514a8c0d6bfa9ea225f5636a2"
+    },
+    {
+      "path": "packages/query/test/db/nested-revive.test.ts",
+      "blob": "1b51f167e3366b915eb5f84a81824a58afed910b"
+    },
+    {
+      "path": "skills/hejbro/references/query-layer.md",
+      "blob": "dbbd86792a779821d68052ffcacac76da96cbd9e"
+    }
+  ]
+}

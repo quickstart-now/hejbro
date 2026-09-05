@@ -1,14 +1,30 @@
+import type { BuilderFunctionName, SelectProjection } from "@hejbro/core";
 import {
+	avg,
+	BUILDER_READ_SHAPES,
 	bigint,
 	bytea,
 	count,
+	cumeDist,
 	date as dateColumn,
+	denseRank,
 	eq,
+	firstValue,
 	interval,
 	jsonArrayFrom,
 	jsonObjectFrom,
+	lag,
+	lastValue,
+	lead,
 	max,
+	min,
+	nthValue,
+	ntile,
 	numeric,
+	over,
+	percentRank,
+	rank,
+	rowNumber,
 	schema,
 	select,
 	sql,
@@ -316,6 +332,174 @@ describe("grandchild revive (g3 review F4 -- kills the nested-plan recursion mut
 	});
 });
 
+// #452 task 1.3: BUILDER_READ_SHAPES-driven revive table -- one row per
+// builder function (windowed and unwindowed where the function allows
+// it), asserting the revived JS value matches its shape: `int8` revives
+// as `bigint` regardless of argument, `argument` revives exactly as its
+// own argument's declared state (a bigint argument parses, a text one
+// passes through unchanged), `own` is never revived at all -- the raw
+// JSON arrival passes straight through unconverted.
+describe("nested revive follows BUILDER_READ_SHAPES (#452 task 1.3)", () => {
+	const items = table(app, "items", {
+		id: uuid().primaryKey(),
+		postId: uuid()
+			.notNull()
+			.references(() => posts.id),
+		amount: bigint().notNull(),
+		label: text().notNull(),
+	});
+
+	const pastPrecision = "9007199254740993";
+
+	const revive = async (
+		cell: Parameters<typeof jsonArrayFrom>[0],
+		rawCellValue: unknown,
+	): Promise<unknown> => {
+		const { driver } = recordingTransactionalDriver({
+			rows: [
+				{
+					id: "0b0e5b3e-0000-4000-8000-000000000001",
+					stats: [{ cell: rawCellValue }],
+				},
+			],
+		});
+		const handle = db({ app, posts, comments, items }, driver);
+		const rows = await handle.select(
+			{ id: posts.id, stats: jsonArrayFrom(cell) },
+			posts,
+		);
+		return (rows[0]?.stats[0] as Record<string, unknown> | undefined)?.cell;
+	};
+
+	const itemsFor = <TProjection extends SelectProjection>(
+		projected: TProjection,
+	) => select(projected, items).where(eq(items.postId, posts.id));
+
+	// A real partitionBy+orderBy, not an empty spec -- {} proved nothing
+	// about a real window's own clauses; the revived value must be the
+	// same either way (#452 review).
+	const itemsSpec = { partitionBy: [items.postId], orderBy: [items.amount] };
+
+	it.each([
+		["count", () => itemsFor({ cell: count() })],
+		["count (windowed)", () => itemsFor({ cell: over(count(), itemsSpec) })],
+		[
+			"row_number (windowed)",
+			() => itemsFor({ cell: over(rowNumber(), itemsSpec) }),
+		],
+		["rank (windowed)", () => itemsFor({ cell: over(rank(), itemsSpec) })],
+		[
+			"dense_rank (windowed)",
+			() => itemsFor({ cell: over(denseRank(), itemsSpec) }),
+		],
+	])("%s revives as bigint (int8 shape)", async (_label, build) => {
+		expect(await revive(build(), pastPrecision)).toBe(9007199254740993n);
+	});
+
+	it.each([
+		["min", () => itemsFor({ cell: min(items.amount) })],
+		[
+			"min (windowed)",
+			() => itemsFor({ cell: over(min(items.amount), itemsSpec) }),
+		],
+		["max", () => itemsFor({ cell: max(items.amount) })],
+		[
+			"max (windowed)",
+			() => itemsFor({ cell: over(max(items.amount), itemsSpec) }),
+		],
+		[
+			"lag (windowed)",
+			() => itemsFor({ cell: over(lag(items.amount), itemsSpec) }),
+		],
+		[
+			"lead (windowed)",
+			() => itemsFor({ cell: over(lead(items.amount), itemsSpec) }),
+		],
+		[
+			"first_value (windowed)",
+			() => itemsFor({ cell: over(firstValue(items.amount), itemsSpec) }),
+		],
+		[
+			"last_value (windowed)",
+			() => itemsFor({ cell: over(lastValue(items.amount), itemsSpec) }),
+		],
+		[
+			"nth_value (windowed)",
+			() => itemsFor({ cell: over(nthValue(items.amount, 1), itemsSpec) }),
+		],
+	])(
+		"%s revives per its bigint argument (argument shape)",
+		async (_label, build) => {
+			expect(await revive(build(), pastPrecision)).toBe(9007199254740993n);
+		},
+	);
+
+	it.each([
+		["min over a text argument", () => itemsFor({ cell: min(items.label) })],
+		["max over a text argument", () => itemsFor({ cell: max(items.label) })],
+		[
+			"min over a text argument (windowed)",
+			() => itemsFor({ cell: over(min(items.label), itemsSpec) }),
+		],
+		[
+			"max over a text argument (windowed)",
+			() => itemsFor({ cell: over(max(items.label), itemsSpec) }),
+		],
+		[
+			"lag over a text argument (windowed)",
+			() => itemsFor({ cell: over(lag(items.label), itemsSpec) }),
+		],
+		[
+			"lead over a text argument (windowed)",
+			() => itemsFor({ cell: over(lead(items.label), itemsSpec) }),
+		],
+		[
+			"first_value over a text argument (windowed)",
+			() => itemsFor({ cell: over(firstValue(items.label), itemsSpec) }),
+		],
+		[
+			"last_value over a text argument (windowed)",
+			() => itemsFor({ cell: over(lastValue(items.label), itemsSpec) }),
+		],
+		[
+			"nth_value over a text argument (windowed)",
+			() => itemsFor({ cell: over(nthValue(items.label, 1), itemsSpec) }),
+		],
+	])(
+		"%s revives per its text argument, not forced to bigint",
+		async (_label, build) => {
+			expect(await revive(build(), "hello")).toBe("hello");
+		},
+	);
+
+	it.each([
+		["sum", () => itemsFor({ cell: sum(items.amount) })],
+		[
+			"sum (windowed)",
+			() => itemsFor({ cell: over(sum(items.amount), itemsSpec) }),
+		],
+		["avg", () => itemsFor({ cell: avg(items.amount) })],
+		[
+			"avg (windowed)",
+			() => itemsFor({ cell: over(avg(items.amount), itemsSpec) }),
+		],
+		[
+			"percent_rank (windowed)",
+			() => itemsFor({ cell: over(percentRank(), itemsSpec) }),
+		],
+		[
+			"cume_dist (windowed)",
+			() => itemsFor({ cell: over(cumeDist(), itemsSpec) }),
+		],
+		["ntile (windowed)", () => itemsFor({ cell: over(ntile(4), itemsSpec) })],
+	])(
+		"%s is never revived (own shape) -- the raw arrival passes through",
+		async (_label, build) => {
+			expect(await revive(build(), 42)).toBe(42);
+		},
+	);
+});
+
 // #444 F6 task 6.2: characterize which aggregate cell shapes inside a
 // nested read actually come back wrong before fixing anything.
 // withJsonSafeCasts' at-risk cast (select.ts) is columnRef-only, so a
@@ -444,36 +628,58 @@ describe("a cast aggregate cell actually revives, not just compiles cast (#444 F
 		);
 		expect(rows[0]?.stats[0]?.maxViews).toBe("9007199254740993");
 	});
+
+	// Same instruction, windowed target -- the "two-chunk cast shape" logic
+	// castTarget/uncast rely on has no reason to differ by windowing, but
+	// this exact input (a user's own template wrapping an over(...) cell)
+	// had no test until now (#452 neighbor-input promotion).
+	it("a user-authored sql cast interpolating a WINDOWED aggregate stays text, not revived", async () => {
+		const rawRow = {
+			id: "0b0e5b3e-0000-4000-8000-000000000001",
+			// biome-ignore lint/style/useNamingConvention: models the real json child key (the projection's own rendered SQL alias, snake_case).
+			stats: [{ max_views: "9007199254740993" }],
+		};
+		const { driver } = recordingTransactionalDriver({ rows: [rawRow] });
+		const handle = db({ app, posts, comments }, driver);
+		const rows = await handle.select(
+			{
+				id: posts.id,
+				stats: jsonArrayFrom(
+					select(
+						{
+							maxViews: sql`${over(max(comments.viewCount), {
+								partitionBy: [comments.postId],
+								orderBy: [comments.createdAt],
+							})}::text`,
+						},
+						comments,
+					).where(eq(comments.postId, posts.id)),
+				),
+			},
+			posts,
+		);
+		expect(rows[0]?.stats[0]?.maxViews).toBe("9007199254740993");
+	});
 });
 
 /**
- * #444 F6 group-8 follow-up: `select.ts`'s cast decision
- * (`atRiskCastSuffix`) and `convert.ts`'s revive decision
- * (`columnStateForExpr`/`aggregateColumnState`) are two hand-written
- * classifications of the same vocabulary (`count`/`min`/`max` cast+
- * revive, `sum`/`avg` neither) living in two different packages with no
- * shared source — exactly the kind of duplication this whole change
- * exists to close everywhere else. There is no single export either
- * side could re-derive the other from without crossing the core/query
- * purity boundary (`select.ts`'s classification is core-only;
- * `convert.ts`'s is query-only, keyed off `Declarations["tables"]` core
- * never sees), so this test asserts their AGREEMENT observably instead
- * of unifying the source: for each of the three shapes below,
- * "select.ts cast it" and "convert.ts revived it to bigint" must be the
- * same boolean.
+ * #452 task 1.4: `select.ts`'s cast decision (`atRiskCastSuffix`) and
+ * `convert.ts`'s revive decision (`columnStateForExpr`/
+ * `aggregateColumnState`) each read `BUILDER_READ_SHAPES` now, but the
+ * two sides still cannot share a function (core is pure, this side
+ * works over declared tables) -- this test asserts their AGREEMENT
+ * observably instead: for every row in the table, "select.ts cast it"
+ * and "convert.ts revived it to bigint" must be the same boolean.
  *
- * **This is a fixed-shape regression test, not a ratchet** — unlike
- * `select-children.ts`'s type-level guarantee elsewhere in this change,
- * nothing here is derived from either side's actual classification set,
- * because neither is exported. It catches the two known sides
- * disagreeing about `count`/`max`/`sum` specifically; it does NOT catch
- * a genuinely new aggregate shape being taught to one side (a cast
- * added to `select.ts`, say) without a matching case added here AND to
- * `convert.ts` — that drift needs a human to remember to extend this
- * file, the same manual-sync risk this whole piece exists to close
- * everywhere it *can* be closed structurally.
+ * **This is a ratchet, not a fixed-shape regression test** — `expected`
+ * is derived from `BUILDER_READ_SHAPES` itself (`shape !== "own"`), and
+ * `builderCases` is a `Record<BuilderFunctionName, …>`: a constructor
+ * added to the vocabulary without a matching case here fails `tsc` at
+ * that record's own declaration, and the `it.each` below iterates the
+ * table's actual rows, not a hand-copied list -- the windowed `count`
+ * row is the one that was red before task 1.2's fix and green after.
  */
-describe("select.ts casts iff convert.ts revives (#444 F6 drift guard)", () => {
+describe("select.ts casts iff convert.ts revives (#452 task 1.4 ratchet)", () => {
 	// a past-2^53 value, delivered as text: distinguishes "revived as
 	// bigint" (exact) from "passed through as a plain JS value" (a
 	// string arriving un-revived stays exactly this string, never
@@ -513,40 +719,141 @@ describe("select.ts casts iff convert.ts revives (#444 F6 drift guard)", () => {
 		};
 	};
 
-	it("count(): cast and revive both true", async () => {
-		const result = await agreementFor(
-			"total",
-			select({ total: count() }, comments).where(eq(comments.postId, posts.id)),
-		);
-		expect(result.wasCast).toBe(true);
-		expect(result.wasRevivedToBigint).toBe(true);
+	// single-word aliases throughout (no camelCase hump) so the raw
+	// driver row's own key and the converted row's resultKey are spelled
+	// identically -- a hump (e.g. "maxViews") renders as a different
+	// snake_case SQL alias ("max_views") than the camelCase resultKey
+	// the converted row carries, a separate naming-translation concern
+	// this ratchet isn't about.
+	const cellFor = <TProjection extends SelectProjection>(
+		projected: TProjection,
+	) => select(projected, comments).where(eq(comments.postId, posts.id));
+
+	// A real partitionBy+orderBy, not an empty spec (#452 review) -- the
+	// agreement outcome must be identical either way.
+	const commentsSpec = {
+		partitionBy: [comments.postId],
+		orderBy: [comments.createdAt],
+	};
+
+	type BuilderCase = {
+		readonly unwindowed?: () => ReturnType<typeof cellFor>;
+		readonly windowed: () => ReturnType<typeof cellFor>;
+	};
+
+	const builderCases: Record<BuilderFunctionName, BuilderCase> = {
+		count: {
+			unwindowed: () => cellFor({ cell: count() }),
+			windowed: () => cellFor({ cell: over(count(), commentsSpec) }),
+		},
+		// biome-ignore lint/style/useNamingConvention: BuilderFunctionName's own Postgres names (D57).
+		row_number: {
+			windowed: () => cellFor({ cell: over(rowNumber(), commentsSpec) }),
+		},
+		rank: { windowed: () => cellFor({ cell: over(rank(), commentsSpec) }) },
+		// biome-ignore lint/style/useNamingConvention: BuilderFunctionName's own Postgres names (D57).
+		dense_rank: {
+			windowed: () => cellFor({ cell: over(denseRank(), commentsSpec) }),
+		},
+		min: {
+			unwindowed: () => cellFor({ cell: min(comments.viewCount) }),
+			windowed: () =>
+				cellFor({ cell: over(min(comments.viewCount), commentsSpec) }),
+		},
+		max: {
+			unwindowed: () => cellFor({ cell: max(comments.viewCount) }),
+			windowed: () =>
+				cellFor({ cell: over(max(comments.viewCount), commentsSpec) }),
+		},
+		lag: {
+			windowed: () =>
+				cellFor({ cell: over(lag(comments.viewCount), commentsSpec) }),
+		},
+		lead: {
+			windowed: () =>
+				cellFor({ cell: over(lead(comments.viewCount), commentsSpec) }),
+		},
+		// biome-ignore lint/style/useNamingConvention: BuilderFunctionName's own Postgres names (D57).
+		first_value: {
+			windowed: () =>
+				cellFor({ cell: over(firstValue(comments.viewCount), commentsSpec) }),
+		},
+		// biome-ignore lint/style/useNamingConvention: BuilderFunctionName's own Postgres names (D57).
+		last_value: {
+			windowed: () =>
+				cellFor({ cell: over(lastValue(comments.viewCount), commentsSpec) }),
+		},
+		// biome-ignore lint/style/useNamingConvention: BuilderFunctionName's own Postgres names (D57).
+		nth_value: {
+			windowed: () =>
+				cellFor({ cell: over(nthValue(comments.viewCount, 1), commentsSpec) }),
+		},
+		sum: {
+			unwindowed: () => cellFor({ cell: sum(comments.viewCount) }),
+			windowed: () =>
+				cellFor({ cell: over(sum(comments.viewCount), commentsSpec) }),
+		},
+		avg: {
+			unwindowed: () => cellFor({ cell: avg(comments.viewCount) }),
+			windowed: () =>
+				cellFor({ cell: over(avg(comments.viewCount), commentsSpec) }),
+		},
+		// biome-ignore lint/style/useNamingConvention: BuilderFunctionName's own Postgres names (D57).
+		percent_rank: {
+			windowed: () => cellFor({ cell: over(percentRank(), commentsSpec) }),
+		},
+		// biome-ignore lint/style/useNamingConvention: BuilderFunctionName's own Postgres names (D57).
+		cume_dist: {
+			windowed: () => cellFor({ cell: over(cumeDist(), commentsSpec) }),
+		},
+		ntile: { windowed: () => cellFor({ cell: over(ntile(4), commentsSpec) }) },
+	};
+
+	type RatchetRow = readonly [
+		name: string,
+		form: "unwindowed" | "windowed",
+		expected: boolean,
+		build: () => ReturnType<typeof cellFor>,
+	];
+
+	/** `builderCases` is total over `BuilderFunctionName` -- every key `Object.entries(BUILDER_READ_SHAPES)` can produce resolves, `noUncheckedIndexedAccess`'s own conservative `| undefined` aside. */
+	const caseFor = (name: BuilderFunctionName): BuilderCase => {
+		const found = builderCases[name];
+		if (found === undefined) {
+			throw new Error(`no builderCases entry for ${name}`);
+		}
+		return found;
+	};
+
+	const ratchetRows: ReadonlyArray<RatchetRow> = Object.entries(
+		BUILDER_READ_SHAPES,
+	).flatMap(([name, shape]) => {
+		const builderCase = caseFor(name as BuilderFunctionName);
+		const expected = shape !== "own";
+		const windowedRow: RatchetRow = [
+			name,
+			"windowed",
+			expected,
+			builderCase.windowed,
+		];
+		if (builderCase.unwindowed === undefined) {
+			return [windowedRow];
+		}
+		const unwindowedRow: RatchetRow = [
+			name,
+			"unwindowed",
+			expected,
+			builderCase.unwindowed,
+		];
+		return [unwindowedRow, windowedRow];
 	});
 
-	// single-word aliases throughout this describe (no camelCase hump) so
-	// the raw driver row's own key and the converted row's resultKey are
-	// spelled identically -- a hump (e.g. "maxViews") renders as a
-	// different snake_case SQL alias ("max_views") than the camelCase
-	// resultKey the converted row carries, which is a real, separate
-	// naming-translation concern this drift guard isn't about.
-	it("max(bigintColumn): cast and revive both true", async () => {
-		const result = await agreementFor(
-			"biggest",
-			select({ biggest: max(comments.viewCount) }, comments).where(
-				eq(comments.postId, posts.id),
-			),
-		);
-		expect(result.wasCast).toBe(true);
-		expect(result.wasRevivedToBigint).toBe(true);
-	});
-
-	it("sum(bigintColumn): cast and revive both false", async () => {
-		const result = await agreementFor(
-			"summed",
-			select({ summed: sum(comments.viewCount) }, comments).where(
-				eq(comments.postId, posts.id),
-			),
-		);
-		expect(result.wasCast).toBe(false);
-		expect(result.wasRevivedToBigint).toBe(false);
-	});
+	it.each(ratchetRows)(
+		"%s (%s): cast and revive agree (expected %s)",
+		async (_name, _form, expected, build) => {
+			const result = await agreementFor("cell", build());
+			expect(result.wasCast).toBe(expected);
+			expect(result.wasRevivedToBigint).toBe(expected);
+		},
+	);
 });

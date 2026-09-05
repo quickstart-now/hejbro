@@ -195,6 +195,8 @@ export {
 	now,
 	or,
 } from "./expr/operators";
+export type { BuilderFunctionName, ReadShape } from "./expr/read-shape";
+export { BUILDER_READ_SHAPES } from "./expr/read-shape";
 export type { DeclaredCteMarker, TableBoundMarker } from "./expr/render-sql";
 export {
 	collectColumnRefs,

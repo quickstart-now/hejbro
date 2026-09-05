@@ -30,6 +30,7 @@ import {
 	numeric,
 	over,
 	percentRank,
+	renderSelect,
 	rls,
 	roleName,
 	rowNumber,
@@ -1978,6 +1979,125 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 		expect(stat?.maxAmount).toBe(9007199254740993n);
 		expect(typeof stat?.maxAmount).toBe("bigint");
 		expect(stat?.total).toBe(2n);
+	});
+
+	// #452 task 1.5: the cast side used to neither unwrap a window node nor
+	// name any window function at all, so a windowed cell (over(count(),
+	// ...), over(max(col), ...), over(lag(col), ...)) inside a nested read
+	// compiled without the ::text cast that carries a bigint past 2^53
+	// through JSON transport losslessly -- this is the one place that
+	// claim can be measured against a real server, not a mock driver.
+	it("a windowed cell in a nested read survives past 2^53, live against a real postgres:17", async () => {
+		const activePool = pool.current;
+		if (activePool === undefined) {
+			throw new Error("beforeAll did not set up the pool");
+		}
+		const driver = pgDriver(activePool);
+		await driver.execute({
+			sql: "create table g5_integration.f452_reports (id uuid primary key)",
+			params: [],
+			kind: "sql",
+		});
+		await driver.execute({
+			sql: `create table g5_integration.f452_sales (
+				id uuid primary key,
+				amount bigint not null
+			)`,
+			params: [],
+			kind: "sql",
+		});
+		const reports = table(testSchema, "f452_reports", {
+			id: uuid().primaryKey(),
+		});
+		const sales = table(testSchema, "f452_sales", {
+			id: uuid().primaryKey(),
+			amount: bigint({ mode: "bigint" }).notNull(),
+		});
+		// Built fresh per call (an Expr/window-spec object built once could
+		// not be reused across the two independent select()s below anyway)
+		// so the compiled-SQL check and the live execution project the
+		// identical shape without literally sharing one query object.
+		const nestedProjection = () => ({
+			amount: sales.amount,
+			windowedCount: over(count(), {}),
+			windowedMax: over(max(sales.amount), {}),
+			windowedLag: over(lag(sales.amount), { orderBy: [sales.amount] }),
+			windowedSum: over(sum(sales.amount), {}),
+		});
+
+		// Delta scenario "A windowed cell keeps its precision too" also
+		// requires "the compiled SQL shows the text cast on each" -- a pure,
+		// deterministic check independent of the live round trip below.
+		const compiledSql = renderSelect(
+			select(
+				{
+					id: reports.id,
+					stats: jsonArrayFrom(select(nestedProjection(), sales)),
+				},
+				reports,
+			).selectQuery,
+		);
+		expect(compiledSql).toContain('count(*) over ()::text as "windowed_count"');
+		expect(compiledSql).toContain(
+			'max("g5_integration"."f452_sales"."amount") over ()::text as "windowed_max"',
+		);
+		expect(compiledSql).toContain(
+			'lag("g5_integration"."f452_sales"."amount") over (order by "g5_integration"."f452_sales"."amount" asc)::text as "windowed_lag"',
+		);
+		expect(compiledSql).toContain(
+			'sum("g5_integration"."f452_sales"."amount") over () as "windowed_sum"',
+		);
+		expect(compiledSql).not.toContain(
+			'sum("g5_integration"."f452_sales"."amount") over ()::text',
+		);
+
+		const handle = db({ reports, sales }, driver);
+		await handle
+			.insert(reports)
+			.values({ id: "90000000-0000-0000-0000-000000000004" });
+		await handle.insert(sales).values([
+			{
+				id: "90000000-0000-0000-0000-000000000005",
+				amount: 9007199254740993n,
+			},
+			{ id: "90000000-0000-0000-0000-000000000006", amount: 1n },
+		]);
+
+		const rows = await handle.select(
+			{
+				id: reports.id,
+				stats: jsonArrayFrom(select(nestedProjection(), sales)),
+			},
+			reports,
+		);
+		const stats = rows[0]?.stats as
+			| ReadonlyArray<{
+					readonly amount: bigint;
+					readonly windowedCount: bigint;
+					readonly windowedMax: bigint;
+					readonly windowedLag: bigint | null;
+					readonly windowedSum: unknown;
+			  }>
+			| undefined;
+		const stat = stats?.[0];
+		expect(stat?.windowedCount).toBe(2n);
+		expect(typeof stat?.windowedCount).toBe("bigint");
+		expect(stat?.windowedMax).toBe(9007199254740993n);
+		expect(typeof stat?.windowedMax).toBe("bigint");
+		// windowedLag: over amount ascending, the first row (1n) has no
+		// predecessor (null); the second row (9007199254740993n) lags to 1n --
+		// keyed by the row's own amount (not windowedMax, identical on both
+		// rows) so the exact bigint identity is proven per row, not just
+		// "some row didn't crash".
+		const lagByAmount = new Map(
+			stats?.map((row) => [row.amount, row.windowedLag]),
+		);
+		expect(lagByAmount.get(1n)).toBeNull();
+		expect(lagByAmount.get(9007199254740993n)).toBe(1n);
+		// sum/avg's own BUILDER_READ_SHAPES row is "own": neither cast nor
+		// converted, windowed or not -- arrives as whatever JSON carries a
+		// double/numeric as (a plain JS value, never a bigint).
+		expect(typeof stat?.windowedSum).not.toBe("bigint");
 	});
 
 	/**
