@@ -44,3 +44,24 @@ spread. Full gate green: TURBO_FORCE=1 pnpm check-types (18/18),
 pnpm check, pnpm check:bans, TURBO_FORCE=1 pnpm test (all packages,
 1322+52 etc. all passing, no regressions).
 
+<a id="w3"></a>
+## W3 — task 1.3: neonDriver prepares on request on its Pool path
+
+_2026-09-05T04:58Z_
+
+Mirrors task 1.2's pg driver shape: NeonDriverOptions second argument on
+neonDriver's Pool overload only (the HTTP overload's type accepts no
+options -- pinned by a @ts-expect-error test, since it has no session to
+prepare in). preparedStatementName/nameForQueryConfig duplicated (not
+imported) from @hejbro/pg's own copy per the provider-preset boundary
+(.claude/rules/provider-preset.md forbids depending on a concrete
+driver implementation). http.ts needed no code change -- its
+CAPABILITIES was already a static false for prepared-statements.
+
+RED: packages/neon/test/driver.test.ts's new describe (mirroring pg's
+input table) against the unmodified driver.ts -- 8 failures via
+`npx vitest run test/driver.test.ts`. GREEN: 28/28 pass after
+implementing the option. Full gate green: TURBO_FORCE=1 pnpm
+check-types (18/18), pnpm check, pnpm check:bans, TURBO_FORCE=1 pnpm
+test (all packages passing, @hejbro/neon 53/53, no regressions).
+

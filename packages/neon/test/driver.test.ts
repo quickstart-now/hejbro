@@ -1,4 +1,5 @@
 import { schema, select, table, uuid } from "@hejbro/core";
+import type { CompileKind, CompileResult } from "@hejbro/query";
 import { db } from "@hejbro/query";
 import type { Pool as NeonPool } from "@neondatabase/serverless";
 import { neon, Pool } from "@neondatabase/serverless";
@@ -8,7 +9,7 @@ import { buildHttpDriver, type HttpQueryable } from "../src/http";
 import { anonymousRole, authenticatedRole } from "../src/roles";
 import { intervalPassthroughTypes } from "../src/type-overrides";
 
-/** What `driver.ts`'s own `makeSession` actually sends a queryable -- a bare `"BEGIN"`/`"COMMIT"`/`"ROLLBACK"` string, or the structured `{text, values, types}` config every compiled statement goes through. Typed narrowly to exactly the shapes the driver constructs. */
+/** What `driver.ts`'s own `makeSession` actually sends a queryable -- a bare `"BEGIN"`/`"COMMIT"`/`"ROLLBACK"` string, or the structured `{text, values, types}` config every compiled statement goes through, optionally `name` when the caller asked for prepared statements (task 1.3, #303). Typed narrowly to exactly the shapes the driver constructs. */
 type CapturedQueryConfig = {
 	readonly text: string;
 	readonly values: ReadonlyArray<unknown>;
@@ -18,6 +19,7 @@ type CapturedQueryConfig = {
 			format?: string,
 		) => (value: string) => unknown;
 	};
+	readonly name?: string;
 };
 type QueryCall = string | CapturedQueryConfig;
 
@@ -216,6 +218,163 @@ describe("neonDriver(pool) setupSession pin and capability (task 3.4)", () => {
 			"select 1",
 			"select 2",
 		]);
+	});
+});
+
+describe("neonDriver(pool, { preparedStatements }) names built statements only when the caller asked (task 1.3, #303, mirrors @hejbro/pg's own driver.test.ts input table)", () => {
+	const captureCallerConfig = async (
+		options: { readonly preparedStatements?: boolean } | undefined,
+		compiled: CompileResult,
+	): Promise<CapturedQueryConfig> => {
+		const { pool, calls } = stubPoolWithClient();
+		const driver = neonDriver(pool, options);
+		await driver.execute(compiled);
+		const config = calls.find(
+			(call): call is CapturedQueryConfig =>
+				typeof call !== "string" && call.text === compiled.sql,
+		);
+		if (config === undefined) {
+			throw new Error("the caller's own statement was never sent");
+		}
+		return config;
+	};
+
+	it("names a select statement hejbro_ + 32 hex digits of sha256 over its text, when the option is true", async () => {
+		const config = await captureCallerConfig(
+			{ preparedStatements: true },
+			{ sql: "select 1", params: [], kind: "select" },
+		);
+		expect(config.name).toMatch(/^hejbro_[0-9a-f]{32}$/);
+	});
+
+	it.each<[CompileKind, ReadonlyArray<unknown>]>([
+		["insert", [1]],
+		["update", [1]],
+		["delete", [1]],
+		["setOp", [1]],
+	])(
+		"names a built %s statement when the option is true",
+		async (kind, params) => {
+			const config = await captureCallerConfig(
+				{ preparedStatements: true },
+				{ sql: `-- ${kind}`, params, kind },
+			);
+			expect(config.name).toBeDefined();
+		},
+	);
+
+	it("never names a sql-kind statement, even carrying two commands, when the option is true", async () => {
+		const config = await captureCallerConfig(
+			{ preparedStatements: true },
+			{ sql: "select 1; select 2", params: [], kind: "sql" },
+		);
+		expect(config.name).toBeUndefined();
+	});
+
+	it("sends no name at all when the option is absent (regression control)", async () => {
+		const config = await captureCallerConfig(undefined, {
+			sql: "select 1",
+			params: [],
+			kind: "select",
+		});
+		expect(config).toEqual({
+			text: "select 1",
+			values: [],
+			types: config.types,
+		});
+	});
+
+	it("sends no name when the option is explicitly false", async () => {
+		const config = await captureCallerConfig(
+			{ preparedStatements: false },
+			{ sql: "select 1", params: [], kind: "select" },
+		);
+		expect(config.name).toBeUndefined();
+	});
+
+	it("names the same text identically across two drivers built over two different pools (a pure function of the text)", async () => {
+		const compiled: CompileResult = {
+			sql: "select 1",
+			params: [],
+			kind: "select",
+		};
+		const first = await captureCallerConfig(
+			{ preparedStatements: true },
+			compiled,
+		);
+		const second = await captureCallerConfig(
+			{ preparedStatements: true },
+			compiled,
+		);
+		expect(first.name).toBe(second.name);
+	});
+
+	it("names two texts differing by one character differently", async () => {
+		const first = await captureCallerConfig(
+			{ preparedStatements: true },
+			{ sql: "select 1", params: [], kind: "select" },
+		);
+		const second = await captureCallerConfig(
+			{ preparedStatements: true },
+			{ sql: "select 2", params: [], kind: "select" },
+		);
+		expect(first.name).not.toBe(second.name);
+	});
+
+	it("names a built statement executed inside a transaction too", async () => {
+		const { pool, calls } = stubPoolWithClient();
+		const driver = neonDriver(pool, { preparedStatements: true });
+
+		await driver.transaction(async (session) => {
+			await session.execute({ sql: "select 1", params: [], kind: "select" });
+			return "done";
+		});
+
+		const config = calls.find(
+			(call): call is CapturedQueryConfig =>
+				typeof call !== "string" && call.text === "select 1",
+		);
+		if (config === undefined) {
+			throw new Error("the caller's own statement was never sent");
+		}
+		expect(config.name).toMatch(/^hejbro_[0-9a-f]{32}$/);
+	});
+
+	it("never names the checkout pin, even when the option is true", async () => {
+		const { pool, calls } = stubPoolWithClient();
+		const driver = neonDriver(pool, { preparedStatements: true });
+
+		await driver.execute({ sql: "select 1", params: [], kind: "select" });
+
+		const pin = calls.find(
+			(call): call is CapturedQueryConfig =>
+				typeof call !== "string" &&
+				call.text ===
+					"set intervalstyle to 'postgres'; set bytea_output to 'hex'",
+		);
+		if (pin === undefined) {
+			throw new Error("the checkout pin was never sent");
+		}
+		expect(pin.name).toBeUndefined();
+	});
+
+	it("capabilities['prepared-statements'] mirrors the option on the Pool overload", () => {
+		const pool = new Pool({
+			connectionString: "postgres://localhost/does-not-need-to-connect",
+		});
+		expect(
+			neonDriver(pool, { preparedStatements: true }).capabilities[
+				"prepared-statements"
+			],
+		).toBe(true);
+		expect(neonDriver(pool).capabilities["prepared-statements"]).toBe(false);
+	});
+
+	it("the HTTP overload accepts no options argument -- its type offers none, since it has no session to prepare in", () => {
+		const sql = neon(HTTP_CONNECTION_STRING);
+		// @ts-expect-error the HTTP overload's type accepts no second argument.
+		const driver = neonDriver(sql, { preparedStatements: true });
+		expect(driver.capabilities["prepared-statements"]).toBe(false);
 	});
 });
 
