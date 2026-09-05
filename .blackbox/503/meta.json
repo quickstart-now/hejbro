@@ -30,6 +30,28 @@
       "at": "2026-09-05T17:38Z",
       "title": "#966 folds into this change: the recursive anchor/term pair is the third surface",
       "ratified": null
+    },
+    {
+      "id": "R3",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R1"
+      ],
+      "at": "2026-09-05T17:47Z",
+      "title": "the measurement protocol: 42804 alone means refused, union all, one representative per family plus a homogeneity sweep",
+      "ratified": null
+    },
+    {
+      "id": "R4",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R1"
+      ],
+      "at": "2026-09-05T17:47Z",
+      "title": "never only for two single-literal families the table refuses; every other shape is accepted; core's type-test naming",
+      "ratified": null
     }
   ],
   "work": [],
