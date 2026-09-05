@@ -115,6 +115,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | [#845](845/) | vendor: a table named fn or as is unreachable behind the client's own members | open | #849 #850 | 0 | 0 (0 pending) |
 | [#846](846/) | init/config paths round 2: read-side trailing separator, config ancestor order, nesting wording, dangling link on read, empty --config | open | #847 | 0 | 0 (0 pending) |
 | [#848](848/) | query: a nested transaction the root callback never awaited commits alone after the root commit | open | #849 #850 | 0 | 0 (0 pending) |
+| [#864](864/) | pg driver: a lost connection kills the process through an unhandled pool 'error' event, dumping a raw stack | open |  | 0 | 0 (0 pending) |
 
 ## Totals
 

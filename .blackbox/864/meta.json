@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#864",
+  "title": "pg driver: a lost connection kills the process through an unhandled pool 'error' event, dumping a raw stack",
+  "parent": "quickstart-now/hejbro#815",
+  "status": "open",
+  "opened": "2026-09-05",
+  "closed": null,
+  "decisions": [],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-05T00:51Z",
+      "title": "the pool and the checked-out client both needed silencing",
+      "pr": null,
+      "decisions": []
+    }
+  ],
+  "prs": [],
+  "origin": null,
+  "followUps": []
+}
