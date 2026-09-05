@@ -24,12 +24,16 @@ recorded as rulings on the change's issues.
   and 9 that it lists as `U` (`begin`, `by`, `declare`, `execute`, `if`,
   `new`, `old`, `return`, `strict`). The class therefore states three
   sources: the keyword categories, the variables plpgsql declares (`new`
-  and `old` among them, in a trigger body), and the words plpgsql opens
-  its own statements with **that measurement shows failing in a rendered
-  position**. A name measured harmless is not removed from the set —
-  this change only widens refusal; relaxing one is a change of its own —
-  and the requirement says that the list reconstructs the set as
-  measured.
+  and `old` among them, in a trigger body — measured there, not in a
+  plain function, where they are harmless), and the words plpgsql opens
+  its own statements with, **named one by one**: measurement splits them
+  into nine that fail as a local (`begin`, `by`, `declare`, `execute`,
+  `foreach`, `if`, `loop`, `strict`, `while`) and five that stand
+  (`exception`, `get`, `perform`, `raise`, `return`). The five stay
+  refused — this change only widens refusal; relaxing one is a change of
+  its own, on its own evidence — and naming all fourteen is what makes
+  the class reconstruct the set. `exit`/`elsif` are the same family and
+  were never refused, so leaving them out relaxes nothing.
 
 ## Q2 — One rule for a local's spelling
 

@@ -68,7 +68,10 @@ refused the same way.
 
 #### Scenario: A variable plpgsql declares itself is refused as a loop name
 - **WHEN** a body names a `ctx.forEach` loop with one of those names, in
-  any letter case — `found`, `FOUND`, `Found`, `tg_op`, `TG_OP`
+  any letter case — `found`, `FOUND`, `Found`, `tg_op`, `TG_OP`, `new`,
+  `old` (measured in a trigger body: a loop named `new` leaves a record
+  that `return new` then fails on, and one named `old` is read after the
+  loop as the loop's leftover value, not the row the trigger received)
 - **THEN** the declaration fails with `reserved-local-name`, and no
   declaration is produced
 
