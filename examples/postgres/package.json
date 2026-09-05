@@ -16,8 +16,8 @@
 		"hejbro": "workspace:*"
 	},
 	"devDependencies": {
-		"@types/pg": "^8.23.1",
-		"pg": "^8.23.0",
+		"@types/pg": "catalog:",
+		"pg": "catalog:",
 		"typescript": "catalog:",
 		"vitest": "catalog:"
 	}
