@@ -4,7 +4,10 @@ import { describe, expect, it } from "vitest";
 // delta's own requirement is that this parser is exposed PUBLICLY, and
 // nothing here proves that without importing it the same way a consumer
 // would.
-import { parseBannerBaseline as parseBannerBaselineFromIndex } from "../src/index";
+import {
+	parseBannerBaseline as parseBannerBaselineFromIndex,
+	parseBannerUpgradedFrom as parseBannerUpgradedFromIndex,
+} from "../src/index";
 import type { KindChange } from "../src/kind/object-kind";
 import type { Snapshot } from "../src/snapshot/snapshot";
 import type { JsonValue } from "../src/snapshot/stable-json";
@@ -16,6 +19,7 @@ import {
 	migrationVersionOf,
 	parseBannerBaseline,
 	parseBannerHashes,
+	parseBannerUpgradedFrom,
 	parseBannerVersion,
 	renderBanner,
 	renderMigrationPrefix,
@@ -230,6 +234,133 @@ describe("parseBannerHashes", () => {
 	});
 });
 
+describe("renderBanner's -- upgraded-from: line (#413)", () => {
+	it("renders the line directly under -- snapshot: when upgradedFrom is given", () => {
+		expect(
+			renderBanner(
+				[createChange],
+				{ parent: "sha256:aaaa", current: "sha256:bbbb" },
+				undefined,
+				undefined,
+				"sha256:cccc",
+			),
+		).toBe(
+			"-- hejbro migration\n-- + table app.posts [new]\n-- parent-snapshot: sha256:aaaa\n-- snapshot: sha256:bbbb\n-- upgraded-from: sha256:cccc",
+		);
+	});
+
+	it("omits the line when upgradedFrom is not given", () => {
+		expect(
+			renderBanner([createChange], {
+				parent: "sha256:aaaa",
+				current: "sha256:bbbb",
+			}),
+		).not.toContain("upgraded-from");
+	});
+});
+
+describe("parseBannerUpgradedFrom (#413)", () => {
+	it("round-trips a banner rendered with an upgradedFrom hash", () => {
+		const sql = renderBanner(
+			[createChange],
+			{ parent: "sha256:aaaa", current: "sha256:bbbb" },
+			undefined,
+			undefined,
+			"sha256:cccc",
+		);
+		expect(parseBannerUpgradedFrom(sql)).toBe("sha256:cccc");
+	});
+
+	it("returns null for a migration that was never upgraded", () => {
+		expect(
+			parseBannerUpgradedFrom(
+				renderBanner([createChange], {
+					parent: "sha256:aaaa",
+					current: "sha256:bbbb",
+				}),
+			),
+		).toBeNull();
+	});
+
+	it("is exported from core's own public index, not just its defining module (#413)", () => {
+		const sql = renderBanner(
+			[createChange],
+			{ parent: "sha256:aaaa", current: "sha256:bbbb" },
+			undefined,
+			undefined,
+			"sha256:cccc",
+		);
+		expect(parseBannerUpgradedFromIndex(sql)).toBe("sha256:cccc");
+		expect(parseBannerUpgradedFromIndex).toBe(parseBannerUpgradedFrom);
+	});
+
+	it("parseBannerHashes still returns the current pair on an upgraded banner", () => {
+		const sql = renderBanner(
+			[createChange],
+			{ parent: "sha256:aaaa", current: "sha256:bbbb" },
+			undefined,
+			undefined,
+			"sha256:cccc",
+		);
+		expect(parseBannerHashes(sql)).toEqual({
+			parent: "sha256:aaaa",
+			current: "sha256:bbbb",
+		});
+	});
+
+	it("ignores an unrecognized banner line beside it", () => {
+		const sql = renderBanner(
+			[createChange],
+			{ parent: "sha256:aaaa", current: "sha256:bbbb" },
+			undefined,
+			undefined,
+			"sha256:cccc",
+		);
+		const [marker, ...rest] = sql.split("\n");
+		const withUnknownLine = [
+			marker,
+			"-- some-future-line: unknown",
+			...rest,
+		].join("\n");
+		expect(parseBannerUpgradedFrom(withUnknownLine)).toBe("sha256:cccc");
+		expect(parseBannerHashes(withUnknownLine)).toEqual({
+			parent: "sha256:aaaa",
+			current: "sha256:bbbb",
+		});
+	});
+
+	it("a re-render from a file that already carries the line keeps exactly one line, holding the first hash (D Q3)", () => {
+		// Simulates a second upgrade: the tip's current hash changes again,
+		// but the caller passes through the ORIGINAL upgraded-from value --
+		// never the hash the tip carried immediately before this render --
+		// since the commit that first added the file has the original
+		// bytes, which is what `history` needs (D Q3).
+		const firstUpgrade = renderBanner(
+			[createChange],
+			{ parent: "sha256:aaaa", current: "sha256:bbbb" },
+			undefined,
+			undefined,
+			"sha256:original",
+		);
+		expect(parseBannerUpgradedFrom(firstUpgrade)).toBe("sha256:original");
+
+		const secondUpgrade = renderBanner(
+			[createChange],
+			{ parent: "sha256:aaaa", current: "sha256:dddd" },
+			undefined,
+			undefined,
+			"sha256:original",
+		);
+		const upgradedFromLineOccurrences = secondUpgrade
+			.split("\n")
+			.filter((line) => line.startsWith("-- upgraded-from:"));
+		expect(upgradedFromLineOccurrences).toEqual([
+			"-- upgraded-from: sha256:original",
+		]);
+		expect(parseBannerUpgradedFrom(secondUpgrade)).toBe("sha256:original");
+	});
+});
+
 describe("parseBannerVersion", () => {
 	it("round-trips a banner rendered with a version", () => {
 		const sql = renderBanner([createChange], undefined, "0.1.0");
@@ -320,6 +451,7 @@ describe("an unrecognized banner line does not break the parsers that read the o
 			{ parent: "sha256:aaaa", current: "sha256:bbbb" },
 			"0.1.0",
 			true,
+			"sha256:cccc",
 		);
 		const [marker, ...rest] = rendered.split("\n");
 		const withUnknownLine = [
@@ -334,6 +466,7 @@ describe("an unrecognized banner line does not break the parsers that read the o
 			parent: "sha256:aaaa",
 			current: "sha256:bbbb",
 		});
+		expect(parseBannerUpgradedFrom(withUnknownLine)).toBe("sha256:cccc");
 	});
 });
 

@@ -187,6 +187,7 @@ const BASELINE_LINE = `${BASELINE_PREFIX} these objects already exist — regist
 const PARENT_SNAPSHOT_PREFIX = "-- parent-snapshot: ";
 const SNAPSHOT_PREFIX = "-- snapshot: ";
 const VERSION_PREFIX = "-- hejbro: ";
+const UPGRADED_FROM_PREFIX = "-- upgraded-from: ";
 
 /**
  * Renders a one-line-per-change summary banner: `+` for creates, `~` for
@@ -214,11 +215,22 @@ const baselineLines = (
 	return [BASELINE_LINE];
 };
 
+/** The `-- upgraded-from:` line (#413), present only when `upgradedFrom` is given -- the hash the tip recorded before a format upgrade rewrote its `-- snapshot:` line. Rendered directly under the hash-chain lines, so it stays with the pair it explains. */
+const upgradedFromLines = (
+	upgradedFrom: string | undefined,
+): ReadonlyArray<string> => {
+	if (upgradedFrom === undefined) {
+		return [];
+	}
+	return [`${UPGRADED_FROM_PREFIX}${upgradedFrom}`];
+};
+
 export const renderBanner = (
 	changes: ReadonlyArray<KindChange>,
 	hashes?: BannerHashes,
 	version?: string,
 	baseline?: boolean,
+	upgradedFrom?: string,
 ): string => {
 	const lines = [
 		"-- hejbro migration",
@@ -233,6 +245,7 @@ export const renderBanner = (
 		...lines,
 		`${PARENT_SNAPSHOT_PREFIX}${hashes.parent}`,
 		`${SNAPSHOT_PREFIX}${hashes.current}`,
+		...upgradedFromLines(upgradedFrom),
 	].join("\n");
 };
 
@@ -255,6 +268,28 @@ export const parseBannerHashes = (fileContent: string): BannerHashes | null => {
 		parent: parentLine.slice(PARENT_SNAPSHOT_PREFIX.length),
 		current: currentLine.slice(SNAPSHOT_PREFIX.length),
 	};
+};
+
+/**
+ * Reads a migration file's `-- upgraded-from:` line (#413): the hash the
+ * tip recorded before a format upgrade rewrote its `-- snapshot:` line,
+ * or `null` on a migration never upgraded. A second upgrade later keeps
+ * this same line and value unchanged — the commit that first added the
+ * file carries these exact bytes, and `history` resolves the tip against
+ * that original hash, not whatever the tip carried immediately before
+ * the latest upgrade. Reads by {@link UPGRADED_FROM_PREFIX} only, the
+ * same reasoning {@link parseBannerBaseline}'s own doc comment states:
+ * matching the whole line would misreport "absent" the moment the
+ * guidance prose after the prefix changed.
+ */
+export const parseBannerUpgradedFrom = (fileContent: string): string | null => {
+	const line = fileContent
+		.split("\n")
+		.find((candidate) => candidate.startsWith(UPGRADED_FROM_PREFIX));
+	if (line === undefined) {
+		return null;
+	}
+	return line.slice(UPGRADED_FROM_PREFIX.length);
 };
 
 /**

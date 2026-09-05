@@ -127,6 +127,7 @@ export const VOCABULARY = [
 	// Banner readers (documented in the generate/verify workflow)
 	"parseBannerBaseline",
 	"parseBannerHashes",
+	"parseBannerUpgradedFrom",
 	"parseBannerVersion",
 	// User-facing utilities and the one brand a shipped spec names
 	"HejbroError",

@@ -93,6 +93,7 @@ export {
 	over,
 	parseBannerBaseline,
 	parseBannerHashes,
+	parseBannerUpgradedFrom,
 	parseBannerVersion,
 	percentRank,
 	pgEnum,

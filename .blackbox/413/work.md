@@ -71,3 +71,18 @@ Test file: packages/core/test/snapshot.test.ts (existing version-message file, p
 
 Note: an early full `pnpm test` run failed on `preset-smoke` with "Failed to resolve entry for package @hejbro/core" -- self-inflicted: I had `TURBO_FORCE=1 pnpm check-types` (which rebuilds core's dist) running concurrently with `TURBO_FORCE=1 pnpm test` in the background, racing tsdown's clean-then-rewrite of packages/core/dist against preset-smoke's module resolution. Not a product defect. Fixed by running `pnpm build --force` then `pnpm test` sequentially, with nothing else touching dist concurrently -- confirms these gates must not be run in parallel against the same worktree's dist.
 
+<a id="w6"></a>
+## W6 — 1.3: the -- upgraded-from: banner line and its parser
+
+_2026-09-05T07:49Z_
+
+Added the -- upgraded-from: banner line (R3 contract): prefix "-- upgraded-from: ", rendered directly under -- snapshot: only when renderBanner's new optional 5th parameter (upgradedFrom?: string) is given. parseBannerUpgradedFrom(fileContent): string | null reads it by prefix only (same reasoning as parseBannerBaseline's own doc comment -- matching the whole line would misreport absence the moment the prose after the prefix changed). parseBannerHashes is untouched and continues to return the current pair unaffected by the new line's presence (verified by test, not just asserted -- different prefix, no code change needed there).
+
+R3's "keeps one line, first hash" requirement: renderBanner has no memory of a file's previous contents (it always renders fresh from its own explicit parameters), so "one line" holds by construction -- there is no code path that could produce two. The interesting half of the requirement -- that a second upgrade's caller passes the ORIGINAL hash forward, not the one just replaced -- is a 1.4 (CLI) concern; 1.3's own test demonstrates the property at the migration-file.ts level: render with upgradedFrom=X, change only the current snapshot hash (simulating what a second upgrade would do to the hash-chain lines), re-render with the SAME upgradedFrom=X -- output still carries exactly one upgraded-from line, value X, parser returns X.
+
+Export pin: parseBannerUpgradedFrom exported from packages/core/src/index.ts, classified ENGINE (not VOCABULARY) in packages/cli/src/core-surface.ts per su-planner's direction -- unlike parseBannerHashes/parseBannerVersion/parseBannerBaseline (VOCABULARY, documented in the generate/verify workflow skill as user-facing), this one is CLI-internal machinery for history/restore resolution (1.5), not (yet) a documented end-user surface.
+
+File path note: tasks.md names packages/core/test/sql/migration-file.test.ts and packages/core/test/exports.test.ts; neither exists at that path. Used the actual existing files instead: packages/core/test/migration-file.test.ts (flat, matches every other parseBanner* test already there) and packages/cli/test/exports.test.ts (core's own export-pin/classification gate; there is no packages/core/test/exports.test.ts in this repo). Same file-path-mismatch pattern already seen in 1.1/1.2.
+
+Gates: pnpm check, check-types (18/18), full pnpm test (@hejbro/core: 101 files / 1739 passed + 1 todo; preset-smoke passes -- confirms the 1.2 dist race was self-inflicted, not systemic), check:bans, check:next-marker, check:diagnostic-xref all green on the first run. check:crap failed once on an unrelated flake (test/cross-instance-symbols.test.ts's duplicate-module-loading test timed out under coverage instrumentation load, nothing this task touches) and passed clean on an immediate retry -- 44 functions at the threshold, no violations.
+
