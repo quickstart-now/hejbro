@@ -369,7 +369,10 @@ export const loadConfig = async (
 			message: `failed to load "${relative(cwd, configPath)}": ${stripAbsolutePrefixes(reason, cwd)}. Next: check that every import in hejbro.config.ts resolves — a package that isn't installed, or an installed package whose "exports" field doesn't resolve, both surface here. Install it, or check the package's own "exports" if it's already installed.`,
 		}),
 	);
-	const config = parseConfig(loaded, configPath);
+	// #745: the label a config diagnostic prints is the path as the user
+	// would type it, never the resolved absolute one -- the CLI's own rule
+	// for every message it writes (`stripAbsolutePrefixes`, snapshot-file.ts).
+	const config = parseConfig(loaded, relLabel(cwd, configPath));
 	return { config, configPath };
 };
 

@@ -29,6 +29,28 @@ const schemaNameOf = (declaration: HejbroInput): string | null => {
 const fixturesDir = join(import.meta.dirname, "fixtures");
 
 describe("loadConfig", () => {
+	// #745: the config path a diagnostic prints is the label the user would
+	// type, never the resolved absolute path -- the CLI's own rule for
+	// every message it writes.
+	it("names the config file by its relative label in invalid-config, never by absolute path", async () => {
+		const cwd = await mkdtemp(join(tmpdir(), "hejbro-745-"));
+		await writeFile(
+			join(cwd, "hejbro.config.ts"),
+			"export default { entry: 42 };\n",
+		);
+		try {
+			await loadConfig(cwd, undefined);
+			throw new Error("expected loadConfig to throw");
+		} catch (error) {
+			expect(error).toMatchObject({ code: "invalid-config" });
+			const message = (error as { message: string }).message;
+			expect(message).toContain('config field "entry" in hejbro.config.ts');
+			expect(message).not.toContain(cwd);
+		} finally {
+			await rm(cwd, { recursive: true, force: true });
+		}
+	});
+
 	it('loads the default export via jiti.import(path, { default: true }) — also exercises the U2 self-import cycle (hejbro.config.ts importing from "hejbro")', async () => {
 		const cwd = join(fixturesDir, "basic");
 		const { config, configPath } = await loadConfig(cwd, undefined);

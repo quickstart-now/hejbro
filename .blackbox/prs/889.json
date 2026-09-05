@@ -1,0 +1,25 @@
+{
+  "version": 3,
+  "number": 889,
+  "ref": "quickstart-now/hejbro#889",
+  "title": "fix(cli): invalid-config names the config file relatively (#745)",
+  "head": "88459989152ede7bfc8c50ac76d5da1940864640",
+  "headRef": "fix-config-path-label",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-05T05:31Z",
+  "refs": [
+    {
+      "path": ".changeset/config-path-label.md",
+      "blob": "a47421faa9bd8d46bde49cf180e4c48ec6888ebc"
+    },
+    {
+      "path": "packages/cli/src/loader.ts",
+      "blob": "bff6e703b3e006a0ad765e4da355a11cf47d45b6"
+    },
+    {
+      "path": "packages/cli/test/loader.test.ts",
+      "blob": "fa1d978741cf6c4aaf909f56ca078deb5e09a50a"
+    }
+  ]
+}

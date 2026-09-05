@@ -1,0 +1,29 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#745",
+  "title": "Configuration paths reach the user as raw stacks and absolute paths",
+  "parent": "quickstart-now/hejbro#412",
+  "status": "closed",
+  "opened": "2026-09-05",
+  "closed": "2026-09-05",
+  "decisions": [],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-05T05:22Z",
+      "title": "Half of #745 was already closed; the config label half is fixed and pinned",
+      "pr": null,
+      "decisions": []
+    }
+  ],
+  "prs": [
+    {
+      "number": 889,
+      "role": "closes",
+      "pinnedAt": "2026-09-05T05:31Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}
