@@ -1,0 +1,53 @@
+{
+  "version": 3,
+  "number": 898,
+  "ref": "quickstart-now/hejbro#898",
+  "title": "chore(openspec): archive pin-wave-tie-break after D106 round 1 (#798)",
+  "head": "c5e5834dbc0070b6f11443eb833693f99108ec0d",
+  "headRef": "archive-pin-wave",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-05T08:51Z",
+  "refs": [
+    {
+      "path": "openspec/changes/archive/2026-09-05-pin-wave-tie-break/design.md",
+      "blob": "9478ab0ebdb19ea3fa9a538d864545910b381881"
+    },
+    {
+      "path": "openspec/changes/pin-wave-tie-break/design.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-05-pin-wave-tie-break/evaluation.md",
+      "blob": "6250847e2aee8dc3db4accc84e52cd2e1b07451d"
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-05-pin-wave-tie-break/proposal.md",
+      "blob": "f66cc7d16c1a1b925f6055514d9161cd149942be"
+    },
+    {
+      "path": "openspec/changes/pin-wave-tie-break/proposal.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-05-pin-wave-tie-break/specs/cli-commands/spec.md",
+      "blob": "bd5009cb06754fddd74bc7e5683a8b157945dae2"
+    },
+    {
+      "path": "openspec/changes/pin-wave-tie-break/specs/cli-commands/spec.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-05-pin-wave-tie-break/tasks.md",
+      "blob": "713c2a34f07b6466a4b6287ee3301728eea651d6"
+    },
+    {
+      "path": "openspec/changes/pin-wave-tie-break/tasks.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/specs/cli-commands/spec.md",
+      "blob": "efcb7531169e10d755c1d35ddfbb97b2808e38a5"
+    }
+  ]
+}

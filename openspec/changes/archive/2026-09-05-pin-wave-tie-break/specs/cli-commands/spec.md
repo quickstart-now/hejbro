@@ -14,8 +14,9 @@ Within a kind, the statements a run emits SHALL follow the declarations'
 own dependency order: a declared object is created — or altered — after
 the declared objects it references, so a table carrying a foreign key to
 another declared table comes after that table, whichever order their
-identities sort in, and a mutually referencing pair — which no order
-satisfies — keeps its existing identity order. The order among objects
+identities sort in, and a mutually referencing group — a pair, or a
+longer cycle — which no order satisfies, keeps its existing identity
+order throughout. The order among objects
 whose references are all satisfied is identity order, and an object
 whose references are satisfied is placed as early as they allow: the
 statements are emitted in waves, each wave holding every object whose

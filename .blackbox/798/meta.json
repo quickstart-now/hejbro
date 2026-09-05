@@ -23,6 +23,20 @@
       "at": "2026-09-05T06:06Z",
       "title": "The wave tie-break is stated and pinned as implemented; a self-reference never blocks its own table",
       "ratified": null
+    },
+    {
+      "id": "R2",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "D106; 412/D24",
+        "D25; evaluation.md (sonnet",
+        "context-free",
+        "3-cycle measured: identity order kept throughout)"
+      ],
+      "at": "2026-09-05T08:50Z",
+      "title": "D106 R1 for pin-wave-tie-break: B0/N1/OK6; N-1 fixed in the archive",
+      "ratified": null
     }
   ],
   "work": [],
@@ -31,6 +45,11 @@
       "number": 890,
       "role": "closes",
       "pinnedAt": "2026-09-05T08:03Z"
+    },
+    {
+      "number": 898,
+      "role": "refs",
+      "pinnedAt": "2026-09-05T08:51Z"
     }
   ],
   "origin": null,
