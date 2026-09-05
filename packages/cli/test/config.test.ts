@@ -294,6 +294,57 @@ describe("parseConfig", () => {
 		});
 	});
 
+	// add-config-driver, #458, Q1/Q4: `driver` accepts a factory function
+	// only -- an instance, a string or any other shape is refused naming
+	// the field. D110 input table: absence, a function, and every shape
+	// this must reject.
+	describe("parseConfig / driver (#458)", () => {
+		it("loads with driver left undefined when the field is absent", () => {
+			const value = {
+				entry: ["src/**/*.schema.ts"],
+			};
+			expect(
+				parseConfig(value, "/repo/hejbro.config.ts").driver,
+			).toBeUndefined();
+		});
+
+		it("round-trips the exact function reference when driver is a function", () => {
+			const factory = (connectionString: string) => ({ connectionString });
+			const value = {
+				entry: ["src/**/*.schema.ts"],
+				driver: factory,
+			};
+			expect(parseConfig(value, "/repo/hejbro.config.ts").driver).toBe(factory);
+		});
+
+		type Row = { readonly label: string; readonly driver: unknown };
+
+		const rejectedRows: ReadonlyArray<Row> = [
+			{ label: "a string", driver: "pg" },
+			{ label: "an object", driver: { connectionString: "pg" } },
+			{ label: "null", driver: null },
+		];
+
+		it.each(rejectedRows)(
+			"rejects driver naming the field and the shape when it is $label",
+			({ driver }) => {
+				const value = {
+					entry: ["src/**/*.schema.ts"],
+					driver,
+				};
+				try {
+					parseConfig(value, "/repo/hejbro.config.ts");
+					throw new Error("expected parseConfig to throw");
+				} catch (error) {
+					expect(error).toMatchObject({ code: "invalid-config" });
+					const message = (error as { message: string }).message;
+					expect(message).toContain("driver");
+					expect(message).toContain("connectionString");
+				}
+			},
+		);
+	});
+
 	it("reports an invalid prefixStrategy value, listing the three valid strategies", () => {
 		const value = {
 			entry: ["src/**/*.schema.ts"],

@@ -1,6 +1,7 @@
 import { isAbsolute } from "node:path";
 import type { MigrationPrefixStrategy, Preset } from "@hejbro/core";
 import { migrationPrefixStrategies, throwHejbroError } from "@hejbro/core";
+import type { Driver } from "@hejbro/query";
 import type { ZodIssue } from "zod";
 import { z } from "zod";
 
@@ -22,6 +23,15 @@ export type HejbroConfig = {
 	readonly prefixStrategy?: MigrationPrefixStrategy;
 	/** Provider presets to register — their kinds and validators (D55). Defaults to `[]`. */
 	readonly presets: ReadonlyArray<Preset>;
+	/**
+	 * The project's own driver factory (add-config-driver, #458, Q1): a
+	 * function, never an instance -- an instance would need the connection
+	 * string at configuration-evaluation time, which is exactly where a
+	 * secret must not live. Called by a connecting command with the
+	 * resolved connection string; the configuration file never carries
+	 * one.
+	 */
+	readonly driver?: (connectionString: string) => Driver | Promise<Driver>;
 };
 
 /** Identity helper so `hejbro.config.ts` reads as a declaration, not a cast. */
@@ -76,10 +86,15 @@ const configSchema = z.object({
 	snapshotPath: z.string().optional(),
 	prefixStrategy: z.enum(migrationPrefixStrategies).optional(),
 	presets: z.array(z.unknown()).default([]),
+	driver: z
+		.custom<NonNullable<HejbroConfig["driver"]>>(isFunctionValue, {
+			message: "driver must be a function",
+		})
+		.optional(),
 });
 
 const HEJBRO_CONFIG_SHAPE_HINT =
-	'{ entry: string[], migrationsDir?: string, snapshotPath?: string, prefixStrategy?: "timestamp" | "index" | "unix", presets?: Preset[] }';
+	'{ entry: string[], migrationsDir?: string, snapshotPath?: string, prefixStrategy?: "timestamp" | "index" | "unix", presets?: Preset[], driver?: (connectionString: string) => Driver }';
 
 const issueFieldName = (issue: ZodIssue): string => {
 	if (issue.path.length === 0) {
@@ -247,5 +262,6 @@ export const parseConfig = (
 			prefixStrategy: result.data.prefixStrategy,
 		}),
 		presets: result.data.presets.filter(isPreset),
+		...(result.data.driver !== undefined && { driver: result.data.driver }),
 	};
 };
