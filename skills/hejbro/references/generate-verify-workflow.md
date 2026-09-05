@@ -189,6 +189,17 @@ goes further: it applies the full committed migration chain to one
 database and a single fresh migration to another, then diffs the schema
 dumps — the deeper, pre-merge check `verify` can't do without a database.
 
+`verify` and the checksum answer two different questions: `verify`'s
+tip-hash check confirms the files *chain* correctly (each one's banner
+names the parent it was generated against), entirely offline, but never
+reads whether a file's own body was edited afterward — the banner above
+that body still hashes the same either way. That half is the ledger's
+own to answer, since only it knows what actually ran: `migrate` refuses
+before sending anything pending when an applied file's body no longer
+matches the checksum recorded for it, and `status` reports the same
+disagreement as a line of its own. Passing `verify` and passing
+`migrate`'s or `status`'s checksum comparison are not the same claim.
+
 ## `hejbro upgrade`
 
 A snapshot file written by an older *released* hejbro version fails
