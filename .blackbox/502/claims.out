@@ -1,0 +1,146 @@
+### C1 window functions at declaration sites
+-- C1a column default
+-- C1b generated column
+ERROR:  window functions are not allowed in DEFAULT expressions
+ERROR:  window functions are not allowed in column generation expressions
+-- C1c check
+-- C1d index expression
+-- C1e index predicate
+ERROR:  window functions are not allowed in check constraints
+ERROR:  window functions are not allowed in index expressions
+LINE 1: create index c1_ix on c1 ((row_number() over ()));
+                                   ^
+ERROR:  window functions are not allowed in index predicates
+LINE 1: create index c1_ip on c1 (id) where row_number() over () > 0...
+                                            ^
+-- C1f policy using
+ERROR:  window functions are not allowed in policy expressions
+-- C1g policy with check
+### C2 scalar function with no return: create then call
+ERROR:  window functions are not allowed in policy expressions
+ERROR:  control reached end of function without RETURN
+CONTEXT:  PL/pgSQL function c2()
+### C3 return query in a non-setof function
+### C4 insert ... returning without INTO inside a body
+ERROR:  cannot use RETURN QUERY in a non-SETOF function
+LINE 1: ...ion c3() returns int language plpgsql as $$ begin return que...
+                                                             ^
+ERROR:  query has no destination for result data
+CONTEXT:  PL/pgSQL function c4f() line 1 at SQL statement
+### C5 same statement twice
+ c5f 
+-----
+ 
+(1 row)
+
+ count 
+-------
+     2
+(1 row)
+
+### C6 value-dependent coercions
+    c6a     
+------------
+ 2026-01-01
+(1 row)
+
+ERROR:  invalid input syntax for type date: "5"
+CONTEXT:  PL/pgSQL function c6b() while casting return value to function's return type
+ c6c 
+-----
+ {}
+(1 row)
+
+ c6d 
+-----
+ {}
+(1 row)
+
+ERROR:  invalid input syntax for type inet: "42.5"
+CONTEXT:  PL/pgSQL function c6e() while casting return value to function's return type
+### C7 return query <insert without returning> in a setof function
+ERROR:  INSERT query does not return tuples
+CONTEXT:  SQL statement "insert into c4 default values"
+PL/pgSQL function c7() line 1 at RETURN QUERY
+### C8 same constraint name on two tables in one schema
+  conname   | conrelid 
+------------+----------
+ shared_chk | c8a
+ shared_chk | c8b
+(2 rows)
+
+### C9 duplicate parameter name
+ERROR:  parameter name "user_id" used more than once
+### C10 window function in distinct on
+ id 
+----
+(0 rows)
+
+### C11 recursive term: intersect / except / order by / limit / offset
+ERROR:  recursive query "r" does not have the form non-recursive-term UNION [ALL] recursive-term
+LINE 1: with recursive r(n) as (select 1 intersect select n+1 from r...
+                       ^
+ERROR:  recursive query "r" does not have the form non-recursive-term UNION [ALL] recursive-term
+LINE 1: with recursive r(n) as (select 1 except select n+1 from r wh...
+                       ^
+ n 
+---
+ 1
+ 2
+ 3
+(3 rows)
+
+ n 
+---
+ 1
+ 2
+ 3
+(3 rows)
+
+ n 
+---
+ 1
+(1 row)
+
+### C12 aggregate in the recursive term
+### C13 window function in the recursive term parses
+ERROR:  aggregate functions are not allowed in a recursive query's recursive term
+LINE 1: with recursive r(n) as (select 1 union all select max(n)+1 f...
+                                                          ^
+                                  QUERY PLAN                                   
+-------------------------------------------------------------------------------
+ CTE Scan on r  (cost=3.02..3.64 rows=31 width=12)
+   CTE r
+     ->  Recursive Union  (cost=0.00..3.02 rows=31 width=12)
+           ->  Result  (cost=0.00..0.01 rows=1 width=12)
+           ->  WindowAgg  (cost=0.00..0.27 rows=3 width=12)
+                 ->  WorkTable Scan on r r_1  (cost=0.00..0.22 rows=3 width=4)
+                       Filter: (n < 3)
+(7 rows)
+
+### C14 window-only call without over
+ERROR:  window function row_number requires an OVER clause
+LINE 1: select row_number() from c1;
+               ^
+### C15 recursive term nullable key where the anchor is not null
+ id | pg_typeof 
+----+-----------
+  1 | integer
+  2 | integer
+(2 rows)
+
+ pg_typeof 
+-----------
+ integer
+(1 row)
+
+### C16 identity alters in place; generated expression change; plain to generated
+ERROR:  syntax error at or near "("
+LINE 1: ... table c16 alter column a add generated always as (id) store...
+                                                             ^
+ERROR:  column "a" of relation "c16" is not a generated column
+                                         version                                          
+------------------------------------------------------------------------------------------
+ PostgreSQL 17.11 on x86_64-pc-linux-musl, compiled by gcc (Alpine 15.2.0) 15.2.0, 64-bit
+(1 row)
+
