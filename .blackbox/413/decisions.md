@@ -30,3 +30,10 @@ _lead · extension · basis 412/D24, D25, D13; #701/D3 (canonical form never its
 
 (1) canonicalizeTable sorts foreignKeys with the serializer's key — new task 1.1c with four reds, the structural assertion over all 12 fixtures mandatory; proposal Impact gains kinds/table-kind.ts. (2) The lead rebases the branch onto upstream/dev after 1.7 and runs the ten gates before the reviewer's SHA. (3) design.md Q4's second bullet states the measured mechanism: restore parses the commit's stored snapshot as the parent (D81); only a tip whose banner carries upgraded-from is re-encoded in memory via upgradeSnapshot; the trigger is the marker, never the format. (4) check-next-marker's cross-file limit is filed by the lead under #815. Ratification: owner on return.
 
+<a id="r5"></a>
+## R5 — Older-format refusal is stated as a conditional plus an existential clause; history/status keep running; task 1.8 measures all 18 commands
+
+_lead · interpretation · basis 412/D24, D25; su review B1 (history/status exit 0 on a real 0.1.1 project, the PR's own e2e asserting it); proposal's original 'every command's refusal ends with Next: run hejbro upgrade'; reviewer's vacuous-truth objection · 2026-09-05T11:16Z · ratified: pending_
+
+Option ①: any command that refuses a snapshot for being a released older format points its next step at `hejbro upgrade`, and generate/verify are among the commands that do refuse; commands that never read the snapshot's content (history, status) run as before. Widening the refusal to history/status is rejected (it would block pre-upgrade diagnosis and add a needless read). Task 1.8: delta ×2, skill reference, e2e comment, a full 18-command measurement recorded in design.md and compared with the reviewer's sealed matrix, and N1's test key aligned with the implementation's delimiter key. Ratification: owner on return.
+

@@ -61,6 +61,19 @@
       "at": "2026-09-05T09:10Z",
       "title": "FK order joins the canonical form (task 1.1c); rebase after 1.7 by the lead; design Q4 restated to the measured mechanism",
       "ratified": null
+    },
+    {
+      "id": "R5",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "412/D24",
+        "D25; su review B1 (history/status exit 0 on a real 0.1.1 project",
+        "the PR's own e2e asserting it); proposal's original 'every command's refusal ends with Next: run hejbro upgrade'; reviewer's vacuous-truth objection"
+      ],
+      "at": "2026-09-05T11:16Z",
+      "title": "Older-format refusal is stated as a conditional plus an existential clause; history/status keep running; task 1.8 measures all 18 commands",
+      "ratified": null
     }
   ],
   "work": [
