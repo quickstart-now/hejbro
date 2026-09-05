@@ -10,12 +10,17 @@ the constraint only).
 **Files edited**: `packages/cli/src/contract/tables.ts`, the contract
 emit tests and goldens under `packages/cli/test/` (1.1); `packages/query/
 src/client/name-keyed-db.ts` and its tests (1.2); `packages/cli/test/
-two-repo.integration.test.ts`, `skills/hejbro/references/polyrepo.md`,
-`skills/hejbro/references/query-layer.md`, one `.changeset/*.md` (1.3).
-If a task appears to need any other file, that goes back to the planner,
-not into the diff.
+two-repo.integration.test.ts` (1.3); `skills/hejbro/references/
+polyrepo.md`, `skills/hejbro/references/query-layer.md`, `packages/
+skills/test/fixtures/preludes/polyrepo-contract.ts`, `docs/guide/
+polyrepo.md`, one `.changeset/*.md` (1.4). The prelude and the guide
+joined under 653/R2: the reference's `.related()` snippet compiles
+against that prelude (`packages/skills/test/snippet-compile.test.ts`),
+and the guide illustrates the emitted `Database`, which now carries
+`Relations`. If a task appears to need any other file, that goes back to
+the planner, not into the diff.
 
-**Ordering.** 1.1 → 1.2 → 1.3.
+**Ordering.** 1.1 → 1.2 → 1.3 → 1.4.
 
 ## 1. `.related()` on the vendored client
 
@@ -44,13 +49,21 @@ not into the diff.
       scopes the nested read (the recorded `set_config` precedes the
       statement). Files: `name-keyed-db.ts`, tests.
 
-- [ ] 1.3 (~8m) The witness, the reference, the changeset. Red:
+- [ ] 1.3 (~7m) The two-repository witness. Red:
       `two-repo.integration.test.ts` gains "3.3: the consumer joins the
       platform-owned table" — a managed `posts` referencing the declared
       existing `auth.users` is vendored, rows are inserted on the real
       server, and `client.posts.select().related({ author: true })`
-      resolves the parent row typed as `auth.users`'s declared columns;
-      `polyrepo.md` documents `.related()` on the vendored client and the
-      re-vendor note (design Q2); `query-layer.md`'s `related()` section
-      cross-references it; `pnpm changeset` → `minor`. Files: the test,
-      the two references, `.changeset/*.md`.
+      resolves the parent row typed as `auth.users`'s declared columns.
+      Files: the test.
+
+- [ ] 1.4 (~7m) The references, the guide, the changeset. Red: the
+      snippet gate (`packages/skills/test/snippet-compile.test.ts`) over
+      a `.related()` example added to `polyrepo.md`, which fails until
+      the `polyrepo-contract` prelude carries a second table, its
+      foreign key and both `Relations` maps; `polyrepo.md` also records
+      the re-vendor note (design Q2), `query-layer.md`'s `related()`
+      section cross-references it, `docs/guide/polyrepo.md`'s emitted-
+      `Database` illustration gains `readonly Relations: {};` (653/R2),
+      and `pnpm changeset` → `minor`. Files: the two references, the
+      prelude, the guide, `.changeset/*.md`.
