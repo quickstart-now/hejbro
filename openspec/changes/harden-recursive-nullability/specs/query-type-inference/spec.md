@@ -71,9 +71,11 @@ The elision is the test's; the outward row type does not inherit it.
 An anchor projecting a non-null value and a recursive term projecting a
 nullable value for the SAME key still type-checks, and the recursive
 term's null genuinely reaches the result rows — so the CTE's outward
-row type SHALL carry that key as nullable: the anchor's type, widened
-by the recursive term's nullability, the same per-key union a plain
-set operation's result already has. The rule that the row type is the
+row type SHALL carry that key as nullable: the anchor's type kept, with
+null added wherever the recursive term's own projection is nullable. A
+plain set operation does not do this — its result keeps the left
+branch's projection unchanged — so this rule is the recursive form's
+own, stricter than the set-operation result it is often compared to. The rule that the row type is the
 anchor's governs the *type* (which Postgres resolves and enforces with
 `42804`); nullability is a dimension Postgres never resolves, so the
 anchor's non-null claim was hejbro's own inference and is not made.
@@ -91,6 +93,12 @@ rather than a silently dropped case.
   still shows the anchor's non-null type for that key, and the CTE's
   outward row type shows it as nullable — the type a null value from the
   recursive term, which genuinely reaches the result rows (measured),
-  requires; a key non-null in both branches stays non-null, and a key
-  nullable in the anchor is nullable outward whatever the recursive term
+  requires; a key non-null in both branches stays non-null — unless the
+  recursive term is a set operation, whose own left-joined set is not
+  tracked: a key such a term projects from a column, or from an
+  expression that is not a nested read, then reads nullable — while a
+  key it projects through a nested read keeps that read's own
+  nullability (an array read never null, an object read nullable) and
+  is unaffected by the untracked set — and a key nullable
+  in the anchor is nullable outward whatever the recursive term
   projects

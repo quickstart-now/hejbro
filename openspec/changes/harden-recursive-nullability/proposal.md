@@ -19,8 +19,10 @@ STRICT rule of the type layer — never a type that lies — settles it.
 
 - **The outward row type widens by the recursive term's nullability.**
   For every key, the CTE's row type stays the anchor's *type* and
-  becomes nullable when either branch's projection is nullable —
-  exactly what a plain set operation already does for its result. The
+  becomes nullable when either branch's projection is nullable. A plain
+  set operation does not do this — its result keeps the left branch's
+  projection unchanged — so this is the recursive form's own rule, not
+  an existing one reused. The
   compatibility test is unchanged (nullability elided), and the
   reference the recursive term is written against stays typed from the
   anchor alone, so the recursive term still sees the anchor's columns

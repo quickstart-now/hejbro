@@ -385,8 +385,16 @@ second one.
 
 The outward row's *type* per key is always the anchor's; its
 *nullability* is not — a key reads nullable when either the anchor or
-the recursive term projects it nullable. `handle.with(...)` currently
-reads every CTE key as nullable regardless of this rule (a separate,
+the recursive term projects it nullable, the recursive term's own
+nested reads (`jsonArrayFrom`/`jsonObjectFrom`) included. **Exception:**
+when the recursive term is itself a set operation (`.union()` and
+friends), every key of that term reads nullable, since a set-op stage
+carries no left-joined set of its own to check — a real left join
+inside one of its branches would otherwise go unseen. This is not the
+same rule a plain `union()`/`intersect()`/`except()` result already
+has: a plain set operation keeps the left branch's own projection
+unchanged, nullability included (#944). `handle.with(...)` currently
+reads every CTE key as nullable regardless of any of this (a separate,
 existing boundary, #942), so the rule becomes visible on the chain once
 that boundary narrows.
 
