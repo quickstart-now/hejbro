@@ -143,7 +143,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#823](823/) | migrate: a failed ledger insert is reported as the migration's failure | closed | #835 #871 #877 | 0 | 1 (0 pending) |
 | ↳ [#830](830/) | cli: config-not-found Next names hejbro.config.ts even when --config pointed elsewhere | closed | #840 #868 #876 | 0 | 1 (1 pending) |
 | ↳ [#831](831/) | cli: the directory-at-config-path refusal repeats the file name twice | closed | #840 #868 #876 | 0 | 1 (0 pending) |
-| ↳ [#832](832/) | core: category-C keywords fail as argument names but are not refused; the stated class does not match the list | open | #833 | 0 | 1 (1 pending) |
+| ↳ [#832](832/) | core: category-C keywords fail as argument names but are not refused; the stated class does not match the list | open | #833 | 0 | 2 (1 pending) |
 | ↳ [#836](836/) | status: a permission error on a real ledger reaches the user as a raw node-postgres object | closed | #838 #871 #877 | 0 | 8 (1 pending) |
 | ↳ [#837](837/) | raise --file with an absolute path is joined onto the cwd and dies with a raw ENOENT | open | #838 | 0 | 0 (0 pending) |
 | ↳ [#839](839/) | test: core cross-instance-symbols times out under load from parallel worktrees | closed | #868 | 0 | 0 (0 pending) |
@@ -176,7 +176,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 
 ## Totals
 
-Owner decisions 91 · rulings 200 (interpretation 136, extension 62, stop 2) · pending extensions 24 · rejected 2
+Owner decisions 91 · rulings 201 (interpretation 137, extension 62, stop 2) · pending extensions 24 · rejected 2
 
 ## Conventions
 
