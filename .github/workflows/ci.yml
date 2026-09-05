@@ -279,6 +279,12 @@ jobs:
       - run: pnpm check:next-marker
       - run: pnpm check:diagnostic-xref
       - run: pnpm check:bans
+      # #510: openspec validate never reads the base spec's requirement
+      # titles, so a misspelled MODIFIED/REMOVED/RENAMED-from title archives
+      # as a new requirement beside the old one; this holds every active
+      # delta title to an exact base line (Node-independent, one leg).
+      - run: pnpm check:modified-titles
+        if: matrix.node-version == 24
       # #488: the changeset fixed group must equal the workspace's published
       # set exactly -- a new package outside the group would version alone.
       - run: pnpm check:fixed-group

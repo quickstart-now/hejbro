@@ -1,0 +1,23 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#510",
+  "title": "cross-check MODIFIED requirement titles against the base spec in CI",
+  "parent": "quickstart-now/hejbro#412",
+  "status": "open",
+  "opened": "2026-09-05",
+  "closed": null,
+  "decisions": [],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-05T05:03Z",
+      "title": "openspec 1.11.0 still validates a misspelled MODIFIED title; check-modified-titles catches it",
+      "pr": null,
+      "decisions": []
+    }
+  ],
+  "prs": [],
+  "origin": null,
+  "followUps": []
+}

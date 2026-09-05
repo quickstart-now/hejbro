@@ -229,7 +229,11 @@ them during normal work.
       contract, not a docs nit)
 - [ ] README CRAP block refreshed (`pnpm check:crap`)
 - [ ] OpenSpec change state current (`tasks.md` ticks; archive on
-      completion; durations in `openspec/task-times.csv`)
+      completion; durations in `openspec/task-times.csv`). A delta's
+      MODIFIED/REMOVED/RENAMED-from titles must match the base spec's
+      `### Requirement:` lines verbatim — `openspec validate --strict`
+      never checks that (#510); `pnpm check:modified-titles` does, and CI
+      runs it on one leg
 - [ ] Wrote `openspec/task-times.csv` rows → README task-time badges
       refreshed too (`pnpm check:tasktime`). CI enforces this on one
       matrix leg only, so it surfaces as a single-leg failure long
