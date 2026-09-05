@@ -70,11 +70,17 @@ const declaredTitles = (deltaText) =>
 			}
 			if (state.section === "renamed" && line.startsWith(RENAMED_FROM_PREFIX)) {
 				const title = line.slice(RENAMED_FROM_PREFIX.length).trim();
-				return { ...state, entries: [...state.entries, { section: "renamed-from", title }] };
+				return {
+					...state,
+					entries: [...state.entries, { section: "renamed-from", title }],
+				};
 			}
 			if (line.startsWith(REQUIREMENT_PREFIX) && state.section !== "renamed") {
 				const title = line.slice(REQUIREMENT_PREFIX.length).trim();
-				return { ...state, entries: [...state.entries, { section: state.section, title }] };
+				return {
+					...state,
+					entries: [...state.entries, { section: state.section, title }],
+				};
 			}
 			return state;
 		},
@@ -85,26 +91,41 @@ const problemsFor = (changeDir) =>
 	deltaSpecFiles(changeDir).flatMap(({ capability, file }) => {
 		const base = baseTitles(capability);
 		const location = relative(ROOT, file);
-		return declaredTitles(readFileSync(file, "utf8")).flatMap(({ section, title }) => {
-			const mustExist = section === "modified" || section === "removed" || section === "renamed-from";
-			if (mustExist && (base === null || !base.has(title))) {
-				return [`${location}: ${section.toUpperCase()} title not found verbatim in openspec/specs/${capability}/spec.md: "${title}"`];
-			}
-			if (section === "added" && base !== null && base.has(title)) {
-				return [`${location}: ADDED title already exists in openspec/specs/${capability}/spec.md (use MODIFIED): "${title}"`];
-			}
-			return [];
-		});
+		return declaredTitles(readFileSync(file, "utf8")).flatMap(
+			({ section, title }) => {
+				const mustExist =
+					section === "modified" ||
+					section === "removed" ||
+					section === "renamed-from";
+				if (mustExist && (base === null || !base.has(title))) {
+					return [
+						`${location}: ${section.toUpperCase()} title not found verbatim in openspec/specs/${capability}/spec.md: "${title}"`,
+					];
+				}
+				if (section === "added" && base !== null && base.has(title)) {
+					return [
+						`${location}: ADDED title already exists in openspec/specs/${capability}/spec.md (use MODIFIED): "${title}"`,
+					];
+				}
+				return [];
+			},
+		);
 	});
 
 const changeDirs = activeChangeDirs();
 const problems = changeDirs.flatMap(problemsFor);
 if (problems.length > 0) {
-	console.error(`error[check-modified-titles]: ${problems.length} delta title(s) do not match the base spec:`);
+	console.error(
+		`error[check-modified-titles]: ${problems.length} delta title(s) do not match the base spec:`,
+	);
 	for (const problem of problems) {
 		console.error(`  ${problem}`);
 	}
-	console.error("Next: spell each MODIFIED/REMOVED/RENAMED-from title exactly as the base spec's `### Requirement:` line, and move an ADDED requirement that already exists to MODIFIED.");
+	console.error(
+		"Next: spell each MODIFIED/REMOVED/RENAMED-from title exactly as the base spec's `### Requirement:` line, and move an ADDED requirement that already exists to MODIFIED.",
+	);
 	process.exit(1);
 }
-console.log(`check-modified-titles: ok -- ${changeDirs.length} active change(s), every delta title matches its base spec`);
+console.log(
+	`check-modified-titles: ok -- ${changeDirs.length} active change(s), every delta title matches its base spec`,
+);
