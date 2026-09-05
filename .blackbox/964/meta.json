@@ -1,0 +1,21 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#964",
+  "title": "spec: name the surface on which the recursive-cte nullability rule is observable",
+  "parent": "quickstart-now/hejbro#815",
+  "status": "open",
+  "opened": "2026-09-05",
+  "closed": null,
+  "decisions": [],
+  "work": [],
+  "prs": [
+    {
+      "number": 968,
+      "role": "refs",
+      "pinnedAt": "2026-09-05T17:06Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

@@ -618,7 +618,12 @@ the anchor**, not from a union of the two branches: a plain union widens
 (`int` and `bigint` resolve to `bigint`), but a recursive CTE refuses to
 (`42804`, "column N has type integer in non-recursive term but type
 bigint overall"). So the compatibility *test* is shared; the resulting
-row type is the anchor's. Requiring the two projections to be identical
+row type is the anchor's — in its types. Its nullability is not: a key
+SHALL read back as nullable through the CTE's outward reference when
+either branch projects it nullable, because a `null` the recursive term
+produces reaches the result rows and Postgres resolves no nullability
+at all. The reference the recursive term itself is written against
+stays typed from the anchor alone. Requiring the two projections to be identical
 would be stricter than that rule and would reject constructs Postgres
 genuinely accepts in a recursive term.
 
@@ -642,8 +647,9 @@ the identical check independently.
 - **WHEN** the anchor projects a column directly and the recursive term
   projects the same key through a window function
 - **THEN** it type-checks, and the field reads back as the **anchor's**
-  type — how the recursive term computes it is not part of the CTE's row
-  type
+  type — nullable when the recursive term's projection is nullable, as a
+  windowed projection is — and how the recursive term computes it is
+  otherwise not part of the CTE's row type
 
 ### Requirement: Recursive-term nullability is elided, and the residue is stated
 The recursive-term compatibility test SHALL elide nullability when
@@ -666,17 +672,22 @@ recursion) never terminates rather than returning a row — neither is
 evidence the category is safe, and this requirement makes no such
 claim.
 
-The elision leaves a known, measured residue: an anchor projecting a
-non-null value and a recursive term projecting a nullable value for the
-SAME key still type-checks, and the CTE's declared row type stays the
-anchor's (non-null) — but the recursive term's null genuinely reaches
-the result rows. The unsoundness here is hejbro's own — the type system
-infers non-null and that inference is what is wrong, not anything
-Postgres does; no measured query carried a `NOT NULL` constraint, so
-this is not "Postgres ignores the anchor's `NOT NULL`". Widening the
-declared row type instead would contradict the rule that the row type is
-always the anchor's — that trade-off is deliberately left open rather
-than settled here.
+The elision is the test's; the outward row type does not inherit it.
+An anchor projecting a non-null value and a recursive term projecting a
+nullable value for the SAME key still type-checks, and the recursive
+term's null genuinely reaches the result rows — so the CTE's outward
+row type SHALL carry that key as nullable: the anchor's type kept, with
+null added wherever the recursive term's own projection is nullable. For
+every key, whether that projection is nullable is decided by the
+projection's own rule — a column by its declaration and by its stage's
+tracked left-joined set, a nested read by the nested-read rule, any
+other expression by the family fallback, which is nullable — never by
+the anchor's. A plain set operation does not do this — its result keeps the left
+branch's projection unchanged — so this rule is the recursive form's
+own, stricter than the set-operation result it is often compared to. The rule that the row type is the
+anchor's governs the *type* (which Postgres resolves and enforces with
+`42804`); nullability is a dimension Postgres never resolves, so the
+anchor's non-null claim was hejbro's own inference and is not made.
 
 Elision covers nullability only. A `.$type<T>()` brand (a TS-only tag on
 a column's declared type, invisible to Postgres) is a separate axis this
@@ -687,9 +698,19 @@ rather than a silently dropped case.
 - **WHEN** the anchor projects a non-null value for a key and the
   recursive term projects a nullable value for the same key, with no
   other type divergence
-- **THEN** it type-checks, and the CTE's declared row type is the
-  anchor's non-null type — even though a null value from the recursive
-  term can genuinely reach the result rows (measured)
+- **THEN** it type-checks, the reference inside the recursive callback
+  still shows the anchor's non-null type for that key, and the CTE's
+  outward row type shows it as nullable — the type a null value from the
+  recursive term, which genuinely reaches the result rows (measured),
+  requires; a key non-null in both branches stays non-null — unless the
+  recursive term is a set operation, whose own left-joined set is not
+  tracked: a key such a term projects from a column, or from an
+  expression that is not a nested read, then reads nullable — while a
+  key it projects through a nested read keeps that read's own
+  nullability (an array read never null, an object read nullable) and
+  is unaffected by the untracked set — and a key nullable
+  in the anchor is nullable outward whatever the recursive term
+  projects
 
 ### Requirement: A same-family type divergence between recursive branches is not caught
 The recursive term's declared TYPE (as opposed to whether it is
