@@ -30,6 +30,13 @@
       "title": "Both example round-trips pass on dev fffea4dc under colima",
       "pr": null,
       "decisions": []
+    },
+    {
+      "id": "W2",
+      "at": "2026-09-05T04:38Z",
+      "title": "First CI run failed: dash refuses set -o pipefail; the script is invoked as sh",
+      "pr": null,
+      "decisions": []
     }
   ],
   "prs": [
