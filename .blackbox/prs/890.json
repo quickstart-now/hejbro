@@ -3,15 +3,15 @@
   "number": 890,
   "ref": "quickstart-now/hejbro#890",
   "title": "docs(openspec): pin the wave sort tie-break (#798)",
-  "head": "99b59f12f159aace41ba0418ccf12e60232b4c9b",
+  "head": "cd08ecf2fea83519113d390816dbe94c1ffea573",
   "headRef": "pin-wave-tie-break",
   "base": "dev",
   "merged": null,
-  "pinnedAt": "2026-09-05T06:14Z",
+  "pinnedAt": "2026-09-05T08:03Z",
   "refs": [
     {
       "path": "README.md",
-      "blob": "f5dc348316b50f2058d08f8aa6d3aaff89ec3611"
+      "blob": "31e62d243778ea2f4445e64b1915c5597ac49f46"
     },
     {
       "path": "openspec/changes/pin-wave-tie-break/design.md",
@@ -31,7 +31,7 @@
     },
     {
       "path": "openspec/task-times.csv",
-      "blob": "2ff52e254f697c3fdbb1d2851df737612bba5a38"
+      "blob": "bf92b10f18e25626b90e208e01cd837044c8bb68"
     },
     {
       "path": "packages/core/test/diff-engine.test.ts",
