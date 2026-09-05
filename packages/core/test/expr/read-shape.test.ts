@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
+import * as aggregateModule from "../../src/expr/aggregate";
+import * as windowModule from "../../src/expr/window";
 import type { BuilderFunctionName, ExprNode, ReadShape } from "../../src/index";
+import * as coreBarrel from "../../src/index";
 import {
 	avg,
 	BUILDER_READ_SHAPES,
@@ -23,6 +26,42 @@ import {
 
 const placeholder = columnRef("app", "t", "c", { typeName: "bigint" });
 
+/**
+ * Runtime exports these two modules carry that are NOT themselves an
+ * aggregate/window function constructor, excluded with a reason rather
+ * than silently: `over()` attaches a window spec to an existing
+ * aggregate or window-only call, so it never produces a function-call
+ * node under its own name and has no row of its own in
+ * `BUILDER_READ_SHAPES`.
+ */
+const NON_CONSTRUCTOR_EXPORTS: ReadonlySet<string> = new Set(["over"]);
+
+/** Every function-valued runtime export of `module`, minus {@link NON_CONSTRUCTOR_EXPORTS} -- a type-only export (e.g. `Aggregated`) or a non-function value (e.g. `readAsBrand`, a symbol) never appears here. */
+const constructorExportNames = (
+	module: Record<string, unknown>,
+): ReadonlyArray<string> =>
+	Object.entries(module)
+		.filter(
+			([name, value]) =>
+				typeof value === "function" && !NON_CONSTRUCTOR_EXPORTS.has(name),
+		)
+		.map(([name]) => name);
+
+/**
+ * Every aggregate/window constructor the public surface exports, derived
+ * from the two defining modules (`expr/aggregate.ts`, `expr/window.ts`)
+ * rather than hand-copied (#452 task 1.1 rework) -- a constructor added
+ * to either module without a matching entry in
+ * {@link constructorFunctionNames} below fails the set-equality
+ * assertion this file makes, closing the gap a hand-written list alone
+ * could not: a 17th constructor added to `window.ts` used to pass this
+ * suite silently before this derivation existed.
+ */
+const derivedConstructorNames: ReadonlySet<string> = new Set([
+	...constructorExportNames(aggregateModule),
+	...constructorExportNames(windowModule),
+]);
+
 /** The function name a plain aggregate call carries -- `built.exprNode` is a `FunctionCallNode` by construction for every one of these five. */
 const functionNameOfAggregate = (built: {
 	readonly exprNode: ExprNode;
@@ -40,11 +79,14 @@ const functionNameOfWindowOnly = (built: {
 }): string => built.windowFn.functionName;
 
 /**
- * Every aggregate/window constructor the public barrel exports (D110 --
- * the closure claim's own input table), invoked with a placeholder
- * argument where one is required, paired with the function name it
- * actually produced -- the string-level half of the closure a type
- * cannot see (#452 task 1.1).
+ * The 16 constructors {@link derivedConstructorNames} names, each
+ * invoked with a placeholder argument where one is required, paired
+ * with the function name it actually produced -- the string-level half
+ * of the closure a type cannot see (#452 task 1.1). Arity differs per
+ * constructor, so this call table stays hand-written; the "covers
+ * exactly the public surface" claim (D110) is what the first test below
+ * checks against {@link derivedConstructorNames}, not this table's own
+ * length.
  */
 const constructorFunctionNames: ReadonlyArray<readonly [string, string]> = [
 	["count", functionNameOfAggregate(count())],
@@ -66,6 +108,23 @@ const constructorFunctionNames: ReadonlyArray<readonly [string, string]> = [
 ];
 
 describe("BUILDER_READ_SHAPES closure (#452 task 1.1)", () => {
+	it("the hand-written call table covers exactly the constructors expr/aggregate.ts and expr/window.ts export (D110)", () => {
+		const handWrittenLabels = new Set(
+			constructorFunctionNames.map(([label]) => label),
+		);
+		expect([...handWrittenLabels].sort()).toEqual(
+			[...derivedConstructorNames].sort(),
+		);
+	});
+
+	it("every derived constructor is reachable from the public barrel (src/index.ts)", () => {
+		const allReachable = [...derivedConstructorNames].every(
+			(name) =>
+				typeof (coreBarrel as Record<string, unknown>)[name] === "function",
+		);
+		expect(allReachable).toBe(true);
+	});
+
 	it.each(constructorFunctionNames)(
 		"%s's own function name has a row in BUILDER_READ_SHAPES",
 		(_label, functionName) => {

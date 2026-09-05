@@ -730,12 +730,12 @@ const castColumnIfAtRisk = (
  * projection AT BUILD TIME — the node itself carries the casts, so the
  * compiled SQL, the snapshot codec round-trip, and rename retargeting
  * all see the same statement (a render-time cast could not: the stored
- * node has no column types). A direct column ref and the `count()`/
- * `min`/`max` aggregate shapes `convert.ts`'s own revive logic tries to
- * type precisely are cast (#444 F6); any other computed expression's
- * JSON shape is its author's own contract. The types come from the
- * chain's own `projectionInput` (the built refs — and, since #444 F9,
- * `min`/`max`'s own result — carry their `typeNode`); a whole-`Table`
+ * node has no column types). A direct column ref and every builder
+ * aggregate/window cell whose `BUILDER_READ_SHAPES` row is `"int8"` or
+ * `"argument"` are cast (#452); any other computed expression's JSON
+ * shape is its author's own contract. The types come from the chain's
+ * own `projectionInput` (the built refs — and, since #444 F9, `min`/
+ * `max`'s own result — carry their `typeNode`); a whole-`Table`
  * subselect expands into the equivalent aliased projection so its casts
  * apply too (F2).
  */
