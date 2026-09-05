@@ -239,3 +239,22 @@ header lists that file under (1.3, 1.6, 1.7). Task 1.3's red is the
 five-class table with one mutation per row, row 2 (banner prose edited ->
 proceeds) being the row that proves the piece's premise.
 
+<a id="r10"></a>
+## R10 — a run with nothing pending compares nothing; status is where a changed body is reported
+
+_lead · interpretation · basis R9 · 2026-09-05T18:36Z · ratified: pending_
+
+The delta says "before applying anything pending, `migrate` SHALL
+hash...", and the wiring sits after the nothing-pending exit, so a run
+with nothing to apply compares nothing and exits 0. Ruling: that stays.
+The rule exists to keep hejbro from applying a migration on top of a body
+that differs from what ran; with nothing pending there is nothing to
+build on the changed history, and the moment a pending migration appears
+the same run refuses -- so an edited applied body is never silently built
+upon, only silently left alone for the run that had no work. Comparing on
+an idle run would either exit 2 against `migrate`'s own code contract
+(0 = nothing pending or all applied) or print a warning `migrate` has no
+register for; the delta already names `status` as the command that
+reports a changed body without acting. The delta gains one scenario so
+the constructor-mode reviewer can answer the input from the spec.
+

@@ -107,6 +107,17 @@
       "at": "2026-09-05T18:09Z",
       "title": "apply-migration-body-changed: every changed file, abbreviated checksums, one pure comparison shared by migrate and status",
       "ratified": null
+    },
+    {
+      "id": "R10",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R9"
+      ],
+      "at": "2026-09-05T18:36Z",
+      "title": "a run with nothing pending compares nothing; status is where a changed body is reported",
+      "ratified": null
     }
   ],
   "work": [],
