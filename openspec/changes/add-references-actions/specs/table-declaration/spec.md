@@ -14,7 +14,10 @@ naming the referential actions — `{ onDelete?, onUpdate? }`, over the
 same action vocabulary the `extras` form accepts — and SHALL fold them
 into the same declaration, so a column-level foreign key with actions
 generates, snapshots and diffs exactly as the `extras` form with the
-same actions does. Self-referencing foreign keys and composite
+same actions does. A later `.references()` call on the same column
+SHALL replace the reference as a whole — target and actions together —
+so a second call naming no actions leaves the column with none.
+Self-referencing foreign keys and composite
 (multi-column) foreign keys live on the `extras` path, and a
 declaration needing them uses `extras`. Declaring `.references()` and an `extras` foreign key over
 the same column SHALL fail at declaration time with an explicit error
@@ -89,9 +92,9 @@ the next read folds again.
   and `on update` clauses included — identical snapshot content, and an
   action changed on either form diffs as the same drop-and-add
 
-#### Scenario: A repeated references() call replaces the reference as a whole
-- **WHEN** a column calls `.references()` more than once
-- **THEN** the emitted constraint carries the last call's target and the last call's actions -- none when the last call named none -- and no action from an earlier call survives; whether a repeated call should be refused instead is open in #972
+#### Scenario: A repeated reference replaces target and actions together
+- **WHEN** a column declares `.references(() => a.id, { onDelete: "cascade" })` and then `.references(() => b.id)`, or a second call naming different actions
+- **THEN** the emitted foreign key targets the last call's column and carries exactly the last call's actions — none in the first case — matching the `extras` form written from the last call alone; whether a repeated call should be refused instead is open in #972
 
 #### Scenario: The example's foreign keys convert without moving a byte
 - **WHEN** `examples/postgres` declares its single-column foreign keys
