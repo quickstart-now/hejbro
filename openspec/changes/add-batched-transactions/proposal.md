@@ -97,8 +97,11 @@ None.
   message), tests including the tier-obligation check.
 - `@hejbro/neon`: `src/http.ts` (`batch`, `true`), `src/driver.ts`
   (WebSocket `false`).
-- `@hejbro/pg`, `@hejbro/supabase`, `@hejbro/nile`: the declaration and
-  the throwing `batch`.
+- `@hejbro/pg` and `@hejbro/supabase`: the declaration and the throwing
+  `batch`. `@hejbro/nile`: inherited from the base driver — `nileDriver`
+  spreads a complete `Driver` and owns no execution path, so both the
+  capability record and `batch` reach it whole (486/R7); its obligation
+  is verified, not written.
 - `skills/hejbro`: `references/neon-preset.md`, `references/query-layer.md`
   (the capability table).
 
