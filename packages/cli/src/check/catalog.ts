@@ -63,6 +63,8 @@ const indexRow = z.object({
 	predicate: z.string().nullable(),
 	/** The index's ordered key list (#778's index-key surface, review round 1 R3) -- `n` is cast to `int`: `unnest(...) with ordinality` always yields a `bigint` ordinality column, and `pg_get_indexdef`'s own column-number parameter is `int` with no bigint overload -- measured directly (docker postgres:17-alpine, task 1.7): the uncast form fails outright with "function pg_get_indexdef(oid, bigint, boolean) does not exist". Bounded to `n <= indnkeyatts` (review round 2 B4): `indkey` also lists a covering index's `INCLUDE` columns after the last key position, and those carry no ordering and cannot be declared, so they are excluded here rather than filtered downstream. */
 	keys: z.array(indexKeyRow),
+	/** The constraint this index backs (`pg_constraint.conname` joined on `conindid`), `null` when it backs none -- harden-check-inventory (#707/#726) design.md: read from the catalog's own record of the relationship, never inferred from the index and the constraint sharing a name (an ordinary index whose name happens to match an unrelated constraint would otherwise be misreported as backing it). Restricted to `contype in ('p','u','x')` (M6): `conindid` also names a foreign key's own row, pointing at the *referenced* table's unique/primary-key index -- an unrestricted join would misreport that index as backing every foreign key that merely points at it (measured live against `examples/postgres`'s own declared primary keys). Only a primary key, unique or exclusion constraint gets its own backing index from Postgres; a foreign key never does. */
+	constraintName: z.string().nullable(),
 });
 export type IndexRow = z.infer<typeof indexRow>;
 
@@ -174,11 +176,13 @@ export const CHECK_CATALOG_QUERIES = {
 				left join pg_attribute a on a.attrelid = ix.indrelid and a.attnum = k.attnum
 				left join pg_collation coll on coll.oid = ix.indcollation[k.n - 1]
 				where k.n <= ix.indnkeyatts
-			), '[]'::json) as keys
+			), '[]'::json) as keys,
+			con.conname as "constraintName"
 		from pg_index ix
 		join pg_class c on c.oid = ix.indrelid
 		join pg_class ic on ic.oid = ix.indexrelid
 		join pg_namespace n on n.oid = c.relnamespace
+		left join pg_constraint con on con.conindid = ix.indexrelid and con.contype in ('p','u','x')
 		order by schema, "table", name
 	`,
 	enums: `

@@ -273,16 +273,20 @@ describe("catalog-inference / D106 R4-B1: a bad name costs the object, not the r
 			// line naming an object the line just above already says was
 			// never inferred.
 			expect(first.stdout).not.toContain("Widgets_sku_key");
-			// D106 R4-B3/#707: three distinct consequence sentences, not one
-			// generic "check will not report this" line reused three times --
-			// "Widgets"'s own schema ("app") still declares "widgets", so
-			// `check`'s inventory keeps naming it, unlike the whole-schema and
-			// index/check omissions, which `check` never surfaces again.
+			// D106 R4-B3/#707, updated by harden-check-inventory: three
+			// distinct consequence sentences, not one generic line reused
+			// three times -- "Widgets"'s own schema ("app") still declares
+			// "widgets", so `check`'s inventory keeps naming it, and (since
+			// harden-check-inventory) so does the omitted index, via
+			// `check`'s own object-level inventory -- only the whole-schema
+			// omission has nothing left in `check`'s inventory to surface.
 			expect(first.stdout).toContain(
 				"`check` will not list them, since nothing in that schema is declared",
 			);
 			expect(first.stdout).toContain("unmanaged-table inventory");
-			expect(first.stdout).toContain("hejbro will not mention it again");
+			expect(first.stdout).toContain(
+				"`check` keeps listing it as unmanaged until it is renamed in the database and declared",
+			);
 			// D106 R5-B2: a leading-underscore column round-trips through its
 			// own TypeScript key but is not a valid hejbro SQL identifier --
 			// omitted and named like any other undeclarable column, never an

@@ -372,11 +372,11 @@ const undeclarableColumnReason = (
 	return "no declaration key produces this SQL name back";
 };
 
-/** import's own consequence: the table is left only partly declared, and `check` keeps reporting the column until it is renamed in the database -- the only remedy that exists for either cause (D106 R6-N1: "declared by hand" never was one). */
+/** import's own consequence: the table is left only partly declared, and `check` keeps reporting the column until it is renamed in the database -- the only remedy that exists for either cause (D106 R6-N1: "declared by hand" never was one). Review round 1 N3, lead ruling 707/R3: renaming alone only makes the name one a declaration can carry -- `check` goes on naming the column as unmanaged until a declaration actually covers it, so the line names the whole exit condition. */
 const undeclarableNameLineForImport = (
 	column: UndeclarableNameColumn,
 ): string =>
-	`Omitted: column "${column.schema}.${column.table}.${column.sqlName}" -- ${undeclarableColumnReason(column.cause)}. The table "${column.schema}.${column.table}" is only partly declared, and \`check\` reports this column until it is renamed in the database.`;
+	`Omitted: column "${column.schema}.${column.table}.${column.sqlName}" -- ${undeclarableColumnReason(column.cause)}. The table "${column.schema}.${column.table}" is only partly declared, and \`check\` reports this column until it is renamed in the database and declared.`;
 
 /** pull's own consequence (CI-G1-R1-16): `contract/from-catalog.ts`'s own `computeTable`/`buildColumnEntries` iterate the snapshot's columns, never the description's, so a column excluded from the snapshot never reaches the contract -- renaming in the database, then linking the schema repository, is the only way out (D106 R6-N1: not "declared by hand", for either cause). */
 const undeclarableNameLineForPull = (column: UndeclarableNameColumn): string =>
@@ -427,18 +427,22 @@ const omittedSchemaLines = (
 /**
  * import's own consequence: the table's own identifier is what a
  * declaration would need to name it by, so everything it holds
- * (columns, checks, indexes, foreign keys) goes with it. Unlike an
- * omitted index or check (which `check` never mentions again, see
- * {@link omittedIndexLine}), the table itself keeps surfacing: its own
- * schema is still declared (by its other, expressible tables), so
- * `check`'s own inventory (existence-only, informational, never a
- * failing check) keeps listing it as unmanaged on every run (#707).
+ * (columns, checks, indexes, foreign keys) goes with it. `check`'s own
+ * inventory (existence-only, informational, never a failing check)
+ * keeps listing it as unmanaged on every run, the same way it now does
+ * an omitted index or check (harden-check-inventory, #707 -- see
+ * {@link omittedIndexLine}), as long as its own schema is still
+ * declared (by its other, expressible tables). Review round 2 B1:
+ * renaming alone only makes the name one a declaration can carry --
+ * `check` goes on naming the table as unmanaged until a declaration
+ * actually covers it (measured live: renaming the table left it
+ * listed), so the line names the whole exit condition.
  */
 const omittedTableConsequenceForImport = (
 	stillReportedInInventory: boolean,
 ): string => {
 	if (stillReportedInInventory) {
-		return "`check` keeps listing the table itself in its unmanaged-table inventory (informational, never a failing check) until it is renamed in the database.";
+		return "`check` keeps listing the table itself in its unmanaged-table inventory (informational, never a failing check) until it is renamed in the database and declared.";
 	}
 	return "the omitted table was the only thing that schema would have declared, so nothing keeps naming it after this run's own report -- rename it in the database, or declare its schema's other objects so `check`'s inventory has something to anchor on.";
 };
@@ -471,14 +475,17 @@ const omittedTableLines = (
  * unmanaged, forever -- the same drift the round-3 foreign-key fix
  * exists to prevent, not reproduce. Omission costs only this index; a
  * vendored contract never carries indexes at all (`contract/emit.ts`),
- * so the two commands share one line. Unlike an omitted table (which
- * `check`'s own inventory keeps naming, see
- * {@link omittedTableConsequenceForImport}), nothing in `check` scans
- * for an index or check no declaration names (#707) -- this run's own
- * report is the only place this omission is ever said out loud.
+ * so the two commands share one line. `check`'s own inventory
+ * (harden-check-inventory, #707) keeps naming this index as unmanaged
+ * on every run, the same way it does an omitted table (see
+ * {@link omittedTableConsequenceForImport}) -- this line states that,
+ * never that hejbro will not mention it again. Review round 1 N3:
+ * renaming alone only makes the name declarable -- the inventory keeps
+ * naming the index until a declaration actually covers it, so the line
+ * names the whole exit condition, not just its first half.
  */
 const omittedIndexLine = (index: OmittedIndex): string =>
-	`Omitted: index "${index.schema}.${index.table}.${index.sqlName}" -- its catalog name is not a valid hejbro SQL identifier, so no declaration can carry it under the same name \`check\` would compare it by. hejbro will not mention it again -- \`check\` compares only what is declared, so rename it in the database to bring it back; a hand-written declaration under a different name only adds a second one.`;
+	`Omitted: index "${index.schema}.${index.table}.${index.sqlName}" -- its catalog name is not a valid hejbro SQL identifier, so no declaration can carry it under the same name \`check\` would compare it by. \`check\` keeps listing it as unmanaged until it is renamed in the database and declared; a hand-written declaration under a different name only adds a second one.`;
 
 const omittedIndexLines = (
 	indexes: ReadonlyArray<OmittedIndex>,
@@ -488,9 +495,9 @@ const omittedIndexLines = (
 		(index) => `${index.schema}.${index.table}.${index.sqlName}`,
 	).map(omittedIndexLine);
 
-/** A check constraint's own name is compared by `check` the same way an index's is (see {@link omittedIndexLine}) -- omission costs only this check, and a vendored contract never carries checks either; nothing in `check` scans for one no declaration names, so this run's own report is the only place this omission is ever said out loud (#707). */
+/** A check constraint's own name is compared by `check` the same way an index's is (see {@link omittedIndexLine}) -- omission costs only this check, and a vendored contract never carries checks either. */
 const omittedCheckLine = (check: OmittedCheck): string =>
-	`Omitted: check constraint "${check.schema}.${check.table}.${check.sqlName}" -- its catalog name is not a valid hejbro SQL identifier, so no declaration can carry it under the same name \`check\` would compare it by. hejbro will not mention it again -- \`check\` compares only what is declared, so rename it in the database to bring it back; a hand-written declaration under a different name only adds a second one.`;
+	`Omitted: check constraint "${check.schema}.${check.table}.${check.sqlName}" -- its catalog name is not a valid hejbro SQL identifier, so no declaration can carry it under the same name \`check\` would compare it by. \`check\` keeps listing it as unmanaged until it is renamed in the database and declared; a hand-written declaration under a different name only adds a second one.`;
 
 const omittedCheckLines = (
 	checks: ReadonlyArray<OmittedCheck>,

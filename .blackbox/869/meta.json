@@ -1,0 +1,21 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#869",
+  "title": "cli integration suites are excluded from pnpm test, so the done-gates never run the live witnesses",
+  "parent": "quickstart-now/hejbro#815",
+  "status": "open",
+  "opened": "2026-09-05",
+  "closed": null,
+  "decisions": [],
+  "work": [],
+  "prs": [
+    {
+      "number": 878,
+      "role": "refs",
+      "pinnedAt": "2026-09-05T02:28Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

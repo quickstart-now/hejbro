@@ -29,7 +29,13 @@ import {
 	compareGeneratedColumn,
 	compareIndexKeys,
 } from "../check/expression";
-import type { Inventory } from "../check/inventory";
+import type {
+	Inventory,
+	UnmanagedCheckConstraint,
+	UnmanagedColumn,
+	UnmanagedIndex,
+	UnmanagedTable,
+} from "../check/inventory";
 import { buildInventory } from "../check/inventory";
 import { requireConfigFields } from "../config-required";
 import { fromHejbroError, renderDiagnostics } from "../diagnostics";
@@ -204,6 +210,9 @@ export type CheckReport = {
 /** Exported so a test can build one explicitly (4.5, o2) -- `renderCheckReport` no longer defaults this away. */
 export const EMPTY_INVENTORY: Inventory = {
 	unmanagedTables: [],
+	unmanagedColumns: [],
+	unmanagedIndexes: [],
+	unmanagedCheckConstraints: [],
 	extensions: [],
 };
 
@@ -218,6 +227,102 @@ const extensionsLines = (
 };
 
 /**
+ * Compares two strings by UTF-16 code unit, never by a collation --
+ * review round 1 N1: `localeCompare` made the inventory's order depend
+ * on the running machine's own locale (measured: the same database
+ * printed a different order under `LC_ALL=en_US.UTF-8` than under
+ * `LC_ALL=sv_SE.UTF-8`), and a normalization pair (NFC/NFD -- two
+ * different Postgres identifiers) compared equal under it, so a stable
+ * sort fell back to whatever order the catalog happened to return them
+ * in. Guard clauses, not a ternary (house style): `<`/`>` compare
+ * JavaScript strings by UTF-16 code unit, which coincides with code
+ * point order for every identity outside the astral planes -- review
+ * round 2 N5 (non-blocking): a real astral-plane pair (`"a😀"` U+1F600
+ * vs `"aﬀ"` U+FB00) sorts by code unit, not true code point, but the
+ * properties this rule needs -- a total order, locale-independent, no
+ * ties -- all still hold; a true code-point compare needs iterating the
+ * string, which house style bans (no loops).
+ */
+const compareCodeUnits = (a: string, b: string): number => {
+	if (a < b) {
+		return -1;
+	}
+	if (a > b) {
+		return 1;
+	}
+	return 0;
+};
+
+/**
+ * Every per-instance inventory line is sorted by the identity it names
+ * (Q7, design.md) right before rendering, by code unit (review round 1
+ * N1) -- mirrors `infer/loss-report.ts`'s own `sortedBy` (D106 N3): a
+ * catalog read's order is never something a report should depend on, so
+ * two runs against the same database (or two databases holding the same
+ * objects, created in a different order) print the same lines in the
+ * same order regardless of the order the catalog happened to return
+ * them in, and regardless of the machine's own locale.
+ */
+const sortedByIdentity = <T>(
+	items: ReadonlyArray<T>,
+	identityOf: (item: T) => string,
+): ReadonlyArray<T> =>
+	[...items].sort((a, b) => compareCodeUnits(identityOf(a), identityOf(b)));
+
+const tableIdentity = (table: UnmanagedTable): string =>
+	`${table.schema}.${table.table}`;
+
+const columnIdentity = (column: UnmanagedColumn): string =>
+	`${column.schema}.${column.table}.${column.name}`;
+
+const indexIdentity = (indexEntry: UnmanagedIndex): string =>
+	`${indexEntry.schema}.${indexEntry.table}.${indexEntry.name}`;
+
+const checkConstraintIdentity = (
+	constraint: UnmanagedCheckConstraint,
+): string => `${constraint.schema}.${constraint.table}.${constraint.name}`;
+
+/** An unmanaged index's own "backs constraint X; " clause (Q4, design.md) -- present only when the catalog's own `constraintName` fact says so, never inferred from a name match; `""` otherwise, so the sentence reads exactly as the table/column axes' does. */
+const indexBacksConstraintClause = (constraintName: string | null): string => {
+	if (constraintName === null) {
+		return "";
+	}
+	return `backs constraint ${constraintName}; `;
+};
+
+const unmanagedTableLines = (
+	tables: ReadonlyArray<UnmanagedTable>,
+): ReadonlyArray<string> =>
+	sortedByIdentity(tables, tableIdentity).map(
+		(table) =>
+			`unmanaged table (not covered by any declaration): ${tableIdentity(table)}`,
+	);
+
+const unmanagedColumnLines = (
+	columns: ReadonlyArray<UnmanagedColumn>,
+): ReadonlyArray<string> =>
+	sortedByIdentity(columns, columnIdentity).map(
+		(column) =>
+			`unmanaged column (not covered by any declaration): ${columnIdentity(column)}`,
+	);
+
+const unmanagedIndexLines = (
+	indexes: ReadonlyArray<UnmanagedIndex>,
+): ReadonlyArray<string> =>
+	sortedByIdentity(indexes, indexIdentity).map(
+		(indexEntry) =>
+			`unmanaged index (${indexBacksConstraintClause(indexEntry.constraintName)}not covered by any declaration): ${indexIdentity(indexEntry)}`,
+	);
+
+const unmanagedCheckConstraintLines = (
+	constraints: ReadonlyArray<UnmanagedCheckConstraint>,
+): ReadonlyArray<string> =>
+	sortedByIdentity(constraints, checkConstraintIdentity).map(
+		(constraint) =>
+			`unmanaged check constraint (not covered by any declaration): ${checkConstraintIdentity(constraint)}`,
+	);
+
+/**
  * The report's own inventory section (task 5.1, spec Req5): informational
  * only, present whether or not `check` found any differences, and never
  * itself a `Finding` -- 2.1's own code set has no inventory entry,
@@ -225,10 +330,10 @@ const extensionsLines = (
  * difference a project is obliged to fix.
  */
 const inventoryLines = (inventory: Inventory): ReadonlyArray<string> => [
-	...inventory.unmanagedTables.map(
-		(table) =>
-			`unmanaged table (not covered by any declaration): ${table.schema}.${table.table}`,
-	),
+	...unmanagedTableLines(inventory.unmanagedTables),
+	...unmanagedColumnLines(inventory.unmanagedColumns),
+	...unmanagedIndexLines(inventory.unmanagedIndexes),
+	...unmanagedCheckConstraintLines(inventory.unmanagedCheckConstraints),
 	...extensionsLines(inventory.extensions),
 ];
 

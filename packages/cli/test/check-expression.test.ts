@@ -1819,7 +1819,9 @@ describe("compareIndexKeys / 4.2 an index's predicate and ordered key list", () 
 	}): Catalog => ({
 		...emptyCatalog(),
 		tables: [{ schema: "app", table: "widgets", rls: false }],
-		indexes: [{ schema: "app", table: "widgets", ...row }],
+		indexes: [
+			{ schema: "app", table: "widgets", constraintName: null, ...row },
+		],
 	});
 
 	const plainKey = (text: string): CatalogKey => ({ text, expression: false });

@@ -1,0 +1,21 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#874",
+  "title": "loss report: sortedBy uses localeCompare, so import/pull output order depends on the locale",
+  "parent": "quickstart-now/hejbro#815",
+  "status": "open",
+  "opened": "2026-09-05",
+  "closed": null,
+  "decisions": [],
+  "work": [],
+  "prs": [
+    {
+      "number": 878,
+      "role": "refs",
+      "pinnedAt": "2026-09-05T02:28Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

@@ -1,0 +1,175 @@
+# Tasks: harden-check-inventory
+
+Tracking issues: #707, #726 (the bug issues themselves; one change, one
+PR). One group, one team, tasks in order — 1.1 and 1.3–1.5 all edit
+`packages/cli/src/check/inventory.ts`, so they are one slice by
+construction. The group's reviewer runs in constructor mode: the input
+(a live database's catalog) is foreign to hejbro's own output (D110).
+
+Settled by the lead before implementation (`.blackbox/707/` R1,
+`.blackbox/726/` R1): the inventory is informational and never touches
+the exit code; one line per object, the existing sentence with the kind
+word varying; the anchor is a managed table; an index backing a
+*declared* key is excluded, and an index backing any other constraint is
+reported with that constraint named, read from the catalog's own record;
+identity ordering; generated and identity columns count; no cap. A
+fourth kind (`unmanaged constraint`) is #859, not this change.
+
+Definition of done for every task: `pnpm check`, `pnpm check-types`,
+`pnpm check:bans`, `pnpm test` green (`TURBO_FORCE=1` in this worktree;
+`pnpm build --force` first when a subprocess or Docker suite runs); the
+delta scenarios of `openspec show harden-check-inventory --diff` hold.
+
+## 1. `check`'s inventory names database-only objects on managed tables (#707 · #726)
+
+- [x] 1.1 [design] ~8m — Red: `packages/cli/test/check-inventory.test.ts`
+  new describe "the inventory's anchor is a managed table" with an input
+  table over the four table states × one database-only column each —
+  a table a `table:` declaration manages (listed), a catalog table no
+  declaration covers (not listed as a column; the table's own unmanaged
+  line stands), a table declared `existingTable()` (nothing listed), a
+  table in a schema no declaration touches (nothing listed) — asserted
+  through `buildInventory`. Green: the managed-table identity set in
+  `inventory.ts` (declared, non-`existing`, schema-scoped, reusing
+  `declaredSchemaNames`/`declaredTableIdentities`), `Inventory` gaining
+  its object-level arrays, and `EMPTY_INVENTORY` (`commands/check.ts`)
+  updated to match.
+  Files: `packages/cli/src/check/inventory.ts`,
+  `packages/cli/src/commands/check.ts`, the test.
+- [x] 1.2 ~9m — Red: `packages/cli/test/check-catalog.test.ts` "an index
+  carries the constraint it backs": the fake session's `indexes` rows
+  carry `constraintName: string | null` and the parsed `Catalog` exposes
+  it; the pinned query text joins `pg_constraint` on `conindid`. Green:
+  `indexRow`'s zod shape, the `indexes` query's join, and the mechanical
+  `constraintName: null` additions to every `IndexRow` literal in
+  `packages/cli/test/*.test.ts`. The fact is read from `conindid`, never
+  from the index and the constraint sharing a name (design.md).
+  Files: `packages/cli/src/check/catalog.ts`, the tests.
+- [x] 1.3 ~8m — Red: `check-inventory.test.ts` describe "unmanaged
+  columns" with an input table over column kinds on one managed table: a
+  column the declaration covers (never listed), a database-only plain
+  column, a database-only generated column, a database-only identity
+  column, a column whose name no declaration could carry (`_id`,
+  `"createdAt"`) — the last four all listed by `schema.table.name`, none
+  of them read for type, default or expression.
+  Files: `packages/cli/src/check/inventory.ts`, the test.
+- [x] 1.4 [design] ~10m — Red: `check-inventory.test.ts` describe
+  "unmanaged indexes" with an input table over `pg_index` rows on one
+  managed table: an index the declaration names (not listed), the index
+  backing the declared primary key (not listed), the index backing a
+  declared column's unique constraint (not listed), a database-only
+  plain index, a database-only partial index, a database-only expression
+  index (listed, `constraintName` null), the index of a database-only
+  primary key and of a database-only unique constraint (listed, each
+  carrying the constraint it backs), and a plain index whose *name*
+  matches a foreign-key constraint on the same table (listed, carrying
+  no constraint — the case name-matching would get wrong). Green: the
+  index axis and its exclusion-by-backed-constraint rule.
+  Files: `packages/cli/src/check/inventory.ts`, the test.
+- [x] 1.5 ~7m — Red: `check-inventory.test.ts` describe "unmanaged check
+  constraints" with an input table over `pg_constraint` rows on one
+  managed table: a check the declaration names (not listed), a
+  database-only check, and one row of each other constraint type (`p`,
+  `u`, `f`) on the same table (never listed as a check constraint —
+  those are #859's, not this change's).
+  Files: `packages/cli/src/check/inventory.ts`, the test.
+- [x] 1.6 [design] ~9m — Red: `packages/cli/test/check-command.test.ts`
+  new describe "the inventory section names objects, not only tables"
+  with an input table over the three kinds × several identities supplied
+  in scrambled catalog order: each prints one
+  `unmanaged <kind> (not covered by any declaration): <identity>` line;
+  an index backing a constraint prints
+  `unmanaged index (backs constraint <name>; not covered by any
+  declaration): <identity>`; the lines come out in identity order
+  regardless of input order; none carries an error code or a `Next:`
+  line; a run whose only report content is inventory exits zero. Green:
+  `inventoryLines` in `commands/check.ts`.
+  Files: `packages/cli/src/commands/check.ts`, the test.
+- [x] 1.7 ~7m — Red: `packages/cli/test/infer-loss-report.test.ts` new
+  cases over the omitted-index and omitted-check lines: each states that
+  `check` keeps listing the object as unmanaged until it is renamed in
+  the database, and neither contains "will not mention it again"; the
+  omitted-column and omitted-table lines keep saying what they say today
+  (regression, asserted against the current strings). Green: the two
+  consequence sentences in `infer/loss-report.ts`.
+  Files: `packages/cli/src/infer/loss-report.ts`, the test.
+- [x] 1.8 ~9m — Red:
+  `packages/cli/test/check-live.integration.test.ts` new case against
+  `postgres:17-alpine`: hejbro's own migration applied, then a
+  database-only column, index and check constraint added on the managed
+  table and a database-only unique constraint created — `check` prints
+  one inventory line for each, names the constraint the last one's index
+  backs, prints nothing for the indexes backing the declared primary key
+  and unique column, and exits zero. Same task: `skills/hejbro`'s check
+  section states what the inventory covers, and
+  `pnpm check:next-marker` / `pnpm check:diagnostic-xref` are re-run
+  (the inventory carries no code, so neither reference gains an entry —
+  confirm rather than assume).
+  Files: `packages/cli/test/check-live.integration.test.ts`,
+  `skills/hejbro/references/brownfield-adoption.md`.
+- [x] 1.9 ~8m — Red: `examples/brownfield/test/brownfield.integration.test.ts`
+  — the corpus witness that today stops at
+  `// the column line's own check promise is not asserted -- #726`
+  asserts it instead: after the corpus `import`, `check` still exits 0
+  with `check: no differences.` and no `error[` line, still names
+  `shop.Widgets` and still never names `Marketing`, and now also names
+  each column the loss report said it would (`catalog.products."a*/b"`,
+  `people.accounts._id`) — while naming no object *inside*
+  `shop.Widgets`, the unmanaged table. Green: nothing new in `src` if
+  1.1–1.6 are right; a corpus-level disagreement is a finding to report,
+  not to patch here.
+  Files: `examples/brownfield/test/brownfield.integration.test.ts`.
+- [x] 1.10 ~7m — Completes 1.3's and 1.4's input tables with the rows
+  that can actually fail. Red: `packages/cli/test/check-inventory.test.ts`
+  — in "unmanaged columns", one row where a column name is *declared on
+  one managed table and database-only on another* (`app.users.note`
+  declared, `app.orders.note` not: only `app.orders.note` is listed),
+  and one where two managed tables share a name across schemas
+  (`app.users.legacy` declared, `shop.users.legacy` not: only
+  `shop.users.legacy` is listed) — a declared-name set gathered globally,
+  or a table identity taken without its schema, fails here. The identity
+  column row is dropped from that table: at this layer its input is
+  byte-identical to the plain database-only column's, and the catalog
+  read carries no `attidentity` — a comment states that instead. In
+  "unmanaged indexes", the row whose database primary key carries a name
+  the declaration does not (`widgets_pk` against a declared
+  `widgets_pkey`) replaces any input a real database could not hold.
+  Green: nothing new if the axes key on `schema.table.name`; a red row
+  is a real defect and is fixed in `inventory.ts` here.
+  Files: `packages/cli/src/check/inventory.ts`,
+  `packages/cli/test/check-inventory.test.ts`.
+- [x] 1.11 ~7m — The omitted-column line's own exit condition, after the
+  review (lead ruling `.blackbox/707/` R3): renaming a column whose name
+  no declaration could carry makes the name carryable, and `check` goes
+  on naming it until a declaration carries it — so "until it is renamed
+  in the database" is the same over-promise this change exists to end,
+  in the very line #726 was filed about. Red:
+  `packages/cli/test/infer-loss-report.test.ts`, the two column-line
+  pins (`import` and `pull` variants, both `toBe` on the whole string):
+  the `import` line ends "renamed in the database and declared", the
+  `pull` line is unchanged (its way out is linking the schema
+  repository, which does carry the column). Green: the one clause in
+  `undeclarableNameLineForImport` (`infer/loss-report.ts`). Same task:
+  `infer-omitted-names.integration.test.ts` and any brownfield witness
+  asserting that string, run explicitly.
+  Files: `packages/cli/src/infer/loss-report.ts`,
+  `packages/cli/test/infer-loss-report.test.ts`,
+  `packages/cli/test/infer-omitted-names.integration.test.ts`.
+- [x] 1.12 ~6m — The omitted-*table* line is the fourth sibling of the
+  same defect and was left behind by 1.7 and 1.11 (review round 2, B1):
+  it still ends "until it is renamed in the database", and a renamed
+  table is a table no declaration carries, which `check` goes on naming.
+  Red: `packages/cli/test/infer-loss-report.test.ts`, the pin on the
+  `stillReportedInInventory: true` line — it ends "renamed in the
+  database and declared"; the `false` branch's line is unchanged and
+  pinned as a regression (it promises nothing about `check` and is
+  already exact). Green: the one clause in
+  `omittedTableConsequenceForImport` (`infer/loss-report.ts`). Same
+  task: the comparator's own comment in `commands/check.ts` says UTF-16
+  code units rather than claiming code points (review round 2, N5 — the
+  order is total, locale-independent and tie-free either way, which is
+  what the requirement needs; the words were wrong, not the code), and
+  any test or witness asserting the table line is updated and run.
+  Files: `packages/cli/src/infer/loss-report.ts`,
+  `packages/cli/src/commands/check.ts`,
+  `packages/cli/test/infer-loss-report.test.ts`.

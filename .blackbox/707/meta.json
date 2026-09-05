@@ -1,0 +1,82 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#707",
+  "title": "check is silent about undeclared indexes and check constraints on managed tables",
+  "parent": "quickstart-now/hejbro#412",
+  "status": "closed",
+  "opened": "2026-09-04",
+  "closed": "2026-09-05",
+  "decisions": [
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "412/D12",
+        "412/D13",
+        "412/R28"
+      ],
+      "at": "2026-09-04T22:19Z",
+      "title": "cv proposal approved; Q1-Q9 settled (informational lines, managed tables only, declared-constraint index exclusion with a backs-constraint line, identifier order, generated/identity included); constraint kind → #859",
+      "ratified": null
+    },
+    {
+      "id": "R2",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R1",
+        "412/D13"
+      ],
+      "at": "2026-09-05T00:50Z",
+      "title": "cv (b) accepted at 22f1f99e; conindid repair and its delta sentence accepted; gate gap → #869; report-then-wait rule adopted; reviewer summoned",
+      "ratified": null
+    },
+    {
+      "id": "R3",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R1",
+        "R2",
+        "412/D13"
+      ],
+      "at": "2026-09-05T01:20Z",
+      "title": "cv review round 1: N1/N3 repaired in the piece, the column line's clause too; #872 #873 #874 filed; narrow re-review",
+      "ratified": null
+    },
+    {
+      "id": "R4",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R3",
+        "412/D13"
+      ],
+      "at": "2026-09-05T02:19Z",
+      "title": "cv (c) accepted at 75429d9f: round 3 clean; two planner lessons recorded; PR by the lead",
+      "ratified": null
+    }
+  ],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-05T00:22Z",
+      "title": "check's inventory axis extended to columns, indexes and check constraints",
+      "pr": null,
+      "decisions": [
+        "R1"
+      ]
+    }
+  ],
+  "prs": [
+    {
+      "number": 878,
+      "role": "closes",
+      "pinnedAt": "2026-09-05T02:28Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

@@ -1,0 +1,21 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#872",
+  "title": "import: a non-default primary-key constraint name is dropped with no loss-report line",
+  "parent": "quickstart-now/hejbro#815",
+  "status": "open",
+  "opened": "2026-09-05",
+  "closed": null,
+  "decisions": [],
+  "work": [],
+  "prs": [
+    {
+      "number": 878,
+      "role": "refs",
+      "pinnedAt": "2026-09-05T02:28Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

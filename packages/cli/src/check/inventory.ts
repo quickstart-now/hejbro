@@ -7,18 +7,44 @@ export type UnmanagedTable = {
 	readonly table: string;
 };
 
+/** A column the database holds on a *managed* table that no declaration covers (harden-check-inventory, #726) -- the object-level counterpart of {@link UnmanagedTable}, anchored the same way (see {@link managedTableIdentities}). */
+export type UnmanagedColumn = {
+	readonly schema: string;
+	readonly table: string;
+	readonly name: string;
+};
+
+/** An index the database holds on a *managed* table that no declaration covers (harden-check-inventory, #707) -- `constraintName` is the catalog's own `conindid` fact (`check/catalog.ts`'s `indexes` query, task 1.2), never inferred from a name match: an index backing a constraint no declaration names still carries that constraint here (Q4, design.md), and only an index backing a *declared* key is excluded entirely (see {@link declaredKeyConstraintNames}). */
+export type UnmanagedIndex = {
+	readonly schema: string;
+	readonly table: string;
+	readonly name: string;
+	readonly constraintName: string | null;
+};
+
+/** A CHECK constraint the database holds on a *managed* table that no declaration covers (harden-check-inventory, #707) -- a primary key, unique or foreign key constraint is never one of these, whatever its own catalog `type`: a database-only constraint of one of those other kinds is #859's own reported kind, not this change's. */
+export type UnmanagedCheckConstraint = {
+	readonly schema: string;
+	readonly table: string;
+	readonly name: string;
+};
+
 /**
  * Existence-only information (spec Req5): tables inside a declared
- * schema that no declaration covers, and the extensions the database
- * has. Neither carries a hejbro error code -- 2.1's own code set has no
- * inventory entry, because this is never a difference (a project may
- * legitimately leave objects unmanaged) and SHALL NOT affect the exit
- * code. Existence only, by construction: nothing here compares a type,
- * a default, or an expression, so nothing here can produce a false
+ * schema that no declaration covers, columns on a managed table that no
+ * declaration covers, and the extensions the database has. Neither
+ * carries a hejbro error code -- 2.1's own code set has no inventory
+ * entry, because this is never a difference (a project may legitimately
+ * leave objects unmanaged) and SHALL NOT affect the exit code.
+ * Existence only, by construction: nothing here compares a type, a
+ * default, or an expression, so nothing here can produce a false
  * positive.
  */
 export type Inventory = {
 	readonly unmanagedTables: ReadonlyArray<UnmanagedTable>;
+	readonly unmanagedColumns: ReadonlyArray<UnmanagedColumn>;
+	readonly unmanagedIndexes: ReadonlyArray<UnmanagedIndex>;
+	readonly unmanagedCheckConstraints: ReadonlyArray<UnmanagedCheckConstraint>;
 	readonly extensions: ReadonlyArray<string>;
 };
 
@@ -28,6 +54,15 @@ type LocalObjectWithSchema = { readonly schema: string };
 type LocalTableWithExisting = {
 	readonly schema: string;
 	readonly existing?: true;
+};
+type LocalColumnNode = { readonly name: string; readonly uniqueName?: string };
+type LocalIndexNode = { readonly name: string };
+type LocalCheckNode = { readonly name: string };
+type LocalManagedTableNode = {
+	readonly columns: ReadonlyArray<LocalColumnNode>;
+	readonly indexes?: ReadonlyArray<LocalIndexNode>;
+	readonly primaryKeyName?: string;
+	readonly checks?: ReadonlyArray<LocalCheckNode>;
 };
 
 /**
@@ -84,6 +119,190 @@ const unmanagedTables = (
 		.map((row) => ({ schema: row.schema, table: row.table }));
 };
 
+/** `declaredTableIdentities(snapshot)` narrowed to the ones declared `existing: true` -- the complement `managedTableIdentities` below removes. */
+const existingTableIdentities = (snapshot: Snapshot): ReadonlySet<string> =>
+	new Set(
+		Object.entries(snapshot.objects)
+			.filter(([key]) => key.startsWith("table:"))
+			.filter(([, node]) => (node as LocalTableWithExisting).existing === true)
+			.map(([key]) => key.slice("table:".length)),
+	);
+
+/**
+ * The object-level inventory's own anchor (harden-check-inventory,
+ * #707/#726): a table a `table:` declaration manages -- declared, and
+ * not `existingTable()` (add-unmanaged-objects, D106 R3: an existing
+ * declaration claims a shape hejbro does not own, so nothing on it is
+ * hejbro's to call unmanaged). A table this set excludes for either
+ * reason contributes no column, index or check-constraint line: an
+ * undeclared table's own `unmanaged table` line already says everything
+ * true about what it holds, and a schema no declaration touches is out
+ * of scope by `declaredTableIdentities`/`declaredSchemaNames` never
+ * naming it in the first place.
+ */
+const managedTableIdentities = (snapshot: Snapshot): ReadonlySet<string> => {
+	const existing = existingTableIdentities(snapshot);
+	return new Set(
+		[...declaredTableIdentities(snapshot)].filter(
+			(identity) => !existing.has(identity),
+		),
+	);
+};
+
+/** A managed table's own snapshot node, or `undefined` for an identity `managedTableIdentities` never vouches for -- the shared read every object-level axis below narrows from. */
+const managedTableNode = (
+	snapshot: Snapshot,
+	identity: string,
+): LocalManagedTableNode | undefined =>
+	snapshot.objects[`table:${identity}`] as LocalManagedTableNode | undefined;
+
+/** The column names a managed table's own declaration names, read from its snapshot node -- absent (schema no declaration touches, or the table itself unmanaged/existing) reads as no declared columns, which never matters: {@link unmanagedColumns} only calls this for an identity `managedTableIdentities` already vouches for. */
+const declaredColumnNames = (
+	snapshot: Snapshot,
+	identity: string,
+): ReadonlySet<string> =>
+	new Set(
+		(managedTableNode(snapshot, identity)?.columns ?? []).map(
+			(column) => column.name,
+		),
+	);
+
+/** The index names a managed table's own declaration names, read from its snapshot node -- {@link unmanagedIndexes}'s first exclusion. */
+const declaredIndexNames = (
+	snapshot: Snapshot,
+	identity: string,
+): ReadonlySet<string> =>
+	new Set(
+		(managedTableNode(snapshot, identity)?.indexes ?? []).map(
+			(indexNode) => indexNode.name,
+		),
+	);
+
+/**
+ * The constraint names a managed table's own declaration produces for a
+ * primary key or a unique column -- the *only* constraints whose backing
+ * index this inventory excludes (Q4, design.md: an index backing any
+ * other constraint, including a database-only primary key or unique
+ * constraint, is inventoried, carrying that constraint's name). A
+ * declared table with neither reads as an empty set, same as an
+ * identity `managedTableNode` doesn't vouch for.
+ */
+const declaredKeyConstraintNames = (
+	snapshot: Snapshot,
+	identity: string,
+): ReadonlySet<string> => {
+	const node = managedTableNode(snapshot, identity);
+	const uniqueNames = (node?.columns ?? [])
+		.map((column) => column.uniqueName)
+		.filter((name): name is string => typeof name === "string");
+	const primaryKeyNames = [node?.primaryKeyName].filter(
+		(name): name is string => typeof name === "string",
+	);
+	return new Set([...uniqueNames, ...primaryKeyNames]);
+};
+
+/** The CHECK constraint names a managed table's own declaration names, read from its snapshot node -- {@link unmanagedCheckConstraints}'s exclusion. */
+const declaredCheckNames = (
+	snapshot: Snapshot,
+	identity: string,
+): ReadonlySet<string> =>
+	new Set(
+		(managedTableNode(snapshot, identity)?.checks ?? []).map(
+			(checkNode) => checkNode.name,
+		),
+	);
+
+/**
+ * Columns the catalog has on a managed table that no declaration
+ * covers (#726) -- the column-level counterpart of {@link
+ * unmanagedTables}, anchored on {@link managedTableIdentities} rather
+ * than `declaredSchemaNames`: a managed table's schema is always
+ * declared by construction (it holds a `table:` declaration), so no
+ * separate schema filter is needed here.
+ */
+const unmanagedColumns = (
+	snapshot: Snapshot,
+	catalog: Catalog,
+): ReadonlyArray<UnmanagedColumn> => {
+	const managedTables = managedTableIdentities(snapshot);
+	return catalog.columns
+		.filter((row) => managedTables.has(`${row.schema}.${row.table}`))
+		.filter(
+			(row) =>
+				!declaredColumnNames(snapshot, `${row.schema}.${row.table}`).has(
+					row.name,
+				),
+		)
+		.map((row) => ({ schema: row.schema, table: row.table, name: row.name }));
+};
+
+/**
+ * Indexes the catalog has on a managed table that no declaration covers
+ * (#707) -- the index-level counterpart of {@link unmanagedColumns}.
+ * Excludes an index the declaration names outright, and an index
+ * backing a *declared* key ({@link declaredKeyConstraintNames}); every
+ * other index is reported, carrying whatever constraint the catalog's
+ * own `constraintName` says it backs (Q4, design.md) -- including one
+ * backing a database-only primary key or unique constraint, and a plain
+ * index whose name merely collides with an unrelated constraint (its
+ * `constraintName` is `null`, since that fact came from `conindid`,
+ * never from the name).
+ */
+const unmanagedIndexes = (
+	snapshot: Snapshot,
+	catalog: Catalog,
+): ReadonlyArray<UnmanagedIndex> => {
+	const managedTables = managedTableIdentities(snapshot);
+	return catalog.indexes
+		.filter((row) => managedTables.has(`${row.schema}.${row.table}`))
+		.filter(
+			(row) =>
+				!declaredIndexNames(snapshot, `${row.schema}.${row.table}`).has(
+					row.name,
+				),
+		)
+		.filter((row) => {
+			if (row.constraintName === null) {
+				return true;
+			}
+			return !declaredKeyConstraintNames(
+				snapshot,
+				`${row.schema}.${row.table}`,
+			).has(row.constraintName);
+		})
+		.map((row) => ({
+			schema: row.schema,
+			table: row.table,
+			name: row.name,
+			constraintName: row.constraintName,
+		}));
+};
+
+/**
+ * CHECK constraints the catalog has on a managed table that no
+ * declaration covers (#707) -- filtered to `type === "c"` first, so a
+ * database-only primary key, unique or foreign key constraint on the
+ * same table never reaches this axis at all (#859's own reported kind,
+ * not this change's), then to the ones a managed table's declaration
+ * does not already name.
+ */
+const unmanagedCheckConstraints = (
+	snapshot: Snapshot,
+	catalog: Catalog,
+): ReadonlyArray<UnmanagedCheckConstraint> => {
+	const managedTables = managedTableIdentities(snapshot);
+	return catalog.constraints
+		.filter((row) => row.type === "c")
+		.filter((row) => managedTables.has(`${row.schema}.${row.table}`))
+		.filter(
+			(row) =>
+				!declaredCheckNames(snapshot, `${row.schema}.${row.table}`).has(
+					row.name,
+				),
+		)
+		.map((row) => ({ schema: row.schema, table: row.table, name: row.name }));
+};
+
 /**
  * Builds the report's own inventory section (task 5.1) -- pure, no I/O
  * (group 1's `readCatalog` already ran), same split as `compare.ts` and
@@ -94,5 +313,8 @@ export const buildInventory = (
 	catalog: Catalog,
 ): Inventory => ({
 	unmanagedTables: unmanagedTables(snapshot, catalog),
+	unmanagedColumns: unmanagedColumns(snapshot, catalog),
+	unmanagedIndexes: unmanagedIndexes(snapshot, catalog),
+	unmanagedCheckConstraints: unmanagedCheckConstraints(snapshot, catalog),
 	extensions: catalog.extensions.map((row) => row.name),
 });
