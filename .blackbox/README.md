@@ -71,6 +71,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#552](552/) | whole-table projection renders unqualified columns under a join | closed | #737 | 0 | 3 (0 pending) |
 | ↳ [#631](631/) | migrate: record a body checksum in the ledger and refuse an applied migration whose SQL changed | closed | #1005 #1010 | 0 | 16 (6 pending) |
 | ↳ [#652](652/) | ci: changeset gate never checks the PR itself while unreleased changesets cover the fixed group | closed | #886 | 0 | 0 (0 pending) |
+| ↳ [#653](653/) | vendored client: expose .related() on the name-keyed chain | open |  | 0 | 1 (1 pending) |
 | ↳ [#663](663/) | test: the scoped vendored fn observer never asserts the context SQL | closed | #896 | 0 | 0 (0 pending) |
 | ↳ [#667](667/) | test: the vendored read of an existing table is witnessed only under Docker | closed | #896 | 0 | 0 (0 pending) |
 | ↳ [#673](673/) | test: subprocess-spawning suites time out under a full parallel pnpm test and pass in isolation | closed | #773 | 0 | 7 (0 pending) |
@@ -218,7 +219,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 
 ## Totals
 
-Owner decisions 95 · rulings 293 (interpretation 195, extension 96, stop 2) · pending extensions 58 · rejected 2
+Owner decisions 95 · rulings 294 (interpretation 195, extension 97, stop 2) · pending extensions 59 · rejected 2
 
 ## Conventions
 
