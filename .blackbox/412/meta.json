@@ -638,6 +638,15 @@
       "raw": [
         "9d9e9165-53a6-4428-bebf-45e47e987321#78"
       ]
+    },
+    {
+      "id": "D28",
+      "by": "owner",
+      "at": "2026-09-05T11:08Z",
+      "title": "Restated: skip the umbrella issues (#412, #815) and take everything else strictly in issue-number order",
+      "raw": [
+        "9d9e9165-53a6-4428-bebf-45e47e987321#79"
+      ]
     }
   ],
   "work": [

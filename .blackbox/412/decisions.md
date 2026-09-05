@@ -594,3 +594,10 @@ _owner · 2026-09-05T10:58Z · raw 9d9e9165-53a6-4428-bebf-45e47e987321#78_
 
 The owner corrects the lead's reading of "process issues oldest-first across the whole repo": the intent was the old standalone issues (#413, #458, #486, #500, #501, #503, #514, #515, #631, #653, …) — not the post-release sub-issue queue under #412/#815 (#816–#875), which the lead had been draining first. Queue order from here: oldest top-level issues first; the #815 queue after them. The fl piece already in flight (#816–#832) finishes; the next free slots go to the old issues.
 
+<a id="d28"></a>
+## D28 — Restated: skip the umbrella issues (#412, #815) and take everything else strictly in issue-number order
+
+_owner · 2026-09-05T11:08Z · raw 9d9e9165-53a6-4428-bebf-45e47e987321#79_
+
+The owner restates D27 precisely: the only issues to skip are the umbrellas that merely group sub-issues (#412, #815); every other open issue is processed in ascending number order, oldest first, regardless of which umbrella it hangs under.
+
