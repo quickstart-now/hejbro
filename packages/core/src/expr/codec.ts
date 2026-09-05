@@ -1,6 +1,7 @@
 import { assertNever, throwHejbroError } from "../error";
 import type { JsonValue } from "../snapshot/stable-json";
 import type {
+	AggregateFilterNode,
 	BetweenNode,
 	ColumnRefNode,
 	ComparisonNode,
@@ -85,6 +86,7 @@ export const NODE_KIND_TO_SNAPSHOT: Readonly<
 	exists: "exists",
 	selectExpr: "select-expr",
 	window: "window",
+	aggregateFilter: "aggregate-filter",
 };
 
 const NODE_KIND_FROM_SNAPSHOT: Readonly<Record<string, ExprNode["nodeKind"]>> =
@@ -336,6 +338,12 @@ const encodeWindowNode = (node: WindowNode): JsonValue => ({
 	orderBy: node.orderBy.map(encodeOrderByTerm),
 });
 
+const encodeAggregateFilterNode = (node: AggregateFilterNode): JsonValue => ({
+	nodeKind: NODE_KIND_TO_SNAPSHOT.aggregateFilter,
+	fn: encodeExprNode(node.fn),
+	where: encodeExprNode(node.where),
+});
+
 const encodeLiteralNode = (node: LiteralNode): JsonValue => ({
 	nodeKind: "literal",
 	literal: encodeLiteral(node.literal),
@@ -376,6 +384,7 @@ const encodeExprNodeHandlers: EncodeExprNodeHandlers = {
 	exists: encodeExists,
 	selectExpr: encodeSelectExprNode,
 	window: encodeWindowNode,
+	aggregateFilter: encodeAggregateFilterNode,
 };
 
 /** @internal exported for {@link decodeExprNode}'s exhaustive-map symmetry and for tests. */
@@ -674,15 +683,47 @@ const decodeRequiredArrayField = <T>(
 };
 
 /**
- * `fn` on a decoded window node — missing or not itself a function call
- * is corruption, refused rather than repaired (same "new in this format,
- * no leniency" reasoning as {@link decodeRequiredArrayField}). Narrowing
- * happens here, not by trusting the stored `nodeKind`, because a
- * hand-edited or otherwise damaged snapshot could name any node kind
- * under `fn` — this is the one place that enforces {@link WindowNode}'s
- * own `fn: FunctionCallNode` narrowing on the way back in.
+ * `fn` on a decoded window node — missing, or neither a function call nor
+ * a filtered aggregate (#501/R2 Q2, #501/R3: SQL's own `filter … over …`
+ * order is the only representable one), is corruption, refused rather
+ * than repaired (same "new in this format, no leniency" reasoning as
+ * {@link decodeRequiredArrayField}). Narrowing happens here, not by
+ * trusting the stored `nodeKind`, because a hand-edited or otherwise
+ * damaged snapshot could name any node kind under `fn` — this is the one
+ * place that enforces {@link WindowNode}'s own `fn: FunctionCallNode |
+ * AggregateFilterNode` narrowing on the way back in.
  */
-const decodeWindowFn = (node: Record<string, JsonValue>): FunctionCallNode => {
+const decodeWindowFn = (
+	node: Record<string, JsonValue>,
+): FunctionCallNode | AggregateFilterNode => {
+	const value = node.fn;
+	if (value === undefined) {
+		return unknownDiscriminator("fn", "undefined");
+	}
+	const fn = decodeExprNode(value);
+	if (fn.nodeKind !== "functionCall" && fn.nodeKind !== "aggregateFilter") {
+		return unknownDiscriminator("fn", JSON.stringify(value));
+	}
+	return fn;
+};
+
+const decodeWindowNode = (node: Record<string, JsonValue>): WindowNode => ({
+	nodeKind: "window",
+	fn: decodeWindowFn(node),
+	partitionBy: decodeRequiredArrayField(node, "partitionBy", decodeExprNode),
+	orderBy: decodeRequiredArrayField(node, "orderBy", decodeOrderByTerm),
+});
+
+/**
+ * `fn` on a decoded aggregate-filter node — missing, or not itself a
+ * function call, is corruption, refused rather than repaired (#501/R2
+ * Q4, same reasoning as {@link decodeWindowFn}). Unlike `WindowNode.fn`,
+ * this slot stays narrowed to a plain function call: `filter` over a
+ * filtered aggregate is not SQL (design.md Q2).
+ */
+const decodeAggregateFilterFn = (
+	node: Record<string, JsonValue>,
+): FunctionCallNode => {
 	const value = node.fn;
 	if (value === undefined) {
 		return unknownDiscriminator("fn", "undefined");
@@ -694,11 +735,23 @@ const decodeWindowFn = (node: Record<string, JsonValue>): FunctionCallNode => {
 	return fn;
 };
 
-const decodeWindowNode = (node: Record<string, JsonValue>): WindowNode => ({
-	nodeKind: "window",
-	fn: decodeWindowFn(node),
-	partitionBy: decodeRequiredArrayField(node, "partitionBy", decodeExprNode),
-	orderBy: decodeRequiredArrayField(node, "orderBy", decodeOrderByTerm),
+/** `where` on a decoded aggregate-filter node — missing is corruption, same reasoning as {@link decodeAggregateFilterFn}. */
+const decodeAggregateFilterWhere = (
+	node: Record<string, JsonValue>,
+): ExprNode => {
+	const value = node.where;
+	if (value === undefined) {
+		return unknownDiscriminator("where", "undefined");
+	}
+	return decodeExprNode(value);
+};
+
+const decodeAggregateFilterNode = (
+	node: Record<string, JsonValue>,
+): AggregateFilterNode => ({
+	nodeKind: "aggregateFilter",
+	fn: decodeAggregateFilterFn(node),
+	where: decodeAggregateFilterWhere(node),
 });
 
 /**
@@ -733,6 +786,7 @@ const decodeExprNodeHandlers: DecodeExprNodeHandlers = {
 	exists: decodeExistsNode,
 	selectExpr: decodeSelectExprNode,
 	window: decodeWindowNode,
+	aggregateFilter: decodeAggregateFilterNode,
 };
 
 export const decodeExprNode = (value: JsonValue): ExprNode => {

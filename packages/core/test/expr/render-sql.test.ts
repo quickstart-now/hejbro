@@ -3,7 +3,12 @@ import {
 	exprChildren,
 	replaceExprChildren,
 } from "../../src/expr/expr-children";
-import type { ExprNode, SelectNode, SetOpNode } from "../../src/index";
+import type {
+	ExprNode,
+	FunctionCallNode,
+	SelectNode,
+	SetOpNode,
+} from "../../src/index";
 import {
 	collectColumnRefs,
 	renderExpr,
@@ -274,4 +279,109 @@ describe("collectColumnRefs reaches every position expr-children.ts's registry r
 			});
 		});
 	});
+});
+
+// add-aggregate-filter task 1.2 (#501/R2): filter (where …) renders after
+// the aggregate call, and after it but before over (…) when windowed --
+// SQL's own clause order, not a hejbro-invented one.
+describe("renderExpr: aggregateFilter (task 1.2, #501/R2)", () => {
+	const views: ExprNode = {
+		nodeKind: "columnRef",
+		schemaName: "app",
+		tableName: "posts",
+		columnName: "views",
+	};
+	const filterCondition: ExprNode = {
+		nodeKind: "comparison",
+		operator: "=",
+		left: status,
+		right: lit("published"),
+	};
+	const filterConditionSql = `"app"."posts"."status" = 'published'`;
+
+	const aggregateFilterCases: ReadonlyArray<{
+		readonly label: string;
+		readonly fn: FunctionCallNode;
+		readonly renderedCall: string;
+	}> = [
+		{
+			label: "count",
+			fn: {
+				nodeKind: "functionCall",
+				schemaName: null,
+				functionName: "count",
+				args: [{ nodeKind: "rawSql", sql: "*" }],
+			},
+			renderedCall: "count(*)",
+		},
+		{
+			label: "min",
+			fn: {
+				nodeKind: "functionCall",
+				schemaName: null,
+				functionName: "min",
+				args: [views],
+			},
+			renderedCall: 'min("app"."posts"."views")',
+		},
+		{
+			label: "max",
+			fn: {
+				nodeKind: "functionCall",
+				schemaName: null,
+				functionName: "max",
+				args: [views],
+			},
+			renderedCall: 'max("app"."posts"."views")',
+		},
+		{
+			label: "sum",
+			fn: {
+				nodeKind: "functionCall",
+				schemaName: null,
+				functionName: "sum",
+				args: [views],
+			},
+			renderedCall: 'sum("app"."posts"."views")',
+		},
+		{
+			label: "avg",
+			fn: {
+				nodeKind: "functionCall",
+				schemaName: null,
+				functionName: "avg",
+				args: [views],
+			},
+			renderedCall: 'avg("app"."posts"."views")',
+		},
+	];
+
+	it.each(aggregateFilterCases)(
+		"$label: renders <call> filter (where <condition>)",
+		({ fn, renderedCall }) => {
+			const node: ExprNode = {
+				nodeKind: "aggregateFilter",
+				fn,
+				where: filterCondition,
+			};
+			expect(renderExpr(node)).toBe(
+				`${renderedCall} filter (where ${filterConditionSql})`,
+			);
+		},
+	);
+
+	it.each(aggregateFilterCases)(
+		"$label: windowed renders the filter clause before over (…)",
+		({ fn, renderedCall }) => {
+			const node: ExprNode = {
+				nodeKind: "window",
+				fn: { nodeKind: "aggregateFilter", fn, where: filterCondition },
+				partitionBy: [],
+				orderBy: [{ expr: publishedAt, direction: "asc" }],
+			};
+			expect(renderExpr(node)).toBe(
+				`${renderedCall} filter (where ${filterConditionSql}) over (order by "app"."posts"."published_at" asc)`,
+			);
+		},
+	);
 });

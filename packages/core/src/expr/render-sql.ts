@@ -1,6 +1,7 @@
 import { assertNever, throwHejbroError } from "../error";
 import { qualifyName, quoteIdentifier } from "../sql/identifier";
 import type {
+	AggregateFilterNode,
 	BetweenNode,
 	ColumnRefNode,
 	ComparisonNode,
@@ -1099,6 +1100,16 @@ const renderFunctionCallNode = (
 	return `${name}(${args})`;
 };
 
+/** `<fn>(…) filter (where …)` — Postgres's own clause, after the aggregate call (#501/R2 Q2). */
+const renderAggregateFilterNode = (
+	node: AggregateFilterNode,
+	outerScope: OuterScope,
+): string => {
+	const fnSql = renderFunctionCallNode(node.fn, outerScope);
+	const whereSql = renderExpr(node.where, outerScope);
+	return `${fnSql} filter (where ${whereSql})`;
+};
+
 /** `partition by …` — the window clause's own first sub-clause, omitted when empty (D104: rendering nothing under an empty spec is exactly Postgres's default). */
 const partitionByClause = (
 	partitionBy: ReadonlyArray<ExprNode>,
@@ -1113,9 +1124,24 @@ const partitionByClause = (
 	return `partition by ${columns}`;
 };
 
+/**
+ * `node.fn` rendered — a plain function call, or (#501/R2 Q2, #501/R3) a
+ * filtered aggregate, which renders its own `filter (where …)` clause
+ * before `over (…)` follows, exactly SQL's own clause order.
+ */
+const renderWindowFn = (
+	fn: FunctionCallNode | AggregateFilterNode,
+	outerScope: OuterScope,
+): string => {
+	if (fn.nodeKind === "aggregateFilter") {
+		return renderAggregateFilterNode(fn, outerScope);
+	}
+	return renderFunctionCallNode(fn, outerScope);
+};
+
 /** `<fn>(…) over (partition by … order by …)` — clause order and omission follow SQL's own `over (...)` grammar (D104). */
 const renderWindowNode = (node: WindowNode, outerScope: OuterScope): string => {
-	const fnSql = renderFunctionCallNode(node.fn, outerScope);
+	const fnSql = renderWindowFn(node.fn, outerScope);
 	const overClauses = [
 		partitionByClause(node.partitionBy, outerScope),
 		orderByClause(node.orderBy, outerScope),
@@ -1179,6 +1205,7 @@ const renderExprHandlers: RenderExprHandlers = {
 	exists: renderExistsNode,
 	selectExpr: renderSelectExprNode,
 	window: renderWindowNode,
+	aggregateFilter: renderAggregateFilterNode,
 };
 
 export const renderExpr = (

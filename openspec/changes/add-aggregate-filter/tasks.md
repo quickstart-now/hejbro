@@ -8,7 +8,8 @@ applies (`any`/`let`/`var`/`for`/`while`/ternary banned; comments state
 the constraint only). Lands after `harden-aggregate-vocabulary` merges.
 
 **Files edited**: `packages/core/src/expr/{ast,aggregate,window,
-render-sql,codec,expr-children,retarget,walk,read-shape}.ts`, `packages/core/src/
+render-sql,codec,expr-children,retarget,walk,read-shape}.ts` (1.1–1.3
+as each task names them), `packages/core/src/
 query/select.ts`, `packages/core/src/index.ts`, `packages/core/test/expr/
 reachable-kinds.ts` and the tests beside each (1.1–1.3); `packages/query/
 src/compile/params.ts`, `packages/query/src/db/convert.ts` and tests
@@ -38,20 +39,24 @@ planner, not into the diff.
       `ast.ts`, `aggregate.ts`, `window.ts`, `read-shape.ts`,
       `reachable-kinds.ts`, `index.ts`, tests.
 
-- [ ] 1.2 (~9m) Render, encode, decode. Red: the render tests — the
-      table from 1.1 renders `<name>(…) filter (where …)` and, windowed,
-      `… filter (where …) over (…)`; the codec tests — round trip through
-      a view body, token `aggregate-filter`, and a stored node missing
-      `where` or `fn` is refused naming the corruption. Files:
-      `render-sql.ts`, `codec.ts`, tests.
+- [x] 1.2 (~11m) Render, encode, decode, children. Red: the render tests
+      — the table from 1.1 renders `<name>(…) filter (where …)` and,
+      windowed, `… filter (where …) over (…)`; the codec tests — round
+      trip through a view body, token `aggregate-filter`, and a stored
+      node missing `where` or `fn` is refused naming the corruption;
+      the expr-children test — `exprChildren` yields the call and the
+      condition. `exprChildren` belongs here, not to 1.3: `render-sql.ts`'s
+      own `collectColumnRefs` calls it on the render path, so a view
+      carrying a filtered aggregate cannot render at all until the
+      traversal registry knows the kind. Files: `render-sql.ts`,
+      `codec.ts`, `expr-children.ts`, tests.
 
-- [ ] 1.3 (~8m) Walk, retarget, children, read shape. Red: the
-      expr-children/retarget/walk tests — a rename of the table inside
-      the condition retargets it; `exprChildren` yields the call and the
-      condition; the read-shape lookup unwraps a filtered call to its
-      inner call so `atRiskCastSuffix` casts `filter(count(), …)` inside
-      a nested read. Files: `expr-children.ts`, `retarget.ts`, `walk.ts`,
-      `read-shape.ts`, `query/select.ts`, tests.
+- [ ] 1.3 (~6m) Walk, retarget, read shape. Red: the retarget/walk tests
+      — a rename of the table inside the condition retargets it; the
+      read-shape lookup unwraps a filtered call to its inner call so
+      `atRiskCastSuffix` casts `filter(count(), …)` inside a nested read.
+      Files: `retarget.ts`, `walk.ts`, `read-shape.ts`,
+      `query/select.ts`, tests.
 
 - [ ] 1.4 (~8m) The query package. Red: `params.test.ts` — a literal
       inside the filter condition is lifted to `$n` in order; the nested

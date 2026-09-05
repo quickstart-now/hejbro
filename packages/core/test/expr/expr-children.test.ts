@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import type { ExprNode, WindowNode } from "../../src/expr/ast";
+import type {
+	AggregateFilterNode,
+	ExprNode,
+	WindowNode,
+} from "../../src/expr/ast";
 import {
 	exprChildren,
 	replaceExprChildren,
@@ -28,6 +32,15 @@ describe("exprChildren/replaceExprChildren (#473)", () => {
 			...node.partitionBy,
 			...node.orderBy.map((term) => term.expr),
 		]);
+	});
+
+	// add-aggregate-filter task 1.2 (#501/R2 Q2): a filtered aggregate's
+	// two child positions -- the aggregate call, then its condition -- in
+	// the exact order the delta's own scenario names them.
+	it("aggregateFilter reports its children in render order: fn, then where", () => {
+		const node = buildUnrelatedCase("aggregateFilter") as AggregateFilterNode;
+		const children = exprChildren(node);
+		expect(children).toEqual([node.fn, node.where]);
 	});
 
 	it("sqlTemplate reports only its expr chunks, in chunk order, skipping text chunks", () => {
