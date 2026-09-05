@@ -166,6 +166,7 @@ describe("withCheckConnection / N2 pool teardown", () => {
 		"interactive-transactions": false,
 		"session-state": false,
 		"prepared-statements": false,
+		"batched-transactions": false,
 	};
 	const buildFakeImporter = (ends: number[]) => {
 		const connection: CheckDriverConnection = {
@@ -173,6 +174,9 @@ describe("withCheckConnection / N2 pool teardown", () => {
 			execute: async () => [],
 			transaction: async () => {
 				throw new Error("transaction should not be called by this test");
+			},
+			batch: async () => {
+				throw new Error("batch should not be called by this test");
 			},
 			setupSession: async () => {
 				throw new Error("setupSession should not be called by this test");
@@ -352,6 +356,7 @@ describe("withCheckConnection / configured factory (#458 task 1.2)", () => {
 		"interactive-transactions": false,
 		"session-state": false,
 		"prepared-statements": false,
+		"batched-transactions": false,
 	};
 
 	const buildClosableDriver = (ends: number[]): CheckDriverConnection => ({
@@ -359,6 +364,9 @@ describe("withCheckConnection / configured factory (#458 task 1.2)", () => {
 		execute: async () => [],
 		transaction: async () => {
 			throw new Error("transaction should not be called by this test");
+		},
+		batch: async () => {
+			throw new Error("batch should not be called by this test");
 		},
 		setupSession: async () => {
 			throw new Error("setupSession should not be called by this test");

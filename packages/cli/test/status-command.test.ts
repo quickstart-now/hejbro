@@ -224,11 +224,15 @@ const makeFakeStatusImporter = (
 				readonly "interactive-transactions": boolean;
 				readonly "session-state": boolean;
 				readonly "prepared-statements": boolean;
+				readonly "batched-transactions": boolean;
 			};
 			readonly execute: (compiled: {
 				readonly sql: string;
 			}) => Promise<ReadonlyArray<Record<string, unknown>>>;
 			readonly transaction: () => Promise<never>;
+			readonly batch: () => Promise<
+				ReadonlyArray<ReadonlyArray<Record<string, unknown>>>
+			>;
 			readonly setupSession: () => Promise<void>;
 			readonly client: { readonly end: () => Promise<void> };
 		};
@@ -242,6 +246,7 @@ const makeFakeStatusImporter = (
 				"interactive-transactions": false,
 				"session-state": false,
 				"prepared-statements": false,
+				"batched-transactions": false,
 			},
 			execute: async (compiled: { readonly sql: string }) => {
 				calls.push(compiled.sql);
@@ -252,6 +257,9 @@ const makeFakeStatusImporter = (
 				return [];
 			},
 			transaction: async () => {
+				throw new Error("status must never open a transaction");
+			},
+			batch: async () => {
 				throw new Error("status must never open a transaction");
 			},
 			setupSession: async () => {},
@@ -370,11 +378,15 @@ const makeFailingReadImporter = (
 				readonly "interactive-transactions": boolean;
 				readonly "session-state": boolean;
 				readonly "prepared-statements": boolean;
+				readonly "batched-transactions": boolean;
 			};
 			readonly execute: (compiled: {
 				readonly sql: string;
 			}) => Promise<ReadonlyArray<Record<string, unknown>>>;
 			readonly transaction: () => Promise<never>;
+			readonly batch: () => Promise<
+				ReadonlyArray<ReadonlyArray<Record<string, unknown>>>
+			>;
 			readonly setupSession: () => Promise<void>;
 			readonly client: { readonly end: () => Promise<void> };
 		};
@@ -388,6 +400,7 @@ const makeFailingReadImporter = (
 				"interactive-transactions": false,
 				"session-state": false,
 				"prepared-statements": false,
+				"batched-transactions": false,
 			},
 			execute: async (compiled: { readonly sql: string }) => {
 				calls.push(compiled.sql);
@@ -404,6 +417,9 @@ const makeFailingReadImporter = (
 				return [];
 			},
 			transaction: async () => {
+				throw new Error("status must never open a transaction");
+			},
+			batch: async () => {
 				throw new Error("status must never open a transaction");
 			},
 			setupSession: async () => {},
@@ -523,6 +539,7 @@ const buildRecordingDriver = (): {
 			"interactive-transactions": false,
 			"session-state": false,
 			"prepared-statements": false,
+			"batched-transactions": false,
 		},
 		execute: async (compiled) => {
 			executed.push(compiled);
@@ -530,6 +547,9 @@ const buildRecordingDriver = (): {
 		},
 		transaction: async () => {
 			throw new Error("transaction should not be called by this test");
+		},
+		batch: async () => {
+			throw new Error("batch should not be called by this test");
 		},
 		setupSession: async () => {
 			throw new Error("setupSession should not be called by this test");

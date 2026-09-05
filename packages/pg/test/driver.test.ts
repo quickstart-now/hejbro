@@ -174,7 +174,22 @@ describe("pgDriver(pool) (owner decision ①, task 5.1)", () => {
 			"interactive-transactions": true,
 			"session-state": true,
 			"prepared-statements": false,
+			"batched-transactions": false,
 		});
+	});
+
+	it("batch refuses before touching the pool at all -- not even pool.connect() (task 1.2a, #486)", async () => {
+		const pool = new Pool({
+			connectionString: "postgres://localhost/does-not-need-to-connect",
+		});
+		const connectSpy = vi.spyOn(pool, "connect");
+		const driver = pgDriver(pool);
+
+		await expect(
+			driver.batch([{ sql: "select 1", params: [], kind: "sql" }]),
+		).rejects.toThrow(/batched-transactions/);
+
+		expect(connectSpy).not.toHaveBeenCalled();
 	});
 
 	// D106 R1 N3 (add-prepared-statements): an untyped caller's `"true"`

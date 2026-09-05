@@ -17,11 +17,13 @@ const fakeDriver = (): Driver => ({
 		"interactive-transactions": true,
 		"session-state": true,
 		"prepared-statements": false,
+		"batched-transactions": false,
 	},
 	execute: vi.fn(async () => []),
 	transaction: vi.fn(async (callback) =>
 		callback({ execute: vi.fn(async () => []) }),
 	),
+	batch: vi.fn(async () => []),
 	setupSession: vi.fn(async () => {}),
 });
 
@@ -40,6 +42,7 @@ const recordingTransactionalDriver = (): {
 			"interactive-transactions": true,
 			"session-state": true,
 			"prepared-statements": false,
+			"batched-transactions": false,
 		},
 		execute: vi.fn(async () => []),
 		transaction: vi.fn(async (callback) => {
@@ -53,6 +56,7 @@ const recordingTransactionalDriver = (): {
 			};
 			return callback(session);
 		}),
+		batch: vi.fn(async () => []),
 		setupSession: vi.fn(async () => {}),
 	};
 	return { driver, sentPerTransaction };
@@ -92,6 +96,7 @@ describe("supabaseDriver(driver) one-argument call is unchanged by the endpoint 
 			"interactive-transactions": true,
 			"session-state": true,
 			"prepared-statements": false,
+			"batched-transactions": false,
 		});
 	});
 
@@ -161,6 +166,7 @@ describe("supabaseDriver(driver, options) endpoint option (task 2.1)", () => {
 			"interactive-transactions": true,
 			"session-state": false,
 			"prepared-statements": false,
+			"batched-transactions": false,
 		});
 	});
 });
@@ -221,6 +227,7 @@ describe("the transaction-pooler endpoint refuses a base that prepares (task 1.4
 			"interactive-transactions": true,
 			"session-state": true,
 			"prepared-statements": true,
+			"batched-transactions": false,
 		},
 	});
 
@@ -256,6 +263,7 @@ describe("the transaction-pooler endpoint refuses a base that prepares (task 1.4
 			"interactive-transactions": true,
 			"session-state": false,
 			"prepared-statements": false,
+			"batched-transactions": false,
 		});
 	});
 
@@ -273,6 +281,7 @@ describe("the transaction-pooler endpoint refuses a base that prepares (task 1.4
 				"interactive-transactions": true,
 				"session-state": true,
 				"prepared-statements": true,
+				"batched-transactions": false,
 			});
 			const compiled: CompileResult = {
 				sql: "select 1",
@@ -307,11 +316,13 @@ describe("supabaseDriver(driver) conforms to the driver contract (#481, task 1.7
 				"interactive-transactions": true,
 				"session-state": true,
 				"prepared-statements": false,
+				"batched-transactions": false,
 			},
 			execute: vi.fn(async () => []),
 			transaction: vi.fn(async (callback) =>
 				callback({ execute: vi.fn(async () => []) }),
 			),
+			batch: vi.fn(async () => []),
 			setupSession: vi.fn(async (session: DriverSession) => {
 				const rows = await session.execute({
 					sql: "set intervalstyle to 'postgres'; set bytea_output to 'hex'",

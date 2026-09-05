@@ -12,6 +12,7 @@ const capabilities: DriverCapabilities = {
 	"interactive-transactions": true,
 	"session-state": true,
 	"prepared-statements": false,
+	"batched-transactions": false,
 };
 
 type FakeCompiled = {
@@ -48,6 +49,7 @@ const makeImporter = (options?: {
 			transaction: async <T>(
 				callback: (session: { execute: typeof execute }) => Promise<T>,
 			): Promise<T> => callback({ execute }),
+			batch: async () => [],
 			setupSession: async () => {},
 			client: { end: async () => {} },
 		}),
@@ -144,6 +146,7 @@ describe("runRaise / 7.7", () => {
 					}) => Promise<T>,
 				): Promise<T> =>
 					callback({ execute: async () => [] as ReadonlyArray<FakeRow> }),
+				batch: async () => [],
 				setupSession: async () => {},
 				client: { end: async () => {} },
 			}),
@@ -247,9 +250,11 @@ const buildRecordingRaiseDriver = (): {
 			"interactive-transactions": true,
 			"session-state": true,
 			"prepared-statements": false,
+			"batched-transactions": false,
 		},
 		execute,
 		transaction: async (callback) => callback({ execute }),
+		batch: async () => [],
 		setupSession: async () => {},
 		client: {
 			end: async () => {

@@ -4,8 +4,10 @@ import type {
 	CompileResult,
 	Driver,
 	DriverCapabilities,
+	DriverRow,
 	DriverSession,
 } from "@hejbro/query";
+import { throwMissingCapability } from "@hejbro/query";
 import type { CustomTypesConfig, PoolClient } from "pg";
 import { Pool, types as pgTypes } from "pg";
 
@@ -16,7 +18,10 @@ import { Pool, types as pgTypes } from "pg";
  * preserves `SET`-style session state across sequential statements on
  * the same connection. `prepared-statements` is the caller's own,
  * stated through {@link PgDriverOptions} (add-prepared-statements
- * design Q3).
+ * design Q3). `batched-transactions` is fixed `false` (task 1.2a,
+ * #486/R5): a single physical connection already has `transaction()`,
+ * so a batch execution path has nothing to add here -- {@link
+ * buildDriver}'s own `batch` member refuses before sending anything.
  */
 // Frozen, and the option read with `=== true` (D106 R1 N3): a JS caller's
 // `"true"` or `1` must not land verbatim in a declaration typed boolean,
@@ -26,7 +31,22 @@ const capabilitiesFor = (preparedStatements: boolean): DriverCapabilities =>
 		"interactive-transactions": true,
 		"session-state": true,
 		"prepared-statements": preparedStatements,
+		"batched-transactions": false,
 	});
+
+/**
+ * `Driver.batch`'s own body on this driver (task 1.2a, #486/R5): refuses
+ * before touching the pool at all -- not even `pool.connect()` -- the
+ * same pattern `@hejbro/neon`'s HTTP driver already uses for its own
+ * missing `transaction()`. Mandatory on every `Driver` regardless of the
+ * capability's own value (contract.ts's own tsdoc); this driver declares
+ * it `false` and this is that declaration's one enforcement point.
+ */
+const refuseBatch = async (
+	_statements: ReadonlyArray<CompileResult>,
+): Promise<ReadonlyArray<ReadonlyArray<DriverRow>>> => {
+	throwMissingCapability("batched-transactions", "batch");
+};
 
 /** The second-argument shape both `pgDriver` overloads accept (add-prepared-statements design Q3). */
 export type PgDriverOptions = {
@@ -395,6 +415,7 @@ const buildDriver = (
 				throw error;
 			}
 		},
+		batch: refuseBatch,
 		setupSession,
 	};
 	return driver;

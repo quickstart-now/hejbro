@@ -44,6 +44,7 @@ const makeScriptedDriver = (
 			"interactive-transactions": false,
 			"session-state": false,
 			"prepared-statements": false,
+			"batched-transactions": false,
 		},
 		execute: async (compiled) => {
 			const answer = answers[calls.length];
@@ -59,6 +60,11 @@ const makeScriptedDriver = (
 			return answer.rows;
 		},
 		transaction: async () => {
+			throw new Error(
+				"a ledger diagnostic classifier must never open a transaction",
+			);
+		},
+		batch: async () => {
 			throw new Error(
 				"a ledger diagnostic classifier must never open a transaction",
 			);

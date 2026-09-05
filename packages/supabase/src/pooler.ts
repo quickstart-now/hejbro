@@ -2,8 +2,10 @@ import type {
 	CompileResult,
 	Driver,
 	DriverCapabilities,
+	DriverRow,
 	DriverSession,
 } from "@hejbro/query";
+import { throwMissingCapability } from "@hejbro/query";
 
 /**
  * Fixed per tasks.md group 1 header / design.md: a transaction-mode
@@ -11,7 +13,12 @@ import type {
  * one `BEGIN`/`COMMIT` (`interactive-transactions: true`), but does not
  * reliably keep that same backend across separate transactions or
  * separate single-statement executions (`session-state: false`) --
- * measured against a local stack (design.md's Measurement record). An
+ * measured against a local stack (design.md's Measurement record).
+ * `batched-transactions` is fixed `false` (task 1.2a, #486/R5/R7): this
+ * decorator builds its own capability record rather than spreading the
+ * wrapped driver's, so its member set must agree with that declaration
+ * independently of what the base driver underneath declares -- see
+ * {@link batch} below for the member half of that agreement. An
  * explicit constant, never a spread of the wrapped driver's own
  * `capabilities`: a future capability key added to the contract must be a
  * type error here, not a silently inherited value.
@@ -20,6 +27,23 @@ const CAPABILITIES: DriverCapabilities = {
 	"interactive-transactions": true,
 	"session-state": false,
 	"prepared-statements": false,
+	"batched-transactions": false,
+};
+
+/**
+ * `Driver.batch`'s own body on this decorator (task 1.2a, #486/R7):
+ * refuses before touching the wrapped driver at all. Declared
+ * explicitly, never inherited via `...driver` the way `execute`/
+ * `transaction`/`setupSession` are overridden below -- an inherited
+ * `batch` would read as working while {@link CAPABILITIES} declares
+ * `false`, exactly the hole "A capability explicitly declared false
+ * fails closed" forbids, regardless of what the wrapped driver's own
+ * `batch` does.
+ */
+const refuseBatch = async (
+	_statements: ReadonlyArray<CompileResult>,
+): Promise<ReadonlyArray<ReadonlyArray<DriverRow>>> => {
+	throwMissingCapability("batched-transactions", "batch");
 };
 
 /**
@@ -102,5 +126,6 @@ export const poolerDriver = (driver: Driver): Driver => ({
 			await sendPins(session);
 			return callback(session);
 		}),
+	batch: refuseBatch,
 	setupSession: async () => {},
 });

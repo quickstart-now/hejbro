@@ -24,6 +24,7 @@ const recordingBase = (
 			"interactive-transactions": true,
 			"session-state": true,
 			"prepared-statements": false,
+			"batched-transactions": false,
 		},
 		execute: vi.fn(async () => rows),
 		transaction: vi.fn(async (callback) => {
@@ -37,6 +38,7 @@ const recordingBase = (
 			};
 			return callback(session);
 		}),
+		batch: vi.fn(async () => []),
 		setupSession: vi.fn(async () => {}),
 	};
 	return { driver, sentPerTransaction };

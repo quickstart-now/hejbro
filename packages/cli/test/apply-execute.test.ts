@@ -54,6 +54,7 @@ const makeFakeDriver = (options?: {
 			"interactive-transactions": true,
 			"session-state": true,
 			"prepared-statements": false,
+			"batched-transactions": false,
 		},
 		execute: async (compiled) => {
 			calls.push(compiled);
@@ -64,6 +65,7 @@ const makeFakeDriver = (options?: {
 			const session = makeSession();
 			return callback(session);
 		},
+		batch: async () => [],
 		setupSession: async () => {},
 	};
 	return { driver, calls, sessionCount };

@@ -35,10 +35,14 @@ const fakeConnection: CheckDriverConnection = {
 		"interactive-transactions": false,
 		"session-state": false,
 		"prepared-statements": false,
+		"batched-transactions": false,
 	},
 	execute: async () => [],
 	transaction: async () => {
 		throw new Error("transaction should not be called by this test");
+	},
+	batch: async () => {
+		throw new Error("batch should not be called by this test");
 	},
 	setupSession: async () => {
 		throw new Error("setupSession should not be called by this test");
@@ -323,6 +327,7 @@ const buildRecordingDriver = (): {
 			"interactive-transactions": false,
 			"session-state": false,
 			"prepared-statements": false,
+			"batched-transactions": false,
 		},
 		execute: async () => {
 			executed.push(1);
@@ -330,6 +335,9 @@ const buildRecordingDriver = (): {
 		},
 		transaction: async () => {
 			throw new Error("transaction should not be called by this test");
+		},
+		batch: async () => {
+			throw new Error("batch should not be called by this test");
 		},
 		setupSession: async () => {
 			throw new Error("setupSession should not be called by this test");

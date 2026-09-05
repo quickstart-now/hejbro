@@ -36,12 +36,16 @@ const makeFakeCatalogDriver = (
 			"interactive-transactions": false,
 			"session-state": false,
 			"prepared-statements": false,
+			"batched-transactions": false,
 		},
 		execute: async (compiled) => {
 			calls.push(compiled);
 			return rows as unknown as ReadonlyArray<DriverRow>;
 		},
 		transaction: async () => {
+			throw new Error("probeLedgerIdentity must never open a transaction");
+		},
+		batch: async () => {
 			throw new Error("probeLedgerIdentity must never open a transaction");
 		},
 		setupSession: async () => {},
@@ -400,6 +404,7 @@ const makeFailingCatalogDriver = (
 			"interactive-transactions": false,
 			"session-state": false,
 			"prepared-statements": false,
+			"batched-transactions": false,
 		},
 		execute: async (compiled) => {
 			calls.push(compiled);
@@ -415,6 +420,9 @@ const makeFailingCatalogDriver = (
 			return [];
 		},
 		transaction: async () => {
+			throw new Error("probeLedgerIdentity must never open a transaction");
+		},
+		batch: async () => {
 			throw new Error("probeLedgerIdentity must never open a transaction");
 		},
 		setupSession: async () => {},
