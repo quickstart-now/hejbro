@@ -293,6 +293,55 @@ export const parseBannerUpgradedFrom = (fileContent: string): string | null => {
 };
 
 /**
+ * Rewrites an existing tip migration's `-- snapshot:` line to
+ * `newSnapshotHash` for a format upgrade (#413), owning the
+ * `-- upgraded-from:` line's whole persistence contract so no caller has
+ * to re-derive it: when the file already carries that line
+ * ({@link parseBannerUpgradedFrom} returns non-`null`), its value is kept
+ * exactly as-is — a second upgrade never overwrites the hash the tip
+ * first recorded; otherwise the value the `-- snapshot:` line carried
+ * *before* this call becomes the new `-- upgraded-from:` line, inserted
+ * directly under it. No other byte of the file changes — every other
+ * line, including one this build doesn't recognize, passes through
+ * unchanged, in place. `fileContent` must already carry a `-- snapshot:`
+ * line (every caller reads it from a chain entry {@link parseBannerHashes}
+ * already proved has one); a file with none is a caller bug, not a user
+ * input this function is the one responsible for diagnosing.
+ */
+export const rewriteTipSnapshotHash = (
+	fileContent: string,
+	newSnapshotHash: string,
+): string => {
+	const lines = fileContent.split("\n");
+	const snapshotLineIndex = lines.findIndex((line) =>
+		line.startsWith(SNAPSHOT_PREFIX),
+	);
+	if (snapshotLineIndex === -1) {
+		return throwHejbroError(
+			"unreachable",
+			"rewriteTipSnapshotHash was called on a file with no -- snapshot: line.",
+		);
+	}
+	const oldSnapshotHash = (lines[snapshotLineIndex] as string).slice(
+		SNAPSHOT_PREFIX.length,
+	);
+	const existingUpgradedFrom = parseBannerUpgradedFrom(fileContent);
+	const rewrittenLines = [
+		...lines.slice(0, snapshotLineIndex),
+		`${SNAPSHOT_PREFIX}${newSnapshotHash}`,
+		...lines.slice(snapshotLineIndex + 1),
+	];
+	if (existingUpgradedFrom !== null) {
+		return rewrittenLines.join("\n");
+	}
+	return [
+		...rewrittenLines.slice(0, snapshotLineIndex + 1),
+		`${UPGRADED_FROM_PREFIX}${oldSnapshotHash}`,
+		...rewrittenLines.slice(snapshotLineIndex + 1),
+	].join("\n");
+};
+
+/**
  * Reads a migration file's `-- hejbro: <version>` line (#229), or `null`
  * when the line is absent — every pre-#229 migration file, and the only
  * signal that lets `hejbro restore`'s `restore-state-mismatch` diagnostic

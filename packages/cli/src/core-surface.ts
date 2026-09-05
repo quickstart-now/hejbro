@@ -168,6 +168,7 @@ export const ENGINE = [
 	"noColumnOrder",
 	"parseSnapshot",
 	"requiredKeysByKind",
+	"rewriteTipSnapshotHash",
 	"sameJson",
 	"stableJson",
 	"upgradeSnapshot",

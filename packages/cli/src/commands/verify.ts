@@ -57,11 +57,30 @@ const VERIFY_DESCRIPTION =
 const snapshotStaleMessage = (snapshotPath: string): string =>
 	`the checked-in snapshot at "${snapshotPath}" does not match your declarations — either the declarations changed without a new migration, or the snapshot file was hand-edited. Next: run \`hejbro generate\` and commit the result (or, if the snapshot is correct and the declarations are wrong, restore the declarations you meant).`;
 
-const chainTipMismatchMessage = (
+/** Exported (#413) so `hejbro upgrade`'s own chain-tip-mismatch precondition reuses this exact text via {@link chainTipMismatchError} — the same reasoning {@link readSnapshotFileText} being shared across commands already states: two commands reporting the same break in different words risks them drifting apart. */
+export const chainTipMismatchMessage = (
 	tipMigrationPath: string,
 	snapshotPath: string,
 ): string =>
 	`the migration chain's tip hash doesn't match the current snapshot — "${tipMigrationPath}"'s "snapshot:" hash and the snapshot at "${snapshotPath}" disagree. Next: restore the snapshot (and "${tipMigrationPath}", if it was edited) from version control — the snapshot is a derived file and should only ever change through \`hejbro generate\`.`;
+
+/**
+ * Builds the exact `chain-tip-mismatch` error check 4 below throws,
+ * exported (#413) so `hejbro upgrade`'s identical precondition raises the
+ * same error object — code and message paired in one place, not just the
+ * message text, so the two commands' diagnostics can never drift even
+ * structurally. `hejbro upgrade` throws the value this returns; check 4
+ * wraps it in a `CheckOutcome` instead of throwing, since verify's own
+ * control flow never throws mid-check.
+ */
+export const chainTipMismatchError = (
+	tipMigrationPath: string,
+	snapshotPath: string,
+): HejbroError =>
+	hejbroError(
+		"chain-tip-mismatch",
+		chainTipMismatchMessage(tipMigrationPath, snapshotPath),
+	);
 
 /** States only the observation, never a cause (schema-export spec, R2-G3
  * 3.2): the export could be stale for any number of reasons (an edited
@@ -655,12 +674,9 @@ const runCheck4 = (
 	}
 	return {
 		ok: false,
-		error: hejbroError(
-			"chain-tip-mismatch",
-			chainTipMismatchMessage(
-				migrationPath(migrationsDir, tipEntry.fileName),
-				snapshotPath,
-			),
+		error: chainTipMismatchError(
+			migrationPath(migrationsDir, tipEntry.fileName),
+			snapshotPath,
 		),
 	};
 };

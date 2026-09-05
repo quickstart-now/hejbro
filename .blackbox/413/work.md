@@ -86,3 +86,16 @@ File path note: tasks.md names packages/core/test/sql/migration-file.test.ts and
 
 Gates: pnpm check, check-types (18/18), full pnpm test (@hejbro/core: 101 files / 1739 passed + 1 todo; preset-smoke passes -- confirms the 1.2 dist race was self-inflicted, not systemic), check:bans, check:next-marker, check:diagnostic-xref all green on the first run. check:crap failed once on an unrelated flake (test/cross-instance-symbols.test.ts's duplicate-module-loading test timed out under coverage instrumentation load, nothing this task touches) and passed clean on an immediate retry -- 44 functions at the threshold, no violations.
 
+<a id="w7"></a>
+## W7 — 1.4: hejbro upgrade — check:next-marker forced error-construction sharing, not just message sharing
+
+_2026-09-05T08:20Z_
+
+scripts/check-next-marker.mjs's resolveMessageText only follows a message argument to a same-file `const` declaration (findDeclarationText scans the current file's own text). The first version of commands/upgrade.ts's chain-tip-mismatch precondition imported verify.ts's chainTipMismatchMessage and called throwHejbroError("chain-tip-mismatch", chainTipMismatchMessage(...)) at the import site -- the checker found the throwHejbroError call in upgrade.ts, but could not resolve the message argument across files, and failed with "could not locate the message literal".
+
+Verified manually (the checker's own suggested fallback) that the message text does carry Next: -- this was a real gate limitation (cross-file import resolution), not a missing Next: clause.
+
+Lead ruling (via su-planner): do not accept the gate red, do not duplicate the message text in upgrade.ts, and do not extend the shared checker script for one call site. Instead move the error CONSTRUCTION (not just the message) into verify.ts: chainTipMismatchError(tipMigrationPath, snapshotPath) -> HejbroError wraps hejbroError("chain-tip-mismatch", chainTipMismatchMessage(...)) in the same file as chainTipMismatchMessage's own declaration, so check-next-marker's same-file resolver sees code+message paired and passes honestly. verify.ts's own check 4 now calls this too (previously had its own separate hejbroError(...) call with the identical arguments), so the two commands are now provably unable to drift in that they build the literal same HejbroError value. upgrade.ts imports only chainTipMismatchError and never holds the "chain-tip-mismatch" string or the message text itself -- a reviewer scanning upgrade.ts for a bare code+message pair will correctly find none, by design.
+
+The cross-file resolution gap in check-next-marker.mjs itself is a real, separately-tracked limitation -- the lead is informed via su-planner; not filed as an issue by the implementer per instruction.
+

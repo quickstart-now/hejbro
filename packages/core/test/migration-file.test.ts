@@ -23,6 +23,7 @@ import {
 	parseBannerVersion,
 	renderBanner,
 	renderMigrationPrefix,
+	rewriteTipSnapshotHash,
 } from "../src/sql/migration-file";
 
 const fixedDate = new Date(Date.UTC(2026, 7, 19, 14, 30, 52));
@@ -358,6 +359,58 @@ describe("parseBannerUpgradedFrom (#413)", () => {
 			"-- upgraded-from: sha256:original",
 		]);
 		expect(parseBannerUpgradedFrom(secondUpgrade)).toBe("sha256:original");
+	});
+});
+
+describe("rewriteTipSnapshotHash (#413)", () => {
+	const before = renderBanner(
+		[createChange, alterChange],
+		{ parent: "sha256:aaaa", current: "sha256:bbbb" },
+		"0.1.0",
+	);
+
+	it("rewrites the -- snapshot: line and records the old value as -- upgraded-from:, leaving every other line untouched", () => {
+		expect(rewriteTipSnapshotHash(before, "sha256:newnew")).toBe(
+			'-- hejbro migration\n-- hejbro: 0.1.0\n-- + table app.posts [new]\n-- ~ table app.posts [column "slug" added]\n-- parent-snapshot: sha256:aaaa\n-- snapshot: sha256:newnew\n-- upgraded-from: sha256:bbbb',
+		);
+	});
+
+	it("keeps exactly one -- upgraded-from: line, holding the first hash, across a second rewrite", () => {
+		const firstUpgrade = rewriteTipSnapshotHash(before, "sha256:newnew");
+		const secondUpgrade = rewriteTipSnapshotHash(
+			firstUpgrade,
+			"sha256:newer-still",
+		);
+
+		expect(parseBannerUpgradedFrom(secondUpgrade)).toBe("sha256:bbbb");
+		const upgradedFromLineOccurrences = secondUpgrade
+			.split("\n")
+			.filter((line) => line.startsWith("-- upgraded-from:"));
+		expect(upgradedFromLineOccurrences).toEqual([
+			"-- upgraded-from: sha256:bbbb",
+		]);
+		expect(parseBannerHashes(secondUpgrade)).toEqual({
+			parent: "sha256:aaaa",
+			current: "sha256:newer-still",
+		});
+	});
+
+	it("preserves an unrecognized banner line beside the ones it rewrites", () => {
+		const [marker, ...rest] = before.split("\n");
+		const withUnknownLine = [
+			marker,
+			"-- some-future-line: unknown",
+			...rest,
+		].join("\n");
+
+		const after = rewriteTipSnapshotHash(withUnknownLine, "sha256:newnew");
+
+		expect(after).toContain("-- some-future-line: unknown");
+		expect(parseBannerHashes(after)).toEqual({
+			parent: "sha256:aaaa",
+			current: "sha256:newnew",
+		});
+		expect(parseBannerUpgradedFrom(after)).toBe("sha256:bbbb");
 	});
 });
 

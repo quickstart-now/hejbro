@@ -409,6 +409,7 @@ export {
 	parseBannerVersion,
 	renderBanner,
 	renderMigrationPrefix,
+	rewriteTipSnapshotHash,
 } from "./sql/migration-file";
 export type { SqlStage, SqlStatement } from "./sql/statement";
 export {

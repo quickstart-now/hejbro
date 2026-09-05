@@ -12,6 +12,7 @@ import { raiseCommand } from "./commands/raise";
 import { resetCommand } from "./commands/reset";
 import { restoreCommand } from "./commands/restore";
 import { statusCommand } from "./commands/status";
+import { upgradeCommand } from "./commands/upgrade";
 import { vendorCommand } from "./commands/vendor";
 import { verifyCommand } from "./commands/verify";
 import { CLI_VERSION } from "./version";
@@ -47,6 +48,7 @@ export const main = defineCommand({
 		migrate: migrateCommand,
 		status: statusCommand,
 		reset: resetCommand,
+		upgrade: upgradeCommand,
 		raise: raiseCommand,
 		link: linkCommand,
 		vendor: vendorCommand,
