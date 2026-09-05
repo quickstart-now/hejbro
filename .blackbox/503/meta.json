@@ -76,7 +76,17 @@
       "ratified": null
     }
   ],
-  "work": [],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-05T18:08Z",
+      "title": "the r6 ruling gains a third paragraph after the measurement",
+      "pr": null,
+      "decisions": [
+        "R6"
+      ]
+    }
+  ],
   "prs": [],
   "origin": null,
   "followUps": []

@@ -50,3 +50,5 @@ Scenario *A pair the server unifies stays accepted* has no cross-family instance
 ```
 The within-family paragraph of the requirement gains one sentence after its `int`/`bigint` example: "The same granularity also lets through four same-family pairs the server refuses -- `json` against `jsonb`, `time` or `timetz` against `timestamptz`, `macaddr` against `inet`, an enum against `text` -- tracked as #977; this requirement states the gap and does not close it." design.md records the reproduction SQL, the server version, the two SQLSTATEs, the sweep summary and the four names.
 
+Two more sentences predate the measurement and are corrected with the same reading. The requirement's opening names `42804` alone as the refusal; the server has two type-resolution refusals and the table holds both, so the opening and the first scenario's THEN name `42804` or `42846`. The opening's 'A pair the server unifies through an implicit cast SHALL stay accepted' has no cross-family instance; it is replaced by the sentence that states which pairs unify.
+
