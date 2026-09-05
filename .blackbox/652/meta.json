@@ -8,7 +8,15 @@
   "opened": "2026-09-05",
   "closed": null,
   "decisions": [],
-  "work": [],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-05T05:14Z",
+      "title": "check-pr-changeset controls",
+      "pr": null,
+      "decisions": []
+    }
+  ],
   "prs": [],
   "origin": null,
   "followUps": []
