@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 3,
   "kind": "issue",
   "ref": "quickstart-now/hejbro#726",
   "title": "loss report promises check will report an omitted column, but check has no column-level inventory",

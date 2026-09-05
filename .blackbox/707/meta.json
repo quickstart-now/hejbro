@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 3,
   "kind": "issue",
   "ref": "quickstart-now/hejbro#707",
   "title": "check is silent about undeclared indexes and check constraints on managed tables",
