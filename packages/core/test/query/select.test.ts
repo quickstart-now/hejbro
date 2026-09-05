@@ -2,8 +2,10 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 import type {
 	ColumnBuilder,
 	ColumnRef,
+	Expr,
 	SelectNode,
 	SetOpNode,
+	Table,
 } from "../../src/index";
 import {
 	and,
@@ -12,21 +14,33 @@ import {
 	bigint,
 	bytea,
 	count,
+	cumeDist,
 	date,
+	denseRank,
 	desc,
 	eq,
 	exists,
+	firstValue,
 	gt,
 	interval,
 	isNotNull,
 	jsonArrayFrom,
 	jsonObjectFrom,
+	lag,
+	lastValue,
+	lead,
 	max,
 	min,
+	nthValue,
+	ntile,
 	numeric,
+	over,
+	percentRank,
+	rank,
 	renderExpr,
 	renderSelect,
 	renderSetOp,
+	rowNumber,
 	schema,
 	select,
 	sql,
@@ -431,40 +445,84 @@ describe("group 2 review rulings (F1/F2) and the at-risk table", () => {
 		}
 	});
 
-	// #444 F6 (task 6.3): the at-risk cast used to be columnRef-only, so a
-	// bigint-typed aggregate cell inside a nested read compiled without
-	// the ::text cast @hejbro/query's convert.ts needs to revive it
-	// losslessly (task 6.2's own characterization, packages/query/test/
-	// db/nested-revive.test.ts).
-	it("casts an at-risk aggregate cell in a nested read", () => {
-		const ledger = table(app, "ledger", {
-			id: uuid().primaryKey(),
-			amount: bigint().notNull(),
-		});
-		const rendered = renderSelect(
+	// #452 task 1.2: BUILDER_READ_SHAPES-driven cast agreement -- one row
+	// per builder function (windowed and unwindowed where the function
+	// allows it): `int8` rows cast unconditionally, `argument` rows cast
+	// exactly as their own argument's declared type would (bigint casts,
+	// text doesn't), `own` rows never cast. `over(count(), …)` casting is
+	// the red that motivates the change: the cast side used to neither
+	// unwrap a window node nor name any window function at all.
+	const ledgerBigint = table(app, "read_shape_bigint", {
+		id: uuid().primaryKey(),
+		value: bigint().notNull(),
+	});
+	const ledgerText = table(app, "read_shape_text", {
+		id: uuid().primaryKey(),
+		value: text().notNull(),
+	});
+
+	const rendersCastFor = (projected: Expr, from: Table): boolean =>
+		renderSelect(
 			select(
 				{
 					id: posts.id,
-					stats: jsonArrayFrom(
-						select(
-							{
-								maxAmount: max(ledger.amount),
-								total: count(),
-								summed: sum(ledger.amount),
-							},
-							ledger,
-						),
-					),
+					nested: jsonArrayFrom(select({ cell: projected }, from)),
 				},
 				posts,
 			).selectQuery,
-		);
-		expect(rendered).toContain('max("app"."ledger"."amount")::text');
-		expect(rendered).toContain("count(*)::text");
-		// sum/avg stay uncast (F6 task 6.2's own measurement: convert.ts
-		// never tries to revive them as a fixed type either, cast or not).
-		expect(rendered).toContain('sum("app"."ledger"."amount")');
-		expect(rendered).not.toContain('sum("app"."ledger"."amount")::text');
+		).includes("::text");
+
+	it.each([
+		["count", () => count()],
+		["count (windowed)", () => over(count(), {})],
+		["row_number (windowed)", () => over(rowNumber(), {})],
+		["rank (windowed)", () => over(rank(), {})],
+		["dense_rank (windowed)", () => over(denseRank(), {})],
+	])("%s casts unconditionally (int8 shape)", (_label, build) => {
+		expect(rendersCastFor(build(), ledgerBigint)).toBe(true);
+	});
+
+	it.each([
+		["min", () => min(ledgerBigint.value)],
+		["min (windowed)", () => over(min(ledgerBigint.value), {})],
+		["max", () => max(ledgerBigint.value)],
+		["max (windowed)", () => over(max(ledgerBigint.value), {})],
+		["lag (windowed)", () => over(lag(ledgerBigint.value), {})],
+		["lead (windowed)", () => over(lead(ledgerBigint.value), {})],
+		["first_value (windowed)", () => over(firstValue(ledgerBigint.value), {})],
+		["last_value (windowed)", () => over(lastValue(ledgerBigint.value), {})],
+		["nth_value (windowed)", () => over(nthValue(ledgerBigint.value, 1), {})],
+	])("%s casts over a bigint argument (argument shape)", (_label, build) => {
+		expect(rendersCastFor(build(), ledgerBigint)).toBe(true);
+	});
+
+	it.each([
+		["min", () => min(ledgerText.value)],
+		["min (windowed)", () => over(min(ledgerText.value), {})],
+		["max", () => max(ledgerText.value)],
+		["max (windowed)", () => over(max(ledgerText.value), {})],
+		["lag (windowed)", () => over(lag(ledgerText.value), {})],
+		["lead (windowed)", () => over(lead(ledgerText.value), {})],
+		["first_value (windowed)", () => over(firstValue(ledgerText.value), {})],
+		["last_value (windowed)", () => over(lastValue(ledgerText.value), {})],
+		["nth_value (windowed)", () => over(nthValue(ledgerText.value, 1), {})],
+	])(
+		"%s casts nothing over a text argument (argument shape)",
+		(_label, build) => {
+			expect(rendersCastFor(build(), ledgerText)).toBe(false);
+		},
+	);
+
+	it.each([
+		["sum", () => sum(ledgerBigint.value)],
+		["sum (windowed)", () => over(sum(ledgerBigint.value), {})],
+		["avg", () => avg(ledgerBigint.value)],
+		["avg (windowed)", () => over(avg(ledgerBigint.value), {})],
+		["percent_rank (windowed)", () => over(percentRank(), {})],
+		["cume_dist (windowed)", () => over(cumeDist(), {})],
+		["ntile (windowed)", () => over(ntile(4), {})],
+	])("%s casts nothing (own shape)", (_label, build) => {
+		expect(rendersCastFor(build(), ledgerBigint)).toBe(false);
 	});
 });
 

@@ -41,7 +41,7 @@ needs both; 1.5 last.
       `packages/core/test/expr/read-shape.test.ts`,
       `packages/cli/src/core-surface.ts`.
 
-- [ ] 1.2 (~8m) The cast side reads the table and unwraps a window
+- [x] 1.2 (~8m) The cast side reads the table and unwraps a window
       node. Red: `packages/core/test/query/select.test.ts` (the file that
       pins `count()` → `::text` today, *"casts an at-risk aggregate cell
       in a nested read"*), an `it.each` over

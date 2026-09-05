@@ -14,6 +14,8 @@ import type {
 	TableRefNode,
 } from "../expr/ast";
 import { expr, resolveOrderTerm } from "../expr/ast";
+import type { ReadShape } from "../expr/read-shape";
+import { BUILDER_READ_SHAPES } from "../expr/read-shape";
 import { someExprNode } from "../expr/walk";
 import { markConsumed, noteBuilder } from "../plpgsql/recording-session";
 import type { TypeNode } from "../types/type-node";
@@ -632,78 +634,69 @@ const typeNodeOf = (inputValue: unknown): TypeNode | undefined =>
 	(inputValue as { readonly typeNode?: TypeNode } | undefined)?.typeNode;
 
 /**
- * The builder's own unqualified aggregate function name, or `undefined`
- * for anything else — a schema-qualified call is a declared function
- * (`db.fn`), which may legitimately be named `count`/`min`/`max` in
- * someone's own schema and must not be treated as the builder's
- * aggregate, and a non-`functionCall` expr obviously isn't one either.
- * Split out (D71/#154 ratchet-5) so {@link isCountCall}/{@link
- * isPassthroughAggregateCall} each stay a single comparison instead of
- * repeating this same two-part shape guard.
+ * The builder's own unqualified aggregate/window function name, or
+ * `undefined` for anything else — a schema-qualified call is a declared
+ * function (`db.fn`), which may legitimately be named `count`/`min`/`max`
+ * in someone's own schema and must not be treated as the builder's own,
+ * and a non-`functionCall` expr obviously isn't one either. A `window`
+ * node (D104, `over(...)`) reads through to its own inner call first —
+ * exactly how `@hejbro/query`'s `convert.ts` already reads it — so a
+ * windowed cell is classified by the SAME name an unwindowed one would
+ * be, never treated as unclassifiable (#452, the drift this table
+ * closes: `over(count(), …)` used to cast nothing at all).
  */
-const builderAggregateFunctionName = (expr: ExprNode): string | undefined => {
-	if (expr.nodeKind !== "functionCall") {
+const unwrapWindowNode = (node: ExprNode): ExprNode => {
+	if (node.nodeKind === "window") {
+		return node.fn;
+	}
+	return node;
+};
+
+const builderAggregateFunctionName = (node: ExprNode): string | undefined => {
+	const target = unwrapWindowNode(node);
+	if (target.nodeKind !== "functionCall") {
 		return undefined;
 	}
-	if (expr.schemaName !== null) {
+	if (target.schemaName !== null) {
 		return undefined;
 	}
-	return expr.functionName;
+	return target.functionName;
 };
 
 /**
- * `count()` is always `bigint` — Postgres's `int8`, whatever it counted —
- * unconditionally at risk with no `typeNode` to check: unlike `min`/`max`
- * (#444 F9's `Aggregated<TExpr>`), `count()`'s own return type carries no
- * backing `typeNode` at all, only the `ReadAs<bigint>` brand (#416).
- * Mirrors `@hejbro/query`'s `convert.ts`'s own `COUNT_STATE` — the same
- * "count reads back as bigint" fact, on the read side of this cast's
- * write side.
+ * `expr`'s {@link ReadShape} per {@link BUILDER_READ_SHAPES}, or
+ * `undefined` when `expr` isn't one of the builder's own aggregate/window
+ * calls at all (`convert.ts`'s own `aggregateColumnState` reads the same
+ * table for the same lookup, #452 — the two sides cannot share a
+ * function, but they share this data).
  */
-const isCountCall = (expr: ExprNode): boolean =>
-	builderAggregateFunctionName(expr) === "count";
-
-/**
- * `min`/`max` read back as their argument's own type, so the same
- * `typeNode`-driven cast rule the `columnRef` case already uses applies
- * to their result unchanged. `sum`/`avg` are deliberately excluded:
- * `convert.ts`'s own `PASSTHROUGH_AGGREGATES` never attempts to revive
- * them as a fixed type either (Postgres's own promotion table isn't
- * modeled there), so casting them to text here would be a lie the read
- * side never corrects — a value arriving as a string where a number was
- * promised, a regression this cast must not introduce (F6 task 6.2's own
- * measurement: they never manufacture a wrong *bigint* either way,
- * cast or not, so they carry no risk this cast exists to close).
- */
-const isPassthroughAggregateCall = (expr: ExprNode): boolean => {
+const builderReadShapeOf = (expr: ExprNode): ReadShape | undefined => {
 	const name = builderAggregateFunctionName(expr);
-	return name === "min" || name === "max";
-};
-
-/** `true` for a direct `columnRef` or a passthrough aggregate — the two shapes {@link atRiskCastSuffix} resolves via `typeNode`, split out to keep that function's own branch count low (D71/#154 ratchet-5). */
-const isColumnRefOrPassthroughAggregate = (expr: ExprNode): boolean => {
-	if (expr.nodeKind === "columnRef") {
-		return true;
+	if (name === undefined || !Object.hasOwn(BUILDER_READ_SHAPES, name)) {
+		return undefined;
 	}
-	return isPassthroughAggregateCall(expr);
+	return BUILDER_READ_SHAPES[name as keyof typeof BUILDER_READ_SHAPES];
 };
 
 /**
  * The `::text`/`::text[]` suffix `expr` needs to survive JSON transport
- * losslessly, or `null` when it doesn't need one — covers a direct
- * `columnRef` and the two aggregate shapes `convert.ts`'s own revive
- * logic tries to type as something more precise than "whatever JSON
- * says" (#444 F6): `count()` unconditionally, `min`/`max` via the same
- * `typeNode` lookup a bare column ref uses.
+ * losslessly, or `null` when it doesn't need one — a direct `columnRef`,
+ * or a builder aggregate/window call whose {@link ReadShape} is `"int8"`
+ * (cast unconditionally, whatever its argument) or `"argument"` (cast
+ * exactly as a bare column ref of its own argument's type would be,
+ * windowed or not). A `"own"` shape (`sum`/`avg` and the three
+ * ranking-fraction/bucket functions) is never cast (#452, `own`'s own
+ * doc comment on {@link ReadShape} for why).
  */
 const atRiskCastSuffix = (
 	expr: ExprNode,
 	inputValue: unknown,
 ): string | null => {
-	if (isCountCall(expr)) {
+	const shape = builderReadShapeOf(expr);
+	if (shape === "int8") {
 		return "::text";
 	}
-	if (!isColumnRefOrPassthroughAggregate(expr)) {
+	if (expr.nodeKind !== "columnRef" && shape !== "argument") {
 		return null;
 	}
 	const typeNode = typeNodeOf(inputValue);
