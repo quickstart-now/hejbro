@@ -1,0 +1,123 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#514",
+  "title": "references() cannot express referential actions (onDelete/onUpdate)",
+  "parent": "quickstart-now/hejbro#412",
+  "status": "closed",
+  "opened": "2026-09-05",
+  "closed": "2026-09-05",
+  "decisions": [
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "412/D24",
+        "412/D25; #514's measurement (identical DDL but for the dropped on delete clause; 0 of 7 example FKs expressible); D102 (one declaration feeds DDL and types)"
+      ],
+      "at": "2026-09-05T05:40Z",
+      "title": ".references() takes the referential actions as a second argument; parity with extras is the contract; the example converts as the witness",
+      "ratified": null
+    },
+    {
+      "id": "R2",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [],
+      "at": "2026-09-05T16:28Z",
+      "title": "references() options argument: sibling state slot, no runtime guard, fold-side null normalization",
+      "ratified": null
+    },
+    {
+      "id": "R3",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [],
+      "at": "2026-09-05T16:36Z",
+      "title": "examples/postgres conversion scope: app.schema.ts and step-10 only",
+      "ratified": null
+    },
+    {
+      "id": "R4",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [],
+      "at": "2026-09-05T16:56Z",
+      "title": "history-rewriting commands are out of the implementer's hands; the retitling of the first two commits stands",
+      "ratified": null
+    },
+    {
+      "id": "R5",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R1"
+      ],
+      "at": "2026-09-05T17:10Z",
+      "title": "the d102 amendment lands in the row's own revision parenthesis",
+      "ratified": null
+    },
+    {
+      "id": "R6",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R1"
+      ],
+      "at": "2026-09-05T17:46Z",
+      "title": "the last references() call replaces the whole reference, actions included",
+      "ratified": null
+    },
+    {
+      "id": "R7",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R6"
+      ],
+      "at": "2026-09-05T18:15Z",
+      "title": "the replacement rule of a repeated references() call enters the delta as a scenario",
+      "ratified": null
+    }
+  ],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-05T17:17Z",
+      "title": "group 1 closes: references() takes referential actions, parity through diff and rename, example converts",
+      "pr": null,
+      "decisions": []
+    },
+    {
+      "id": "W2",
+      "at": "2026-09-05T17:50Z",
+      "title": "review outcome: b1 repeated references() fix, n1 cheatsheet restore, n2-n4 dispositioned",
+      "pr": null,
+      "decisions": []
+    },
+    {
+      "id": "W3",
+      "at": "2026-09-05T18:02Z",
+      "title": "review outcome supplement: #970/#971/#972 filed, reviewer's independent verification",
+      "pr": null,
+      "decisions": []
+    },
+    {
+      "id": "W4",
+      "at": "2026-09-05T18:16Z",
+      "title": "re-review outcome: b0, repeated references() widened to 13+1 rows, delta scenario closes n5",
+      "pr": null,
+      "decisions": []
+    }
+  ],
+  "prs": [
+    {
+      "number": 979,
+      "role": "closes",
+      "pinnedAt": "2026-09-05T18:48Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

@@ -1,3 +1,4 @@
+import type { ForeignKeyAction } from "../dsl/table";
 import { throwHejbroError } from "../error";
 import type { ColumnRef, Expr, ExprNode } from "../expr/ast";
 import { isExpr } from "../expr/ast";
@@ -62,6 +63,11 @@ export type ColumnState = {
 	 * yet to build a `ForeignKeyDeclaration` from).
 	 */
 	readonly references?: () => ColumnRef;
+	/** Set only by `.references(target, actions)`'s second argument (add-references-actions) -- always alongside `references` above, since `.references()` is the only writer of either slot, so "actions without a thunk" is unreachable. A later `.references()` call replaces the reference as a whole (target and actions together, 514/R6), so the writer always sets this to `null` when its own `actions` argument is absent -- never leaves an earlier call's value in place. */
+	readonly referenceActions?: {
+		readonly onDelete?: ForeignKeyAction;
+		readonly onUpdate?: ForeignKeyAction;
+	} | null;
 };
 
 /**
@@ -393,14 +399,20 @@ export type ColumnBuilder<
 	 * from it). The thunk defers evaluation for import-order safety. The
 	 * target must share this column's type family — Postgres would reject
 	 * a mismatch at apply time, so the declaration fails to type-check
-	 * instead. Self-referencing and composite foreign keys, and
-	 * `onDelete`/`onUpdate` actions, stay on the `extras` path.
+	 * instead. Self-referencing and composite foreign keys stay on the
+	 * `extras` path. The optional second argument (add-references-actions)
+	 * carries `onDelete`/`onUpdate` — it does not affect `TMeta`, so the
+	 * type layer's edge is the same with or without it.
 	 */
 	references<
 		TTargetColumns extends Record<string, ColumnBuilder>,
 		TTargetKey extends keyof TTargetColumns & string,
 	>(
 		target: () => ColumnRef<TFamily> & OriginBrand<TTargetColumns, TTargetKey>,
+		actions?: {
+			readonly onDelete?: ForeignKeyAction;
+			readonly onUpdate?: ForeignKeyAction;
+		},
 	): ColumnBuilder<
 		TFamily,
 		TMeta & { references: { columns: TTargetColumns; key: TTargetKey } }
@@ -549,8 +561,12 @@ export const createColumnBuilder = <
 		}),
 	unique: () =>
 		createColumnBuilder<TFamily, TMeta>({ ...columnState, unique: true }),
-	references: (target) =>
-		createColumnBuilder({ ...columnState, references: target }),
+	references: (target, actions) =>
+		createColumnBuilder({
+			...columnState,
+			references: target,
+			referenceActions: actions ?? null,
+		}),
 	default: (value) =>
 		createColumnBuilder<TFamily, TMeta & { hasDefault: true }>({
 			...columnState,

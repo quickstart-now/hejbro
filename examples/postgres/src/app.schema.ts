@@ -111,18 +111,15 @@ export const projects = table(
 		id: uuid().primaryKey().defaultRandom(),
 		slug: text().notNull().unique(),
 		name: text().notNull(),
-		ownerId: uuid().notNull(),
+		ownerId: uuid()
+			.notNull()
+			.references(() => members.id, {
+				onDelete: "restrict",
+				onUpdate: "cascade",
+			}),
 		archivedAt: timestamptz(),
 	},
 	(t) => ({
-		foreignKeys: [
-			{
-				columns: [t.ownerId],
-				references: { table: members, columns: [members.id] },
-				onDelete: "restrict",
-				onUpdate: "cascade",
-			},
-		],
 		checks: [
 			check(
 				"projects_slug_format",
@@ -152,7 +149,9 @@ export const tasks = table(
 	"tasks",
 	{
 		id: uuid().primaryKey().defaultRandom(),
-		projectId: uuid().notNull(),
+		projectId: uuid()
+			.notNull()
+			.references(() => projects.id, { onDelete: "cascade" }),
 		title: text().notNull(),
 		status: text().notNull().default("todo"),
 		priority: smallint().notNull().default(3),
@@ -164,13 +163,6 @@ export const tasks = table(
 		metadata: jsonb(),
 	},
 	(t) => ({
-		foreignKeys: [
-			{
-				columns: [t.projectId],
-				references: { table: projects, columns: [projects.id] },
-				onDelete: "cascade",
-			},
-		],
 		// Step 4: the partial index over `due_at` is dropped along with the
 		// column itself — `task_schedules` below gets its own ordered index.
 		indexes: [
@@ -219,18 +211,13 @@ export const taskSchedules = table(
 	app,
 	"task_schedules",
 	{
-		taskId: uuid().primaryKey(),
+		taskId: uuid()
+			.primaryKey()
+			.references(() => tasks.id, { onDelete: "cascade" }),
 		dueAt: timestamptz(),
 		reminderAt: timestamptz(),
 	},
 	(t) => ({
-		foreignKeys: [
-			{
-				columns: [t.taskId],
-				references: { table: tasks, columns: [tasks.id] },
-				onDelete: "cascade",
-			},
-		],
 		indexes: [index().on(desc(t.dueAt))],
 		checks: [
 			check("task_schedules_reminder_before_due", lt(t.reminderAt, t.dueAt)),
@@ -258,19 +245,19 @@ export const comments = table(
 	"comments",
 	{
 		id: uuid().primaryKey().defaultRandom(),
-		taskId: uuid().notNull(),
+		taskId: uuid()
+			.notNull()
+			.references(() => tasks.id, { onDelete: "cascade" }),
 		parentId: uuid(),
 		body: text().notNull(),
 	},
 	(t) => ({
 		foreignKeys: [
-			{
-				columns: [t.taskId],
-				references: { table: tasks, columns: [tasks.id] },
-				onDelete: "cascade",
-			},
 			// Self-referencing FK (D52): `table` is omitted, derived from the
-			// referenced column's own ref.
+			// referenced column's own ref. Self-referencing foreign keys stay
+			// on the `extras` path (add-references-actions, #514) — the
+			// column-level `.references()` sugar above handles every
+			// non-self, single-column edge in this table instead.
 			{
 				columns: [t.parentId],
 				references: { columns: [t.id] },
@@ -311,23 +298,12 @@ export const comments = table(
  * `table-constraints` already covers the same shape as a text
  * comparison, D48/D49's job is the executed counterpart).
  */
-export const taskTags = table(
-	app,
-	"task_tags",
-	{
-		taskId: uuid().primaryKey(),
-		tagLabel: text().notNull().primaryKey(),
-	},
-	(t) => ({
-		foreignKeys: [
-			{
-				columns: [t.taskId],
-				references: { table: tasks, columns: [tasks.id] },
-				onDelete: "cascade",
-			},
-		],
-	}),
-);
+export const taskTags = table(app, "task_tags", {
+	taskId: uuid()
+		.primaryKey()
+		.references(() => tasks.id, { onDelete: "cascade" }),
+	tagLabel: text().notNull().primaryKey(),
+});
 
 /**
  * New in step 7 — its only reason to exist is a table added *after*
@@ -341,17 +317,12 @@ export const taskLabels = table(
 	"task_labels",
 	{
 		id: uuid().primaryKey().defaultRandom(),
-		taskId: uuid().notNull(),
+		taskId: uuid()
+			.notNull()
+			.references(() => tasks.id, { onDelete: "cascade" }),
 		label: text().notNull(),
 	},
-	(t) => ({
-		foreignKeys: [
-			{
-				columns: [t.taskId],
-				references: { table: tasks, columns: [tasks.id] },
-				onDelete: "cascade",
-			},
-		],
+	() => ({
 		rls: rls.enabled({
 			// permissive by design — this example shows the reader/writer role split, not row filtering.
 			readAll: rls

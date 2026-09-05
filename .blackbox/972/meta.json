@@ -1,0 +1,21 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#972",
+  "title": "core: a repeated .references() on one column replaces the first silently; refuse or state the rule",
+  "parent": null,
+  "status": "open",
+  "opened": "2026-09-05",
+  "closed": null,
+  "decisions": [],
+  "work": [],
+  "prs": [
+    {
+      "number": 979,
+      "role": "refs",
+      "pinnedAt": "2026-09-05T18:48Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}
