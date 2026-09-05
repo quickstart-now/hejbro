@@ -134,12 +134,18 @@ A loop's record name and a row read's name SHALL be hejbro SQL
 identifiers — lower-case snake_case, exactly the rule an argument key's
 derived name and a column name already meet — and a name that is not
 SHALL be refused at declaration time with `invalid-sql-name`, naming the
-function and the name, before any other check on that name runs. Two
-spellings that fold to one unquoted identifier therefore never both
-pass: the one that is not lower-case is refused as not a SQL name,
-never accepted as a second local. A row read's name takes no
-reserved-name check — it renders nowhere, and the scalars the read
-declares are checked in its place, as they already are.
+function and the name, before the duplicate check. The reserved-name
+check comes first and folds case, so a name the class owns is reported
+as reserved whatever its spelling — a loop named `FOUND` or `Row`
+answers `reserved-local-name`, not `invalid-sql-name`, because
+lower-casing it would not make it usable. Every other spelling that is
+not a hejbro SQL name is refused as one. Two spellings that fold to one
+unquoted identifier therefore never both pass: the one that is not
+lower-case is refused — as a reserved name if the class owns it, as not
+a SQL name otherwise — never accepted as a second local. A row read's
+name takes no reserved-name check at all — it renders nowhere, and the
+scalars the read declares are checked in its place, as they already
+are.
 
 The names a body declares live in two spaces. The **rendered** space
 holds the plpgsql identifiers the body writes out — an argument's
@@ -162,10 +168,13 @@ collision is visible.
 
 #### Scenario: A loop or row name that is not a hejbro SQL name is refused
 - **WHEN** a body names a `ctx.forEach` loop or a `ctx.row` read
-  `"my-loop"`, `"Row"`, `"2nd"`, `"a b"`, `""` or a name with a
+  `"my-loop"`, `"Item"`, `"2nd"`, `"a b"`, `""` or a name with a
   non-ASCII letter
 - **THEN** the declaration fails with `invalid-sql-name`, naming the
-  function and the name, and no declaration is produced
+  function and the name, and no declaration is produced — while a loop
+  named `"Row"`, a mixed-case spelling of a name the reserved class
+  owns, fails with `reserved-local-name` instead, the two rules never
+  claiming one name
 
 #### Scenario: Two spellings that fold to one name never both pass
 - **WHEN** a body names one row read `row_a` and another `Row_a`

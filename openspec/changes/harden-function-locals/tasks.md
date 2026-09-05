@@ -65,13 +65,16 @@ before 1.3 (the reserved check runs inside the name rule); 1.3 then 1.4
 - [ ] 1.3 (~10m) Loop, row and column names. Red (a):
       `packages/core/test/plpgsql/body-context.test.ts`, a table over
       loop and row names
-      {`my-loop`, `Row`, `2nd`, `a b`, ``, `naïve`} → `invalid-sql-name`
-      naming the function and the name; {`row_a` + `Row_a`} →
+      {`my-loop`, `Item`, `2nd`, `a b`, ``, `naïve`} → `invalid-sql-name`
+      naming the function and the name; {loop `Row`} →
+      `reserved-local-name` (the reserved check folds case and runs
+      first, so the two rules never claim one name); {`row_a` + `Row_a`} →
       `invalid-sql-name` on `Row_a`, never `duplicate-local-name`; {two
       loops `r`}, {loop `r` + row `r`}, {two rows `r`} →
       `duplicate-local-name` naming both constructs; {row `found`} →
-      accepted (a row name takes no reserved check). Green: the name
-      rule runs `assertSqlName` first, and the two spaces are recorded
+      accepted (a row name takes no reserved check). Green: a rendered
+      name takes reserved (case-folded) → SQL name → duplicate, a row
+      name takes SQL name → duplicate, and the two spaces are recorded
       separately — rendered (loop record, row-derived scalars) and
       construct (loop name, row name). Red (b):
       `packages/core/test/table-surface.test.ts`, `{userId, user_id}`

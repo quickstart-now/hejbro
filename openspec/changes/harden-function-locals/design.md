@@ -39,13 +39,22 @@ recorded as rulings on the change's issues.
 
 A name a body renders — an argument's derived SQL name, a loop's record
 name, a row read's derived scalar local — takes three checks in one
-order: hejbro SQL name (`invalid-sql-name`), reserved
-(`reserved-local-name`), duplicate (`duplicate-local-name`). A row
-read's *name* is not rendered — the read declares one scalar per
-projected column and no variable under the row name itself — so it
-takes two: SQL name, then duplicate. It is not reserved-checked, and
-the requirement's existing scenario (a row read named `found` succeeds,
-judged by the locals it declares) stays true.
+order: reserved (`reserved-local-name`, folding case), hejbro SQL name
+(`invalid-sql-name`), duplicate (`duplicate-local-name`). A row read's
+*name* is not rendered — the read declares one scalar per projected
+column and no variable under the row name itself — so it takes two: SQL
+name, then duplicate. It is not reserved-checked, and the requirement's
+existing scenario (a row read named `found` succeeds, judged by the
+locals it declares) stays true.
+
+Reserved comes first because an argument key is snake-cased before it is
+checked while a loop name is checked as written, so only the loop name
+can be a reserved word in a spelling the SQL-name rule would also
+refuse. `FOUND` already answers `reserved-local-name` today; letting the
+SQL-name rule reach it first would change a shipped code, and would
+report the spelling when the name is the problem — lower-casing it does
+not help. Every spelling that is not a reserved word still meets the
+SQL-name rule first.
 
 Case folding in the duplicate check is not added: a hejbro SQL name is
 lower-case by definition, so two spellings that fold to one name cannot
