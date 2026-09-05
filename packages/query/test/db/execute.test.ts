@@ -19,7 +19,11 @@ const recordingDriver = (): {
 } => {
 	const received: Array<CompileResult> = [];
 	const driver: Driver = {
-		capabilities: { "interactive-transactions": true, "session-state": true },
+		capabilities: {
+			"interactive-transactions": true,
+			"session-state": true,
+			"prepared-statements": false,
+		},
 		execute: vi.fn(async (compiled: CompileResult) => {
 			received.push(compiled);
 			return [];

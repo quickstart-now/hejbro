@@ -27,7 +27,11 @@ import type { InferCatalogResult } from "../src/infer/compose";
  * flag validation, refuse-before-write, and writing what it was given.
  */
 const fakeConnection: CheckDriverConnection = {
-	capabilities: { "interactive-transactions": false, "session-state": false },
+	capabilities: {
+		"interactive-transactions": false,
+		"session-state": false,
+		"prepared-statements": false,
+	},
 	execute: async () => [],
 	transaction: async () => {
 		throw new Error("transaction should not be called by this test");

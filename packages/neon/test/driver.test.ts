@@ -80,6 +80,7 @@ describe("neonDriver -- the overload fixes the capability set (task 3.1)", () =>
 		expect(driver.capabilities).toEqual({
 			"interactive-transactions": true,
 			"session-state": true,
+			"prepared-statements": false,
 		});
 	});
 
@@ -89,6 +90,7 @@ describe("neonDriver -- the overload fixes the capability set (task 3.1)", () =>
 		expect(driver.capabilities).toEqual({
 			"interactive-transactions": false,
 			"session-state": false,
+			"prepared-statements": false,
 		});
 	});
 
@@ -107,6 +109,7 @@ describe("neonDriver -- the overload fixes the capability set (task 3.1)", () =>
 		expect(driver.capabilities).toEqual({
 			"interactive-transactions": true,
 			"session-state": true,
+			"prepared-statements": false,
 		});
 		expect(connectSpy).not.toHaveBeenCalled();
 	});
@@ -190,6 +193,7 @@ describe("neonDriver(pool) setupSession pin and capability (task 3.4)", () => {
 		expect(driver.capabilities).toEqual({
 			"interactive-transactions": true,
 			"session-state": true,
+			"prepared-statements": false,
 		});
 
 		await driver.execute({ sql: "select 1", params: [], kind: "sql" });

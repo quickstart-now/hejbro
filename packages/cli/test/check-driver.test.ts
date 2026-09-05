@@ -112,6 +112,7 @@ describe("withCheckConnection / N2 pool teardown", () => {
 	const fakeCapabilities: DriverCapabilities = {
 		"interactive-transactions": false,
 		"session-state": false,
+		"prepared-statements": false,
 	};
 	const buildFakeImporter = (ends: number[]) => {
 		const connection: CheckDriverConnection = {

@@ -93,6 +93,7 @@ export const recordingTransactionalDriver = (
 		capabilities: {
 			"interactive-transactions": options.interactiveTransactions ?? true,
 			"session-state": true,
+			"prepared-statements": false,
 		},
 		execute: vi.fn(async (compiled) => {
 			topLevelSent.push({ sql: compiled.sql, params: compiled.params });

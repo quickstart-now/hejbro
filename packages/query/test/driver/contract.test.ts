@@ -6,11 +6,19 @@ import type {
 	DriverSession,
 } from "../../src/driver/contract";
 
-describe("Driver capability contract (owner decision ①, task 4.1)", () => {
+describe("Driver capability contract (owner decision ①, task 4.1; three keys, task 1.1/#303)", () => {
 	it("a driver missing a capability key is a compile error", () => {
-		// @ts-expect-error "session-state" is missing from the exhaustive capability record.
-		const _missingKey: DriverCapabilities = {
+		// @ts-expect-error "session-state" and "prepared-statements" are missing from the exhaustive capability record.
+		const _missingKeys: DriverCapabilities = {
 			"interactive-transactions": true,
+		};
+	});
+
+	it("a driver missing only prepared-statements is a compile error (the third key, task 1.1)", () => {
+		// @ts-expect-error "prepared-statements" is missing from the exhaustive capability record.
+		const _missingPreparedStatements: DriverCapabilities = {
+			"interactive-transactions": true,
+			"session-state": false,
 		};
 	});
 
@@ -18,6 +26,7 @@ describe("Driver capability contract (owner decision ①, task 4.1)", () => {
 		const capabilities: DriverCapabilities = {
 			"interactive-transactions": true,
 			"session-state": false,
+			"prepared-statements": false,
 		};
 		expectTypeOf(capabilities).toEqualTypeOf<DriverCapabilities>();
 	});
@@ -26,8 +35,19 @@ describe("Driver capability contract (owner decision ①, task 4.1)", () => {
 		const _extraKey: DriverCapabilities = {
 			"interactive-transactions": true,
 			"session-state": true,
+			"prepared-statements": false,
 			// @ts-expect-error "streaming" was never declared as a capability key.
 			streaming: true,
+		};
+	});
+
+	it("naming a fourth key outside the fixed set is a compile error (the union stays closed, task 1.1)", () => {
+		const _fourthKey: DriverCapabilities = {
+			"interactive-transactions": true,
+			"session-state": true,
+			"prepared-statements": true,
+			// @ts-expect-error "streaming-cursors" was never declared as a capability key.
+			"streaming-cursors": true,
 		};
 	});
 
@@ -37,6 +57,7 @@ describe("Driver capability contract (owner decision ①, task 4.1)", () => {
 			capabilities: {
 				"interactive-transactions": true,
 				"session-state": true,
+				"prepared-statements": false,
 			},
 			transaction: async <T>(
 				callback: (session: DriverSession) => Promise<T>,
@@ -51,6 +72,7 @@ describe("Driver capability contract (owner decision ①, task 4.1)", () => {
 			capabilities: {
 				"interactive-transactions": true,
 				"session-state": true,
+				"prepared-statements": false,
 			},
 			execute: async () => [],
 			transaction: async <T>(
@@ -62,7 +84,11 @@ describe("Driver capability contract (owner decision ①, task 4.1)", () => {
 
 describe("Driver.contributedRoles (task 4.7's role-contribution slot, batch C reopening reason)", () => {
 	const baseDriver: Omit<Driver, "contributedRoles"> = {
-		capabilities: { "interactive-transactions": true, "session-state": true },
+		capabilities: {
+			"interactive-transactions": true,
+			"session-state": true,
+			"prepared-statements": false,
+		},
 		execute: async () => [],
 		transaction: async (callback) => callback({ execute: async () => [] }),
 		setupSession: async () => {},
@@ -88,7 +114,11 @@ describe("Driver.contributedRoles (task 4.7's role-contribution slot, batch C re
 
 describe("Driver.renderContext (task 1.1, #554 -- the context-rendering contribution)", () => {
 	const baseDriver: Omit<Driver, "contributedRoles"> = {
-		capabilities: { "interactive-transactions": true, "session-state": true },
+		capabilities: {
+			"interactive-transactions": true,
+			"session-state": true,
+			"prepared-statements": false,
+		},
 		execute: async () => [],
 		transaction: async (callback) => callback({ execute: async () => [] }),
 		setupSession: async () => {},
@@ -118,7 +148,11 @@ describe("Driver.renderContext (task 1.1, #554 -- the context-rendering contribu
 
 describe("Driver.roleLessPlatform (task 1.2, #554 -- the role-less-platform declaration)", () => {
 	const baseDriver: Omit<Driver, "contributedRoles"> = {
-		capabilities: { "interactive-transactions": true, "session-state": true },
+		capabilities: {
+			"interactive-transactions": true,
+			"session-state": true,
+			"prepared-statements": false,
+		},
 		execute: async () => [],
 		transaction: async (callback) => callback({ execute: async () => [] }),
 		setupSession: async () => {},
@@ -138,7 +172,11 @@ describe("Driver.roleLessPlatform (task 1.2, #554 -- the role-less-platform decl
 
 describe("Driver.contextRequired (task 1.3, #554 -- the context-mandatory declaration)", () => {
 	const baseDriver: Omit<Driver, "contributedRoles"> = {
-		capabilities: { "interactive-transactions": true, "session-state": true },
+		capabilities: {
+			"interactive-transactions": true,
+			"session-state": true,
+			"prepared-statements": false,
+		},
 		execute: async () => [],
 		transaction: async (callback) => callback({ execute: async () => [] }),
 		setupSession: async () => {},
@@ -157,10 +195,11 @@ describe("Driver.contextRequired (task 1.3, #554 -- the context-mandatory declar
 });
 
 describe("roleLessPlatform and contextRequired are not capabilities (task 1.4, #554)", () => {
-	it("DriverCapabilities still requires exactly the two keys (regression control, unaffected by the new driver declarations)", () => {
+	it("DriverCapabilities still requires exactly the three keys (regression control, unaffected by the new driver declarations)", () => {
 		const capabilities: DriverCapabilities = {
 			"interactive-transactions": true,
 			"session-state": false,
+			"prepared-statements": false,
 		};
 		expectTypeOf(capabilities).toEqualTypeOf<DriverCapabilities>();
 	});
@@ -169,6 +208,7 @@ describe("roleLessPlatform and contextRequired are not capabilities (task 1.4, #
 		const _extra: DriverCapabilities = {
 			"interactive-transactions": true,
 			"session-state": true,
+			"prepared-statements": false,
 			// @ts-expect-error "roleLessPlatform" was never declared as a capability key.
 			roleLessPlatform: true,
 		};
@@ -178,6 +218,7 @@ describe("roleLessPlatform and contextRequired are not capabilities (task 1.4, #
 		const _extra: DriverCapabilities = {
 			"interactive-transactions": true,
 			"session-state": true,
+			"prepared-statements": false,
 			// @ts-expect-error "contextRequired" was never declared as a capability key.
 			contextRequired: true,
 		};

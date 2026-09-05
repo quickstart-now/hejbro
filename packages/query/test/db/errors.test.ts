@@ -13,7 +13,11 @@ const posts = table(app, "posts", {
 const MARKER = "adversarial-marker-f3c9a7b1";
 
 const driverThatThrows = (driverError: Error): Driver => ({
-	capabilities: { "interactive-transactions": true, "session-state": true },
+	capabilities: {
+		"interactive-transactions": true,
+		"session-state": true,
+		"prepared-statements": false,
+	},
 	execute: vi.fn(async () => {
 		throw driverError;
 	}),
@@ -114,6 +118,7 @@ describe("driver-message fidelity (#427)", () => {
 			capabilities: {
 				"interactive-transactions": true,
 				"session-state": true,
+				"prepared-statements": false,
 			},
 			execute: vi.fn(async () => {
 				throw "socket hang up";
@@ -152,6 +157,7 @@ describe("driver-message fidelity (#427)", () => {
 			capabilities: {
 				"interactive-transactions": true,
 				"session-state": true,
+				"prepared-statements": false,
 			},
 			execute: vi.fn(async () => {
 				throw { weird: true };

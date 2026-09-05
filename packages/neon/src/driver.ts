@@ -19,6 +19,7 @@ import { intervalPassthroughTypes } from "./type-overrides";
 const WS_CAPABILITIES: DriverCapabilities = {
 	"interactive-transactions": true,
 	"session-state": true,
+	"prepared-statements": false,
 };
 
 /**

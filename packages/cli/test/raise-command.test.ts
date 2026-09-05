@@ -10,6 +10,7 @@ import {
 const capabilities: DriverCapabilities = {
 	"interactive-transactions": true,
 	"session-state": true,
+	"prepared-statements": false,
 };
 
 type FakeCompiled = {

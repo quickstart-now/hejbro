@@ -176,7 +176,11 @@ describe("contributed statements are sent one at a time, in the rendering's own 
 	it("each statement is only sent after the previous one resolves -- a Promise.all-style send would let a faster later statement finish first and record out of order", async () => {
 		const order: Array<unknown> = [];
 		const driver: Driver = {
-			capabilities: { "interactive-transactions": true, "session-state": true },
+			capabilities: {
+				"interactive-transactions": true,
+				"session-state": true,
+				"prepared-statements": false,
+			},
 			execute: vi.fn(async () => []),
 			transaction: vi.fn(async (callback) => {
 				const session: DriverSession = {
@@ -253,7 +257,11 @@ describe("DbContext and the rendering's context type are the same type (task 2.1
 	it("a DbContext value is assignable straight to a driver's renderContext, with no cast", () => {
 		const context: DbContext = { role: roleName("grant_reader") };
 		const driver: Driver = {
-			capabilities: { "interactive-transactions": true, "session-state": true },
+			capabilities: {
+				"interactive-transactions": true,
+				"session-state": true,
+				"prepared-statements": false,
+			},
 			execute: async () => [],
 			transaction: async (callback) => callback({ execute: async () => [] }),
 			setupSession: async () => {},
@@ -459,7 +467,11 @@ describe("db.as(context) -- a failing set_config stops the chain (fail-stop, not
 		const sent: Array<{ sql: string }> = [];
 		let callIndex = 0;
 		const driver: Driver = {
-			capabilities: { "interactive-transactions": true, "session-state": true },
+			capabilities: {
+				"interactive-transactions": true,
+				"session-state": true,
+				"prepared-statements": false,
+			},
 			execute: vi.fn(async () => []),
 			transaction: vi.fn(async (callback) => {
 				const session: DriverSession = {

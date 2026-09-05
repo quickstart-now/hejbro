@@ -17,6 +17,7 @@ import { Pool, types as pgTypes } from "pg";
 const CAPABILITIES: DriverCapabilities = {
 	"interactive-transactions": true,
 	"session-state": true,
+	"prepared-statements": false,
 };
 
 /** Postgres's builtin `interval` type oid -- pg's own default parser turns it into a `PostgresInterval` object with no lossless way back to text (5.0 scout: `String()` gives `"[object Object]"`, and even `.toPostgres()` reorders/reformats fields rather than reproducing the original). */

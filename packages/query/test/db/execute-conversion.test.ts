@@ -30,7 +30,11 @@ const rawRow = {
 };
 
 const fakeDriver = (rows: ReadonlyArray<DriverRow>): Driver => ({
-	capabilities: { "interactive-transactions": true, "session-state": true },
+	capabilities: {
+		"interactive-transactions": true,
+		"session-state": true,
+		"prepared-statements": false,
+	},
 	execute: vi.fn(async () => rows),
 	transaction: vi.fn(async (callback) =>
 		callback({ execute: vi.fn(async () => rows) }),

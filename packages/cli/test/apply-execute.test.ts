@@ -53,6 +53,7 @@ const makeFakeDriver = (options?: {
 		capabilities: {
 			"interactive-transactions": true,
 			"session-state": true,
+			"prepared-statements": false,
 		},
 		execute: async (compiled) => {
 			calls.push(compiled);

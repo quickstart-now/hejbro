@@ -40,7 +40,11 @@ const makeScriptedDriver = (
 ): { readonly driver: Driver; readonly calls: CompileResult[] } => {
 	const calls: CompileResult[] = [];
 	const driver: Driver = {
-		capabilities: { "interactive-transactions": false, "session-state": false },
+		capabilities: {
+			"interactive-transactions": false,
+			"session-state": false,
+			"prepared-statements": false,
+		},
 		execute: async (compiled) => {
 			const answer = answers[calls.length];
 			calls.push(compiled);

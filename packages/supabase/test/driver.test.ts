@@ -10,7 +10,11 @@ import { anonRole, authenticatedRole, serviceRole } from "../src/roles";
 
 /** A minimal contract `Driver` fixture -- no concrete driver implementation, mirroring `packages/query/test/db/db.test.ts`'s own `fakeDriver`. */
 const fakeDriver = (): Driver => ({
-	capabilities: { "interactive-transactions": true, "session-state": true },
+	capabilities: {
+		"interactive-transactions": true,
+		"session-state": true,
+		"prepared-statements": false,
+	},
 	execute: vi.fn(async () => []),
 	transaction: vi.fn(async (callback) =>
 		callback({ execute: vi.fn(async () => []) }),
@@ -29,7 +33,11 @@ const recordingTransactionalDriver = (): {
 		Array<{ sql: string; params: ReadonlyArray<unknown> }>
 	> = [];
 	const driver: Driver = {
-		capabilities: { "interactive-transactions": true, "session-state": true },
+		capabilities: {
+			"interactive-transactions": true,
+			"session-state": true,
+			"prepared-statements": false,
+		},
 		execute: vi.fn(async () => []),
 		transaction: vi.fn(async (callback) => {
 			const sent: Array<{ sql: string; params: ReadonlyArray<unknown> }> = [];
@@ -80,6 +88,7 @@ describe("supabaseDriver(driver) one-argument call is unchanged by the endpoint 
 		expect(wrapped.capabilities).toEqual({
 			"interactive-transactions": true,
 			"session-state": true,
+			"prepared-statements": false,
 		});
 	});
 
@@ -148,6 +157,7 @@ describe("supabaseDriver(driver, options) endpoint option (task 2.1)", () => {
 		expect(wrapped.capabilities).toEqual({
 			"interactive-transactions": true,
 			"session-state": false,
+			"prepared-statements": false,
 		});
 	});
 });
@@ -212,7 +222,11 @@ describe("supabaseDriver(driver) conforms to the driver contract (#481, task 1.7
 		// checked, correctly: it never sends anything).
 		const recorded: Array<{ sql: string; params: ReadonlyArray<unknown> }> = [];
 		const underlying: Driver = {
-			capabilities: { "interactive-transactions": true, "session-state": true },
+			capabilities: {
+				"interactive-transactions": true,
+				"session-state": true,
+				"prepared-statements": false,
+			},
 			execute: vi.fn(async () => []),
 			transaction: vi.fn(async (callback) =>
 				callback({ execute: vi.fn(async () => []) }),

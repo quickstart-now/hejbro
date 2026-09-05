@@ -33,12 +33,12 @@ export type ContextRendering = (
 ) => ReadonlyArray<CompileResult>;
 
 /**
- * The two capabilities a driver may or may not support (owner decision ①,
- * tasks.md group 4 header, 2026-08-26). What is deliberately **not** listed
- * here: a mandatory prerequisite every driver must supply just to be a
- * driver at all (parameterized statement execution) — that lives on
- * {@link Driver} itself, unconditionally, never as a capability that could
- * read `false`.
+ * The three capabilities a driver may or may not support (owner decision ①,
+ * tasks.md group 4 header, 2026-08-26; extended to a third key by task 1.1,
+ * #303). What is deliberately **not** listed here: a mandatory prerequisite
+ * every driver must supply just to be a driver at all (parameterized
+ * statement execution) — that lives on {@link Driver} itself,
+ * unconditionally, never as a capability that could read `false`.
  *
  * - `"interactive-transactions"`: the driver can hold one connection open
  *   across multiple round trips inside a `BEGIN`/`COMMIT` — required by
@@ -51,8 +51,17 @@ export type ContextRendering = (
  *   boundary of what counts as "preserved" is refined by the drivers that
  *   declare it (`@hejbro/pg`/Supabase, groups 5/6); this key only fixes
  *   its name and its presence requirement.
+ * - `"prepared-statements"`: the driver names its built statements so a
+ *   connection parses and plans each distinct text once (add-prepared-
+ *   statements spec). Requires session state to survive across
+ *   executions to be meaningful, but is declared independently: a path
+ *   without session state (a transaction-mode pooler) MUST declare this
+ *   `false` regardless of what its base driver would otherwise support.
  */
-export type DriverCapabilityKey = "interactive-transactions" | "session-state";
+export type DriverCapabilityKey =
+	| "interactive-transactions"
+	| "session-state"
+	| "prepared-statements";
 
 /**
  * Exhaustive per {@link DriverCapabilityKey} — deliberately not

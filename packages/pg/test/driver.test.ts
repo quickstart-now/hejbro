@@ -167,6 +167,7 @@ describe("pgDriver(pool) (owner decision ①, task 5.1)", () => {
 		expect(driver.capabilities).toEqual({
 			"interactive-transactions": true,
 			"session-state": true,
+			"prepared-statements": false,
 		});
 	});
 

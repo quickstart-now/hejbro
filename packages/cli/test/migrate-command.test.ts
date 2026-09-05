@@ -54,6 +54,7 @@ const makeFakeDriver = (options?: {
 		capabilities: options?.capabilities ?? {
 			"interactive-transactions": true,
 			"session-state": true,
+			"prepared-statements": false,
 		},
 		execute: session.execute,
 		transaction: async (callback) => callback(session),
@@ -332,6 +333,7 @@ describe("assertInteractiveTransactions / 7.3", () => {
 			capabilities: {
 				"interactive-transactions": false,
 				"session-state": false,
+				"prepared-statements": false,
 			},
 		});
 
@@ -606,6 +608,7 @@ describe("runMigrate / 7.2 connection acquisition, apply-owned codes", () => {
 		const capabilities: DriverCapabilities = {
 			"interactive-transactions": true,
 			"session-state": true,
+			"prepared-statements": false,
 		};
 		const unreachableImporter = async () => ({
 			pgDriver: () => ({
@@ -687,7 +690,11 @@ describe("runMigrate — a relation that is not the ledger at the ledger's name 
 			},
 		};
 		const driver: CheckDriverConnection = {
-			capabilities: { "interactive-transactions": true, "session-state": true },
+			capabilities: {
+				"interactive-transactions": true,
+				"session-state": true,
+				"prepared-statements": false,
+			},
 			execute: session.execute,
 			transaction: async (callback) => callback(session),
 			setupSession: async () => {},
@@ -927,7 +934,11 @@ const makeFailingLedgerImporter = (
 		},
 	};
 	const driver: CheckDriverConnection = {
-		capabilities: { "interactive-transactions": true, "session-state": true },
+		capabilities: {
+			"interactive-transactions": true,
+			"session-state": true,
+			"prepared-statements": false,
+		},
 		execute: session.execute,
 		transaction: async (callback) => callback(session),
 		setupSession: async () => {},

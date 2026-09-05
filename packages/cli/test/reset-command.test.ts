@@ -88,6 +88,7 @@ const makeFakeDriver = (
 		capabilities: capabilities ?? {
 			"interactive-transactions": true,
 			"session-state": true,
+			"prepared-statements": false,
 		},
 		execute: session.execute,
 		transaction: async (callback) => callback(session),
@@ -157,6 +158,7 @@ describe("applyResetReport / 7.7", () => {
 		const { driver, calls } = makeFakeDriver("testdb", {
 			"interactive-transactions": false,
 			"session-state": false,
+			"prepared-statements": false,
 		});
 
 		await expect(
@@ -241,6 +243,7 @@ describe("runReset — a ledger diagnostic's header names the ledger, not the co
 					capabilities: {
 						"interactive-transactions": true,
 						"session-state": true,
+						"prepared-statements": false,
 					},
 					execute: async (compiled: CompileResult) => {
 						const sql = compiled.sql.trim().toLowerCase();
@@ -317,6 +320,7 @@ describe("runReset — a ledger diagnostic's header names the ledger, not the co
 					capabilities: {
 						"interactive-transactions": true,
 						"session-state": true,
+						"prepared-statements": false,
 					},
 					execute: async (compiled: CompileResult) => {
 						const sql = compiled.sql.trim().toLowerCase();
