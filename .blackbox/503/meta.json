@@ -96,6 +96,17 @@
       "at": "2026-09-05T18:40Z",
       "title": "a rule that tightens types repairs the call sites it newly refuses; today that is one test line",
       "ratified": null
+    },
+    {
+      "id": "R9",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R7"
+      ],
+      "at": "2026-09-05T18:56Z",
+      "title": "the chain carries its projection as a phantom brand that lives in @hejbro/query; left projection, parallel checks, fail-open",
+      "ratified": null
     }
   ],
   "work": [
