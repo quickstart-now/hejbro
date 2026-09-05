@@ -483,6 +483,27 @@
 			"primaryKeyName": "profiles_pkey",
 			"schema": "app"
 		},
+		"table:auth.users": {
+			"columns": [
+				{
+					"name": "id",
+					"typeNode": {
+						"typeName": "uuid"
+					}
+				},
+				{
+					"name": "email",
+					"typeNode": {
+						"typeName": "text"
+					}
+				}
+			],
+			"existing": true,
+			"foreignKeys": [],
+			"indexes": [],
+			"name": "users",
+			"schema": "auth"
+		},
 		"view:app.profiles_public": {
 			"columns": [
 				"id",

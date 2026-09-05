@@ -62,6 +62,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#663](663/) | test: the scoped vendored fn observer never asserts the context SQL | closed | #896 | 0 | 0 (0 pending) |
 | ↳ [#667](667/) | test: the vendored read of an existing table is witnessed only under Docker | closed | #896 | 0 | 0 (0 pending) |
 | ↳ [#673](673/) | test: subprocess-spawning suites time out under a full parallel pnpm test and pass in isolation | closed | #773 | 0 | 7 (0 pending) |
+| ↳ [#674](674/) | examples: declare an existing table in the supabase example so the round trip covers the brownfield path | open |  | 0 | 0 (0 pending) |
 | ↳ [#679](679/) | core: function argument names bypass D36 and are emitted unquoted in DDL | closed | #733 #758 | 0 | 3 (0 pending) |
 | ↳ [#686](686/) | ctx.return accepts a mutation with no returning() and renders invalid plpgsql | closed | #733 | 0 | 3 (0 pending) |
 | ↳ [#687](687/) | init ignores the configured migrationsDir and snapshotPath | closed | #739 #759 #770 | 0 | 8 (0 pending) |

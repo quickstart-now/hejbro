@@ -167,7 +167,7 @@ describe("hejbro cli (built CLI, tmp copy of examples/supabase with its committe
 		const migrationFiles = (await readdir(join(cwd, "migrations"))).filter(
 			(name) => name.endsWith(".sql"),
 		);
-		expect(migrationFiles).toHaveLength(4);
+		expect(migrationFiles).toHaveLength(5);
 	});
 
 	it("generate reports no changes on the committed chain, and both preset warnings render on stderr with exit 0 once something actually changes", async () => {
@@ -201,6 +201,6 @@ describe("hejbro cli (built CLI, tmp copy of examples/supabase with its committe
 		const migrationFiles = (await readdir(join(cwd, "migrations"))).filter(
 			(name) => name.endsWith(".sql"),
 		);
-		expect(migrationFiles).toHaveLength(5);
+		expect(migrationFiles).toHaveLength(6);
 	});
 });

@@ -16,6 +16,7 @@ import { declarations as step1 } from "../src/steps/step-1.schema";
 import { declarations as step2 } from "../src/steps/step-2.schema";
 import { declarations as step3 } from "../src/steps/step-3.schema";
 import { declarations as step4 } from "../src/steps/step-4.schema";
+import { declarations as step5 } from "../src/steps/step-5.schema";
 
 const root = join(import.meta.dirname, "..");
 const migrationFiles = readdirSync(join(root, "migrations"))
@@ -61,7 +62,7 @@ const confirmedDropsForStep = (
 
 describe("examples/supabase migration chain", () => {
 	it("regenerating from the step declarations reproduces the committed migrations", () => {
-		const steps = [step1, step2, step3, step4];
+		const steps = [step1, step2, step3, step4, step5];
 		const outcome = steps.reduce(
 			(state, declarations, i) => {
 				const result = generateMigration({
@@ -76,6 +77,10 @@ describe("examples/supabase migration chain", () => {
 					"exposed-table-without-rls",
 					"view-over-rls-without-security-invoker",
 				]);
+				// Step 5 (#674) declares the platform-owned `auth.users` with
+				// `existingTable()`: a banner-only migration (no DDL) that moves
+				// the snapshot, so the comparison below reduces to two empty
+				// bodies and the hash chain stays unbroken.
 				const committed = readFileSync(
 					join(root, "migrations", migrationFiles[i] as string),
 					"utf8",

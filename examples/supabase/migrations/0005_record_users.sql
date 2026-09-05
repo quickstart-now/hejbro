@@ -1,0 +1,4 @@
+-- hejbro migration
+-- hejbro: 0.2.0-pre.1
+-- parent-snapshot: sha256:8ddd39752cdac52e58122e3ea13dad1fae101e67512895a36c330a939876bc6c
+-- snapshot: sha256:28cb423bb7828990b64b1783fbb885fe174350c43ada42e3f6d26b57a83d641b
