@@ -22,6 +22,11 @@
       "number": 910,
       "role": "closes",
       "pinnedAt": "2026-09-05T12:05Z"
+    },
+    {
+      "number": 924,
+      "role": "refs",
+      "pinnedAt": "2026-09-05T12:33Z"
     }
   ],
   "origin": null,
