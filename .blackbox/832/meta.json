@@ -75,7 +75,15 @@
       "ratified": null
     }
   ],
-  "work": [],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-05T10:18Z",
+      "title": "harden-function-locals 1.1-1.2, 1.5: category-C measured and refused, the class stated by three sources",
+      "pr": null,
+      "decisions": []
+    }
+  ],
   "prs": [
     {
       "number": 833,

@@ -8,7 +8,15 @@
   "opened": "2026-09-05",
   "closed": null,
   "decisions": [],
-  "work": [],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-05T10:18Z",
+      "title": "harden-function-locals 1.3: duplicate-column names both colliding keys",
+      "pr": null,
+      "decisions": []
+    }
+  ],
   "prs": [],
   "origin": null,
   "followUps": []

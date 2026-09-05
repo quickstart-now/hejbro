@@ -27,7 +27,7 @@ before 1.3 (the reserved check runs inside the name rule); 1.3 then 1.4
 
 ## 1. Body locals
 
-- [ ] 1.1 (~10m) **[design]** The measurement the class rests on. The
+- [x] 1.1 (~10m) **[design]** The measurement the class rests on. The
       sweep runs on a live `postgres:17` and sweeps three name sets in the
       three positions a body renders a name — as an argument, as a loop
       record, as a row-declared local: (a) all 63 category-C keywords
@@ -46,7 +46,7 @@ before 1.3 (the reserved check runs inside the name rule); 1.3 then 1.4
       are reported to the planner, never removed from the set. Files:
       `design.md`.
 
-- [ ] 1.2 (~9m) The reserved set and the class statement. Red:
+- [x] 1.2 (~9m) The reserved set and the class statement. Red:
       `define-function.test.ts` (argument position) and
       `plpgsql/body-context.test.ts` (loop name, row-declared local) gain
       an `it.each` over the whole category-C table vendored as a literal
@@ -62,7 +62,7 @@ before 1.3 (the reserved check runs inside the name rule); 1.3 then 1.4
       measurement shows failing), not by "plpgsql reserves for its own
       statements". Files: `reserved.ts`, its tests.
 
-- [ ] 1.3 (~10m) Loop, row and column names. Red (a):
+- [x] 1.3 (~10m) Loop, row and column names. Red (a):
       `packages/core/test/plpgsql/body-context.test.ts`, a table over
       loop and row names
       {`my-loop`, `Item`, `2nd`, `a b`, ``, `naïve`} → `invalid-sql-name`
@@ -84,7 +84,7 @@ before 1.3 (the reserved check runs inside the name rule); 1.3 then 1.4
       derived name repeats an earlier key's, with that earlier key).
       Files: `body-context.ts`, `table.ts`, those two test files.
 
-- [ ] 1.4 (~8m) The rendered space is seeded with the argument names.
+- [x] 1.4 (~8m) The rendered space is seeded with the argument names.
       Red: a table {`args: { x }` + loop `x` → refused, naming the
       argument}, {`args: { x }` + row `x` over column `id` → accepted,
       the derived local `x_id` is free}, {`args: { x_id }` + row `x`
@@ -97,7 +97,7 @@ before 1.3 (the reserved check runs inside the name rule); 1.3 then 1.4
       `packages/core/test/define-function.test.ts`,
       `packages/core/test/plpgsql/body-context.test.ts`.
 
-- [ ] 1.5 (~6m) Docs and changeset. `function-builder-pitfalls.md`
+- [x] 1.5 (~6m) Docs and changeset. `function-builder-pitfalls.md`
       states the checks a local name passes (SQL name, reserved
       including column-name keywords, duplicate across the two spaces
       including arguments) and that a row name is judged by the locals
