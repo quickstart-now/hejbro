@@ -4,9 +4,9 @@
   "ref": "quickstart-now/hejbro#866",
   "title": "chore: vendor dd-blackbox meta v3 and migrate the record (pins once per PR)",
   "parent": "quickstart-now/hejbro#815",
-  "status": "open",
+  "status": "closed",
   "opened": "2026-09-05",
-  "closed": null,
+  "closed": "2026-09-05",
   "decisions": [],
   "work": [
     {
@@ -17,7 +17,13 @@
       "decisions": []
     }
   ],
-  "prs": [],
+  "prs": [
+    {
+      "number": 867,
+      "role": "closes",
+      "pinnedAt": "2026-09-05T00:23Z"
+    }
+  ],
   "origin": null,
   "followUps": []
 }

@@ -131,7 +131,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | [#854](854/) | check: the declared expression is spelled differently by mode and surface | open | #855 | 0 | 0 (0 pending) |
 | [#856](856/) | core: a trigger with a duplicated event or update column commits a migration postgres refuses | open | #858 #861 | 0 | 0 (0 pending) |
 | [#857](857/) | core: a policy with a repeated role renders a duplicate the catalog keeps | open | #858 | 0 | 0 (0 pending) |
-| [#866](866/) | chore: vendor dd-blackbox meta v3 and migrate the record (pins once per PR) | open |  | 0 | 0 (0 pending) |
+| [#866](866/) | chore: vendor dd-blackbox meta v3 and migrate the record (pins once per PR) | closed | #867 | 0 | 0 (0 pending) |
 
 ## Totals
 
