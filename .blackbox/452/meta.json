@@ -20,6 +20,17 @@
       "at": "2026-09-05T04:49Z",
       "title": "The cast/revive vocabulary becomes one closed table in core, read by both sides; the guard becomes a table-driven ratchet",
       "ratified": null
+    },
+    {
+      "id": "R2",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "452/R1 design Q1 ('whose name is added to the union'); av-reviewer's tsc exit 0 measurement with a 17th constructor; av-planner's grading"
+      ],
+      "at": "2026-09-05T06:22Z",
+      "title": "Review close-out: B1 closes by aligning the delta prose with Q1 (b); N1 gains a witness task for the context-applied half of the preview scenario",
+      "ratified": null
     }
   ],
   "work": [

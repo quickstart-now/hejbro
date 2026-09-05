@@ -50,7 +50,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#375](375/) | run the d49 round-trip witness in ci | closed | #881 | 0 | 1 (1 pending) |
 | ↳ [#449](449/) | concurrent tx.execute beside a nested transaction is unguarded | closed | #849 #850 | 0 | 3 (2 pending) |
 | ↳ [#450](450/) | identical literals in distinct on and order by lift to different placeholders | closed | #882 | 0 | 1 (0 pending) |
-| ↳ [#452](452/) | promote the cast/revive drift guard to a ratchet over the aggregate vocabulary | open |  | 0 | 1 (1 pending) |
+| ↳ [#452](452/) | promote the cast/revive drift guard to a ratchet over the aggregate vocabulary | open |  | 0 | 2 (1 pending) |
 | ↳ [#491](491/) | align third-party client version ranges across published packages (catalog policy) | closed | #883 | 0 | 1 (0 pending) |
 | ↳ [#497](497/) | crap gate output misstates its side effects and cache-induced failures | closed | #885 | 0 | 0 (0 pending) |
 | ↳ [#510](510/) | cross-check MODIFIED requirement titles against the base spec in CI | closed | #884 | 0 | 0 (0 pending) |
@@ -167,7 +167,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 
 ## Totals
 
-Owner decisions 91 · rulings 188 (interpretation 131, extension 55, stop 2) · pending extensions 17 · rejected 2
+Owner decisions 91 · rulings 189 (interpretation 132, extension 55, stop 2) · pending extensions 17 · rejected 2
 
 ## Conventions
 

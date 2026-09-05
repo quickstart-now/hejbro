@@ -13,12 +13,13 @@ the constraint only).
 query/select.ts`, `packages/core/test/query/select.test.ts` (1.2);
 `packages/query/src/db/convert.ts`, `packages/query/test/db/
 nested-revive.test.ts` (1.3, 1.4); `packages/pg/test/integration.test.ts`,
-`skills/hejbro/references/query-layer.md`, one `.changeset/*.md` (1.5).
+`skills/hejbro/references/query-layer.md`, one `.changeset/*.md` (1.5);
+`packages/query/test/db/execute.test.ts` (1.6).
 If a task appears to need any other file, that goes back to the planner,
 not into the diff.
 
 **Ordering.** 1.1 first; 1.2 and 1.3 are independent after it; 1.4
-needs both; 1.5 last.
+needs both; 1.5 last. 1.6 is independent of all of them.
 
 ## 1. One read-shape vocabulary
 
@@ -81,3 +82,13 @@ needs both; 1.5 last.
       windowed cells keep their precision like aggregates, and
       `pnpm changeset` → `patch`. Files: the witness, the reference,
       `.changeset/*.md`.
+
+- [ ] 1.6 (~5m) The preview-equals-executed claim covers the
+      context-applied half too. Red: `packages/query/test/db/
+      execute.test.ts`, new case *"executed SQL equals previewed
+      compile output under an applied execution context"* — a statement
+      that carries params, executed through a handle with a context
+      applied: the statement the driver receives has `sql`, `params`
+      and `kind` equal to `compile()`'s own output, and the context
+      statements precede it inside the same transaction rather than
+      altering it. Files: `packages/query/test/db/execute.test.ts`.

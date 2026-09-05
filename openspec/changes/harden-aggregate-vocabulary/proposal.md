@@ -26,11 +26,13 @@ kept.
   back: as `int8` (`count`, `row_number`, `rank`, `dense_rank`), as its
   first argument's own type (`min`, `max`, `lag`, `lead`, `first_value`,
   `last_value`, `nth_value`), or as its own JSON-safe shape (`sum`,
-  `avg`, `percent_rank`, `cume_dist`, `ntile`). The key type is the
-  union of the constructors' own names, so a constructor added without
-  a row fails to type-check, and a test enumerates the constructors
-  from the public surface so a name string that drifts from its row is
-  caught at run time too.
+  `avg`, `percent_rank`, `cume_dist`, `ntile`). The key type is a
+  closed union of the builder's own function names, so a name outside
+  it fails to type-check at the table's declaration, and a test
+  enumerates the constructors from their defining modules —
+  cross-checked against the public surface both ways — so a
+  constructor added without a row, or a name string that drifts from
+  its row, is caught at run time.
 - **Both sides read the table.** The cast side casts a cell whose
   function reads back as `int8` or as its argument — a windowed cell
   through its inner call, exactly as the revive side already reads it —

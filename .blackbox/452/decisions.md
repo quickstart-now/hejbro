@@ -9,3 +9,10 @@ _lead · extension · basis 412/D24, 412/D25; D102 (cast+revive promise); the re
 
 Design (openspec/changes/harden-aggregate-vocabulary/design.md Q1-Q4): a `BUILDER_READ_SHAPES` table in core keyed by the constructors' own name union (type closure via satisfies) with shapes int8 / argument / own; exported like SELECT_CLAUSE_TRAVERSALS (query's contract, not user surface); both sides read it; a window node reads as its inner call on both sides; the drift guard iterates the table (cast iff revive) and a closure test enumerates the public constructors; a live witness for over(count()) past 2^53. Internal invariant made observable in query-execution's nested-revive requirement (MODIFIED) with two new scenarios. Not in scope: db.fn, casting sum/avg. Ratification: owner on return.
 
+<a id="r2"></a>
+## R2 — Review close-out: B1 closes by aligning the delta prose with Q1 (b); N1 gains a witness task for the context-applied half of the preview scenario
+
+_lead · interpretation · basis 452/R1 design Q1 ('whose name is added to the union'); av-reviewer's tsc exit 0 measurement with a 17th constructor; av-planner's grading · 2026-09-05T06:22Z · ratified: pending_
+
+B1 -> (b): the delta's "a constructor without a row fails to type-check" becomes "a name outside the vocabulary's key union fails to type-check at the table's own declaration, and a constructor added without a row is caught by a test that enumerates the constructors from their defining modules" -- the implementation already matches the approved ruling; only the sentence over-claimed. (a) would extend Q1 and is not taken. N1 -> add task 1.6 (~5m): execute.test.ts asserts, on a handle with a context applied, that the statement's own sql/params equal compile() and the context statements precede it in the same transaction. N2/N3/N4 and the two promotions are the planner's. Ratification: owner on return.
+
