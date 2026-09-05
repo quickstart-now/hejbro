@@ -89,6 +89,18 @@
       "at": "2026-09-05T15:02Z",
       "title": "A nested-read key widens too; the widening is unioned where the nested read resolves",
       "ratified": null
+    },
+    {
+      "id": "R8",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R6",
+        "R7"
+      ],
+      "at": "2026-09-05T15:20Z",
+      "title": "Nullability is answered by the value's own rule, wherever the value is used",
+      "ratified": null
     }
   ],
   "work": [

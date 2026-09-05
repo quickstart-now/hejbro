@@ -56,7 +56,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#486](486/) | the driver contract has no vocabulary for non-interactive statement batches | closed | #955 | 0 | 14 (5 pending) |
 | ↳ [#491](491/) | align third-party client version ranges across published packages (catalog policy) | closed | #883 | 0 | 1 (0 pending) |
 | ↳ [#497](497/) | crap gate output misstates its side effects and cache-induced failures | closed | #885 | 0 | 0 (0 pending) |
-| ↳ [#500](500/) | recursive CTE row type stays non-null-inferred even when the recursive term is nullable | open |  | 0 | 7 (3 pending) |
+| ↳ [#500](500/) | recursive CTE row type stays non-null-inferred even when the recursive term is nullable | open |  | 0 | 8 (3 pending) |
 | ↳ [#502](502/) | audit server-behavior assertions across openspec/specs | closed | #910 | 0 | 0 (0 pending) |
 | ↳ [#510](510/) | cross-check MODIFIED requirement titles against the base spec in CI | closed | #884 | 0 | 0 (0 pending) |
 | ↳ [#528](528/) | driver-conformance kit mis-observes transaction-wrapping session-state:false drivers | closed | #737 #760 | 0 | 6 (0 pending) |
@@ -184,7 +184,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 
 ## Totals
 
-Owner decisions 93 · rulings 238 (interpretation 158, extension 78, stop 2) · pending extensions 40 · rejected 2
+Owner decisions 93 · rulings 239 (interpretation 159, extension 78, stop 2) · pending extensions 40 · rejected 2
 
 ## Conventions
 

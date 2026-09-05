@@ -145,7 +145,8 @@ and the sentence was incomplete. A `SetOpStage` carries no left-joined
 brand, so its set is UNKNOWN, and this repository's frozen contract
 reads an untracked position as nullable; `never` would assert an empty
 set nobody measured and would drop a real left join hiding inside a
-set-op branch.
+set-op branch, which the reviewer measured on postgres:17 as a genuine
+NULL.
 
 The delta's THEN clause and the skill's CTE sentence therefore carry
 the exception explicitly, and the reviewer's B1 input is pinned as a
@@ -158,8 +159,8 @@ operation's result already has" was false -- a plain set operation
 keeps the left branch's projection -- and is corrected in the delta,
 the proposal, the design ruling and the skill. The gap that comparison
 accidentally revealed (a plain set operation's own result type never
-carries the right branch's nullability) is the lead's new issue,
-sibling of #932 and #942.
+carries the right branch's nullability) is the lead's #944, sibling of
+#932 and #942.
 
 <a id="r7"></a>
 ## R7 — A nested-read key widens too; the widening is unioned where the nested read resolves
@@ -196,4 +197,27 @@ non-null row is never stated over a json column, whose read type is
 The evidence first cited (an E8 shape over a json column) was a
 measurement artifact -- a json column reads `unknown` regardless of
 `notNull` -- and is replaced by E11a; the reviewer caught this himself.
+
+<a id="r8"></a>
+## R8 — Nullability is answered by the value's own rule, wherever the value is used
+
+_lead · interpretation · basis R6, R7 · 2026-09-05T15:20Z · ratified: pending_
+
+A recursive term's set-op branch carries no tracked left-joined set, so
+a key it projects from a column, or from an expression that is not a
+nested read, reads nullable -- the untracked rule. A key it projects
+through a nested read does not: that value's own rule answers instead,
+as it does everywhere else. `jsonArrayFrom` renders as
+`coalesce(json_agg(...), '[]')` and is structurally never null;
+`jsonObjectFrom` is `... | null` by its own rule. The delta's exception
+clause is written this way, exclusively, rather than as "every key",
+so a later review can falsify it with one input instead of reading it
+as a slogan.
+
+Measured: the reviewer ran the statement this change emits and the key
+came back `[]`, never null, even with no child rows. E2 (a `union`
+over a `json` column) is refused by Postgres -- "could not identify an
+equality operator for type json" -- so the row is stated over
+`unionAll` instead; hejbro accepting that `union` at build time is a
+pre-existing gap tracked separately as #952.
 
