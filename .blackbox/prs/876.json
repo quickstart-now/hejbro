@@ -3,11 +3,11 @@
   "number": 876,
   "ref": "quickstart-now/hejbro#876",
   "title": "chore(openspec): archive harden-config-paths-2 after d106 round 1",
-  "head": "29cccc948e4805157acd08eb30688a9ea1c8b704",
+  "head": "479a9d783469fbd79c836a8075304d2377e1129e",
   "headRef": "archive-config-paths-2",
   "base": "dev",
   "merged": null,
-  "pinnedAt": "2026-09-05T01:40Z",
+  "pinnedAt": "2026-09-05T01:51Z",
   "refs": [
     {
       "path": ".changeset/harden-config-paths-2.md",
@@ -15,7 +15,7 @@
     },
     {
       "path": "README.md",
-      "blob": "e0ab53855ca3743654824475044a1fe977f251da"
+      "blob": "49d0c02a2c0a95b25fe2138a5a19bef524ec90a6"
     },
     {
       "path": "openspec/changes/archive/2026-09-05-harden-config-paths-2/design.md",
