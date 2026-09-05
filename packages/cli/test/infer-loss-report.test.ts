@@ -358,6 +358,38 @@ describe("buildLossReport / 1.7", () => {
 		expect(line).toContain("only thing that schema would have declared");
 	});
 
+	// D106 round 1 B1 (harden-check-inventory): a pull consumer holds no
+	// declarations, so its omitted-index and omitted-check lines must carry
+	// pull's own consequence, never a `check` listing that never happens.
+	it.each([
+		{
+			kind: "index",
+			facts: {
+				omittedIndexes: [
+					{ schema: "m", table: "kept", sqlName: "idx\nnewline" },
+				],
+			},
+		},
+		{
+			kind: "check constraint",
+			facts: {
+				omittedChecks: [{ schema: "m", table: "kept", sqlName: "chk!bad" }],
+			},
+		},
+	])(
+		"pull: names an omitted $kind with the contract-facing consequence, never a check listing",
+		({ kind, facts }) => {
+			const report = buildLossReport({ ...emptyFacts("pull"), ...facts });
+			const line = report.find((entry) =>
+				entry.startsWith(`Omitted: ${kind} "m.kept.`),
+			);
+			expect(line).toBeDefined();
+			expect(line).toContain("cannot be carried in the contract");
+			expect(line).toContain("then link the schema repository");
+			expect(line).not.toContain("keeps listing");
+		},
+	);
+
 	it("pull: names an omitted table with its own contract-facing consequence", () => {
 		const report = buildLossReport({
 			...emptyFacts("pull"),
@@ -497,21 +529,14 @@ describe("buildLossReport / 1.7", () => {
 		);
 	});
 
-	it("names an omitted index, its table, and says check keeps listing it as unmanaged -- the same line for both commands, since a contract never carries indexes", () => {
-		const facts = {
+	it("import: names an omitted index, its table, and says check keeps listing it as unmanaged", () => {
+		const importLine = buildLossReport({
+			...emptyFacts("import"),
 			omittedIndexes: [
 				{ schema: "app", table: "widgets", sqlName: "IX_Widgets" },
 			],
-		};
-		const importLine = buildLossReport({
-			...emptyFacts("import"),
-			...facts,
 		}).find((entry) => entry.includes("IX_Widgets"));
-		const pullLine = buildLossReport({ ...emptyFacts("pull"), ...facts }).find(
-			(entry) => entry.includes("IX_Widgets"),
-		);
 		expect(importLine).toBeDefined();
-		expect(importLine).toBe(pullLine);
 		expect(importLine).toContain('index "app.widgets.IX_Widgets"');
 		expect(importLine).toContain(
 			"`check` keeps listing it as unmanaged until it is renamed in the database and declared",

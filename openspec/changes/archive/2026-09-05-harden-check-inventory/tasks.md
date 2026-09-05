@@ -173,3 +173,24 @@ delta scenarios of `openspec show harden-check-inventory --diff` hold.
   Files: `packages/cli/src/infer/loss-report.ts`,
   `packages/cli/src/commands/check.ts`,
   `packages/cli/test/infer-loss-report.test.ts`.
+
+## 2. The review's constructed inputs (round 1)
+
+Group 1 is complete, so this group shares its files with nothing
+running. Files this group owns: `packages/cli/src/infer/loss-report.ts`,
+`packages/cli/test/infer-loss-report.test.ts`,
+`skills/hejbro/references/brownfield-adoption.md`.
+
+- [x] 2.1 (~6m) `pull`'s omitted-index and omitted-check-constraint
+      lines carry `pull`'s own consequence (review B1): a pull consumer
+      holds no declarations of the producer's schema, so no `check`
+      listing follows — the object cannot be carried in the contract,
+      and the way out is a rename in the database followed by linking
+      the schema repository, as the column line already says for `pull`.
+      Red: `infer-loss-report.test.ts` — "pull: names an omitted %s with
+      the contract-facing consequence, never a check listing" over the
+      two kinds; the `import` lines are pinned unchanged. Green:
+      `omittedIndexLineForPull` / `omittedCheckLineForPull`, the two
+      builders taking `facts.command`. Same task (review N1): the skill's
+      loss section says renamed *and declared* for the column, and that
+      `check` keeps listing an omitted index or check constraint.
