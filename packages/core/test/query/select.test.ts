@@ -474,12 +474,20 @@ describe("group 2 review rulings (F1/F2) and the at-risk table", () => {
 	// keeps the "own rows never cast" assertions meaningful (the
 	// `packages/pg/test/integration.test.ts` live witness already asserts
 	// its own casts this same alias-scoped way).
-	const rendersCastFor = (projected: Expr, from: Table): boolean =>
+	// `sibling` is optional and defaults to none -- every existing call
+	// site is unchanged; it exists so a test can put a CAST sibling cell
+	// in the same nested projection and still assert on `cell` alone,
+	// the exact shape the alias-scoping below has to survive.
+	const rendersCastFor = (
+		projected: Expr,
+		from: Table,
+		sibling?: Record<string, Expr>,
+	): boolean =>
 		renderSelect(
 			select(
 				{
 					id: posts.id,
-					nested: jsonArrayFrom(select({ cell: projected }, from)),
+					nested: jsonArrayFrom(select({ cell: projected, ...sibling }, from)),
 				},
 				posts,
 			).selectQuery,
@@ -590,6 +598,20 @@ describe("group 2 review rulings (F1/F2) and the at-risk table", () => {
 		["ntile (windowed)", () => over(ntile(4), ledgerBigintSpec)],
 	])("%s casts nothing (own shape)", (_label, build) => {
 		expect(rendersCastFor(build(), ledgerBigint)).toBe(false);
+	});
+
+	// Goes through rendersCastFor itself (not a standalone renderSelect
+	// call, unlike the "sibling cell" test above) -- this is what actually
+	// pins alias-scoping in the helper both `own`-shape tables above call:
+	// a whole-statement `.includes("::text")` would read this as cast
+	// (the sibling `count()` cell is), so this row goes red the moment
+	// that scoping regresses (#452 review, second pass).
+	it("sum (with a cast sibling in the same nested projection) casts nothing (own shape)", () => {
+		expect(
+			rendersCastFor(sum(ledgerBigint.value), ledgerBigint, {
+				sibling: count(),
+			}),
+		).toBe(false);
 	});
 
 	// An "argument" row's cast still needs its own argument's typeNode
