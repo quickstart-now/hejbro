@@ -3,15 +3,19 @@
   "number": 900,
   "ref": "quickstart-now/hejbro#900",
   "title": "fix(core): re-issue schema-wide grants after create view; constructor-review corpus (#899, #742)",
-  "head": "4cb1eb4282c5a0c4df568e73b9fc9cd9d47db941",
+  "head": "40868b95c34b88c934b15bb79166fa3edfd39806",
   "headRef": "corpus-742",
   "base": "dev",
   "merged": null,
-  "pinnedAt": "2026-09-05T09:01Z",
+  "pinnedAt": "2026-09-05T10:04Z",
   "refs": [
     {
       "path": ".changeset/view-grant-catch-up-742.md",
       "blob": "c7ae47d3613e83902211f153423edf3f2027cd40"
+    },
+    {
+      "path": "README.md",
+      "blob": "8a62e6d66cd5a0a829dc5fc3eff68e101eca8145"
     },
     {
       "path": "examples/postgres/hejbro.snapshot.json",
