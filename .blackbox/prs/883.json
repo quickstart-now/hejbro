@@ -1,0 +1,53 @@
+{
+  "version": 3,
+  "number": 883,
+  "ref": "quickstart-now/hejbro#883",
+  "title": "build: declare third-party client ranges once in the pnpm catalog (#491)",
+  "head": "72bc14654c0bd9dda532e133cb1257ac974eda09",
+  "headRef": "chore-client-ranges",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-05T05:00Z",
+  "refs": [
+    {
+      "path": ".changeset/client-ranges-catalog.md",
+      "blob": "58001f33236ca893b3d707d208ce55e3243920c5"
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "blob": "d48d86626cfe02d22dde2c5092a53fb76db122a6"
+    },
+    {
+      "path": "package.json",
+      "blob": "7bae133943fb5fac29177d54f86421d81bdaf92a"
+    },
+    {
+      "path": "packages/neon/package.json",
+      "blob": "2fe1a65e4d926787690b751f6c79232d460b3c6f"
+    },
+    {
+      "path": "packages/pg/package.json",
+      "blob": "637943488766c3231dd482f135b2d615fb342326"
+    },
+    {
+      "path": "packages/skills/package.json",
+      "blob": "d628b676a74768d4c1b09cf2c4cc614e228980f0"
+    },
+    {
+      "path": "packages/supabase/package.json",
+      "blob": "964069863987374c05e1cb6ae37299da3c9b86dd"
+    },
+    {
+      "path": "pnpm-lock.yaml",
+      "blob": "dc6240bab814fadf7cbbdb477b5fcaf7cc62d15c"
+    },
+    {
+      "path": "pnpm-workspace.yaml",
+      "blob": "f3d892b2449c33076dbdb6befcd37b0b5e3a42ba"
+    },
+    {
+      "path": "scripts/check-client-ranges.mjs",
+      "blob": "ea912a32c90f8a852881ad4465343480a8c2ca9c"
+    }
+  ]
+}
