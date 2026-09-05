@@ -83,7 +83,7 @@ needs both; 1.5 last. 1.6 is independent of all of them.
       `pnpm changeset` → `patch`. Files: the witness, the reference,
       `.changeset/*.md`.
 
-- [ ] 1.6 (~5m) The preview-equals-executed claim covers the
+- [x] 1.6 (~5m) The preview-equals-executed claim covers the
       context-applied half too. Red: `packages/query/test/db/
       execute.test.ts`, new case *"executed SQL equals previewed
       compile output under an applied execution context"* — a statement
