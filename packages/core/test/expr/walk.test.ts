@@ -442,3 +442,77 @@ describe("findExprScopeViolation reaches a CTE-sourced exists() (add-ctes task 2
 		expect(findExprScopeViolation(node, [])).toBeUndefined();
 	});
 });
+
+// add-aggregate-filter task 1.3 (#501/R2): a filtered aggregate's
+// condition is a sibling expression, not a subquery -- checked in the
+// SAME scope as the surrounding expression, matching window's own
+// fn/partitionBy/orderBy rule just above it in scopeViolationHandlers.
+describe("findExprScopeViolation reaches a filtered aggregate's condition", () => {
+	const inScope = { schemaName: "app", tableName: "posts" };
+
+	it("a condition referencing an out-of-scope table is a violation", () => {
+		const node: ExprNode = {
+			nodeKind: "aggregateFilter",
+			fn: {
+				nodeKind: "functionCall",
+				schemaName: null,
+				functionName: "count",
+				args: [{ nodeKind: "rawSql", sql: "*" }],
+			},
+			where: {
+				nodeKind: "columnRef",
+				schemaName: "app",
+				tableName: "comments",
+				columnName: "post_id",
+			},
+		};
+		const violation = findExprScopeViolation(node, [inScope]);
+		expect(violation?.tableName).toBe("comments");
+	});
+
+	it("a condition referencing an in-scope table is not a violation", () => {
+		const node: ExprNode = {
+			nodeKind: "aggregateFilter",
+			fn: {
+				nodeKind: "functionCall",
+				schemaName: null,
+				functionName: "count",
+				args: [{ nodeKind: "rawSql", sql: "*" }],
+			},
+			where: {
+				nodeKind: "columnRef",
+				schemaName: "app",
+				tableName: "posts",
+				columnName: "status",
+			},
+		};
+		expect(findExprScopeViolation(node, [inScope])).toBeUndefined();
+	});
+
+	it("an out-of-scope reference in the aggregate's own argument is also a violation", () => {
+		const node: ExprNode = {
+			nodeKind: "aggregateFilter",
+			fn: {
+				nodeKind: "functionCall",
+				schemaName: null,
+				functionName: "sum",
+				args: [
+					{
+						nodeKind: "columnRef",
+						schemaName: "app",
+						tableName: "comments",
+						columnName: "score",
+					},
+				],
+			},
+			where: {
+				nodeKind: "columnRef",
+				schemaName: "app",
+				tableName: "posts",
+				columnName: "status",
+			},
+		};
+		const violation = findExprScopeViolation(node, [inScope]);
+		expect(violation?.tableName).toBe("comments");
+	});
+});

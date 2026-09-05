@@ -208,6 +208,60 @@ describe("retargetExprNode (#110 item 7/18: rename retargeting)", () => {
 		expect(serialized.match(/"articles"/g)).toHaveLength(5);
 	});
 
+	// add-aggregate-filter task 1.3 (#501/R2): a filtered aggregate's
+	// condition is a sibling ExprNode -- retargetExprNode's generic
+	// fallback (exprChildren/replaceExprChildren) already recurses through
+	// it once expr-children.ts's own aggregateFilter entry (task 1.2)
+	// yields [fn, where]; this test proves BOTH positions retarget, not
+	// just structural identity-preservation the REACHABLE_NODE_KINDS loop
+	// above already covers.
+	it("retargets a columnRef inside a filtered aggregate's condition, and inside its own argument", () => {
+		const node: ExprNode = {
+			nodeKind: "aggregateFilter",
+			fn: {
+				nodeKind: "functionCall",
+				schemaName: null,
+				functionName: "sum",
+				args: [
+					{
+						nodeKind: "columnRef",
+						schemaName: "app",
+						tableName: "posts",
+						columnName: "id",
+					},
+				],
+			},
+			where: {
+				nodeKind: "columnRef",
+				schemaName: "app",
+				tableName: "posts",
+				columnName: "id",
+			},
+		};
+		expect(retargetExprNode(node, tableRenameTarget)).toEqual({
+			nodeKind: "aggregateFilter",
+			fn: {
+				nodeKind: "functionCall",
+				schemaName: null,
+				functionName: "sum",
+				args: [
+					{
+						nodeKind: "columnRef",
+						schemaName: "app",
+						tableName: "articles",
+						columnName: "id",
+					},
+				],
+			},
+			where: {
+				nodeKind: "columnRef",
+				schemaName: "app",
+				tableName: "articles",
+				columnName: "id",
+			},
+		});
+	});
+
 	it("retargets a columnRef inside an exists() subquery's where/join/orderBy, and the subquery's own from/join table refs", () => {
 		const node: ExprNode = {
 			nodeKind: "exists",

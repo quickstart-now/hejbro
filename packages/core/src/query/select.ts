@@ -643,7 +643,13 @@ const typeNodeOf = (inputValue: unknown): TypeNode | undefined =>
  * exactly how `@hejbro/query`'s `convert.ts` already reads it — so a
  * windowed cell is classified by the SAME name an unwindowed one would
  * be, never treated as unclassifiable (#452, the drift this table
- * closes: `over(count(), …)` used to cast nothing at all).
+ * closes: `over(count(), …)` used to cast nothing at all). A filtered
+ * aggregate (#501/R2 Q4) reads through the SAME way, one more unwrap:
+ * `window`'s own widened `fn` slot admits an `aggregateFilter` node
+ * (design.md Q2), so unwrapping window first, then a filtered call,
+ * covers `filter(count(), …)` and `over(filter(count(), …), spec)`
+ * alike — the reverse nesting (`filter` over a window) is not
+ * representable at all (design.md Q2), so no third unwrap is needed.
  */
 const unwrapWindowNode = (node: ExprNode): ExprNode => {
 	if (node.nodeKind === "window") {
@@ -652,8 +658,24 @@ const unwrapWindowNode = (node: ExprNode): ExprNode => {
 	return node;
 };
 
-const builderAggregateFunctionName = (node: ExprNode): string | undefined => {
-	const target = unwrapWindowNode(node);
+const unwrapAggregateFilterNode = (node: ExprNode): ExprNode => {
+	if (node.nodeKind === "aggregateFilter") {
+		return node.fn;
+	}
+	return node;
+};
+
+/**
+ * @internal exported for `query/select.test.ts`'s cast-agreement table —
+ * a filtered `sum`/`avg` (`own` read shape) casts nothing whether or not
+ * it's correctly unwrapped, so asserting the cast suffix alone can't
+ * catch a regression there; this lets that table assert the unwrapped
+ * name directly instead.
+ */
+export const builderAggregateFunctionName = (
+	node: ExprNode,
+): string | undefined => {
+	const target = unwrapAggregateFilterNode(unwrapWindowNode(node));
 	if (target.nodeKind !== "functionCall") {
 		return undefined;
 	}

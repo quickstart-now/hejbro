@@ -51,12 +51,15 @@ planner, not into the diff.
       traversal registry knows the kind. Files: `render-sql.ts`,
       `codec.ts`, `expr-children.ts`, tests.
 
-- [ ] 1.3 (~6m) Walk, retarget, read shape. Red: the retarget/walk tests
+- [x] 1.3 (~6m) Walk, retarget, read shape. Red: the retarget/walk tests
       — a rename of the table inside the condition retargets it; the
       read-shape lookup unwraps a filtered call to its inner call so
       `atRiskCastSuffix` casts `filter(count(), …)` inside a nested read.
-      Files: `retarget.ts`, `walk.ts`, `read-shape.ts`,
-      `query/select.ts`, tests.
+      `retarget.ts` needs no source change — its generic fallback walks
+      through `exprChildren`, which learned the kind in 1.2 — so its
+      scenario lands as a pin that was green on arrival, recorded as
+      such. Files: `walk.ts`, `read-shape.ts`, `query/select.ts`, tests
+      (`retarget.test.ts` included).
 
 - [ ] 1.4 (~8m) The query package. Red: `params.test.ts` — a literal
       inside the filter condition is lifted to `$n` in order; the nested
