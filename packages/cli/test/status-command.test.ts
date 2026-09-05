@@ -816,4 +816,33 @@ describe("runStatus — a changed body is reported / 1.4, 631/R9, R11", () => {
 		expect(result.exitCode).toBe(0);
 		expect(result.stderr).toBeNull();
 	});
+
+	it("7: a changed body never appears in the applied bucket, an unrelated recorded file stays listed -- 631/R15(B1)", async () => {
+		await writeFixtureFile(cwd, "migrations/0001_a.sql", editedFile1);
+		await writeFixtureFile(cwd, "migrations/0002_b.sql", originalFile2);
+		const { importer } = makeFakeStatusImporter(LEDGER_PROBE_ROWS, {
+			ledgerRows: [
+				{
+					filename: "0001_a.sql",
+					origin: "applied",
+					checksum: bodyChecksum(originalFile1),
+				},
+				{
+					filename: "0002_b.sql",
+					origin: "applied",
+					checksum: bodyChecksum(originalFile2),
+				},
+			],
+		});
+
+		const result = await runStatus(cwd, ["--url", "postgres://fake"], importer);
+
+		expect(result.exitCode).toBe(1);
+		expect(result.stdout.some((line) => line.includes("0001_a.sql"))).toBe(
+			false,
+		);
+		expect(result.stdout.some((line) => line.includes("0002_b.sql"))).toBe(
+			true,
+		);
+	});
 });

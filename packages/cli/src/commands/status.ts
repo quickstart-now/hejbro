@@ -114,13 +114,16 @@ const ledgerAbsenceLines = (
 	return [];
 };
 
-/** [task 16.3, D106 M1] The migrations the ledger records as applied -- chain-linked rows only (`origin !== "raised"`); a raised row is named by {@link raisedLines} instead, never folded in here (spec: "names the migrations the ledger records as applied", which a raised row -- never applied by `migrate` -- is not). */
-const appliedLines = (ledgerState: LedgerState): ReadonlyArray<string> => {
+/** [task 16.3, D106 M1; excludes a changed body since 631/R15(B1)] The migrations the ledger records as applied -- chain-linked rows only (`origin !== "raised"`), minus any file {@link changedFilenames} names: the delta states a changed body is reported once, as its own diagnostic, never also as applied. A raised row is named by {@link raisedLines} instead, never folded in here (spec: "names the migrations the ledger records as applied", which a raised row -- never applied by `migrate` -- is not). */
+const appliedLines = (
+	ledgerState: LedgerState,
+	changedFilenames: ReadonlySet<string>,
+): ReadonlyArray<string> => {
 	if (!ledgerState.exists) {
 		return [];
 	}
 	const chainLinked = ledgerState.applied.filter(
-		(row) => row.origin !== "raised",
+		(row) => row.origin !== "raised" && !changedFilenames.has(row.filename),
 	);
 	if (chainLinked.length === 0) {
 		return [];
@@ -141,15 +144,19 @@ const raisedLines = (ledgerState: LedgerState): ReadonlyArray<string> => {
 		.map((row) => `status: this database was raised from "${row.filename}".`);
 };
 
-/** `plan.ok`'s own report (task 7.6; applied/raised sections since task 16.3/16.4, D106 M1/M2/M7) -- the ledger's own absence-vs-empty state, the migrations it records as applied, which file (if any) raised it, then pending migrations named in chain order, or the "caught up" line when there are none. */
+/** [631/R15(B1)] `renderStatusReport`'s own default when a caller has no changed-body findings to exclude -- every existing call site (this file's own two-arg calls, every test) keeps its own meaning: nothing excluded. */
+const NO_CHANGED_FILENAMES: ReadonlySet<string> = new Set();
+
+/** `plan.ok`'s own report (task 7.6; applied/raised sections since task 16.3/16.4, D106 M1/M2/M7) -- the ledger's own absence-vs-empty state, the migrations it records as applied, which file (if any) raised it, then pending migrations named in chain order, or the "caught up" line when there are none. `changedFilenames` (631/R15(B1)) excludes a file from the applied bucket -- its own body-changed diagnostic already names it, once. */
 export const renderStatusReport = (
 	plan: Extract<PlanResult, { readonly ok: true }>,
 	ledgerState: LedgerState,
+	changedFilenames: ReadonlySet<string> = NO_CHANGED_FILENAMES,
 ): StatusResult => ({
 	exitCode: 0,
 	stdout: [
 		...ledgerAbsenceLines(ledgerState),
-		...appliedLines(ledgerState),
+		...appliedLines(ledgerState, changedFilenames),
 		...raisedLines(ledgerState),
 		...pendingLines(plan.pending),
 	],
@@ -308,7 +315,11 @@ export const runStatus = async (
 								finding.filename,
 							),
 						);
-						const report = renderStatusReport(plan, ledgerState);
+						const report = renderStatusReport(
+							plan,
+							ledgerState,
+							new Set(findings.map((finding) => finding.filename)),
+						);
 						return {
 							exitCode: 1,
 							stdout: report.stdout,
