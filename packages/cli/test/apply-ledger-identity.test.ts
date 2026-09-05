@@ -790,7 +790,7 @@ describe("assertLedgerNotOccupied / 1.6, 631/R14 (apply-ledger-filtered message)
 		});
 
 		expect(message).toBe(
-			`"${LEDGER_SCHEMA}"."${LEDGER_TABLE}" has row-level security enabled and forced, and hejbro never turns it on for its own ledger. Rows this role cannot see read as a ledger that recorded nothing, and the next \`migrate\` would re-apply the chain from the start. The connecting role is "ld_role"; it carries no policy at all, so every row is hidden from that role. Next: disable row-level security on the ledger, or connect as the role that applied the chain, then rerun \`hejbro status\`.`,
+			`"${LEDGER_SCHEMA}"."${LEDGER_TABLE}" has row-level security enabled and forced, and hejbro never turns it on for its own ledger. Rows this role cannot see read as a ledger that recorded nothing, and the next \`migrate\` would re-apply the chain from the start. The connecting role is "ld_role"; it carries no policy at all, so every row may be hidden from that role. Next: disable row-level security on the ledger, or connect as the role that applied the chain, then rerun \`hejbro status\`.`,
 		);
 	});
 

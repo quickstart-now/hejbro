@@ -331,10 +331,10 @@ const article = (word: string): string => {
 	return "a";
 };
 
-/** [1.6, 631/R14(d)] The default-deny sentence when the catalog held no policy at all, or the quoted, comma-joined list otherwise -- row-level security with no policy hides every row, which is worth saying rather than leaving `policies` looking accidentally empty. */
+/** [1.6, 631/R14(d); wording corrected 631/R15 N3] The default-deny sentence when the catalog held no policy at all, or the quoted, comma-joined list otherwise -- row-level security with no policy hides every row from an ordinary role, but not from the table's owner or a role carrying `BYPASSRLS`, so the sentence says "may", never a flat claim this catalog-only judgement can't back. */
 const filteredPoliciesClause = (policies: ReadonlyArray<string>): string => {
 	if (policies.length === 0) {
-		return "it carries no policy at all, so every row is hidden from that role";
+		return "it carries no policy at all, so every row may be hidden from that role";
 	}
 	return `the policies on it are ${policies.map((policy) => `"${policy}"`).join(", ")}`;
 };
