@@ -130,7 +130,13 @@ that path. A factory that throws SHALL surface as the command's own
 connection-failed diagnostic, describing the thrown error. A driver the
 factory returns that offers no way to close SHALL be refused before any
 statement is sent, with a coded error naming the `driver` field and the
-missing member. The factory SHALL receive the resolved connection
+missing member. Every driver hejbro itself ships SHALL expose that
+member, so a factory built from a shipped driver is never the one
+refused: the vanilla driver, both Neon drivers, and every decorator
+that spreads its base. Closing a driver that holds nothing open does
+nothing, and SHALL be documented as doing nothing rather than left
+absent — Neon's HTTP driver opens no connection to close, and a missing
+member would refuse it for a fault it does not have. The factory SHALL receive the resolved connection
 string only — never the configuration and never the environment — and
 the configuration file SHALL still never carry a connection string.
 Capability requirements are unchanged: an apply command refuses a

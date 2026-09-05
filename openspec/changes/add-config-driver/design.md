@@ -24,9 +24,11 @@ closes its pool; the CLI closes it through `driver.client.end()`, the
 one non-contract member it relies on today. A contract `Driver` has no
 close member.
 
-- (i) Require the factory's driver to carry `client.end()` (the shape
-  `pgDriver`, `neonDriver(pool)` and every decorator that spreads its
-  base already have); refuse one that does not, at use, with
+- (i) Require the factory's driver to carry `client.end()` (`pgDriver`
+  and every decorator that spreads its base already expose `client`;
+  `neonDriver(pool)` did not — measured in 1.6 — and gains it in this
+  change, task 1.10, lead ruling 458/R3); refuse one that does not, at
+  use, with
   `<command>-driver-unclosable` naming the `driver` field and the
   missing member.
 - (ii) Add a close member to the driver contract.

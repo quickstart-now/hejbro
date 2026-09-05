@@ -132,3 +132,103 @@ other, both on 1.2b) → 1.5 → 1.6. 1.2b is inserted by lead ruling
       stale skill is a broken user contract, not a docs nit. Files: the
       three preset references, `brownfield-adoption.md`,
       `.changeset/*.md`.
+
+### Review round 1 (reviewer at 0311f061)
+
+Three tasks the piece review turned up. Each one is the delta's own
+sentence failing on an input the sentence covers, so each is repaired
+here rather than deferred: a scenario that only holds for the inputs
+the implementer happened to pick is not a scenario.
+
+- [x] 1.7 (~6m) A factory returning nothing is refused, not a crash.
+      `hasClosableClient` (`check/driver.ts:140`) reads `.client` off
+      the returned value without first confirming it is a non-null
+      object, so `null`/`undefined` reach the user as a raw `TypeError`
+      instead of the coded refusal L130-133 promises for a driver with
+      no way to close. The reachable spelling is an arrow function that
+      forgot its `return` — the shape the preset docs themselves show.
+      Red: extend `check-driver.test.ts`'s unclosable input table with
+      `null` and `undefined` rows (its neighbours — `{client:null}`,
+      `{client:{end:42}}`, a top-level `end`, a number — already pass).
+      No new code: these two belong on the existing refusal path.
+      Files: `packages/cli/src/check/driver.ts`, its test.
+
+- [x] 1.8 (~9m) **[design]** The connection diagnostics name the
+      command's own flag. `driver.ts:69` and `:233` hard-code `--url`
+      while interpolating `commandName`, so `hejbro pull` refuses by
+      telling the user to pass a flag it ignores — following the
+      `Next:` line reproduces the same error. The text predates this
+      change, but this change is what made the delta assert per-command
+      flags (L123-125, L172-177) and what put `pull` on this path, and
+      the `.changeset` entry this PR adds repeats the same claim.
+      Settles how the flag reaches the message: a literal on
+      `ConnectionContext` beside `commandName`, supplied at each call
+      site exactly as the codes are (never assembled), so the four
+      apply commands' shared context carries `--url` and `pull`'s
+      carries `--db-url`. Red: a table over the two messages ×
+      {`check`-shaped context → `--url`; `pull`'s context → `--db-url`}
+      plus one per-command assertion that no message names a flag its
+      command does not accept. Fix the `.changeset` wording in the same
+      task. Files: `packages/cli/src/check/driver.ts`,
+      `packages/cli/src/apply/capability.ts`, `commands/{check,import,
+      pull}.ts`, `check-driver.test.ts`, `.changeset/*.md`.
+
+- [x] 1.9 (~5m) `describeDriverError` describes an object that carries
+      a message. L179-183 says the connection-failed message describes
+      the thrown error; a thrown `ErrorEvent` renders as
+      `[object ErrorEvent]`, describing nothing. This is pre-existing
+      code, repaired here because 1.6's own `neon-preset.md` now
+      recommends the WebSocket `Pool` path, and that path throws
+      exactly this on a failed connection — the documented happy path's
+      failure message would be the useless one. Structural, never a
+      type test: any object whose `message` is a string. Red: the
+      thrown-value table (`Error`, bare string, `{code}`,
+      `AggregateError`, nested `cause`, `null` — all already passing)
+      gains a row for an object with a string `message`. Files:
+      `packages/cli/src/check/error-message.ts`, its test.
+      *Settled during the task, measured by rewinding the module:* a
+      plain object carrying **both** `code` and `message` used to
+      render its `code` and now renders its `message`. That is the
+      point of the task rather than a side effect — the old rule keyed
+      on the *class* (`instanceof Error`), so the same two fields
+      rendered one way inside an `Error` and another way in a plain
+      object. Keying on the shape makes those two agree. Only that
+      narrow set moves: a real `Error` carrying a `code` took the
+      message branch before and after.
+
+- [x] 1.10 (~6m) The Neon WebSocket driver exposes its pool as `client`
+      (lead ruling 458/R3). `buildWebSocketDriver` returns an object
+      with no `client` member, so the one line `neon-preset.md`
+      recommends is the one shape the CLI refuses — the delta's closing
+      promise would be false for one of the three shipped presets, so
+      the preset is fixed rather than the documentation worked around
+      (D13: complete within the purpose). Mirror how `pgDriver` exposes
+      its own pool. Red: `neonDriver(pool).client === pool` in the neon
+      driver's test, and the e2e proving the documented one-liner
+      (`driver: (url) => neonDriver(pool)`) reaches close — a recording
+      pool's `end` called exactly once. Remove the
+      `{ ...neonDriver(pool), client: { end: … } }` workaround from
+      `neon-preset.md`. The existing `minor` changeset covers this (the
+      seven packages are a fixed group). Files:
+      `packages/neon/src/driver.ts`, its test,
+      `skills/hejbro/references/neon-preset.md`, the e2e.
+
+- [x] 1.11 (~5m) **[design]** Closing Neon's HTTP driver does nothing,
+      and says so (lead ruling 458/R4). `buildHttpDriver` opens no
+      connection, so it exposes no `client` and the CLI refuses it for
+      a fault it does not have — which takes `check`, `status`,
+      `import` and `pull` away from the serverless path those commands
+      suit. Settles the member's shape: **not** the underlying `sql`
+      handle dressed up as a client. `pgDriver` and 1.10's WebSocket
+      driver expose `client` because a pool really is there; here there
+      is none, and handing back a fake handle would claim a capability
+      the object does not have. It exposes the minimum the close
+      contract needs — an object whose `end` resolves — and the comment
+      states only the constraint: nothing is held open, the CLI's close
+      path needs a member to call. Red: `neonDriver(sql).client.end()`
+      resolves **and never calls `sql`** (a recording queryable proves
+      the second half — a close that quietly issued a statement would
+      be the opposite of no-op); the apply commands' existing
+      `interactive-transactions` refusal is unchanged. One line in
+      `neon-preset.md`'s two-path section. Files:
+      `packages/neon/src/http.ts`, its test, `neon-preset.md`.
