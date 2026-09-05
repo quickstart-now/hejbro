@@ -8,7 +8,7 @@ and the kind-change guards (`requireNext`, `requirePrevious`,
 and rebuilds expressions, and reads a change's sides, through core
 instead of restating them.
 
-The two preset kinds that folded onto the guards now name the change by
-its kind token when they refuse: `supabase-storage-bucket …` and
-`smoke-schema-note …` instead of their former display labels. The
-refusal code is unchanged (`invalid-kind-change`).
+The storage-bucket kind that folded onto the guards now names the change
+by its kind token when it refuses: `supabase-storage-bucket …` instead
+of its former display label. The refusal code is unchanged
+(`invalid-kind-change`).

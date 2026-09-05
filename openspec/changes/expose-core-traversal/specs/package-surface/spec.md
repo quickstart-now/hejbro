@@ -38,10 +38,11 @@ the RLS validator does.
   behaviour each site's own tests pin is unchanged
 - **AND** a statement's own clauses — a `with` node's body, a set
   operation's branches, a subquery's clauses — stay outside this
-  registry: those are `SelectNode` positions the lifter reaches through
-  `selectChildExprs`/`replaceSelectChildExprs`, and a node whose child
-  is a whole statement (`exists`, `selectExpr`) reports no expression
-  child here
+  registry: those are query positions (`SelectNode | SetOpNode`) the
+  lifter reaches through its own query walk, applying
+  `selectChildExprs`/`replaceSelectChildExprs` at each `SelectNode` it
+  arrives at, and a node whose child is a whole statement (`exists`,
+  `selectExpr`) reports no expression child here
 
 #### Scenario: A kind reads a change's sides through the guards
 - **WHEN** the storage-bucket kind and the example preset's kind emit for
