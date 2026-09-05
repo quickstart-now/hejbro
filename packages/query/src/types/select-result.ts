@@ -134,22 +134,48 @@ export type SelectResult<
 			: never;
 
 /**
- * One object-projection value's result type: a nested read
- * (`jsonArrayFrom`/`jsonObjectFrom`, recognized by its phantom
- * {@link NestedReadMarker}) resolves through {@link SelectResult}
- * RECURSIVELY — so a nested row's columns carry exactly the declared
- * read types a top-level select would (D102 cast+revive), and
- * grandchildren compose for free. Everything else keeps the flat
- * family-widened fallback (#311's known gap, unchanged here).
+ * One object-projection value's result type: {@link
+ * DirectNestedOrExprResult} plus whatever {@link RecursiveNullWidening}
+ * contributes when `TValue` carries `WidenedBy` (#500/R7) — a nested
+ * read resolves this same union too, not only a plain column, since
+ * `DirectNestedOrExprResult` used to return before a nested read's own
+ * value was ever checked for the brand at all.
  */
 type NestedOrExprResult<TValue, TLeftJoined> =
+	| DirectNestedOrExprResult<TValue, TLeftJoined>
+	| RecursiveNullWidening<TValue>;
+
+/**
+ * One object-projection value's result type, without the recursive
+ * widening {@link NestedOrExprResult} adds on top (#500/R7 — named
+ * "direct" for the same reason {@link DirectProjectedColumnResult} is):
+ * a nested read (`jsonArrayFrom`/`jsonObjectFrom`, recognized by its
+ * phantom {@link NestedReadMarker}) resolves through {@link
+ * SelectResult} RECURSIVELY — so a nested row's columns carry exactly
+ * the declared read types a top-level select would (D102 cast+revive),
+ * and grandchildren compose for free. Everything else keeps the flat
+ * family-widened fallback (#311's known gap, unchanged here).
+ *
+ * {@link RecursiveNullWidening} resolves the recursive term's own
+ * carried value through this same type, not through {@link
+ * DirectProjectedColumnResult} directly: that type doesn't know the
+ * nested-read rule and would call a `jsonArrayFrom` value nullable,
+ * though it renders as `coalesce(json_agg(...), '[]')` and can never be
+ * null (#500/R7) — a false widening the delta's own STRICT rule refuses
+ * on the other side. Resolving through this type instead keeps
+ * `jsonArrayFrom` non-null, `jsonObjectFrom` nullable by its own rule,
+ * and an ordinary column on {@link DirectProjectedColumnResult}'s own
+ * path, and never re-enters {@link RecursiveNullWidening} itself — one
+ * layer only.
+ */
+type DirectNestedOrExprResult<TValue, TLeftJoined> =
 	TValue extends NestedReadMarker<infer TMode, infer TSub>
 		? [TMode] extends ["jsonArray"]
 			? ReadonlyArray<SelectResult<TSub>>
 			: [TMode] extends ["jsonObject"]
 				? SelectResult<TSub> | null
 				: ReadonlyArray<SelectResult<TSub>> | SelectResult<TSub> | null
-		: ProjectedColumnResult<TValue, TLeftJoined>;
+		: DirectProjectedColumnResult<TValue, TLeftJoined>;
 
 /**
  * The declared column a projected value came from, recovered through the
@@ -246,8 +272,8 @@ type OriginColumnMap<TValue> = TValue extends {
  *
  * Named "direct" (#500/R2) because a recursive CTE's outward reference
  * adds a second, independent source of nullability on top of this one —
- * see {@link ProjectedColumnResult}, the type every other file in this
- * package actually reads.
+ * see {@link NestedOrExprResult}, the type `SelectResult` actually
+ * reads.
  */
 type DirectProjectedColumnResult<TValue, TLeftJoined> = [
 	OriginColumn<TValue>,
@@ -293,11 +319,16 @@ type WidenedRecursivePair<TValue> = TValue extends {
 /**
  * The null-only contribution `WidenedBy` adds (#500/R2, #500/R3): the
  * recursive term's own carried value, resolved through {@link
- * ProjectedColumnResult} recursively against its own carried
- * left-joined set, unions in `null` when that resolution admits it —
- * never the recursive term's full value type, only whether it can be
- * null (the anchor's own type still governs otherwise, Postgres's own
- * rule, #500/R1). `never` when `TValue` carries no such brand.
+ * DirectNestedOrExprResult} — not {@link DirectProjectedColumnResult}
+ * directly, since the carried value can itself be a nested read
+ * (#500/R7) — against its own carried left-joined set, unions in `null`
+ * when that resolution admits it. Never the recursive term's full value
+ * type, only whether it can be null (the anchor's own type still
+ * governs otherwise, Postgres's own rule, #500/R1). `never` when
+ * `TValue` carries no such brand. Every existing caller of the type
+ * this feeds ({@link NestedOrExprResult}) is unaffected: this resolves
+ * `never` for any value that never went through `asRecursive`'s
+ * widening.
  *
  * Checked as `[WidenedRecursivePair<TValue>] extends [never]` first,
  * not `WidenedRecursivePair<TValue> extends readonly [...]` directly —
@@ -313,24 +344,13 @@ type RecursiveNullWidening<TValue> = [WidenedRecursivePair<TValue>] extends [
 				infer TRecursiveValue,
 				infer TRecursiveLeftJoined,
 			]
-		? null extends ProjectedColumnResult<TRecursiveValue, TRecursiveLeftJoined>
+		? null extends DirectNestedOrExprResult<
+				TRecursiveValue,
+				TRecursiveLeftJoined
+			>
 			? null
 			: never
 		: never;
-
-/**
- * A projected field's actual result type: {@link
- * DirectProjectedColumnResult} plus whatever {@link RecursiveNullWidening}
- * contributes when `TValue` carries `WidenedBy` — a recursive CTE's
- * outward reference intersects that brand onto every key (#500/R2), so
- * this union is where an ordinary projection's typing and a recursive
- * CTE's outward row typing meet. Every existing caller of the old
- * single-source type is unaffected: `RecursiveNullWidening` is `never`
- * for any value that never went through `asRecursive`'s widening.
- */
-type ProjectedColumnResult<TValue, TLeftJoined> =
-	| DirectProjectedColumnResult<TValue, TLeftJoined>
-	| RecursiveNullWidening<TValue>;
 
 /**
  * `true` when `TColumns` (a projected field's OWN origin column map)
