@@ -2,9 +2,9 @@
 
 ### Requirement: Drivers declare their capabilities
 A driver SHALL declare which execution capabilities it supports —
-interactive transactions, session state, prepared statements and batched transactions, the complete set — as
-inspectable data on the driver value. The query layer SHALL consult
-these declarations instead of probing behavior at runtime.
+interactive transactions, session state, prepared statements and
+batched transactions, the complete set — as inspectable data on the driver value. The query layer
+SHALL consult these declarations instead of probing behavior at runtime.
 
 #### Scenario: Capabilities are inspectable
 - **WHEN** a driver value is examined before any connection is made
@@ -14,15 +14,22 @@ these declarations instead of probing behavior at runtime.
 ### Requirement: The capability set is exhaustive and statically checked
 The driver capability set SHALL be a fixed, enumerated set of named
 capabilities — exactly four: interactive transactions, session state,
-prepared statements and batched transactions — never an open-ended list, and never a bare index signature.
-Extending the set is a spec change to this requirement, not a driver's
-own addition. A driver value's capability declaration SHALL name every
-capability in the set; omitting one, or naming one outside the set,
-SHALL fail to type-check rather than silently default. A mandatory
-prerequisite every driver must supply just to be a driver at all
-(parameterized statement execution) SHALL NOT be represented as a
+prepared statements and batched transactions — never an open-ended list, and never a bare
+index signature. Extending the set is a spec change to this requirement,
+not a driver's own addition. A driver value's capability declaration
+SHALL name every capability in the set; omitting one, or naming one
+outside the set, SHALL fail to type-check rather than silently default.
+A mandatory prerequisite every driver must supply just to be a driver at
+all (parameterized statement execution) SHALL NOT be represented as a
 capability — it lives on the driver's own required surface,
 unconditionally, never as a value that could read `false`.
+
+`prepared-statements` differs from the other three in one respect: no
+query-layer operation requires it. It states what the driver does with
+a built statement, and the query layer never consults it — so the
+"declared `false` fails closed" scenario below has no operation to
+exercise it with, by design, and a driver declaring it `false` simply
+sends every statement unnamed.
 
 #### Scenario: Omitting a declared capability is a compile error
 - **WHEN** a driver's capability declaration omits one of the fixed set's
@@ -49,22 +56,26 @@ the client it was handed — never discovered by probing a connection, and
 never a single set that averages the paths. **Where the client value
 distinguishes the path,** choosing the path SHALL be the caller's
 existing decision (which client they constructed), not a second decision
-the driver asks them to repeat.
+the driver asks them to repeat. On the session-oriented path the
+prepared-statements declaration SHALL be the caller's, stated through an
+options argument the session-path constructor accepts and the one-shot
+constructor does not offer; unstated, it is `false`.
 
 #### Scenario: A session-path driver declares full capabilities
 - **WHEN** a driver is built from the provider's session-oriented client
   (one that keeps a connection open across statements)
 - **THEN** it declares both interactive transactions and session state as
-  supported
+  supported, and prepared statements as the caller stated — `false`
+  when nothing was stated
 
 #### Scenario: A one-shot-path driver declares its limits
 - **WHEN** a driver is built from the provider's one-shot client (one
   that carries no session between statements)
-- **THEN** it declares interactive transactions and session state as
-  `false`, and batched transactions as what its one-shot request can
-  actually do — `true` when the client executes a statement list
-  atomically in one round trip — and every declaration is readable
-  before any connection is made
+- **THEN** it declares interactive transactions, session state and
+  prepared statements as `false`, and batched transactions as what its
+  one-shot request can actually do — `true` when the client executes a
+  statement list atomically in one round trip — and every declaration
+  is readable before any connection is made
 
 #### Scenario: The path is fixed by the client, not by a runtime probe
 - **WHEN** a driver value is constructed
