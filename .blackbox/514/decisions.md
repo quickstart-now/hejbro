@@ -151,3 +151,20 @@ against the `extras` form; the reviewer's reproduction under
 `/private/tmp/review-ra-scratch/corpus/` is the source of the rows. Files:
 `column-builder.ts` and its test only.
 
+<a id="r7"></a>
+## R7 — the replacement rule of a repeated references() call enters the delta as a scenario
+
+_lead · interpretation · basis R6 · 2026-09-05T18:15Z · ratified: pending_
+
+The re-review closed B1 and found that R6's observable contract -- a
+repeated `.references()` call replaces target and actions together --
+lived only in a test title, a comment and this record. A contract the user
+can observe belongs in the spec (D87), and the D106 archive gate reads
+spec sentences only, so it would never see this one. Ruling: the delta's
+requirement *A column-level reference carries referential actions* gains
+one scenario stating the rule; #972 keeps the open question of whether a
+repeated call should instead be refused, and the scenario says so in its
+last clause so the two do not contradict. N6 (the public
+`ColumnState.referenceActions` type widened to `| null`) is recorded as
+fact; its only reader folds it with `?.`.
+

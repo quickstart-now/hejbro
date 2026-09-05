@@ -68,6 +68,17 @@
       "at": "2026-09-05T17:46Z",
       "title": "the last references() call replaces the whole reference, actions included",
       "ratified": null
+    },
+    {
+      "id": "R7",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R6"
+      ],
+      "at": "2026-09-05T18:15Z",
+      "title": "the replacement rule of a repeated references() call enters the delta as a scenario",
+      "ratified": null
     }
   ],
   "work": [
