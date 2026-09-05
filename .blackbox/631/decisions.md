@@ -130,3 +130,53 @@ role still lands on `apply-ledger-unwritable` at the `bootstrap` site --
 and the live witness pins it with one row: after `reset`, the ledger has
 the `checksum` column.
 
+<a id="r6"></a>
+## R6 — the checksum argument is required; a fake that only lacks the new column changes minimally
+
+_lead · extension · basis R2 · 2026-09-05T17:43Z · ratified: pending_
+
+`recordAppliedMigration(session, filename, origin)` gains a required
+checksum argument, for the reason `ledger.ts` already gives for `origin`:
+every writer states the value because no default would be correct -- a
+row without a checksum is a fact about the past (written before the
+column existed), not a claim a new writer may make, and an optional
+argument would open a path to silently null rows. The planner's first
+count put three test files outside the boundary among the callers; a
+read-only listing showed those were mentions in comments and test names,
+not calls, so every call site is inside the piece: seeding calls in
+`apply-ledger.test.ts` and `apply-reset.test.ts` gain the argument, and
+the whole-row `toEqual` assertions in `apply-ledger.test.ts` and
+`apply-raise.test.ts` gain the field. Conditional extension, ruled ahead
+so the next breakage costs no round trip: the fakes in
+`apply-ledger-diagnostics.test.ts`, its `.integration.` twin and
+`raise-command.test.ts` imitate the ledger's SQL text by hand; if any of
+them breaks only because it does not know the new column (the `select`
+list, the `insert` list, the returned row shape), the file changes
+minimally to know it -- the same class as R5: production untouched, the
+file added to the tasks.md Files-edited header, one line in the task
+report saying what changed. Any other shape of breakage stops and
+reports. `readLedger` folds a missing or null checksum to `null` (never
+the strings "undefined" or "null" the `String(...)` idiom would produce,
+which would turn "not compared" into "never matches"); an old row reading
+as `checksum: null` is one row of task 1.2's table.
+
+<a id="r7"></a>
+## R7 — a raised file is hashed whole, banner or not
+
+_lead · interpretation · basis R2 · 2026-09-05T17:43Z · ratified: pending_
+
+The delta says a raised database records the whole file's checksum,
+unconditionally; design.md's "a raised snapshot file has no banner" is
+the reason, not a condition. Two implementations differ on exactly one
+input -- a file whose first line is the literal `-- hejbro migration`
+handed to `raise --file`: routing `raise` through `bodyChecksum` would
+hash only the body there and break the sentence. Ruling: `raise` hashes
+the whole normalised file (CRLF to LF only, same rule as R2) through a
+second export in `ledger.ts` that shares the normalisation with
+`bodyChecksum` -- `wholeFileChecksum(text)` -- and never consults the
+banner. Task 1.2's input table carries the one row that separates the
+two (a banner-first file raised -> whole-file hash) together with the
+mutation that must redden it (swap `raise`'s hash to `bodyChecksum`).
+design.md's Q1 sentence is repaired in place to state the unconditional
+rule.
+

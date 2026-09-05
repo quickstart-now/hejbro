@@ -63,6 +63,28 @@
       "at": "2026-09-05T17:14Z",
       "title": "test fakes that identify statements by prefix gain one alter-table branch; production is untouched",
       "ratified": null
+    },
+    {
+      "id": "R6",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "R2"
+      ],
+      "at": "2026-09-05T17:43Z",
+      "title": "the checksum argument is required; a fake that only lacks the new column changes minimally",
+      "ratified": null
+    },
+    {
+      "id": "R7",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R2"
+      ],
+      "at": "2026-09-05T17:43Z",
+      "title": "a raised file is hashed whole, banner or not",
+      "ratified": null
     }
   ],
   "work": [],
