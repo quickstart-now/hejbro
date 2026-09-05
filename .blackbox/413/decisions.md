@@ -23,3 +23,10 @@ _lead · interpretation · basis 413/W1 (canonicalizeSnapshot takes a KindRegist
 
 (1) `upgradeSnapshot(raw, registry, requiredKeysByKind?) -> { text, fromVersion }` ratified: the registry is what makes preset kinds canonicalize, so the idempotence scenario holds for a Supabase snapshot too. (2) The migration-format delta gains the sentence and scenario: a tip upgraded again keeps exactly one `upgraded-from` line whose value is the hash the tip first recorded; the parser returns it. Applied by the planner before 1.3. Ratification: owner on return.
 
+<a id="r4"></a>
+## R4 — FK order joins the canonical form (task 1.1c); rebase after 1.7 by the lead; design Q4 restated to the measured mechanism
+
+_lead · extension · basis 412/D24, D25, D13; #701/D3 (canonical form never itself a movement); su spike: 16 current-format snapshots byte-identical under FK sorting, T2 goldens unchanged, examples/postgres v5 carried non-canonical FK order under a weak oracle tier · 2026-09-05T09:10Z · ratified: pending_
+
+(1) canonicalizeTable sorts foreignKeys with the serializer's key — new task 1.1c with four reds, the structural assertion over all 12 fixtures mandatory; proposal Impact gains kinds/table-kind.ts. (2) The lead rebases the branch onto upstream/dev after 1.7 and runs the ten gates before the reviewer's SHA. (3) design.md Q4's second bullet states the measured mechanism: restore parses the commit's stored snapshot as the parent (D81); only a tip whose banner carries upgraded-from is re-encoded in memory via upgradeSnapshot; the trigger is the marker, never the format. (4) check-next-marker's cross-file limit is filed by the lead under #815. Ratification: owner on return.
+

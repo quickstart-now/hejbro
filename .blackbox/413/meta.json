@@ -46,6 +46,21 @@
       "at": "2026-09-05T06:22Z",
       "title": "upgradeSnapshot takes the registry; a re-upgraded tip keeps one upgraded-from line holding the original hash -- stated in the delta",
       "ratified": null
+    },
+    {
+      "id": "R4",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "412/D24",
+        "D25",
+        "D13; #701/D3 (canonical form never itself a movement); su spike: 16 current-format snapshots byte-identical under FK sorting",
+        "T2 goldens unchanged",
+        "examples/postgres v5 carried non-canonical FK order under a weak oracle tier"
+      ],
+      "at": "2026-09-05T09:10Z",
+      "title": "FK order joins the canonical form (task 1.1c); rebase after 1.7 by the lead; design Q4 restated to the measured mechanism",
+      "ratified": null
     }
   ],
   "work": [
@@ -102,6 +117,13 @@
       "id": "W8",
       "at": "2026-09-05T08:50Z",
       "title": "1.5: history and restore resolve an upgraded tip",
+      "pr": null,
+      "decisions": []
+    },
+    {
+      "id": "W9",
+      "at": "2026-09-05T09:05Z",
+      "title": "spike: extending tableKind.canonicalize to sort foreignKeys is safe and sufficient",
       "pr": null,
       "decisions": []
     }

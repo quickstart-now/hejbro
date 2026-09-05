@@ -116,3 +116,18 @@ Verified end-to-end against the REAL built CLI (dogfooding 1.4's own hejbro upgr
 
 Gates: all green (details in the completion report to su-planner).
 
+<a id="w9"></a>
+## W9 — spike: extending tableKind.canonicalize to sort foreignKeys is safe and sufficient
+
+_2026-09-05T09:05Z_
+
+Spike only (su-planner directive) -- scratch script in /private/tmp scratchpad, never committed, not in the worktree. Simulated "canonicalizeTable also sorts foreignKeys (D1 order)" by layering an additional sort pass on top of the real canonicalizeSnapshot's own output (sound since canonicalize is idempotent and this is a pure additional pass over the same objects).
+
+Result 1 (safety): all 16 current-format snapshots (14 golden expected/snapshot.json + both examples) are byte-UNCHANGED with FK-sort layered on -- confirms every current-format file's FK order is already canonical (as tableKind's own doc comment assumed), so extending canonicalizeTable is a true no-op for all of today's writer output.
+
+Result 2 (sufficiency): (a) the 0.1.1 project fixture's app.comments table -- the exact table the manual repro found in the wrong order -- now sorts to [comments_parent_id_fk, comments_task_id_fk], matching a fresh rebuild's own canonical order. (b) All 10 of 1.1/1.1b's own T2 golden byte-oracle rows still MATCH with FK-sort layered on top of the real upgradeSnapshot pipeline -- extending canonicalizeTable does not regress the existing oracle.
+
+Result 3 (out-of-sample survey, answering "did the 1.1 oracle simply never have a 2+-FK table to exercise this?"): scanned all 12 format-5 fixtures for tables with 2+ foreign keys. Found exactly two: golden-table-constraints.json's own app.comments (already canonical -- explains why T2's byte-oracle row for table-constraints passed despite the gap existing elsewhere) and example-postgres.json's app.comments (NOT canonical -- but the two example fixtures were only ever held to the WEAKER T1 oracle -- parses/keys survive/idempotent -- never the byte-oracle against a fresh rebuild, so this was never checked). Confirms the gap is real, was measurably out of 1.1's own oracle's reach for a structural reason (the one fixture that could have caught it, example-postgres.json, was in the "identity/idempotence only" tier by design, not the byte-oracle tier), and is not an isolated one-off -- the 0.1.1 project's own comments table hits it independently, from real declaration authorship, not a contrived fixture.
+
+Conclusion for the lead's ruling: option (a) -- extending canonicalizeTable itself -- measures as both safe (no current-format file changes) and sufficient (closes the exact gap the 0.1.1 project fixture exposed, without breaking any existing oracle row). This also completes #701/D3's own stated intent (generate.ts:305-309's comment: canonicalizeSnapshot exists so a snapshot "read straight off disk, never canonicalized" compares equal after being brought to canonical form) for the one field (foreignKeys) it did not yet cover.
+
