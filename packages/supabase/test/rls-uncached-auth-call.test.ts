@@ -1,4 +1,4 @@
-import type { PolicyDeclaration } from "@hejbro/core";
+import type { ExprNode, PolicyDeclaration, SelectNode } from "@hejbro/core";
 import {
 	and,
 	emptySnapshot,
@@ -642,6 +642,394 @@ describe("rlsUncachedAuthCallValidator", () => {
 			const warnings = rlsUncachedAuthCallValidator(emptySnapshot, [policy]);
 			expect(warnings).toHaveLength(1);
 			expect(warnings[0]?.code).toBe("rls-uncached-auth-call");
+		});
+	});
+});
+
+/**
+ * One row per {@link ExprNode} kind × child position this validator's
+ * traversal knows, plus three contrast rows (#515, tasks.md 1.3): pinned
+ * against the pre-fold `childrenOfHandlers` table (commit 9244e528) --
+ * running this same table again after the fold to `exprChildren` must
+ * stay byte-identical, which is the proof no child position was lost.
+ * `exists`/`selectExpr` keep their own branch after the fold: a
+ * subquery's predicate runs once per outer row exactly like the policy's
+ * own clause, so this validator descends into it (#444 F5b) where core's
+ * own `exprChildren` deliberately treats it as opaque. The contrast rows
+ * (comparison/window/exists with a plain literal instead of an auth call)
+ * guard against the table trivially reporting a warning regardless of
+ * content.
+ */
+describe("rlsUncachedAuthCallValidator: one row per node kind × child position, pinned pre-fold (#515)", () => {
+	const literalTrue: ExprNode = {
+		nodeKind: "literal",
+		literal: { literalKind: "boolean", value: true },
+	};
+	const basePolicy: Omit<PolicyDeclaration, "using" | "withCheck"> = {
+		declarationKind: "policy",
+		schemaName: "app",
+		tableName: "accounts",
+		policyName: "accounts_exotic",
+		permissive: true,
+		command: "select",
+		roles: ["authenticated"],
+		declaredAt: null,
+	};
+	const innerSelect = (where: ExprNode): SelectNode => ({
+		queryKind: "select",
+		projection: { projectionKind: "constantOne" },
+		from: { schemaName: "app", tableName: "profiles" },
+		joins: [],
+		where,
+		groupBy: [],
+		having: null,
+		orderBy: [],
+		limit: null,
+		offset: null,
+		distinct: null,
+	});
+	const authCall = (): ExprNode => authUid().exprNode;
+
+	type Row = {
+		readonly label: string;
+		readonly using: ExprNode;
+		readonly expectedWarnings: number;
+	};
+
+	const rows: ReadonlyArray<Row> = [
+		// Zero-child kinds: no auth call reachable, always zero warnings.
+		{ label: "literal", using: literalTrue, expectedWarnings: 0 },
+		{
+			label: "rawSql",
+			using: { nodeKind: "rawSql", sql: "true" },
+			expectedWarnings: 0,
+		},
+		{
+			label: "plpgsqlRef",
+			using: { nodeKind: "plpgsqlRef", path: ["new", "flag"] },
+			expectedWarnings: 0,
+		},
+		{
+			label: "columnRef",
+			using: {
+				nodeKind: "columnRef",
+				schemaName: "app",
+				tableName: "accounts",
+				columnName: "id",
+			},
+			expectedWarnings: 0,
+		},
+		// comparison: left, then right.
+		{
+			label: "comparison left",
+			using: {
+				nodeKind: "comparison",
+				operator: "=",
+				left: authCall(),
+				right: literalTrue,
+			},
+			expectedWarnings: 1,
+		},
+		{
+			label: "comparison right",
+			using: {
+				nodeKind: "comparison",
+				operator: "=",
+				left: literalTrue,
+				right: authCall(),
+			},
+			expectedWarnings: 1,
+		},
+		// logical: operands 1, 2, 3 -- one auth call at a time, the other two plain.
+		{
+			label: "logical operand 1",
+			using: {
+				nodeKind: "logical",
+				operator: "and",
+				operands: [authCall(), literalTrue, literalTrue],
+			},
+			expectedWarnings: 1,
+		},
+		{
+			label: "logical operand 2",
+			using: {
+				nodeKind: "logical",
+				operator: "and",
+				operands: [literalTrue, authCall(), literalTrue],
+			},
+			expectedWarnings: 1,
+		},
+		{
+			label: "logical operand 3",
+			using: {
+				nodeKind: "logical",
+				operator: "and",
+				operands: [literalTrue, literalTrue, authCall()],
+			},
+			expectedWarnings: 1,
+		},
+		{
+			label: "not operand",
+			using: { nodeKind: "not", operand: authCall() },
+			expectedWarnings: 1,
+		},
+		{
+			label: "nullTest operand",
+			using: { nodeKind: "nullTest", negated: false, operand: authCall() },
+			expectedWarnings: 1,
+		},
+		// inList: operand, then values 1 and 2.
+		{
+			label: "inList operand",
+			using: {
+				nodeKind: "inList",
+				negated: false,
+				operand: authCall(),
+				values: [literalTrue, literalTrue],
+			},
+			expectedWarnings: 1,
+		},
+		{
+			label: "inList value 1",
+			using: {
+				nodeKind: "inList",
+				negated: false,
+				operand: literalTrue,
+				values: [authCall(), literalTrue],
+			},
+			expectedWarnings: 1,
+		},
+		{
+			label: "inList value 2",
+			using: {
+				nodeKind: "inList",
+				negated: false,
+				operand: literalTrue,
+				values: [literalTrue, authCall()],
+			},
+			expectedWarnings: 1,
+		},
+		// between: operand, lowerBound, upperBound.
+		{
+			label: "between operand",
+			using: {
+				nodeKind: "between",
+				negated: false,
+				operand: authCall(),
+				lowerBound: literalTrue,
+				upperBound: literalTrue,
+			},
+			expectedWarnings: 1,
+		},
+		{
+			label: "between lowerBound",
+			using: {
+				nodeKind: "between",
+				negated: false,
+				operand: literalTrue,
+				lowerBound: authCall(),
+				upperBound: literalTrue,
+			},
+			expectedWarnings: 1,
+		},
+		{
+			label: "between upperBound",
+			using: {
+				nodeKind: "between",
+				negated: false,
+				operand: literalTrue,
+				lowerBound: literalTrue,
+				upperBound: authCall(),
+			},
+			expectedWarnings: 1,
+		},
+		// functionCall: args 1 and 2, wrapped in a non-auth outer call (coalesce).
+		{
+			label: "functionCall arg 1",
+			using: {
+				nodeKind: "functionCall",
+				schemaName: null,
+				functionName: "coalesce",
+				args: [authCall(), literalTrue],
+			},
+			expectedWarnings: 1,
+		},
+		{
+			label: "functionCall arg 2",
+			using: {
+				nodeKind: "functionCall",
+				schemaName: null,
+				functionName: "coalesce",
+				args: [literalTrue, authCall()],
+			},
+			expectedWarnings: 1,
+		},
+		// sqlTemplate: expr chunks 1 and 2.
+		{
+			label: "sqlTemplate expr chunk 1",
+			using: {
+				nodeKind: "sqlTemplate",
+				chunks: [
+					{ chunkKind: "expr", expr: authCall() },
+					{ chunkKind: "text", text: " and " },
+					{ chunkKind: "expr", expr: literalTrue },
+				],
+			},
+			expectedWarnings: 1,
+		},
+		{
+			label: "sqlTemplate expr chunk 2",
+			using: {
+				nodeKind: "sqlTemplate",
+				chunks: [
+					{ chunkKind: "expr", expr: literalTrue },
+					{ chunkKind: "text", text: " and " },
+					{ chunkKind: "expr", expr: authCall() },
+				],
+			},
+			expectedWarnings: 1,
+		},
+		// window: fn's own argument, then partitionBy, then orderBy.
+		{
+			label: "window fn argument",
+			using: {
+				nodeKind: "window",
+				fn: {
+					nodeKind: "functionCall",
+					schemaName: null,
+					functionName: "coalesce",
+					args: [authCall(), literalTrue],
+				},
+				partitionBy: [],
+				orderBy: [],
+			},
+			expectedWarnings: 1,
+		},
+		{
+			label: "window partitionBy",
+			using: {
+				nodeKind: "window",
+				fn: {
+					nodeKind: "functionCall",
+					schemaName: null,
+					functionName: "rank",
+					args: [],
+				},
+				partitionBy: [authCall()],
+				orderBy: [],
+			},
+			expectedWarnings: 1,
+		},
+		{
+			label: "window orderBy",
+			using: {
+				nodeKind: "window",
+				fn: {
+					nodeKind: "functionCall",
+					schemaName: null,
+					functionName: "rank",
+					args: [],
+				},
+				partitionBy: [],
+				orderBy: [{ expr: authCall(), direction: "asc" }],
+			},
+			expectedWarnings: 1,
+		},
+		// aggregateFilter: fn's own argument, then where.
+		{
+			label: "aggregateFilter fn argument",
+			using: {
+				nodeKind: "aggregateFilter",
+				fn: {
+					nodeKind: "functionCall",
+					schemaName: null,
+					functionName: "coalesce",
+					args: [authCall(), literalTrue],
+				},
+				where: literalTrue,
+			},
+			expectedWarnings: 1,
+		},
+		{
+			label: "aggregateFilter where",
+			using: {
+				nodeKind: "aggregateFilter",
+				fn: {
+					nodeKind: "functionCall",
+					schemaName: null,
+					functionName: "count",
+					args: [{ nodeKind: "rawSql", sql: "*" }],
+				},
+				where: authCall(),
+			},
+			expectedWarnings: 1,
+		},
+		// exists/selectExpr: this validator's own descent into the subquery's where.
+		{
+			label: "exists subquery where",
+			using: {
+				nodeKind: "exists",
+				negated: false,
+				query: innerSelect(authCall()),
+			},
+			expectedWarnings: 1,
+		},
+		{
+			label: "selectExpr subquery where",
+			using: {
+				nodeKind: "selectExpr",
+				mode: "jsonObject",
+				query: innerSelect(authCall()),
+			},
+			expectedWarnings: 1,
+		},
+		// Contrast rows: same shapes, a plain literal instead of an auth call --
+		// the witness that the table doesn't warn regardless of content.
+		{
+			label: "contrast: comparison with no auth call",
+			using: {
+				nodeKind: "comparison",
+				operator: "=",
+				left: literalTrue,
+				right: literalTrue,
+			},
+			expectedWarnings: 0,
+		},
+		{
+			label: "contrast: window with no auth call",
+			using: {
+				nodeKind: "window",
+				fn: {
+					nodeKind: "functionCall",
+					schemaName: null,
+					functionName: "rank",
+					args: [],
+				},
+				partitionBy: [literalTrue],
+				orderBy: [{ expr: literalTrue, direction: "asc" }],
+			},
+			expectedWarnings: 0,
+		},
+		{
+			label: "contrast: exists subquery with no auth call",
+			using: {
+				nodeKind: "exists",
+				negated: false,
+				query: innerSelect(literalTrue),
+			},
+			expectedWarnings: 0,
+		},
+	];
+
+	rows.forEach((row) => {
+		it(`${row.label}: ${row.expectedWarnings} warning(s)`, () => {
+			const policy: PolicyDeclaration = {
+				...basePolicy,
+				using: row.using,
+				withCheck: null,
+			};
+			const warnings = rlsUncachedAuthCallValidator(emptySnapshot, [policy]);
+			expect(warnings).toHaveLength(row.expectedWarnings);
 		});
 	});
 });

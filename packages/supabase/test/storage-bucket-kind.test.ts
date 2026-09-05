@@ -382,7 +382,7 @@ describe("storageBucketKind.emit", () => {
 				notes: [],
 			}),
 		).toThrowError(
-			"storage bucket create change is missing its next snapshot.",
+			"supabase-storage-bucket create change is missing its next snapshot.",
 		);
 	});
 
@@ -396,7 +396,9 @@ describe("storageBucketKind.emit", () => {
 				next: null,
 				notes: [],
 			}),
-		).toThrowError("storage bucket alter change is missing its next snapshot.");
+		).toThrowError(
+			"supabase-storage-bucket alter change is missing its next snapshot.",
+		);
 	});
 
 	it("drop emits no SQL", () => {
