@@ -80,9 +80,9 @@ and 1.3 are independent after 1.1b; 1.4 needs 1.1b and 1.3; 1.5 needs
       returns its input byte for byte. Green: one recursive pass that
       round-trips the outermost discriminator-bearing subtree through its
       codec and leaves every other value untouched; the `with` dispatch
-      goes through `kinds/view-kind.ts`'s own encoder, which
-      `encodeQueryNode` deliberately excludes. Files: `packages/core/src/
-      snapshot/snapshot.ts` (or a new module beside it), its test.
+      calls the codec's own `with` pair directly, which `encodeQueryNode`
+      deliberately excludes, so the generic pass depends on no kind
+      module. Files: `packages/core/src/snapshot/snapshot.ts`, its test.
 
 - [x] 1.2 (~6m) The older-format message splits on the floor. Red:
       `packages/core/test/snapshot.test.ts`, the existing
