@@ -40,3 +40,10 @@ _lead · interpretation · basis R4, 412/D13 · 2026-09-04T23:04Z · ratified: p
 
 B3 refinement (reviewer's forward note): echoing an absolute `--config` value verbatim collides with the repository-wide rule that diagnostics carry no absolute paths (D57, cited at identity.ts). Ruling: the rule protects paths hejbro discovered on the machine; a value the user typed is the user's own and the remedy may hand it back. The delta names the exception explicitly — a user-supplied `--config` value is reflected verbatim in the `Next:` line only, never in the header or the body (which stay cwd-relative) — so the leak sweep allows exactly that echo and reports the allowance. The third B2 site (the `--config` requirement's `config-unreadable` sentence bundling "a file on the way / a dangling link on the way" into the OS-code clause) moves like the other two: kind judgements carry no OS code; permission, loop and listing failures keep theirs.
 
+<a id="r6"></a>
+## R6 — cp (c) accepted at 0d56b5d0: re-review 0/0/6; neighbours to #839 and #714; PR by the lead
+
+_lead · interpretation · basis R4, R5, 412/D13 · 2026-09-05T00:32Z · ratified: pending_
+
+(c) accepted at 0d56b5d0: narrow re-review BLOCKING 0 / NON-BLOCKING 0 / OK 6 — B1 header on 7 commands, B2 sentence↔behaviour 20/20 rows (kind judgements carry no OS code; EACCES/ELOOP/listing keep theirs), B3 typed value echoed verbatim and cwd-invariant, B4 `check:next-marker` green with zero exemptions and the scanner untouched, N1/N2 closed; leak sweep 557 lines 0/0/0 with the one permitted `Next:` echo verified as a real hit (`/private/tmp/nowhere/h.ts`). Full gates green on both sides. Neighbours: the `check:crap` contention flake goes to #839 with the measured load; the ELOOP corpus rows and the dirLabel spelling nit to #714 (no issue: same node, an accepted convention). Estimates 83 → actual 445 minutes recorded per row; two procedure deviations recorded (1.2 source-first, repaired by a stash-red check; the crap flake's load measured after the fact). Lead's next: rebase onto dev, gates, PR (Closes #846 #820 #830 #831), pin, merge, D106.
+

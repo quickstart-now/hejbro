@@ -68,6 +68,19 @@
       "at": "2026-09-04T23:04Z",
       "title": "B3: the delta names the verbatim user-value echo as a Next:-only exception to D57; B2 third site (config-unreadable) moves too",
       "ratified": null
+    },
+    {
+      "id": "R6",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R4",
+        "R5",
+        "412/D13"
+      ],
+      "at": "2026-09-05T00:32Z",
+      "title": "cp (c) accepted at 0d56b5d0: re-review 0/0/6; neighbours to #839 and #714; PR by the lead",
+      "ratified": null
     }
   ],
   "work": [
