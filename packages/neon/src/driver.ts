@@ -20,13 +20,12 @@ import { intervalPassthroughTypes } from "./type-overrides";
  * the caller's own (task 1.3, #303), stated through
  * {@link NeonDriverOptions}.
  */
-const wsCapabilitiesFor = (
-	preparedStatements: boolean,
-): DriverCapabilities => ({
-	"interactive-transactions": true,
-	"session-state": true,
-	"prepared-statements": preparedStatements,
-});
+const wsCapabilitiesFor = (preparedStatements: boolean): DriverCapabilities =>
+	Object.freeze({
+		"interactive-transactions": true,
+		"session-state": true,
+		"prepared-statements": preparedStatements,
+	});
 
 /** The second-argument shape `neonDriver`'s `Pool` overload accepts (task 1.3, #303, add-prepared-statements design Q3) -- the HTTP overload has no session to prepare in, so its own type offers none. */
 export type NeonDriverOptions = {
@@ -221,5 +220,5 @@ export function neonDriver(
 	if (typeof client === "function") {
 		return buildHttpDriver(client);
 	}
-	return buildWebSocketDriver(client, options?.preparedStatements ?? false);
+	return buildWebSocketDriver(client, options?.preparedStatements === true);
 }

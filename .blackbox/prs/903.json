@@ -1,0 +1,81 @@
+{
+  "version": 3,
+  "number": 903,
+  "ref": "quickstart-now/hejbro#903",
+  "title": "chore(openspec): archive add-prepared-statements after D106 round 1 (#303)",
+  "head": "d72c2fc345198076e3f154ca1ecf37aa41034df6",
+  "headRef": "archive-prepared-statements",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-05T09:31Z",
+  "refs": [
+    {
+      "path": ".changeset/prepared-statements-option-strict.md",
+      "blob": "69b8c9a5e40209138725fd264e872cbba983ce45"
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-05-add-prepared-statements/design.md",
+      "blob": "3d7affa36c475e7c455f6a50cb66dc72176315f0"
+    },
+    {
+      "path": "openspec/changes/add-prepared-statements/design.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-05-add-prepared-statements/evaluation.md",
+      "blob": "a834ec9269af8653fe9e5d3a6f73c321bde489bd"
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-05-add-prepared-statements/proposal.md",
+      "blob": "9eca266f6e18c1067c71e114b90ed435beb16d7e"
+    },
+    {
+      "path": "openspec/changes/add-prepared-statements/proposal.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-05-add-prepared-statements/specs/driver-contract/spec.md",
+      "blob": "22ccfee40a1d8ec8ab0d2702d2d1823c2312603c"
+    },
+    {
+      "path": "openspec/changes/add-prepared-statements/specs/driver-contract/spec.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-05-add-prepared-statements/tasks.md",
+      "blob": "dd510b6415f5db908e53bfced94f316b5c1b85cf"
+    },
+    {
+      "path": "openspec/changes/add-prepared-statements/tasks.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/specs/driver-contract/spec.md",
+      "blob": "d2595da9e702c3e6f8f1bc2fa2abc160f88a6b23"
+    },
+    {
+      "path": "packages/neon/src/driver.ts",
+      "blob": "7696928a06bdaeb8eeae61a3fefe4ef891cb179e"
+    },
+    {
+      "path": "packages/neon/src/http.ts",
+      "blob": "72a5903fe6aa626c2c3546ddf3fd68632bbec024"
+    },
+    {
+      "path": "packages/neon/test/driver.test.ts",
+      "blob": "48aaa74908ead280e88b91a3b8c0a981543e31b7"
+    },
+    {
+      "path": "packages/pg/src/driver.ts",
+      "blob": "42d19038c01bbcb2436fa7602c6f8df260d3b321"
+    },
+    {
+      "path": "packages/pg/test/driver.test.ts",
+      "blob": "b70991b9a06aa40f884462ddd081fda51c20cf1f"
+    },
+    {
+      "path": "skills/hejbro/references/query-layer.md",
+      "blob": "8891b032c030fb5f812ba5b5d846790c5330bf1d"
+    }
+  ]
+}

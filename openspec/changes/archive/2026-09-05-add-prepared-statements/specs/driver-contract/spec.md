@@ -24,6 +24,13 @@ all (parameterized statement execution) SHALL NOT be represented as a
 capability — it lives on the driver's own required surface,
 unconditionally, never as a value that could read `false`.
 
+`prepared-statements` differs from the other two in one respect: no
+query-layer operation requires it. It states what the driver does with
+a built statement, and the query layer never consults it — so the
+"declared `false` fails closed" scenario below has no operation to
+exercise it with, by design, and a driver declaring it `false` simply
+sends every statement unnamed.
+
 #### Scenario: Omitting a declared capability is a compile error
 - **WHEN** a driver's capability declaration omits one of the fixed set's
   keys
@@ -120,8 +127,9 @@ collision is not a practical possibility — and the name fits the
 server's identifier length. A
 statement of the `sql` kind SHALL always be sent unnamed, whatever the
 declaration: the driver parses no SQL, and a text that carries more than
-one command cannot be prepared, so the escape hatch, the session pins
-and a migration body are never named. Whether a statement is named SHALL
+one command cannot be prepared, so the escape hatch, the session pins,
+a migration body and a declared-function call (`db.fn`, which compiles
+as the `sql` kind) are never named. Whether a statement is named SHALL
 depend on the declaration and the statement's kind only — never on the
 text, the parameters, or anything observed at run time. A driver that
 declares `false` SHALL send every statement unnamed, exactly as it did

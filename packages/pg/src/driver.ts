@@ -18,11 +18,15 @@ import { Pool, types as pgTypes } from "pg";
  * stated through {@link PgDriverOptions} (add-prepared-statements
  * design Q3).
  */
-const capabilitiesFor = (preparedStatements: boolean): DriverCapabilities => ({
-	"interactive-transactions": true,
-	"session-state": true,
-	"prepared-statements": preparedStatements,
-});
+// Frozen, and the option read with `=== true` (D106 R1 N3): a JS caller's
+// `"true"` or `1` must not land verbatim in a declaration typed boolean,
+// and the declaration is inspectable data, never something to edit.
+const capabilitiesFor = (preparedStatements: boolean): DriverCapabilities =>
+	Object.freeze({
+		"interactive-transactions": true,
+		"session-state": true,
+		"prepared-statements": preparedStatements,
+	});
 
 /** The second-argument shape both `pgDriver` overloads accept (add-prepared-statements design Q3). */
 export type PgDriverOptions = {
@@ -426,6 +430,6 @@ export function pgDriver(
 ): Driver & { readonly client: Pool } {
 	return buildDriver(
 		resolvePool(poolOrConnectionString),
-		options?.preparedStatements ?? false,
+		options?.preparedStatements === true,
 	);
 }

@@ -36,6 +36,19 @@
       "at": "2026-09-05T06:22Z",
       "title": "Review close-out: the never-share sentence is made honest (128-bit hash), PgDriverOptions export ratified, the shared name helper and two follow-ups go to #815",
       "ratified": null
+    },
+    {
+      "id": "R3",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "D106; 412/D24",
+        "D25; evaluation.md (fable",
+        "context-free; PgBouncer transaction mode and a wsproxy Neon path exercised)"
+      ],
+      "at": "2026-09-05T09:19Z",
+      "title": "D106 R1 for add-prepared-statements: B0/N5/OK16 — N2 N4 N5 fixed in the archive, N3 fixed with a patch, N1 = #892",
+      "ratified": null
     }
   ],
   "work": [
@@ -129,6 +142,11 @@
       "number": 894,
       "role": "closes",
       "pinnedAt": "2026-09-05T07:41Z"
+    },
+    {
+      "number": 903,
+      "role": "refs",
+      "pinnedAt": "2026-09-05T09:31Z"
     }
   ],
   "origin": null,
