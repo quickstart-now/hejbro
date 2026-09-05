@@ -102,6 +102,15 @@
         "R4",
         "R5"
       ]
+    },
+    {
+      "id": "W4",
+      "at": "2026-09-05T14:16Z",
+      "title": "group completion: the crap gate found a refusal-table gap in task 1.1's own code",
+      "pr": null,
+      "decisions": [
+        "R2"
+      ]
     }
   ],
   "prs": [],
