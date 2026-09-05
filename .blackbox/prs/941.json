@@ -1,0 +1,77 @@
+{
+  "version": 3,
+  "number": 941,
+  "ref": "quickstart-now/hejbro#941",
+  "title": "chore(openspec): archive add-snapshot-upgrade after d106 round 1 (#413)",
+  "head": "38082cb5f377cf30c0b609c85a823083918ce598",
+  "headRef": "archive-add-snapshot-upgrade",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-05T13:03Z",
+  "refs": [
+    {
+      "path": "openspec/changes/archive/2026-09-05-add-snapshot-upgrade/design.md",
+      "blob": "c17de35726bc71cb7251cc8d8fa799541f850a3b"
+    },
+    {
+      "path": "openspec/changes/add-snapshot-upgrade/design.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-05-add-snapshot-upgrade/evaluation.md",
+      "blob": "9f730bf3836661c9fd9d63d8f54bf02a4072708c"
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-05-add-snapshot-upgrade/proposal.md",
+      "blob": "98ceb6a3676d6c4e7097d98eaf4abb58c302c76c"
+    },
+    {
+      "path": "openspec/changes/add-snapshot-upgrade/proposal.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-05-add-snapshot-upgrade/specs/cli-commands/spec.md",
+      "blob": "2f95c9c91b76996160d460b63e258ab45bbf4181"
+    },
+    {
+      "path": "openspec/changes/add-snapshot-upgrade/specs/cli-commands/spec.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-05-add-snapshot-upgrade/specs/migration-format/spec.md",
+      "blob": "765d675ba44f3d857974f987e6809b8c9b9c62ae"
+    },
+    {
+      "path": "openspec/changes/add-snapshot-upgrade/specs/migration-format/spec.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-05-add-snapshot-upgrade/specs/snapshot-format/spec.md",
+      "blob": "afd4f476f713f025d7bdc93c9e4cbed83e06ce76"
+    },
+    {
+      "path": "openspec/changes/add-snapshot-upgrade/specs/snapshot-format/spec.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-05-add-snapshot-upgrade/tasks.md",
+      "blob": "77399f84dc081332d23ef22bc9bc07e298bc4b8a"
+    },
+    {
+      "path": "openspec/changes/add-snapshot-upgrade/tasks.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/specs/cli-commands/spec.md",
+      "blob": "67ce36e725e9576117995ac3f480b71e5c628c67"
+    },
+    {
+      "path": "openspec/specs/migration-format/spec.md",
+      "blob": "4e9aedb6e7643f658ad8f84aa10c7ca08d8f12eb"
+    },
+    {
+      "path": "openspec/specs/snapshot-format/spec.md",
+      "blob": "a8fa512dcca7692115a9e63a32d0769147a9adfe"
+    }
+  ]
+}
