@@ -265,6 +265,13 @@ describe("pgDriver({ preparedStatements }) names built statements only when the 
 			{ sql: "select 1", params: [], kind: "select" },
 		);
 		expect(config.name).toMatch(/^hejbro_[0-9a-f]{32}$/);
+		// A literal golden, not derived from the implementation under test:
+		// `@hejbro/neon`'s own driver.test.ts pins this identical literal
+		// against `neonDriver`'s copy of the same naming rule (the
+		// provider-preset boundary forbids sharing the function itself) --
+		// either copy drifting from the other flags red here or there,
+		// which the regex alone (shape-only) cannot catch.
+		expect(config.name).toBe("hejbro_822ae07d4783158bc1912bb623e5107c");
 	});
 
 	it.each<[CompileKind, ReadonlyArray<unknown>]>([
@@ -380,24 +387,34 @@ describe("pgDriver({ preparedStatements }) names built statements only when the 
 		);
 	});
 
-	it("names a built statement executed inside a transaction too (the session handed to the callback)", async () => {
-		const { pool, calls } = stubPoolWithClient();
-		const driver = pgDriver(pool, { preparedStatements: true });
+	it.each<[CompileKind, ReadonlyArray<unknown>]>([
+		["select", []],
+		["insert", [1]],
+		["update", [1]],
+		["delete", [1]],
+		["setOp", [1]],
+	])(
+		"names a built %s statement executed inside a transaction too (the session handed to the callback)",
+		async (kind, params) => {
+			const { pool, calls } = stubPoolWithClient();
+			const driver = pgDriver(pool, { preparedStatements: true });
+			const sql = `-- transaction ${kind}`;
 
-		await driver.transaction(async (session) => {
-			await session.execute({ sql: "select 1", params: [], kind: "select" });
-			return "done";
-		});
+			await driver.transaction(async (session) => {
+				await session.execute({ sql, params, kind });
+				return "done";
+			});
 
-		const config = calls.find(
-			(call): call is CapturedQueryConfig =>
-				typeof call !== "string" && call.text === "select 1",
-		);
-		if (config === undefined) {
-			throw new Error("the caller's own statement was never sent");
-		}
-		expect(config.name).toMatch(/^hejbro_[0-9a-f]{32}$/);
-	});
+			const config = calls.find(
+				(call): call is CapturedQueryConfig =>
+					typeof call !== "string" && call.text === sql,
+			);
+			if (config === undefined) {
+				throw new Error("the caller's own statement was never sent");
+			}
+			expect(config.name).toBeDefined();
+		},
+	);
 
 	it("never names the checkout pin (a sql-kind, multi-command text) even when the option is true", async () => {
 		const { pool, calls } = stubPoolWithClient();

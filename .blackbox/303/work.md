@@ -214,3 +214,45 @@ tracking it as separate rows -- 1.2: 20 -> 29 min, 1.3: 12 -> 18 min.
 Per planner: task-times records what a task actually cost, and this
 rework was part of task 1.2's/1.3's own cost, not a new task.
 
+<a id="w10"></a>
+## W10 — review N-items: cross pins, transaction breadth, missing cells, pass-through, doc
+
+_2026-09-05T06:14Z_
+
+Reviewer non-blocking findings (N), all test/doc, no source logic
+change, closed in one commit:
+(1) Cross-pin: pg's and neon's driver.test.ts each gained a literal
+    golden assertion (hejbro_822ae07d4783158bc1912bb623e5107c for
+    "select 1") alongside the existing shape-only regex, so either
+    copy of the duplicated naming function drifting from the other
+    now fails at least one of the two suites. No cross-package import
+    (would violate the provider-preset boundary).
+(2) Transaction-path breadth (D110): both files' "named inside a
+    transaction" case widened from one select-only test to it.each
+    over all five built kinds, matching the execute-path table's own
+    breadth and the delta's "each built kind ... through its own
+    execution member and inside a transaction it holds".
+(3) Neon's input table gained its two missing cells: sql-kind with
+    params (mirrors pg's own case), and the 63-byte identifier-length
+    check (pg already had it).
+(4) supabase/test/driver.test.ts's session/no-endpoint-over-a-
+    preparing-base case now asserts driver.execute was called with
+    the exact CompileResult the caller sent (toHaveBeenCalledWith),
+    not just a call count -- proving the passthrough path never
+    intercepts/alters the statement before whatever naming the base
+    itself performs (tested directly in pgDriver's/neonDriver's own
+    suites).
+(5) query-layer.md's "Prepared statements" section gained a short,
+    fact-only note on 0A000 ("cached plan must not change result
+    type") after a migration changes a table's shape while a
+    long-lived preparedStatements:true pool holds connections whose
+    cached plans reference the old shape -- two remedies (let the
+    connection cycle, or restart the pool after the migration).
+
+Verified: pg 56/56, neon 59/59, supabase 145/145, skills 24/24. Full
+gate green: TURBO_FORCE=1 pnpm check-types (18/18), pnpm check,
+pnpm check:bans, TURBO_FORCE=1 pnpm test (all packages, no
+regressions), pnpm check:crap (0 violations, README unchanged --
+no src function touched). Docker integration not re-run per planner
+(no source logic change).
+

@@ -245,6 +245,13 @@ describe("neonDriver(pool, { preparedStatements }) names built statements only w
 			{ sql: "select 1", params: [], kind: "select" },
 		);
 		expect(config.name).toMatch(/^hejbro_[0-9a-f]{32}$/);
+		// A literal golden, not derived from the implementation under test:
+		// `@hejbro/pg`'s own driver.test.ts pins this identical literal
+		// against `pgDriver`'s copy of the same naming rule (the
+		// provider-preset boundary forbids sharing the function itself) --
+		// either copy drifting from the other flags red here or there,
+		// which the regex alone (shape-only) cannot catch.
+		expect(config.name).toBe("hejbro_822ae07d4783158bc1912bb623e5107c");
 	});
 
 	it.each<[CompileKind, ReadonlyArray<unknown>]>([
@@ -262,6 +269,14 @@ describe("neonDriver(pool, { preparedStatements }) names built statements only w
 			expect(config.name).toBeDefined();
 		},
 	);
+
+	it("never names a sql-kind statement, even carrying params, when the option is true (the escape hatch is not parsed)", async () => {
+		const config = await captureCallerConfig(
+			{ preparedStatements: true },
+			{ sql: "select $1::int", params: [1], kind: "sql" },
+		);
+		expect(config.name).toBeUndefined();
+	});
 
 	it("never names a sql-kind statement, even carrying two commands, when the option is true", async () => {
 		const config = await captureCallerConfig(
@@ -328,24 +343,45 @@ describe("neonDriver(pool, { preparedStatements }) names built statements only w
 		expect(first.name).not.toBe(second.name);
 	});
 
-	it("names a built statement executed inside a transaction too", async () => {
-		const { pool, calls } = stubPoolWithClient();
-		const driver = neonDriver(pool, { preparedStatements: true });
-
-		await driver.transaction(async (session) => {
-			await session.execute({ sql: "select 1", params: [], kind: "select" });
-			return "done";
-		});
-
-		const config = calls.find(
-			(call): call is CapturedQueryConfig =>
-				typeof call !== "string" && call.text === "select 1",
+	it("every generated name fits inside Postgres's 63-byte identifier limit", async () => {
+		const config = await captureCallerConfig(
+			{ preparedStatements: true },
+			{ sql: "select 1", params: [], kind: "select" },
 		);
-		if (config === undefined) {
-			throw new Error("the caller's own statement was never sent");
-		}
-		expect(config.name).toMatch(/^hejbro_[0-9a-f]{32}$/);
+		expect(config.name).toBeDefined();
+		expect(Buffer.byteLength(config.name ?? "", "utf8")).toBeLessThanOrEqual(
+			63,
+		);
 	});
+
+	it.each<[CompileKind, ReadonlyArray<unknown>]>([
+		["select", []],
+		["insert", [1]],
+		["update", [1]],
+		["delete", [1]],
+		["setOp", [1]],
+	])(
+		"names a built %s statement executed inside a transaction too",
+		async (kind, params) => {
+			const { pool, calls } = stubPoolWithClient();
+			const driver = neonDriver(pool, { preparedStatements: true });
+			const sql = `-- transaction ${kind}`;
+
+			await driver.transaction(async (session) => {
+				await session.execute({ sql, params, kind });
+				return "done";
+			});
+
+			const config = calls.find(
+				(call): call is CapturedQueryConfig =>
+					typeof call !== "string" && call.text === sql,
+			);
+			if (config === undefined) {
+				throw new Error("the caller's own statement was never sent");
+			}
+			expect(config.name).toBeDefined();
+		},
+	);
 
 	it("never names the checkout pin, even when the option is true", async () => {
 		const { pool, calls } = stubPoolWithClient();

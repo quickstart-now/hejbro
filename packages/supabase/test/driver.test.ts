@@ -1,5 +1,5 @@
 import { roleName, schema, table, uuid } from "@hejbro/core";
-import type { Driver, DriverSession } from "@hejbro/query";
+import type { CompileResult, Driver, DriverSession } from "@hejbro/query";
 import { db } from "@hejbro/query";
 import { assertSessionStateConformance } from "@hejbro/query/testing/driver-conformance";
 import { describe, expect, it, vi } from "vitest";
@@ -274,8 +274,21 @@ describe("the transaction-pooler endpoint refuses a base that prepares (task 1.4
 				"session-state": true,
 				"prepared-statements": true,
 			});
-			await wrapped.execute({ sql: "select 1", params: [], kind: "select" });
+			const compiled: CompileResult = {
+				sql: "select 1",
+				params: [],
+				kind: "select",
+			};
+			await wrapped.execute(compiled);
 			expect(driver.execute).toHaveBeenCalledTimes(1);
+			// This path is a pure passthrough (no wrapping, unlike the
+			// pooler's own execute/transaction members) -- the exact
+			// CompileResult the caller sent is what reaches the base's own
+			// execute, byte-for-byte, so whatever naming the base itself
+			// performs on it (pgDriver's/neonDriver's own contract, proven
+			// directly in their own test suites) applies to the real
+			// statement, never a copy or a stripped one.
+			expect(driver.execute).toHaveBeenCalledWith(compiled);
 		},
 	);
 });

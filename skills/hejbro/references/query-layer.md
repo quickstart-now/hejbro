@@ -63,6 +63,17 @@ own session between executions (see `supabase-preset.md`'s
 transaction-pooler note below for the one path that refuses it
 outright).
 
+**Applying a migration that changes a table's shape (e.g. `alter
+column ... type ...`) can make an existing named statement's cached
+plan stale.** A long-lived pool with `preparedStatements: true` holds
+connections whose already-prepared statements reference the old shape;
+Postgres itself raises `0A000 cached plan must not change result type`
+the next time one of those connections' cached statement runs against
+the new shape. Two ways out: let the connection cycle out of the pool
+naturally (a fresh checkout parses the statement again against the new
+shape), or restart the pool after applying a migration that changes a
+table a prepared statement reads.
+
 `@hejbro/neon`'s own `neonDriver(pool, { preparedStatements: true })`
 offers the identical option on its `Pool` (WebSocket) path — see
 `neon-preset.md`. Neon's one-shot HTTP path has no session to prepare

@@ -88,6 +88,13 @@
       "title": "group 1: task-times.csv actual_min correction for 1.2/1.3",
       "pr": null,
       "decisions": []
+    },
+    {
+      "id": "W10",
+      "at": "2026-09-05T06:14Z",
+      "title": "review N-items: cross pins, transaction breadth, missing cells, pass-through, doc",
+      "pr": null,
+      "decisions": []
     }
   ],
   "prs": [],
