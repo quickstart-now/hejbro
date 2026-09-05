@@ -1,4 +1,4 @@
-/** Whether `error` is an object carrying a string `message` -- structural, never `instanceof Error` (#458 review round 1, task 1.9): a thrown `ErrorEvent` (Neon's WebSocket `Pool` path throws exactly this on a failed connection) carries a real `message` but is not an `Error` instance, and a narrower type check would keep describing it as `[object ErrorEvent]`. */
+/** Whether `error` is an object carrying a string `message` -- structural, never `instanceof Error` (#458 review round 1, task 1.9): a thrown `ErrorEvent` (Neon's WebSocket `Pool` path throws exactly this on a failed connection) is not an `Error` instance, and a narrower type check would keep describing it as `[object ErrorEvent]`. Its own `message` is empty, though (measured, task 1.12) -- this guard alone does not resolve it; {@link errorConstructorName} is the rung that does. */
 const hasStringMessage = (
 	error: unknown,
 ): error is { readonly message: string } =>
@@ -16,6 +16,19 @@ const errorCode = (error: unknown): string | undefined => {
 		return code;
 	}
 	return undefined;
+};
+
+/** `error`'s own constructor name, when it names something more specific than a plain object (task 1.12) -- the last rung before `String()`'s own coercion artifact (`[object …]`). Plain `Object` is excluded: `"Object"` says nothing `[object Object]` doesn't already say. */
+const errorConstructorName = (error: unknown): string | undefined => {
+	if (typeof error !== "object" || error === null) {
+		return undefined;
+	}
+	const name = (error as { readonly constructor?: { readonly name?: unknown } })
+		.constructor?.name;
+	if (typeof name !== "string" || name === "" || name === "Object") {
+		return undefined;
+	}
+	return name;
 };
 
 /** Only ever called from inside {@link describeDriverError}'s own body, at runtime after module evaluation -- never at module-load time -- so the forward reference to a `const` declared below it is not a TDZ hazard (mirrors packages/pg/src/driver.ts's own `ensurePinned`/`driver` forward reference). */
@@ -39,7 +52,9 @@ const flattenAggregateError = (error: AggregateError): string =>
  * once for a wrong-target message, here for an empty one. Order: a
  * non-empty own `message` wins first (the common case, plain `Error`);
  * an `AggregateError`'s flattened `.errors` next; a `.code` after that;
- * `String(error)` only as the last resort.
+ * a more specific constructor name after that (task 1.12, e.g. a real
+ * `ErrorEvent`, empty `message` and no `code`); `String(error)` only as
+ * the last resort.
  */
 export const describeDriverError = (error: unknown): string => {
 	if (hasStringMessage(error) && error.message !== "") {
@@ -54,6 +69,10 @@ export const describeDriverError = (error: unknown): string => {
 	const code = errorCode(error);
 	if (code !== undefined) {
 		return code;
+	}
+	const constructorName = errorConstructorName(error);
+	if (constructorName !== undefined) {
+		return constructorName;
 	}
 	return String(error);
 };

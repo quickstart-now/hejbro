@@ -43,6 +43,22 @@ const THROWN_VALUE_ROWS: ReadonlyArray<{
 		thrown: { message: "connection reset", type: "error" },
 		expected: "connection reset",
 	},
+	// cd-planner review, #458 task 1.12: the hand-made row above covers the
+	// *shape* (an object with a non-empty message) but never the *class*
+	// this task exists for -- a real `ErrorEvent` (Neon's WebSocket `Pool`
+	// path, measured) carries an EMPTY own `message`, so it never reaches
+	// the row above's own branch. Kept side by side with that row on
+	// purpose: only this one reproduces the bug the task was opened for.
+	{
+		label: "a real ErrorEvent instance with an empty own message",
+		thrown: new ErrorEvent("error"),
+		expected: "ErrorEvent",
+	},
+	// #458 task 1.12: a plain `Object` is excluded from the new
+	// constructor-name rung -- "Object" names nothing `[object Object]`
+	// doesn't already say, so this stays on the existing `String()`
+	// fallback, unchanged.
+	{ label: "a plain empty object", thrown: {}, expected: "[object Object]" },
 	// cd-planner review, #458 task 1.9: the neighbour the seven-row table
 	// left uncovered -- a plain object carrying BOTH a code and a
 	// non-empty message. Not decided here which one this function should
