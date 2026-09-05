@@ -87,3 +87,14 @@ check:crap --force's first failure was a 5000ms timeout in cross-instance-symbol
 
 Neighbor issue numbers from this review's own findings: #945, #947, #948, #949, #950, #951, #953, #954.
 
+<a id="w8"></a>
+## W8 — Correction: the crap-gate flake measurement is 1 failure in 6 runs
+
+_2026-09-05T16:21Z · per R7, R8_
+
+Correction to W7's flake measurement (the tool has no edit; recorded as a new entry, not a rewrite of W7). W7 stated only "four isolated retries passed 4/4." Review round 4's own full gate sweep reran `check:crap --force` a second time under the same conditions and it passed, giving a complete count:
+
+Measured 1 failure in 6 runs: the first full gate sweep failed while bt and rn worktrees ran concurrently, four isolated retries passed, and a second full sweep under the same conditions passed as well -- load-dependent, not caused by this change (data point for #920).
+
+The prior W7 phrase "isolated retries passed 4/4" undercounted by omitting the second full-sweep pass; this entry supersedes it for that number.
+

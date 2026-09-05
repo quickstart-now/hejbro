@@ -158,6 +158,16 @@
         "R7",
         "R8"
       ]
+    },
+    {
+      "id": "W8",
+      "at": "2026-09-05T16:21Z",
+      "title": "Correction: the crap-gate flake measurement is 1 failure in 6 runs",
+      "pr": null,
+      "decisions": [
+        "R7",
+        "R8"
+      ]
     }
   ],
   "prs": [],
