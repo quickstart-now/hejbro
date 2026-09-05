@@ -31,6 +31,17 @@
       "at": "2026-09-05T12:39Z",
       "title": "R2 — nullability is decided in @hejbro/query alone; core only carries the recursive term's projection",
       "ratified": null
+    },
+    {
+      "id": "R3",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "R2"
+      ],
+      "at": "2026-09-05T12:59Z",
+      "title": "The recursive term's own left-joined set travels with the widening carrier",
+      "ratified": null
     }
   ],
   "work": [],

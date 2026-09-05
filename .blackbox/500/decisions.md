@@ -51,3 +51,32 @@ left-joined row that decides the question. `packages/query/src/db/
 chain.ts` is expected to need no source change, the chain taking core's
 own `CteBuilder` rather than restating it.
 
+<a id="r3"></a>
+## R3 — The recursive term's own left-joined set travels with the widening carrier
+
+_lead · extension · basis R2 · 2026-09-05T12:59Z · ratified: pending_
+
+`WidenedBy` takes a second parameter, the recursive term's own
+left-joined set: `asRecursive` infers it from the stage the recursive
+callback returns, and `@hejbro/query` resolves the carried value as
+`ProjectedColumnResult<R, TRecursiveLeftJoined>`. A recursive term that
+left-joins nothing carries `never`, the tracked empty set, so a key
+non-null in both branches stays non-null; one that projects a
+left-joined table's non-null column carries that table, so the key
+reads nullable outward; one that is a set-op stage carries no set at
+all and falls to `UntrackedJoins`, widening every key -- the fail-safe
+direction.
+
+Reading an absorbed left-joined set here does not contradict
+`select.ts`'s own absorption note: that note forbids NARROWING on a set
+a position did not earn; this reads it only to WIDEN.
+
+Rejected: dropping the left-joined row and stating it as residue. R2
+rejected a core-side nullability rule precisely because it loses
+left-join knowledge, so leaving the same loss inside the O1b
+implementation would leave R2's own rationale unrealized.
+
+Boundary: the anchor's own left-joined set stays absorbed, unchanged by
+this change and pinned by none of its tests -- a pre-existing gap
+tracked separately under #815.
+
