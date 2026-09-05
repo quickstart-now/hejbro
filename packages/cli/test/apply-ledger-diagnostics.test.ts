@@ -269,7 +269,7 @@ describe("a ledger write the database refuses names the ledger and what was bein
 					thrown.code === "apply-ledger-unwritable" &&
 					thrown.message.includes('the row recording "0001_init.sql"') &&
 					thrown.message.includes(
-						'the migration ran in the same transaction and rolled back with it, so nothing from "0001_init.sql" is applied and the ledger records nothing new.',
+						'the statements from that file ran in the same transaction and rolled back with it, so nothing from "0001_init.sql" is applied and the ledger records nothing new.',
 					) &&
 					!thrown.message.includes("no identity and no default") &&
 					/Next:/.test(thrown.message) &&

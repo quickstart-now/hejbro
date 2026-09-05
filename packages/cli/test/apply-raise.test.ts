@@ -392,4 +392,37 @@ describe("applyRaise — a ledger raise may not read refuses before the bootstra
 		expect(error).toMatchObject({ code: "apply-ledger-unwritable" });
 		expect(calls.some((call) => call.sql === snapshotFile.sql)).toBe(false);
 	});
+
+	// [task 2.5, harden-ledger-diagnostics review repair] `raise`'s own
+	// input is a snapshot SQL file, never a migration -- the public
+	// surface never calls it one (proposal: "It does not parse SQL"), so
+	// the row-site rollback sentence must not either.
+	it("42501 on the ledger row insert -> the rollback sentence never calls the file a migration", async () => {
+		const { driver } = makeFakeDriver({
+			failWhen: (call) =>
+				call.sql.trim().toLowerCase().startsWith("insert into"),
+			failError: Object.assign(
+				new Error("permission denied for table migration_ledger"),
+				{ code: "42501" },
+			),
+		});
+
+		const error: unknown = await applyRaise(
+			driver,
+			snapshotFile,
+			COMMAND,
+		).catch((caught: unknown) => caught);
+
+		expect(error).toMatchObject({ code: "apply-ledger-unwritable" });
+		const message = (error as Error).message;
+		// The ledger table itself is named `migration_ledger` (surfaced both
+		// in the qualified identity and in the server's own message text),
+		// so the check is the rollback sentence's own wording, never a bare
+		// substring search for "migration" across the whole text.
+		expect(message).not.toContain("the migration ran");
+		expect(message).toContain(snapshotFile.fileName);
+		expect(message).toContain(
+			"the statements from that file ran in the same transaction and rolled back with it",
+		);
+	});
 });

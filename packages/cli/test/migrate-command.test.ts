@@ -781,6 +781,31 @@ describe("applyFrom — a ledger failure is not the migration's failure / 1.5 (h
 		expect(result.stdout).toEqual([]);
 	});
 
+	// [task 2.5, harden-ledger-diagnostics review repair] Regression: the
+	// wording change (2.5 drops "migration" from the rollback sentence,
+	// `raise`'s own reason) still states migrate's own rollback truthfully
+	// -- the sentence names what ran, not what kind of file it came from.
+	it("ledger insert refused -> the rollback sentence still states the rollback, with the file named separately", async () => {
+		const { driver } = makeFakeDriver({
+			failWhen: (call) => call.sql.toLowerCase().includes("insert into"),
+			failError: Object.assign(
+				new Error(
+					'null value in column "id" of relation "migration_ledger" violates not-null constraint',
+				),
+				{ code: "23502", column: "id" },
+			),
+		});
+
+		const result = await applyFrom(driver, [migrationA], []);
+
+		expect(result.stderr).toContain(
+			`the row recording "${migrationA.fileName}"`,
+		);
+		expect(result.stderr).toContain(
+			"the statements from that file ran in the same transaction and rolled back with it",
+		);
+	});
+
 	it("the same failure with one migration already applied before it -> the applied bucket still printed", async () => {
 		const { driver } = makeFakeDriver({
 			failWhen: (call) =>

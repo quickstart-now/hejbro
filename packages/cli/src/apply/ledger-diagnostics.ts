@@ -175,7 +175,7 @@ const writeRollbackSentence = (
 	if (site === "clear") {
 		return "the drops ran in the same transaction and rolled back with it, so every declared object is still standing.";
 	}
-	return `the migration ran in the same transaction and rolled back with it, so nothing from "${rowFilename}" is applied and the ledger records nothing new.`;
+	return `the statements from that file ran in the same transaction and rolled back with it, so nothing from "${rowFilename}" is applied and the ledger records nothing new.`;
 };
 
 /** Postgres's own code for a not-null violation -- the one SQLSTATE design.md D3 gives its own sentence, the #823 shape: the ledger's own row insert refused because a bootstrap column lost the value `bootstrapLedger` declares for it. */
