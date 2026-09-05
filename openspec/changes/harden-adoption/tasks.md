@@ -13,7 +13,9 @@ sequence-kind.ts`, `packages/core/src/kind/object-kind.ts` (the change
 shape, if a transition flag is needed) and their tests plus goldens
 (1.1, 1.2); `packages/cli/src/commands/generate.ts` and its tests (1.3);
 `packages/cli/test/*.integration.test.ts` (1.4); `skills/hejbro/
-references/brownfield-adoption.md`, one `.changeset/*.md` (1.5). If a
+references/brownfield-adoption.md`, `skills/hejbro/references/
+extension-interface.md` (the public `KindChange` surface gains an
+optional field, 671/R4), one `.changeset/*.md` (1.5). If a
 task appears to need any other file, that goes back to the planner, not
 into the diff.
 
@@ -51,5 +53,9 @@ into the diff.
 
 - [ ] 1.5 (~5m) Docs and changeset. `brownfield-adoption.md` states the
       adoption contract (creates children and normalizes sequences,
-      never drops) and the notice; `pnpm changeset` → `minor`. Files:
-      the reference, `.changeset/*.md`.
+      never drops) and the notice, citing the literal
+      `warning[adoption-creates]` beside the existing
+      `error[baseline-not-first]` (671/R3); `extension-interface.md`
+      states the optional `transition` field on `KindChange` (671/R4);
+      `pnpm changeset` → `minor`. Files: the two references,
+      `.changeset/*.md`.
