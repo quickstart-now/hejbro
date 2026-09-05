@@ -622,6 +622,8 @@ _lead · extension · basis 412/D24, D25; AGENTS.md (test-only and example work 
 
 Every open sub-issue is now either in an active team, a written proposal, or one of three lead-direct plain-cycle batches: (a) observer pins #663 #667 #695 (tests only, plus the trivial guard/export items in #695); (b) examples #674 (existingTable in examples/supabase, round trip) and #742 (constructor-review corpus into examples/brownfield); (c) #502 — measure the 18 grep-matched server-behaviour claims on Postgres 17 and correct any wrong sentence through a text-only OpenSpec change if one is found. #772 stays open per 412/D26 (hejbro-assist verifies real Nile). Ratification: owner on return.
 ## R33 — A recorded ruling's body may be amended in place only while it is unpinned
+<a id="r34"></a>
+## R34 — A recorded ruling's body may be amended in place only while it is unpinned
 _lead · extension · 2026-09-05T12:53Z · ratified: pending_
 A ruling recorded with `add ruling` may have its body amended by editing
 decisions.md directly only while the entry is pinned to no PR (`prs:
