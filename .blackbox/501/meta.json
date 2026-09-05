@@ -39,9 +39,31 @@
       "at": "2026-09-05T13:06Z",
       "title": "the window fn slot widens in two places",
       "ratified": null
+    },
+    {
+      "id": "R4",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [],
+      "at": "2026-09-05T13:21Z",
+      "title": "expr-children moves into the render task",
+      "ratified": null
     }
   ],
-  "work": [],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-05T13:21Z",
+      "title": "tasks 1.1-1.2: filter() and the aggregate-filter node, two file-scope gaps found by crash",
+      "pr": null,
+      "decisions": [
+        "R1",
+        "R2",
+        "R3",
+        "R4"
+      ]
+    }
+  ],
   "prs": [],
   "origin": null,
   "followUps": []

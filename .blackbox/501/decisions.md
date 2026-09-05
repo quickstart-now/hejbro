@@ -33,3 +33,12 @@ Basis: R1, R2.
 
 The fn slot widening decided in Q2 lands in two files that must move together: ast.ts's WindowNode.fn type and expr/window.ts's own runtime guard. overAggregate refuses anything whose exprNode is not a functionCall, and buildWindowNode's parameter is narrowed the same way, so over(filter(count(), condition), spec) -- required by task 1.1's own red table -- cannot pass on the type widening alone. expr/window.ts is therefore added to task 1.1's Files edited: a missing entry in the file list, not a change of contract. invalid-over-target's message gains a clause saying a filtered aggregate is accepted too. The alternatives (deferring window.ts to a later task, or dropping window composition from this change) are refused: the first leaves task 1.1's own red table failing across a task boundary, the second contradicts the proposal and the query-builder delta.
 
+<a id="r4"></a>
+## R4 — expr-children moves into the render task
+
+_lead · interpretation · 2026-09-05T13:21Z · ratified: pending_
+
+Basis: R3.
+
+render-sql.ts's collectColumnRefs calls exprChildren on the render path, so a view carrying a filtered aggregate crashes before it renders while expr-children.ts's traversal registry does not know the kind; the same reachable-kind loop also runs at module evaluation time in render-sql.test.ts. expr-children.ts and its test therefore move from task 1.3 into task 1.2, together with the red sentence "exprChildren yields the call and the condition". Leaving them in 1.3 was refused: it is not the same as the type-check sites left red per task, because both suites die during collection and task 1.2 would land with none of its own green evidence. This is a defect in the task split, not a change of contract -- the split was checked against the file list and never against the runtime call graph. Task 1.3 keeps retarget, walk, read-shape and query/select.ts.
+
