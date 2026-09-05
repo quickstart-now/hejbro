@@ -1,4 +1,9 @@
-const ADJACENT_QUOTED_PAIR = /"([^"]+)"\."([^"]+)"/;
+// #846 review B1: a group must not span whitespace or parentheses -- two
+// bare identifiers only. A group as loose as `[^"]+` let the closing
+// quote of a field name and the closing quote of an unrelated quoted
+// value (e.g. a lone "." spelling fault) pair up through the prose
+// between them, turning that prose into the returned "identity".
+const ADJACENT_QUOTED_PAIR = /"([^"\s()]+)"\."([^"\s()]+)"/;
 const FIRST_QUOTED_SUBSTRING = /"([^"]+)"/;
 
 /**

@@ -4,16 +4,41 @@
   "ref": "quickstart-now/hejbro#831",
   "title": "cli: the directory-at-config-path refusal repeats the file name twice",
   "parent": "quickstart-now/hejbro#815",
-  "status": "open",
+  "status": "closed",
   "opened": "2026-09-04",
-  "closed": null,
-  "decisions": [],
-  "work": [],
+  "closed": "2026-09-05",
+  "decisions": [
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "D1"
+      ],
+      "at": "2026-09-04T20:16Z",
+      "title": "OD6: the configuration-path refusal names the path once and offers --config",
+      "ratified": null
+    }
+  ],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-04T22:28Z",
+      "title": "Config-path refusals name the file once",
+      "pr": null,
+      "decisions": []
+    }
+  ],
   "prs": [
     {
       "number": 840,
       "role": "refs",
       "pinnedAt": "2026-09-04T16:03Z"
+    },
+    {
+      "number": 868,
+      "role": "closes",
+      "pinnedAt": "2026-09-05T00:49Z"
     }
   ],
   "origin": null,

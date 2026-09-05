@@ -1,5 +1,17 @@
-import { lstatSync, readlinkSync, statSync } from "node:fs";
+import { lstatSync, readlinkSync, type Stats, statSync } from "node:fs";
 import { dirname, isAbsolute, relative } from "node:path";
+
+/** The two kinds of node a configured artifact can be (#846 D2, moved
+ * from `commands/init.ts` -- shared by every module that judges a
+ * configured path). */
+export type NodeKind = "file" | "directory";
+
+const kindOfStat = (stat: Stats): NodeKind => {
+	if (stat.isDirectory()) {
+		return "directory";
+	}
+	return "file";
+};
 
 /** A configured path's trailing `/`s dropped before it is stat'd -- POSIX
  * `stat()` on a path spelled with a trailing separator refuses with
@@ -147,27 +159,132 @@ export const walkAncestors = (
 	}
 };
 
-/** The raw path of the node whose permissions actually block a leaf's
- * own failed `stat` (#768, D4; shared by `commands/init.ts` and
- * `snapshot-file.ts`, #767 review D7 -- "one fact, one answer on both
- * sides"): for `EACCES`/`EPERM`, walk upward from `dirname(leafPath)`,
- * seeded with the leaf's own code, to find the ancestor that blocks it
- * -- `stat`'s `EACCES` is always a directory on the way, never the
- * leaf. `null` for any other code, or on the (untested) chance the
- * seeded walk doesn't resolve to a blocked ancestor; callers fall back
- * to naming the leaf itself in that case. Returns the raw filesystem
- * path -- never a label -- so every caller renders it in its own style. */
-export const permissionCulpritFor = (
+/** One judgement of a configured path (#846 D2), shared by every module
+ * that scaffolds or reads a configured artifact: ancestors first (a
+ * file, a dangling link, or a blocked directory on the way is named as
+ * that node, never as the leaf with a bare operating-system code), then
+ * the leaf itself, judged by what it points at when it is a symbolic
+ * link. `absent` carries the deepest existing ancestor (`parent`) --
+ * the node a caller's own writability check and first-node-to-create
+ * both need, so neither re-walks. */
+export type PathOutcome =
+	| { readonly kind: "absent"; readonly parent: string }
+	| { readonly kind: "present"; readonly actualKind: NodeKind }
+	| { readonly kind: "dangling"; readonly target: string }
+	| { readonly kind: "ancestor-file"; readonly path: string }
+	| {
+			readonly kind: "ancestor-dangling";
+			readonly path: string;
+			readonly target: string;
+	  }
+	| {
+			readonly kind: "blocked";
+			readonly culprit: string;
+			readonly code: string;
+	  }
+	| {
+			readonly kind: "stat-failed";
+			readonly path: string;
+			readonly code: string;
+	  };
+
+/** `leafPath`'s own outcome once its ancestors are already known "ok"
+ * (`parent` is that deepest existing ancestor, for an absent leaf) --
+ * `lstat`s first: a non-link node's `lstat` already carries its kind, so
+ * only a link needs the second, following `stat` (#767 review, D8). */
+const leafOutcomeAt = (
+	cwd: string,
+	path: string,
+	parent: string,
+): PathOutcome => {
+	try {
+		const lstat = lstatSync(path);
+		if (!lstat.isSymbolicLink()) {
+			return { kind: "present", actualKind: kindOfStat(lstat) };
+		}
+		try {
+			return { kind: "present", actualKind: kindOfStat(statSync(path)) };
+		} catch (error) {
+			const code = errorCode(error);
+			if (code === "ENOENT") {
+				return { kind: "dangling", target: symlinkTargetLabel(cwd, path) };
+			}
+			return { kind: "stat-failed", path, code };
+		}
+	} catch (error) {
+		const code = errorCode(error);
+		if (code === "ENOENT") {
+			return { kind: "absent", parent };
+		}
+		return { kind: "stat-failed", path, code };
+	}
+};
+
+/** The leaf's own `EACCES`/`EPERM` resolved to the ancestor that actually
+ * blocks it (#768, D4), or `outcome` unchanged when it isn't one of
+ * those two codes -- `dirname(leafPath)` is already known to exist (the
+ * caller's own ancestor walk already succeeded), so seeding a fresh walk
+ * from there with the leaf's own code finds that same node again and
+ * reports it `blocked`, never a second, deeper walk. Folded into
+ * {@link probePath} itself (#846 D2) so every caller gets one outcome
+ * kind for "a permission blocks this", whether the permission failure
+ * was the leaf's own or an ancestor's. */
+const resolveLeafPermission = (
 	cwd: string,
 	leafPath: string,
-	code: string,
-): string | null => {
-	if (code !== "EACCES" && code !== "EPERM") {
-		return null;
+	outcome: PathOutcome,
+): PathOutcome => {
+	if (outcome.kind !== "stat-failed") {
+		return outcome;
 	}
-	const outcome = walkAncestors(cwd, dirname(leafPath), code);
-	if (outcome.kind === "blocked") {
-		return outcome.culprit;
+	if (outcome.code !== "EACCES" && outcome.code !== "EPERM") {
+		return outcome;
 	}
-	return null;
+	const permissionOutcome = walkAncestors(cwd, dirname(leafPath), outcome.code);
+	if (permissionOutcome.kind !== "blocked") {
+		return outcome;
+	}
+	return {
+		kind: "blocked",
+		culprit: permissionOutcome.culprit,
+		code: permissionOutcome.code,
+	};
+};
+
+/** Judges `leafPath` (already trailing-separator-stripped by the caller,
+ * D106 R1 B1) by its ancestors, then by itself (#846 D2): the one
+ * judgement `commands/init.ts` applies to every planned artifact,
+ * including the configuration artifact, and the read side applies to
+ * the paths it consumes. */
+export const probePath = (cwd: string, leafPath: string): PathOutcome => {
+	const ancestorOutcome = walkAncestors(cwd, dirname(leafPath));
+	if (ancestorOutcome.kind === "conflict") {
+		return { kind: "ancestor-file", path: ancestorOutcome.path };
+	}
+	if (ancestorOutcome.kind === "dangling") {
+		return {
+			kind: "ancestor-dangling",
+			path: ancestorOutcome.path,
+			target: ancestorOutcome.target,
+		};
+	}
+	if (ancestorOutcome.kind === "blocked") {
+		return {
+			kind: "blocked",
+			culprit: ancestorOutcome.culprit,
+			code: ancestorOutcome.code,
+		};
+	}
+	if (ancestorOutcome.kind === "stat-failed") {
+		return {
+			kind: "stat-failed",
+			path: ancestorOutcome.path,
+			code: ancestorOutcome.code,
+		};
+	}
+	return resolveLeafPermission(
+		cwd,
+		leafPath,
+		leafOutcomeAt(cwd, leafPath, ancestorOutcome.path),
+	);
 };

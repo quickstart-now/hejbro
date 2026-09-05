@@ -1,0 +1,117 @@
+{
+  "version": 3,
+  "number": 868,
+  "ref": "quickstart-now/hejbro#868",
+  "title": "fix(cli): one path judgement for init and every read side (#846, #820, #830, #831)",
+  "head": "59289785c37b86b93544553fc9bb1f3fe246545e",
+  "headRef": "fix-config-paths-2",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-05T00:49Z",
+  "refs": [
+    {
+      "path": ".changeset/harden-config-paths-2.md",
+      "blob": "81c5a41a5d12b9fdcc02b3f981b82ed1de64eec3"
+    },
+    {
+      "path": "README.md",
+      "blob": "011cd655383f89033ccdca6060a202a0e8d09cd2"
+    },
+    {
+      "path": "openspec/changes/harden-config-paths-2/design.md",
+      "blob": "ac11f74370907766afc51ff1f3a54cfd57fc9efe"
+    },
+    {
+      "path": "openspec/changes/harden-config-paths-2/proposal.md",
+      "blob": "70714bda50d645dcb089ee16ad38992fb0887831"
+    },
+    {
+      "path": "openspec/changes/harden-config-paths-2/specs/cli-commands/spec.md",
+      "blob": "b4469e2aa3ce3d4352d4bc5621a49127e6c954e0"
+    },
+    {
+      "path": "openspec/changes/harden-config-paths-2/tasks.md",
+      "blob": "20c8db624f9c0f8286ba4c2db1f1e354ea328e78"
+    },
+    {
+      "path": "openspec/task-times.csv",
+      "blob": "b6957d1f72e38e674cdd400dcc597bc0824036bb"
+    },
+    {
+      "path": "packages/cli/src/commands/generate.ts",
+      "blob": "de18033bca102e00455eec5ba109e5290bfc9b6c"
+    },
+    {
+      "path": "packages/cli/src/commands/history.ts",
+      "blob": "685d87044eb43a442c6a10d6d91f4594e8385ced"
+    },
+    {
+      "path": "packages/cli/src/commands/init.ts",
+      "blob": "9fb20adbfe6da80d6ed1ea4cdb39876befb548bf"
+    },
+    {
+      "path": "packages/cli/src/commands/migrate.ts",
+      "blob": "5f8d502a3e6e6395876345d591bfb4f0912c9322"
+    },
+    {
+      "path": "packages/cli/src/commands/restore.ts",
+      "blob": "d2dcbb95bee30faae48f5cefd0dc61077a1c6a15"
+    },
+    {
+      "path": "packages/cli/src/commands/status.ts",
+      "blob": "71cf95d955818a8034e6456e79fd3510cc54b9ef"
+    },
+    {
+      "path": "packages/cli/src/commands/verify.ts",
+      "blob": "f6e327998d12d848580d4f990153c94e57f8e772"
+    },
+    {
+      "path": "packages/cli/src/config.ts",
+      "blob": "b583a9102fddffdcc604d70f95384a3f7c1741c8"
+    },
+    {
+      "path": "packages/cli/src/identity.ts",
+      "blob": "69735c70cceb890849a4859973aba842355dde60"
+    },
+    {
+      "path": "packages/cli/src/loader.ts",
+      "blob": "45798474c3cbef97810046dc4e8c1a7952c35be3"
+    },
+    {
+      "path": "packages/cli/src/path-probe.ts",
+      "blob": "77549366e00cfae69436522d5343db87cd3ccdc2"
+    },
+    {
+      "path": "packages/cli/src/snapshot-file.ts",
+      "blob": "424de61cd2d4ef1151a53e7df6f6be4c9e6f37ef"
+    },
+    {
+      "path": "packages/cli/test/config.test.ts",
+      "blob": "2d4047b705110911ae500d47591a3d5568a3a3dc"
+    },
+    {
+      "path": "packages/cli/test/generate-command.test.ts",
+      "blob": "a38b4d7ee61fd050a73413f8b7267abee1ae29dd"
+    },
+    {
+      "path": "packages/cli/test/identity.test.ts",
+      "blob": "8ca61e41fa1f166b0ff71782beabfc64a257b0ad"
+    },
+    {
+      "path": "packages/cli/test/init.test.ts",
+      "blob": "c67a533d6589127cf6665900e5737dd1139a4490"
+    },
+    {
+      "path": "packages/cli/test/loader.test.ts",
+      "blob": "f34ae5cfdf03ab36dba85e939ef78376aa88f12f"
+    },
+    {
+      "path": "packages/cli/test/restore-command.test.ts",
+      "blob": "76147c41acc5b0d99f769f1f625fca58fb6257b8"
+    },
+    {
+      "path": "skills/hejbro/references/generate-verify-workflow.md",
+      "blob": "a285c7bfca070a45176847b8716b6b5619c4bc1c"
+    }
+  ]
+}

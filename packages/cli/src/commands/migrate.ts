@@ -333,7 +333,7 @@ export const runMigrate = async (
 		const { config } = await loadConfig(cwd, undefined);
 		requireConfigFields(config, "migrate", ["migrationsDir"]);
 		const migrationsDirPath = join(cwd, config.migrationsDir);
-		const fileNames = listMigrationFiles(migrationsDirPath);
+		const fileNames = listMigrationFiles(cwd, config.migrationsDir);
 		const chain = readChainEntries(migrationsDirPath, fileNames);
 		const baselineFileNames = readBaselineFileNames(
 			migrationsDirPath,

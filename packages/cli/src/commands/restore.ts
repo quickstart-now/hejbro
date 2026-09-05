@@ -275,7 +275,7 @@ export const runRestore = async (
 			);
 		}
 		const migrationsDirPath = join(cwd, config.migrationsDir);
-		const fileNames = listMigrationFiles(migrationsDirPath);
+		const fileNames = listMigrationFiles(cwd, config.migrationsDir);
 		const targetToken = rawArgs[0] ?? "";
 		const targetNumber = parsePositiveInteger(targetToken);
 		if (

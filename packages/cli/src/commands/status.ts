@@ -197,7 +197,7 @@ export const runStatus = async (
 		const { config } = await loadConfig(cwd, undefined);
 		requireConfigFields(config, "status", ["migrationsDir"]);
 		const migrationsDirPath = join(cwd, config.migrationsDir);
-		const fileNames = listMigrationFiles(migrationsDirPath);
+		const fileNames = listMigrationFiles(cwd, config.migrationsDir);
 		const chain = readChainEntries(migrationsDirPath, fileNames);
 
 		return await withCheckConnection(

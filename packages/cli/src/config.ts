@@ -138,6 +138,39 @@ const absolutePathFields = (data: {
 		return [{ field, value }];
 	});
 
+/** Whether `value` names a directory rather than a file: empty, a
+ * trailing separator, or a last segment of "." or ".." — every spelling
+ * that resolves to a directory node no file can ever be written to or
+ * read from (#846 NB2/NB6, D1). */
+const isSpelledAsDirectory = (value: string): boolean => {
+	if (value === "" || value.endsWith("/")) {
+		return true;
+	}
+	const lastSegment = value.split("/").at(-1);
+	return lastSegment === "." || lastSegment === "..";
+};
+
+/** A `snapshotPath` spelled as a directory (#846 NB2/NB6, D1): refusing
+ * once, when the configuration is read, is what keeps `init` and the
+ * commands that read the snapshot from answering the same value two
+ * ways — one refusing the spelling, the other stripping it, stat'ing the
+ * file underneath, and reporting a permissions failure that was never
+ * about permissions. Three shapes, three sentences (lead-approved,
+ * design D1): an empty value never echoes a bare `""` back (regression,
+ * `1bc19b32`) -- it names the field as empty instead; a trailing
+ * separator suggests dropping it; a last segment of "." or ".."
+ * (non-empty, no trailing separator) echoes the value but has no
+ * separator to drop, so it only suggests the default file name. */
+const describeSnapshotPathAsDirectory = (value: string): string => {
+	if (value === "") {
+		return `config field "snapshotPath" is empty, but the snapshot is a file. Next: point snapshotPath at a file path (e.g. "hejbro.snapshot.json"), or remove the field.`;
+	}
+	if (value.endsWith("/")) {
+		return `config field "snapshotPath" names a directory ("${value}"), but the snapshot is a file. Next: point snapshotPath at a file path (e.g. "state.json") — drop the trailing "/" or name a file inside the directory.`;
+	}
+	return `config field "snapshotPath" names a directory ("${value}"), but the snapshot is a file. Next: point snapshotPath at a file path (e.g. "hejbro.snapshot.json").`;
+};
+
 /** `join(cwd, value)` silently swallows a leading "/", so an absolute-
  * looking `migrationsDir`/`snapshotPath` used to resolve under the
  * working directory anyway, with only the display differing between
@@ -177,6 +210,15 @@ export const parseConfig = (
 		return throwHejbroError(
 			"invalid-config",
 			describeAbsolutePathField(offendingPath.field, offendingPath.value),
+		);
+	}
+	if (
+		result.data.snapshotPath !== undefined &&
+		isSpelledAsDirectory(result.data.snapshotPath)
+	) {
+		return throwHejbroError(
+			"invalid-config",
+			describeSnapshotPathAsDirectory(result.data.snapshotPath),
 		);
 	}
 	const invalidPresetIndex = findInvalidPresetIndex(result.data.presets);

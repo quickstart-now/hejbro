@@ -4,16 +4,111 @@
   "ref": "quickstart-now/hejbro#846",
   "title": "init/config paths round 2: read-side trailing separator, config ancestor order, nesting wording, dangling link on read, empty --config",
   "parent": "quickstart-now/hejbro#815",
-  "status": "open",
+  "status": "closed",
   "opened": "2026-09-04",
-  "closed": null,
-  "decisions": [],
-  "work": [],
+  "closed": "2026-09-05",
+  "decisions": [
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "D1"
+      ],
+      "at": "2026-09-04T16:53Z",
+      "title": "Batch cp = #846 #820 #830 #831 as one change harden-config-paths-2, parallel to ck and so; #819 and #837 wait for ck",
+      "ratified": null
+    },
+    {
+      "id": "R2",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "D1",
+        "R1"
+      ],
+      "at": "2026-09-04T20:16Z",
+      "title": "harden-config-paths-2 approved; OD1 spelling refused at parse (invalid-config, stated code exception); OD3 two read-side codes via probePath; nesting wording",
+      "ratified": null
+    },
+    {
+      "id": "R3",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R1",
+        "R2",
+        "412/D13"
+      ],
+      "at": "2026-09-04T22:31Z",
+      "title": "cp (b) accepted at 9c95244d; D1/D5 details and the 1.2 order deviation ratified; #860 filed; reviewer summoned",
+      "ratified": null
+    },
+    {
+      "id": "R4",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R3",
+        "412/D12",
+        "412/D13"
+      ],
+      "at": "2026-09-04T22:59Z",
+      "title": "cp review round 1: B1/B3/B4 code repairs, B2 scenario sentence moves (OS code only when the OS refused); narrow re-review",
+      "ratified": null
+    },
+    {
+      "id": "R5",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R4",
+        "412/D13"
+      ],
+      "at": "2026-09-04T23:04Z",
+      "title": "B3: the delta names the verbatim user-value echo as a Next:-only exception to D57; B2 third site (config-unreadable) moves too",
+      "ratified": null
+    },
+    {
+      "id": "R6",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R4",
+        "R5",
+        "412/D13"
+      ],
+      "at": "2026-09-05T00:32Z",
+      "title": "cp (c) accepted at 0d56b5d0: re-review 0/0/6; neighbours to #839 and #714; PR by the lead",
+      "ratified": null
+    }
+  ],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-04T22:28Z",
+      "title": "Read side judges paths as init does; config artifact ancestors first; nesting wording; empty --config refused",
+      "pr": null,
+      "decisions": []
+    },
+    {
+      "id": "W2",
+      "at": "2026-09-05T00:09Z",
+      "title": "Review round 1: header identity, ancestor OS codes, next-marker gate, config subject on every init branch",
+      "pr": null,
+      "decisions": []
+    }
+  ],
   "prs": [
     {
       "number": 847,
       "role": "refs",
       "pinnedAt": "2026-09-04T16:38Z"
+    },
+    {
+      "number": 868,
+      "role": "closes",
+      "pinnedAt": "2026-09-05T00:49Z"
     }
   ],
   "origin": null,

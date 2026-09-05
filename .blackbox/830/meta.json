@@ -4,16 +4,41 @@
   "ref": "quickstart-now/hejbro#830",
   "title": "cli: config-not-found Next names hejbro.config.ts even when --config pointed elsewhere",
   "parent": "quickstart-now/hejbro#815",
-  "status": "open",
+  "status": "closed",
   "opened": "2026-09-04",
-  "closed": null,
-  "decisions": [],
-  "work": [],
+  "closed": "2026-09-05",
+  "decisions": [
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "D1"
+      ],
+      "at": "2026-09-04T20:16Z",
+      "title": "OD4: --config decided by probePath (config-not-found / config-not-a-file / config-unreadable); OD5: empty or trailing --config refused with invalid-config-flag",
+      "ratified": null
+    }
+  ],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-04T22:28Z",
+      "title": "config-not-found names the path looked up and init --config; config path judged before loading",
+      "pr": null,
+      "decisions": []
+    }
+  ],
   "prs": [
     {
       "number": 840,
       "role": "refs",
       "pinnedAt": "2026-09-04T16:03Z"
+    },
+    {
+      "number": 868,
+      "role": "closes",
+      "pinnedAt": "2026-09-05T00:49Z"
     }
   ],
   "origin": null,

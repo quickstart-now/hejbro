@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { renameSync } from "node:fs";
-import { readdir, readFile, writeFile } from "node:fs/promises";
+import { readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 import { sha256Hex } from "../src/hash";
@@ -212,6 +212,32 @@ describe("hejbro restore", () => {
 			expect(notAnInteger.stderr).toContain(
 				"error[restore-target-out-of-range]",
 			);
+		} finally {
+			await removeCliFixtureDir(cwd);
+		}
+	});
+
+	// #820, #846 D4: listMigrationFiles used to readdirSync the configured
+	// migrationsDir directly -- a file there crashed restore (one of the
+	// six call sites) with a raw ENOTDIR, same as every other command.
+	it("a regular file at migrationsDir is refused with migrations-dir-not-a-directory, never ENOTDIR", async () => {
+		const cwd = await createCliFixtureDir();
+		try {
+			git(cwd, ["init", "-q", "-b", "main"]);
+			await writeFixtureFile(cwd, "hejbro.config.ts", CONFIG_SOURCE);
+			await runCli(cwd, ["init"]);
+			git(cwd, ["add", "-A"]);
+			git(cwd, ["commit", "-q", "-m", "chore: init"]);
+			await rm(join(cwd, "migrations"), { recursive: true, force: true });
+			await writeFixtureFile(cwd, "migrations", "not a directory");
+
+			const result = await runCli(cwd, ["restore", "1"]);
+
+			expect(result.exitCode).toBe(1);
+			expect(result.stderr).toContain("error[migrations-dir-not-a-directory]");
+			expect(result.stderr).toContain("migrations");
+			expect(result.stderr).not.toContain("ENOTDIR");
+			expect(result.stderr).not.toContain(cwd);
 		} finally {
 			await removeCliFixtureDir(cwd);
 		}

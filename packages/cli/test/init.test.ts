@@ -345,7 +345,10 @@ describe("runInit / path-kind conflicts and unconfigured fields (#687)", () => {
 		);
 	});
 
-	it("refuses when a snapshotPath spelled with a trailing slash holds a directory", async () => {
+	// #846 D1: a snapshotPath spelled as a directory is now refused when
+	// the configuration is read (invalid-config), before init ever looks
+	// at what sits on disk -- moved from init-path-conflict.
+	it("refuses a snapshotPath spelled with a trailing slash at config read, before looking at disk", async () => {
 		await writeFile(
 			configPath(),
 			'export default { entry: ["src/**/*.schema.ts"], snapshotPath: "db/" };\n',
@@ -355,10 +358,12 @@ describe("runInit / path-kind conflicts and unconfigured fields (#687)", () => {
 		const result = await runInit(cwd);
 
 		expect(result.exitCode).toBe(1);
-		expect(result.stderr).toContain("error[init-path-conflict]");
+		expect(result.stderr).toContain("error[invalid-config]");
 	});
 
-	it("refuses an empty snapshotPath, which resolves to the project directory itself", async () => {
+	// #846 D1: moved from init-path-conflict -- an empty snapshotPath is
+	// refused at config read, before any artifact is planned.
+	it("refuses an empty snapshotPath at config read, before any artifact is planned", async () => {
 		await writeFile(
 			configPath(),
 			'export default { entry: ["src/**/*.schema.ts"], snapshotPath: "" };\n',
@@ -367,17 +372,19 @@ describe("runInit / path-kind conflicts and unconfigured fields (#687)", () => {
 		const result = await runInit(cwd);
 
 		expect(result.exitCode).toBe(1);
-		expect(result.stderr).toContain("error[init-path-conflict]");
+		expect(result.stderr).toContain("error[invalid-config]");
 		expect(existsSync(join(cwd, "migrations"))).toBe(false);
 	});
 
 	// Regression pin (reviewer-observed on 1bc19b32): an empty relative
-	// label rendered as a bare "" in the refusal, leaving an empty
-	// identifier and an unfollowable "move or remove ... at """ line --
-	// the same D1 "./" fold the report line already applies must reach
-	// the refusal label too.
+	// label used to render as a bare "" in the refusal, leaving an
+	// unfollowable "move or remove ... at """ line. #846 D1 moves both
+	// values to the config-read refusal (invalid-config) before runInit
+	// ever builds a label from them, so that code path is unreachable for
+	// these two inputs now -- the pin stays here as the same regression's
+	// guard, just aimed at config.ts's own message instead.
 	it.each(["", "."])(
-		"names the project directory as ./ in the refusal, never a bare empty string (snapshotPath: %j)",
+		"refuses at config read without ever printing a bare empty string (snapshotPath: %j)",
 		async (emptyValue) => {
 			await writeFile(
 				configPath(),
@@ -387,12 +394,17 @@ describe("runInit / path-kind conflicts and unconfigured fields (#687)", () => {
 			const result = await runInit(cwd);
 
 			expect(result.exitCode).toBe(1);
-			expect(result.stderr).toContain("./");
+			expect(result.stderr).toContain("error[invalid-config]");
+			expect(result.stderr).toContain("snapshotPath");
+			expect(result.stderr).toContain("Next:");
 			expect(result.stderr).not.toContain('""');
 		},
 	);
 
-	it("refuses a snapshotPath spelled as a directory even when nothing sits there yet", async () => {
+	// #846 D1: moved from init-path-conflict, same reasoning as the row
+	// above -- the spelling is refused at config read regardless of what
+	// (if anything) sits on disk.
+	it("refuses a snapshotPath spelled as a directory at config read even when nothing sits there yet", async () => {
 		await writeFile(
 			configPath(),
 			'export default { entry: ["src/**/*.schema.ts"], snapshotPath: "db/" };\n',
@@ -401,15 +413,16 @@ describe("runInit / path-kind conflicts and unconfigured fields (#687)", () => {
 		const result = await runInit(cwd);
 
 		expect(result.exitCode).toBe(1);
-		expect(result.stderr).toContain("error[init-path-conflict]");
+		expect(result.stderr).toContain("error[invalid-config]");
 		expect(existsSync(join(cwd, "db"))).toBe(false);
 	});
 
-	// Regression pin: before checkPathKind's pre-check, this exact
+	// Regression pin: before this refusal existed, this exact
 	// configuration reached createArtifact's writeFileSync and crashed
 	// with a raw, unformatted ENOENT naming the absolute path -- runInit
-	// now refuses it with the coded diagnostic instead, and that
-	// diagnostic never names an absolute path (D57/Task 14 convention).
+	// now refuses it with the coded diagnostic instead (#846 D1: at
+	// config read, invalid-config), and that diagnostic never names an
+	// absolute path (D57/Task 14 convention).
 	it("this configuration no longer reaches the raw writeFileSync crash, and names no absolute path", async () => {
 		await writeFile(
 			configPath(),
@@ -419,7 +432,7 @@ describe("runInit / path-kind conflicts and unconfigured fields (#687)", () => {
 		const result = await runInit(cwd);
 
 		expect(result.exitCode).toBe(1);
-		expect(result.stderr).toContain("error[init-path-conflict]");
+		expect(result.stderr).toContain("error[invalid-config]");
 		expect(result.stderr).not.toContain("ENOENT");
 		expect(result.stderr).not.toContain(cwd);
 	});
@@ -1186,6 +1199,74 @@ describe.skipIf(process.getuid?.() === 0)(
 	},
 );
 
+// #846 review N1: throwNotWritable/throwCreateDiskFailed named the
+// configuration artifact's own field as `hejbro.config.ts`, doubling the
+// name the label already carries ("hejbro.config.ts" cannot be created
+// for hejbro.config.ts") -- and naming the default field even when
+// --config pointed elsewhere. The configuration artifact now reads "as
+// the configuration file"; every other artifact is unchanged.
+describe.skipIf(process.getuid?.() === 0)(
+	"runInit / names the configuration path once on the write-permission and create-failure branches (#846 review N1)",
+	() => {
+		afterEach(async () => {
+			await Promise.all(
+				["ro"].map(async (name) => {
+					const candidate = join(cwd, name);
+					if (!existsSync(candidate)) {
+						return;
+					}
+					await chmod(candidate, 0o755);
+				}),
+			);
+			await chmod(cwd, 0o755);
+		});
+
+		it("names the configuration file, never repeating it, when cwd itself cannot be written into", async () => {
+			await chmod(cwd, 0o500);
+
+			const result = await runInit(cwd);
+
+			expect(result.exitCode).toBe(1);
+			expect(result.stderr).toBe(
+				'error[init-path-conflict]: hejbro.config.ts\n  "hejbro.config.ts" cannot be created as the configuration file (EACCES): "./" does not let this process write into it. Next: check permissions on "./", then rerun `hejbro init`.',
+			);
+		});
+
+		it("names the --config path, never the default hejbro.config.ts, when its parent cannot be written into", async () => {
+			await mkdir(join(cwd, "ro"), { recursive: true });
+			await chmod(join(cwd, "ro"), 0o500);
+
+			const result = await runInit(cwd, ["--config", "ro/my.config.ts"]);
+
+			expect(result.exitCode).toBe(1);
+			expect(result.stderr).toContain(
+				"error[init-path-conflict]: ro/my.config.ts",
+			);
+			expect(result.stderr).toContain("ro/my.config.ts");
+			expect(result.stderr).toContain(
+				'"ro" does not let this process write into it',
+			);
+			expect(result.stderr).not.toContain("hejbro.config.ts");
+		});
+
+		it("keeps a field artifact's wording unchanged (control)", async () => {
+			await writeFile(
+				configPath(),
+				'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "ro/mig" };\n',
+			);
+			await mkdir(join(cwd, "ro"), { recursive: true });
+			await chmod(join(cwd, "ro"), 0o500);
+
+			const result = await runInit(cwd);
+
+			expect(result.exitCode).toBe(1);
+			expect(result.stderr).toContain(
+				'"ro/mig/" cannot be created for migrationsDir (EACCES)',
+			);
+		});
+	},
+);
+
 // #767 review round 1, D6 (create side): `access` can be wrong (ACLs,
 // immutable flags, a disk that fills, a race) -- the check pass above
 // cannot prove a node that doesn't exist yet will stay writable once
@@ -1433,10 +1514,14 @@ describe("runInit / a planned file that would have to hold another planned path 
 			outcome: "nested-refusal",
 		},
 		{
+			// #846 D1: snapshotPath can no longer be spelled with a trailing
+			// separator at all (refused at config read before this check
+			// runs) -- migrationsDir keeps that spelling, so its own
+			// normalization is still the row's point.
 			label:
-				'migrationsDir: "mig/sub/", snapshotPath: "mig/" (spellings, not strings)',
+				'migrationsDir: "mig/sub/", snapshotPath: "mig" (migrationsDir spelling, not string)',
 			migrationsDir: "mig/sub/",
-			snapshotPath: "mig/",
+			snapshotPath: "mig",
 			onDisk: "nothing",
 			outcome: "nested-refusal",
 		},
@@ -1559,7 +1644,7 @@ describe("runInit / a directory sitting where the configuration file belongs (D1
 
 		expect(result.exitCode).toBe(1);
 		expect(result.stderr).toBe(
-			'error[init-path-conflict]: hejbro.config.ts\n  "hejbro.config.ts" was expected to be a file for hejbro.config.ts, but a directory is there. Next: move or remove the existing directory at "hejbro.config.ts", then rerun `hejbro init`.',
+			'error[init-path-conflict]: hejbro.config.ts\n  "hejbro.config.ts" is the configuration path, but a directory is there — the configuration is a file hejbro reads. Next: move or remove the existing directory at "hejbro.config.ts", or name another file with --config, then rerun `hejbro init`.',
 		);
 		expect(existsSync(join(cwd, "migrations"))).toBe(false);
 		expect(existsSync(snapshotPath())).toBe(false);
@@ -1594,6 +1679,137 @@ describe("runInit / a directory sitting where the configuration file belongs (D1
 
 		expect(result.exitCode).toBe(0);
 		expect(result.report).toContain("created hejbro.config.ts");
+	});
+});
+
+// #846 D5 phrasing/D6 (#831, NB5): the configuration path's own name
+// used to appear twice ("... for hejbro.config.ts"), and a planned file
+// that would have to hold another planned artifact always said "a file
+// cannot hold a directory", wrong whenever the held artifact was itself
+// a file (the configuration, or a snapshotPath nested inside it).
+describe("runInit / the configuration path's own messages (#846 D5 phrasing, D6)", () => {
+	it("describes a directory at --config as the configuration path, naming it once", async () => {
+		await mkdir(join(cwd, "sub", "h.ts"), { recursive: true });
+
+		const result = await runInit(cwd, ["--config", "sub/h.ts"]);
+
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toBe(
+			'error[init-path-conflict]: sub/h.ts\n  "sub/h.ts" is the configuration path, but a directory is there — the configuration is a file hejbro reads. Next: move or remove the existing directory at "sub/h.ts", or name another file with --config, then rerun `hejbro init`.',
+		);
+	});
+
+	it("refuses a snapshotPath nested inside the configuration path, naming the held kind (file)", async () => {
+		await writeFile(
+			configPath(),
+			'export default { entry: ["src/**/*.schema.ts"], snapshotPath: "hejbro.config.ts/state.json" };\n',
+		);
+
+		const result = await runInit(cwd);
+
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toBe(
+			'error[init-path-conflict]: hejbro.config.ts\n  "hejbro.config.ts" is the configuration path, and snapshotPath ("hejbro.config.ts/state.json") would have to be created inside it — a file cannot hold a file. Next: point snapshotPath outside "hejbro.config.ts", then rerun `hejbro init`.',
+		);
+	});
+
+	it("refuses a migrationsDir nested inside the configuration path, naming the held kind (directory)", async () => {
+		await writeFile(
+			configPath(),
+			'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "hejbro.config.ts/mig" };\n',
+		);
+
+		const result = await runInit(cwd);
+
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toBe(
+			'error[init-path-conflict]: hejbro.config.ts\n  "hejbro.config.ts" is the configuration path, and migrationsDir ("hejbro.config.ts/mig") would have to be created inside it — a file cannot hold a directory. Next: point migrationsDir outside "hejbro.config.ts", then rerun `hejbro init`.',
+		);
+	});
+
+	it("refuses the configuration path nested inside snapshotPath, naming --config and snapshotPath in Next:", async () => {
+		// The configuration file itself must be readable to know its own
+		// snapshotPath field -- "state.json" is a real directory holding
+		// it, which is exactly the nesting this run refuses.
+		await mkdir(join(cwd, "state.json"), { recursive: true });
+		await writeFile(
+			join(cwd, "state.json", "h.ts"),
+			'export default { entry: ["src/**/*.schema.ts"], snapshotPath: "state.json" };\n',
+		);
+
+		const result = await runInit(cwd, ["--config", "state.json/h.ts"]);
+
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toBe(
+			'error[init-path-conflict]: state.json\n  "state.json" is named by snapshotPath, and the configuration path ("state.json/h.ts") would have to be created inside it — a file cannot hold a file. Next: name a configuration file outside snapshotPath with --config, or point snapshotPath elsewhere, then rerun `hejbro init`.',
+		);
+	});
+
+	// Control: neither side is the configuration artifact -- the existing
+	// sentence (D106 R1 N1) stays byte-unchanged.
+	it("keeps the existing nested sentence byte-unchanged when neither side is the configuration artifact (control)", async () => {
+		await writeFile(
+			configPath(),
+			'export default { entry: ["src/**/*.schema.ts"], snapshotPath: "mig", migrationsDir: "mig/sub" };\n',
+		);
+
+		const result = await runInit(cwd);
+
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toBe(
+			'error[init-path-conflict]: mig\n  "mig" is named by snapshotPath, and migrationsDir ("mig/sub") would have to be created inside it — a file cannot hold a directory. Next: point snapshotPath at a file outside migrationsDir, then rerun `hejbro init`.',
+		);
+	});
+
+	describe("subprocess rows (built CLI) — parity with generate's config-not-a-file", () => {
+		beforeAll(assertBuiltCli);
+
+		it("matches generate's first sentence for a directory at the default configuration path", async () => {
+			await mkdir(join(cwd, "hejbro.config.ts"), { recursive: true });
+
+			const initRun = await runCli(cwd, ["init"]);
+			const generateRun = await runCli(cwd, ["generate"]);
+
+			expect(initRun.exitCode).toBe(1);
+			expect(generateRun.exitCode).toBe(1);
+			expect(initRun.stderr).toContain("error[init-path-conflict]");
+			expect(generateRun.stderr).toContain("error[config-not-a-file]");
+			const firstSentence =
+				'"hejbro.config.ts" is the configuration path, but a directory is there — the configuration is a file hejbro reads.';
+			expect(initRun.stderr).toContain(firstSentence);
+			expect(generateRun.stderr).toContain(firstSentence);
+		});
+
+		it("matches generate's first sentence for a dangling link at --config", async () => {
+			await symlink("nowhere", join(cwd, "h.ts"));
+
+			const initRun = await runCli(cwd, ["init", "--config", "h.ts"]);
+			const generateRun = await runCli(cwd, ["generate", "--config", "h.ts"]);
+
+			expect(initRun.exitCode).toBe(1);
+			expect(generateRun.exitCode).toBe(1);
+			const firstSentence =
+				'"h.ts" is the configuration path, but a dangling symbolic link is there, pointing at "nowhere".';
+			expect(initRun.stderr).toContain(firstSentence);
+			expect(generateRun.stderr).toContain(firstSentence);
+		});
+
+		it("names the same ancestor file ('f') in both message and Next: for --config f/h.ts", async () => {
+			await writeFile(join(cwd, "f"), "not a directory");
+
+			const initRun = await runCli(cwd, ["init", "--config", "f/h.ts"]);
+			const generateRun = await runCli(cwd, ["generate", "--config", "f/h.ts"]);
+
+			expect(initRun.exitCode).toBe(1);
+			expect(generateRun.exitCode).toBe(1);
+			expect(initRun.stderr).toContain('"f"');
+			expect(initRun.stderr).toContain("Next:");
+			expect(initRun.stderr.split('"f"').length - 1).toBeGreaterThanOrEqual(2);
+			expect(generateRun.stderr).toContain('"f" is a file');
+			expect(generateRun.stderr).toContain(
+				'Next: move or remove the file at "f"',
+			);
+		});
 	});
 });
 
@@ -1768,6 +1984,31 @@ describe("runInit / --config (#741)", () => {
 			expect(initRun.stderr).toBe(generateRun.stderr);
 		});
 
+		// #846 D5 (#830, NB8): --config= used to resolve to cwd and refuse
+		// it as an existing "directory" -- a confusing answer for a value
+		// the user never spelled as a path at all.
+		it("refuses --config= as invalid-config-flag, creating nothing and never mentioning the working directory", async () => {
+			const result = await runCli(cwd, ["init", "--config="]);
+
+			expect(result.exitCode).toBe(1);
+			expect(result.stderr).toContain("error[invalid-config-flag]");
+			expect(result.stderr).not.toContain(
+				'move or remove the existing directory at "."',
+			);
+			expect(existsSync(join(cwd, "hejbro.config.ts"))).toBe(false);
+		});
+
+		// #846 D5: a trailing --config (no value follows) used to be
+		// silently treated as "flag absent", scaffolding the default
+		// hejbro.config.ts instead of refusing the empty value.
+		it("refuses a trailing --config (no value) as invalid-config-flag, never silently the default", async () => {
+			const result = await runCli(cwd, ["init", "--config"]);
+
+			expect(result.exitCode).toBe(1);
+			expect(result.stderr).toContain("error[invalid-config-flag]");
+			expect(existsSync(join(cwd, "hejbro.config.ts"))).toBe(false);
+		});
+
 		it("honours --config: --config=<path> is identical to the space form", async () => {
 			await mkdir(join(cwd, "sub"), { recursive: true });
 			await writeFile(
@@ -1847,3 +2088,140 @@ export const posts = table(app, "posts", {
 		});
 	});
 });
+
+// #846 D2, NB3: the configuration artifact's own kind used to be checked
+// before its ancestors, so `--config f/h.ts` with `f` a file stat'd the
+// non-existent leaf "f/h.ts" directly and named it with a bare ENOTDIR,
+// instead of the ancestor refusal naming `f` every other artifact
+// already gets. One `probePath` judgement (ancestors, then the leaf) now
+// covers the configuration artifact too.
+describe.skipIf(process.getuid?.() === 0)(
+	"runInit / judges the --config path by its ancestors before its own node (#846 D2, NB3)",
+	() => {
+		afterEach(async () => {
+			const nx = join(cwd, "nx");
+			if (existsSync(nx)) {
+				await chmod(nx, 0o755);
+			}
+		});
+
+		type ConfigAncestorRow = {
+			readonly label: string;
+			readonly configFlag: ReadonlyArray<string>;
+			readonly setup: (fixtureCwd: string) => Promise<void>;
+			readonly assert: (result: Awaited<ReturnType<typeof runInit>>) => void;
+		};
+
+		const rows: ReadonlyArray<ConfigAncestorRow> = [
+			{
+				label: "--config f/h.ts, f a regular file",
+				configFlag: ["--config", "f/h.ts"],
+				setup: async (fixtureCwd) => {
+					await writeFile(join(fixtureCwd, "f"), "not a directory");
+				},
+				assert: (result) => {
+					expect(result.exitCode).toBe(1);
+					expect(result.stderr).toBe(
+						'error[init-path-conflict]: f\n  "f" was expected to be a directory to hold the configuration file, but a file is there. Next: move or remove the existing file at "f", then rerun `hejbro init`.',
+					);
+					expect(existsSync(join(cwd, "f", "h.ts"))).toBe(false);
+				},
+			},
+			{
+				label: "--config lnk/h.ts, lnk -> nowhere (dangling ancestor)",
+				configFlag: ["--config", "lnk/h.ts"],
+				setup: async (fixtureCwd) => {
+					await symlink("nowhere", join(fixtureCwd, "lnk"));
+				},
+				assert: (result) => {
+					expect(result.exitCode).toBe(1);
+					expect(result.stderr).toBe(
+						'error[init-path-conflict]: lnk\n  "lnk" was expected to be a directory to hold the configuration file, but a dangling symbolic link is there, pointing at "nowhere". Next: remove the link or create its target, then rerun `hejbro init`.',
+					);
+				},
+			},
+			{
+				label: "--config nx/h.ts, nx mode 000 (blocked)",
+				configFlag: ["--config", "nx/h.ts"],
+				setup: async (fixtureCwd) => {
+					await mkdir(join(fixtureCwd, "nx"), { recursive: true });
+					await chmod(join(fixtureCwd, "nx"), 0o000);
+				},
+				assert: (result) => {
+					expect(result.exitCode).toBe(1);
+					expect(result.stderr).toBe(
+						'error[init-path-conflict]: nx/h.ts\n  "nx/h.ts" could not be checked for the configuration file (EACCES): "nx" does not let this process look inside it. Next: check permissions on "nx", then rerun `hejbro init`.',
+					);
+				},
+			},
+			{
+				label: "--config nx/a/h.ts, nx mode 000 (names nx, not nx/a)",
+				configFlag: ["--config", "nx/a/h.ts"],
+				setup: async (fixtureCwd) => {
+					await mkdir(join(fixtureCwd, "nx", "a"), { recursive: true });
+					await chmod(join(fixtureCwd, "nx"), 0o000);
+				},
+				assert: (result) => {
+					expect(result.exitCode).toBe(1);
+					expect(result.stderr).toBe(
+						'error[init-path-conflict]: nx/a/h.ts\n  "nx/a/h.ts" could not be checked for the configuration file (EACCES): "nx" does not let this process look inside it. Next: check permissions on "nx", then rerun `hejbro init`.',
+					);
+				},
+			},
+			{
+				label: "--config d/h.ts, d an empty directory (control: created)",
+				configFlag: ["--config", "d/h.ts"],
+				setup: async (fixtureCwd) => {
+					await mkdir(join(fixtureCwd, "d"), { recursive: true });
+				},
+				assert: (result) => {
+					expect(result.exitCode).toBe(0);
+					expect(result.report).toContain("created d/h.ts");
+				},
+			},
+			{
+				label:
+					"--config h.ts, h.ts -> nowhere (leaf dangling link, #846 D5 phrasing)",
+				configFlag: ["--config", "h.ts"],
+				setup: async (fixtureCwd) => {
+					await symlink("nowhere", join(fixtureCwd, "h.ts"));
+				},
+				assert: (result) => {
+					expect(result.exitCode).toBe(1);
+					expect(result.stderr).toBe(
+						'error[init-path-conflict]: h.ts\n  "h.ts" is the configuration path, but a dangling symbolic link is there, pointing at "nowhere". Next: remove the link or create its target, or name another file with --config, then rerun `hejbro init`.',
+					);
+				},
+			},
+			{
+				label:
+					'omitted --config, migrationsDir: "f/mig", f a file (control: other artifacts unchanged)',
+				configFlag: [],
+				setup: async (fixtureCwd) => {
+					await writeFile(
+						configPath(),
+						'export default { entry: ["src/**/*.schema.ts"], migrationsDir: "f/mig" };\n',
+					);
+					await writeFile(join(fixtureCwd, "f"), "not a directory");
+				},
+				assert: (result) => {
+					expect(result.exitCode).toBe(1);
+					expect(result.stderr).toBe(
+						'error[init-path-conflict]: f\n  "f" was expected to be a directory to hold migrationsDir, but a file is there. Next: move or remove the existing file at "f", then rerun `hejbro init`.',
+					);
+				},
+			},
+		];
+
+		it.each(rows)(
+			"judges the --config path by its ancestors before its own node ($label)",
+			async ({ configFlag, setup, assert }) => {
+				await setup(cwd);
+
+				const result = await runInit(cwd, configFlag);
+
+				assert(result);
+			},
+		);
+	},
+);
