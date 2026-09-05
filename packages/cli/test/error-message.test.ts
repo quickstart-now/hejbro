@@ -5,6 +5,15 @@ import { describeDriverError } from "../src/check/error-message";
 // it's described -- a table (D110), not one example, so a fix scoped to
 // one branch shows up as exactly the new row passing, every neighbour
 // unaffected.
+// `ErrorEvent` is a global only from Node 26 on; the runner's Node 22/24
+// have none, and the class Neon's WebSocket `Pool` actually throws is
+// `ws`'s own, which `hejbro` does not depend on. This local class keeps
+// the measured shape -- an `Event` subclass named `ErrorEvent` whose own
+// `message` is empty -- so the row runs identically on every leg.
+const ErrorEventShape = class ErrorEvent extends Event {
+	readonly message = "";
+};
+
 const THROWN_VALUE_ROWS: ReadonlyArray<{
 	readonly label: string;
 	readonly thrown: unknown;
@@ -51,7 +60,7 @@ const THROWN_VALUE_ROWS: ReadonlyArray<{
 	// purpose: only this one reproduces the bug the task was opened for.
 	{
 		label: "a real ErrorEvent instance with an empty own message",
-		thrown: new ErrorEvent("error"),
+		thrown: new ErrorEventShape("error"),
 		expected: "ErrorEvent",
 	},
 	// #458 task 1.12: a plain `Object` is excluded from the new

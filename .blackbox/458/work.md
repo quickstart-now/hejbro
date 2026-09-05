@@ -75,3 +75,10 @@ _2026-09-05T11:34Z_
 
 PR #909 verify (24) failed in `examples/cli-smoke/test/config-driver.e2e.test.ts` (task 1.11 case): `hejbro generate` exited 1 at the config import. The runner's `pnpm test` step built core, query, pg, supabase, nile and hejbro -- never `@hejbro/neon` -- because cli-smoke links `packages/neon` by path only and declared no workspace dependency on it, so turbo's `^build` had no edge to follow; CI runs `pnpm test` before `pnpm build`, so `packages/neon/dist` did not exist yet. Locally every worktree already carries a built neon, which is why the suite was green here. Fix: `@hejbro/neon` declared as a cli-smoke devDependency (lockfile link entry); `turbo run test --filter=cli-smoke --dry=json` now schedules `@hejbro/neon#build` before `cli-smoke#test`. Private package, no changeset. Node 22 leg was cancelled by fail-fast, same cause.
 
+<a id="w6"></a>
+## W6 — W6 — CI: error-message.test.ts used the ErrorEvent global, absent on Node 22/24
+
+_2026-09-05T11:44Z_
+
+Second verify (24) failure on PR #909 after W5: `packages/cli/test/error-message.test.ts` failed to load with `ReferenceError: ErrorEvent is not defined`. The task 1.12 row built its input with `new ErrorEvent("error")`; that global exists on the local Node 26 (where the row was measured and passed) but not on the runner's Node 22/24 -- measured here: Node 22.22.2 has `typeof ErrorEvent === "undefined"` while `Event` is defined. The class Neon's WebSocket Pool actually throws is `ws`'s own, which `hejbro` does not depend on. Fix: a local `class ErrorEvent extends Event` with an empty own `message` (the measured shape; constructor name preserved, so the constructor-name rung is exercised the same way). Verified under Node 22: the file's 13 rows pass and the whole `hejbro` package suite passes (94 files, 1380 tests).
+
