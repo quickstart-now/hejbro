@@ -37,6 +37,15 @@
       "at": "2026-09-05T16:36Z",
       "title": "examples/postgres conversion scope: app.schema.ts and step-10 only",
       "ratified": null
+    },
+    {
+      "id": "R4",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [],
+      "at": "2026-09-05T16:56Z",
+      "title": "history-rewriting commands are out of the implementer's hands; the retitling of the first two commits stands",
+      "ratified": null
     }
   ],
   "work": [],

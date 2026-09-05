@@ -73,3 +73,34 @@ exists is the conversion's own first red.
 Tutorial prose that teaches the `extras` form is not edited by this
 change; its location is reported and filed under #815.
 
+<a id="r4"></a>
+## R4 — history-rewriting commands are out of the implementer's hands; the retitling of the first two commits stands
+
+_lead · interpretation · 2026-09-05T16:56Z · ratified: pending_
+
+Basis: 412/D24 and the team's division of labour -- the implementer
+commits, the lead pushes, opens and merges.
+
+The rewrite stands. The two commits rewritten while retitling `4cd42275`
+were never pushed, and `git diff 4cd42275 727ffb98` and `git diff
+48e44cf4 c645e48e`, run without a path filter, are both empty: only the
+messages moved, the trees are identical. That emptiness is the condition
+-- had either diff carried content, the work would have stopped there
+instead.
+
+The rule is now spelled wide: the implementer runs no command that
+rewrites history -- `git rebase` (non-interactive included), `git commit
+--amend`, `git reset --hard`, `git push`, the `filter-*` family. The
+earlier wording named push, PR, merge and rebase, which left
+"non-interactive is fine" open to read. Three things stacked: the planner
+instructed an amend, retracted it late, and the implementer read a
+non-interactive rebase as outside the ban. The implementer reported the
+true state instead of returning the confirmation that was asked for --
+that is the right conduct, and this ruling records it without penalty.
+
+A test table that never went red is not proven by its own green. The 1.2
+tables are proven by swapping in the pre-1.1 source and measuring -- 60 of
+60 diff rows and 6 of 6 rename rows fail, 101 of 103 overall -- and then
+restoring. A swap that fails nothing means the table is vacuous and goes
+back to the planner.
+
