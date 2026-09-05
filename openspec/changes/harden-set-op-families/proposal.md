@@ -1,4 +1,4 @@
-# Proposal: harden-set-op-families (#503)
+# Proposal: harden-set-op-families (#503, #966)
 
 ## Why
 
@@ -9,7 +9,10 @@ type-checks today and fails on the server: `UNION types text and
 numeric cannot be matched` (`42804`, measured while settling
 harden-query-surface 6.2). Unlike the key-order gap (which the server
 does not catch and #487 closed), this is a loud late failure worth
-moving to build time. It is filed apart from #489 on purpose: #489 is
+moving to build time. #966 (from the D106 review of
+`harden-recursive-nullability`) is the same failure on the recursive
+anchor/term surface -- a `text` anchor against an `integer` term -- and
+folds in here (503/R2). It is filed apart from #489 on purpose: #489 is
 divergence *within* a family (`int`/`bigint`), invisible at family
 granularity by construction, and a family rule must not read as having
 closed it.

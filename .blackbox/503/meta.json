@@ -19,6 +19,17 @@
       "at": "2026-09-05T11:00Z",
       "title": "Cross-family set-operation branches are refused at build time by a measured pair table; unknown is a wildcard; #489 stays separate",
       "ratified": null
+    },
+    {
+      "id": "R2",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "R1"
+      ],
+      "at": "2026-09-05T17:38Z",
+      "title": "#966 folds into this change: the recursive anchor/term pair is the third surface",
+      "ratified": null
     }
   ],
   "work": [],

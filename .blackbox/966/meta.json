@@ -7,7 +7,19 @@
   "status": "open",
   "opened": "2026-09-05",
   "closed": null,
-  "decisions": [],
+  "decisions": [
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "503/R2"
+      ],
+      "at": "2026-09-05T17:38Z",
+      "title": "handled inside harden-set-op-families (#503)",
+      "ratified": null
+    }
+  ],
   "work": [],
   "prs": [
     {

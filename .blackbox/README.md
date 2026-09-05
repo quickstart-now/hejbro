@@ -59,7 +59,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#500](500/) | recursive CTE row type stays non-null-inferred even when the recursive term is nullable | closed | #956 #968 | 0 | 8 (3 pending) |
 | ↳ [#501](501/) | add a real FILTER (WHERE …) aggregate constructor | closed | #963 #976 | 0 | 8 (1 pending) |
 | ↳ [#502](502/) | audit server-behavior assertions across openspec/specs | closed | #910 | 0 | 0 (0 pending) |
-| ↳ [#503](503/) | reject cross-family set-operation branches at build time | open |  | 0 | 1 (1 pending) |
+| ↳ [#503](503/) | reject cross-family set-operation branches at build time | open |  | 0 | 2 (2 pending) |
 | ↳ [#510](510/) | cross-check MODIFIED requirement titles against the base spec in CI | closed | #884 | 0 | 0 (0 pending) |
 | ↳ [#514](514/) | references() cannot express referential actions (onDelete/onUpdate) | closed | #979 #980 | 0 | 7 (1 pending) |
 | ↳ [#515](515/) | core-internal traversal helpers presets/query can't fold without a public export | closed | #988 #991 | 0 | 5 (2 pending) |
@@ -191,7 +191,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#953](953/) | core/query: a db.fn call refused by filter() or over() cannot be named exactly -- the thenable carries no brand core can read | open | #976 | 0 | 0 (0 pending) |
 | ↳ [#964](964/) | spec: name the surface on which the recursive-cte nullability rule is observable | open | #968 | 0 | 0 (0 pending) |
 | ↳ [#965](965/) | spec: qualify 'a plain set operation keeps the left projection' to the core-built surface | open | #968 | 0 | 0 (0 pending) |
-| ↳ [#966](966/) | query: a cross-family type divergence on a recursive-cte key passes the type layer and fails on the server | open | #968 | 0 | 0 (0 pending) |
+| ↳ [#966](966/) | query: a cross-family type divergence on a recursive-cte key passes the type layer and fails on the server | open | #968 | 0 | 1 (0 pending) |
 | [#834](834/) | skills: the bare npx skills add still installs the seven internal .claude/skills — metadata.internal hides them (measured on skills 1.5.23) | closed | #888 | 0 | 0 (0 pending) |
 | [#967](967/) | skills: nested combinators inside a recursive term are allowed; the doc says they cannot be spelled | open | #968 | 0 | 0 (0 pending) |
 | [#970](970/) | core: an unknown referential action string reaches the DDL unrefused on the type-check-free path | open | #979 #980 | 0 | 0 (0 pending) |
@@ -206,7 +206,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 
 ## Totals
 
-Owner decisions 93 · rulings 260 (interpretation 175, extension 83, stop 2) · pending extensions 45 · rejected 2
+Owner decisions 93 · rulings 262 (interpretation 176, extension 84, stop 2) · pending extensions 46 · rejected 2
 
 ## Conventions
 
