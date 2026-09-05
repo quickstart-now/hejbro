@@ -74,6 +74,15 @@
       "at": "2026-09-05T11:16Z",
       "title": "Older-format refusal is stated as a conditional plus an existential clause; history/status keep running; task 1.8 measures all 18 commands",
       "ratified": null
+    },
+    {
+      "id": "R6",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [],
+      "at": "2026-09-05T13:01Z",
+      "title": "D106 round 1 B1: the fixed-point scenario is about the current writer's canonical form",
+      "ratified": null
     }
   ],
   "work": [
@@ -160,6 +169,11 @@
       "number": 923,
       "role": "closes",
       "pinnedAt": "2026-09-05T12:33Z"
+    },
+    {
+      "number": 941,
+      "role": "refs",
+      "pinnedAt": "2026-09-05T13:03Z"
     }
   ],
   "origin": null,

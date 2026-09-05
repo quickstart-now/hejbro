@@ -37,3 +37,10 @@ _lead · interpretation · basis 412/D24, D25; su review B1 (history/status exit
 
 Option ①: any command that refuses a snapshot for being a released older format points its next step at `hejbro upgrade`, and generate/verify are among the commands that do refuse; commands that never read the snapshot's content (history, status) run as before. Widening the refusal to history/status is rejected (it would block pre-upgrade diagnosis and add a needless read). Task 1.8: delta ×2, skill reference, e2e comment, a full 18-command measurement recorded in design.md and compared with the reviewer's sealed matrix, and N1's test key aligned with the implementation's delimiter key. Ratification: owner on return.
 
+<a id="r6"></a>
+## R6 — D106 round 1 B1: the fixed-point scenario is about the current writer's canonical form
+
+_lead · interpretation · 2026-09-05T13:01Z · ratified: pending_
+
+D106 round 1 (context-free session, fable; evaluation.md) constructed real projects from four released hejbro versions (0.1.0, 0.1.1, 0.2.0-pre.0, 0.2.0-pre.1) and found the snapshot-format scenario "The current format is a fixed point" contradicted by a formatVersion-8 snapshot written by 0.2.0-pre.0: upgradeSnapshot re-encodes it with table checks in sorted rather than declaration order (139-line diff), because the canonical form gained that ordering after pre.0 while the format number did not move; snapshots the current writer renders (init, examples, the tag goldens) are fixed points, and hejbro upgrade treats the format match as a no-op, which the cli-commands delta states. Ruling: the scenario is narrowed to the current writer's canonical rendering, states that a same-format file in an earlier canonical order is re-encoded to the current form, and notes that the CLI's no-op on a format match is tracked separately (a follow-up under #815: whether upgrade should canonicalize and re-chain such a file). No code change. Basis: D106 R1 report; owner ratification pending.
+
