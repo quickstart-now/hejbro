@@ -24,7 +24,8 @@ export type ConfigCommand =
 	| "check"
 	| "migrate"
 	| "status"
-	| "reset";
+	| "reset"
+	| "upgrade";
 
 /**
  * Refuses with a coded error naming the first missing field a command

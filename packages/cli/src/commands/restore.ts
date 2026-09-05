@@ -1,15 +1,18 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import type { KindRegistry } from "@hejbro/core";
 import {
 	generateMigration,
 	HEJBRO_SNAPSHOT_VERSION,
 	hejbroError,
 	parseBannerHashes,
+	parseBannerUpgradedFrom,
 	parseBannerVersion,
 	parseSnapshot,
 	renderSnapshot,
 	requiredKeysByKind,
 	throwHejbroError,
+	upgradeSnapshot,
 } from "@hejbro/core";
 import { defineCommand } from "citty";
 import { globSync } from "tinyglobby";
@@ -130,6 +133,8 @@ type MigrationEntry = {
 	readonly number: number;
 	readonly fileName: string;
 	readonly bannerCurrentHash: string;
+	/** The tip's `-- upgraded-from:` value (#413), or `null` on a migration never upgraded -- present only ever on the tip. When set, `bannerCurrentHash` is already a current-format hash, so restoring this migration must re-encode its historical snapshot blob before comparing against it (see the reproduction check below). */
+	readonly bannerUpgradedFrom: string | null;
 	readonly state: MigrationState;
 	readonly commit: GitCommitInfo | null;
 };
@@ -153,11 +158,13 @@ const computeAllMigrationEntries = (
 	return fileNames.map((fileName, index) => {
 		const fileContent = readFileSync(join(migrationsDirPath, fileName), "utf8");
 		const bannerCurrentHash = bannerCurrentHashOf(fileContent);
+		const bannerUpgradedFrom = parseBannerUpgradedFrom(fileContent);
 		const entry = computeMigrationState(
 			cwd,
 			migrationsDirRelative,
 			snapshotPathRelative,
 			bannerCurrentHash,
+			bannerUpgradedFrom,
 			addedCommits,
 			fileName,
 		);
@@ -165,6 +172,7 @@ const computeAllMigrationEntries = (
 			number: index + 1,
 			fileName,
 			bannerCurrentHash,
+			bannerUpgradedFrom,
 			state: entry.state,
 			commit: entry.commit,
 		};
@@ -257,6 +265,31 @@ const parsedFormatVersionOf = (snapshotText: string): unknown => {
 		return parsed.formatVersion;
 	}
 	return parsed.hejbroSnapshot;
+};
+
+/**
+ * The target commit's own snapshot blob, brought to the current format
+ * in memory when the tip carries `-- upgraded-from:` (#413) — never
+ * written to disk, restore doesn't touch the snapshot file. The tip's
+ * `bannerCurrentHash` is only ever a *current-format* hash once it has
+ * been upgraded, so the D81 parent this feeds into (below) must be
+ * re-encoded the same way before the two can ever agree; a migration
+ * that was never upgraded is returned unchanged, keeping the older-
+ * format guard's own refusal exactly as it was.
+ */
+const normalizedTargetSnapshotText = (
+	targetSnapshotText: string,
+	bannerUpgradedFrom: string | null,
+	registry: KindRegistry,
+): string => {
+	if (bannerUpgradedFrom === null) {
+		return targetSnapshotText;
+	}
+	return upgradeSnapshot(
+		targetSnapshotText,
+		registry,
+		requiredKeysByKind(registry),
+	).text;
 };
 
 export const runRestore = async (
@@ -382,23 +415,39 @@ export const runRestore = async (
 		const targetSnapshotText = blobAt(cwd, sha, config.snapshotPath).toString(
 			"utf8",
 		);
-		const recordedFormatVersion = parsedFormatVersionOf(targetSnapshotText);
-		if (recordedFormatVersion !== HEJBRO_SNAPSHOT_VERSION) {
-			const note = `note: migration ${targetNumber} was generated under an older snapshot format (v${recordedFormatVersion}; this build is v${HEJBRO_SNAPSHOT_VERSION}) — the post-restore snapshot-reproduction check can't run across a format change. Review the diff manually before running \`hejbro generate\`.`;
-			return {
-				exitCode: 0,
-				stdout: [verifiedCommitLine, ...diffLines, note, "", ...undoLines],
-				stderr: null,
-			};
+		const registry = buildRegistry(config);
+
+		// #413: an upgraded tip's own `bannerCurrentHash` is already a
+		// current-format hash, so its target commit's historical blob (a
+		// released older format the ordinary read below would otherwise
+		// refuse) is re-encoded first; a migration that was never
+		// upgraded keeps today's older-format guard untouched -- gating
+		// on `upgraded-from`'s presence, not the blob's own format, so an
+		// ordinary old migration that was never upgraded still gets the
+		// ordinary note instead of a false drift report against a parent
+		// it was never generated against.
+		if (target.bannerUpgradedFrom === null) {
+			const recordedFormatVersion = parsedFormatVersionOf(targetSnapshotText);
+			if (recordedFormatVersion !== HEJBRO_SNAPSHOT_VERSION) {
+				const note = `note: migration ${targetNumber} was generated under an older snapshot format (v${recordedFormatVersion}; this build is v${HEJBRO_SNAPSHOT_VERSION}) — the post-restore snapshot-reproduction check can't run across a format change. Review the diff manually before running \`hejbro generate\`.`;
+				return {
+					exitCode: 0,
+					stdout: [verifiedCommitLine, ...diffLines, note, "", ...undoLines],
+					stderr: null,
+				};
+			}
 		}
 
-		const registry = buildRegistry(config);
 		// D81: rebuild against the target commit's own snapshot as parent --
 		// an empty parent would rebuild every table's `allColumns` lists in
 		// declaration order, disagreeing with the recorded physical order
 		// the moment a column was ever inserted mid-declaration.
 		const targetSnapshot = parseSnapshot(
-			targetSnapshotText,
+			normalizedTargetSnapshotText(
+				targetSnapshotText,
+				target.bannerUpgradedFrom,
+				registry,
+			),
 			requiredKeysByKind(registry),
 		);
 		const rebuilt = generateMigration({

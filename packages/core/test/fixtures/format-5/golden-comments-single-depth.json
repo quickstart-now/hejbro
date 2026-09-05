@@ -1,0 +1,113 @@
+{
+	"dialect": "postgres",
+	"formatVersion": 5,
+	"objects": {
+		"function:app.comments_enforce_single_depth": {
+			"args": [],
+			"bodyHash": "e1ab5100",
+			"bodySql": "create or replace function \"app\".\"comments_enforce_single_depth\"()\nreturns trigger\nlanguage plpgsql\nas $function$\ndeclare\n\tparent_post_id uuid;\n\tparent_parent_id uuid;\nbegin\n\tif new.parent_id is null then\n\t\treturn new;\n\tend if;\n\tselect \"app\".\"comments\".\"post_id\" as \"post_id\", \"app\".\"comments\".\"parent_id\" as \"parent_id\" into parent_post_id, parent_parent_id from \"app\".\"comments\" where \"app\".\"comments\".\"id\" = new.parent_id;\n\tif parent_post_id is null then\n\t\traise exception 'Could not find the parent comment (parent_id=%)', new.parent_id;\n\tend if;\n\tif parent_parent_id is not null then\n\t\traise exception 'Replies can only be nested one level deep (parent_id=%)', new.parent_id;\n\tend if;\n\tif parent_post_id <> new.post_id then\n\t\traise exception 'A reply must belong to the same post as its parent (post_id=%, parent''s post_id=%)', new.post_id, parent_post_id;\n\tend if;\n\treturn new;\nend;\n$function$;",
+			"language": "plpgsql",
+			"name": "comments_enforce_single_depth",
+			"returns": "trigger",
+			"schema": "app",
+			"security": "invoker"
+		},
+		"schema:app": {
+			"name": "app"
+		},
+		"table:app.comments": {
+			"columns": [
+				{
+					"default": {
+						"args": [],
+						"function": "gen_random_uuid",
+						"nodeKind": "function-call",
+						"schema": null
+					},
+					"name": "id",
+					"notNull": true,
+					"primaryKey": true,
+					"typeNode": {
+						"typeName": "uuid"
+					}
+				},
+				{
+					"name": "post_id",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "uuid"
+					}
+				},
+				{
+					"name": "parent_id",
+					"typeNode": {
+						"typeName": "uuid"
+					}
+				},
+				{
+					"name": "body",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "text"
+					}
+				}
+			],
+			"foreignKeys": [],
+			"indexes": [],
+			"name": "comments",
+			"primaryKeyName": "comments_pkey",
+			"schema": "app"
+		},
+		"table:app.posts": {
+			"columns": [
+				{
+					"default": {
+						"args": [],
+						"function": "gen_random_uuid",
+						"nodeKind": "function-call",
+						"schema": null
+					},
+					"name": "id",
+					"notNull": true,
+					"primaryKey": true,
+					"typeNode": {
+						"typeName": "uuid"
+					}
+				},
+				{
+					"name": "slug",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "text"
+					},
+					"unique": true,
+					"uniqueName": "posts_slug_key"
+				},
+				{
+					"name": "published_at",
+					"typeNode": {
+						"typeName": "timestamptz"
+					}
+				}
+			],
+			"foreignKeys": [],
+			"indexes": [],
+			"name": "posts",
+			"primaryKeyName": "posts_pkey",
+			"schema": "app"
+		},
+		"trigger:app.comments.comments_single_depth": {
+			"events": [
+				{
+					"event": "insert"
+				}
+			],
+			"forEach": "row",
+			"function": "comments_enforce_single_depth",
+			"name": "comments_single_depth",
+			"schema": "app",
+			"table": "comments",
+			"timing": "before"
+		}
+	}
+}

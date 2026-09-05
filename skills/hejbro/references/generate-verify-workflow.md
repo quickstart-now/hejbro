@@ -76,6 +76,7 @@ banner can carry:
 import {
 	parseBannerBaseline,
 	parseBannerHashes,
+	parseBannerUpgradedFrom,
 	parseBannerVersion,
 } from "hejbro";
 
@@ -84,10 +85,13 @@ declare const fileContent: string;
 const hashes = parseBannerHashes(fileContent); // { parent, current } | null
 const version = parseBannerVersion(fileContent); // string | null (pre-#229 files carry none)
 const isBaseline = parseBannerBaseline(fileContent); // boolean — see below
+const upgradedFrom = parseBannerUpgradedFrom(fileContent); // string | null — see `hejbro upgrade` below
 ```
 
 `parseBannerHashes`/`parseBannerVersion` return `null` when their own
-line is absent (a pre-Phase-5 or pre-#229 file). `parseBannerBaseline`
+line is absent (a pre-Phase-5 or pre-#229 file). `parseBannerUpgradedFrom`
+returns `null` the same way — absent on every migration `hejbro upgrade`
+has never re-chained. `parseBannerBaseline`
 returns a plain `boolean` instead — for a marker, absence is itself a
 meaningful answer (`false`, an ordinary migration to *run*), not a
 missing value; `true` means *register this migration as applied, never
@@ -184,6 +188,48 @@ The **local Docker round-trip** (`pnpm roundtrip` in an example package)
 goes further: it applies the full committed migration chain to one
 database and a single fresh migration to another, then diffs the schema
 dumps — the deeper, pre-merge check `verify` can't do without a database.
+
+## `hejbro upgrade`
+
+A snapshot file written by an older *released* hejbro version fails
+every command that reads its content — `generate` (and `baseline`,
+which shares its read path), `verify`, `check` and `reset` — with the
+older-format diagnostic, naming `hejbro upgrade` as the next step
+instead of silently reinterpreting an old file. A command that never
+parses the snapshot's content is unaffected: `history` and `status`
+read git blobs and the ledger, not the snapshot, and both run
+normally; `restore` only hashes the snapshot's bytes to check the tip
+match, so it succeeds too, adding a note to review the diff manually
+when the restored commit predates the current format.
+
+`upgrade` re-encodes the snapshot at the current format and, if a
+migration chain exists, rewrites its tip's own banner to match: the
+`-- snapshot:` line gets the new file's hash, and a new
+`-- upgraded-from:` line is inserted directly under it, naming the hash
+the tip carried before — no other line of any migration changes. A
+project with no migrations yet has no tip to re-chain; the snapshot
+alone is rewritten. Running `upgrade` again on an already-upgraded tip
+leaves the `upgraded-from` line as it is — it always names the *first*
+pre-upgrade hash, never a later one.
+
+Before writing anything, `upgrade` checks that the tip's recorded hash
+matches the snapshot as stored, refusing with `chain-tip-mismatch`
+otherwise — an already-broken chain is `verify`'s business, and
+upgrading over it would hide the break. A snapshot already at the
+current format is a no-op (exit 0, nothing written); a newer format, or
+one older than any release ever shipped, gets the ordinary newer-format
+or pin-or-reset diagnostic instead.
+
+Commit both rewritten files together — the snapshot and the tip
+migration — the same way an ordinary `generate` output is committed as
+one unit: `verify` reads them as a pair, and a partial commit reproduces
+exactly the mismatch `upgrade` itself checks for.
+
+`history` and `restore` both resolve an upgraded tip transparently: the
+commit that originally added it is still the commit `history` reports
+`ok` against (matched by either its current hash or the `upgraded-from`
+hash), and `restore` re-encodes that commit's historical snapshot blob
+in memory before comparing it, never touching the snapshot file on disk.
 
 ## `hejbro reset`
 

@@ -39,6 +39,7 @@ describe("computeMigrationState", () => {
 			"migrations",
 			"hejbro.snapshot.json",
 			snapshotHashAt(snapshotV1),
+			null,
 			addedCommits,
 			"0001_add_a.sql",
 		);
@@ -69,6 +70,7 @@ describe("computeMigrationState", () => {
 			"migrations",
 			"hejbro.snapshot.json",
 			snapshotHashAt(snapshotV2),
+			null,
 			addedCommits,
 			"0001_add_a.sql",
 		);
@@ -87,6 +89,7 @@ describe("computeMigrationState", () => {
 			"migrations",
 			"hejbro.snapshot.json",
 			"sha256:never-recorded-anywhere",
+			null,
 			addedCommits,
 			"0001_add_a.sql",
 		);
@@ -106,6 +109,7 @@ describe("computeMigrationState", () => {
 			"migrations",
 			"hejbro.snapshot.json",
 			"sha256:whatever",
+			null,
 			addedCommits,
 			"0002_add_b.sql",
 		);
@@ -139,10 +143,86 @@ describe("computeMigrationState", () => {
 			"migrations",
 			"hejbro.snapshot.json",
 			"sha256:whatever",
+			null,
 			addedCommits,
 			"0001_add_a_renamed.sql",
 		);
 		expect(result.state).toBe("rewritten");
 		expect(result.commit).toBeNull();
+	});
+
+	// #413: after `hejbro upgrade`, the tip's `-- snapshot:` line names the
+	// re-encoded bytes' hash, but the commit that originally *added* the
+	// file still carries the pre-upgrade (older-format) blob -- which
+	// hashes to the `-- upgraded-from:` value, not the current one.
+	it("ok (upgraded-from): the add-commit's own blob is the pre-upgrade format, matching upgraded-from rather than the current hash", async () => {
+		write(fixture.cwd, "migrations/0001_add_a.sql", "-- hejbro migration\n");
+		const oldFormatSnapshot = '{"formatVersion":5,"v":1}';
+		write(fixture.cwd, "hejbro.snapshot.json", oldFormatSnapshot);
+		fixture.commit("feat: a", "2026-01-01T10:00:00Z");
+
+		const addedCommits = migrationAddedCommits(fixture.cwd, "migrations");
+		const result = computeMigrationState(
+			fixture.cwd,
+			"migrations",
+			"hejbro.snapshot.json",
+			"sha256:the-re-encoded-hash-no-commit-carries-yet",
+			snapshotHashAt(oldFormatSnapshot),
+			addedCommits,
+			"0001_add_a.sql",
+		);
+		expect(result.state).toBe("ok");
+		expect(result.commit?.subject).toBe("feat: a");
+	});
+
+	it("ok (upgraded-from): still reports the original add-commit even when a later commit's own snapshot blob happens to match the current hash", async () => {
+		write(fixture.cwd, "migrations/0001_add_a.sql", "-- hejbro migration\n");
+		const oldFormatSnapshot = '{"formatVersion":5,"v":1}';
+		write(fixture.cwd, "hejbro.snapshot.json", oldFormatSnapshot);
+		fixture.commit("feat: a", "2026-01-01T10:00:00Z");
+
+		// Simulates a committed `hejbro upgrade`: a LATER commit rewrites
+		// the snapshot file to the re-encoded bytes. If the candidate/
+		// upgraded-from check were ever dropped in favor of the fallback
+		// search alone, this later commit is exactly what
+		// `findCommitMatchingHash` would find against `bannerCurrentHash`,
+		// silently reporting the upgrade commit instead of the migration's
+		// own original add-commit -- the delta scenario's own wording is
+		// "at the commit that originally added it".
+		const upgradedSnapshot = '{"formatVersion":8,"v":1}';
+		write(fixture.cwd, "hejbro.snapshot.json", upgradedSnapshot);
+		fixture.commit("chore: hejbro upgrade", "2026-01-02T10:00:00Z");
+
+		const addedCommits = migrationAddedCommits(fixture.cwd, "migrations");
+		const result = computeMigrationState(
+			fixture.cwd,
+			"migrations",
+			"hejbro.snapshot.json",
+			snapshotHashAt(upgradedSnapshot),
+			snapshotHashAt(oldFormatSnapshot),
+			addedCommits,
+			"0001_add_a.sql",
+		);
+		expect(result.state).toBe("ok");
+		expect(result.commit?.subject).toBe("feat: a");
+	});
+
+	it("lost: a blob matching neither the current hash nor upgraded-from stays lost", async () => {
+		write(fixture.cwd, "migrations/0001_add_a.sql", "-- hejbro migration\n");
+		write(fixture.cwd, "hejbro.snapshot.json", '{"formatVersion":5,"v":1}');
+		fixture.commit("feat: a", "2026-01-01T10:00:00Z");
+
+		const addedCommits = migrationAddedCommits(fixture.cwd, "migrations");
+		const result = computeMigrationState(
+			fixture.cwd,
+			"migrations",
+			"hejbro.snapshot.json",
+			"sha256:never-recorded-anywhere",
+			"sha256:also-never-recorded-anywhere",
+			addedCommits,
+			"0001_add_a.sql",
+		);
+		expect(result.state).toBe("lost");
+		expect(result.commit?.subject).toBe("feat: a");
 	});
 });

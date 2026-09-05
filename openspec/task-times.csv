@@ -949,3 +949,12 @@ date,change-id,task-id,group,est_min,actual_min,waited_user_min,notes
 2026-09-05,harden-function-locals,1.4,1,8,10,0,argument seeding; red re-verified by stashing the green
 2026-09-05,harden-function-locals,1.5,1,6,7,0,skill reference + changeset
 2026-09-05,harden-function-locals,1.6,1,8,15,0,"review-born; next+query refused, harmless-19 control table (argument/loop/row-read), red re-verified by stashing reserved.ts; +setof/coalesce regression-lock rows"
+2026-09-05,add-snapshot-upgrade,1.1,1,10,38,0,"registry-required upgradeSnapshot(raw, registry, requiredKeysByKind?); floor 5; 12 format-5 fixtures vendored from hejbro@0.1.1"
+2026-09-05,add-snapshot-upgrade,1.1b,1,10,20,0,"normalizeDiscriminatedNodes round-trips every discriminated subtree through its own codec before canonicalize; split out normalizeQueryNode to hold CRAP complexity at 5"
+2026-09-05,add-snapshot-upgrade,1.2,1,6,12,0,"older-format message splits on the release floor; 5-row table over {4, pre-key, 5, 6, 7}"
+2026-09-05,add-snapshot-upgrade,1.3,1,7,18,0,"-- upgraded-from: banner line + parseBannerUpgradedFrom; reclassified VOCABULARY over an initial ENGINE guess (amended in place)"
+2026-09-05,add-snapshot-upgrade,1.4,1,10,55,0,"hejbro upgrade command; chain-tip-mismatch moved into verify.ts as a full error constructor after check-next-marker's cross-file resolution gap"
+2026-09-05,add-snapshot-upgrade,1.5,1,7,40,0,"history/restore resolve an upgraded tip; design Q4's stated mechanism was wrong (restore does parse the historical blob), contract unchanged, fixed by gating on upgraded-from presence"
+2026-09-05,add-snapshot-upgrade,1.1c,1,8,30,0,"canonicalizeTable orders foreignKeys too -- found via 1.6 prep probing the vendored 0.1.1 fixture (upgrade+verify failed snapshot-stale), spiked safe+sufficient before fixing"
+2026-09-05,add-snapshot-upgrade,1.6,1,9,55,0,"e2e over the real 0.1.1 project's own three batch commits; tasks.md's own ""every migration ok"" wording was stronger than the delta scenario and corrected; per-test 120_000ms timeout added after measuring 26s without host load"
+2026-09-05,add-snapshot-upgrade,1.7,1,7,18,0,"generate-verify-workflow.md upgrade section + parseBannerUpgradedFrom in the import example; D101 row/index updated; minor changeset; separate chore(openspec) commit synced tasks.md/design.md/specs"

@@ -1,0 +1,204 @@
+# Work — quickstart-now/hejbro#413
+
+What was built, measured and reversed under the decisions, one entry per PR or group (`W#`). Managed by `blackbox add work`; append-only.
+
+<a id="w1"></a>
+## W1 — upgradeSnapshot takes the registry, not a required-keys map
+
+_2026-09-05T04:49Z_
+
+canonicalizeSnapshot's real signature is `canonicalizeSnapshot(snapshot: Snapshot, registry: KindRegistry): Snapshot` (packages/core/src/snapshot/snapshot.ts:207-229) -- it needs a full KindRegistry, not the plain `ReadonlyMap<string, ReadonlyArray<string>>` that `requiredKeysByKind(registry)` (packages/core/src/kind/registry.ts:237-245) produces.
+
+Measured directly (Stage A, task 1.1): re-encoding the 0.1.1-tagged format-5 `table-constraints` golden expected snapshot and diffing it against today's expected snapshot shows the only non-formatVersion difference is the `checks` array's *order* -- two check-constraint objects, byte-identical content, swapped position. That reordering is exactly what `tableKind.canonicalize` (packages/core/src/kinds/table-kind.ts:601-609, `canonicalizeTable`, #701/D3) does: it sorts `indexes` and `checks` by name. Nothing else in any of the 10 byte-identical golden cases differs beyond that and the known additive fields (`distinct`/`groupBy`/`having`/`offset`, all decode to their empty value when absent).
+
+Conclusion: upgradeSnapshot's "brought to the canonical form" step is not optional plumbing -- it is load-bearing for the byte-identical oracle itself, and it requires calling each object's own kind.canonicalize through a real KindRegistry. A registry built internally via `createDefaultRegistry()` (core-only kinds) would silently skip canonicalize for any preset-declared kind (e.g. a Supabase-only kind) carried in a format-5 snapshot, undermining the ADDED requirement's idempotence claim for any input outside core's own kind set. Settled (lead ruling via su-planner): `upgradeSnapshot(raw, registry, requiredKeysByKind?) -> { text, fromVersion }` -- the caller's own registry (already built for every other command via `buildRegistry(config)`) is passed in, exactly like `canonicalizeSnapshot`'s existing pattern. `parseSnapshot`'s own 2-argument shape (kept plain-map-only, no registry) is unaffected -- the requiredKeysByKind doc comment's coupling concern was about parseSnapshot needing only string-list data; upgradeSnapshot genuinely needs kind behavior, so that precedent does not transfer.
+
+<a id="w2"></a>
+## W2 — spike: generic queryKind/nodeKind decode-encode walk fixes both failing golden cases, no-op on every current-format file
+
+_2026-09-05T05:03Z_
+
+Spike only (su-planner directive) -- scratch script run via tsx from /private/tmp scratchpad, never committed, not in the worktree.
+
+Hypothesis tested: a generic normalization pass -- recursively walk a parsed snapshot's objects, and wherever a JSON object literal carries `nodeKind` (an ExprNode) or `queryKind` (a query node), decode it through the matching codec (`decodeExprNode`/`encodeExprNode`, or `decodeQueryNode`/`encodeQueryNode` for `select`/`set-op`, or `decodeWithNode`/`encodeWithNode` for `with`) and replace the subtree with the re-encoded result -- run once, before `canonicalizeSnapshot`, fixes the two failing golden cases and is a no-op on every current-format snapshot.
+
+Result 1 (effect): all 10 golden cases MATCH byte-for-byte after adding this pass, including the two that failed with canonicalizeSnapshot alone (app-security, column-insert-mid).
+
+Result 2 (fixed point): ran the same normalization + canonicalizeSnapshot + renderSnapshot pipeline over all 16 current-format snapshots that exist in the repo today (14 golden expected/snapshot.json + both examples) -- every one is byte-identical to its own input (FIXED POINT). No current-format file changed.
+
+Result 3 (out-of-sample field survey): ran the walker over all 12 format-5 fixtures and logged which snapshot fields actually carry a nodeKind/queryKind subtree. Confirmed fields, none unexpected: table `columns[].default` (nodeKind:function-call/literal), table `checks[].expression` (nodeKind:comparison/in-list/between/sql-template), table `indexes[].where` (nodeKind:comparison), policy `using`/`withCheck` (nodeKind:exists/comparison/null-test/logical/literal), view `query` (queryKind:select). No `queryKind:with` subtree occurs in any of the 12 format-5 fixtures (0.1.1 predates CTEs), so the `with`-dispatch branch (decodeWithNode/encodeWithNode, needed because encodeQueryNode/decodeQueryNode's own dispatch is deliberately narrow to select/set-op per codec.ts:996-1002) is wired in the spike but unexercised by this oracle -- a real risk area for any future case that does carry a `with` node, structurally important but unmeasured here.
+
+Zero exceptions across all 12 fixtures' full object trees.
+
+Conclusion for the lead's ruling: the round-trip a format bump needs is not reachable through the existing per-kind `canonicalize` hook (view-kind has none, policy-kind's only sorts roles, table-kind's only sorts indexes/checks) -- it lives in the expr/query codec, and a **generic, kind-agnostic** recursive walk over the two node-shape discriminators reaches every field that needs it without hardcoding per-kind field names, and is provably inert on data the writer already produces in full.
+
+<a id="w3"></a>
+## W3 — spike addendum: neither with nor set-op queryKind appears in any current-format file
+
+_2026-09-05T05:05Z_
+
+Follow-up measurement on W2's spike: grepped all 16 current-format snapshots (14 golden expected/snapshot.json + both examples) for `"queryKind"` values. Only `"select"` appears anywhere; neither `"with"` nor `"set-op"` occurs in any of them.
+
+Consequence: the spike's Result 2 (fixed point over all 16 current-format files) never exercised the generic walker's `with`/`set-op` dispatch branches -- both are unverified by any file-based oracle available in this repo today, not just `with` alone as first noted. Neither branch can ever be exercised by a vendored fixture (0.1.1 predates CTEs, and no golden case's declarations use a set operation), so covering them needs an in-memory constructed input (buildSnapshot over a declaration set that includes a CTE view and a union/except/intersect view), not a file. Held pending the lead's ruling on (A) vs (B); if (B) ships, this coverage gap becomes its own task.
+
+<a id="w4"></a>
+## W4 — 1.1b: generic discriminator-driven normalization closes the byte oracle
+
+_2026-09-05T07:13Z_
+
+Implemented the recursive normalization pass ruled on in R2 (lead ruling via su-planner): normalizeDiscriminatedNodes walks a parsed snapshot's objects and, on encountering an object literal carrying `nodeKind` (an ExprNode) or `queryKind` (a query node), round-trips it through its own codec (decodeExprNode/encodeExprNode; decodeQueryNode/encodeQueryNode for select/set-op; decodeWithNode/encodeWithNode for with) and replaces the subtree, run inside upgradeSnapshot before canonicalizeSnapshot. Node recognition is by discriminator field only, no per-kind field list.
+
+Refactor during green (su-planner review): the first working version imported view-kind.ts's own encodeViewQueryNode/decodeViewQueryNode wrapper for the with/non-with dispatch -- functionally correct (same underlying codec calls) but made the generic normalizer depend on a specific kinds/ module, contradicting 1.1b's own "recognise by discriminator only, no kind-specific dependency" constraint. Replaced with the same three-way dispatch built directly from expr/codec.ts's own exports (decodeQueryNode/encodeQueryNode, decodeWithNode/encodeWithNode), removing the kinds/view-kind import entirely -- snapshot.ts now only depends on expr/codec.ts for both the expression and query axes, symmetric.
+
+CRAP gate caught a second issue after that refactor: folding the with/non-with dispatch into normalizeDiscriminatedNodes's own body raised its cyclomatic complexity to 6 (CRAP 6.00 at 100% coverage -- complexity alone over the threshold, not a coverage gap, so no test could fix it). Split the queryKind dispatch into its own normalizeQueryNode helper; both functions now sit at exactly complexity 5 (CRAP 5.00, at the gate's own threshold, matching the pattern already used elsewhere in this file, e.g. applyCanonicalize split out of buildEntry).
+
+Result: 45/45 tests green (T1 12 + T2 10 golden byte-oracle + 4 in-memory queryKind fixed points [with/union/except/intersect, none present in any committed snapshot] + T3 15 + T4 4 refusal rows), full pnpm test (@hejbro/core: 101 files / 1726 passed + 1 todo), all custom gates (bans, next-marker, diagnostic-xref, crap) green.
+
+<a id="w5"></a>
+## W5 — 1.2: older-format message splits on the release floor
+
+_2026-09-05T07:32Z_
+
+Split parseSnapshot's older-format diagnostic on HEJBRO_UPGRADABLE_SNAPSHOT_FLOOR (5): below it (a format no release ever wrote) keeps olderVersionMessage's pin-or-reset guidance verbatim, unchanged; at or above it (5, 6, 7 -- this build's own snapshot history) a new olderReleasedFormatMessage names `hejbro upgrade` and never mentions pinning or resetting. olderFormatMessage is a small if-only dispatcher (no ternary) between the two, called from validatePresentFormatVersion; validateMissingFormatVersion (the pre-formatVersion-key path) is untouched since it is always below the floor.
+
+Verified the split doesn't break 1.1's T4 (upgradeSnapshot's below-floor/newer refusals carry the ordinary read's exact code+message): upgradeSnapshot's own validateUpgradeableFormatVersion calls olderVersionMessage directly for its below-floor branch, exactly what olderFormatMessage itself calls for the same input -- same function, same argument, same string.
+
+Red confirmed by actual revert-and-rerun (not just written-then-passed): reverted validatePresentFormatVersion's call back to olderVersionMessage, reran the new 5-row table -- the 3 released-format rows (5/6/7) failed exactly as expected, the 2 below-floor rows stayed green. Restored the fix; all green again.
+
+Added a further assertion after su-planner review: each row also asserts the message names the exact version mismatch found ("snapshot version <v> is older than this build supports (expects 8)") per the delta scenario's "naming the version mismatch" clause -- catches an implementation that names `hejbro upgrade` without saying which version was found.
+
+Test file: packages/core/test/snapshot.test.ts (existing version-message file, per tasks.md's own allowance), new describe "the older-format message splits on the release floor (#413)", 5-row it.each table. All gates green: pnpm check, check-types (18/18), full pnpm test (@hejbro/core: 101 files / 1731 passed + 1 todo), check:bans, check:next-marker, check:diagnostic-xref, check:crap (44 at threshold, no violations).
+
+Note: an early full `pnpm test` run failed on `preset-smoke` with "Failed to resolve entry for package @hejbro/core" -- self-inflicted: I had `TURBO_FORCE=1 pnpm check-types` (which rebuilds core's dist) running concurrently with `TURBO_FORCE=1 pnpm test` in the background, racing tsdown's clean-then-rewrite of packages/core/dist against preset-smoke's module resolution. Not a product defect. Fixed by running `pnpm build --force` then `pnpm test` sequentially, with nothing else touching dist concurrently -- confirms these gates must not be run in parallel against the same worktree's dist.
+
+<a id="w6"></a>
+## W6 — 1.3: the -- upgraded-from: banner line and its parser
+
+_2026-09-05T07:49Z_
+
+Added the -- upgraded-from: banner line (R3 contract): prefix "-- upgraded-from: ", rendered directly under -- snapshot: only when renderBanner's new optional 5th parameter (upgradedFrom?: string) is given. parseBannerUpgradedFrom(fileContent): string | null reads it by prefix only (same reasoning as parseBannerBaseline's own doc comment -- matching the whole line would misreport absence the moment the prose after the prefix changed). parseBannerHashes is untouched and continues to return the current pair unaffected by the new line's presence (verified by test, not just asserted -- different prefix, no code change needed there).
+
+R3's "keeps one line, first hash" requirement: renderBanner has no memory of a file's previous contents (it always renders fresh from its own explicit parameters), so "one line" holds by construction -- there is no code path that could produce two. The interesting half of the requirement -- that a second upgrade's caller passes the ORIGINAL hash forward, not the one just replaced -- is a 1.4 (CLI) concern; 1.3's own test demonstrates the property at the migration-file.ts level: render with upgradedFrom=X, change only the current snapshot hash (simulating what a second upgrade would do to the hash-chain lines), re-render with the SAME upgradedFrom=X -- output still carries exactly one upgraded-from line, value X, parser returns X.
+
+Export pin: parseBannerUpgradedFrom exported from packages/core/src/index.ts, classified ENGINE (not VOCABULARY) in packages/cli/src/core-surface.ts per su-planner's direction -- unlike parseBannerHashes/parseBannerVersion/parseBannerBaseline (VOCABULARY, documented in the generate/verify workflow skill as user-facing), this one is CLI-internal machinery for history/restore resolution (1.5), not (yet) a documented end-user surface.
+
+File path note: tasks.md names packages/core/test/sql/migration-file.test.ts and packages/core/test/exports.test.ts; neither exists at that path. Used the actual existing files instead: packages/core/test/migration-file.test.ts (flat, matches every other parseBanner* test already there) and packages/cli/test/exports.test.ts (core's own export-pin/classification gate; there is no packages/core/test/exports.test.ts in this repo). Same file-path-mismatch pattern already seen in 1.1/1.2.
+
+Gates: pnpm check, check-types (18/18), full pnpm test (@hejbro/core: 101 files / 1739 passed + 1 todo; preset-smoke passes -- confirms the 1.2 dist race was self-inflicted, not systemic), check:bans, check:next-marker, check:diagnostic-xref all green on the first run. check:crap failed once on an unrelated flake (test/cross-instance-symbols.test.ts's duplicate-module-loading test timed out under coverage instrumentation load, nothing this task touches) and passed clean on an immediate retry -- 44 functions at the threshold, no violations.
+
+<a id="w7"></a>
+## W7 — 1.4: hejbro upgrade — check:next-marker forced error-construction sharing, not just message sharing
+
+_2026-09-05T08:20Z_
+
+scripts/check-next-marker.mjs's resolveMessageText only follows a message argument to a same-file `const` declaration (findDeclarationText scans the current file's own text). The first version of commands/upgrade.ts's chain-tip-mismatch precondition imported verify.ts's chainTipMismatchMessage and called throwHejbroError("chain-tip-mismatch", chainTipMismatchMessage(...)) at the import site -- the checker found the throwHejbroError call in upgrade.ts, but could not resolve the message argument across files, and failed with "could not locate the message literal".
+
+Verified manually (the checker's own suggested fallback) that the message text does carry Next: -- this was a real gate limitation (cross-file import resolution), not a missing Next: clause.
+
+Lead ruling (via su-planner): do not accept the gate red, do not duplicate the message text in upgrade.ts, and do not extend the shared checker script for one call site. Instead move the error CONSTRUCTION (not just the message) into verify.ts: chainTipMismatchError(tipMigrationPath, snapshotPath) -> HejbroError wraps hejbroError("chain-tip-mismatch", chainTipMismatchMessage(...)) in the same file as chainTipMismatchMessage's own declaration, so check-next-marker's same-file resolver sees code+message paired and passes honestly. verify.ts's own check 4 now calls this too (previously had its own separate hejbroError(...) call with the identical arguments), so the two commands are now provably unable to drift in that they build the literal same HejbroError value. upgrade.ts imports only chainTipMismatchError and never holds the "chain-tip-mismatch" string or the message text itself -- a reviewer scanning upgrade.ts for a bare code+message pair will correctly find none, by design.
+
+The cross-file resolution gap in check-next-marker.mjs itself is a real, separately-tracked limitation -- the lead is informed via su-planner; not filed as an issue by the implementer per instruction.
+
+<a id="w8"></a>
+## W8 — 1.5: history and restore resolve an upgraded tip
+
+_2026-09-05T08:50Z_
+
+history-state.ts: computeMigrationState gains bannerUpgradedFrom: string | null (right after bannerCurrentHash). Candidate check widened to candidateHash === bannerCurrentHash || candidateHash === bannerUpgradedFrom; unmatched falls through to the existing findCommitMatchingHash fallback and lost, unchanged. Callers (history.ts, restore.ts -- both call this function, tasks.md's own file list only named restore.ts; history.ts is required too since the scenario is literally about `hejbro history`, reported and added with su-planner's agreement) pass parseBannerUpgradedFrom(fileContent).
+
+Measured trap (su-planner review): a test asserting only `state === "ok"` cannot tell a correct implementation (candidate's own blob matches upgraded-from) apart from a broken one that falls through to the bannerCurrentHash-only fallback search, which -- if a later commit happens to carry the upgraded snapshot bytes (e.g. a committed `hejbro upgrade`) -- ALSO reports "ok", but names the wrong commit (the upgrade commit, not the migration's own original add-commit; the delta scenario's own wording is "at the commit that originally added it"). Added a dedicated test with exactly that shape (original add-commit + a later commit whose blob matches the current hash) and verified by actual mutation: removing the `|| candidateHash === bannerUpgradedFrom` clause makes this specific test fail on the wrong commit ("chore: hejbro upgrade" instead of "feat: a") while state stays "ok" -- confirms the assertion is load-bearing, not redundant with the state check.
+
+restore.ts -- design Q4's stated mechanism was wrong, measured directly: Q4 said the reproduction check "rebuilds from declarations under the current hejbro" without needing the new banner line, but restore.ts:406 (pre-existing, D81) uses parseSnapshot(targetSnapshotText, ...) -- the TARGET COMMIT'S OWN stored snapshot blob -- as generateMigration's previousSnapshot (an empty parent would rebuild every table's allColumns in declaration order, disagreeing with the recorded physical order after any mid-declaration column insert). For an upgraded tip, the commit computeMigrationState now correctly resolves to is the ORIGINAL add-commit, which still carries the pre-upgrade (older-format) blob -- parseSnapshot rejects that outright (unsupported-snapshot-version), which is exactly why the pre-existing "older snapshot format" guard (parsedFormatVersionOf(...) !== HEJBRO_SNAPSHOT_VERSION) exists and fires unconditionally today, short-circuiting before the rebuild+compare ever runs.
+
+Lead ruling (via su-planner): contract stands ((a), not (b)) -- the migration-format delta scenario explicitly requires restore to "verify that commit's declarations against the tip's current hash", so bailing out with a note contradicts the shipped contract even though Q4 mis-described why. Fix: gate the older-format guard on `bannerUpgradedFrom !== null` (target.bannerUpgradedFrom, threaded onto MigrationEntry), not on the blob's own format number. When set, re-encode the target blob via upgradeSnapshot(targetSnapshotText, registry, requiredKeysByKind(registry)) IN MEMORY ONLY (restore never writes the snapshot file) before parseSnapshot, so it lands on the same current-format footing as generateMigration's rebuild and the tip's already-current bannerCurrentHash. Gating on format alone (any migration below HEJBRO_SNAPSHOT_VERSION gets re-encoded) was explicitly rejected: an ordinary migration that is genuinely an older format but was NEVER run through hejbro upgrade would then be rebuilt against a re-encoded parent it was never actually generated against, producing a false drift report instead of today's honest "can't check this" note -- upgraded-from is set only on a tip hejbro upgrade actually touched, so gating on its presence can't affect any other migration.
+
+Verified end-to-end against the REAL built CLI (dogfooding 1.4's own hejbro upgrade, not a hand-simulated fixture): init -> generate (format 8) -> mutate committed snapshot's formatVersion to 5 + rewrite the migration's own -- snapshot: hash to match (existing withMutatedCommittedSnapshot test helper) -> commit -> `hejbro upgrade` (real dist/cli.js) -> commit -> `hejbro restore 1` -> "verified: restored declarations reproduce migration 1's recorded snapshot", exit 0. A sibling fixture with the SAME format-5 mutation but no `hejbro upgrade` step still gets today's "note: ... older snapshot format (v5; this build is v8)" unchanged -- proves the gate is upgraded-from's presence, not format 5 itself. Reverted the guard to unconditional and reran: only the upgraded-tip test failed (the never-upgraded one stayed green), confirming the two tests are independently discriminating.
+
+Gates: all green (details in the completion report to su-planner).
+
+<a id="w9"></a>
+## W9 — spike: extending tableKind.canonicalize to sort foreignKeys is safe and sufficient
+
+_2026-09-05T09:05Z_
+
+Spike only (su-planner directive) -- scratch script in /private/tmp scratchpad, never committed, not in the worktree. Simulated "canonicalizeTable also sorts foreignKeys (D1 order)" by layering an additional sort pass on top of the real canonicalizeSnapshot's own output (sound since canonicalize is idempotent and this is a pure additional pass over the same objects).
+
+Result 1 (safety): all 16 current-format snapshots (14 golden expected/snapshot.json + both examples) are byte-UNCHANGED with FK-sort layered on -- confirms every current-format file's FK order is already canonical (as tableKind's own doc comment assumed), so extending canonicalizeTable is a true no-op for all of today's writer output.
+
+Result 2 (sufficiency): (a) the 0.1.1 project fixture's app.comments table -- the exact table the manual repro found in the wrong order -- now sorts to [comments_parent_id_fk, comments_task_id_fk], matching a fresh rebuild's own canonical order. (b) All 10 of 1.1/1.1b's own T2 golden byte-oracle rows still MATCH with FK-sort layered on top of the real upgradeSnapshot pipeline -- extending canonicalizeTable does not regress the existing oracle.
+
+Result 3 (out-of-sample survey, answering "did the 1.1 oracle simply never have a 2+-FK table to exercise this?"): scanned all 12 format-5 fixtures for tables with 2+ foreign keys. Found exactly two: golden-table-constraints.json's own app.comments (already canonical -- explains why T2's byte-oracle row for table-constraints passed despite the gap existing elsewhere) and example-postgres.json's app.comments (NOT canonical -- but the two example fixtures were only ever held to the WEAKER T1 oracle -- parses/keys survive/idempotent -- never the byte-oracle against a fresh rebuild, so this was never checked). Confirms the gap is real, was measurably out of 1.1's own oracle's reach for a structural reason (the one fixture that could have caught it, example-postgres.json, was in the "identity/idempotence only" tier by design, not the byte-oracle tier), and is not an isolated one-off -- the 0.1.1 project's own comments table hits it independently, from real declaration authorship, not a contrived fixture.
+
+Conclusion for the lead's ruling: option (a) -- extending canonicalizeTable itself -- measures as both safe (no current-format file changes) and sufficient (closes the exact gap the 0.1.1 project fixture exposed, without breaking any existing oracle row). This also completes #701/D3's own stated intent (generate.ts:305-309's comment: canonicalizeSnapshot exists so a snapshot "read straight off disk, never canonicalized" compares equal after being brought to canonical form) for the one field (foreignKeys) it did not yet cover.
+
+<a id="w10"></a>
+## W10 — 1.1c: canonicalizeTable sorts foreignKeys into D1 canonical order
+
+_2026-09-05T09:14Z_
+
+Root cause (one line, per su-planner): the writer always emits foreignKeys already in D1 canonical order (dsl/table.ts's declaration.foreignKeys getter sorts via compareForeignKeys/foreignKeySortKey before serialize ever runs), so canonicalizeTable's own doc comment treated foreignKeys as "already canonical" and left them untouched -- true for anything a post-D1 writer produced, false for a snapshot written before D1 existed (0.1.1, format 5-6).
+
+Fix: canonicalizeTable now sorts foreignKeys by the same local-columns-then-target-identity key dsl/table.ts's foreignKeySortKey already uses, reimplemented at the snapshot shape (referencesTable is that same declaration's schemaName+tableName already combined into one identity string, so sorting by it alone is equivalent). Never diverged into a second, independently-invented order -- the risk su-planner flagged.
+
+Tests (1.1c's 4 required rows):
+1. packages/core/test/kinds/table-kind.test.ts (new): a table node with the same 2 FK edges in each of the two possible declared orders canonicalizes to the identical result. Verified red by reverting the sort to a no-op: exactly the "declared task-then-parent" row failed (the "parent-then-task" row already happened to match by construction), confirming genuine discrimination.
+2. packages/core/test/snapshot/upgrade.test.ts, new describe "every table's foreignKeys are in canonical order after upgrading": a STRUCTURAL assertion (not byte comparison) over all 12 format-5 fixtures -- every table entry's foreignKeys, post-upgrade, satisfies the canonical order predicate, reimplemented independently in the test (not calling table-kind.ts's own private key) so this checks the CONTRACT, not the implementation. Verified red by the same revert: exactly example-postgres's app.comments table failed, byte-for-byte matching the spike's own finding (comments_task_id_fk, comments_parent_id_fk in that non-canonical order) -- this is precisely the assertion whose ABSENCE let the gap through 1.1's original oracle.
+3+4. Rows 3 (16 current-format files byte-unchanged) and 4 (10 golden byte-oracle rows) needed no new tests -- 1.1/1.1b's own existing "the current format is a fixed point" and "a golden case with unchanged declarations..." describes in upgrade.test.ts already cover exactly this scope and continued passing unchanged (spike W9 had already measured this safety property; these tests now pin it as a permanent regression check, not just a one-off spike).
+
+Full core suite: 102 files (101 + this task's own new table-kind.test.ts), 1756 passed + 1 todo (was 1742 + 1 todo -- +14 = 12 new structural rows in upgrade.test.ts + 2 new declared-order rows in table-kind.test.ts).
+
+<a id="w11"></a>
+## W11 — 1.6 e2e: real 0.1.1 project upgrade scenario
+
+_2026-09-05T10:08Z_
+
+Built packages/cli/test/upgrade.e2e.test.ts (subprocess, assertBuiltCli)
+against a real 0.1.1 project fixture vendored under packages/cli/test/
+fixtures/project-0.1.1/commit-{1,2,3}/. Each commit-N directory replays
+one of the 0.1.1 tag's own three real commits verbatim (git show
+<sha>:<path>): 4dc5c486 (migrations 1-4), f27cbea3 (migrations 5-6,
+regenerated 1-4's own chain), 8b22258d (migration 7, regenerated 1-6
+again -- the tag's own final state). Each directory is independently
+byte-self-consistent (its own migrations' banner hashes chain onto its
+own hejbro.snapshot.json), confirmed by direct sha256 comparison before
+writing the test.
+
+Tripwire (reported, resolved by ruling): tasks.md's own paraphrase said
+history should report "every migration ok" after upgrade, but the
+approved delta scenario only requires the tip. Measured directly: even
+replaying the project's own real batch-commit history, only migration 7
+(the batch's own last commit) resolves ok; 1-6 resolve lost because a
+later regeneration moved their content past any commit's own recorded
+snapshot blob -- ordinary history-state.ts behavior, unrelated to
+upgrade. Ruling: tasks.md's wording was corrected to match the delta
+scenario; the test asserts the tip resolves ok at its own add-commit,
+and separately asserts every other migration's history row is
+byte-identical before and after the upgrade commit (proving upgrade
+touches nothing else, pairing with the delta's "no other line of any
+migration changes").
+
+Red verified by reverting 1.1c's table-kind.ts fix and rebuilding:
+upgrade -> verify then fails with error[snapshot-stale], exactly the
+defect 1.1c fixes -- confirms 1.6 and 1.1c catch the same bug from two
+directions.
+
+Performance tripwire (reported, resolved by ruling): the test spawns
+~8 hejbro CLI subprocesses and ~10 git subprocesses over one real repo,
+heavier than any existing single CLI test. Passed reliably at 9.5-26s
+under normal load; timed out at the package's shared 30_000ms
+testTimeout under host contention (uptime load averages 173/161/95 on a
+16-core machine, 50-80 concurrent node processes, unrelated to this
+change) -- and, once, even without that contention (26s, 87% of the
+30s ceiling). Ruling: 26s-without-load is the deciding number -- the
+test is structurally tight against the default regardless of host
+noise. Applied a per-test-only timeout (120_000, vitest's third `it`
+argument), mirroring examples/cli-smoke/vitest.config.ts's own
+120_000ms contended-phase ceiling; the shared packages/cli/vitest.config.ts
+testTimeout: 30_000 (#90/#117) is untouched.
+
+Noted, not fixed (unrelated pre-existing flake): packages/core's
+test/cross-instance-symbols.test.ts timed out once under its own 5000ms
+default during the same host-contention window (pnpm check:crap),
+passing on retry. Same load pattern as above; this change does not
+touch that file or its timeout.
+

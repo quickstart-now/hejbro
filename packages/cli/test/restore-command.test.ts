@@ -540,6 +540,78 @@ export const projects = table(app, "projects", {
 		}
 	});
 
+	// #413: the older-format guard keys on the tip's `-- upgraded-from:`
+	// line, never on the target commit's format number alone -- an
+	// ordinary migration that happens to be an older format but was
+	// never upgraded must still get today's note, not a reproduction
+	// attempt (which would compare a current-format rebuild against a
+	// parent generateMigration was never run against, and fail).
+	it("exits 0 with an older-format-version note for a format-5 migration that was never upgraded (#413)", async () => {
+		const cwd = await createCliFixtureDir();
+		try {
+			git(cwd, ["init", "-q", "-b", "main"]);
+			await writeFixtureFile(cwd, "hejbro.config.ts", CONFIG_SOURCE);
+			await writeFixtureFile(cwd, "src/app.schema.ts", SCHEMA_V1);
+			await runCli(cwd, ["init"]);
+			await runCli(cwd, ["generate"]);
+
+			const fileName = await soleMigrationFileName(cwd);
+			const migrationPath = join(cwd, "migrations", fileName);
+			await withMutatedCommittedSnapshot(cwd, migrationPath, (parsed) => ({
+				...parsed,
+				formatVersion: 5,
+			}));
+			git(cwd, ["add", "-A"]);
+			git(cwd, ["commit", "-q", "-m", "feat: posts table"]);
+
+			const result = await runCli(cwd, ["restore", "1"]);
+			expect(result.exitCode).toBe(0);
+			expect(result.stdout).toContain(
+				"note: migration 1 was generated under an older snapshot format (v5; this build is v8)",
+			);
+		} finally {
+			await removeCliFixtureDir(cwd);
+		}
+	});
+
+	// #413: after a real `hejbro upgrade`, the tip's own add-commit still
+	// carries the pre-upgrade (format-5) blob, but its banner now names
+	// the upgraded-from hash -- restore must re-encode that blob in
+	// memory (never touching the snapshot file) to compare against the
+	// tip's current, post-upgrade hash.
+	it("restore verifies an upgraded tip by re-encoding the historical blob in memory (#413)", async () => {
+		const cwd = await createCliFixtureDir();
+		try {
+			git(cwd, ["init", "-q", "-b", "main"]);
+			await writeFixtureFile(cwd, "hejbro.config.ts", CONFIG_SOURCE);
+			await writeFixtureFile(cwd, "src/app.schema.ts", SCHEMA_V1);
+			await runCli(cwd, ["init"]);
+			await runCli(cwd, ["generate"]);
+
+			const fileName = await soleMigrationFileName(cwd);
+			const migrationPath = join(cwd, "migrations", fileName);
+			await withMutatedCommittedSnapshot(cwd, migrationPath, (parsed) => ({
+				...parsed,
+				formatVersion: 5,
+			}));
+			git(cwd, ["add", "-A"]);
+			git(cwd, ["commit", "-q", "-m", "feat: posts table (format 5)"]);
+
+			const upgrade = await runCli(cwd, ["upgrade"]);
+			expect(upgrade.exitCode).toBe(0);
+			git(cwd, ["add", "-A"]);
+			git(cwd, ["commit", "-q", "-m", "chore: hejbro upgrade"]);
+
+			const result = await runCli(cwd, ["restore", "1"]);
+			expect(result.exitCode).toBe(0);
+			expect(result.stdout).toContain(
+				"verified: restored declarations reproduce migration 1's recorded snapshot",
+			);
+		} finally {
+			await removeCliFixtureDir(cwd);
+		}
+	});
+
 	it("restore-history-rewritten: refuses to restore a migration whose add-commit can't be found (renamed after its own commit)", async () => {
 		const cwd = await createCliFixtureDir();
 		try {

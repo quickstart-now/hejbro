@@ -127,6 +127,7 @@ export const VOCABULARY = [
 	// Banner readers (documented in the generate/verify workflow)
 	"parseBannerBaseline",
 	"parseBannerHashes",
+	"parseBannerUpgradedFrom",
 	"parseBannerVersion",
 	// User-facing utilities and the one brand a shipped spec names
 	"HejbroError",
@@ -167,8 +168,10 @@ export const ENGINE = [
 	"noColumnOrder",
 	"parseSnapshot",
 	"requiredKeysByKind",
+	"rewriteTipSnapshotHash",
 	"sameJson",
 	"stableJson",
+	"upgradeSnapshot",
 	// Diff, generate and chain
 	"changeOperations",
 	"checkChain",

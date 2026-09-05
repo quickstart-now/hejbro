@@ -590,19 +590,43 @@ const tableFieldDiffNotes = (diffs: TableFieldDiffs): ReadonlyArray<string> => [
 ];
 
 /**
- * Sorts `indexes` and `checks` by name (#701, D3) — an order the database
- * never reads, so two declarations that list the same members in a
- * different order serialize to byte-identical nodes. `checks` stays
- * absent when it already was (compact snapshot, D33): sorting an empty
- * array still produces an empty array, and `checksField` keeps that
- * omitted. Every other field — `columns` (physical order, D81),
- * `foreignKeys` (already canonical, D1) — passes through untouched.
+ * The same local-columns-then-target-identity key `dsl/table.ts`'s own
+ * `foreignKeySortKey` sorts a table's `foreignKeys` by at declaration
+ * time (D1, add-relational-reads) — mirrored here at the snapshot shape
+ * (`referencesTable` is already that declaration's `references.
+ * schemaName`+`references.tableName` combined into one identity string,
+ * so sorting by it alone is equivalent to sorting by the two
+ * separately). Never diverge this from that key: a fresh declaration's
+ * own `foreignKeys` getter is already sorted this way, so if this key
+ * ever disagreed, canonicalizing a fresh serialization would silently
+ * reorder it away from what the writer itself considers canonical.
+ */
+const foreignKeySortKey = (foreignKey: ForeignKeySnapshot): string =>
+	[
+		foreignKey.columns.join("\u001f"),
+		foreignKey.referencesTable,
+		foreignKey.referencesColumns.join("\u001f"),
+	].join("\u001f");
+
+/**
+ * Sorts `indexes`, `checks`, and `foreignKeys` by their own canonical key
+ * (#701/D3 for `indexes`/`checks`; D1 for `foreignKeys`, #413) — an order
+ * the database never reads, so two declarations that list the same
+ * members in a different order (or a snapshot written before the
+ * relevant order was canonical) serialize to byte-identical nodes.
+ * `checks` stays absent when it already was (compact snapshot, D33):
+ * sorting an empty array still produces an empty array, and
+ * `checksField` keeps that omitted. `columns` (physical order, D81)
+ * passes through untouched.
  */
 const canonicalizeTable = (node: JsonValue): JsonValue => {
 	const snapshot = asTableSnapshot(node);
 	return {
 		...snapshot,
 		indexes: [...snapshot.indexes].sort((a, b) => compareKeys(a.name, b.name)),
+		foreignKeys: [...snapshot.foreignKeys].sort((a, b) =>
+			compareKeys(foreignKeySortKey(a), foreignKeySortKey(b)),
+		),
 		...checksField(
 			[...tableChecks(snapshot)].sort((a, b) => compareKeys(a.name, b.name)),
 		),

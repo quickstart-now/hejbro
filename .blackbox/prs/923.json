@@ -1,0 +1,301 @@
+{
+  "version": 3,
+  "number": 923,
+  "ref": "quickstart-now/hejbro#923",
+  "title": "feat(core,cli): hejbro upgrade re-encodes an older released snapshot format and re-chains the tip (#413)",
+  "head": "a2a4a9d70f414deafdd8d541aabb065586ea9c01",
+  "headRef": "feat-snapshot-upgrade",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-05T12:33Z",
+  "refs": [
+    {
+      "path": ".changeset/vast-pandas-relax.md",
+      "blob": "f38d27a455887a346965c5548be9b39981f07cb7"
+    },
+    {
+      "path": "README.md",
+      "blob": "2b45ee082e5ee05f911863d28ff679630a4ac9c0"
+    },
+    {
+      "path": "biome.json",
+      "blob": "bd310ffe334729e780288c4062baa113945cd902"
+    },
+    {
+      "path": "docs/specs/2026-08-19-hejbro-design.md",
+      "blob": "c56b8c6e996305f154ba2fe9b7ad3fb8cf3d4854"
+    },
+    {
+      "path": "openspec/changes/add-snapshot-upgrade/design.md",
+      "blob": "c17de35726bc71cb7251cc8d8fa799541f850a3b"
+    },
+    {
+      "path": "openspec/changes/add-snapshot-upgrade/proposal.md",
+      "blob": "98ceb6a3676d6c4e7097d98eaf4abb58c302c76c"
+    },
+    {
+      "path": "openspec/changes/add-snapshot-upgrade/specs/cli-commands/spec.md",
+      "blob": "2f95c9c91b76996160d460b63e258ab45bbf4181"
+    },
+    {
+      "path": "openspec/changes/add-snapshot-upgrade/specs/migration-format/spec.md",
+      "blob": "765d675ba44f3d857974f987e6809b8c9b9c62ae"
+    },
+    {
+      "path": "openspec/changes/add-snapshot-upgrade/specs/snapshot-format/spec.md",
+      "blob": "dbebf7f8c14fa31e0ce3ee44a774ef96906e4c21"
+    },
+    {
+      "path": "openspec/changes/add-snapshot-upgrade/tasks.md",
+      "blob": "77399f84dc081332d23ef22bc9bc07e298bc4b8a"
+    },
+    {
+      "path": "openspec/task-times.csv",
+      "blob": "9df57d61df060d44091deb021cfa6f7a27e38cfe"
+    },
+    {
+      "path": "packages/cli/src/commands/history.ts",
+      "blob": "c9a3d158f0e6dbe66859038bf3d9221a6ab47c9c"
+    },
+    {
+      "path": "packages/cli/src/commands/restore.ts",
+      "blob": "420c26ed0297732413ea7adf4876f2afd479371d"
+    },
+    {
+      "path": "packages/cli/src/commands/upgrade.ts",
+      "blob": "41d58c999ce3fa42045ce514189594a6fc1f3d2a"
+    },
+    {
+      "path": "packages/cli/src/commands/verify.ts",
+      "blob": "9eb9262a946064cdc07614327d624374638923a1"
+    },
+    {
+      "path": "packages/cli/src/config-required.ts",
+      "blob": "5f23a7eca1aa9ff72734a16e0552318ecd72c7e9"
+    },
+    {
+      "path": "packages/cli/src/core-surface.ts",
+      "blob": "85a5ac1da3bbb8bda1228c385d7abddd85e73310"
+    },
+    {
+      "path": "packages/cli/src/history-state.ts",
+      "blob": "6b320b1c90cc3cf2c7f9d92acffaaeea0434db3a"
+    },
+    {
+      "path": "packages/cli/src/index.ts",
+      "blob": "f260dafbb5a7b2b8a9d2da3866b1a40a00ee2e4e"
+    },
+    {
+      "path": "packages/cli/src/main.ts",
+      "blob": "a73e7ccbfee758330890a026c6cfa142be2d5c81"
+    },
+    {
+      "path": "packages/cli/test/exports.test.ts",
+      "blob": "cfaa6841b629c6de8669761ef650079df02cd014"
+    },
+    {
+      "path": "packages/cli/test/fixtures/project-0.1.1/commit-1/hejbro.config.ts",
+      "blob": "43595f4ba939bf3457640a3caa0979ca3d4cf81b"
+    },
+    {
+      "path": "packages/cli/test/fixtures/project-0.1.1/commit-1/hejbro.snapshot.json",
+      "blob": "bdc26fd3f9f20c6390edd5c24154d6945e46ef91"
+    },
+    {
+      "path": "packages/cli/test/fixtures/project-0.1.1/commit-1/migrations/0001_add_app.sql",
+      "blob": "8d5a598625ac12963055a439423bea028e496500"
+    },
+    {
+      "path": "packages/cli/test/fixtures/project-0.1.1/commit-1/migrations/0002_alter_tasks.sql",
+      "blob": "b92c572475bd7cc97944df68a0d691e59ba6a964"
+    },
+    {
+      "path": "packages/cli/test/fixtures/project-0.1.1/commit-1/migrations/0003_alter_projects.sql",
+      "blob": "220f29fbbf2d9a3cb99e474daefd3dbc948716eb"
+    },
+    {
+      "path": "packages/cli/test/fixtures/project-0.1.1/commit-1/migrations/0004_add_task_schedules.sql",
+      "blob": "8bd90ed43afbf2bd402e5307a59c5083b058de53"
+    },
+    {
+      "path": "packages/cli/test/fixtures/project-0.1.1/commit-1/src/app.schema.ts",
+      "blob": "731d537d79819116e97c7c4218a50679c1922250"
+    },
+    {
+      "path": "packages/cli/test/fixtures/project-0.1.1/commit-2/hejbro.config.ts",
+      "blob": "43595f4ba939bf3457640a3caa0979ca3d4cf81b"
+    },
+    {
+      "path": "packages/cli/test/fixtures/project-0.1.1/commit-2/hejbro.snapshot.json",
+      "blob": "3b454a21106acc71cc4fc634ca6a108336eaeb80"
+    },
+    {
+      "path": "packages/cli/test/fixtures/project-0.1.1/commit-2/migrations/0001_add_app.sql",
+      "blob": "9d1f6f9546cded05ae86f4c0e2828abe8dcb5267"
+    },
+    {
+      "path": "packages/cli/test/fixtures/project-0.1.1/commit-2/migrations/0002_alter_tasks.sql",
+      "blob": "321e70f3a5daffe762927a163186a99abb183498"
+    },
+    {
+      "path": "packages/cli/test/fixtures/project-0.1.1/commit-2/migrations/0003_alter_projects.sql",
+      "blob": "9bb0f55083821b9e522c3eb2c725c412a96d846f"
+    },
+    {
+      "path": "packages/cli/test/fixtures/project-0.1.1/commit-2/migrations/0004_add_task_schedules.sql",
+      "blob": "263e27fb85f8d806597fc73ca92fe46877f62895"
+    },
+    {
+      "path": "packages/cli/test/fixtures/project-0.1.1/commit-2/migrations/0005_add_task_tags.sql",
+      "blob": "a7e24e0ba620f07ec39e0dc6e4c9fd672b845437"
+    },
+    {
+      "path": "packages/cli/test/fixtures/project-0.1.1/commit-2/migrations/0006_alter_task_tags.sql",
+      "blob": "8d391318503f37323353f3d1b56fc8b796c8f46b"
+    },
+    {
+      "path": "packages/cli/test/fixtures/project-0.1.1/commit-2/src/app.schema.ts",
+      "blob": "d154d5242a47108bed6fe9043cfe2e6f2aa387d2"
+    },
+    {
+      "path": "packages/cli/test/fixtures/project-0.1.1/commit-3/hejbro.config.ts",
+      "blob": "43595f4ba939bf3457640a3caa0979ca3d4cf81b"
+    },
+    {
+      "path": "packages/cli/test/fixtures/project-0.1.1/commit-3/hejbro.snapshot.json",
+      "blob": "d2730de90bb1433858f7a0b6d52f8bd07874e943"
+    },
+    {
+      "path": "packages/cli/test/fixtures/project-0.1.1/commit-3/migrations/0001_add_app.sql",
+      "blob": "3899d2c2fc3cf1ec531e3901121dab6d31653cc1"
+    },
+    {
+      "path": "packages/cli/test/fixtures/project-0.1.1/commit-3/migrations/0002_alter_tasks.sql",
+      "blob": "d30114c903ed59f121424d7c5e4bf86e0c9f04c0"
+    },
+    {
+      "path": "packages/cli/test/fixtures/project-0.1.1/commit-3/migrations/0003_alter_projects.sql",
+      "blob": "db46c7072efd86eef7f5d22ccfd05b2940cdaf16"
+    },
+    {
+      "path": "packages/cli/test/fixtures/project-0.1.1/commit-3/migrations/0004_add_task_schedules.sql",
+      "blob": "635478b0a036b2ee05b4d5b023241b7cbc394e13"
+    },
+    {
+      "path": "packages/cli/test/fixtures/project-0.1.1/commit-3/migrations/0005_add_task_tags.sql",
+      "blob": "96c39334947d5e8cac9ebb9a2162956a858649a4"
+    },
+    {
+      "path": "packages/cli/test/fixtures/project-0.1.1/commit-3/migrations/0006_alter_task_tags.sql",
+      "blob": "b2c46bff0f9841b5b29fdbb8c6147f6e0b521920"
+    },
+    {
+      "path": "packages/cli/test/fixtures/project-0.1.1/commit-3/migrations/0007_add_task_labels.sql",
+      "blob": "567605549ad645b38c7b719b9e58d574319c63d9"
+    },
+    {
+      "path": "packages/cli/test/fixtures/project-0.1.1/commit-3/src/app.schema.ts",
+      "blob": "96590c57b4dda507834c083dd1871ef700088922"
+    },
+    {
+      "path": "packages/cli/test/history-state.test.ts",
+      "blob": "b0b9969f5cd8787100b6216e440873dfb88fbac9"
+    },
+    {
+      "path": "packages/cli/test/restore-command.test.ts",
+      "blob": "b71b03646414ee8745a641f152bca01b6d748d35"
+    },
+    {
+      "path": "packages/cli/test/upgrade-command.test.ts",
+      "blob": "c8c51361ed4f6a7ad9a998d1258fdcfb0af15a76"
+    },
+    {
+      "path": "packages/cli/test/upgrade.e2e.test.ts",
+      "blob": "6574a78579d37ee87042e93c903b073c21eea8e0"
+    },
+    {
+      "path": "packages/core/src/index.ts",
+      "blob": "1f1168cf92a4b79a85739fea62be1339297666ab"
+    },
+    {
+      "path": "packages/core/src/kinds/table-kind.ts",
+      "blob": "1d75b0edeb9edac8b893bee4910d4a4df4095f37"
+    },
+    {
+      "path": "packages/core/src/snapshot/snapshot.ts",
+      "blob": "07600846f65e898923c52e5412c8dfe3edb74afd"
+    },
+    {
+      "path": "packages/core/src/sql/migration-file.ts",
+      "blob": "4217a796760d9927135a2f0df77b0067b26bbbcb"
+    },
+    {
+      "path": "packages/core/test/fixtures/format-5/example-postgres.json",
+      "blob": "d2730de90bb1433858f7a0b6d52f8bd07874e943"
+    },
+    {
+      "path": "packages/core/test/fixtures/format-5/example-supabase.json",
+      "blob": "f655db1ba6bb79557ca7b8c7cc9343a3b3e4fd3f"
+    },
+    {
+      "path": "packages/core/test/fixtures/format-5/golden-app-posts.json",
+      "blob": "efc9da23ff672fce99f33c283db2bda50205b423"
+    },
+    {
+      "path": "packages/core/test/fixtures/format-5/golden-app-security.json",
+      "blob": "244f88beb904eba641d65dd55bed63ab4e396937"
+    },
+    {
+      "path": "packages/core/test/fixtures/format-5/golden-column-insert-mid.json",
+      "blob": "402adfbbd5380d175e34b20beaf37367a1c4fad2"
+    },
+    {
+      "path": "packages/core/test/fixtures/format-5/golden-comments-single-depth.json",
+      "blob": "628061837d90f8fdcbd37270b8204f58ac4ea9a7"
+    },
+    {
+      "path": "packages/core/test/fixtures/format-5/golden-grants-delta.json",
+      "blob": "ce585a41952707028d0134cdb4a677f80e96bf86"
+    },
+    {
+      "path": "packages/core/test/fixtures/format-5/golden-rls-policies.json",
+      "blob": "1581157e37df258a9afa56e2106fabfa10ac8f54"
+    },
+    {
+      "path": "packages/core/test/fixtures/format-5/golden-sequence-lifecycle.json",
+      "blob": "32f998a76ce6e3bd485457da1bceffa017213525"
+    },
+    {
+      "path": "packages/core/test/fixtures/format-5/golden-table-constraints.json",
+      "blob": "bde770fa062a272078e3097e44f5b4b06abb269d"
+    },
+    {
+      "path": "packages/core/test/fixtures/format-5/golden-table-indexes.json",
+      "blob": "9e67e3cf1d7263c123fa105adc82d29debb8cffe"
+    },
+    {
+      "path": "packages/core/test/fixtures/format-5/golden-view-lifecycle.json",
+      "blob": "b0efd3ea471d13ad6dc7399b4f2abf0145426358"
+    },
+    {
+      "path": "packages/core/test/kinds/table-kind.test.ts",
+      "blob": "0b679ecb996375cf016353582d19de95b95033f8"
+    },
+    {
+      "path": "packages/core/test/migration-file.test.ts",
+      "blob": "b69e9a4f6808ec839f7a63b42d122b8e2c4295bf"
+    },
+    {
+      "path": "packages/core/test/snapshot.test.ts",
+      "blob": "fcf5b5d106b46ec18c650d25258746c8cdac5f75"
+    },
+    {
+      "path": "packages/core/test/snapshot/upgrade.test.ts",
+      "blob": "91c9bfe13419b5ee605eb013c563561a35b7da7a"
+    },
+    {
+      "path": "skills/hejbro/references/generate-verify-workflow.md",
+      "blob": "f78789a78d04cc55d2bf79115b8486fd178201f8"
+    }
+  ]
+}

@@ -1,0 +1,113 @@
+{
+	"dialect": "postgres",
+	"formatVersion": 5,
+	"objects": {
+		"enum:app.post_status": {
+			"name": "post_status",
+			"schema": "app",
+			"values": [
+				"draft",
+				"published"
+			]
+		},
+		"schema:app": {
+			"name": "app"
+		},
+		"table:app.comments": {
+			"columns": [
+				{
+					"default": {
+						"args": [],
+						"function": "gen_random_uuid",
+						"nodeKind": "function-call",
+						"schema": null
+					},
+					"name": "id",
+					"notNull": true,
+					"primaryKey": true,
+					"typeNode": {
+						"typeName": "uuid"
+					}
+				},
+				{
+					"name": "post_id",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "uuid"
+					}
+				},
+				{
+					"name": "body",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "text"
+					}
+				}
+			],
+			"foreignKeys": [
+				{
+					"columns": [
+						"post_id"
+					],
+					"name": "comments_post_id_fk",
+					"onDelete": "cascade",
+					"referencesColumns": [
+						"id"
+					],
+					"referencesTable": "app.posts"
+				}
+			],
+			"indexes": [],
+			"name": "comments",
+			"primaryKeyName": "comments_pkey",
+			"schema": "app"
+		},
+		"table:app.posts": {
+			"columns": [
+				{
+					"default": {
+						"args": [],
+						"function": "gen_random_uuid",
+						"nodeKind": "function-call",
+						"schema": null
+					},
+					"name": "id",
+					"notNull": true,
+					"primaryKey": true,
+					"typeNode": {
+						"typeName": "uuid"
+					}
+				},
+				{
+					"name": "published_at",
+					"typeNode": {
+						"typeName": "timestamptz"
+					}
+				},
+				{
+					"name": "status",
+					"notNull": true,
+					"typeNode": {
+						"enumName": "post_status",
+						"enumSchema": "app",
+						"typeName": "enum"
+					}
+				},
+				{
+					"name": "slug",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "text"
+					},
+					"unique": true,
+					"uniqueName": "posts_slug_key"
+				}
+			],
+			"foreignKeys": [],
+			"indexes": [],
+			"name": "posts",
+			"primaryKeyName": "posts_pkey",
+			"schema": "app"
+		}
+	}
+}

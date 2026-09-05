@@ -122,6 +122,7 @@ const HEJBRO_RUNTIME_EXPORTS: ReadonlyArray<string> = [
 	"over",
 	"parseBannerBaseline",
 	"parseBannerHashes",
+	"parseBannerUpgradedFrom",
 	"parseBannerVersion",
 	"percentRank",
 	"pgEnum",

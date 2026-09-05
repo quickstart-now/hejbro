@@ -37,13 +37,20 @@ export type MigrationHistoryEntry = {
  * whole-project result (one git call, shared across every migration this
  * run examines — not re-run per file). `migrationsDirRelative` is only
  * used for the "no candidate" branch's own per-file dirty check
- * (`uncommitted` vs `rewritten`).
+ * (`uncommitted` vs `rewritten`). `bannerUpgradedFrom` (#413) is the
+ * tip's `-- upgraded-from:` value, or `null` on a migration never
+ * upgraded: after `hejbro upgrade` the commit that originally *added*
+ * the file still carries the pre-upgrade blob, which hashes to this
+ * value rather than the tip's current one — checked alongside
+ * `bannerCurrentHash` so an upgraded tip still resolves `ok` at the
+ * commit that has always been its own.
  */
 export const computeMigrationState = (
 	cwd: string,
 	migrationsDirRelative: string,
 	snapshotPathRelative: string,
 	bannerCurrentHash: string,
+	bannerUpgradedFrom: string | null,
 	addedCommits: ReadonlyMap<string, GitCommitInfo>,
 	fileName: string,
 ): MigrationHistoryEntry => {
@@ -57,7 +64,10 @@ export const computeMigrationState = (
 	}
 	const candidateBlob = blobAt(cwd, candidate.sha, snapshotPathRelative);
 	const candidateHash = `sha256:${sha256Hex(candidateBlob)}`;
-	if (candidateHash === bannerCurrentHash) {
+	if (
+		candidateHash === bannerCurrentHash ||
+		candidateHash === bannerUpgradedFrom
+	) {
 		return { state: "ok", commit: candidate };
 	}
 	const found = findCommitMatchingHash(

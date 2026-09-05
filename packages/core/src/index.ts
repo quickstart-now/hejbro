@@ -376,7 +376,7 @@ export type {
 export { cteRowMeta, isCteReference, withCte } from "./query/with";
 export type { ColumnOrderOracle } from "./snapshot/column-order";
 export { computeColumnOrder, noColumnOrder } from "./snapshot/column-order";
-export type { Snapshot } from "./snapshot/snapshot";
+export type { Snapshot, SnapshotUpgrade } from "./snapshot/snapshot";
 export {
 	buildSnapshot,
 	canonicalizeSnapshot,
@@ -384,6 +384,7 @@ export {
 	HEJBRO_SNAPSHOT_VERSION,
 	parseSnapshot,
 	renderSnapshot,
+	upgradeSnapshot,
 } from "./snapshot/snapshot";
 export type { JsonValue } from "./snapshot/stable-json";
 export { stableJson } from "./snapshot/stable-json";
@@ -404,9 +405,11 @@ export {
 	migrationVersionOf,
 	parseBannerBaseline,
 	parseBannerHashes,
+	parseBannerUpgradedFrom,
 	parseBannerVersion,
 	renderBanner,
 	renderMigrationPrefix,
+	rewriteTipSnapshotHash,
 } from "./sql/migration-file";
 export type { SqlStage, SqlStatement } from "./sql/statement";
 export {

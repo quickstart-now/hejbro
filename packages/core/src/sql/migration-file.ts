@@ -187,6 +187,7 @@ const BASELINE_LINE = `${BASELINE_PREFIX} these objects already exist — regist
 const PARENT_SNAPSHOT_PREFIX = "-- parent-snapshot: ";
 const SNAPSHOT_PREFIX = "-- snapshot: ";
 const VERSION_PREFIX = "-- hejbro: ";
+const UPGRADED_FROM_PREFIX = "-- upgraded-from: ";
 
 /**
  * Renders a one-line-per-change summary banner: `+` for creates, `~` for
@@ -214,11 +215,22 @@ const baselineLines = (
 	return [BASELINE_LINE];
 };
 
+/** The `-- upgraded-from:` line (#413), present only when `upgradedFrom` is given -- the hash the tip recorded before a format upgrade rewrote its `-- snapshot:` line. Rendered directly under the hash-chain lines, so it stays with the pair it explains. */
+const upgradedFromLines = (
+	upgradedFrom: string | undefined,
+): ReadonlyArray<string> => {
+	if (upgradedFrom === undefined) {
+		return [];
+	}
+	return [`${UPGRADED_FROM_PREFIX}${upgradedFrom}`];
+};
+
 export const renderBanner = (
 	changes: ReadonlyArray<KindChange>,
 	hashes?: BannerHashes,
 	version?: string,
 	baseline?: boolean,
+	upgradedFrom?: string,
 ): string => {
 	const lines = [
 		"-- hejbro migration",
@@ -233,6 +245,7 @@ export const renderBanner = (
 		...lines,
 		`${PARENT_SNAPSHOT_PREFIX}${hashes.parent}`,
 		`${SNAPSHOT_PREFIX}${hashes.current}`,
+		...upgradedFromLines(upgradedFrom),
 	].join("\n");
 };
 
@@ -255,6 +268,77 @@ export const parseBannerHashes = (fileContent: string): BannerHashes | null => {
 		parent: parentLine.slice(PARENT_SNAPSHOT_PREFIX.length),
 		current: currentLine.slice(SNAPSHOT_PREFIX.length),
 	};
+};
+
+/**
+ * Reads a migration file's `-- upgraded-from:` line (#413): the hash the
+ * tip recorded before a format upgrade rewrote its `-- snapshot:` line,
+ * or `null` on a migration never upgraded. A second upgrade later keeps
+ * this same line and value unchanged — the commit that first added the
+ * file carries these exact bytes, and `history` resolves the tip against
+ * that original hash, not whatever the tip carried immediately before
+ * the latest upgrade. Reads by {@link UPGRADED_FROM_PREFIX} only, the
+ * same reasoning {@link parseBannerBaseline}'s own doc comment states:
+ * matching the whole line would misreport "absent" the moment the
+ * guidance prose after the prefix changed.
+ */
+export const parseBannerUpgradedFrom = (fileContent: string): string | null => {
+	const line = fileContent
+		.split("\n")
+		.find((candidate) => candidate.startsWith(UPGRADED_FROM_PREFIX));
+	if (line === undefined) {
+		return null;
+	}
+	return line.slice(UPGRADED_FROM_PREFIX.length);
+};
+
+/**
+ * Rewrites an existing tip migration's `-- snapshot:` line to
+ * `newSnapshotHash` for a format upgrade (#413), owning the
+ * `-- upgraded-from:` line's whole persistence contract so no caller has
+ * to re-derive it: when the file already carries that line
+ * ({@link parseBannerUpgradedFrom} returns non-`null`), its value is kept
+ * exactly as-is — a second upgrade never overwrites the hash the tip
+ * first recorded; otherwise the value the `-- snapshot:` line carried
+ * *before* this call becomes the new `-- upgraded-from:` line, inserted
+ * directly under it. No other byte of the file changes — every other
+ * line, including one this build doesn't recognize, passes through
+ * unchanged, in place. `fileContent` must already carry a `-- snapshot:`
+ * line (every caller reads it from a chain entry {@link parseBannerHashes}
+ * already proved has one); a file with none is a caller bug, not a user
+ * input this function is the one responsible for diagnosing.
+ */
+export const rewriteTipSnapshotHash = (
+	fileContent: string,
+	newSnapshotHash: string,
+): string => {
+	const lines = fileContent.split("\n");
+	const snapshotLineIndex = lines.findIndex((line) =>
+		line.startsWith(SNAPSHOT_PREFIX),
+	);
+	if (snapshotLineIndex === -1) {
+		return throwHejbroError(
+			"unreachable",
+			"rewriteTipSnapshotHash was called on a file with no -- snapshot: line.",
+		);
+	}
+	const oldSnapshotHash = (lines[snapshotLineIndex] as string).slice(
+		SNAPSHOT_PREFIX.length,
+	);
+	const existingUpgradedFrom = parseBannerUpgradedFrom(fileContent);
+	const rewrittenLines = [
+		...lines.slice(0, snapshotLineIndex),
+		`${SNAPSHOT_PREFIX}${newSnapshotHash}`,
+		...lines.slice(snapshotLineIndex + 1),
+	];
+	if (existingUpgradedFrom !== null) {
+		return rewrittenLines.join("\n");
+	}
+	return [
+		...rewrittenLines.slice(0, snapshotLineIndex + 1),
+		`${UPGRADED_FROM_PREFIX}${oldSnapshotHash}`,
+		...rewrittenLines.slice(snapshotLineIndex + 1),
+	].join("\n");
 };
 
 /**
