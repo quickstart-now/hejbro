@@ -16,6 +16,7 @@ import type {
 import { expr, resolveOrderTerm } from "../expr/ast";
 import type { ReadShape } from "../expr/read-shape";
 import { BUILDER_READ_SHAPES } from "../expr/read-shape";
+import type { SqlTypeFamily } from "../expr/type-family";
 import { someExprNode } from "../expr/walk";
 import { markConsumed, noteBuilder } from "../plpgsql/recording-session";
 import type { TypeNode } from "../types/type-node";
@@ -114,6 +115,23 @@ type SameKeys<TLeft, TRight> = [keyof TLeft] extends [keyof TRight]
 		? true
 		: false
 	: false;
+
+/** Measured on postgres:17 (design.md, task 1.1): a set operation unifies only within the same family, so each list holds just that family — a right-hand family absent from a left-hand family's own list is one the server refuses (`42804`/`42846`). */
+export const setOpUnifiableFamilies = {
+	uuid: ["uuid"],
+	text: ["text"],
+	numeric: ["numeric"],
+	boolean: ["boolean"],
+	datetime: ["datetime"],
+	interval: ["interval"],
+	json: ["json"],
+	bytea: ["bytea"],
+	net: ["net"],
+	array: ["array"],
+} as const satisfies Record<
+	Exclude<SqlTypeFamily, "unknown">,
+	readonly SqlTypeFamily[]
+>;
 
 /**
  * Set-operation result typing (moved from `@hejbro/query`, add-ctes task

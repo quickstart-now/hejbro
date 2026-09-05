@@ -20,7 +20,7 @@ goes back to the planner, not into the diff.
 
 ## 1. Family agreement
 
-- [ ] 1.1 (~10m) **[design]** The measured pair table. On a
+- [x] 1.1 (~10m) **[design]** The measured pair table. On a
       `postgres:17` container, for every ordered pair of the ten
       concrete families (`uuid text numeric boolean datetime interval
       json bytea net array`), run one `union` of two typed literals and
