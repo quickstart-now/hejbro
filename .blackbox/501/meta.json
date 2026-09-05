@@ -1,0 +1,30 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#501",
+  "title": "add a real FILTER (WHERE …) aggregate constructor",
+  "parent": "quickstart-now/hejbro#412",
+  "status": "open",
+  "opened": "2026-09-05",
+  "closed": null,
+  "decisions": [
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "412/D24",
+        "D25; D104 (variant over field",
+        "measured); D73 (new vocabulary",
+        "no version bump); the query-builder requirement's own 'until a real FILTER construct ships'"
+      ],
+      "at": "2026-09-05T05:49Z",
+      "title": "FILTER (WHERE …) ships as a filter(aggregate, condition) wrapper over a new AggregateFilterNode variant",
+      "ratified": null
+    }
+  ],
+  "work": [],
+  "prs": [],
+  "origin": null,
+  "followUps": []
+}
