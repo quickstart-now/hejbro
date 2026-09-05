@@ -59,7 +59,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#500](500/) | recursive CTE row type stays non-null-inferred even when the recursive term is nullable | closed | #956 #968 | 0 | 8 (3 pending) |
 | ↳ [#501](501/) | add a real FILTER (WHERE …) aggregate constructor | closed | #963 #976 | 0 | 8 (1 pending) |
 | ↳ [#502](502/) | audit server-behavior assertions across openspec/specs | closed | #910 | 0 | 0 (0 pending) |
-| ↳ [#503](503/) | reject cross-family set-operation branches at build time | open |  | 0 | 10 (4 pending) |
+| ↳ [#503](503/) | reject cross-family set-operation branches at build time | open |  | 0 | 11 (5 pending) |
 | ↳ [#510](510/) | cross-check MODIFIED requirement titles against the base spec in CI | closed | #884 | 0 | 0 (0 pending) |
 | ↳ [#514](514/) | references() cannot express referential actions (onDelete/onUpdate) | closed | #979 #980 | 0 | 7 (1 pending) |
 | ↳ [#515](515/) | core-internal traversal helpers presets/query can't fold without a public export | closed | #988 #991 | 0 | 5 (2 pending) |
@@ -206,7 +206,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 
 ## Totals
 
-Owner decisions 93 · rulings 270 (interpretation 182, extension 86, stop 2) · pending extensions 48 · rejected 2
+Owner decisions 93 · rulings 271 (interpretation 182, extension 87, stop 2) · pending extensions 49 · rejected 2
 
 ## Conventions
 

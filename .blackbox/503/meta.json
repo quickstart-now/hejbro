@@ -118,6 +118,17 @@
       "at": "2026-09-05T19:16Z",
       "title": "the chain applies the family verdict alone: one type-only core export, SetOpFamiliesRefused",
       "ratified": null
+    },
+    {
+      "id": "R11",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "R9"
+      ],
+      "at": "2026-09-05T19:41Z",
+      "title": "the chain's six combinators become one intersection; the second hand-written copy goes",
+      "ratified": null
     }
   ],
   "work": [
