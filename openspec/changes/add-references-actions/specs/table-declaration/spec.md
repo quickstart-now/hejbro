@@ -89,6 +89,10 @@ the next read folds again.
   and `on update` clauses included — identical snapshot content, and an
   action changed on either form diffs as the same drop-and-add
 
+#### Scenario: A repeated references() call replaces the reference as a whole
+- **WHEN** a column calls `.references()` more than once
+- **THEN** the emitted constraint carries the last call's target and the last call's actions -- none when the last call named none -- and no action from an earlier call survives; whether a repeated call should be refused instead is open in #972
+
 #### Scenario: The example's foreign keys convert without moving a byte
 - **WHEN** `examples/postgres` declares its single-column foreign keys
   through `.references()` with their actions instead of `extras`
