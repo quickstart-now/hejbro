@@ -3,15 +3,19 @@
   "number": 906,
   "ref": "quickstart-now/hejbro#906",
   "title": "chore(openspec): archive harden-aggregate-vocabulary after D106 round 1 (#452)",
-  "head": "d4b81ba63198ffc4f7f58051e2de556e11aa2d4d",
+  "head": "0e1dd598c68ebea8d1442ab46a363e082f6db335",
   "headRef": "archive-aggregate-vocabulary",
   "base": "dev",
   "merged": null,
-  "pinnedAt": "2026-09-05T09:47Z",
+  "pinnedAt": "2026-09-05T09:58Z",
   "refs": [
     {
       "path": ".changeset/cte-nested-revive.md",
       "blob": "954806f441c2f7d30f2fa7515b4188c69a2f08ac"
+    },
+    {
+      "path": "README.md",
+      "blob": "17885c5bc038851a0ad27dca5cbba11468fa4954"
     },
     {
       "path": "openspec/changes/archive/2026-09-05-harden-aggregate-vocabulary/design.md",
@@ -55,7 +59,7 @@
     },
     {
       "path": "packages/query/src/db/convert.ts",
-      "blob": "63012827b20eeb8c3c5ce3b2ba76e6884fcf2aaf"
+      "blob": "9b974634a9b2479b2ec384da8de4da0b0a20a761"
     },
     {
       "path": "packages/query/test/db/with.test.ts",
