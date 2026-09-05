@@ -55,7 +55,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#510](510/) | cross-check MODIFIED requirement titles against the base spec in CI | closed | #884 | 0 | 0 (0 pending) |
 | ↳ [#528](528/) | driver-conformance kit mis-observes transaction-wrapping session-state:false drivers | closed | #737 #760 | 0 | 6 (0 pending) |
 | ↳ [#531](531/) | pg checkout reads its own setupSession; the spec's late-binding scenario fails for spread decorators | closed | #737 | 0 | 3 (0 pending) |
-| ↳ [#533](533/) | cli restore-command test flakes on first heavy parallel run after install | open | #773 | 0 | 1 (0 pending) |
+| ↳ [#533](533/) | cli restore-command test flakes on first heavy parallel run after install | closed | #773 | 0 | 1 (0 pending) |
 | ↳ [#551](551/) | execute() of a core-built set operation loses per-key result typing | closed | #737 | 0 | 2 (0 pending) |
 | ↳ [#552](552/) | whole-table projection renders unqualified columns under a join | closed | #737 | 0 | 3 (0 pending) |
 | ↳ [#652](652/) | ci: changeset gate never checks the PR itself while unreleased changesets cover the fixed group | closed | #886 | 0 | 0 (0 pending) |
@@ -133,7 +133,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#832](832/) | core: category-C keywords fail as argument names but are not refused; the stated class does not match the list | open | #833 | 0 | 0 (0 pending) |
 | ↳ [#836](836/) | status: a permission error on a real ledger reaches the user as a raw node-postgres object | closed | #838 #871 #877 | 0 | 8 (1 pending) |
 | ↳ [#837](837/) | raise --file with an absolute path is joined onto the cwd and dies with a raw ENOENT | open | #838 | 0 | 0 (0 pending) |
-| ↳ [#839](839/) | test: core cross-instance-symbols times out under load from parallel worktrees | open | #868 | 0 | 0 (0 pending) |
+| ↳ [#839](839/) | test: core cross-instance-symbols times out under load from parallel worktrees | closed | #868 | 0 | 0 (0 pending) |
 | ↳ [#841](841/) | check: the backtick delimiter around expression texts collides with a backtick inside a string literal | open | #851 #855 | 0 | 0 (0 pending) |
 | ↳ [#842](842/) | pg driver: set intervalstyle / set bytea_output per connection contradicts the no-session-state clause | open | #851 | 0 | 0 (0 pending) |
 | ↳ [#843](843/) | check: a not-compared outcome folds into exit 1 with real differences | open | #851 | 0 | 0 (0 pending) |
@@ -171,4 +171,4 @@ Owner decisions 91 · rulings 187 (interpretation 131, extension 54, stop 2) · 
 - Every PR is pinned before merge: each changed file's blob SHA, stored once per item in `prs/<N>.json` and checked both ways (every pin matches the PR head, every changed file is pinned) by the pre-merge hook and by CI. A folder's `meta.json` holds one line per PR (`closes`, `refs` or `own`); a parent's PR column is derived from its children.
 - Never read this directory during normal work. It answers provenance questions only.
 
-Merged but not closed: #412, #533, #819, #837
+Merged but not closed: #412, #714, #815, #819, #837, #860
