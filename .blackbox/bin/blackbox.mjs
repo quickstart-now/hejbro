@@ -529,7 +529,9 @@ const renderFolderReadme = (folder, item) => {
 		"",
 		"| When | Entry |",
 		"|---|---|",
-		...timelineRows(meta, item.pins).map(([when, what]) => `| ${when} | ${what} |`),
+		...timelineRows(meta, item.pins).map(
+			([when, what]) => `| ${when} | ${what} |`,
+		),
 		"",
 		countsLine(kindCounts(meta)),
 		"",
@@ -752,10 +754,14 @@ const validatePins = (state, problems) => {
 	state.items.forEach((item) => {
 		item.pins.forEach(({ path, pin }, number) => {
 			if (pin.version !== PIN_VERSION) {
-				problems.push(`${path}: pin version ${pin.version}, expected ${PIN_VERSION}`);
+				problems.push(
+					`${path}: pin version ${pin.version}, expected ${PIN_VERSION}`,
+				);
 			}
 			if (pin.number !== number) {
-				problems.push(`${path}: pin number ${pin.number} does not match the file name`);
+				problems.push(
+					`${path}: pin number ${pin.number} does not match the file name`,
+				);
 			}
 			const held = item.folders.some((folder) =>
 				folder.meta.prs.some((entry) => entry.number === number),
@@ -951,7 +957,9 @@ const checkPins = ({ state, reader, holders, number, changed, problems }) => {
 	const itemRels = state.items.map((item) => item.rel);
 	const pinned = new Map();
 	holders.forEach((folder) => {
-		const entry = folder.meta.prs.find((candidate) => candidate.number === number);
+		const entry = folder.meta.prs.find(
+			(candidate) => candidate.number === number,
+		);
 		const pin = pinOf(state, folder, number);
 		if (!entry || pin === null) {
 			problems.push(
@@ -1570,7 +1578,9 @@ const pinFolder = ({
 	);
 	const item = itemOf(state, folder);
 	const existingPin = item.pins.get(number)?.pin ?? null;
-	const existingEntry = folder.meta.prs.find((entry) => entry.number === number);
+	const existingEntry = folder.meta.prs.find(
+		(entry) => entry.number === number,
+	);
 	if (existingPin && existingEntry && sameRefs(existingPin.refs, refs)) {
 		return { changed: false, refs, head: existingPin.head };
 	}
@@ -1972,8 +1982,12 @@ const mergePinCandidates = (candidates, pin) => {
 	if (sameRefs(current.refs, pin.refs)) {
 		return;
 	}
-	const later = pin.pinnedAt > current.pinnedAt ? pin : current;
-	const earlier = later === pin ? current : pin;
+	const [later, earlier] = (() => {
+		if (pin.pinnedAt > current.pinnedAt) {
+			return [pin, current];
+		}
+		return [current, pin];
+	})();
 	const history = [
 		...(later.history ?? []),
 		...(earlier.history ?? []),
@@ -2008,7 +2022,9 @@ const migrateTo = (opts) => {
 			(folder) => folder.meta.version !== META_VERSION,
 		);
 		const candidates = new Map();
-		item.pins.forEach(({ pin }) => mergePinCandidates(candidates, pin));
+		item.pins.forEach(({ pin }) => {
+			mergePinCandidates(candidates, pin);
+		});
 		stale.forEach((folder) => {
 			(folder.meta.prs ?? []).forEach((block) => {
 				if (Array.isArray(block.refs)) {
@@ -2042,7 +2058,9 @@ const migrateTo = (opts) => {
 		return;
 	}
 	plans.forEach(({ item, stale, writes }) => {
-		writes.forEach((pin) => writePin(root, item, pin));
+		writes.forEach((pin) => {
+			writePin(root, item, pin);
+		});
 		stale.forEach((folder) => {
 			folder.meta.prs = (folder.meta.prs ?? [])
 				.map((block) => {
