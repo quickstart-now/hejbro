@@ -89,8 +89,8 @@ declaring the same column through both fails at declaration time:
 
 | Use when | Form | Covers |
 |---|---|---|
-| A single local column, referencing one other table | Column-level `.references()` | Also feeds the query layer's relation types (`related()` — see the query-layer reference) in the same declaration; nothing is declared twice |
-| Composite (multi-column), self-referencing, an explicit constraint name, or `onDelete`/`onUpdate` | `extras.foreignKeys` | Everything the column-level form can't express |
+| A single local column, referencing one other table | Column-level `.references()` | Also feeds the query layer's relation types (`related()` — see the query-layer reference) in the same declaration; nothing is declared twice. An optional second argument carries `onDelete`/`onUpdate` |
+| Composite (multi-column) or self-referencing | `extras.foreignKeys` | Everything the column-level form can't express |
 
 **Column-level**: `ownerId: uuid().notNull().references(() => users.id)`
 — one declaration feeds both the generated DDL and the query layer's
@@ -100,13 +100,17 @@ inside `table()` itself, only on the declaration's first `foreignKeys`
 read, so two declaration files (or two tables in one file) that
 `.references()` each other resolve regardless of which one loads or is
 declared first — including a genuine circular import between two schema
-files. It cannot express a referential action — no `onDelete`, no
-`onUpdate` (#514). A column that
-needs one uses the `extras.foreignKeys` form **only** — declaring the
-same column through both fails at declaration time
+files. An optional second argument carries the foreign key's referential
+actions: `ownerId: uuid().notNull().references(() => members.id, {
+onDelete: "restrict", onUpdate: "cascade" })` — both `onDelete` and
+`onUpdate` are optional, and each accepts one of `foreignKeyActions`'
+five values (`cascade`, `restrict`, `set null`, `set default`,
+`no action`). Self-referencing and composite (multi-column) foreign
+keys still need the `extras.foreignKeys` form — declaring the same
+column through both fails at declaration time
 (`invalid-duplicate-foreign-key`: the constraint would emit twice), so
-this is not "add extras alongside `.references()` for the action", it
-is one form or the other, per column.
+this is not "add extras alongside `.references()`", it is one form or
+the other, per column.
 
 **`extras.foreignKeys`**: an array of `{ columns, references: { table?,
 columns }, name?, onDelete?, onUpdate? }` — `columns` names this table's
@@ -130,18 +134,17 @@ export const comments = table(
 	"comments",
 	{
 		id: uuid().primaryKey(),
-		taskId: uuid().notNull(),
+		taskId: uuid()
+			.notNull()
+			.references(() => tasks.id, { onDelete: "cascade" }),
 		parentId: uuid(),
 	},
 	(t) => ({
 		foreignKeys: [
-			{
-				columns: [t.taskId],
-				references: { table: tasks, columns: [tasks.id] },
-				onDelete: "cascade",
-			},
 			// Self-referencing (D52): `table` omitted, derived from the
-			// referenced column's own ref.
+			// referenced column's own ref. Stays on the extras path even
+			// though it carries an action — self-referencing foreign keys
+			// can't use the column-level form regardless.
 			{
 				columns: [t.parentId],
 				references: { columns: [t.id] },
