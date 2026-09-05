@@ -129,6 +129,17 @@
       "at": "2026-09-05T19:41Z",
       "title": "the chain's six combinators become one intersection; the second hand-written copy goes",
       "ratified": null
+    },
+    {
+      "id": "R12",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R6"
+      ],
+      "at": "2026-09-05T20:16Z",
+      "title": "the within-family gap is a class, not a list of four: array element types head it",
+      "ratified": null
     }
   ],
   "work": [
