@@ -943,3 +943,9 @@ date,change-id,task-id,group,est_min,actual_min,waited_user_min,notes
 2026-09-05,add-config-driver,1.10,1,6,14,0,neon websocket exposes client; first entry into packages/neon
 2026-09-05,add-config-driver,1.11,1,5,20,0,neon http no-op close incl. the offline cli-smoke e2e; times reconstructed from commit timestamps
 2026-09-05,add-config-driver,1.12,1,6,44,0,real ErrorEvent has an empty message; grew two crash guards found after the first commit (String() on a null-prototype throw); times partly reconstructed
+2026-09-05,harden-function-locals,1.1,1,10,35,0,"81 names x 3 positions on postgres:17 + trigger new/old; two instrumentation bugs found (missing ON_ERROR_STOP, oidvector [0:0]= prefix) and re-run"
+2026-09-05,harden-function-locals,1.2,1,9,9,0,61 category-C names + class statement in the doc comment
+2026-09-05,harden-function-locals,1.3,1,10,15,0,"check order settled mid-task (reserved before sql-name); two name spaces + duplicate-column message"
+2026-09-05,harden-function-locals,1.4,1,8,10,0,argument seeding; red re-verified by stashing the green
+2026-09-05,harden-function-locals,1.5,1,6,7,0,skill reference + changeset
+2026-09-05,harden-function-locals,1.6,1,8,15,0,"review-born; next+query refused, harmless-19 control table (argument/loop/row-read), red re-verified by stashing reserved.ts; +setof/coalesce regression-lock rows"

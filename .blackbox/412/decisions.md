@@ -587,3 +587,24 @@ _lead · interpretation · basis 412/D24, D25; read on 2026-09-05: packages/quer
 
 F6: an empty context no longer satisfies contextRequired -- a zero-statement rendering and a role-less, setting-less default rendering both refuse with context-rendering-empty; on a driver that does not declare the context mandatory nothing changed. F7: the refusal names the surface invoked, never db.context. Both landed with harden-context-boundary and the Nile change; #561 closes with no further work. Ratification: owner on return.
 
+<a id="d27"></a>
+## D27 — Oldest-first means the oldest top-level issues (#413 and its peers), not #412's own sub-issue queue
+
+_owner · 2026-09-05T10:58Z · raw 9d9e9165-53a6-4428-bebf-45e47e987321#78_
+
+The owner corrects the lead's reading of "process issues oldest-first across the whole repo": the intent was the old standalone issues (#413, #458, #486, #500, #501, #503, #514, #515, #631, #653, …) — not the post-release sub-issue queue under #412/#815 (#816–#875), which the lead had been draining first. Queue order from here: oldest top-level issues first; the #815 queue after them. The fl piece already in flight (#816–#832) finishes; the next free slots go to the old issues.
+
+<a id="d28"></a>
+## D28 — Restated: skip the umbrella issues (#412, #815) and take everything else strictly in issue-number order
+
+_owner · 2026-09-05T11:08Z · raw 9d9e9165-53a6-4428-bebf-45e47e987321#79_
+
+The owner restates D27 precisely: the only issues to skip are the umbrellas that merely group sub-issues (#412, #815); every other open issue is processed in ascending number order, oldest first, regardless of which umbrella it hangs under.
+
+<a id="r32"></a>
+## R32 — Reproduction inputs a reviewer hands over are measured from the real library, never synthesized
+
+_lead · extension · basis 412/D24, D25; D110; cd review round 2 (a synthesized ErrorEvent with a non-empty message let task 1.9 pass while the real one has an empty message) · 2026-09-05T11:10Z · ratified: pending_
+
+Process rule for every future brief: when a review or a task cites a value an external library throws or returns, the input table carries the value as measured from that library on this machine (or a container), not a hand-built lookalike; a synthesized example that is more lenient than the real class turns a red test green. Recorded here so the next brief template carries it. Ratification: owner on return.
+

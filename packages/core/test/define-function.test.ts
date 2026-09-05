@@ -2,6 +2,7 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 import type { ColumnBuilder, FunctionDeclaration } from "../src/index";
 import {
 	bigint,
+	coalesce,
 	defineFunction,
 	defineTrigger,
 	eq,
@@ -532,6 +533,267 @@ describe("a keyword reserved for function and type names is refused as an argume
 	);
 });
 
+describe("a category-C keyword is refused as an argument name (#832)", () => {
+	// `pg_get_keywords()` catcode `C` on `postgres:17.11`; re-measurement SQL
+	// lives in design.md's Measurement (1.1) section.
+	const categoryCNameCases: ReadonlyArray<{ readonly argName: string }> = [
+		{ argName: "between" },
+		{ argName: "bigint" },
+		{ argName: "bit" },
+		{ argName: "boolean" },
+		{ argName: "char" },
+		{ argName: "character" },
+		{ argName: "coalesce" },
+		{ argName: "dec" },
+		{ argName: "decimal" },
+		{ argName: "exists" },
+		{ argName: "extract" },
+		{ argName: "float" },
+		{ argName: "greatest" },
+		{ argName: "grouping" },
+		{ argName: "inout" },
+		{ argName: "int" },
+		{ argName: "integer" },
+		{ argName: "interval" },
+		{ argName: "json" },
+		{ argName: "json_array" },
+		{ argName: "json_arrayagg" },
+		{ argName: "json_exists" },
+		{ argName: "json_object" },
+		{ argName: "json_objectagg" },
+		{ argName: "json_query" },
+		{ argName: "json_scalar" },
+		{ argName: "json_serialize" },
+		{ argName: "json_table" },
+		{ argName: "json_value" },
+		{ argName: "least" },
+		{ argName: "merge_action" },
+		{ argName: "national" },
+		{ argName: "nchar" },
+		{ argName: "none" },
+		{ argName: "normalize" },
+		{ argName: "nullif" },
+		{ argName: "numeric" },
+		{ argName: "out" },
+		{ argName: "overlay" },
+		{ argName: "position" },
+		{ argName: "precision" },
+		{ argName: "real" },
+		{ argName: "row" },
+		{ argName: "setof" },
+		{ argName: "smallint" },
+		{ argName: "substring" },
+		{ argName: "time" },
+		{ argName: "timestamp" },
+		{ argName: "treat" },
+		{ argName: "trim" },
+		{ argName: "values" },
+		{ argName: "varchar" },
+		{ argName: "xmlattributes" },
+		{ argName: "xmlconcat" },
+		{ argName: "xmlelement" },
+		{ argName: "xmlexists" },
+		{ argName: "xmlforest" },
+		{ argName: "xmlnamespaces" },
+		{ argName: "xmlparse" },
+		{ argName: "xmlpi" },
+		{ argName: "xmlroot" },
+		{ argName: "xmlserialize" },
+		{ argName: "xmltable" },
+	];
+
+	it.each(categoryCNameCases)(
+		"refuses an argument whose derived name is $argName with reserved-local-name",
+		({ argName }) => {
+			expect(
+				codeOf(() =>
+					defineFunction(
+						app,
+						"echo_category_c",
+						{ args: { [argName]: uuid() }, returns: { typeName: "uuid" } },
+						(ctx) => {
+							ctx.return(sql`null`);
+						},
+					),
+				),
+			).toBe("reserved-local-name");
+		},
+	);
+
+	const neverRefusedCases: ReadonlyArray<{ readonly argName: string }> = [
+		{ argName: "exit" },
+		{ argName: "elsif" },
+	];
+
+	it.each(neverRefusedCases)(
+		"accepts an argument named $argName -- absent from every category and never refused (control, #832)",
+		({ argName }) => {
+			const fn = defineFunction(
+				app,
+				"echo_never_refused",
+				{ args: { [argName]: uuid() }, returns: { typeName: "uuid" } },
+				(ctx) => {
+					ctx.return(sql`null`);
+				},
+			);
+			expect(fn.args[0]?.argName).toBe(argName);
+		},
+	);
+});
+
+describe("next and query are refused as body locals (#832/R6, review-born)", () => {
+	const setofStatementWordCases: ReadonlyArray<{ readonly argName: string }> = [
+		{ argName: "next" },
+		{ argName: "query" },
+	];
+
+	it.each(setofStatementWordCases)(
+		"refuses an argument whose derived name is $argName with reserved-local-name",
+		({ argName }) => {
+			expect(
+				codeOf(() =>
+					defineFunction(
+						app,
+						"echo_setof_word",
+						{ args: { [argName]: uuid() }, returns: { typeName: "uuid" } },
+						(ctx) => {
+							ctx.return(sql`null`);
+						},
+					),
+				),
+			).toBe("reserved-local-name");
+		},
+	);
+
+	it("the reviewer's exact repro -- args: { next } + ctx.return(a.next) -- fails at declaration time, so no migration is ever produced", () => {
+		expect(
+			codeOf(() =>
+				defineFunction(
+					app,
+					"echo_next_repro",
+					{ args: { next: text() }, returns: { typeName: "text" } },
+					(ctx, a) => {
+						ctx.return(a.next);
+					},
+				),
+			),
+		).toBe("reserved-local-name");
+	});
+
+	// The server accepts both of these shapes -- a setof body renders
+	// `return query <select>`, never putting the name right after
+	// `return`, and `coalesce(...)` isn't the first token either -- but
+	// the refusal is uniform by name, not by which expression the body
+	// happens to write around it, so both still refuse (832/R6 review).
+	it.each(setofStatementWordCases)(
+		"refuses an argument named $argName even under returns: <table> (setof) -- harmless on the server, refused because the refusal is uniform by name",
+		({ argName }) => {
+			expect(
+				codeOf(() =>
+					defineFunction(
+						app,
+						"echo_setof_word_table",
+						{ args: { [argName]: uuid() }, returns: posts },
+						(ctx) => {
+							ctx.return(select(posts));
+						},
+					),
+				),
+			).toBe("reserved-local-name");
+		},
+	);
+
+	it("refuses an argument named next even inside coalesce(...) -- not the first token after return, still refused by name", () => {
+		expect(
+			codeOf(() =>
+				defineFunction(
+					app,
+					"echo_next_coalesce",
+					{ args: { next: text() }, returns: { typeName: "text" } },
+					(ctx, a) => {
+						ctx.return(coalesce(a.next, "d"));
+					},
+				),
+			),
+		).toBe("reserved-local-name");
+	});
+
+	it("refuses an argument named query even inside coalesce(...) -- not the first token after return, still refused by name", () => {
+		expect(
+			codeOf(() =>
+				defineFunction(
+					app,
+					"echo_query_coalesce",
+					{ args: { query: text() }, returns: { typeName: "text" } },
+					(ctx, a) => {
+						ctx.return(coalesce(a.query, "d"));
+					},
+				),
+			),
+		).toBe("reserved-local-name");
+	});
+
+	it("a row read named next is accepted -- row names take no reserved check (control)", () => {
+		const fn = defineFunction(
+			app,
+			"echo_next_row",
+			{ returns: posts },
+			(ctx) => {
+				ctx.row(
+					select({ id: posts.id }, posts).where(eq(posts.id, posts.id)),
+					"next",
+				);
+				ctx.return(select(posts));
+			},
+		);
+		expect(fn.body.declarations).toEqual([
+			{ declKind: "scalar", name: "next_id", typeNode: { typeName: "uuid" } },
+		]);
+	});
+
+	// Measured harmless as an argument, a loop name and a row read's own
+	// name (reviewer sweep, #832/R6) -- the same "plpgsql opens a
+	// statement with this word" family as `next`/`query`, but never
+	// refused, so kept out of the class (reserved.ts's doc comment names
+	// all nineteen).
+	const harmlessStatementWordCases: ReadonlyArray<{ readonly name: string }> = [
+		{ name: "exit" },
+		{ name: "elsif" },
+		{ name: "elseif" },
+		{ name: "continue" },
+		{ name: "assert" },
+		{ name: "open" },
+		{ name: "move" },
+		{ name: "close" },
+		{ name: "call" },
+		{ name: "set" },
+		{ name: "reset" },
+		{ name: "commit" },
+		{ name: "rollback" },
+		{ name: "alias" },
+		{ name: "constant" },
+		{ name: "reverse" },
+		{ name: "slice" },
+		{ name: "diagnostics" },
+		{ name: "stacked" },
+	];
+
+	it.each(harmlessStatementWordCases)(
+		"accepts an argument named $name -- measured harmless in every rendered position (control)",
+		({ name }) => {
+			const fn = defineFunction(
+				app,
+				"echo_harmless_word_arg",
+				{ args: { [name]: uuid() }, returns: { typeName: "uuid" } },
+				(ctx) => {
+					ctx.return(sql`null`);
+				},
+			);
+			expect(fn.args[0]?.argName).toBe(name);
+		},
+	);
+});
+
 describe("two argument keys deriving to one SQL name are refused (#751)", () => {
 	const collidingCases: ReadonlyArray<{
 		readonly label: string;
@@ -873,5 +1135,132 @@ describe("a returns builder with notNullElements is refused (#433)", () => {
 			tags: text().array().notNullElements(),
 		});
 		expect(tableWithArray.tags).toBeDefined();
+	});
+});
+
+describe("the body's rendered names are seeded with the argument names (#816)", () => {
+	it("a loop named after an argument collides with the argument, naming it", () => {
+		let caught: unknown;
+		try {
+			defineFunction(
+				app,
+				"echo_shadow_loop",
+				{ args: { x: uuid() }, returns: posts },
+				(ctx) => {
+					ctx.forEach(
+						select(posts).where(eq(posts.id, posts.id)),
+						() => {},
+						"x",
+					);
+					ctx.return(select(posts));
+				},
+			);
+		} catch (error) {
+			caught = error;
+		}
+		expect((caught as { code?: string } | undefined)?.code).toBe(
+			"duplicate-local-name",
+		);
+		expect((caught as { message?: string } | undefined)?.message).toContain(
+			'the argument named "x"',
+		);
+	});
+
+	it("a row read may carry an argument's name -- the row name renders nowhere (control)", () => {
+		const fn = defineFunction(
+			app,
+			"echo_row_same_name",
+			{ args: { x: uuid() }, returns: posts },
+			(ctx) => {
+				ctx.row(
+					select({ id: posts.id }, posts).where(eq(posts.id, posts.id)),
+					"x",
+				);
+				ctx.return(select(posts));
+			},
+		);
+		expect(fn.body.declarations).toEqual([
+			{ declKind: "scalar", name: "x_id", typeNode: { typeName: "uuid" } },
+		]);
+	});
+
+	it("a row read's derived scalar colliding with an argument is refused, naming the argument", () => {
+		let caught: unknown;
+		try {
+			defineFunction(
+				app,
+				"echo_row_shadow_arg",
+				// biome-ignore lint/style/useNamingConvention: adversarial snake_case key under test.
+				{ args: { x_id: uuid() }, returns: posts },
+				(ctx) => {
+					ctx.row(
+						select({ id: posts.id }, posts).where(eq(posts.id, posts.id)),
+						"x",
+					);
+					ctx.return(select(posts));
+				},
+			);
+		} catch (error) {
+			caught = error;
+		}
+		expect((caught as { code?: string } | undefined)?.code).toBe(
+			"duplicate-local-name",
+		);
+		expect((caught as { message?: string } | undefined)?.message).toContain(
+			'the argument named "x_id"',
+		);
+	});
+
+	it("a loop with a different name from the argument is unaffected (control)", () => {
+		const fn = defineFunction(
+			app,
+			"echo_loop_no_collision",
+			{ args: { x: uuid() }, returns: posts },
+			(ctx) => {
+				ctx.forEach(select(posts).where(eq(posts.id, posts.id)), () => {}, "y");
+				ctx.return(select(posts));
+			},
+		);
+		expect(fn.body.declarations).toEqual([{ declKind: "record", name: "y" }]);
+	});
+
+	it("a loop named after an argument's derived SQL name collides even though the keys differ -- comparison is by derived name, not by key", () => {
+		let caught: unknown;
+		try {
+			defineFunction(
+				app,
+				"echo_loop_derived_collision",
+				{ args: { userId: uuid() }, returns: posts },
+				(ctx) => {
+					ctx.forEach(
+						select(posts).where(eq(posts.id, posts.id)),
+						() => {},
+						"user_id",
+					);
+					ctx.return(select(posts));
+				},
+			);
+		} catch (error) {
+			caught = error;
+		}
+		expect((caught as { code?: string } | undefined)?.code).toBe(
+			"duplicate-local-name",
+		);
+		expect((caught as { message?: string } | undefined)?.message).toContain(
+			'the argument named "user_id"',
+		);
+	});
+
+	it("a body with no declared arguments behaves as before (control, no regression)", () => {
+		const fn = defineFunction(
+			app,
+			"echo_no_args",
+			{ returns: posts },
+			(ctx) => {
+				ctx.forEach(select(posts).where(eq(posts.id, posts.id)), () => {}, "x");
+				ctx.return(select(posts));
+			},
+		);
+		expect(fn.body.declarations).toEqual([{ declKind: "record", name: "x" }]);
 	});
 });

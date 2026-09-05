@@ -4,16 +4,134 @@
   "ref": "quickstart-now/hejbro#832",
   "title": "core: category-C keywords fail as argument names but are not refused; the stated class does not match the list",
   "parent": "quickstart-now/hejbro#815",
-  "status": "open",
+  "status": "closed",
   "opened": "2026-09-04",
-  "closed": null,
-  "decisions": [],
-  "work": [],
+  "closed": "2026-09-05",
+  "decisions": [
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "412/D24",
+        "412/D25; the five issues' own measurements (#832 N1/N2 on PG 17.11; #816/#817/#821 from the co team; #818 wording)"
+      ],
+      "at": "2026-09-05T05:26Z",
+      "title": "harden-function-locals: the reserved class becomes R, T and C; body locals take the argument key's three checks; the ledger is seeded with argument names",
+      "ratified": null
+    },
+    {
+      "id": "R2",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "412/D24",
+        "D25; 832/R1; fl (a) tripwire: tasks 1.2/1.3 rows and the kept scenario 'A row name is judged by the locals it declares'"
+      ],
+      "at": "2026-09-05T09:15Z",
+      "title": "Two name spaces for body locals; the reserved check applies to rendered names only",
+      "ratified": null
+    },
+    {
+      "id": "R3",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "412/D24",
+        "D25; 832/R1; fl measurement: catcode C = 63 (61 new)",
+        "16 names in the set outside R/T/C and the declared-variable list",
+        "new/old missing from that list"
+      ],
+      "at": "2026-09-05T09:15Z",
+      "title": "The reserved class states three sources; the set never loosens in this change",
+      "ratified": null
+    },
+    {
+      "id": "R4",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "412/D24",
+        "D25; 832/R1",
+        "R3; the requirement's own 'one list",
+        "one check and one message'; fl measurement 81 names × 3 positions on postgres:17 (C: 63/63 fail as arguments",
+        "63/63 harmless as loop/row locals; group of 16: 9 fail in rendered positions",
+        "7 harmless)"
+      ],
+      "at": "2026-09-05T09:25Z",
+      "title": "Uniform refusal stands: category C stays refused in loop and row positions although the server accepts it there",
+      "ratified": null
+    },
+    {
+      "id": "R5",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "412/D24",
+        "D25; 832/R2; the kept #748 scenario (found/FOUND/Found → reserved-local-name); a regression of an existing error code is an observable contract change"
+      ],
+      "at": "2026-09-05T09:50Z",
+      "title": "Loop names: reserved (case-folded) before the SQL-name check, so an upper-case reserved spelling keeps its existing code",
+      "ratified": null
+    },
+    {
+      "id": "R6",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "412/D24",
+        "D25; 832/R3",
+        "R4; fl review (constructor mode",
+        "3",
+        "328 rendered functions created on postgres 17.11: next/query the only accepted-then-refused names); the delta's own 'relaxing a refusal is a change of its own' applied symmetrically to needless new refusals"
+      ],
+      "at": "2026-09-05T11:10Z",
+      "title": "N-1: next and query join the enumerated third source (task 1.6); the source stays an enumeration; the 18 measured-safe words are named as outside the class",
+      "ratified": null
+    },
+    {
+      "id": "R7",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [],
+      "at": "2026-09-05T11:32Z",
+      "title": "R7 — Reviewer's stray hejbro init in the main checkout: cleaned, no restore, no issue",
+      "ratified": null
+    }
+  ],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-05T10:18Z",
+      "title": "harden-function-locals 1.1-1.2, 1.5: category-C measured and refused, the class stated by three sources",
+      "pr": null,
+      "decisions": []
+    },
+    {
+      "id": "W2",
+      "at": "2026-09-05T11:17Z",
+      "title": "harden-function-locals 1.6: next and query refused after the piece review's server-side witness",
+      "pr": null,
+      "decisions": []
+    },
+    {
+      "id": "W3",
+      "at": "2026-09-05T11:31Z",
+      "title": "harden-function-locals 1.6: setof and non-first-token regression lock added",
+      "pr": null,
+      "decisions": []
+    }
+  ],
   "prs": [
     {
       "number": 833,
       "role": "refs",
       "pinnedAt": "2026-09-04T14:49Z"
+    },
+    {
+      "number": 910,
+      "role": "closes",
+      "pinnedAt": "2026-09-05T12:05Z"
     }
   ],
   "origin": null,

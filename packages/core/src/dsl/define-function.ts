@@ -221,9 +221,9 @@ const assertArgsPrototypeNotReplaced = (
 /**
  * The first pair of resolved args whose `argName` collides, in
  * declaration order — `null` when every `argName` is unique. Mirrors
- * `buildColumnEntries`'s duplicate-column search, but a column only ever
- * needs the shared name, while an argument's message names both
- * declaration-order keys behind it.
+ * `buildColumnEntries`'s duplicate-column search, which names both
+ * declaration-order keys behind the shared name the same way this does
+ * (#818).
  */
 const findDuplicateArgName = (
 	resolved: ReadonlyArray<{ readonly key: string; readonly argName: string }>,
@@ -395,6 +395,7 @@ export const defineFunction = <
 		returns.returnsKind,
 		scalarReturnFamilyOf(returns),
 		declaredTableOf(returns),
+		argDeclarations.map((declaration) => declaration.argName),
 		(ctx) => body(ctx, refs),
 	);
 

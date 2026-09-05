@@ -232,7 +232,9 @@ describe("body-context recording", () => {
 				);
 				ctx.return(row);
 			}),
-		).toThrowError(/already declared/);
+		).toThrowError(
+			/the row read named "dup" collides with the row read named "dup"/,
+		);
 	});
 
 	it("reserved local name throws reserved-local-name", () => {
@@ -435,7 +437,7 @@ describe("body-context recording", () => {
 				);
 				ctx.return(row);
 			}),
-		).toThrowError(/already declared/);
+		).toThrowError(/the loop named "dup" collides with the loop named "dup"/);
 	});
 
 	it("reserved loop name throws reserved-local-name", () => {
@@ -476,6 +478,116 @@ describe("body-context recording", () => {
 			).toThrowError(
 				/collides with a name Postgres reserves or plpgsql declares itself/,
 			);
+		},
+	);
+
+	// `pg_get_keywords()` catcode `C` on `postgres:17.11`; re-measurement SQL
+	// lives in design.md's Measurement (1.1) section.
+	const categoryCLoopNameCases: ReadonlyArray<{ readonly loopName: string }> = [
+		{ loopName: "between" },
+		{ loopName: "bigint" },
+		{ loopName: "bit" },
+		{ loopName: "boolean" },
+		{ loopName: "char" },
+		{ loopName: "character" },
+		{ loopName: "coalesce" },
+		{ loopName: "dec" },
+		{ loopName: "decimal" },
+		{ loopName: "exists" },
+		{ loopName: "extract" },
+		{ loopName: "float" },
+		{ loopName: "greatest" },
+		{ loopName: "grouping" },
+		{ loopName: "inout" },
+		{ loopName: "int" },
+		{ loopName: "integer" },
+		{ loopName: "interval" },
+		{ loopName: "json" },
+		{ loopName: "json_array" },
+		{ loopName: "json_arrayagg" },
+		{ loopName: "json_exists" },
+		{ loopName: "json_object" },
+		{ loopName: "json_objectagg" },
+		{ loopName: "json_query" },
+		{ loopName: "json_scalar" },
+		{ loopName: "json_serialize" },
+		{ loopName: "json_table" },
+		{ loopName: "json_value" },
+		{ loopName: "least" },
+		{ loopName: "merge_action" },
+		{ loopName: "national" },
+		{ loopName: "nchar" },
+		{ loopName: "none" },
+		{ loopName: "normalize" },
+		{ loopName: "nullif" },
+		{ loopName: "numeric" },
+		{ loopName: "out" },
+		{ loopName: "overlay" },
+		{ loopName: "position" },
+		{ loopName: "precision" },
+		{ loopName: "real" },
+		{ loopName: "row" },
+		{ loopName: "setof" },
+		{ loopName: "smallint" },
+		{ loopName: "substring" },
+		{ loopName: "time" },
+		{ loopName: "timestamp" },
+		{ loopName: "treat" },
+		{ loopName: "trim" },
+		{ loopName: "values" },
+		{ loopName: "varchar" },
+		{ loopName: "xmlattributes" },
+		{ loopName: "xmlconcat" },
+		{ loopName: "xmlelement" },
+		{ loopName: "xmlexists" },
+		{ loopName: "xmlforest" },
+		{ loopName: "xmlnamespaces" },
+		{ loopName: "xmlparse" },
+		{ loopName: "xmlpi" },
+		{ loopName: "xmlroot" },
+		{ loopName: "xmlserialize" },
+		{ loopName: "xmltable" },
+	];
+
+	it.each(categoryCLoopNameCases)(
+		"a loop named $loopName -- a category-C keyword -- throws reserved-local-name (#832)",
+		({ loopName }) => {
+			expect(() =>
+				defineTrigger(comments, triggerConfig, (ctx, { new: row }) => {
+					ctx.forEach(
+						select(comments).where(eq(comments.parentId, row.id)),
+						() => {},
+						loopName,
+					);
+					ctx.return(row);
+				}),
+			).toThrowError(
+				/collides with a name Postgres reserves or plpgsql declares itself/,
+			);
+		},
+	);
+
+	const neverRefusedLoopNameCases: ReadonlyArray<{
+		readonly loopName: string;
+	}> = [{ loopName: "exit" }, { loopName: "elsif" }];
+
+	it.each(neverRefusedLoopNameCases)(
+		"a loop named $loopName -- absent from every category and never refused -- is accepted (control, #832)",
+		({ loopName }) => {
+			const declaration = defineTrigger(
+				comments,
+				triggerConfig,
+				(ctx, { new: row }) => {
+					ctx.forEach(
+						select(comments).where(eq(comments.parentId, row.id)),
+						() => {},
+						loopName,
+					);
+					ctx.return(row);
+				},
+			);
+			const [forEachStmt] = declaration.functionDeclaration.body.statements;
+			expect(forEachStmt).toMatchObject({ stmtKind: "forEach", loopName });
 		},
 	);
 
@@ -542,6 +654,79 @@ describe("body-context recording", () => {
 			/collides with a name Postgres reserves or plpgsql declares itself/,
 		);
 	});
+
+	// Of the 63 category-C keywords, only these 11 contain an underscore --
+	// a row-declared local is always `<row>_<col>`, so only these can ever
+	// equal one exactly. The other 52 can only ever appear as a substring of
+	// a row-declared local, never as the whole name, and are covered at the
+	// argument and loop positions instead. `pg_get_keywords()` catcode `C`
+	// on `postgres:17.11`; re-measurement SQL lives in design.md's
+	// Measurement (1.1) section.
+	const categoryCRowLocalCases: ReadonlyArray<{
+		readonly rowName: string;
+		readonly key: string;
+		readonly derivedName: string;
+	}> = [
+		{ rowName: "json", key: "array", derivedName: "json_array" },
+		{ rowName: "json", key: "arrayagg", derivedName: "json_arrayagg" },
+		{ rowName: "json", key: "exists", derivedName: "json_exists" },
+		{ rowName: "json", key: "object", derivedName: "json_object" },
+		{ rowName: "json", key: "objectagg", derivedName: "json_objectagg" },
+		{ rowName: "json", key: "query", derivedName: "json_query" },
+		{ rowName: "json", key: "scalar", derivedName: "json_scalar" },
+		{ rowName: "json", key: "serialize", derivedName: "json_serialize" },
+		{ rowName: "json", key: "table", derivedName: "json_table" },
+		{ rowName: "json", key: "value", derivedName: "json_value" },
+		{ rowName: "merge", key: "action", derivedName: "merge_action" },
+	];
+
+	it.each(categoryCRowLocalCases)(
+		"a row-declared local $derivedName (row $rowName, column $key) -- a category-C keyword -- throws reserved-local-name (#832)",
+		({ rowName, key }) => {
+			expect(() =>
+				defineTrigger(comments, triggerConfig, (ctx, { new: row }) => {
+					ctx.row(
+						select({ [key]: comments.postId }, comments).where(
+							eq(comments.id, row.id),
+						),
+						rowName,
+					);
+					ctx.return(row);
+				}),
+			).toThrowError(
+				/collides with a name Postgres reserves or plpgsql declares itself/,
+			);
+		},
+	);
+
+	const neverRefusedRowNameCases: ReadonlyArray<{ readonly rowName: string }> =
+		[{ rowName: "exit" }, { rowName: "elsif" }];
+
+	it.each(neverRefusedRowNameCases)(
+		"a row read named $rowName -- absent from every category and never refused -- is accepted (control, #832)",
+		({ rowName }) => {
+			const declaration = defineTrigger(
+				comments,
+				triggerConfig,
+				(ctx, { new: row }) => {
+					ctx.row(
+						select({ postId: comments.postId }, comments).where(
+							eq(comments.id, row.parentId),
+						),
+						rowName,
+					);
+					ctx.return(row);
+				},
+			);
+			expect(declaration.functionDeclaration.body.declarations).toEqual([
+				{
+					declKind: "scalar",
+					name: `${rowName}_post_id`,
+					typeNode: { typeName: "uuid" },
+				},
+			]);
+		},
+	);
 
 	it("forEach over a derived-expression projection throws row-projection-not-column", () => {
 		expect(() =>
@@ -618,6 +803,295 @@ describe("body-context recording", () => {
 			/must return a trigger row.*Next: run the statement with ctx\.execute/,
 		);
 	});
+});
+
+describe("loop and row names are hejbro SQL names, checked before duplicate (#817/#821, D106 832/R2)", () => {
+	const invalidNameCases: ReadonlyArray<{
+		readonly label: string;
+		readonly name: string;
+	}> = [
+		{ label: "a hyphen", name: "my-loop" },
+		{ label: "an upper-case first letter", name: "Item" },
+		{ label: "a leading digit", name: "2nd" },
+		{ label: "a space", name: "a b" },
+		{ label: "the empty string", name: "" },
+		{ label: "a non-ASCII letter", name: "café" },
+	];
+
+	it.each(invalidNameCases)(
+		"refuses a loop named $name ($label) with invalid-sql-name",
+		({ name }) => {
+			expect(() =>
+				defineTrigger(comments, triggerConfig, (ctx, { new: row }) => {
+					ctx.forEach(
+						select(comments).where(eq(comments.parentId, row.id)),
+						() => {},
+						name,
+					);
+					ctx.return(row);
+				}),
+			).toThrowError(/is not a valid hejbro SQL identifier/);
+		},
+	);
+
+	it.each(invalidNameCases)(
+		"refuses a row read named $name ($label) with invalid-sql-name",
+		({ name }) => {
+			expect(() =>
+				defineTrigger(comments, triggerConfig, (ctx, { new: row }) => {
+					ctx.row(
+						select({ postId: comments.postId }, comments).where(
+							eq(comments.id, row.parentId),
+						),
+						name,
+					);
+					ctx.return(row);
+				}),
+			).toThrowError(/is not a valid hejbro SQL identifier/);
+		},
+	);
+
+	it("names the function and the name in a loop's invalid-sql-name refusal", () => {
+		expect(() =>
+			defineTrigger(comments, triggerConfig, (ctx, { new: row }) => {
+				ctx.forEach(
+					select(comments).where(eq(comments.parentId, row.id)),
+					() => {},
+					"my-loop",
+				);
+				ctx.return(row);
+			}),
+		).toThrowError(
+			/loop in app\.comments\.comments_single_depth name "my-loop" is not a valid hejbro SQL identifier/,
+		);
+	});
+
+	it("names the function and the name in a row read's invalid-sql-name refusal", () => {
+		expect(() =>
+			defineTrigger(comments, triggerConfig, (ctx, { new: row }) => {
+				ctx.row(
+					select({ postId: comments.postId }, comments).where(
+						eq(comments.id, row.parentId),
+					),
+					"my-row",
+				);
+				ctx.return(row);
+			}),
+		).toThrowError(
+			/row read in app\.comments\.comments_single_depth name "my-row" is not a valid hejbro SQL identifier/,
+		);
+	});
+
+	it("a loop named Row -- a mixed-case spelling of an owned category-C name -- fails with reserved-local-name, not invalid-sql-name", () => {
+		expect(() =>
+			defineTrigger(comments, triggerConfig, (ctx, { new: row }) => {
+				ctx.forEach(
+					select(comments).where(eq(comments.parentId, row.id)),
+					() => {},
+					"Row",
+				);
+				ctx.return(row);
+			}),
+		).toThrowError(
+			/collides with a name Postgres reserves or plpgsql declares itself/,
+		);
+	});
+
+	it("a row read named Row -- the same spelling, but a row read takes no reserved check -- fails with invalid-sql-name instead (contrast)", () => {
+		expect(() =>
+			defineTrigger(comments, triggerConfig, (ctx, { new: row }) => {
+				ctx.row(
+					select({ postId: comments.postId }, comments).where(
+						eq(comments.id, row.parentId),
+					),
+					"Row",
+				);
+				ctx.return(row);
+			}),
+		).toThrowError(/is not a valid hejbro SQL identifier/);
+	});
+
+	it("two spellings that fold to one row name never both pass -- row_a then Row_a fails with invalid-sql-name, before any duplicate check", () => {
+		expect(() =>
+			defineTrigger(comments, triggerConfig, (ctx, { new: row }) => {
+				ctx.row(
+					select({ postId: comments.postId }, comments).where(
+						eq(comments.id, row.parentId),
+					),
+					"row_a",
+				);
+				ctx.row(
+					select({ postId: comments.postId }, comments).where(
+						eq(comments.id, row.id),
+					),
+					"Row_a",
+				);
+				ctx.return(row);
+			}),
+		).toThrowError(/is not a valid hejbro SQL identifier/);
+	});
+
+	it("two loops named r collide with duplicate-local-name, naming both as loops", () => {
+		expect(() =>
+			defineTrigger(comments, triggerConfig, (ctx, { new: row }) => {
+				ctx.forEach(
+					select(comments).where(eq(comments.parentId, row.id)),
+					() => {},
+					"r",
+				);
+				ctx.forEach(
+					select(comments).where(eq(comments.parentId, row.id)),
+					() => {},
+					"r",
+				);
+				ctx.return(row);
+			}),
+		).toThrowError(/the loop named "r" collides with the loop named "r"/);
+	});
+
+	it("a loop r and a row read r collide with duplicate-local-name, naming the loop and the row read", () => {
+		expect(() =>
+			defineTrigger(comments, triggerConfig, (ctx, { new: row }) => {
+				ctx.forEach(
+					select(comments).where(eq(comments.parentId, row.id)),
+					() => {},
+					"r",
+				);
+				ctx.row(
+					select({ postId: comments.postId }, comments).where(
+						eq(comments.id, row.parentId),
+					),
+					"r",
+				);
+				ctx.return(row);
+			}),
+		).toThrowError(/the loop named "r" collides with the row read named "r"/);
+	});
+});
+
+describe("next and query are refused as loop names; the wider plpgsql-statement family stays accepted (#832/R6, review-born)", () => {
+	const setofStatementWordCases: ReadonlyArray<{ readonly loopName: string }> =
+		[{ loopName: "next" }, { loopName: "query" }];
+
+	it.each(setofStatementWordCases)(
+		"a loop named $loopName -- plpgsql's own SETOF-returning statement word -- throws reserved-local-name",
+		({ loopName }) => {
+			expect(() =>
+				defineTrigger(comments, triggerConfig, (ctx, { new: row }) => {
+					ctx.forEach(
+						select(comments).where(eq(comments.parentId, row.id)),
+						() => {},
+						loopName,
+					);
+					ctx.return(row);
+				}),
+			).toThrowError(
+				/collides with a name Postgres reserves or plpgsql declares itself/,
+			);
+		},
+	);
+
+	it.each(setofStatementWordCases)(
+		"a row read named $loopName is accepted -- row names take no reserved check (control)",
+		({ loopName }) => {
+			const declaration = defineTrigger(
+				comments,
+				triggerConfig,
+				(ctx, { new: row }) => {
+					ctx.row(
+						select({ postId: comments.postId }, comments).where(
+							eq(comments.id, row.parentId),
+						),
+						loopName,
+					);
+					ctx.return(row);
+				},
+			);
+			expect(declaration.functionDeclaration.body.declarations).toEqual([
+				{
+					declKind: "scalar",
+					name: `${loopName}_post_id`,
+					typeNode: { typeName: "uuid" },
+				},
+			]);
+		},
+	);
+
+	// Measured harmless as an argument, a loop name and a row read's own
+	// name (reviewer sweep, #832/R6) -- the same "plpgsql opens a
+	// statement with this word" family as `next`/`query`, but never
+	// refused, so kept out of the class (reserved.ts's doc comment names
+	// all nineteen).
+	const harmlessStatementWordCases: ReadonlyArray<{ readonly name: string }> = [
+		{ name: "exit" },
+		{ name: "elsif" },
+		{ name: "elseif" },
+		{ name: "continue" },
+		{ name: "assert" },
+		{ name: "open" },
+		{ name: "move" },
+		{ name: "close" },
+		{ name: "call" },
+		{ name: "set" },
+		{ name: "reset" },
+		{ name: "commit" },
+		{ name: "rollback" },
+		{ name: "alias" },
+		{ name: "constant" },
+		{ name: "reverse" },
+		{ name: "slice" },
+		{ name: "diagnostics" },
+		{ name: "stacked" },
+	];
+
+	it.each(harmlessStatementWordCases)(
+		"a loop named $name is accepted -- measured harmless in every rendered position (control)",
+		({ name }) => {
+			const declaration = defineTrigger(
+				comments,
+				triggerConfig,
+				(ctx, { new: row }) => {
+					ctx.forEach(
+						select(comments).where(eq(comments.parentId, row.id)),
+						() => {},
+						name,
+					);
+					ctx.return(row);
+				},
+			);
+			const [forEachStmt] = declaration.functionDeclaration.body.statements;
+			expect(forEachStmt).toMatchObject({
+				stmtKind: "forEach",
+				loopName: name,
+			});
+		},
+	);
+
+	it.each(harmlessStatementWordCases)(
+		"a row read named $name is accepted -- measured harmless in every rendered position (control)",
+		({ name }) => {
+			const declaration = defineTrigger(
+				comments,
+				triggerConfig,
+				(ctx, { new: row }) => {
+					ctx.row(
+						select({ postId: comments.postId }, comments).where(
+							eq(comments.id, row.parentId),
+						),
+						name,
+					);
+					ctx.return(row);
+				},
+			);
+			expect(declaration.functionDeclaration.body.declarations).toEqual([
+				{
+					declKind: "scalar",
+					name: `${name}_post_id`,
+					typeNode: { typeName: "uuid" },
+				},
+			]);
+		},
+	);
 });
 
 const MOCK_ID = "00000000-0000-0000-0000-000000000000";

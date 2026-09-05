@@ -253,6 +253,47 @@ type ColumnEntry = {
 	readonly columnState: ColumnState;
 };
 
+/**
+ * The first pair of column entries whose `columnName` collides, in
+ * declaration order — `null` when every `columnName` is unique. Mirrors
+ * `define-function.ts`'s `findDuplicateArgName` search.
+ */
+const findDuplicateColumnName = (
+	columnEntries: ReadonlyArray<{
+		readonly columnKey: string;
+		readonly columnName: string;
+	}>,
+): {
+	readonly firstKey: string;
+	readonly secondKey: string;
+	readonly columnName: string;
+} | null => {
+	const duplicateIndex = columnEntries.findIndex((entry, index) =>
+		columnEntries
+			.slice(0, index)
+			.some((earlier) => earlier.columnName === entry.columnName),
+	);
+	if (duplicateIndex === -1) {
+		return null;
+	}
+	const duplicate = columnEntries[duplicateIndex] as {
+		columnKey: string;
+		columnName: string;
+	};
+	const firstIndex = columnEntries.findIndex(
+		(entry) => entry.columnName === duplicate.columnName,
+	);
+	const first = columnEntries[firstIndex] as {
+		columnKey: string;
+		columnName: string;
+	};
+	return {
+		firstKey: first.columnKey,
+		secondKey: duplicate.columnKey,
+		columnName: duplicate.columnName,
+	};
+};
+
 /** Snake-cases and validates a table's column builders into {@link ColumnEntry}s (shared by {@link table} and `existingTable`). */
 export const buildColumnEntries = <
 	TColumns extends Record<string, ColumnBuilder>,
@@ -268,16 +309,12 @@ export const buildColumnEntries = <
 		}),
 	);
 
-	const duplicateColumnName = columnEntries
-		.map((entry) => entry.columnName)
-		.find(
-			(columnName, index, allNames) => allNames.indexOf(columnName) !== index,
-		);
+	const duplicate = findDuplicateColumnName(columnEntries);
 
-	if (duplicateColumnName !== undefined) {
+	if (duplicate !== null) {
 		throwHejbroError(
 			"duplicate-column",
-			`table "${tableName}" has duplicate column name "${duplicateColumnName}" after snake_casing. Next: rename one of the conflicting TypeScript properties.`,
+			`table "${tableName}" declares columns "${duplicate.firstKey}" and "${duplicate.secondKey}" that both derive to the SQL name "${duplicate.columnName}". Next: rename one of the two keys so their snake_case names differ.`,
 		);
 	}
 

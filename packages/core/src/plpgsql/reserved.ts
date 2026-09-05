@@ -3,18 +3,42 @@ import { throwHejbroError } from "../error";
 /**
  * Every name an unquoted plpgsql local (row scalars, function args,
  * `new`/`old` and their fields) cannot carry (dual quoting policy, spec
- * §5.3 decision A3), defined by source, not by how it fails: a name
- * Postgres reserves — its keyword table's categories `R` (reserved) and
- * `T` (reserved, usable as a function or type name) — or plpgsql
- * reserves for its own statements; and a variable plpgsql declares on
- * its own (`FOUND`, the exception-block `SQLSTATE`/`SQLERRM`, a trigger
- * function's `TG_*` variables, and `current_schema` among the category-T
- * keywords, which Postgres creates without complaint and reads as the
- * local). Where the failure lands varies by name — a reserved keyword
- * breaks at creation, at an assignment, or at a read, depending on its
- * category, while a shadowed name is created silently and read wrong —
- * so every one of them is refused here under one code, at the one place
- * every failure is visible: declaration time.
+ * §5.3 decision A3), from three sources:
+ *
+ * 1. `pg_get_keywords()` categories `R` (reserved), `T` (reserved, usable
+ *    as a function or type name), and `C` (usable as a column label, but
+ *    not as an argument name or a body local — measured on
+ *    `postgres:17.11`, design.md's Measurement (1.1)).
+ * 2. a variable plpgsql declares on its own: `found`, the exception
+ *    block's `sqlstate`/`sqlerrm`, a trigger body's `new` and `old`, and
+ *    a trigger function's twelve `tg_*` variables.
+ * 3. sixteen words plpgsql opens its own statements with, named one by
+ *    one because the keyword table does not carry them — the list is
+ *    what defines this source, not a broader "plpgsql statement syntax"
+ *    description, since most of plpgsql's own vocabulary renders fine:
+ *    eleven fail as a local (`begin`, `by`, `declare`, `execute`,
+ *    `foreach`, `if`, `loop`, `next`, `query`, `strict`, `while` —
+ *    `return next`/`return query` are plpgsql's own SETOF-returning
+ *    statements, so an argument or loop named `next`/`query` renders
+ *    `return next;`/`return query;` and either fails at creation
+ *    (non-SETOF) or returns the wrong thing) and five stand without
+ *    failing but are refused on the same footing (`exception`, `get`,
+ *    `perform`, `raise`, `return`) — this change only widens refusal, so
+ *    a name already refused stays refused even where it is measured
+ *    harmless. Nineteen more of plpgsql's own words are the same family
+ *    but measured harmless in every rendered position and stay out of
+ *    the class (`exit`, `elsif`, `elseif`, `continue`, `assert`, `open`,
+ *    `move`, `close`, `call`, `set`, `reset`, `commit`, `rollback`,
+ *    `alias`, `constant`, `reverse`, `slice`, `diagnostics`, `stacked`):
+ *    they have never been refused, so leaving them out relaxes nothing,
+ *    and refusing them would refuse a working program.
+ *
+ * Where the failure lands varies by name and by position — a keyword
+ * breaks at creation, at an assignment, or at a read; a shadowed name is
+ * created silently and read wrong — so every one of them is refused
+ * here under one code, at the one place every failure is visible:
+ * declaration time, regardless of where in the body the name is
+ * measured to actually fail.
  */
 export const reservedPlpgsqlNames: ReadonlySet<string> = new Set([
 	"all",
@@ -29,12 +53,18 @@ export const reservedPlpgsqlNames: ReadonlySet<string> = new Set([
 	"authorization",
 	"begin",
 	"between",
+	"bigint",
 	"binary",
+	"bit",
+	"boolean",
 	"both",
 	"by",
 	"case",
 	"cast",
+	"char",
+	"character",
 	"check",
+	"coalesce",
 	"collate",
 	"collation",
 	"column",
@@ -49,6 +79,8 @@ export const reservedPlpgsqlNames: ReadonlySet<string> = new Set([
 	"current_time",
 	"current_timestamp",
 	"current_user",
+	"dec",
+	"decimal",
 	"declare",
 	"default",
 	"deferrable",
@@ -61,8 +93,10 @@ export const reservedPlpgsqlNames: ReadonlySet<string> = new Set([
 	"exception",
 	"execute",
 	"exists",
+	"extract",
 	"false",
 	"fetch",
+	"float",
 	"for",
 	"foreach",
 	"foreign",
@@ -72,54 +106,90 @@ export const reservedPlpgsqlNames: ReadonlySet<string> = new Set([
 	"full",
 	"get",
 	"grant",
+	"greatest",
 	"group",
+	"grouping",
 	"having",
 	"if",
 	"ilike",
 	"in",
 	"initially",
 	"inner",
+	"inout",
+	"int",
+	"integer",
 	"intersect",
+	"interval",
 	"into",
 	"is",
 	"isnull",
 	"join",
+	"json",
+	"json_array",
+	"json_arrayagg",
+	"json_exists",
+	"json_object",
+	"json_objectagg",
+	"json_query",
+	"json_scalar",
+	"json_serialize",
+	"json_table",
+	"json_value",
 	"lateral",
 	"leading",
+	"least",
 	"left",
 	"like",
 	"limit",
 	"localtime",
 	"localtimestamp",
 	"loop",
+	"merge_action",
+	"national",
 	"natural",
+	"nchar",
 	"new",
+	"next",
+	"none",
+	"normalize",
 	"not",
 	"notnull",
 	"null",
+	"nullif",
+	"numeric",
 	"offset",
 	"old",
 	"on",
 	"only",
 	"or",
 	"order",
+	"out",
 	"outer",
 	"overlaps",
+	"overlay",
 	"perform",
 	"placing",
+	"position",
+	"precision",
 	"primary",
+	"query",
 	"raise",
+	"real",
 	"references",
 	"return",
 	"returning",
 	"right",
+	"row",
 	"select",
 	"session_user",
+	"setof",
 	"similar",
+	"smallint",
 	"some",
 	"sqlerrm",
 	"sqlstate",
 	"strict",
+	"substring",
 	"symmetric",
 	"system_user",
 	"table",
@@ -137,13 +207,19 @@ export const reservedPlpgsqlNames: ReadonlySet<string> = new Set([
 	"tg_tag",
 	"tg_when",
 	"then",
+	"time",
+	"timestamp",
 	"to",
 	"trailing",
+	"treat",
+	"trim",
 	"true",
 	"union",
 	"unique",
 	"user",
 	"using",
+	"values",
+	"varchar",
 	"variadic",
 	"verbose",
 	"when",
@@ -151,6 +227,17 @@ export const reservedPlpgsqlNames: ReadonlySet<string> = new Set([
 	"while",
 	"window",
 	"with",
+	"xmlattributes",
+	"xmlconcat",
+	"xmlelement",
+	"xmlexists",
+	"xmlforest",
+	"xmlnamespaces",
+	"xmlparse",
+	"xmlpi",
+	"xmlroot",
+	"xmlserialize",
+	"xmltable",
 ]);
 
 /**

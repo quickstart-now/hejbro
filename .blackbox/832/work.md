@@ -2,3 +2,40 @@
 
 What was built, measured and reversed under the decisions, one entry per PR or group (`W#`). Managed by `blackbox add work`; append-only.
 
+<a id="w1"></a>
+## W1 — harden-function-locals 1.1-1.2, 1.5: category-C measured and refused, the class stated by three sources
+
+_2026-09-05T10:18Z_
+
+Change `harden-function-locals`, group 1, tasks 1.1, 1.2, 1.5 (commits 7c8e7aa8, 5d8e0a69, 990f2c93, 7e67636e, 16dea9c7 on branch `harden-function-locals`).
+
+1.1 measured all 63 `pg_get_keywords()` category-C names, the 16 names the shipped reserved set held that are neither R/T/C nor a plpgsql-declared variable, and the `exit`/`elsif` counter-example pair, on live `postgres:17.11`, in the three positions a body renders a name (argument, loop record, row-declared local), verifying `harmless` by calling the function and reading the value back, not merely by a successful `CREATE`. As an argument all 63 category-C names fail (60 syntax errors, `inout`/`out`/`setof` with 42P13 instead); as a loop record or row-declared local all 63 are accepted by the server. Of the 16, 9 fail as a rendered name (`begin by declare execute foreach if loop strict while`) and 7 stand (`exception get perform raise return`, plus `exit`/`elsif` which were never refused). A trigger-body follow-up measured `new`/`old` specifically: redeclaring either as a loop record or a row-declared local corrupts the trigger's own row -- two hard errors and one silent wrong-value read (`old.v` after the loop reads the loop's leftover value, not the row's).
+
+**Two instrumentation bugs were found and the sweep re-run in full before any result was reported**: the first script run omitted `ON_ERROR_STOP=1`, so a failing `CREATE` still reported `rc=0` and was misclassified as a success; the second passed a fresh oidvector-cast type comparison that never matched because `proargtypes::regtype[]::text` prints with an explicit `[0:0]=` bound prefix Postgres adds to zero-based arrays. Both were caught before the first report went out, and the full 81-name x 3-position sweep was re-run after each fix -- the measurement reported and pinned in `design.md`'s Measurement (1.1) section is the corrected run.
+
+1.2 (commit 990f2c93) adds the 61 missing category-C names to `reservedPlpgsqlNames` in alphabetical order (63 total minus `between`/`exists`, already present) and restates the doc comment's class as three sources: `pg_get_keywords()` categories R/T/C; variables plpgsql declares itself (`found`, `sqlstate`/`sqlerrm`, a trigger body's `new`/`old`, the twelve `tg_*` variables); and the fourteen words plpgsql opens its own statements with, named one by one (9 that fail, 5 that stand -- refused on prior-release evidence, not on this measurement, since relaxing a refusal is its own decision). `exit`/`elsif` are named as the reason the fourteen are not fifteen. Red: 63 category-C names as an argument's derived name (all refused); the same 63 as a loop name (all refused); the 11 that contain an underscore, the only shape a row-declared local can naturally take (`<row>_<col>`), constructed via a row name plus a column key (all refused); `exit`/`elsif` accepted as a control in all three positions. 133 failing red cases matched the predicted count exactly (61+61+11). Full `pnpm test` green after, no collateral against the 63-name reservation. Pure work: 1.1 ~35 min against a 10 min estimate (the two instrumentation bugs and the trigger follow-up account for the overrun); 1.2 ~9 min against a 9 min estimate (implementer-stamped).
+
+1.5 (commits 7e67636e docs, 16dea9c7 skill+changeset) updates `function-builder-pitfalls.md`'s reserved-name paragraph to state the three sources and the reserved-before-SQL-name-before-duplicate check order, and adds a `.changeset/harden-function-locals.md` (patch, `@hejbro/core`, the fixed group of seven) describing the four user-visible refusals this change adds. Pure work ~7 min against a 6 min estimate (implementer-stamped).
+
+<a id="w2"></a>
+## W2 — harden-function-locals 1.6: next and query refused after the piece review's server-side witness
+
+_2026-09-05T11:17Z_
+
+Change `harden-function-locals`, group 1, task 1.6, review-born (branch `harden-function-locals`).
+
+The spec-bound reviewer put every accepted rendered SQL from the group's implementation (3,328 renders) onto a live `postgres:17` and found the one shape hejbro accepted that the server refuses: an argument (or a loop) named `next` or `query` renders as the first token after `return` in a scalar-returning function's body -- `return next;` -- which plpgsql reads as its own `RETURN NEXT`/`RETURN QUERY` statement, not an identifier read, so a non-`setof` function using the name fails at creation with 42804. `hejbro generate` wrote a migration that could not be applied. The break is lexical and holds only at that exact position: the same argument inside `return coalesce(next, 'd')`, or in a `returns setof` body (`return query <select>` never puts the name there), is created and runs correctly -- the refusal is still by name, in every rendered position, because a name-based refusal is what makes the guarantee uniform.
+
+The lead's ruling (832/R6) added `next`/`query` to `reservedPlpgsqlNames` (195 -> 197) and required the doc comment's third source to stay an explicit list rather than broaden to "plpgsql statement syntax" -- broadening the description, rather than naming the two words, would have silently pulled in nineteen more of plpgsql's own words that the reviewer separately measured harmless in every rendered position (`exit`, `elsif`, `elseif`, `continue`, `assert`, `open`, `move`, `close`, `call`, `set`, `reset`, `commit`, `rollback`, `alias`, `constant`, `reverse`, `slice`, `diagnostics`, `stacked`) and refused nineteen working programs. The doc comment now names all nineteen as the family the source excludes, not just the two it includes.
+
+Measured: red first -- `next`/`query` refused as an argument and as a loop name; the reviewer's exact repro (`args: { next }` + `ctx.return(a.next)`) refused at declaration time; a row read named `next` accepted (row names take no reserved check); the nineteen-name control table accepted in all three positions (argument, loop, row read) -- five failures, all controls green. Genuinely verified red by `git stash`-ing `reserved.ts` alone and re-running the new tests before restoring it. Green after the two-entry addition. Full `pnpm test` green afterward, no collateral against the wider set. Pure work ~12 min against an 8 min estimate (implementer-stamped).
+
+<a id="w3"></a>
+## W3 — harden-function-locals 1.6: setof and non-first-token regression lock added
+
+_2026-09-05T11:31Z_
+
+Change `harden-function-locals`, group 1, task 1.6, addendum (commit 45d5328e on branch `harden-function-locals`).
+
+Two more input-table rows pin the reviewer's own re-check expectations: an argument named `next`/`query` under `returns: <table>` (setof) still refused with `reserved-local-name`, even though a setof body renders `return query <select>` and never puts the name right after `return` (server-harmless); and an argument named `next`/`query` used inside `coalesce(...)` (not the first token after `return`) still refused the same way. Both shapes are accepted by the server -- the refusal is a deliberate uniform-by-name choice the requirement already states, and without a test pinning it the choice does not stay a contract. No `reserved.ts` change was needed (regression lock only). `openspec/task-times.csv`'s 1.6 row actual raised 12 -> 15 to include this addendum.
+

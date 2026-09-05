@@ -1,0 +1,29 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#502",
+  "title": "audit server-behavior assertions across openspec/specs",
+  "parent": "quickstart-now/hejbro#412",
+  "status": "closed",
+  "opened": "2026-09-05",
+  "closed": "2026-09-05",
+  "decisions": [],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-05T09:13Z",
+      "title": "18 server-behaviour claims measured on PostgreSQL 17.11: none wrong",
+      "pr": null,
+      "decisions": []
+    }
+  ],
+  "prs": [
+    {
+      "number": 910,
+      "role": "closes",
+      "pinnedAt": "2026-09-05T12:05Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

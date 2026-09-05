@@ -55,18 +55,39 @@ uuid()`) does declare an argument under that name, and is refused the
 ordinary way instead, with `invalid-sql-name` (`__proto__` isn't
 lower-case snake_case).
 
-The reserved-name check (`reserved-local-name`) refuses a keyword *and* a
-variable plpgsql declares on its own — `found`, `sqlstate`, `sqlerrm`,
-and the twelve `tg_*` trigger variables — case-insensitively, since an
-argument by one of those names is unreachable behind plpgsql's own
-variable (`return found` yields plpgsql's `FOUND`, not the caller's
-value) and a declared local hides it, with no error at all, and the keywords Postgres
-reserves for function and type names (`left`, `is`, `join`,
-`current_schema`, …). Two
-argument keys that derive to the same SQL name (`userId` beside
+The reserved-name check (`reserved-local-name`) refuses a name from
+three sources: Postgres's own keyword categories `R`/`T` (`left`, `is`,
+`join`, `current_schema`, …) plus `C` — column-name keywords like `int`,
+`row`, `values`, `time`, `json`, `out`, `trim`, which fail identically as
+a body local even though Postgres accepts them elsewhere; a variable
+plpgsql declares on its own — `found`, `sqlstate`/`sqlerrm`, a trigger
+body's `new`/`old`, and the twelve `tg_*` variables (an argument by one
+of those names is unreachable behind plpgsql's own variable — `return
+found` yields plpgsql's `FOUND`, not the caller's value); and fourteen
+words plpgsql opens one of its own statements with (`begin`, `declare`,
+`loop`, `while`, …) — `exit` and `elsif` are the same family but stay
+usable, since no release ever refused them. The check folds case and
+runs *before* the hejbro SQL-name check (`invalid-sql-name`) and the
+duplicate check, so `FOUND` fails as `reserved-local-name` (lower-casing
+it would not make it usable), while a merely-invalid spelling like
+`My_loop` fails as `invalid-sql-name`.
+
+A `ctx.forEach` loop's record name and a `ctx.row`/`ctx.rowOrNull`
+read's own name take the same three checks an argument key does, in the
+same order — except a row read's *name* itself: it declares no
+variable, only one scalar per projected column (`<row>_<col>`), so it
+skips the reserved check entirely. `ctx.row(query, "found")` is fine,
+but `ctx.row({ op: t.op }, "tg")` isn't — the column it projects derives
+the owned name `tg_op`. An argument's derived name, a loop's record
+name and a row's derived scalars all share one name space: a loop or a
+row's derived local carrying an argument's own name is refused with
+`duplicate-local-name`, naming the argument; a loop and a row read
+sharing one name are refused the same way, naming both constructs.
+
+Two argument keys that derive to the same SQL name (`userId` beside
 `user_id`) are refused too, with `duplicate-argument`, naming both keys
 and the shared name — the same check a table's colliding column keys
-already get.
+get with `duplicate-column`.
 
 ## The body context API
 
