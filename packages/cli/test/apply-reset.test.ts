@@ -237,10 +237,15 @@ const makeFakeDriver = (
 			if (sql.startsWith("select")) {
 				return ledgerRows.map((filename) => ({ filename }));
 			}
+			if (sql.startsWith("alter table")) {
+				return [];
+			}
 			// Any other statement (the DROP DDL reset itself sends) is just
 			// recorded, not interpreted -- these tests assert on its text --
 			// unless a drop failure was configured, in which case this is
-			// exactly the statement that fails.
+			// exactly the statement that fails. Every statement the ledger
+			// receives SHALL match one of the branches above this one, or it
+			// is mistaken for the DROP.
 			if (dropFailure !== undefined) {
 				throw dropFailure.thrown;
 			}

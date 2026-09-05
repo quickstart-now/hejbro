@@ -10,10 +10,13 @@ the constraint only).
 **Files edited**: `packages/cli/src/apply/{ledger,execute,raise}.ts`,
 `packages/cli/src/apply/ledger-identity.ts`,
 `packages/cli/src/commands/{migrate,status}.ts` and their tests
-(1.1–1.4, 1.6); `packages/cli/test/apply-live.integration.test.ts`
-(1.5, 1.6); `skills/hejbro/references/generate-verify-workflow.md` and
-one `.changeset/*.md` (1.7). If a task appears to need any other file,
-that goes back to the planner, not into the diff.
+(1.1–1.4, 1.6); `packages/cli/test/apply-reset.test.ts`, whose fake
+gains one `alter table` branch because the bootstrap now sends a third
+statement (1.1, 631/R5);
+`packages/cli/test/apply-live.integration.test.ts` (1.5, 1.6);
+`skills/hejbro/references/generate-verify-workflow.md` and one
+`.changeset/*.md` (1.7). If a task appears to need any other file, that
+goes back to the planner, not into the diff.
 
 **Ordering.** 1.1 → 1.2 → 1.3 → 1.4 → 1.5 → 1.6 → 1.7.
 
