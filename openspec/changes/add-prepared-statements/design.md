@@ -63,7 +63,7 @@ error on the second transaction.
   limit, stable across processes and connections, distinct across texts.
   The client library caches "parsed" per connection and per name and
   refuses one name for two texts, so a name that is a pure function of
-  the text can never collide with a different text on one connection.
+  the text does not collide with a different text on one connection in practice (a 128-bit digest).
 - Only built kinds are named. A `sql`-kind text may carry several
   commands (the session pins do; a migration body does) and a prepared
   statement may carry exactly one; hejbro parses no SQL, so the escape
