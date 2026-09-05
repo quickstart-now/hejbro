@@ -45,7 +45,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | [#374](374/) | adversarial spec-only review stage in the opsx cycle | closed | #539 | 1 | 0 (0 pending) |
 | [#377](377/) | snapshot format stability policy for 1.0 | closed | #383 | 1 | 0 (0 pending) |
 | [#378](378/) | defect-leakage metric over escaped defects | closed | #384 | 1 | 0 (0 pending) |
-| [#412](412/) | 0.2.x: post-release commitments | open | #715 #808 #824 #835 #840 #849 #851 #858 #867 #868 #871 #878 #880 #895 #910 #923 #955 #956 #963 #968 #976 #979 #894 (via #303) #903 (via #303) #881 (via #375) #941 (via #413) #850 (via #449) #882 (via #450) #901 (via #452) #906 (via #452) #909 (via #458) #911 (via #458) #962 (via #486) #883 (via #491) #885 (via #497) #884 (via #510) #737 (via #528) #760 (via #528) #773 (via #533) #886 (via #652) #896 (via #663) #897 (via #674) #733 (via #679) #758 (via #679) #739 (via #687) #759 (via #687) #770 (via #687) #861 (via #701) #879 (via #707) #847 (via #741) #900 (via #742) #889 (via #745) #833 (via #748) #784 (via #750) #802 (via #750) #775 (via #752) #799 (via #752) #780 (via #754) #795 (via #754) #887 (via #765) #855 (via #778) #838 (via #783) #786 (via #785) #789 (via #787) #790 (via #788) #792 (via #791) #794 (via #793) #890 (via #798) #898 (via #798) #822 (via #800) #806 (via #804) #813 (via #807) #811 (via #810) | 28 | 35 (4 pending) |
+| [#412](412/) | 0.2.x: post-release commitments | open | #715 #808 #824 #835 #840 #849 #851 #858 #867 #868 #871 #878 #880 #895 #910 #923 #955 #956 #963 #968 #976 #979 #980 #894 (via #303) #903 (via #303) #881 (via #375) #941 (via #413) #850 (via #449) #882 (via #450) #901 (via #452) #906 (via #452) #909 (via #458) #911 (via #458) #962 (via #486) #883 (via #491) #885 (via #497) #884 (via #510) #737 (via #528) #760 (via #528) #773 (via #533) #886 (via #652) #896 (via #663) #897 (via #674) #733 (via #679) #758 (via #679) #739 (via #687) #759 (via #687) #770 (via #687) #861 (via #701) #879 (via #707) #847 (via #741) #900 (via #742) #889 (via #745) #833 (via #748) #784 (via #750) #802 (via #750) #775 (via #752) #799 (via #752) #780 (via #754) #795 (via #754) #887 (via #765) #855 (via #778) #838 (via #783) #786 (via #785) #789 (via #787) #790 (via #788) #792 (via #791) #794 (via #793) #890 (via #798) #898 (via #798) #822 (via #800) #806 (via #804) #813 (via #807) #811 (via #810) | 28 | 35 (4 pending) |
 | ↳ [#303](303/) | Prepared-statement caching behind the driver capability contract | closed | #894 #903 | 0 | 3 (2 pending) |
 | ↳ [#375](375/) | run the d49 round-trip witness in ci | closed | #881 | 0 | 1 (1 pending) |
 | ↳ [#413](413/) | snapshot format upgrade path across released versions | closed | #923 #941 | 0 | 6 (2 pending) |
@@ -60,7 +60,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#501](501/) | add a real FILTER (WHERE …) aggregate constructor | closed | #963 #976 | 0 | 8 (1 pending) |
 | ↳ [#502](502/) | audit server-behavior assertions across openspec/specs | closed | #910 | 0 | 0 (0 pending) |
 | ↳ [#510](510/) | cross-check MODIFIED requirement titles against the base spec in CI | closed | #884 | 0 | 0 (0 pending) |
-| ↳ [#514](514/) | references() cannot express referential actions (onDelete/onUpdate) | closed | #979 | 0 | 7 (1 pending) |
+| ↳ [#514](514/) | references() cannot express referential actions (onDelete/onUpdate) | closed | #979 #980 | 0 | 7 (1 pending) |
 | ↳ [#528](528/) | driver-conformance kit mis-observes transaction-wrapping session-state:false drivers | closed | #737 #760 | 0 | 6 (0 pending) |
 | ↳ [#531](531/) | pg checkout reads its own setupSession; the spec's late-binding scenario fails for spread decorators | closed | #737 | 0 | 3 (0 pending) |
 | ↳ [#533](533/) | cli restore-command test flakes on first heavy parallel run after install | closed | #773 | 0 | 1 (0 pending) |
@@ -138,7 +138,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | [#573](573/) | nile preset: measure identity columns and keyless tables on tenant-aware tables (D106 F9) | closed | #578 | 1 | 0 (0 pending) |
 | [#603](603/) | Apply engine (D12 revised): hejbro owns migrate and reset, production included | closed | #628 | 0 | 0 (0 pending) |
 | [#714](714/) | add a brownfield corpus: a database hejbro did not create, with a standing import→baseline→check witness | open | #851 #858 #868 #871 #878 #910 | 0 | 0 (0 pending) |
-| [#815](815/) | 0.2.x: post-release commitments (2) | open | #867 #868 #871 #878 #968 #976 #979 #893 (via #814) #910 (via #816) #924 (via #816) #840 (via #819) #876 (via #820) #835 (via #823) #877 (via #823) #833 (via #832) #838 (via #836) #851 (via #841) #855 (via #841) #849 (via #845) #850 (via #845) #847 (via #846) #858 (via #856) #861 (via #856) #955 (via #891) #962 (via #891) #900 (via #899) #963 (via #931) #956 (via #932) | 0 | 0 (0 pending) |
+| [#815](815/) | 0.2.x: post-release commitments (2) | open | #867 #868 #871 #878 #968 #976 #979 #980 #893 (via #814) #910 (via #816) #924 (via #816) #840 (via #819) #876 (via #820) #835 (via #823) #877 (via #823) #833 (via #832) #838 (via #836) #851 (via #841) #855 (via #841) #849 (via #845) #850 (via #845) #847 (via #846) #858 (via #856) #861 (via #856) #955 (via #891) #962 (via #891) #900 (via #899) #963 (via #931) #956 (via #932) | 0 | 0 (0 pending) |
 | ↳ [#814](814/) | release: changesets leaves the pre dist-tag stale on packages without a stable version | open | #893 | 0 | 1 (0 pending) |
 | ↳ [#816](816/) | core: an argument name is not checked against the body's own row and loop names | closed | #910 #924 | 0 | 0 (0 pending) |
 | ↳ [#817](817/) | core: loop and row names in a function body bypass the D36 SQL-name check | closed | #910 #924 | 0 | 0 (0 pending) |
@@ -191,9 +191,9 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#966](966/) | query: a cross-family type divergence on a recursive-cte key passes the type layer and fails on the server | open | #968 | 0 | 0 (0 pending) |
 | [#834](834/) | skills: the bare npx skills add still installs the seven internal .claude/skills — metadata.internal hides them (measured on skills 1.5.23) | closed | #888 | 0 | 0 (0 pending) |
 | [#967](967/) | skills: nested combinators inside a recursive term are allowed; the doc says they cannot be spelled | open | #968 | 0 | 0 (0 pending) |
-| [#970](970/) | core: an unknown referential action string reaches the DDL unrefused on the type-check-free path | open | #979 | 0 | 0 (0 pending) |
+| [#970](970/) | core: an unknown referential action string reaches the DDL unrefused on the type-check-free path | open | #979 #980 | 0 | 0 (0 pending) |
 | [#971](971/) | core: a derived foreign-key name over 63 bytes is truncated by the server, snapshot and catalog disagree | open | #979 | 0 | 0 (0 pending) |
-| [#972](972/) | core: a repeated .references() on one column replaces the first silently; refuse or state the rule | open | #979 | 0 | 0 (0 pending) |
+| [#972](972/) | core: a repeated .references() on one column replaces the first silently; refuse or state the rule | open | #979 #980 | 0 | 0 (0 pending) |
 | [#973](973/) | core: filter()/where() on a non-object target crash with a bare TypeError on the type-check-free path | open | #976 | 0 | 0 (0 pending) |
 | [#974](974/) | query: count() reads as bigint | null while the reference says bigint; count is never null | open | #976 | 0 | 0 (0 pending) |
 | [#975](975/) | core: a damaged aggregate-filter snapshot node calls its missing child slot a discriminator | open | #976 | 0 | 0 (0 pending) |

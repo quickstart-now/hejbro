@@ -1,0 +1,57 @@
+{
+  "version": 3,
+  "number": 980,
+  "ref": "quickstart-now/hejbro#980",
+  "title": "chore(openspec): archive add-references-actions after d106 round 1 (#514)",
+  "head": "5f7f96561834534f4e1203de90efe5ea5bd25de6",
+  "headRef": "archive-add-references-actions",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-05T19:20Z",
+  "refs": [
+    {
+      "path": "openspec/changes/archive/2026-09-06-add-references-actions/design.md",
+      "blob": "49e4c5ccb7f623cd93665b4f34a9fd8d28a22eb7"
+    },
+    {
+      "path": "openspec/changes/add-references-actions/design.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-06-add-references-actions/evaluation.md",
+      "blob": "ec505cdb81c9f0478174b8e2a046dc5d38a5d521"
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-06-add-references-actions/proposal.md",
+      "blob": "39679e3d2582cadc8b2fe5800b69f0aabc4fd4c0"
+    },
+    {
+      "path": "openspec/changes/add-references-actions/proposal.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-06-add-references-actions/specs/table-declaration/spec.md",
+      "blob": "502b2854b64bc18f50d9abb581ede90c8a246c93"
+    },
+    {
+      "path": "openspec/changes/add-references-actions/specs/table-declaration/spec.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-06-add-references-actions/tasks.md",
+      "blob": "dd95f8accde741078d116c8bdef4efe1bab00a46"
+    },
+    {
+      "path": "openspec/changes/add-references-actions/tasks.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/specs/table-declaration/spec.md",
+      "blob": "5668fd625477614526600e955bc7f4af505f2721"
+    },
+    {
+      "path": "skills/hejbro/SKILL.md",
+      "blob": "26a688f637f1d6fe824723a5ac83e53a97d8dd3a"
+    }
+  ]
+}
