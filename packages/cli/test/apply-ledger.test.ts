@@ -804,8 +804,32 @@ describe("bodyChecksum / 1.1, 631/R2", () => {
 			`${banner}\n${bodyWithLoneCr}`,
 			bodyWithLoneCr,
 		],
+		[
+			"631/R15: no blank line right after the banner -- the statement right after it is still body",
+			`${banner}create schema "ops";\n\ncreate index "idx" on "ops"."t" ("id");\n`,
+			'create schema "ops";\n\ncreate index "idx" on "ops"."t" ("id");\n',
+		],
+		[
+			"631/R15: a comment line before the first statement is still banner",
+			`${banner}\n-- a note\n\ncreate table "public"."t" ("id" bigint);\n`,
+			'create table "public"."t" ("id" bigint);\n',
+		],
+		[
+			"631/R15: a comment line and a blank line after the first statement stay body",
+			`${banner}\n${body}\n-- inline note\ncreate index "idx" on "public"."t" ("id");\n`,
+			`${body}\n-- inline note\ncreate index "idx" on "public"."t" ("id");\n`,
+		],
 	])("%s", (_label, fileText, expectedBodyText) => {
 		expect(bodyChecksum(fileText)).toBe(sha256Hex(expectedBodyText));
+	});
+
+	// [631/R15] Regression lock for the first row above (banner + body):
+	// the new leading comment/blank-run rule reaches the exact same split
+	// point a generated file's banner already produces (its own trailing
+	// blank line is consumed as part of the run either way), so this
+	// value must not move.
+	it("631/R15 regression: a generated file's own banner+body split is unchanged", () => {
+		expect(bodyChecksum(file1)).toBe(sha256Hex(body));
 	});
 
 	it("banner only, no blank-line separator anywhere -- the empty body", () => {

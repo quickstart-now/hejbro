@@ -376,31 +376,34 @@ const BANNER_FIRST_LINE = "-- hejbro migration";
 const normalizeLineEndings = (text: string): string =>
 	text.replace(/\r\n/g, "\n");
 
+/** [1.6 review repair, 631/R15] A line the banner can end with: a comment (`--`-prefixed) or blank. A statement is never either, so it can never sit inside the banner under this predicate. */
+const isBannerContinuationLine = (line: string): boolean =>
+	line === "" || line.startsWith("--");
+
 /**
- * [task 1.1, 631/R2] SHA-256 hex of a migration file's body: the file with
- * line endings normalized, then everything after the first `"\n\n"` --
- * that separator excluded. A file whose first line is not exactly
- * {@link BANNER_FIRST_LINE} carries no banner and is hashed whole; a
- * banner with no `"\n\n"` anywhere hashes the empty body.
+ * [task 1.1, 631/R2; repaired 1.6 review, 631/R15] SHA-256 hex of a
+ * migration file's body: the file with line endings normalized, split
+ * into lines. A file whose first line is not exactly
+ * {@link BANNER_FIRST_LINE} carries no banner and is hashed whole.
+ * Otherwise the banner is the first line together with the maximal
+ * leading run of lines after it that are comments or blank; the body is
+ * everything from the first line that is neither, to the end (a comment
+ * or blank line inside the body stays body). A banner with nothing after
+ * it hashes the empty body.
  */
 export const bodyChecksum = (fileText: string): string => {
 	const normalized = normalizeLineEndings(fileText);
-	const firstLineEnd = normalized.indexOf("\n");
-	if (firstLineEnd === -1) {
-		if (normalized !== BANNER_FIRST_LINE) {
-			return sha256Hex(normalized);
-		}
-		return sha256Hex("");
-	}
-	const firstLine = normalized.slice(0, firstLineEnd);
-	if (firstLine !== BANNER_FIRST_LINE) {
+	const lines = normalized.split("\n");
+	if (lines[0] !== BANNER_FIRST_LINE) {
 		return sha256Hex(normalized);
 	}
-	const separatorStart = normalized.indexOf("\n\n");
-	if (separatorStart === -1) {
+	const bodyStart = lines.findIndex(
+		(line, index) => index > 0 && !isBannerContinuationLine(line),
+	);
+	if (bodyStart === -1) {
 		return sha256Hex("");
 	}
-	return sha256Hex(normalized.slice(separatorStart + "\n\n".length));
+	return sha256Hex(lines.slice(bodyStart).join("\n"));
 };
 
 /**
