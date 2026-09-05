@@ -180,6 +180,7 @@ describe("contributed statements are sent one at a time, in the rendering's own 
 				"interactive-transactions": true,
 				"session-state": true,
 				"prepared-statements": false,
+				"batched-transactions": false,
 			},
 			execute: vi.fn(async () => []),
 			transaction: vi.fn(async (callback) => {
@@ -200,6 +201,7 @@ describe("contributed statements are sent one at a time, in the rendering's own 
 				};
 				return callback(session);
 			}),
+			batch: vi.fn(async () => []),
 			setupSession: vi.fn(async () => {}),
 		};
 		const handle = db(appSchema, driver);
@@ -261,9 +263,11 @@ describe("DbContext and the rendering's context type are the same type (task 2.1
 				"interactive-transactions": true,
 				"session-state": true,
 				"prepared-statements": false,
+				"batched-transactions": false,
 			},
 			execute: async () => [],
 			transaction: async (callback) => callback({ execute: async () => [] }),
+			batch: async () => [],
 			setupSession: async () => {},
 			renderContext: (renderedContext) => {
 				expectTypeOf(renderedContext).toEqualTypeOf<DbContext>();
@@ -471,6 +475,7 @@ describe("db.as(context) -- a failing set_config stops the chain (fail-stop, not
 				"interactive-transactions": true,
 				"session-state": true,
 				"prepared-statements": false,
+				"batched-transactions": false,
 			},
 			execute: vi.fn(async () => []),
 			transaction: vi.fn(async (callback) => {
@@ -489,6 +494,7 @@ describe("db.as(context) -- a failing set_config stops the chain (fail-stop, not
 				};
 				return callback(session);
 			}),
+			batch: vi.fn(async () => []),
 			setupSession: vi.fn(async () => {}),
 		};
 		const handle = db(appSchema, driver);

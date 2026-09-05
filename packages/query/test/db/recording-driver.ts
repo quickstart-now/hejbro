@@ -94,6 +94,7 @@ export const recordingTransactionalDriver = (
 			"interactive-transactions": options.interactiveTransactions ?? true,
 			"session-state": true,
 			"prepared-statements": false,
+			"batched-transactions": false,
 		},
 		execute: vi.fn(async (compiled) => {
 			topLevelSent.push({ sql: compiled.sql, params: compiled.params });
@@ -110,6 +111,7 @@ export const recordingTransactionalDriver = (
 			};
 			return callback(session);
 		}),
+		batch: vi.fn(async () => []),
 		setupSession: vi.fn(async () => {}),
 		...contributedRolesField(options.contributedRoles),
 		...renderContextField(options.renderContext),

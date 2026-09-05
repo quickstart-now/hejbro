@@ -27,6 +27,7 @@ const transactionalDriver = (
 			"interactive-transactions": interactiveTransactions,
 			"session-state": true,
 			"prepared-statements": false,
+			"batched-transactions": false,
 		},
 		execute: vi.fn(async () => []),
 		transaction: vi.fn(async (callback) => {
@@ -40,6 +41,7 @@ const transactionalDriver = (
 				throw error;
 			}
 		}),
+		batch: vi.fn(async () => []),
 		setupSession: vi.fn(async () => {}),
 	};
 	return { driver, sessionExecute, commit, rollback };

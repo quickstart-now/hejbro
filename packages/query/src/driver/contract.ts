@@ -33,12 +33,13 @@ export type ContextRendering = (
 ) => ReadonlyArray<CompileResult>;
 
 /**
- * The three capabilities a driver may or may not support (owner decision ①,
+ * The four capabilities a driver may or may not support (owner decision ①,
  * tasks.md group 4 header, 2026-08-26; extended to a third key by task 1.1,
- * #303). What is deliberately **not** listed here: a mandatory prerequisite
- * every driver must supply just to be a driver at all (parameterized
- * statement execution) — that lives on {@link Driver} itself,
- * unconditionally, never as a capability that could read `false`.
+ * #303; extended to a fourth by task 1.1, #486). What is deliberately
+ * **not** listed here: a mandatory prerequisite every driver must supply
+ * just to be a driver at all (parameterized statement execution) — that
+ * lives on {@link Driver} itself, unconditionally, never as a capability
+ * that could read `false`.
  *
  * - `"interactive-transactions"`: the driver can hold one connection open
  *   across multiple round trips inside a `BEGIN`/`COMMIT` — required by
@@ -57,11 +58,18 @@ export type ContextRendering = (
  *   executions to be meaningful, but is declared independently: a path
  *   without session state (a transaction-mode pooler) MUST declare this
  *   `false` regardless of what its base driver would otherwise support.
+ * - `"batched-transactions"`: the driver runs a pre-assembled list of
+ *   statements as one transaction, in one round trip where possible,
+ *   returning one row list per member ({@link Driver.batch}). Says
+ *   nothing about a held session or about interactivity: a batch never
+ *   carries state to another batch, and no member may depend on an
+ *   earlier member's rows (#486).
  */
 export type DriverCapabilityKey =
 	| "interactive-transactions"
 	| "session-state"
-	| "prepared-statements";
+	| "prepared-statements"
+	| "batched-transactions";
 
 /**
  * Exhaustive per {@link DriverCapabilityKey} — deliberately not
@@ -119,6 +127,17 @@ export type Driver = DriverSession & {
 	 * before any statement is sent).
 	 */
 	transaction<T>(callback: (session: DriverSession) => Promise<T>): Promise<T>;
+	/**
+	 * Runs `statements` as one transaction, returning each member's row
+	 * list in the same order (task 1.1, #486). Mandatory on every `Driver`
+	 * regardless of `"batched-transactions"`: a driver that declares the
+	 * capability `false` still implements this member, by throwing
+	 * `driver-missing-capability` before sending anything (the pattern
+	 * `transaction` above already uses on a non-interactive driver).
+	 */
+	batch(
+		statements: ReadonlyArray<CompileResult>,
+	): Promise<ReadonlyArray<ReadonlyArray<DriverRow>>>;
 	/**
 	 * Called by the driver's own connection-acquisition code on every new
 	 * connection, before it is handed to any caller — the hook that pins

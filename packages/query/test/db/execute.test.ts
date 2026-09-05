@@ -33,6 +33,7 @@ const recordingDriver = (): {
 			"interactive-transactions": true,
 			"session-state": true,
 			"prepared-statements": false,
+			"batched-transactions": false,
 		},
 		execute: vi.fn(async (compiled: CompileResult) => {
 			received.push(compiled);
@@ -41,6 +42,7 @@ const recordingDriver = (): {
 		transaction: vi.fn(async (callback) =>
 			callback({ execute: vi.fn(async () => []) }),
 		),
+		batch: vi.fn(async () => []),
 		setupSession: vi.fn(async () => {}),
 	};
 	return { driver, received };
@@ -127,6 +129,7 @@ const recordingContextDriver = (): {
 			"interactive-transactions": true,
 			"session-state": true,
 			"prepared-statements": false,
+			"batched-transactions": false,
 		},
 		execute: vi.fn(async () => []),
 		transaction: vi.fn(async (callback) => {
@@ -140,6 +143,7 @@ const recordingContextDriver = (): {
 			};
 			return callback(session);
 		}),
+		batch: vi.fn(async () => []),
 		setupSession: vi.fn(async () => {}),
 	};
 	return { driver, sentPerTransaction };

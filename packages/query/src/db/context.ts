@@ -264,7 +264,7 @@ export const createProviderRun = (
 		operation: string,
 		send: (session: DriverSession) => Promise<T>,
 	): Promise<T> => {
-		assertCapability(driver, "interactive-transactions", operation);
+		assertCapability(driver, ["interactive-transactions"], operation);
 		const context = await provider();
 		if (context === undefined || context === null) {
 			throwProviderContextEmpty();
@@ -316,7 +316,7 @@ export const createAsApi = <
 			operation: string,
 			send: (session: DriverSession) => Promise<T>,
 		): Promise<T> => {
-			assertCapability(driver, "interactive-transactions", operation);
+			assertCapability(driver, ["interactive-transactions"], operation);
 			return driver.transaction(async (session) => {
 				await applyContext(driver, session, context, operation);
 				return send(session);

@@ -481,7 +481,7 @@ export const createTransactionApi = (
 ): (<T>(callback: (tx: Tx) => Promise<T>) => Promise<T>) => {
 	const guardedOpen = guardNestedTransaction(
 		<T>(callback: (session: DriverSession) => Promise<T>): Promise<T> => {
-			assertCapability(driver, "interactive-transactions", "transaction");
+			assertCapability(driver, ["interactive-transactions"], "transaction");
 			return driver.transaction(callback);
 		},
 	);

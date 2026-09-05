@@ -250,6 +250,7 @@ describe("a context whose rendering produces nothing is refused (task 1.1, #590)
 				"interactive-transactions": true,
 				"session-state": true,
 				"prepared-statements": false,
+				"batched-transactions": false,
 			},
 			execute: vi.fn(async () => []),
 			transaction: vi.fn(async (callback) => {
@@ -261,6 +262,7 @@ describe("a context whose rendering produces nothing is refused (task 1.1, #590)
 				};
 				return callback(session);
 			}),
+			batch: vi.fn(async () => []),
 			setupSession: vi.fn(async () => {}),
 			contextRequired: true,
 			renderContext: () => [poison],
