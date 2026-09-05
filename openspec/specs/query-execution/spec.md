@@ -11,15 +11,19 @@ rows with predictable error behavior.
 ### Requirement: A db handle executes built statements
 A db handle SHALL be constructed from schema declarations plus a driver
 and SHALL execute built statements, returning rows typed by the
-statement's inferred result type. What is sent to the database SHALL be
-exactly the statement's pure `compile()` output.
+statement's inferred result type. What is sent to the database for a
+statement SHALL be exactly the statement's pure `compile()` output; an
+applied execution context precedes it on the same transaction, per
+`rls-execution-context`, and is not part of the statement.
 
 #### Scenario: Executed SQL equals previewed SQL
 - **WHEN** a statement is compiled for preview and then executed on a db
-  handle
-- **THEN** the SQL text and parameters the driver receives are identical
-  to the previewed compile output, and the resolved rows carry the
-  inferred result type
+  handle — with or without an execution context applied
+- **THEN** the SQL text and parameters the driver receives for that
+  statement are identical to the previewed compile output, any context
+  statements the handle applies precede it inside the same transaction
+  rather than altering it, and the resolved rows carry the inferred
+  result type
 
 ### Requirement: Nested transactions are rejected, not silently flattened
 Calling the transaction API **on the db handle** again from inside an
@@ -138,14 +142,31 @@ inside that context's single transaction like any other statement,
 and no client-side stitching across statements occurs. An empty
 collection arrives as `[]`; a missing single row arrives as `null`.
 
-A nested cell SHALL NOT lose that protection by being an aggregate
-rather than a plain column: `count()` and a `min`/`max` over an
-at-risk column are cast and revived the same way, because JSON has
-already lost the precision by the time the value reaches the client
-and a wrong value is worse than an unconverted one. `sum`/`avg` are
-deliberately outside this: their result type is not the argument's,
-so they are neither cast nor converted, and casting them would deliver
-text where a number is expected.
+A nested cell SHALL NOT lose that protection by being an aggregate or
+a window function rather than a plain column. One vocabulary, owned by
+the core and read by both the cast side and the revive side, SHALL
+name for every builder aggregate and window function how its result
+reads back: as `int8` (`count`, `row_number`, `rank`, `dense_rank` —
+cast to text and revived as `bigint`), as its first argument's own
+type (`min`, `max`, `lag`, `lead`, `first_value`, `last_value`,
+`nth_value` — cast and revived exactly as that argument would be), or
+as its own JSON-safe shape (`sum`, `avg`, `percent_rank`, `cume_dist`,
+`ntile` — neither cast nor converted: `sum`/`avg` promote by the
+argument's exact type, so a fixed conversion would be a lie, and the
+other three are carried losslessly). "Its own shape" is whatever the
+position delivers: at top level the driver's text for a `numeric`
+result, inside a nested read the JSON number Postgres serializes —
+so a nested `sum` or `avg` past 2^53 is not exact there, and the type
+layer says so by typing the cell as `string | number | bigint | null`
+rather than promising a `bigint`. A windowed cell reads as its
+inner call on both sides. The vocabulary SHALL be closed over the
+builder's constructors: a name outside the vocabulary's key union
+fails to type-check at the table's own declaration, and a constructor
+added without a row — or a name that drifts from its row — is caught
+by a test that enumerates the constructors from their defining
+modules, checks each one reaches the public surface, and admits no
+row the enumeration does not produce. A cell is cast exactly when it
+is revived.
 
 The at-risk cast is the compiler's own encoding, and conversion SHALL
 undo exactly that: a value arriving through it is revived by the type
@@ -168,6 +189,24 @@ a `bigint` where its author asked for text.
   `bigint` column whose value is past `Number.MAX_SAFE_INTEGER`
 - **THEN** the delivered value is exactly that `bigint`, not a rounded
   number and not the cast's text
+
+#### Scenario: A windowed cell keeps its precision too
+- **WHEN** a nested collection projects `over(count(), …)`,
+  `over(max(col), …)` and `over(lag(col), …)` over a `bigint` column
+  whose value is past `Number.MAX_SAFE_INTEGER`
+- **THEN** each delivered value is exactly that `bigint`, the compiled
+  SQL shows the text cast on each, and a nested `over(sum(col), …)`
+  is neither cast nor converted
+
+#### Scenario: Every builder function is classified, and cast agrees with revive
+- **WHEN** every aggregate and window constructor the builder's own
+  defining modules export — each one checked to reach the public
+  surface — is invoked and its node's function name looked up in the
+  vocabulary, and a nested cell of each is executed
+- **THEN** every name has a row, and each cell is cast in the compiled
+  SQL exactly when its value is revived — both for the rows that read
+  back as `int8` or as their argument, neither for the rows that read
+  back as their own shape
 
 #### Scenario: An explicit user cast is left alone
 - **WHEN** a nested cell is written as `` sql`${max(posts.views)}::text` ``

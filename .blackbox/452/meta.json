@@ -42,6 +42,20 @@
       "at": "2026-09-05T07:02Z",
       "title": "N5: the closure scenario's WHEN names the defining modules, checked to reach the public surface",
       "ratified": null
+    },
+    {
+      "id": "R4",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "D106; 412/D24",
+        "D25; evaluation.md (fable",
+        "context-free",
+        "postgres 17.11)"
+      ],
+      "at": "2026-09-05T09:35Z",
+      "title": "D106 R1 for harden-aggregate-vocabulary: B1/N5/OK11 — B1 repaired in the archive; N1 N2 restated; N3 N4 filed; N5 by design",
+      "ratified": null
     }
   ],
   "work": [
@@ -65,6 +79,11 @@
       "number": 901,
       "role": "closes",
       "pinnedAt": "2026-09-05T09:04Z"
+    },
+    {
+      "number": 906,
+      "role": "refs",
+      "pinnedAt": "2026-09-05T09:58Z"
     }
   ],
   "origin": null,

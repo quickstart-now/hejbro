@@ -40,7 +40,12 @@ type (`min`, `max`, `lag`, `lead`, `first_value`, `last_value`,
 as its own JSON-safe shape (`sum`, `avg`, `percent_rank`, `cume_dist`,
 `ntile` — neither cast nor converted: `sum`/`avg` promote by the
 argument's exact type, so a fixed conversion would be a lie, and the
-other three are carried losslessly). A windowed cell reads as its
+other three are carried losslessly). "Its own shape" is whatever the
+position delivers: at top level the driver's text for a `numeric`
+result, inside a nested read the JSON number Postgres serializes —
+so a nested `sum` or `avg` past 2^53 is not exact there, and the type
+layer says so by typing the cell as `string | number | bigint | null`
+rather than promising a `bigint`. A windowed cell reads as its
 inner call on both sides. The vocabulary SHALL be closed over the
 builder's constructors: a name outside the vocabulary's key union
 fails to type-check at the table's own declaration, and a constructor

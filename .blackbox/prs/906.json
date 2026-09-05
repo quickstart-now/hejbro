@@ -1,0 +1,73 @@
+{
+  "version": 3,
+  "number": 906,
+  "ref": "quickstart-now/hejbro#906",
+  "title": "chore(openspec): archive harden-aggregate-vocabulary after D106 round 1 (#452)",
+  "head": "0e1dd598c68ebea8d1442ab46a363e082f6db335",
+  "headRef": "archive-aggregate-vocabulary",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-05T09:58Z",
+  "refs": [
+    {
+      "path": ".changeset/cte-nested-revive.md",
+      "blob": "954806f441c2f7d30f2fa7515b4188c69a2f08ac"
+    },
+    {
+      "path": "README.md",
+      "blob": "17885c5bc038851a0ad27dca5cbba11468fa4954"
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-05-harden-aggregate-vocabulary/design.md",
+      "blob": "8f00504965cfd1fa31d6cb167a36930555f18354"
+    },
+    {
+      "path": "openspec/changes/harden-aggregate-vocabulary/design.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-05-harden-aggregate-vocabulary/evaluation.md",
+      "blob": "5275a0ee17eb7aafa1b6e4342a1c00b968eb002f"
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-05-harden-aggregate-vocabulary/proposal.md",
+      "blob": "f5a9ded35c427bb669da82d786712976e392ab99"
+    },
+    {
+      "path": "openspec/changes/harden-aggregate-vocabulary/proposal.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-05-harden-aggregate-vocabulary/specs/query-execution/spec.md",
+      "blob": "10d54fd2119a583732bdc6b92d8799dcff039b41"
+    },
+    {
+      "path": "openspec/changes/harden-aggregate-vocabulary/specs/query-execution/spec.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-05-harden-aggregate-vocabulary/tasks.md",
+      "blob": "b8f7170206d702c5e47b2a547455d9aba5342982"
+    },
+    {
+      "path": "openspec/changes/harden-aggregate-vocabulary/tasks.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/specs/query-execution/spec.md",
+      "blob": "732e4dee08efe88da38bcc3b8baf273ed5c5e7bb"
+    },
+    {
+      "path": "packages/query/src/db/convert.ts",
+      "blob": "9b974634a9b2479b2ec384da8de4da0b0a20a761"
+    },
+    {
+      "path": "packages/query/test/db/with.test.ts",
+      "blob": "8d7d00aeabeefabd40534fb7d18e6ba498e83597"
+    },
+    {
+      "path": "skills/hejbro/references/query-layer.md",
+      "blob": "0b35832e0acbf091a79ef9e8bf26325d5fa6fc7c"
+    }
+  ]
+}
