@@ -22,6 +22,8 @@ export type KindChange = {
 	readonly next: JsonValue | null;
 	/** extra banner notes, e.g. ["column slug added"] */
 	readonly notes: ReadonlyArray<string>;
+	/** `"adopted"` when this change's own node, or the table it fans out from, went from existing to managed in this run (671/R4); absent for a handover, an unchanged managed owner, or a new table. TypeScript-only (D57) -- reaches no generated artifact. Stamped once, by `engine/diff-engine.ts`, after every kind's own `diff` returns; no kind sets this itself. */
+	readonly transition?: "adopted";
 };
 
 /** The common shape every user declaration (schema, table, enum, …) satisfies. */

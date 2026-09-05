@@ -9,7 +9,7 @@ import { rls } from "../src/dsl/rls";
 import { schema } from "../src/dsl/schema";
 import { getTableMeta, table } from "../src/dsl/table";
 import { generateMigration, generateMigrations } from "../src/engine/generate";
-import { eq, isNotNull, literal, now } from "../src/expr/operators";
+import { eq, gt, isNotNull, literal, now } from "../src/expr/operators";
 import { sql } from "../src/expr/sql-template";
 import { createDefaultRegistry } from "../src/kind/registry";
 import type { TableSnapshot } from "../src/kinds/table-snapshot";
@@ -1254,6 +1254,412 @@ describe("an existing declaration emits nothing (add-unmanaged-objects, #605)", 
 		expect(
 			secondResult.snapshot.objects["table:uo10.widgets"],
 		).not.toHaveProperty("existing");
+	});
+
+	// 671/R4 (task 1.1, D-1/D-2): the table's own children -- index,
+	// check, foreign key, primary key -- across adoption, handover, and
+	// an unchanged managed declaration. Each cell gets its own schema so
+	// a mutation's blast radius on one cell never touches another. Every
+	// declaration pair below matches columns exactly except the one
+	// child under test, so the adoption cells isolate the child-creation
+	// mechanism from uo9/uo10's own partial-column-list concern.
+
+	it("an adopted table creates its declared index (671/task 1.1, table A: index x adoption)", () => {
+		const app = schema("uo11");
+		const existingWidgets = existingTable("uo11", "widgets", {
+			id: uuid(),
+			email: text(),
+		});
+		const managedWidgets = table(
+			app,
+			"widgets",
+			{ id: uuid(), email: text() },
+			(t) => ({
+				indexes: [index("widgets_email_idx").on(t.email)],
+			}),
+		);
+		const firstResult = generateMigration({
+			declarations: [app, getTableMeta(existingWidgets)],
+			previousSnapshot: emptySnapshot,
+		});
+		const secondResult = generateMigration({
+			declarations: [app, managedWidgets],
+			previousSnapshot: firstResult.snapshot,
+		});
+		const banner =
+			'-- hejbro migration\n-- ~ table uo11.widgets [index "widgets_email_idx" added]';
+		const createIndex =
+			'create index "widgets_email_idx" on "uo11"."widgets" ("email");';
+		expect(secondResult.sql).toBe([banner, createIndex].join("\n\n"));
+	});
+
+	it("a handover stays fully silent for a table that declares an index (671/task 1.1, table A: index x handover)", () => {
+		const app = schema("uo12");
+		const managedWidgets = table(
+			app,
+			"widgets",
+			{ id: uuid(), email: text() },
+			(t) => ({
+				indexes: [index("widgets_email_idx").on(t.email)],
+			}),
+		);
+		const existingWidgets = existingTable("uo12", "widgets", {
+			id: uuid(),
+			email: text(),
+		});
+		const firstResult = generateMigration({
+			declarations: [app, managedWidgets],
+			previousSnapshot: emptySnapshot,
+		});
+		const secondResult = generateMigration({
+			declarations: [app, getTableMeta(existingWidgets)],
+			previousSnapshot: firstResult.snapshot,
+		});
+		expect(secondResult.hasChanges).toBe(false);
+		expect(secondResult.sql).toBe("");
+	});
+
+	it("an unchanged managed declaration with an index emits nothing (671/task 1.1, table A: index x managed unchanged)", () => {
+		const app = schema("uo13");
+		const managedWidgets = table(
+			app,
+			"widgets",
+			{ id: uuid(), email: text() },
+			(t) => ({
+				indexes: [index("widgets_email_idx").on(t.email)],
+			}),
+		);
+		const firstResult = generateMigration({
+			declarations: [app, managedWidgets],
+			previousSnapshot: emptySnapshot,
+		});
+		const secondResult = generateMigration({
+			declarations: [app, managedWidgets],
+			previousSnapshot: firstResult.snapshot,
+		});
+		expect(secondResult.hasChanges).toBe(false);
+		expect(secondResult.sql).toBe("");
+	});
+
+	it("an adopted table creates its declared check constraint (671/task 1.1, table A: check x adoption)", () => {
+		const app = schema("uo14");
+		const existingWidgets = existingTable("uo14", "widgets", {
+			id: uuid(),
+			qty: integer(),
+		});
+		const managedWidgets = table(
+			app,
+			"widgets",
+			{ id: uuid(), qty: integer() },
+			(t) => ({
+				checks: [check("widgets_qty_positive", gt(t.qty, 0))],
+			}),
+		);
+		const firstResult = generateMigration({
+			declarations: [app, getTableMeta(existingWidgets)],
+			previousSnapshot: emptySnapshot,
+		});
+		const secondResult = generateMigration({
+			declarations: [app, managedWidgets],
+			previousSnapshot: firstResult.snapshot,
+		});
+		const banner =
+			'-- hejbro migration\n-- ~ table uo14.widgets [check "widgets_qty_positive" added]';
+		const addCheck =
+			'alter table "uo14"."widgets" add constraint "widgets_qty_positive" check ("widgets"."qty" > 0);';
+		expect(secondResult.sql).toBe([banner, addCheck].join("\n\n"));
+	});
+
+	it("a handover stays fully silent for a table that declares a check constraint (671/task 1.1, table A: check x handover)", () => {
+		const app = schema("uo15");
+		const managedWidgets = table(
+			app,
+			"widgets",
+			{ id: uuid(), qty: integer() },
+			(t) => ({
+				checks: [check("widgets_qty_positive", gt(t.qty, 0))],
+			}),
+		);
+		const existingWidgets = existingTable("uo15", "widgets", {
+			id: uuid(),
+			qty: integer(),
+		});
+		const firstResult = generateMigration({
+			declarations: [app, managedWidgets],
+			previousSnapshot: emptySnapshot,
+		});
+		const secondResult = generateMigration({
+			declarations: [app, getTableMeta(existingWidgets)],
+			previousSnapshot: firstResult.snapshot,
+		});
+		expect(secondResult.hasChanges).toBe(false);
+		expect(secondResult.sql).toBe("");
+	});
+
+	it("an unchanged managed declaration with a check constraint emits nothing (671/task 1.1, table A: check x managed unchanged)", () => {
+		const app = schema("uo16");
+		const managedWidgets = table(
+			app,
+			"widgets",
+			{ id: uuid(), qty: integer() },
+			(t) => ({
+				checks: [check("widgets_qty_positive", gt(t.qty, 0))],
+			}),
+		);
+		const firstResult = generateMigration({
+			declarations: [app, managedWidgets],
+			previousSnapshot: emptySnapshot,
+		});
+		const secondResult = generateMigration({
+			declarations: [app, managedWidgets],
+			previousSnapshot: firstResult.snapshot,
+		});
+		expect(secondResult.hasChanges).toBe(false);
+		expect(secondResult.sql).toBe("");
+	});
+
+	it("an adopted table creates its declared foreign key, the target untouched (671/task 1.1, table A: foreign key x adoption)", () => {
+		const app = schema("uo17");
+		const owners = table(app, "owners", { id: uuid().primaryKey() });
+		const existingWidgets = existingTable("uo17", "widgets", {
+			id: uuid(),
+			ownerId: uuid(),
+		});
+		const managedWidgets = table(
+			app,
+			"widgets",
+			{ id: uuid(), ownerId: uuid() },
+			(t) => ({
+				foreignKeys: [
+					{
+						name: "widgets_owner_fk",
+						columns: [t.ownerId],
+						references: { table: owners, columns: [owners.id] },
+					},
+				],
+			}),
+		);
+		const firstResult = generateMigration({
+			declarations: [app, owners, getTableMeta(existingWidgets)],
+			previousSnapshot: emptySnapshot,
+		});
+		const secondResult = generateMigration({
+			declarations: [app, owners, managedWidgets],
+			previousSnapshot: firstResult.snapshot,
+		});
+		const banner =
+			'-- hejbro migration\n-- ~ table uo17.widgets [foreign key "widgets_owner_fk" added]';
+		const addForeignKey =
+			'alter table "uo17"."widgets" add constraint "widgets_owner_fk" foreign key ("owner_id") references "uo17"."owners" ("id");';
+		expect(secondResult.sql).toBe([banner, addForeignKey].join("\n\n"));
+	});
+
+	it("a handover stays fully silent for a table that declares a foreign key (671/task 1.1, table A: foreign key x handover)", () => {
+		const app = schema("uo18");
+		const owners = table(app, "owners", { id: uuid().primaryKey() });
+		const managedWidgets = table(
+			app,
+			"widgets",
+			{ id: uuid(), ownerId: uuid() },
+			(t) => ({
+				foreignKeys: [
+					{
+						name: "widgets_owner_fk",
+						columns: [t.ownerId],
+						references: { table: owners, columns: [owners.id] },
+					},
+				],
+			}),
+		);
+		const existingWidgets = existingTable("uo18", "widgets", {
+			id: uuid(),
+			ownerId: uuid(),
+		});
+		const firstResult = generateMigration({
+			declarations: [app, owners, managedWidgets],
+			previousSnapshot: emptySnapshot,
+		});
+		const secondResult = generateMigration({
+			declarations: [app, owners, getTableMeta(existingWidgets)],
+			previousSnapshot: firstResult.snapshot,
+		});
+		expect(secondResult.hasChanges).toBe(false);
+		expect(secondResult.sql).toBe("");
+	});
+
+	it("an unchanged managed declaration with a foreign key emits nothing (671/task 1.1, table A: foreign key x managed unchanged)", () => {
+		const app = schema("uo19");
+		const owners = table(app, "owners", { id: uuid().primaryKey() });
+		const managedWidgets = table(
+			app,
+			"widgets",
+			{ id: uuid(), ownerId: uuid() },
+			(t) => ({
+				foreignKeys: [
+					{
+						name: "widgets_owner_fk",
+						columns: [t.ownerId],
+						references: { table: owners, columns: [owners.id] },
+					},
+				],
+			}),
+		);
+		const firstResult = generateMigration({
+			declarations: [app, owners, managedWidgets],
+			previousSnapshot: emptySnapshot,
+		});
+		const secondResult = generateMigration({
+			declarations: [app, owners, managedWidgets],
+			previousSnapshot: firstResult.snapshot,
+		});
+		expect(secondResult.hasChanges).toBe(false);
+		expect(secondResult.sql).toBe("");
+	});
+
+	// The primary key's own membership lives on the column
+	// (`columnPrimaryKey`), so a bare PK-only adoption still shows a
+	// `column "id" changed` banner note from `tableFieldDiffs`' own
+	// columnDiff -- 671/R2's column-touch ban is about statements
+	// (`alter table … alter column …`), never about this kind's existing
+	// notes convention, which stays unchanged.
+	it("an adopted table creates its declared single-column primary key (671/task 1.1, table A: primary key x adoption)", () => {
+		const app = schema("uo20");
+		const existingWidgets = existingTable("uo20", "widgets", { id: uuid() });
+		const managedWidgets = table(app, "widgets", { id: uuid().primaryKey() });
+		const firstResult = generateMigration({
+			declarations: [app, getTableMeta(existingWidgets)],
+			previousSnapshot: emptySnapshot,
+		});
+		const secondResult = generateMigration({
+			declarations: [app, managedWidgets],
+			previousSnapshot: firstResult.snapshot,
+		});
+		const banner =
+			'-- hejbro migration\n-- ~ table uo20.widgets [column "id" changed]';
+		const addPrimaryKey =
+			'alter table "uo20"."widgets" add constraint "widgets_pkey" primary key ("id");';
+		expect(secondResult.sql).toBe([banner, addPrimaryKey].join("\n\n"));
+	});
+
+	it("a handover stays fully silent for a table with a primary key (671/task 1.1, table A: primary key x handover)", () => {
+		const app = schema("uo21");
+		const managedWidgets = table(app, "widgets", { id: uuid().primaryKey() });
+		const existingWidgets = existingTable("uo21", "widgets", { id: uuid() });
+		const firstResult = generateMigration({
+			declarations: [app, managedWidgets],
+			previousSnapshot: emptySnapshot,
+		});
+		const secondResult = generateMigration({
+			declarations: [app, getTableMeta(existingWidgets)],
+			previousSnapshot: firstResult.snapshot,
+		});
+		expect(secondResult.hasChanges).toBe(false);
+		expect(secondResult.sql).toBe("");
+	});
+
+	it("an unchanged managed declaration with a primary key emits nothing (671/task 1.1, table A: primary key x managed unchanged)", () => {
+		const app = schema("uo22");
+		const managedWidgets = table(app, "widgets", { id: uuid().primaryKey() });
+		const firstResult = generateMigration({
+			declarations: [app, managedWidgets],
+			previousSnapshot: emptySnapshot,
+		});
+		const secondResult = generateMigration({
+			declarations: [app, managedWidgets],
+			previousSnapshot: firstResult.snapshot,
+		});
+		expect(secondResult.hasChanges).toBe(false);
+		expect(secondResult.sql).toBe("");
+	});
+
+	// Table B (671/task 1.1): three adoption rows that each walk a
+	// name-generation path once -- a composite primary key, an unnamed
+	// check derived from `.notNullElements()`, and a self-referencing
+	// foreign key. Full-text `toBe` throughout, observed and pinned the
+	// same way as table A.
+	it("an adopted table creates a composite primary key naming both member columns (671/task 1.1, table B: composite primary key)", () => {
+		const app = schema("uo23");
+		const existingWidgets = existingTable("uo23", "widgets", {
+			id: uuid(),
+			tenantId: uuid(),
+		});
+		const managedWidgets = table(app, "widgets", {
+			id: uuid().primaryKey(),
+			tenantId: uuid().primaryKey(),
+		});
+		const firstResult = generateMigration({
+			declarations: [app, getTableMeta(existingWidgets)],
+			previousSnapshot: emptySnapshot,
+		});
+		const secondResult = generateMigration({
+			declarations: [app, managedWidgets],
+			previousSnapshot: firstResult.snapshot,
+		});
+		const banner =
+			'-- hejbro migration\n-- ~ table uo23.widgets [column "id" changed, column "tenant_id" changed]';
+		const addPrimaryKey =
+			'alter table "uo23"."widgets" add constraint "widgets_pkey" primary key ("id", "tenant_id");';
+		expect(secondResult.sql).toBe([banner, addPrimaryKey].join("\n\n"));
+	});
+
+	it("an adopted table creates the derived check for an unnamed .notNullElements() column (671/task 1.1, table B: unnamed check)", () => {
+		const app = schema("uo24");
+		const existingWidgets = existingTable("uo24", "widgets", {
+			id: uuid(),
+			tags: text().array(),
+		});
+		const managedWidgets = table(app, "widgets", {
+			id: uuid(),
+			tags: text().array().notNullElements(),
+		});
+		const firstResult = generateMigration({
+			declarations: [app, getTableMeta(existingWidgets)],
+			previousSnapshot: emptySnapshot,
+		});
+		const secondResult = generateMigration({
+			declarations: [app, managedWidgets],
+			previousSnapshot: firstResult.snapshot,
+		});
+		const banner =
+			'-- hejbro migration\n-- ~ table uo24.widgets [check "tags_no_null_elements" added]';
+		const addCheck =
+			'alter table "uo24"."widgets" add constraint "tags_no_null_elements" check (array_position("widgets"."tags", null) is null);';
+		expect(secondResult.sql).toBe([banner, addCheck].join("\n\n"));
+	});
+
+	it("an adopted table creates its declared self-referencing foreign key (671/task 1.1, table B: self-referencing foreign key)", () => {
+		const app = schema("uo25");
+		const existingWidgets = existingTable("uo25", "widgets", {
+			id: uuid(),
+			parentId: uuid(),
+		});
+		const managedWidgets = table(
+			app,
+			"widgets",
+			{ id: uuid(), parentId: uuid() },
+			(t) => ({
+				foreignKeys: [
+					{
+						name: "widgets_parent_fk",
+						columns: [t.parentId],
+						references: { columns: [t.id] },
+					},
+				],
+			}),
+		);
+		const firstResult = generateMigration({
+			declarations: [app, getTableMeta(existingWidgets)],
+			previousSnapshot: emptySnapshot,
+		});
+		const secondResult = generateMigration({
+			declarations: [app, managedWidgets],
+			previousSnapshot: firstResult.snapshot,
+		});
+		const banner =
+			'-- hejbro migration\n-- ~ table uo25.widgets [foreign key "widgets_parent_fk" added]';
+		const addForeignKey =
+			'alter table "uo25"."widgets" add constraint "widgets_parent_fk" foreign key ("parent_id") references "uo25"."widgets" ("id");';
+		expect(secondResult.sql).toBe([banner, addForeignKey].join("\n\n"));
 	});
 
 	// D106 R2, R2-B1: `planRenames` runs before `diffSnapshots`, entirely

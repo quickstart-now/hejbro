@@ -577,9 +577,39 @@ const isEmptyTableFieldDiffs = (diffs: TableFieldDiffs): boolean =>
 	isEmptyKeyedDiff(diffs.foreignKeyDiff) &&
 	isEmptyKeyedDiff(diffs.checkDiff);
 
-/** `true` when `node` is a table snapshot node marked existing — `null` (the table absent on that side) is never existing (add-unmanaged-objects). The DDL-blocking guard `tableKind.diff` opens with: an existing table on *either* side of a diff emits nothing, before create/drop/alter is even considered. */
+/** `true` when `node` is a table snapshot node marked existing — `null` (the table absent on that side) is never existing (add-unmanaged-objects). */
 const isExistingSide = (node: JsonValue | null): boolean =>
 	node !== null && tableExisting(asTableSnapshot(node));
+
+/**
+ * `true` when `next` is a real (non-null) managed node succeeding an
+ * existing `previous` (671/R4) — the one shape {@link suppressTableDiff}
+ * does not silence: adoption's own alter path.
+ */
+const isAdoptionTransition = (
+	previous: JsonValue | null,
+	next: JsonValue | null,
+): boolean =>
+	isExistingSide(previous) && next !== null && !isExistingSide(next);
+
+/**
+ * `true` when `tableKind.diff` must emit nothing for this pair (671/R4):
+ * existing on *either* side silences the pair — a handover
+ * (`next` existing), a declaration re-stated as existing, or an existing
+ * declaration *removed* outright (`next === null`; hejbro dropping a
+ * table it never created would be exactly the unowned-DDL mistake
+ * add-unmanaged-objects exists to prevent) — with one named exception,
+ * {@link isAdoptionTransition}.
+ */
+const suppressTableDiff = (
+	previous: JsonValue | null,
+	next: JsonValue | null,
+): boolean => {
+	if (isAdoptionTransition(previous, next)) {
+		return false;
+	}
+	return isExistingSide(previous) || isExistingSide(next);
+};
 
 /** One banner note per added/dropped/changed entry across all four of `diffs`' fields (#154 ratchet-5, see tableFieldDiffs). */
 const tableFieldDiffNotes = (diffs: TableFieldDiffs): ReadonlyArray<string> => [
@@ -681,16 +711,18 @@ export const tableKind: ObjectKind<TableDeclaration> = {
 		return tableIdentity(tableSnapshot.schema, tableSnapshot.name);
 	},
 	diff: (previous, next, identity) => {
-		// D106 R2: the table's own contract is bidirectional silence —
-		// existing on *either* side suppresses a drop (handover) or a
-		// create (adoption) alike, unlike the objects it fans out into
-		// (`sequenceKind`/`rlsKind`/`policyKind`'s own `ownerTableIdentity`,
-		// `engine/diff-engine.ts`'s `ownerIsExisting`), which the J10
-		// ruling deliberately keyed on `next` alone so adoption still
-		// creates what the declaration now manages. Two different
-		// contracts, not one duplicated — this guard stays, and
-		// `tableKind` does not implement `ownerTableIdentity`.
-		if (isExistingSide(previous) || isExistingSide(next)) {
+		// 671/R4 (task 1.1, D-2): see `suppressTableDiff`'s own doc
+		// comment for what this guard now covers (handover, and an
+		// existing declaration removed outright) and what it lets
+		// through (adoption). An adoption falls through to the table's
+		// own alter path, with its column diff suppressed at emit time
+		// (`table-kind-emit.ts`'s `isAdoption` gate) so only the
+		// children it fans out into — indexes, checks, foreign keys,
+		// the primary key — ever render. `tableKind` still does not
+		// implement `ownerTableIdentity`, unlike the objects it fans
+		// out into (`sequenceKind`/`rlsKind`/`policyKind`,
+		// `engine/diff-engine.ts`'s `ownerIsExisting`).
+		if (suppressTableDiff(previous, next)) {
 			return [];
 		}
 		const guard = createOrDropDiff("table", previous, next, identity);

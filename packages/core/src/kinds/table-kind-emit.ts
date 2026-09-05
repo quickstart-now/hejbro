@@ -648,10 +648,65 @@ const planPrimaryKeyChange = (
 	};
 };
 
+/** `[]` when `isAdoption` -- an adopted table's own columns are never touched (671/R2), so `columnDiff.removed`'s `drop column` statements never render for it, real diff or not. */
+const columnRemovedStatements = (
+	next: TableSnapshot,
+	columnDiff: KeyedDiff<ColumnSnapshot>,
+	isAdoption: boolean,
+): ReadonlyArray<SqlStatement> => {
+	if (isAdoption) {
+		return [];
+	}
+	return columnDiff.removed.map((entry) =>
+		statement(
+			`alter table ${qualifyName(next.schema, next.name)} drop column ${quoteIdentifier(entry.key)};`,
+		),
+	);
+};
+
+/** `[]` when `isAdoption` -- see {@link columnRemovedStatements}; an adopted table's declaration can widen the column list an existing partial claim never named (D106 R2/R2-B2), and that widening is never an `add column`. */
+const columnAddedStatements = (
+	next: TableSnapshot,
+	columnDiff: KeyedDiff<ColumnSnapshot>,
+	siblingChanges: ReadonlyArray<KindChange>,
+	isAdoption: boolean,
+): ReadonlyArray<SqlStatement> => {
+	if (isAdoption) {
+		return [];
+	}
+	return columnDiff.added.map((entry) => {
+		const sequence = sequenceForAddedColumn(
+			next.schema,
+			next.name,
+			entry.key,
+			siblingChanges,
+		);
+		const overrideDefault = overrideDefaultForAddedColumn(sequence);
+		return statement(
+			`alter table ${qualifyName(next.schema, next.name)} add column ${renderColumnDefinition(entry.value, overrideDefault)};`,
+		);
+	});
+};
+
+/** `[]` when `isAdoption` -- see {@link columnRemovedStatements}; a column flag that only ever differs because the existing declaration never named it (e.g. `not null`) never renders an `alter column` either. */
+const columnChangedStatements = (
+	next: TableSnapshot,
+	columnDiff: KeyedDiff<ColumnSnapshot>,
+	isAdoption: boolean,
+): ReadonlyArray<SqlStatement> => {
+	if (isAdoption) {
+		return [];
+	}
+	return columnDiff.changed.flatMap((entry) =>
+		alterColumnStatements(next.schema, next.name, entry),
+	);
+};
+
 const emitAlter = (
 	previous: TableSnapshot,
 	next: TableSnapshot,
 	siblingChanges: ReadonlyArray<KindChange>,
+	isAdoption: boolean,
 ): ReadonlyArray<SqlStatement> => {
 	const columnDiff = diffByKey(
 		previous.columns.map((column) => ({ key: column.name, value: column })),
@@ -726,26 +781,9 @@ const emitAlter = (
 		// see planPrimaryKeyChange's doc comment for why the ordering matters
 		// whenever this fires an explicit drop.
 		...statementOrEmpty(primaryKeyChange.dropStatement),
-		...columnDiff.removed.map((entry) =>
-			statement(
-				`alter table ${qualifyName(next.schema, next.name)} drop column ${quoteIdentifier(entry.key)};`,
-			),
-		),
-		...columnDiff.added.map((entry) => {
-			const sequence = sequenceForAddedColumn(
-				next.schema,
-				next.name,
-				entry.key,
-				siblingChanges,
-			);
-			const overrideDefault = overrideDefaultForAddedColumn(sequence);
-			return statement(
-				`alter table ${qualifyName(next.schema, next.name)} add column ${renderColumnDefinition(entry.value, overrideDefault)};`,
-			);
-		}),
-		...columnDiff.changed.flatMap((entry) =>
-			alterColumnStatements(next.schema, next.name, entry),
-		),
+		...columnRemovedStatements(next, columnDiff, isAdoption),
+		...columnAddedStatements(next, columnDiff, siblingChanges, isAdoption),
+		...columnChangedStatements(next, columnDiff, isAdoption),
 		// After every column add/change above — a new or reshuffled member
 		// column must already exist before the constraint can name it.
 		...statementOrEmpty(primaryKeyChange.addStatement),
@@ -786,6 +824,7 @@ const emitAlterChange = (
 		asTableSnapshot(both.previous),
 		asTableSnapshot(both.next),
 		siblingChanges,
+		change.transition === "adopted",
 	);
 };
 

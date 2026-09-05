@@ -379,6 +379,63 @@ const refineWithinKindGroups = (
 		);
 	});
 
+/** `tableExisting(asTableSnapshot(node))`, `false` for `null` (671/R4) -- the same fallback {@link ownerIsExisting} already relies on, reused here so both readers of "is this table node existing" agree. */
+const existingOrFalse = (node: JsonValue | null): boolean =>
+	node !== null && tableExisting(asTableSnapshot(node));
+
+/**
+ * The owner-or-self table node `key`'s change would read on one side of a
+ * diff (671/R4) -- `selfNode` itself when `kind` doesn't implement
+ * `ownerTableIdentity` (`tableKind`: the change's own node IS the table),
+ * or `snapshot`'s own entry for the owner identity otherwise. Unlike
+ * {@link authoritativeOwnerNode}, this never falls one side back to the
+ * other -- it is always asked once per side, precisely so the two sides
+ * can disagree (a table existing in `previous`, managed in `next`).
+ */
+const ownerNodeOnSide = (
+	snapshot: Snapshot,
+	kind: RegisteredObjectKind,
+	identityNode: JsonValue,
+	selfNode: JsonValue | null,
+): JsonValue | null => {
+	if (kind.ownerTableIdentity === undefined) {
+		return selfNode;
+	}
+	const ownerTableKey = `table:${kind.ownerTableIdentity(identityNode)}`;
+	return lookupNode(snapshot.objects, ownerTableKey);
+};
+
+/**
+ * `true` when `key`'s owner (or `key` itself, for `tableKind`) was
+ * existing in `previous` and is managed in `next` -- an adoption,
+ * regardless of what `kind.diff` itself reported (671/R4). `identityNode`
+ * (whichever of `previousNode`/`nextNode` is non-null) supplies the
+ * owner's schema/table identity for a fan-out kind; a self-owned kind
+ * reads `previousNode`/`nextNode` directly on each side instead.
+ */
+const ownerAdoptedThisRun = (
+	kind: RegisteredObjectKind,
+	previous: Snapshot,
+	next: Snapshot,
+	previousNode: JsonValue | null,
+	nextNode: JsonValue | null,
+): boolean => {
+	const identityNode = (nextNode ?? previousNode) as JsonValue;
+	const wasExisting = existingOrFalse(
+		ownerNodeOnSide(previous, kind, identityNode, previousNode),
+	);
+	const isManagedNow = !existingOrFalse(
+		ownerNodeOnSide(next, kind, identityNode, nextNode),
+	);
+	return wasExisting && isManagedNow;
+};
+
+/** Stamps every one of `changes` with `transition: "adopted"` (671/R4) -- the engine is this field's one writer, never a kind itself. */
+const stampAdopted = (
+	changes: ReadonlyArray<KindChange>,
+): ReadonlyArray<KindChange> =>
+	changes.map((change) => ({ ...change, transition: "adopted" as const }));
+
 /**
  * Diffs two snapshots into an ordered list of {@link KindChange}s.
  * Creates and alters are ordered by kind dependency order (topological
@@ -420,7 +477,11 @@ export const diffSnapshots = (
 			if (ownerIsExisting(kind, previous, next, previousNode, nextNode)) {
 				return [];
 			}
-			return kind.diff(previousNode, nextNode, identity);
+			const changes = kind.diff(previousNode, nextNode, identity);
+			if (ownerAdoptedThisRun(kind, previous, next, previousNode, nextNode)) {
+				return stampAdopted(changes);
+			}
+			return changes;
 		}),
 	);
 
