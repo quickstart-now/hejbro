@@ -15,7 +15,11 @@ child positions or an inline guard of its own, so that a node kind
 gaining a child, or a change shape moving, is absorbed in one place.
 These names are engine, not vocabulary: importable from `@hejbro/core`,
 classified as engine in `hejbro`'s curation, and absent from the
-`hejbro` barrel at runtime.
+`hejbro` barrel at runtime. A query position — an `exists` or
+`selectExpr` node's query, a `with` body, a set operation's branch — is
+not an expression child; the registry stops at it and a consumer that
+needs to look inside descends through the query walker on its own, as
+the RLS validator does.
 
 #### Scenario: A preset walks an expression through the registry
 - **WHEN** the RLS validator of the Supabase preset and the query
