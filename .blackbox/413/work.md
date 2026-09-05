@@ -147,3 +147,58 @@ Tests (1.1c's 4 required rows):
 
 Full core suite: 102 files (101 + this task's own new table-kind.test.ts), 1756 passed + 1 todo (was 1742 + 1 todo -- +14 = 12 new structural rows in upgrade.test.ts + 2 new declared-order rows in table-kind.test.ts).
 
+<a id="w11"></a>
+## W11 — 1.6 e2e: real 0.1.1 project upgrade scenario
+
+_2026-09-05T10:08Z_
+
+Built packages/cli/test/upgrade.e2e.test.ts (subprocess, assertBuiltCli)
+against a real 0.1.1 project fixture vendored under packages/cli/test/
+fixtures/project-0.1.1/commit-{1,2,3}/. Each commit-N directory replays
+one of the 0.1.1 tag's own three real commits verbatim (git show
+<sha>:<path>): 4dc5c486 (migrations 1-4), f27cbea3 (migrations 5-6,
+regenerated 1-4's own chain), 8b22258d (migration 7, regenerated 1-6
+again -- the tag's own final state). Each directory is independently
+byte-self-consistent (its own migrations' banner hashes chain onto its
+own hejbro.snapshot.json), confirmed by direct sha256 comparison before
+writing the test.
+
+Tripwire (reported, resolved by ruling): tasks.md's own paraphrase said
+history should report "every migration ok" after upgrade, but the
+approved delta scenario only requires the tip. Measured directly: even
+replaying the project's own real batch-commit history, only migration 7
+(the batch's own last commit) resolves ok; 1-6 resolve lost because a
+later regeneration moved their content past any commit's own recorded
+snapshot blob -- ordinary history-state.ts behavior, unrelated to
+upgrade. Ruling: tasks.md's wording was corrected to match the delta
+scenario; the test asserts the tip resolves ok at its own add-commit,
+and separately asserts every other migration's history row is
+byte-identical before and after the upgrade commit (proving upgrade
+touches nothing else, pairing with the delta's "no other line of any
+migration changes").
+
+Red verified by reverting 1.1c's table-kind.ts fix and rebuilding:
+upgrade -> verify then fails with error[snapshot-stale], exactly the
+defect 1.1c fixes -- confirms 1.6 and 1.1c catch the same bug from two
+directions.
+
+Performance tripwire (reported, resolved by ruling): the test spawns
+~8 hejbro CLI subprocesses and ~10 git subprocesses over one real repo,
+heavier than any existing single CLI test. Passed reliably at 9.5-26s
+under normal load; timed out at the package's shared 30_000ms
+testTimeout under host contention (uptime load averages 173/161/95 on a
+16-core machine, 50-80 concurrent node processes, unrelated to this
+change) -- and, once, even without that contention (26s, 87% of the
+30s ceiling). Ruling: 26s-without-load is the deciding number -- the
+test is structurally tight against the default regardless of host
+noise. Applied a per-test-only timeout (120_000, vitest's third `it`
+argument), mirroring examples/cli-smoke/vitest.config.ts's own
+120_000ms contended-phase ceiling; the shared packages/cli/vitest.config.ts
+testTimeout: 30_000 (#90/#117) is untouched.
+
+Noted, not fixed (unrelated pre-existing flake): packages/core's
+test/cross-instance-symbols.test.ts timed out once under its own 5000ms
+default during the same host-contention window (pnpm check:crap),
+passing on retry. Same load pattern as above; this change does not
+touch that file or its timeout.
+

@@ -67,6 +67,18 @@
 			}
 		},
 		{
+			"includes": ["**/test/fixtures/project-0.1.1/**"],
+			"formatter": {
+				"enabled": false
+			},
+			"linter": {
+				"enabled": false
+			},
+			"assist": {
+				"enabled": false
+			}
+		},
+		{
 			"includes": ["**/test/fixtures/format-5/**"],
 			"formatter": {
 				"enabled": false

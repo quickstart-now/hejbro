@@ -133,6 +133,13 @@
       "title": "1.1c: canonicalizeTable sorts foreignKeys into D1 canonical order",
       "pr": null,
       "decisions": []
+    },
+    {
+      "id": "W11",
+      "at": "2026-09-05T10:08Z",
+      "title": "1.6 e2e: real 0.1.1 project upgrade scenario",
+      "pr": null,
+      "decisions": []
     }
   ],
   "prs": [],
