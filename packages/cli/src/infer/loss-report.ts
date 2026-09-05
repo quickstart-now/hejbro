@@ -487,25 +487,44 @@ const omittedTableLines = (
 const omittedIndexLine = (index: OmittedIndex): string =>
 	`Omitted: index "${index.schema}.${index.table}.${index.sqlName}" -- its catalog name is not a valid hejbro SQL identifier, so no declaration can carry it under the same name \`check\` would compare it by. \`check\` keeps listing it as unmanaged until it is renamed in the database and declared; a hand-written declaration under a different name only adds a second one.`;
 
+/** pull's own consequence (D106 round 1 B1 of harden-check-inventory): a pull consumer holds no declarations of the producer's schema, so no `check` listing follows -- the index cannot be carried in the contract, and linking the schema repository is the way out, as for every other pull line. */
+const omittedIndexLineForPull = (index: OmittedIndex): string =>
+	`Omitted: index "${index.schema}.${index.table}.${index.sqlName}" -- its catalog name is not a valid hejbro SQL identifier, so it cannot be carried in the contract. Rename the index in the database, then link the schema repository.`;
+
 const omittedIndexLines = (
 	indexes: ReadonlyArray<OmittedIndex>,
-): ReadonlyArray<string> =>
-	sortedBy(
+	command: LossReportFacts["command"],
+): ReadonlyArray<string> => {
+	const ordered = sortedBy(
 		indexes,
 		(index) => `${index.schema}.${index.table}.${index.sqlName}`,
-	).map(omittedIndexLine);
+	);
+	if (command === "pull") {
+		return ordered.map(omittedIndexLineForPull);
+	}
+	return ordered.map(omittedIndexLine);
+};
 
 /** A check constraint's own name is compared by `check` the same way an index's is (see {@link omittedIndexLine}) -- omission costs only this check, and a vendored contract never carries checks either. */
 const omittedCheckLine = (check: OmittedCheck): string =>
 	`Omitted: check constraint "${check.schema}.${check.table}.${check.sqlName}" -- its catalog name is not a valid hejbro SQL identifier, so no declaration can carry it under the same name \`check\` would compare it by. \`check\` keeps listing it as unmanaged until it is renamed in the database and declared; a hand-written declaration under a different name only adds a second one.`;
 
+const omittedCheckLineForPull = (check: OmittedCheck): string =>
+	`Omitted: check constraint "${check.schema}.${check.table}.${check.sqlName}" -- its catalog name is not a valid hejbro SQL identifier, so it cannot be carried in the contract. Rename the constraint in the database, then link the schema repository.`;
+
 const omittedCheckLines = (
 	checks: ReadonlyArray<OmittedCheck>,
-): ReadonlyArray<string> =>
-	sortedBy(
+	command: LossReportFacts["command"],
+): ReadonlyArray<string> => {
+	const ordered = sortedBy(
 		checks,
 		(check) => `${check.schema}.${check.table}.${check.sqlName}`,
-	).map(omittedCheckLine);
+	);
+	if (command === "pull") {
+		return ordered.map(omittedCheckLineForPull);
+	}
+	return ordered.map(omittedCheckLine);
+};
 
 /** import's own remedy: renaming the target (in the database) is what makes it reachable again, and only a fresh reading picks that up. */
 const omittedForeignKeyRemedyForImport = (
@@ -608,8 +627,8 @@ export const buildLossReport = (
 	),
 	...omittedSchemaLines(facts.omittedSchemas, facts.command),
 	...omittedTableLines(facts.omittedTables, facts.command),
-	...omittedIndexLines(facts.omittedIndexes),
-	...omittedCheckLines(facts.omittedChecks),
+	...omittedIndexLines(facts.omittedIndexes, facts.command),
+	...omittedCheckLines(facts.omittedChecks, facts.command),
 	...omittedForeignKeyLines(facts.omittedForeignKeys, facts.command),
 	...undeclarableNameLines(facts.undeclarableNameColumns, facts.command),
 	wayOutLine(facts.command),

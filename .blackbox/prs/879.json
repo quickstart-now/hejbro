@@ -1,0 +1,89 @@
+{
+  "version": 3,
+  "number": 879,
+  "ref": "quickstart-now/hejbro#879",
+  "title": "chore(openspec): archive harden-check-inventory after d106 round 1",
+  "head": "bc4bdae6ab3ec28c407818922bdd515df249f10a",
+  "headRef": "archive-check-inventory",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-05T03:13Z",
+  "refs": [
+    {
+      "path": ".changeset/harden-check-inventory.md",
+      "blob": "154b1ea0a50bff73765553087ce1d29a033d4bea"
+    },
+    {
+      "path": "README.md",
+      "blob": "7bbbf8352f9e6b74c751b8a323a55e2262b0ca73"
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-05-harden-check-inventory/design.md",
+      "blob": "4b0e5ff387a7abcf42e96d029430cef20d7fcacc"
+    },
+    {
+      "path": "openspec/changes/harden-check-inventory/design.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-05-harden-check-inventory/evaluation.md",
+      "blob": "feadfcfc2b4328e73f63a415a3cab755970e57a6"
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-05-harden-check-inventory/proposal.md",
+      "blob": "c325bc6c640ef8642694266385d5fdb395f72b62"
+    },
+    {
+      "path": "openspec/changes/harden-check-inventory/proposal.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-05-harden-check-inventory/specs/catalog-inference/spec.md",
+      "blob": "7859a892a0af0fa26d705476ab8b99fd9ae3172f"
+    },
+    {
+      "path": "openspec/changes/harden-check-inventory/specs/catalog-inference/spec.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-05-harden-check-inventory/specs/cli-commands/spec.md",
+      "blob": "78472808c3944bdd83f04499ddaee62049cf3455"
+    },
+    {
+      "path": "openspec/changes/harden-check-inventory/specs/cli-commands/spec.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-05-harden-check-inventory/tasks.md",
+      "blob": "503b23b6e1eff6cb001a9a32303e05f29efc63aa"
+    },
+    {
+      "path": "openspec/changes/harden-check-inventory/tasks.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/specs/catalog-inference/spec.md",
+      "blob": "2f7d64707b100b4e89de460affae19580a4f6337"
+    },
+    {
+      "path": "openspec/specs/cli-commands/spec.md",
+      "blob": "13229222edd588ca9ecd6b497e1b7b719da84d93"
+    },
+    {
+      "path": "openspec/task-times.csv",
+      "blob": "027e4e6ec33a2f41848002c95e6b8b6a25b012c6"
+    },
+    {
+      "path": "packages/cli/src/infer/loss-report.ts",
+      "blob": "39051298b0657467d50fca4923e7f87c4fa71c44"
+    },
+    {
+      "path": "packages/cli/test/infer-loss-report.test.ts",
+      "blob": "31cc63b3f4242a8e40cea2c93d9586f861808535"
+    },
+    {
+      "path": "skills/hejbro/references/brownfield-adoption.md",
+      "blob": "59a63cd875eb90e722148a1895426fa1dc481e97"
+    }
+  ]
+}

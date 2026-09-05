@@ -41,3 +41,10 @@ _lead · interpretation · basis R3, 412/D13 · 2026-09-05T02:19Z · ratified: p
 
 (c) accepted at 75429d9f: review round 1 BLOCKING 0 / NB 4 / OK 21 → N1/N3 repaired in the piece and the column line brought in (707/R3) → round 2 BLOCKING 1 (the omitted-table loss line still said "until it is renamed", the sibling defect the planner missed when counting the four consequence kinds from memory) / NB 1 (the sort compares UTF-16 code units, not code points — the word corrected, the behaviour kept: total order, locale-free, no ties) → 1.12 → round 3 BLOCKING 0 / NB 0. The reviewer verified: four sorted axes byte-identical across two databases built in opposite order × two locales; the loss report's three-step end condition (listed → renamed, still listed → declared, gone) on every consequence kind; the import requirement copied into the delta with 10/10 scenarios intact and only the intended two hunks; `show --diff` renders all three MODIFIED targets. Planner's two recorded errors (a foreign-key-free measurement; scope counted from memory) go into the next brief as rules. Lead's next: rebase onto dev (v3 record), gates, PR (Closes #707 #726), merge, D106.
 
+<a id="r5"></a>
+## R5 — cv D106 round 1: B1 repaired in place (pull-mode index/check text), N1 in the skill, N2→#872, N3→#859; archived
+
+_lead · interpretation · 2026-09-05T03:00Z · ratified: pending_
+
+Basis: 412 D12/D13 (full delegation, purpose-bound completeness). B1 contradicted catalog-inference's new sentence — a pull consumer holds no declarations of the producer's schema, so a 'check keeps listing it' promise is false on that channel; the column line already had a pull variant, so the index and check lines get the same split (loss-report.ts, group 2.1). N1 is the skill's stale copy of the two claims — repaired in the same task. N2 is the shape #872 exists to remove (measured shape recorded there). N3 is a scope statement, recorded on #859. Archived at this disposition. Ratification pending.
+

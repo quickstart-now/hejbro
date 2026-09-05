@@ -57,6 +57,15 @@
       "at": "2026-09-05T02:19Z",
       "title": "cv (c) accepted at 75429d9f: round 3 clean; two planner lessons recorded; PR by the lead",
       "ratified": null
+    },
+    {
+      "id": "R5",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [],
+      "at": "2026-09-05T03:00Z",
+      "title": "cv D106 round 1: B1 repaired in place (pull-mode index/check text), N1 in the skill, N2→#872, N3→#859; archived",
+      "ratified": null
     }
   ],
   "work": [
@@ -75,6 +84,11 @@
       "number": 878,
       "role": "closes",
       "pinnedAt": "2026-09-05T02:28Z"
+    },
+    {
+      "number": 879,
+      "role": "refs",
+      "pinnedAt": "2026-09-05T03:13Z"
     }
   ],
   "origin": null,

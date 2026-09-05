@@ -277,7 +277,8 @@ it doesn't round-trip through snake_case (a quoted `"createdAt"`) or
 because the key it round-trips to is itself one the DSL's own
 identifier rule still rejects (a leading-underscore `_id`) — `check`
 keeps reporting that column as undeclared until it's renamed in the
-database: the DSL derives every column's SQL name from its TypeScript
+database *and declared* (renaming alone only makes the name one a
+declaration can carry): the DSL derives every column's SQL name from its TypeScript
 key and accepts no override, so no declaration, hand-written or not,
 can carry either kind of name. Beyond a column, five further kinds of
 catalog name cost hejbro the object that carries it: a **schema**
@@ -286,8 +287,8 @@ holds — tables, enums, sequences — is omitted with it, unreported by
 `check` since nothing in it is declared); a **table** whose own name
 is not (everything it holds — columns, checks, indexes, foreign
 keys — is left undeclared with it); an **index** or a **check
-constraint** whose own name is not (each is never mentioned again,
-since `check` compares only what is declared); and a **foreign key**
+constraint** whose own name is not (`check` keeps listing each as
+unmanaged until it is renamed in the database and declared); and a **foreign key**
 whose own *target*'s name — its schema, or its table — is not one
 hejbro can carry — the relationship is left out and named, naming the
 missing target, while the column that carried it stays declared as a
