@@ -23,20 +23,33 @@ const git = (...args) =>
 
 const publishedPackageDirs = () =>
 	readdirSync(join(REPO_ROOT, "packages"))
-		.map((name) => ({ name, manifest: join(REPO_ROOT, "packages", name, "package.json") }))
+		.map((name) => ({
+			name,
+			manifest: join(REPO_ROOT, "packages", name, "package.json"),
+		}))
 		.filter(({ manifest }) => existsSync(manifest))
-		.filter(({ manifest }) => JSON.parse(readFileSync(manifest, "utf8")).private !== true)
+		.filter(
+			({ manifest }) =>
+				JSON.parse(readFileSync(manifest, "utf8")).private !== true,
+		)
 		.map(({ name }) => `packages/${name}/src/`);
 
 const changedFiles = (range, ...extra) =>
-	git("diff", "--name-only", ...extra, range).split("\n").filter((line) => line !== "");
+	git("diff", "--name-only", ...extra, range)
+		.split("\n")
+		.filter((line) => line !== "");
 
 const range = `${BASE_REF}...HEAD`;
 const publishedSrc = publishedPackageDirs();
 const changed = changedFiles(range);
-const touchesPublishedSrc = changed.filter((file) => publishedSrc.some((dir) => file.startsWith(dir)));
+const touchesPublishedSrc = changed.filter((file) =>
+	publishedSrc.some((dir) => file.startsWith(dir)),
+);
 const addedChangesets = changedFiles(range, "--diff-filter=A").filter(
-	(file) => file.startsWith(".changeset/") && file.endsWith(".md") && !file.endsWith("README.md"),
+	(file) =>
+		file.startsWith(".changeset/") &&
+		file.endsWith(".md") &&
+		!file.endsWith("README.md"),
 );
 
 const fail = (message) => {
@@ -45,7 +58,10 @@ const fail = (message) => {
 };
 
 if (touchesPublishedSrc.length > 0 && addedChangesets.length !== 1) {
-	const fold = addedChangesets.length > 1 ? ", and fold the extra changesets into one" : "";
+	const fold =
+		addedChangesets.length > 1
+			? ", and fold the extra changesets into one"
+			: "";
 	fail(
 		`this branch changes ${touchesPublishedSrc.length} file(s) under a published package's src/ (first: ${touchesPublishedSrc[0]}) but adds ${addedChangesets.length} changeset file(s); D59 requires exactly one. Next: run \`pnpm changeset\` (minor for a capability, patch for a fix) and commit the .changeset/*.md it writes${fold}.`,
 	);
