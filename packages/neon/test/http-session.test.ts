@@ -1,5 +1,6 @@
+import { roleName, schema, select, table, uuid } from "@hejbro/core";
 import type { DriverSession } from "@hejbro/query";
-import { throwMissingCapability } from "@hejbro/query";
+import { db, throwMissingCapability } from "@hejbro/query";
 import { assertSessionStateConformance } from "@hejbro/query/testing/driver-conformance";
 import { neon, neonConfig } from "@neondatabase/serverless";
 import { afterEach, describe, expect, it } from "vitest";
@@ -158,7 +159,7 @@ describe("HTTP session batch", () => {
 		]);
 	});
 
-	it("declares both capabilities false before any connection", () => {
+	it("declares interactive-transactions/session-state/prepared-statements false and batched-transactions true, before any connection", () => {
 		const sql = neon(CONNECTION_STRING);
 		const driver = buildHttpDriver(sql);
 
@@ -166,6 +167,7 @@ describe("HTTP session batch", () => {
 			"interactive-transactions": false,
 			"session-state": false,
 			"prepared-statements": false,
+			"batched-transactions": true,
 		});
 	});
 
@@ -229,6 +231,152 @@ describe("HTTP session batch", () => {
 		await expect(
 			driver.execute({ sql: "select 1", params: [], kind: "sql" }),
 		).rejects.toThrow(/connection to database failed/);
+	});
+});
+
+describe("Driver.batch (task 1.2b, #486)", () => {
+	it("sends the pins, then every member, in the order given -- one request", async () => {
+		const calls = stubSuccess([
+			EMPTY_RESULT,
+			EMPTY_RESULT,
+			{ fields: [{ name: "a", dataTypeID: TEXT_OID }], rows: [["1"]] },
+			{ fields: [{ name: "b", dataTypeID: TEXT_OID }], rows: [["2"]] },
+		]);
+		const sql = neon(CONNECTION_STRING);
+		const driver = buildHttpDriver(sql);
+
+		await driver.batch([
+			{ sql: "select $1 as a", params: [1], kind: "sql" },
+			{ sql: "select $1 as b", params: [2], kind: "sql" },
+		]);
+
+		expect(calls).toHaveLength(1);
+		// the client's own `prepareValue` stringifies non-object params
+		// before they hit the wire (measured: same as `neon-session.test.ts`'s
+		// own existing "hello" case, just visible here on numbers too).
+		expect(calls[0]?.body.queries).toEqual([
+			{ query: "set intervalstyle to 'postgres'", params: [] },
+			{ query: "set bytea_output to 'hex'", params: [] },
+			{ query: "select $1 as a", params: ["1"] },
+			{ query: "select $1 as b", params: ["2"] },
+		]);
+	});
+
+	it("returns one row list per member, in order -- the pins' own two results are sliced off, never mistaken for a member's own", async () => {
+		stubSuccess([
+			EMPTY_RESULT,
+			EMPTY_RESULT,
+			{ fields: [{ name: "a", dataTypeID: TEXT_OID }], rows: [["1"]] },
+			{ fields: [{ name: "b", dataTypeID: TEXT_OID }], rows: [["2"], ["3"]] },
+			{ fields: [{ name: "c", dataTypeID: TEXT_OID }], rows: [] },
+		]);
+		const sql = neon(CONNECTION_STRING);
+		const driver = buildHttpDriver(sql);
+
+		const results = await driver.batch([
+			{ sql: "select $1 as a", params: [1], kind: "sql" },
+			{ sql: "select id as b from widgets", params: [], kind: "sql" },
+			{ sql: "select 1 as c where false", params: [], kind: "sql" },
+		]);
+
+		expect(results).toHaveLength(3);
+		expect(results[0]).toEqual([{ a: "1" }]);
+		expect(results[1]).toEqual([{ b: "2" }, { b: "3" }]);
+		expect(results[2]).toEqual([]);
+	});
+
+	it("keeps interval/numeric[]/interval[] arrivals as raw text on every member, the same override execute uses", async () => {
+		stubSuccess([
+			EMPTY_RESULT,
+			EMPTY_RESULT,
+			{
+				fields: [{ name: "iv", dataTypeID: INTERVAL_OID }],
+				rows: [["1 day 02:00:00"]],
+			},
+		]);
+		const sql = neon(CONNECTION_STRING);
+		const driver = buildHttpDriver(sql);
+
+		const results = await driver.batch([
+			{ sql: "select iv from widgets", params: [], kind: "sql" },
+		]);
+
+		expect(results[0]).toEqual([{ iv: "1 day 02:00:00" }]);
+	});
+
+	it("a failing member rejects the whole call -- no partial result, no member index (the batch is one transaction, one HTTP request)", async () => {
+		stubServerError(500, "duplicate key value");
+		const sql = neon(CONNECTION_STRING);
+		const driver = buildHttpDriver(sql);
+
+		await expect(
+			driver.batch([
+				{ sql: "select 1 as a", params: [], kind: "sql" },
+				{ sql: "insert into widgets values ($1)", params: [1], kind: "sql" },
+				{ sql: "select 1 as c", params: [], kind: "sql" },
+			]),
+		).rejects.toThrow(/duplicate key value/);
+	});
+
+	it("batch([]) sends nothing over the wire and resolves to an empty array -- zero statements means zero requests, not a pins-only round trip", async () => {
+		const calls = stubSuccess([]);
+		const sql = neon(CONNECTION_STRING);
+		const driver = buildHttpDriver(sql);
+
+		const results = await driver.batch([]);
+
+		expect(results).toEqual([]);
+		expect(calls).toHaveLength(0);
+	});
+
+	it("execute is batch of one, reusing the exact same pin/slice logic -- proven by the driver-contract conformance suite below sharing this same recorded transcript", async () => {
+		const calls = stubSuccess([
+			EMPTY_RESULT,
+			EMPTY_RESULT,
+			{ fields: [{ name: "greeting", dataTypeID: TEXT_OID }], rows: [["hi"]] },
+		]);
+		const sql = neon(CONNECTION_STRING);
+		const driver = buildHttpDriver(sql);
+
+		const rows = await driver.execute({
+			sql: "select $1 as greeting",
+			params: ["hi"],
+			kind: "sql",
+		});
+
+		expect(rows).toEqual([{ greeting: "hi" }]);
+		expect(calls).toHaveLength(1);
+	});
+});
+
+describe("db.as(context) runs on the HTTP driver as one batch (task 1.2b, design.md Q5)", () => {
+	it("sends the driver's own pins, then the context's own statements, then the caller's statement, all as one request", async () => {
+		const calls = stubSuccess([
+			EMPTY_RESULT, // intervalstyle pin
+			EMPTY_RESULT, // bytea_output pin
+			EMPTY_RESULT, // set local role
+			{ fields: [{ name: "id", dataTypeID: TEXT_OID }], rows: [["1"]] }, // caller statement
+		]);
+		const sql = neon(CONNECTION_STRING);
+		const driver = buildHttpDriver(sql);
+		const appSchema = schema("app");
+		const widgets = table(appSchema, "widgets", { id: uuid().primaryKey() });
+		const handle = db({ widgets }, driver, {
+			roles: [roleName("app_reader")],
+		});
+
+		const rows = await handle
+			.as({ role: roleName("app_reader") })
+			.execute(select(widgets));
+
+		expect(rows).toEqual([{ id: "1" }]);
+		expect(calls).toHaveLength(1);
+		expect(calls[0]?.body.queries.map((q) => q.query)).toEqual([
+			"set intervalstyle to 'postgres'",
+			"set bytea_output to 'hex'",
+			'set local role "app_reader"',
+			expect.stringContaining("widgets"),
+		]);
 	});
 });
 

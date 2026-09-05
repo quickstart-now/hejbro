@@ -18,17 +18,21 @@ import { intervalPassthroughTypes } from "./type-overrides";
 export type HttpQueryable = NeonQueryFunction<false, false>;
 
 /**
- * Neither capability the HTTP path can offer (task 2.3, D95/D96): a
+ * Neither `interactive-transactions` nor `session-state` nor
+ * `prepared-statements` can the HTTP path offer (task 2.3, D95/D96): a
  * one-shot HTTP request has no connection to hold a transaction open
  * across round trips, and no session to preserve state across separate
- * requests. Both read `false` and neither is softened -- see task 2.3's
- * own note on why "the pins hold within one batch" does not make
- * `session-state` true.
+ * requests -- see task 2.3's own note on why "the pins hold within one
+ * batch" does not make `session-state` true. `batched-transactions` is
+ * `true` (task 1.2b, #486/R5): `sql.transaction([...])` runs a
+ * pre-assembled statement list as one atomic HTTP request, exactly the
+ * shape the capability names.
  */
 const CAPABILITIES: DriverCapabilities = Object.freeze({
 	"interactive-transactions": false,
 	"session-state": false,
 	"prepared-statements": false,
+	"batched-transactions": true,
 });
 
 /**
@@ -45,10 +49,10 @@ const PIN_STATEMENTS: ReadonlyArray<string> = [
 ];
 
 /**
- * The last entry of a batch result (task 2.2) -- `results` always holds
- * at least one entry (the caller's own statement, appended last by
- * {@link runBatch}), so a missing last entry is an internal-invariant
- * failure, not a user-reachable path.
+ * The last entry of a batch result (task 2.2) -- `execute` is `batch` of
+ * exactly one (task 1.2b, #486), so `results` always holds one entry;
+ * a missing one is an internal-invariant failure, not a user-reachable
+ * path.
  */
 const lastResultOf = (
 	results: ReadonlyArray<ReadonlyArray<DriverRow>>,
@@ -63,25 +67,38 @@ const lastResultOf = (
 };
 
 /**
- * Sends `compiled` as the last member of a batch that pins both session
- * settings first (task 2.1) -- `sql.transaction([...])` is Neon's own
- * non-interactive batch form, confirmed as one HTTP request regardless of
- * member count (measured, `design.md`). Reads the **last** result entry
- * only: the pins' own (empty) result sets are never mistaken for the
- * caller's rows (task 2.2). A failed member's error is not caught here,
- * so it surfaces unchanged (task 2.5) -- including the documented
- * boundary that it carries no member index.
+ * Runs `statements` as one batch, the driver's own pins first (task
+ * 1.2b, #486): `sql.transaction([...])` is Neon's own non-interactive
+ * batch form, confirmed as one HTTP request regardless of member count
+ * (measured, `design.md`) -- `execute` and `Driver.batch` both go
+ * through this one function, never two separate pin-assembly/slicing
+ * implementations. Returns one row list per member of `statements`, in
+ * order: the pins' own (empty) result sets are sliced off the front,
+ * never mistaken for a member's own (task 2.2). A failed member's error
+ * is not caught here, so it surfaces unchanged (task 2.5) -- including
+ * the documented boundary that it carries no member index. `statements`
+ * empty sends nothing at all: a round trip for the pins alone would be
+ * a side effect the caller never asked for, so this returns `[]`
+ * without ever calling `sql`.
  */
 const runBatch = async (
 	sql: HttpQueryable,
-	compiled: CompileResult,
-): Promise<ReadonlyArray<DriverRow>> => {
+	statements: ReadonlyArray<CompileResult>,
+): Promise<ReadonlyArray<ReadonlyArray<DriverRow>>> => {
+	if (statements.length === 0) {
+		return [];
+	}
 	const pins = PIN_STATEMENTS.map((pinSql) => sql.query(pinSql, []));
-	const statement = sql.query(compiled.sql, [...compiled.params], {
-		types: intervalPassthroughTypes,
-	});
-	const results = await sql.transaction([...pins, statement]);
-	return lastResultOf(results as ReadonlyArray<ReadonlyArray<DriverRow>>);
+	const members = statements.map((statement) =>
+		sql.query(statement.sql, [...statement.params], {
+			types: intervalPassthroughTypes,
+		}),
+	);
+	const results = (await sql.transaction([
+		...pins,
+		...members,
+	])) as ReadonlyArray<ReadonlyArray<DriverRow>>;
+	return results.slice(pins.length);
 };
 
 /**
@@ -96,7 +113,8 @@ export const buildHttpDriver = (
 	sql: HttpQueryable,
 ): Driver & { readonly client: { end(): Promise<void> } } => ({
 	capabilities: CAPABILITIES,
-	execute: (compiled) => runBatch(sql, compiled),
+	execute: async (compiled) => lastResultOf(await runBatch(sql, [compiled])),
+	batch: (statements) => runBatch(sql, statements),
 	transaction: async () => {
 		throwMissingCapability("interactive-transactions", "transaction");
 	},

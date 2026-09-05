@@ -4,8 +4,10 @@ import type {
 	CompileResult,
 	Driver,
 	DriverCapabilities,
+	DriverRow,
 	DriverSession,
 } from "@hejbro/query";
+import { throwMissingCapability } from "@hejbro/query";
 import type { Pool, PoolClient } from "@neondatabase/serverless";
 import { buildHttpDriver, type HttpQueryable } from "./http";
 import { anonymousRole, authenticatedRole } from "./roles";
@@ -18,14 +20,33 @@ import { intervalPassthroughTypes } from "./type-overrides";
  * preserves `SET`-style session state across sequential statements on
  * it, exactly like `@hejbro/pg`'s own `Pool`. `prepared-statements` is
  * the caller's own (task 1.3, #303), stated through
- * {@link NeonDriverOptions}.
+ * {@link NeonDriverOptions}. `batched-transactions` is fixed `false`
+ * (task 1.2b, #486/R5): this path already has `transaction()`, so a
+ * batch execution path has nothing to add here -- {@link
+ * buildWebSocketDriver}'s own `batch` member refuses before sending
+ * anything, mirroring `@hejbro/pg`'s own `refuseBatch`.
  */
 const wsCapabilitiesFor = (preparedStatements: boolean): DriverCapabilities =>
 	Object.freeze({
 		"interactive-transactions": true,
 		"session-state": true,
 		"prepared-statements": preparedStatements,
+		"batched-transactions": false,
 	});
+
+/**
+ * `Driver.batch`'s own body on the WebSocket path (task 1.2b, #486/R5):
+ * refuses before touching the pool at all -- not even `pool.connect()`
+ * -- mirroring `@hejbro/pg`'s own `refuseBatch`. Mandatory on every
+ * `Driver` regardless of the capability's own value; this driver
+ * declares it `false` and this is that declaration's one enforcement
+ * point.
+ */
+const refuseBatch = async (
+	_statements: ReadonlyArray<CompileResult>,
+): Promise<ReadonlyArray<ReadonlyArray<DriverRow>>> => {
+	throwMissingCapability("batched-transactions", "batch");
+};
 
 /** The second-argument shape `neonDriver`'s `Pool` overload accepts (task 1.3, #303, add-prepared-statements design Q3) -- the HTTP overload has no session to prepare in, so its own type offers none. */
 export type NeonDriverOptions = {
@@ -201,6 +222,7 @@ const buildWebSocketDriver = (
 				throw error;
 			}
 		},
+		batch: refuseBatch,
 		setupSession,
 		// Neon's two Data API roles (task 3.5, consumes group 4's
 		// constants) -- so db.as(...)'s fail-closed role allowlist admits
