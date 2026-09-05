@@ -3,15 +3,15 @@
   "number": 882,
   "ref": "quickstart-now/hejbro#882",
   "title": "docs(skills): document the distinct-on literal placeholder shape (#450)",
-  "head": "cd270ee908d8f2b855553290a7835fb4ac09d3f4",
+  "head": "592515a23dbb4804ae57453ecd7a12abdd36f393",
   "headRef": "docs-distinct-on-literals",
   "base": "dev",
   "merged": null,
-  "pinnedAt": "2026-09-05T04:46Z",
+  "pinnedAt": "2026-09-05T06:09Z",
   "refs": [
     {
       "path": "skills/hejbro/references/query-layer.md",
-      "blob": "60e2f8699769426bb2db9e23fbd55b51048e4629"
+      "blob": "a6726e0a61a16d53404732d031a0dc0ce63e33f8"
     }
   ]
 }
