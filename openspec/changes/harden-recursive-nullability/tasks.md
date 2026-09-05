@@ -72,7 +72,7 @@ file, that goes back to the planner, not into the diff.
       *narrowing* on a set a position did not earn; this reads it only
       to *widen*. Files: `with.ts`, its type tests.
 
-- [ ] 1.2 (~7m) The query layer widens the outward row. Red: the query
+- [x] 1.2 (~7m) The query layer widens the outward row. Red: the query
       package's CTE type tests, an `expectTypeOf` table through
       `handle.with(...)`'s recursive form — {anchor non-null, recursive
       nullable → outward nullable; the reference inside the recursive
@@ -85,7 +85,14 @@ file, that goes back to the planner, not into the diff.
       projects a left-joined table's non-null column → outward
       nullable**} — the last row is why the rule lives here and not in
       core, and it resolves through `ProjectedColumnResult<R,
-      TRecursiveLeftJoined>`, the set 1.1b carries. Files:
+      TRecursiveLeftJoined>`, the set 1.1b carries.
+      The table is stated over `RecursiveCteReference` +
+      `SelectResult<{…}, never>`, not literally through
+      `handle.with(...)` (#500/R4): `makeWithChain` resolves the
+      untracked default, under which every key of a `db.with(...)` row
+      is already nullable for a reason of its own
+      (narrow-join-nullability's absorption), so the rows that must stay
+      non-null could not be stated there at all. Files:
       `types/select-result.ts`, tests.
 
 - [ ] 1.2b (~6m) The delivered value and the chain surface agree. Red:

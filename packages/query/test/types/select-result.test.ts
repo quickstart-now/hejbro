@@ -1,4 +1,8 @@
-import type { CteRowEnvironment, Expr } from "@hejbro/core";
+import type {
+	CteRowEnvironment,
+	Expr,
+	RecursiveCteReference,
+} from "@hejbro/core";
 import {
 	bigint,
 	columnRef,
@@ -465,5 +469,89 @@ describe("a withCte() reference's read type (add-ctes task 3.2)", () => {
 		}>;
 		type Proj = SelectResult<{ readonly r: Ranked["rn"] }>;
 		expectTypeOf<Proj>().toEqualTypeOf<{ readonly r: bigint | null }>();
+	});
+});
+
+// #500/R2, #500/R3: a recursive CTE's outward row widens per key by the
+// recursive term's own nullability -- `RecursiveCteReference`'s three
+// generic parameters (anchor projection, recursive term's own
+// projection, recursive term's own left-joined set) stand in for an
+// actual `asRecursive` call here, the same type-only style this file
+// already uses for `CteRowEnvironment` above. Every `SelectResult` call
+// below pins its OWN `TLeftJoined` at `never` (the tracked empty set) --
+// `db.with(...)`'s own body absorbs that parameter into the untracked
+// default regardless (narrow-join-nullability task 3.4, already pinned
+// in `chain-types.test.ts`, unrelated to this change and out of its
+// scope), which would make every key nullable and hide the very
+// distinction this table exists to draw.
+describe("a recursive CTE's outward row widens by the recursive term's nullability (#500/R2, #500/R3, task 1.2)", () => {
+	it("anchor non-null, recursive term nullable -> outward nullable", () => {
+		type R = RecursiveCteReference<
+			{ readonly v: typeof posts.amountRequired },
+			{ readonly v: typeof posts.amount },
+			never
+		>;
+		type Row = SelectResult<{ readonly v: R["v"] }, never>;
+		expectTypeOf<Row["v"]>().toEqualTypeOf<number | null>();
+	});
+
+	it("both branches non-null -> non-null", () => {
+		type R = RecursiveCteReference<
+			{ readonly v: typeof posts.amountRequired },
+			{ readonly v: typeof posts.amountRequired },
+			never
+		>;
+		type Row = SelectResult<{ readonly v: R["v"] }, never>;
+		expectTypeOf<Row["v"]>().toEqualTypeOf<number>();
+	});
+
+	it("anchor nullable, recursive term non-null -> nullable (the anchor's own nullability still governs)", () => {
+		type R = RecursiveCteReference<
+			{ readonly v: typeof posts.amount },
+			{ readonly v: typeof posts.amountRequired },
+			never
+		>;
+		type Row = SelectResult<{ readonly v: R["v"] }, never>;
+		expectTypeOf<Row["v"]>().toEqualTypeOf<number | null>();
+	});
+
+	it("the recursive term projects the key through a window function -> nullable, a regression guard rather than evidence of the widening (over(...) already fails IsDirectColumnRef, so this is nullable with or without WidenedBy)", () => {
+		type R = RecursiveCteReference<
+			{ readonly v: typeof posts.amountRequired },
+			{ readonly v: ReturnType<typeof over<typeof posts.amountRequired>> },
+			never
+		>;
+		type Row = SelectResult<{ readonly v: R["v"] }, never>;
+		expectTypeOf<Row["v"]>().toEqualTypeOf<number | null>();
+	});
+
+	it("two keys, one widened and one not", () => {
+		type R = RecursiveCteReference<
+			{
+				readonly id: typeof posts.amountRequired;
+				readonly v: typeof posts.amountRequired;
+			},
+			{
+				readonly id: typeof posts.amountRequired;
+				readonly v: typeof posts.amount;
+			},
+			never
+		>;
+		type Row = SelectResult<
+			{ readonly id: R["id"]; readonly v: R["v"] },
+			never
+		>;
+		expectTypeOf<Row["id"]>().toEqualTypeOf<number>();
+		expectTypeOf<Row["v"]>().toEqualTypeOf<number | null>();
+	});
+
+	it("the recursive term projects a left-joined table's non-null column -> outward nullable (why the rule lives in @hejbro/query, not core)", () => {
+		type R = RecursiveCteReference<
+			{ readonly v: typeof posts.amountRequired },
+			{ readonly v: typeof reactions.weight },
+			typeof reactions
+		>;
+		type Row = SelectResult<{ readonly v: R["v"] }, never>;
+		expectTypeOf<Row["v"]>().toEqualTypeOf<number | null>();
 	});
 });

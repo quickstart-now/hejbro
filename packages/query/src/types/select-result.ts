@@ -10,6 +10,7 @@ import type {
 	SqlTypeFamily,
 	Table,
 	UntrackedJoins,
+	widenedByBrand,
 } from "@hejbro/core";
 import type { ColumnTsType } from "./column-map";
 
@@ -242,8 +243,13 @@ type OriginColumnMap<TValue> = TValue extends {
  * no nullability for a scalar column, so a **nullable** column that met
  * all four conditions above used to lose its `| null` even though it can
  * still arrive `null` on its own declared terms, independent of any join.
+ *
+ * Named "direct" (#500/R2) because a recursive CTE's outward reference
+ * adds a second, independent source of nullability on top of this one —
+ * see {@link ProjectedColumnResult}, the type every other file in this
+ * package actually reads.
  */
-type ProjectedColumnResult<TValue, TLeftJoined> = [
+type DirectProjectedColumnResult<TValue, TLeftJoined> = [
 	OriginColumn<TValue>,
 ] extends [never]
 	? [ReadAsType<TValue>] extends [never]
@@ -261,6 +267,70 @@ type ProjectedColumnResult<TValue, TLeftJoined> = [
 				: SelectColumnResult<OriginColumn<TValue>>
 			: ColumnTsType<OriginColumn<TValue>> | null
 		: ColumnTsType<OriginColumn<TValue>> | null;
+
+/**
+ * The recursive term's own carried value and left-joined set, recovered
+ * from `@hejbro/core`'s `WidenedBy` brand (#500/R2, #500/R3) — read
+ * exactly like {@link OriginColumn}/{@link ReadAsType}: a value that
+ * never went through `asRecursive`'s outward widening carries none of
+ * this brand's own property and fails the outer `extends` via the same
+ * weak-type rejection, landing on `never` before `NonNullable` ever
+ * runs, so `NonNullable`'s own `unknown`-collapse ({@link
+ * IsTrackedLeftJoinedSet}'s defect) cannot surface here — the pair this
+ * unwraps is never itself `unknown`, only its own second element can be.
+ */
+type WidenedRecursivePair<TValue> = TValue extends {
+	readonly [widenedByBrand]?: infer TPair;
+}
+	? NonNullable<TPair> extends readonly [
+			infer TRecursiveValue,
+			infer TRecursiveLeftJoined,
+		]
+		? readonly [TRecursiveValue, TRecursiveLeftJoined]
+		: never
+	: never;
+
+/**
+ * The null-only contribution `WidenedBy` adds (#500/R2, #500/R3): the
+ * recursive term's own carried value, resolved through {@link
+ * ProjectedColumnResult} recursively against its own carried
+ * left-joined set, unions in `null` when that resolution admits it —
+ * never the recursive term's full value type, only whether it can be
+ * null (the anchor's own type still governs otherwise, Postgres's own
+ * rule, #500/R1). `never` when `TValue` carries no such brand.
+ *
+ * Checked as `[WidenedRecursivePair<TValue>] extends [never]` first,
+ * not `WidenedRecursivePair<TValue> extends readonly [...]` directly —
+ * `never` is a subtype of every type, so a direct check would take the
+ * tuple branch for the "no brand" case too, the same trap
+ * {@link OriginColumn}'s own doc measures for a bare `extends`.
+ */
+type RecursiveNullWidening<TValue> = [WidenedRecursivePair<TValue>] extends [
+	never,
+]
+	? never
+	: WidenedRecursivePair<TValue> extends readonly [
+				infer TRecursiveValue,
+				infer TRecursiveLeftJoined,
+			]
+		? null extends ProjectedColumnResult<TRecursiveValue, TRecursiveLeftJoined>
+			? null
+			: never
+		: never;
+
+/**
+ * A projected field's actual result type: {@link
+ * DirectProjectedColumnResult} plus whatever {@link RecursiveNullWidening}
+ * contributes when `TValue` carries `WidenedBy` — a recursive CTE's
+ * outward reference intersects that brand onto every key (#500/R2), so
+ * this union is where an ordinary projection's typing and a recursive
+ * CTE's outward row typing meet. Every existing caller of the old
+ * single-source type is unaffected: `RecursiveNullWidening` is `never`
+ * for any value that never went through `asRecursive`'s widening.
+ */
+type ProjectedColumnResult<TValue, TLeftJoined> =
+	| DirectProjectedColumnResult<TValue, TLeftJoined>
+	| RecursiveNullWidening<TValue>;
 
 /**
  * `true` when `TColumns` (a projected field's OWN origin column map)
