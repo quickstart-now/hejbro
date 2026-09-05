@@ -14,7 +14,7 @@ tier-obligation tests, plus the compile-forced fake-`Driver` literals
 under `packages/{cli,supabase,nile}/test/**` (1.2a); `packages/neon/src/
 http.ts`, `packages/neon/src/driver.ts`, `packages/neon/test/**` (1.2b);
 `packages/query/src/db/
-context.ts` and tests (1.3); `packages/query/src/driver/statement-name.ts`
+context.ts` and tests (1.3, 1.3b); `packages/query/src/driver/statement-name.ts`
 (new), `packages/pg/src/*.ts`, `packages/neon/src/driver.ts` (1.5);
 `packages/query/src/driver/result-rows.ts` (new), `packages/pg/src/*.ts`,
 `packages/neon/src/driver.ts` (1.6); `skills/hejbro/references/
@@ -23,7 +23,9 @@ neon-preset.md`, `skills/hejbro/references/query-layer.md`, one
 If a task appears to need any other file, that goes back to the planner,
 not into the diff.
 
-**Ordering.** 1.1 → 1.2a → 1.3 → 1.5 → 1.6 → 1.2b → 1.4 (486/R5). 1.2a
+**Ordering.** 1.1 → 1.2a → 1.3 → 1.3b → 1.5 → 1.6 → 1.2b → 1.4 (486/R5,
+R9). 1.3b reopens the contract 1.3 settled and touches only
+`db/context.ts`, so it may run before 1.2a where a rebase is pending. 1.2a
 lands before 1.5; 1.2b waits on the `feat-config-driver` piece (#458),
 which owns `packages/neon/src/{http,driver}.ts` until it merges and this
 branch is rebased. Splitting 1.2 is an external file-ownership boundary,
@@ -86,6 +88,25 @@ isolated to `@hejbro/neon` alone.
       path, `fn` call under context, `as(context).transaction(cb)` on a
       batched-only driver (interactive error, unchanged)} for `execute`,
       the provider handle and `fn`. Files: `context.ts`, tests.
+
+- [ ] 1.3b (~6m) **[design]** A failing batch is reported as a batch
+      (486/R9). Measured on the batched path: a failing context
+      statement surfaced as `query execution failed for this "select"
+      statement`, naming the caller's statement — the interactive path,
+      which sends one statement at a time, names the failing one
+      correctly, so the two paths diverged where the delta says they
+      agree. Neon's batch error carries no member index (recorded in
+      `packages/neon/src/http.ts`), so which member failed is not
+      knowable: the report states what was sent and refuses to claim
+      more. `code` stays `query-execution-failed` and `kind` stays the
+      caller's operation kind — the operation did fail; only the
+      sentence was false. Red: `packages/query/test/db/context*.test.ts`
+      — an input table over {the failing member is a context statement,
+      the failing member is the caller's statement}, both resolving to
+      the same batch-shaped report listing every member in order, with
+      the driver's error preserved as `cause`; plus the interactive-path
+      row asserting its per-statement report is unchanged. Files:
+      `packages/query/src/db/context.ts`, tests.
 
 - [ ] 1.4 (~5m) References and changeset. `neon-preset.md`'s two-paths
       section states the HTTP path applies a context in one batch and

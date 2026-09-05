@@ -63,6 +63,21 @@ definition.
   batched-only driver
 - **THEN** the call fails naming `interactive-transactions`, as before
 
+#### Scenario: A failing batch is reported as a batch
+- **WHEN** a member of the batch raises — a context statement or the
+  caller's own, indifferently
+- **THEN** the failure names the batch and lists every member that was
+  sent, in order, states that the driver does not report which member
+  failed, and carries the driver's own error unchanged as the cause —
+  it never asserts that one particular member is the one that failed
+
+#### Scenario: The interactive path still names the failing statement
+- **WHEN** a context statement raises on a driver with interactive
+  transactions
+- **THEN** the failure names that statement alone, exactly as it did
+  before this change: a path that sends one statement at a time knows
+  which one failed, and says so
+
 ### Requirement: A provider handle requires a transactional capability
 Executing on a handle with a registered provider SHALL take the same
 two forms as `db.as(context)`, decided by the same declaration, and on
