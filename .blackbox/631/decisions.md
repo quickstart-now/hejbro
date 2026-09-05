@@ -275,3 +275,17 @@ changed body after its existing sections, and exits 1; a run with a
 disagreement keeps today's behaviour. The delta gains one scenario so the
 reviewer can answer the mixed input from the spec.
 
+The line is a diagnostic, not a stdout line: `status` renders one
+`hejbroError` per changed file through
+`renderDiagnostics([fromHejbroError(error, identity)])`, the path
+`renderPlanFailure` already uses -- identity is the filename, code is
+`apply-migration-body-changed`, message is `body changed after it was
+applied (recorded <12 hex>, on disk <12 hex>). Next: restore the file
+from version control, or, if the change was deliberate, write it as a new
+migration -- hejbro never rewrites applied history -- before rerunning
+\`hejbro migrate\`.` The same code thus carries two messages, `migrate`'s
+one-list form and `status`'s per-file form, the precedent `ledger.ts`
+records for `raise-not-empty` (one fact, two discovery paths). The
+`hejbroError` call is an inline literal in `status.ts` so
+`check:next-marker` resolves it in the same file.
+
