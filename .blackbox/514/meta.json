@@ -19,6 +19,15 @@
       "at": "2026-09-05T05:40Z",
       "title": ".references() takes the referential actions as a second argument; parity with extras is the contract; the example converts as the witness",
       "ratified": null
+    },
+    {
+      "id": "R2",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [],
+      "at": "2026-09-05T16:28Z",
+      "title": "references() options argument: sibling state slot, no runtime guard, fold-side null normalization",
+      "ratified": null
     }
   ],
   "work": [],
