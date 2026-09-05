@@ -52,16 +52,20 @@ const addedChangesets = changedFiles(range, "--diff-filter=A").filter(
 		!file.endsWith("README.md"),
 );
 
+const foldRemedy = (added) => {
+	if (added > 1) {
+		return ", and fold the extra changesets into one";
+	}
+	return "";
+};
+
 const fail = (message) => {
 	console.error(`error[check-pr-changeset]: ${message}`);
 	process.exit(1);
 };
 
 if (touchesPublishedSrc.length > 0 && addedChangesets.length !== 1) {
-	const fold =
-		addedChangesets.length > 1
-			? ", and fold the extra changesets into one"
-			: "";
+	const fold = foldRemedy(addedChangesets.length);
 	fail(
 		`this branch changes ${touchesPublishedSrc.length} file(s) under a published package's src/ (first: ${touchesPublishedSrc[0]}) but adds ${addedChangesets.length} changeset file(s); D59 requires exactly one. Next: run \`pnpm changeset\` (minor for a capability, patch for a fix) and commit the .changeset/*.md it writes${fold}.`,
 	);
