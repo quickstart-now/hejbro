@@ -335,18 +335,24 @@ const validateSnapshotIsObject = (parsed: unknown): ParsedSnapshotShape => {
  * threshold (D71/#154 ratchet-5) rather than one function whose own
  * complexity the whole cascade dominates.
  */
-const validateMissingFormatVersion = (candidate: ParsedSnapshotShape): void => {
+const validateMissingFormatVersion = (
+	candidate: ParsedSnapshotShape,
+): never => {
 	if (typeof candidate.hejbroSnapshot === "number") {
-		throwHejbroError(
+		return throwHejbroError(
 			"unsupported-snapshot-version",
 			olderVersionMessage(candidate.hejbroSnapshot),
 		);
 	}
-	throwHejbroError(
+	return throwHejbroError(
 		"invalid-snapshot",
-		`snapshot version ${JSON.stringify(candidate.hejbroSnapshot)} is not a valid version number. Next: restore the snapshot from version control if it was corrupted, or delete it and run \`hejbro init\` then \`hejbro generate\` to rebuild it from your current declarations.`,
+		invalidVersionNumberMessage(candidate.hejbroSnapshot),
 	);
 };
+
+/** Shared by {@link validatePresentFormatVersion} and {@link validateUpgradeableFormatVersion} (#413) — both need the identical wording for a non-numeric version field, so `upgradeSnapshot`'s refusal is provably the same diagnostic {@link parseSnapshot} gives. */
+const invalidVersionNumberMessage = (value: unknown): string =>
+	`snapshot version ${JSON.stringify(value)} is not a valid version number. Next: restore the snapshot from version control if it was corrupted, or delete it and run \`hejbro init\` then \`hejbro generate\` to rebuild it from your current declarations.`;
 
 /** {@link validateFormatVersion}'s `formatVersion !== undefined` half — matches current, malformed, older, or newer. See {@link validateMissingFormatVersion}. */
 const validatePresentFormatVersion = (formatVersion: unknown): void => {
@@ -356,7 +362,7 @@ const validatePresentFormatVersion = (formatVersion: unknown): void => {
 	if (typeof formatVersion !== "number") {
 		throwHejbroError(
 			"invalid-snapshot",
-			`snapshot version ${JSON.stringify(formatVersion)} is not a valid version number. Next: restore the snapshot from version control if it was corrupted, or delete it and run \`hejbro init\` then \`hejbro generate\` to rebuild it from your current declarations.`,
+			invalidVersionNumberMessage(formatVersion),
 		);
 		return;
 	}
@@ -536,5 +542,99 @@ export const parseSnapshot = (
 		formatVersion: HEJBRO_SNAPSHOT_VERSION,
 		dialect: "postgres",
 		objects,
+	};
+};
+
+/**
+ * Lowest snapshot format any released hejbro ever wrote — 0.1.1 shipped
+ * format 5 (#413). Below it, no release exists to "upgrade" from, so the
+ * pin-or-reset guidance ({@link olderVersionMessage}) is the only path;
+ * `upgradeSnapshot` refuses there with the exact diagnostic
+ * {@link parseSnapshot} gives.
+ */
+const HEJBRO_UPGRADABLE_SNAPSHOT_FLOOR = 5;
+
+/**
+ * {@link upgradeSnapshot}'s own version gate — a present, numeric version
+ * is checked against the upgrade floor rather than strict equality to
+ * {@link HEJBRO_SNAPSHOT_VERSION}; every other case (absent, non-numeric,
+ * below the floor, above current) throws through the exact same helper
+ * {@link validateFormatVersion}'s cascade uses, so the diagnostic is
+ * provably identical to the ordinary read's (#413).
+ */
+const validateUpgradeableFormatVersion = (
+	candidate: ParsedSnapshotShape,
+): number => {
+	if (candidate.formatVersion === undefined) {
+		validateMissingFormatVersion(candidate);
+	}
+	const version = candidate.formatVersion;
+	if (typeof version !== "number") {
+		return throwHejbroError(
+			"invalid-snapshot",
+			invalidVersionNumberMessage(version),
+		);
+	}
+	if (version < HEJBRO_UPGRADABLE_SNAPSHOT_FLOOR) {
+		return throwHejbroError(
+			"unsupported-snapshot-version",
+			olderVersionMessage(version),
+		);
+	}
+	if (version > HEJBRO_SNAPSHOT_VERSION) {
+		return throwHejbroError(
+			"unsupported-snapshot-version",
+			newerVersionMessage(version),
+		);
+	}
+	return version;
+};
+
+/** {@link upgradeSnapshot}'s result: the re-encoded text, and the format version it was read from — the CLI's own `upgrade` command (#413) needs both to report what it did and to fill the migration banner's `upgraded-from` line. */
+export type SnapshotUpgrade = {
+	readonly text: string;
+	readonly fromVersion: number;
+};
+
+/**
+ * Re-encodes a snapshot whose format is one a released hejbro wrote (the
+ * floor {@link HEJBRO_UPGRADABLE_SNAPSHOT_FLOOR} through
+ * {@link HEJBRO_SNAPSHOT_VERSION}, inclusive) into the current format
+ * (#413). Reads it through the same lenient shape rules
+ * {@link parseSnapshot} uses — an older shape's absent field decodes to
+ * its empty value — brings every object to its own kind's canonical form
+ * via `registry` (a real {@link KindRegistry}, not just
+ * `requiredKeysByKind`'s plain map: the canonical form a format bump
+ * folds in, e.g. the v6→v7 foreign-key order, lives in a kind's own
+ * `canonicalize`, which only a real registry can run for every kind a
+ * preset may have contributed — measured directly against a golden
+ * fixture whose only non-version difference from today's writer output
+ * was a `canonicalize`-driven reorder), and renders it as this build
+ * writes. Idempotent, the identity on an already-current-format
+ * snapshot, and refuses a format below the floor or above current with
+ * the exact diagnostic {@link parseSnapshot} gives for it.
+ * `requiredKeysByKind` is optional and additive, exactly as in
+ * {@link parseSnapshot}.
+ */
+export const upgradeSnapshot = (
+	raw: string,
+	registry: KindRegistry,
+	requiredKeysByKind?: ReadonlyMap<string, ReadonlyArray<string>>,
+): SnapshotUpgrade => {
+	const parsed: unknown = parseJson(raw);
+	const candidate = validateSnapshotIsObject(parsed);
+	const fromVersion = validateUpgradeableFormatVersion(candidate);
+	validateDialect(candidate);
+	const objects = validateObjectsShape(candidate);
+	validateObjectEntries(objects);
+	validateRequiredKeys(objects, requiredKeysByKind);
+	const snapshot: Snapshot = {
+		formatVersion: HEJBRO_SNAPSHOT_VERSION,
+		dialect: "postgres",
+		objects,
+	};
+	return {
+		text: renderSnapshot(canonicalizeSnapshot(snapshot, registry)),
+		fromVersion,
 	};
 };

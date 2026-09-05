@@ -169,6 +169,7 @@ export const ENGINE = [
 	"requiredKeysByKind",
 	"sameJson",
 	"stableJson",
+	"upgradeSnapshot",
 	// Diff, generate and chain
 	"changeOperations",
 	"checkChain",

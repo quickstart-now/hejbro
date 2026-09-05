@@ -1,0 +1,112 @@
+{
+	"dialect": "postgres",
+	"formatVersion": 5,
+	"objects": {
+		"function:app.archive_project": {
+			"args": [
+				{
+					"name": "project_id",
+					"type": "uuid"
+				}
+			],
+			"bodyHash": "df70566c",
+			"bodySql": "create or replace function \"app\".\"archive_project\"(project_id uuid)\nreturns setof \"app\".\"projects\"\nlanguage plpgsql\nas $function$\nbegin\n\treturn query update \"app\".\"projects\" set \"archived_at\" = now() where \"app\".\"projects\".\"id\" = project_id returning \"id\", \"title\", \"archived_at\", \"description\", \"level\", \"note\";\nend;\n$function$;",
+			"language": "plpgsql",
+			"name": "archive_project",
+			"returns": "setof \"app\".\"projects\"",
+			"schema": "app",
+			"security": "invoker"
+		},
+		"schema:app": {
+			"name": "app"
+		},
+		"table:app.projects": {
+			"columns": [
+				{
+					"default": {
+						"args": [],
+						"function": "gen_random_uuid",
+						"nodeKind": "function-call",
+						"schema": null
+					},
+					"name": "id",
+					"notNull": true,
+					"primaryKey": true,
+					"typeNode": {
+						"typeName": "uuid"
+					}
+				},
+				{
+					"name": "title",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "text"
+					}
+				},
+				{
+					"name": "archived_at",
+					"typeNode": {
+						"typeName": "timestamptz"
+					}
+				},
+				{
+					"name": "description",
+					"typeNode": {
+						"typeName": "text"
+					}
+				},
+				{
+					"name": "level",
+					"typeNode": {
+						"typeName": "integer"
+					}
+				},
+				{
+					"name": "note",
+					"typeNode": {
+						"typeName": "text"
+					}
+				}
+			],
+			"foreignKeys": [],
+			"indexes": [],
+			"name": "projects",
+			"primaryKeyName": "projects_pkey",
+			"schema": "app"
+		},
+		"view:app.projects_v": {
+			"columns": [
+				"id",
+				"title",
+				"archived_at",
+				"description",
+				"level",
+				"note"
+			],
+			"name": "projects_v",
+			"query": {
+				"from": {
+					"schema": "app",
+					"table": "projects"
+				},
+				"joins": [],
+				"limit": null,
+				"orderBy": [],
+				"projection": {
+					"columns": [
+						"id",
+						"title",
+						"archived_at",
+						"description",
+						"level",
+						"note"
+					],
+					"projectionKind": "all-columns"
+				},
+				"queryKind": "select",
+				"where": null
+			},
+			"schema": "app"
+		}
+	}
+}

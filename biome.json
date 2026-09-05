@@ -67,6 +67,18 @@
 			}
 		},
 		{
+			"includes": ["**/test/fixtures/format-5/**"],
+			"formatter": {
+				"enabled": false
+			},
+			"linter": {
+				"enabled": false
+			},
+			"assist": {
+				"enabled": false
+			}
+		},
+		{
 			"includes": [
 				"examples/*/hejbro.snapshot.json",
 				"examples/*/migrations/**"
