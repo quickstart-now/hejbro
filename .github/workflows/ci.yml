@@ -282,3 +282,6 @@ jobs:
       # #488: the changeset fixed group must equal the workspace's published
       # set exactly -- a new package outside the group would version alone.
       - run: pnpm check:fixed-group
+      # #491: third-party client ranges live once in the pnpm catalog;
+      # a manifest spelling its own range is the drift this refuses.
+      - run: pnpm check:client-ranges

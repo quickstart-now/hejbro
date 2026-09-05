@@ -6,9 +6,18 @@ settings:
 
 catalogs:
   default:
+    '@neondatabase/serverless':
+      specifier: ^1.1.0
+      version: 1.1.0
+    '@types/pg':
+      specifier: ^8.23.1
+      version: 8.23.1
     '@vitest/coverage-v8':
       specifier: 4.1.11
       version: 4.1.11
+    pg:
+      specifier: ^8.23.0
+      version: 8.23.0
     tsdown:
       specifier: 0.22.14
       version: 0.22.14
@@ -89,10 +98,10 @@ importers:
         version: link:../../packages/cli
     devDependencies:
       '@types/pg':
-        specifier: ^8.23.1
+        specifier: 'catalog:'
         version: 8.23.1
       pg:
-        specifier: ^8.23.0
+        specifier: 'catalog:'
         version: 8.23.0
       typescript:
         specifier: 'catalog:'
@@ -198,7 +207,7 @@ importers:
         version: link:../query
     devDependencies:
       '@neondatabase/serverless':
-        specifier: ^1.1.0
+        specifier: 'catalog:'
         version: 1.1.0
       '@vitest/coverage-v8':
         specifier: 'catalog:'
@@ -248,13 +257,13 @@ importers:
         specifier: workspace:*
         version: link:../core
       '@types/pg':
-        specifier: ^8.23.1
+        specifier: 'catalog:'
         version: 8.23.1
       '@vitest/coverage-v8':
         specifier: 'catalog:'
         version: 4.1.11(vitest@4.1.11)
       pg:
-        specifier: ^8.23.0
+        specifier: 'catalog:'
         version: 8.23.0
       tsdown:
         specifier: 'catalog:'
@@ -288,7 +297,7 @@ importers:
   packages/skills:
     devDependencies:
       '@neondatabase/serverless':
-        specifier: ^1.1.0
+        specifier: 'catalog:'
         version: 1.1.0
       typescript:
         specifier: 'catalog:'
@@ -307,13 +316,13 @@ importers:
         version: link:../query
     devDependencies:
       '@types/pg':
-        specifier: ^8.23.1
+        specifier: 'catalog:'
         version: 8.23.1
       '@vitest/coverage-v8':
         specifier: 'catalog:'
         version: 4.1.11(vitest@4.1.11)
       pg:
-        specifier: ^8.23.0
+        specifier: 'catalog:'
         version: 8.23.0
       tsdown:
         specifier: 'catalog:'

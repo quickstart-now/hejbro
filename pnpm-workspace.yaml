@@ -7,3 +7,6 @@ catalog:
   typescript: ^5.9.3
   vitest: 4.1.11
   "@vitest/coverage-v8": 4.1.11
+  pg: ^8.23.0
+  "@types/pg": ^8.23.1
+  "@neondatabase/serverless": ^1.1.0
