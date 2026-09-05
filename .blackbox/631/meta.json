@@ -96,6 +96,17 @@
       "at": "2026-09-05T18:01Z",
       "title": "a file that fails only because it lacks the new field or argument gains exactly that",
       "ratified": null
+    },
+    {
+      "id": "R9",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R2"
+      ],
+      "at": "2026-09-05T18:09Z",
+      "title": "apply-migration-body-changed: every changed file, abbreviated checksums, one pure comparison shared by migrate and status",
+      "ratified": null
     }
   ],
   "work": [],

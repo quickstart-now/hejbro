@@ -200,3 +200,42 @@ still stops and reports. `packages/cli/test/apply-plan.test.ts` (four
 `LedgerRow` literals, TS2322/TS2741) is the first file handled under this
 clause.
 
+<a id="r9"></a>
+## R9 — apply-migration-body-changed: every changed file, abbreviated checksums, one pure comparison shared by migrate and status
+
+_lead · interpretation · basis R2 · 2026-09-05T18:09Z · ratified: pending_
+
+(a) Message register follows `plan.ts`'s two diagnostics: lower-case
+fact, then `Next:`, then the rerun command. Text: `the body of a recorded
+migration changed after it was applied: <list>. Nothing was applied: a
+migration sent on top of a body that differs from what ran would build on
+a history this repository no longer holds. Next: restore the file from
+version control, or, if the change was deliberate, write it as a new
+migration -- hejbro never rewrites applied history -- then rerun
+\`hejbro migrate\`.` Each list item is `"<filename>" (recorded <12 hex>,
+on disk <12 hex>)`, items joined by `, ` as `apply-chain-unverifiable`
+joins its details. (b) The two checksums are abbreviated to their first
+twelve hex digits: they identify "these differ", they never drive the
+next action, and two full digests would bury the sentence; the delta
+sentence says so, so the spec and the message agree. (c) One run names
+every changed file, not the first: the code is one, the list grows; the
+delta's singular becomes "each file whose body changed". (d) The
+comparison is a pure function in `execute.ts` -- `(rows, bodiesOnDisk)
+=> findings`, no filesystem, honouring that module's own "touches no
+filesystem" contract; `migrate.ts` reads the files and throws on
+findings, `status.ts` (task 1.4) reads the files and prints the same
+findings -- the two halves share the one function. `plan.ts` is outside
+the piece and stays untouched. (e) Exit code 2: a body change is a ledger
+disagreement, the delta's own class. (f) The compared set: ledger rows
+with a non-null checksum whose filename is a chain entry present on disk
+-- `registered` rows included, `raised` rows structurally excluded (their
+filenames are not chain entries, as `plan.ts` already treats them), a
+recorded file missing from disk stays `apply-ledger-orphan-row`'s,
+null-checksum rows are not compared. (g)
+`skills/hejbro/references/generate-verify-workflow.md` gains the
+`apply-migration-body-changed` entry in 1.3 and the `apply-ledger-filtered`
+entry in 1.6, 1.7 adds the workflow sentence only; the Files-edited
+header lists that file under (1.3, 1.6, 1.7). Task 1.3's red is the
+five-class table with one mutation per row, row 2 (banner prose edited ->
+proceeds) being the row that proves the piece's premise.
+
