@@ -30,7 +30,11 @@ before any statement is sent — never by falling back to a
 connection-level setting, and never by executing the caller's statement
 unscoped. `db.as(context).transaction(callback)` SHALL keep requiring
 interactive transactions on every driver: a callback is interactive by
-definition.
+definition. On the batched form, the caller SHALL receive rows only
+when the driver's `batch` resolved exactly one row list per member sent
+— a driver returning any other count SHALL be refused before any row
+reaches the caller, never resolved as if the extra or missing member
+did not matter.
 
 #### Scenario: Context on an interactive driver
 - **WHEN** `db.as(context)` executes on a driver declaring interactive
@@ -66,10 +70,11 @@ definition.
 #### Scenario: A failing batch is reported as a batch
 - **WHEN** a member of the batch raises — a context statement or the
   caller's own, indifferently
-- **THEN** the failure names the batch and lists every member that was
-  sent, in order, states that the driver does not report which member
-  failed, and carries the driver's own error unchanged as the cause —
-  it never asserts that one particular member is the one that failed
+- **THEN** the failure names the batch and lists every member the query
+  layer sent, in order — a driver's own session pins are not members —
+  states that the driver does not report which member failed, and
+  carries the driver's own error unchanged as the cause: it never
+  asserts that one particular member is the one that failed
 
 #### Scenario: The interactive path still names the failing statement
 - **WHEN** a context statement raises on a driver with interactive
@@ -77,6 +82,12 @@ definition.
 - **THEN** the failure names that statement alone, exactly as it did
   before this change: a path that sends one statement at a time knows
   which one failed, and says so
+
+#### Scenario: A driver returning the wrong number of row lists is refused
+- **WHEN** a batched-only driver's `batch` resolves a number of row
+  lists other than the number of members sent — fewer, more, or none
+- **THEN** the call fails naming both counts, and the caller receives no
+  rows from any member, including the context's own
 
 ### Requirement: A provider handle requires a transactional capability
 Executing on a handle with a registered provider SHALL take the same

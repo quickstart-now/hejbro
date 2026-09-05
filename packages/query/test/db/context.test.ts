@@ -11,6 +11,7 @@ import {
 	uuid,
 } from "@hejbro/core";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
+import type { CompileResult } from "../../src/compile/compile";
 import type { DbContext } from "../../src/db/context";
 import { defaultContextRendering } from "../../src/db/context";
 import { db } from "../../src/db/db";
@@ -653,6 +654,22 @@ describe("the context runs in a batch when interactive transactions are absent (
 		expect(driver.batch).not.toHaveBeenCalled();
 	});
 
+	it("an empty rendering (zero context statements, one member sent) is never a false-positive batch-result-count-mismatch (task 1.3, #486/R14, review finding N3's off-by-one trap)", async () => {
+		const rendering: ContextRendering = () => [];
+		const { driver, batchCalls } = recordingTransactionalDriver({
+			interactiveTransactions: false,
+			batchedTransactions: true,
+			renderContext: rendering,
+			roleLessPlatform: true,
+		});
+		const handle = db(appSchema, driver);
+
+		await handle.as({}).execute(select(posts));
+
+		expect(batchCalls).toHaveLength(1);
+		expect(batchCalls[0]).toHaveLength(1); // the caller's own statement alone
+	});
+
 	it("batched-only: db.as(context).transaction(cb) still asserts only interactive-transactions, naming just that key (a callback is inherently interactive)", async () => {
 		const { driver } = recordingTransactionalDriver({
 			interactiveTransactions: false,
@@ -783,6 +800,39 @@ describe("a failing batch is reported as a batch (task 1.3b, #486, 486/R9)", () 
 					/^query execution failed for this "select" statement:/,
 				);
 			}
+		},
+	);
+
+	it.each([
+		[
+			"fewer results than statements sent",
+			async (statements: ReadonlyArray<CompileResult>) =>
+				statements.slice(0, -1).map(() => []),
+		],
+		[
+			"more results than statements sent",
+			async (statements: ReadonlyArray<CompileResult>) => [
+				...statements.map(() => []),
+				[],
+			],
+		],
+		["zero results", async () => []],
+	])(
+		"a driver returning %s is refused with batch-result-count-mismatch, naming both counts -- never reported as query-execution-failed (task 1.3, #486/R14, review finding N3)",
+		async (_name, batchImpl) => {
+			const { driver } = recordingTransactionalDriver({
+				interactiveTransactions: false,
+				batchedTransactions: true,
+				batchImpl,
+			});
+			const handle = db(appSchema, driver);
+
+			await expect(
+				handle.as({ role: roleName("grant_reader") }).execute(select(posts)),
+			).rejects.toMatchObject({
+				code: "batch-result-count-mismatch",
+				sent: 2, // role statement + the caller's own
+			});
 		},
 	);
 

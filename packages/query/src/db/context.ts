@@ -255,21 +255,71 @@ const applyContext = async (
 	);
 };
 
+/** "1 result" vs "N results" -- guard clause, not ternary (house style). */
+const resultNoun = (count: number): string => {
+	if (count === 1) {
+		return "1 result";
+	}
+	return `${count} results`;
+};
+
+/** "1 statement" vs "N statements" -- guard clause, not ternary (house style). */
+const memberNoun = (count: number): string => {
+	if (count === 1) {
+		return "1 statement";
+	}
+	return `${count} statements`;
+};
+
 /**
- * The last entry of a driver batch result (task 1.3, #486) -- `results`
- * always holds at least one entry (the caller's own statement, appended
- * last by {@link runContextInBatch}), so a missing last entry is an
- * internal-invariant failure, not a user-reachable path (mirrors
- * `@hejbro/neon`'s own `lastResultOf`, #303).
+ * Builds and throws the `batch-result-count-mismatch`-coded, enriched
+ * plain `Error` (D57) -- a driver contract violation (task 1.3, #486;
+ * review finding N3): `Driver.batch` must resolve exactly one row list
+ * per member sent, and any other count -- fewer, more, or zero -- is a
+ * wrong answer, not merely a missing one, since silently returning a
+ * context statement's own rows as the caller's would go unnoticed. Names
+ * both counts so the message is falsifiable regardless of which
+ * direction the driver got it wrong. Absorbs the former "zero results"
+ * internal-invariant case (486/R14): zero is one instance of a count
+ * mismatch, not a separate failure mode -- unlike `result-rows.ts`'s own
+ * zero-length-array case (task 1.6, #892/R6), which is a different site
+ * entirely (a single node-postgres multi-command result, never a driver
+ * batch result) and keeps its own uncoded internal-invariant error.
  */
-const lastBatchRows = (
+function throwBatchResultCountMismatch(sent: number, returned: number): never {
+	throw Object.assign(
+		new Error(
+			`driver.batch returned ${resultNoun(returned)}, but the query layer sent ${memberNoun(sent)} -- one row list per member is required. Next: use a driver whose batch member honors that contract, or file an issue against this one.`,
+		),
+		{ code: "batch-result-count-mismatch", sent, returned },
+	);
+}
+
+const isBatchResultCountMismatchError = (
+	error: unknown,
+): error is Error & { readonly code: "batch-result-count-mismatch" } =>
+	error instanceof Error &&
+	(error as { code?: unknown }).code === "batch-result-count-mismatch";
+
+/**
+ * The last entry of a driver batch result (task 1.3, #486), after
+ * checking `results` holds exactly one entry per `members` sent (task
+ * 1.3, #486/R14, review finding N3) -- `members.length` is always at
+ * least 1 ({@link runContextInBatch} always appends the caller's own
+ * statement), so a checked-equal `results` always has a defined last
+ * entry; the second guard exists only so `tsc` can see that, and folds
+ * into the same coded error rather than a second failure shape.
+ */
+const lastBatchRowsChecked = (
+	members: ReadonlyArray<CompileResult>,
 	results: ReadonlyArray<ReadonlyArray<DriverRow>>,
 ): ReadonlyArray<DriverRow> => {
+	if (results.length !== members.length) {
+		throwBatchResultCountMismatch(members.length, results.length);
+	}
 	const last = results[results.length - 1];
 	if (last === undefined) {
-		throw new Error(
-			"driver.batch returned zero results. Next: this is an internal invariant failure, not a user-reachable path -- file an issue.",
-		);
+		throwBatchResultCountMismatch(members.length, results.length);
 	}
 	return last;
 };
@@ -355,14 +405,33 @@ const runContextInBatch = async <T>(
 ): Promise<T> => {
 	const statements = contextStatements(driver, context, operation);
 	const sent: Array<CompileResult> = [];
+	// Captures a count-mismatch's own error, which `sendCompiled` (task 4.5)
+	// would otherwise wrap as `query-execution-failed` (its `cause`) before
+	// it ever reaches the catch below (review finding N3, "trap 2"): the
+	// catch checks this ref first and rethrows the original, coded error
+	// unwrapped, rather than letting the 1.3b rebuild below re-wrap it a
+	// second time under the wrong code.
+	const countMismatch: { current: Error | undefined } = { current: undefined };
 	try {
 		return await send({
 			execute: async (compiled) => {
 				sent.push(compiled);
-				return lastBatchRows(await driver.batch([...statements, compiled]));
+				const members = [...statements, compiled];
+				const results = await driver.batch(members);
+				try {
+					return lastBatchRowsChecked(members, results);
+				} catch (error) {
+					if (isBatchResultCountMismatchError(error)) {
+						countMismatch.current = error;
+					}
+					throw error;
+				}
 			},
 		});
 	} catch (error) {
+		if (countMismatch.current !== undefined) {
+			throw countMismatch.current;
+		}
 		const callerStatement = sent[0];
 		if (callerStatement === undefined || !isQueryExecutionFailedError(error)) {
 			throw error;
