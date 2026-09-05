@@ -46,7 +46,7 @@ After 1.2a the red is isolated to `@hejbro/neon` alone.
       ["interactive-transactions", "batched-transactions"])` throws the
       one error naming both. Files: `contract.ts`, `errors.ts`, tests.
 
-- [ ] 1.2a (~5m) The session-path drivers declare (486/R5). Red: the
+- [x] 1.2a (~5m) The session-path drivers declare (486/R5). Red: the
       tier table's first three rows — {pg, supabase over pg, nile over
       pg} — asserting each declaration reads `batched-transactions:
       false` and that `batch` on such a driver throws the contract error
