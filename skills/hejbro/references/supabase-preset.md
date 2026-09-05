@@ -51,14 +51,44 @@ const poolerModeDriver = supabaseDriver(
 );
 ```
 
-| Connection | `endpoint` | `interactive-transactions` | `session-state` |
-| --- | --- | --- | --- |
-| Direct connection, or Supabase's session-mode pooler | omitted, or `"session"` | `true` | `true` |
-| Supabase's transaction-mode pooler (Supavisor, port 6543) | `"transaction-pooler"` | `true` | `false` |
+| Connection | `endpoint` | `interactive-transactions` | `session-state` | `prepared-statements` |
+| --- | --- | --- | --- | --- |
+| Direct connection, or Supabase's session-mode pooler | omitted, or `"session"` | `true` | `true` | the wrapped driver's own |
+| Supabase's transaction-mode pooler (Supavisor, port 6543) | `"transaction-pooler"` | `true` | `false` | `false` |
 
 On the session path the capability set is whatever the wrapped driver
 declares — these values are `pgDriver`'s. The pooler path is the only
 one where this preset replaces them.
+
+### The pooler refuses a base driver that names its own statements
+
+A prepared statement holds no meaning across the backends the
+transaction-pooler endpoint hands out between transactions: a name
+parsed and bound on one backend does not exist on the next one the
+pooler assigns, so `supabaseDriver(driver, { endpoint:
+"transaction-pooler" })` refuses `driver` at construction — before any
+connection is opened — when `driver.capabilities["prepared-statements"]`
+reads `true`:
+
+```ts
+import { pgDriver } from "@hejbro/pg";
+import { supabaseDriver } from "@hejbro/supabase";
+
+const preparingDriver = pgDriver(process.env.SUPABASE_POOLER_URL ?? "", {
+	preparedStatements: true,
+});
+
+// throws at construction, coded "prepared-statements-without-session":
+// build the base driver without preparedStatements, or use the
+// "session" endpoint.
+supabaseDriver(preparingDriver, { endpoint: "transaction-pooler" });
+```
+
+Build the base driver without `preparedStatements` (fine on any
+endpoint — see `query-layer.md`'s own note on the option's default) or
+switch to the `"session"` endpoint, whichever fits. The session
+endpoint (or no endpoint) always passes the base driver's own
+`prepared-statements` declaration through unchanged.
 
 Omitting the option means `"session"` — an existing one-argument call's
 behavior and capability declaration are unchanged by this option's
@@ -87,13 +117,9 @@ This preset does not detect which endpoint a connection string actually
 points at, and never will as a substitute for declaring `endpoint`
 yourself — a capability discovered by asking the database can change
 under the caller's feet between two executions, which is exactly what
-declaring capabilities as data exists to prevent. It also does not change
-prepared-statement behavior under the pooler: that is the underlying
-client library's own configuration, not a capability this driver reads,
-though it is one more thing that behaves differently once you switch
-endpoints. Need client-level options — disabling prepared statements
-under the pooler, a pool size — construct the pool yourself and pass it
-to `pgDriver(pool)`; the same `endpoint` option applies.
+declaring capabilities as data exists to prevent. Need other client-level
+options — a pool size, connection timeouts — construct the pool yourself
+and pass it to `pgDriver(pool)`; the same `endpoint` option applies.
 
 ## Roles and auth helpers
 

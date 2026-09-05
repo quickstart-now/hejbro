@@ -27,6 +27,47 @@ const driver = pgDriver(process.env.DATABASE_URL ?? "postgres://localhost:5432/a
 const handle = db({ posts }, driver);
 ```
 
+### Prepared statements
+
+`pgDriver(poolOrConnectionString, { preparedStatements: true })` names
+every *built* statement — one produced by `select`/`insert`/`update`/
+`deleteFrom`/a set operation — so the connection parses and plans each
+distinct text once and later executions of the same text bind to the
+already-prepared statement, rather than being parsed and planned again
+every time. The name is derived from the statement text alone
+(`hejbro_` followed by 32 hex digits of SHA-256 over the text): the
+same text always gets the same name, on every connection and in every
+process, and two different texts never collide. Once a statement is
+prepared it stays prepared for the connection's life — hejbro evicts
+nothing, so the set of distinct texts an application compiles (bounded
+by its own code; parameters are placeholders) is what accumulates,
+with one exception: a variable-length `in (...)` list yields one text
+per arity used.
+
+A statement compiled through the `sql` escape hatch — including a
+context's own applied statements and a migration body — is **always**
+sent unnamed, whatever the option says: hejbro parses no SQL, and a
+text that carries more than one command cannot be prepared as one.
+Whether a statement is named depends only on the option and the
+statement's own kind, never on its text, its parameters, or anything
+observed at execution time.
+
+The option defaults to `false` — an existing caller's driver sends
+exactly what it always did. Turning it on is a deliberate, workload-
+aware choice, not a default, for two reasons: after a few executions
+Postgres may switch a prepared statement to a *generic* plan (its own
+documented `plan_cache_mode` behavior), which can differ from the
+per-execution plan a fresh, unnamed statement always gets — a real
+difference on skewed data; and it requires a connection that keeps its
+own session between executions (see `supabase-preset.md`'s
+transaction-pooler note below for the one path that refuses it
+outright).
+
+`@hejbro/neon`'s own `neonDriver(pool, { preparedStatements: true })`
+offers the identical option on its `Pool` (WebSocket) path — see
+`neon-preset.md`. Neon's one-shot HTTP path has no session to prepare
+a statement in, so its own type accepts no such option at all.
+
 `@hejbro/supabase`'s `supabaseDriver(driver)` wraps any driver (usually
 `pgDriver(...)`) to contribute Supabase's `anon`/`authenticated`/
 `service_role` roles to `db.as`'s declared-role whitelist — see "RLS
@@ -1077,20 +1118,6 @@ try {
 
 `unowned-declaration` (propagated, not translated — see above) can also
 surface, unchanged, before either of these is ever reached.
-
-## Not supported in this version
-
-These read naturally as query-builder features but aren't there yet —
-use the `sql` escape hatch, or wait for the tracked issue:
-
-- Prepared-statement caching (#303) — every execution compiles and sends
-  fresh. Measured, not shipped: a session-scoped named prepared
-  statement's improvement over today's unnamed text query could not be
-  shown, under a spread-estimator-invariant standard, to reliably exceed
-  run-to-run measurement noise on the workload and machine measured
-  (`openspec/changes/archive/2026-08-31-extend-query-runtime/measurement.md`)
-  — the decision is scoped to that evidence, not a general claim about
-  prepared statements.
 
 ## Errors
 

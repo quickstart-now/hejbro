@@ -24,18 +24,24 @@ const auth = neonAuth("claims"); // or "jwt" -- see "Authentication modes" below
 clients declare genuinely different capabilities — never assume, always
 pass the client whose capabilities you need:
 
-- **`neonDriver(pool)`**, given a `Pool` from `@neondatabase/serverless`:
-  a real WebSocket connection. `interactive-transactions` and
-  `session-state` both `true` — `db.transaction(...)` and `db.as(...)`
-  work exactly like `@hejbro/pg`.
+- **`neonDriver(pool, options?)`**, given a `Pool` from
+  `@neondatabase/serverless`: a real WebSocket connection.
+  `interactive-transactions` and `session-state` both `true` —
+  `db.transaction(...)` and `db.as(...)` work exactly like `@hejbro/pg`.
+  `options?.preparedStatements` names every built statement on this
+  connection, identically to `pgDriver`'s own option (see
+  `query-layer.md`'s "Prepared statements" section) — absent, it is
+  `false`, matching this path's behavior before the option existed.
 - **`neonDriver(sql)`**, given a `neon()` query function: HTTP one-shot.
-  `interactive-transactions` and `session-state` both `false` —
-  `db.transaction(...)` and `db.as(...)` fail immediately with the
-  driver contract's own missing-capability error, before anything is
-  sent. Every execution still carries the same session pins
-  (`IntervalStyle`, `bytea_output`) `@hejbro/pg` applies once per
-  connection, batched with each statement instead — arrival shape for
-  `interval`/`bytea`/etc. is identical to the WebSocket path.
+  `interactive-transactions`, `session-state`, and `prepared-statements`
+  all `false` — `db.transaction(...)` and `db.as(...)` fail immediately
+  with the driver contract's own missing-capability error, before
+  anything is sent. This overload's type accepts no options argument at
+  all: a one-shot HTTP request has no session to prepare a statement in.
+  Every execution still carries the same session pins (`IntervalStyle`,
+  `bytea_output`) `@hejbro/pg` applies once per connection, batched with
+  each statement instead — arrival shape for `interval`/`bytea`/etc. is
+  identical to the WebSocket path.
 
 **A failed HTTP batch carries no member index.** The pins and the
 caller's own statement travel as one batch; if a pin statement ever

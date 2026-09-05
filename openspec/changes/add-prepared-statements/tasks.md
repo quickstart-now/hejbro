@@ -25,7 +25,7 @@ on a real server and follows it; 1.6 documents everything and comes last.
 
 ## 1. Prepared statements behind the capability
 
-- [ ] 1.1 (~9m) **[design]** The capability set names three keys.
+- [x] 1.1 (~9m) **[design]** The capability set names three keys.
       Settles the key's spelling (`prepared-statements`, kebab-case like
       its two siblings) and that the union stays closed. Red:
       `packages/query/test/driver/contract.test.ts`, the existing
@@ -41,7 +41,7 @@ on a real server and follows it; 1.6 documents everything and comes last.
       keys. Files: `packages/query/src/driver/contract.ts`, the test
       files the type error names.
 
-- [ ] 1.2 (~9m) **[design]** `pgDriver` prepares on request. Settles
+- [x] 1.2 (~9m) **[design]** `pgDriver` prepares on request. Settles
       the option name (`preparedStatements`), that both overloads take
       it as a second argument, the name format (`hejbro_` + 32 hex of
       SHA-256 over the text) and the kind rule. Red:
@@ -69,7 +69,7 @@ on a real server and follows it; 1.6 documents everything and comes last.
       hash. Files: `packages/pg/src/driver.ts`, `packages/pg/test/
       driver.test.ts`.
 
-- [ ] 1.3 (~6m) `neonDriver` prepares on request on its `Pool` path.
+- [x] 1.3 (~6m) `neonDriver` prepares on request on its `Pool` path.
       Red: `packages/neon/test/driver.test.ts`, the same input table as
       1.2 against the WebSocket path's fake pool, plus: the HTTP overload
       declares `prepared-statements: false` and its type accepts no
@@ -78,7 +78,7 @@ on a real server and follows it; 1.6 documents everything and comes last.
       `false`. Files: `packages/neon/src/driver.ts`,
       `packages/neon/src/http.ts`, `packages/neon/test/driver.test.ts`.
 
-- [ ] 1.4 (~7m) **[design]** The transaction-pooler path refuses a
+- [x] 1.4 (~7m) **[design]** The transaction-pooler path refuses a
       preparing base. Settles the code
       (`prepared-statements-without-session`) and the message: names the
       endpoint, states the base prepares, `Next:` line naming both
@@ -96,7 +96,7 @@ on a real server and follows it; 1.6 documents everything and comes last.
       driver.ts`, `packages/supabase/src/pooler.ts`, `packages/supabase/
       test/driver.test.ts`, `packages/supabase/test/pooler.test.ts`.
 
-- [ ] 1.5 (~8m) Live witness on `postgres:17-alpine`. Red:
+- [x] 1.5 (~8m) Live witness on `postgres:17-alpine`. Red:
       `packages/pg/test/integration.test.ts`, new case *"a prepared
       statement is reused on its connection"*: a driver with the option
       over a single-connection pool executes one built select twice,
@@ -106,7 +106,7 @@ on a real server and follows it; 1.6 documents everything and comes last.
       driver without the option leaves `pg_prepared_statements` empty.
       Files: `packages/pg/test/integration.test.ts`.
 
-- [ ] 1.6 (~6m) Docs and changeset. `skills/hejbro/references/
+- [x] 1.6 (~6m) Docs and changeset. `skills/hejbro/references/
       query-layer.md` documents the option on `pgDriver`, the kinds that
       are named, the escape hatch that never is, no eviction, and the
       server's own generic-plan behaviour (`plan_cache_mode`);

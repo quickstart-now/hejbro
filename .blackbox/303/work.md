@@ -118,3 +118,32 @@ non-integration gate green too: TURBO_FORCE=1 pnpm check-types
 (18/18), pnpm check, pnpm check:bans, TURBO_FORCE=1 pnpm test (all
 packages passing, no regressions).
 
+<a id="w6"></a>
+## W6 — task 1.6: docs and changeset
+
+_2026-09-05T05:24Z_
+
+skills/hejbro/references/query-layer.md: removed the now-outdated
+"Prepared-statement caching (#303) -- not supported" entry (the whole
+"Not supported in this version" section, its only bullet), added a
+"Prepared statements" subsection under "Building a handle" documenting
+pgDriver's option, the naming rule, the escape hatch exclusion, no
+eviction, and the server's own plan_cache_mode behavior.
+supabase-preset.md: capability table gains the prepared-statements
+column, a new "The pooler refuses a base driver that names its own
+statements" section with a runnable example of the construction-time
+throw, and the stale "does not change prepared-statement behavior
+under the pooler" paragraph corrected (that claim predates this
+change; the pooler now does read this capability).  neon-preset.md:
+documents the option on neonDriver's Pool overload and that the HTTP
+overload's type accepts none. One fixed-group minor changeset
+(.changeset/add-prepared-statements.md) covering all seven published
+packages.
+
+Verified: pnpm --filter @hejbro/skills test (24/24 -- every ts block
+on the touched pages type-checks, links.test.ts unaffected since no
+new file paths were cited), pnpm changeset status (confirms all seven
+packages bump minor). Full gate green: TURBO_FORCE=1 pnpm check-types
+(18/18), pnpm check, pnpm check:bans, TURBO_FORCE=1 pnpm test (all
+packages, no regressions). tasks.md's six checkboxes ticked.
+
