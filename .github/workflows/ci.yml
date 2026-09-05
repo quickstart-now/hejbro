@@ -291,3 +291,11 @@ jobs:
       # #491: third-party client ranges live once in the pnpm catalog;
       # a manifest spelling its own range is the drift this refuses.
       - run: pnpm check:client-ranges
+      # #652: `changeset status` above answers "does the repository hold a
+      # covering changeset?" -- always yes while unreleased changesets name
+      # the fixed group. This asks D59's question of the PR itself: a diff
+      # against dev that touches a published package's src/ must add
+      # exactly one .changeset/*.md. Feature PRs only: the release PR and
+      # the Version Packages PR carry many or consume them, by design.
+      - run: pnpm check:pr-changeset
+        if: ${{ github.event_name == 'pull_request' && github.head_ref != 'dev' && !startsWith(github.head_ref, 'changeset-release/') && matrix.node-version == 24 }}
