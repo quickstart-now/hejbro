@@ -1,0 +1,32 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#798",
+  "title": "generation order: pin where an unconstrained object lands in the wave sort",
+  "parent": "quickstart-now/hejbro#412",
+  "status": "open",
+  "opened": "2026-09-05",
+  "closed": null,
+  "decisions": [
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "412/D24",
+        "D25; runWaves in engine/diff-engine.ts; measured create p_parent",
+        "self_ref",
+        "q_child and drop q_child",
+        "self_ref",
+        "p_parent"
+      ],
+      "at": "2026-09-05T06:06Z",
+      "title": "The wave tie-break is stated and pinned as implemented; a self-reference never blocks its own table",
+      "ratified": null
+    }
+  ],
+  "work": [],
+  "prs": [],
+  "origin": null,
+  "followUps": []
+}

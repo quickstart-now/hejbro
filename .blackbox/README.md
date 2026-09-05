@@ -97,6 +97,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#793](793/) | blackbox: first PR pinned by CI over the owner's BLACKBOX_TOKEN | closed | #794 | 2 | 0 (0 pending) |
 | ↳ [#796](796/) | status crashes with a raw stack when a foreign object occupies the ledger's name | closed | #835 #838 | 0 | 0 (0 pending) |
 | ↳ [#797](797/) | reset: a cycle longer than two tables gets the outside-dependent advice | closed | #835 #838 | 0 | 1 (0 pending) |
+| ↳ [#798](798/) | generation order: pin where an unconstrained object lands in the wave sort | open |  | 0 | 1 (0 pending) |
 | ↳ [#800](800/) | amend D99: notNullElements check renders its column by table, not fully qualified | closed | #822 | 0 | 1 (1 pending) |
 | ↳ [#801](801/) | make the README metric-block stamp merge-safe instead of freezing dev merges | closed | #802 | 0 | 0 (0 pending) |
 | ↳ [#804](804/) | blackbox CI: release PRs run only the release conditions, bot PRs skip the job | closed | #806 | 1 | 0 (0 pending) |
