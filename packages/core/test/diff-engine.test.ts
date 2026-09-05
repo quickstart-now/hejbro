@@ -317,7 +317,9 @@ describe("diffSnapshots — same-kind dependency ordering", () => {
 			"self_ref",
 			{ id: uuid().primaryKey(), parentId: uuid() },
 			(t) => ({
-				foreignKeys: [{ columns: [t.parentId], references: { columns: [t.id] } }],
+				foreignKeys: [
+					{ columns: [t.parentId], references: { columns: [t.id] } },
+				],
 			}),
 		);
 		const next = buildSnapshot(
@@ -329,7 +331,11 @@ describe("diffSnapshots — same-kind dependency ordering", () => {
 		const createOrder = diffSnapshots(emptySnapshot, next, registry)
 			.filter((change) => change.kind === "table")
 			.map((change) => change.identity);
-		expect(createOrder).toEqual(["app.p_parent", "app.self_ref", "app.q_child"]);
+		expect(createOrder).toEqual([
+			"app.p_parent",
+			"app.self_ref",
+			"app.q_child",
+		]);
 
 		const dropOrder = diffSnapshots(next, emptySnapshot, registry)
 			.filter((change) => change.kind === "table")
