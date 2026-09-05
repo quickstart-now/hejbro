@@ -9,6 +9,7 @@ import {
 	isNotNull,
 	max,
 	min,
+	now,
 	over,
 	rowNumber,
 	sql,
@@ -159,6 +160,12 @@ describe("filter() refuses anything that is not a builder aggregate, task 1.1 (#
 		);
 	});
 
+	// This shape (a schema-qualified functionCall node) has no public
+	// constructor today -- `db.fn` (the real "declared function" concept,
+	// `@hejbro/query`) executes immediately and returns a `Promise`, never
+	// builds an `ExprNode`; the only way this node shape reaches `filter()`
+	// today is a snapshot-decoded expression. Hand-built here for exactly
+	// that reason (review B1).
 	it("refuses a schema-qualified declared function call, even one named like a builder aggregate", () => {
 		const declaredCall: Expr = expr("numeric", {
 			nodeKind: "functionCall",
@@ -172,6 +179,44 @@ describe("filter() refuses anything that is not a builder aggregate, task 1.1 (#
 				message: expect.stringContaining(
 					'a declared function call "app.count"',
 				),
+			}),
+		);
+	});
+
+	// Review B1: `db.fn`'s real runtime shape (`@hejbro/query`'s `FnCaller`,
+	// `Promise<unknown>`) carries neither `exprNode` nor `windowFn` --
+	// `describeFilterTarget` used to call anything without `exprNode` "a
+	// window function" regardless, which named this wrong. A bare
+	// `Promise` stands in for it here (core has no dependency on
+	// `@hejbro/query` to construct the real thing).
+	it("refuses a db.fn call (a promise, neither an expression nor a window function)", () => {
+		const dbFnResult = Promise.resolve(42) as unknown as Expr;
+		expect(() => filter(dbFnResult, condition)).toThrowError(
+			expect.objectContaining({
+				code: "filter-not-aggregate",
+				message: expect.stringContaining("a non-expression value"),
+			}),
+		);
+	});
+
+	it("refuses an arbitrary non-expression object, the same way", () => {
+		expect(() => filter({} as unknown as Expr, condition)).toThrowError(
+			expect.objectContaining({
+				code: "filter-not-aggregate",
+				message: expect.stringContaining("a non-expression value"),
+			}),
+		);
+	});
+
+	// Review N5: re-filtering an already-filtered expression used to fall
+	// through to the generic "an expression" phrase -- aggregateFilter has
+	// no row of its own in FILTER_TARGET_PHRASES.
+	it("refuses an already-filtered expression", () => {
+		const alreadyFiltered = filter(count(), condition);
+		expect(() => filter(alreadyFiltered, condition)).toThrowError(
+			expect.objectContaining({
+				code: "filter-not-aggregate",
+				message: expect.stringContaining("an already-filtered expression"),
 			}),
 		);
 	});
@@ -198,21 +243,17 @@ describe("filter() refuses anything that is not a builder aggregate, task 1.1 (#
 		);
 	});
 
-	// CRAP coverage gap found by the group-completion gate (#501): an
-	// unqualified functionCall whose name isn't one of the five aggregates
-	// (e.g. lower(...)) is a computed expression, not a builder aggregate
-	// -- the delta's own "anything that is not a builder aggregate" wording
-	// covers it, but no refusal row exercised it before this one.
-	it("refuses an unqualified function call that isn't one of the five aggregates", () => {
-		const computed: Expr = expr("text", {
-			nodeKind: "functionCall",
-			schemaName: null,
-			functionName: "lower",
-			args: [viewsColumn.exprNode],
-		});
-		expect(() => filter(computed, condition)).toThrowError(
+	// CRAP coverage gap found by the group-completion gate (#501), then
+	// review B1: an unqualified functionCall whose name isn't one of the
+	// five aggregates (e.g. now()) is still a declared function call, not
+	// a bare "expression" -- the schema is absent from the phrase, not the
+	// whole classification. `now()` is a real public constructor
+	// (`expr/operators.ts`), so this row needs no hand-built node.
+	it("refuses an unqualified function call that isn't one of the five aggregates, named by its bare function name", () => {
+		expect(() => filter(now(), condition)).toThrowError(
 			expect.objectContaining({
 				code: "filter-not-aggregate",
+				message: expect.stringContaining('a declared function call "now"'),
 			}),
 		);
 	});

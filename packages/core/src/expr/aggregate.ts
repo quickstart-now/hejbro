@@ -170,34 +170,60 @@ const aggregateFunctionCallOf = (
 /**
  * A phrase per `nodeKind`, for the shapes that need no field of their
  * own -- `functionCall` is handled separately below (its phrase depends
- * on `schemaName`/`functionName`), and any kind absent here (including
- * an unqualified `functionCall`) is a plain "an expression" (#501/R2 Q3).
+ * on `schemaName`/`functionName`, #501/R7 B1), and any OTHER kind absent
+ * here is a plain "an expression" (#501/R2 Q3). `aggregateFilter` names a
+ * re-filtered expression (review N5) -- it would otherwise fall through
+ * to that same generic default.
  */
 const FILTER_TARGET_PHRASES: Partial<Record<ExprNode["nodeKind"], string>> = {
 	columnRef: "a column reference",
 	sqlTemplate: "a raw sql fragment",
 	window: "an already-windowed expression",
+	aggregateFilter: "an already-filtered expression",
 };
 
-/** `functionCall`'s own phrase: a schema-qualified call names a declared function; an unqualified one (not a builder aggregate, or `aggregateFunctionCallOf` would have accepted it) is a plain computed expression. */
+/**
+ * `functionCall`'s own phrase (#501/R7 B1): reaching here at all means
+ * `aggregateFunctionCallOf` already refused it, so it is some declared
+ * function call other than the builder's own five -- schema-qualified or
+ * not, it is named as one, `"<schema>.<name>"` when a schema is present
+ * and the bare name otherwise (never the generic "an expression": a
+ * schemaless non-aggregate call, e.g. `now()`, is still a declared
+ * function call, just not written through `db.fn`).
+ */
 const describeFunctionCallTarget = (node: FunctionCallNode): string => {
 	if (node.schemaName === null) {
-		return "an expression";
+		return `a declared function call "${node.functionName}"`;
 	}
 	return `a declared function call "${node.schemaName}.${node.functionName}"`;
 };
 
 /**
+ * `true` only for a `WindowFunctionCall` (`expr/window.ts`'s own shape) --
+ * the one non-`Expr` shape `filter()` legitimately receives (`rowNumber()`
+ * and friends). Anything else lacking `exprNode` (a `db.fn` call's own
+ * `Promise`, review B1; a plain object) is a different refusal, never
+ * this one.
+ */
+const isWindowFunctionCall = (target: object): boolean => "windowFn" in target;
+
+/**
  * Names what `filter()` actually received, one phrase per refused shape
- * (#501/R2 Q3) -- a window-only call (`rowNumber()`) carries no
- * `exprNode` at all; the rest are read off `exprNode.nodeKind`, a table
- * lookup rather than an if-chain (CRAP: a per-branch if-chain here scores
- * above the repository's own threshold even at full coverage, #501
- * group-completion gate).
+ * (#501/R2 Q3, review B1) -- a window-only call (`rowNumber()`) is the
+ * one shape without `exprNode` that IS legitimately a window function;
+ * everything else without `exprNode` (a `db.fn` call's `Promise`, an
+ * arbitrary object) gets its own phrase instead of being folded into
+ * "a window function". `exprNode`-bearing shapes are read off
+ * `exprNode.nodeKind`, a table lookup rather than an if-chain (CRAP: a
+ * per-branch if-chain here scores above the repository's own threshold
+ * even at full coverage, #501 group-completion gate).
  */
 const describeFilterTarget = (target: object): string => {
 	if (!("exprNode" in target)) {
-		return "a window function";
+		if (isWindowFunctionCall(target)) {
+			return "a window function";
+		}
+		return "a non-expression value";
 	}
 	const node = (target as { readonly exprNode: ExprNode }).exprNode;
 	if (node.nodeKind === "functionCall") {
