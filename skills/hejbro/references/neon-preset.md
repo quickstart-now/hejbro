@@ -68,8 +68,11 @@ pass the client whose capabilities you need:
   `@neondatabase/serverless`: a real WebSocket connection.
   `interactive-transactions` and `session-state` both `true` —
   `db.transaction(...)` and `db.as(...)` work exactly like `@hejbro/pg`.
-  `options?.preparedStatements` names every built statement on this
-  connection, identically to `pgDriver`'s own option (see
+  `batched-transactions` is `false` (task 1.2a, #486): a single held
+  connection already has `transaction()`, so `batch` refuses before
+  sending anything, the same as `@hejbro/pg`'s own connection-string
+  path. `options?.preparedStatements` names every built statement on
+  this connection, identically to `pgDriver`'s own option (see
   `query-layer.md`'s "Prepared statements" section) — absent, it is
   `false`, matching this path's behavior before the option existed.
 - **`neonDriver(sql)`**, given a `neon()` query function: HTTP one-shot.

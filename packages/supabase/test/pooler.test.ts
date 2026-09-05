@@ -117,6 +117,18 @@ describe("poolerDriver(driver)'s batched-transactions tier (task 1.2a, #486/R7):
 		).rejects.toThrow(/batched-transactions/);
 		expect(trueBase.batch).not.toHaveBeenCalled();
 	});
+
+	it("two driver values do not share one mutable capability record -- writing through one must not change the other (486, reviewer finding N2)", () => {
+		const a = poolerDriver(fakeDriver());
+		const b = poolerDriver(fakeDriver());
+
+		expect(() => {
+			(a.capabilities as { "batched-transactions": boolean })[
+				"batched-transactions"
+			] = true;
+		}).toThrow();
+		expect(b.capabilities["batched-transactions"]).toBe(false);
+	});
 });
 
 describe("PIN_STATEMENTS / sendPins (task 1.2)", () => {

@@ -23,12 +23,16 @@ import { throwMissingCapability } from "@hejbro/query";
  * `capabilities`: a future capability key added to the contract must be a
  * type error here, not a silently inherited value.
  */
-const CAPABILITIES: DriverCapabilities = {
+// Frozen (486, reviewer finding N2): every poolerDriver(...) value shared
+// this one object unfrozen, so a write through any one of them mutated
+// every other -- `@hejbro/pg` and `@hejbro/neon` already freeze their own
+// records for the same reason.
+const CAPABILITIES: DriverCapabilities = Object.freeze({
 	"interactive-transactions": true,
 	"session-state": false,
 	"prepared-statements": false,
 	"batched-transactions": false,
-};
+});
 
 /**
  * `Driver.batch`'s own body on this decorator (task 1.2a, #486/R7):
