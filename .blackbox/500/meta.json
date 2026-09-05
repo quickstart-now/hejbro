@@ -42,6 +42,18 @@
       "at": "2026-09-05T12:59Z",
       "title": "The recursive term's own left-joined set travels with the widening carrier",
       "ratified": null
+    },
+    {
+      "id": "R4",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R2",
+        "R3"
+      ],
+      "at": "2026-09-05T13:19Z",
+      "title": "The widening is verified at the layer that decides nullability, not through the chain surface",
+      "ratified": null
     }
   ],
   "work": [],

@@ -80,3 +80,31 @@ Boundary: the anchor's own left-joined set stays absorbed, unchanged by
 this change and pinned by none of its tests -- a pre-existing gap
 tracked separately under #815.
 
+<a id="r4"></a>
+## R4 — The widening is verified at the layer that decides nullability, not through the chain surface
+
+_lead · interpretation · basis R2, R3 · 2026-09-05T13:19Z · ratified: pending_
+
+The 1.2 table is stated over `RecursiveCteReference` and
+`SelectResult<{...}, never>` -- the outward left-joined set given
+explicitly as the tracked empty set -- rather than through
+`handle.with(...)`. `makeWithChain` resolves `SelectResult<TProjection>`
+with the untracked default, under which every key of a `db.with(...)`
+row is already nullable, so the rows that must stay non-null could not
+be stated on that surface at all and the table would test nothing.
+
+The delta says nothing about this. Its sentence -- the outward row is
+the anchor's type, nullable when either branch is -- is true and
+verified at the layer that decides nullability, and today's
+all-nullable chain reading is what narrow-join-nullability's own
+absorption requirement already says; repeating it in this delta would
+give one fact two sources of truth. The boundary is written in tasks.md
+1.2, in design.md's Q4, and in the user-facing skill's CTE section
+instead.
+
+This does not contradict R2's rejection of a core-side rule for
+widening too little. Making the type true at the deciding layer is this
+change's work; making the chain surface show it is the separate change
+that narrows the absorption, tracked as a follow-up under #815
+alongside #932.
+
