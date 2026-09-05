@@ -1,0 +1,21 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#967",
+  "title": "skills: nested combinators inside a recursive term are allowed; the doc says they cannot be spelled",
+  "parent": null,
+  "status": "open",
+  "opened": "2026-09-05",
+  "closed": null,
+  "decisions": [],
+  "work": [],
+  "prs": [
+    {
+      "number": 968,
+      "role": "refs",
+      "pinnedAt": "2026-09-05T17:06Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

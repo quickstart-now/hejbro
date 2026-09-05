@@ -1,0 +1,53 @@
+{
+  "version": 3,
+  "number": 968,
+  "ref": "quickstart-now/hejbro#968",
+  "title": "chore(openspec): archive harden-recursive-nullability after d106 round 1 (#500)",
+  "head": "eb0791aba15cf989ef54bd50d1b865eb0aef4d38",
+  "headRef": "archive-harden-recursive-nullability",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-05T17:06Z",
+  "refs": [
+    {
+      "path": "openspec/changes/archive/2026-09-06-harden-recursive-nullability/design.md",
+      "blob": "b1a1a4e63360887f63a3aaa3dc3c312ba60c2d42"
+    },
+    {
+      "path": "openspec/changes/harden-recursive-nullability/design.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-06-harden-recursive-nullability/evaluation.md",
+      "blob": "b72a569abf800a6ee10ed978ab21db1f35d16d7e"
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-06-harden-recursive-nullability/proposal.md",
+      "blob": "53fe35b7ecc42a1f78d8375f00bb110dbca6682b"
+    },
+    {
+      "path": "openspec/changes/harden-recursive-nullability/proposal.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-06-harden-recursive-nullability/specs/query-type-inference/spec.md",
+      "blob": "487f0031b895987d56c9c4aea9deebf90c7c96b1"
+    },
+    {
+      "path": "openspec/changes/harden-recursive-nullability/specs/query-type-inference/spec.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-06-harden-recursive-nullability/tasks.md",
+      "blob": "235866091a823e65b388adf0be0e8d8330571518"
+    },
+    {
+      "path": "openspec/changes/harden-recursive-nullability/tasks.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/specs/query-type-inference/spec.md",
+      "blob": "c68580baf3671807c3b617a8d781d141dace2ca6"
+    }
+  ]
+}
