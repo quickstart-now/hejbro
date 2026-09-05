@@ -93,6 +93,11 @@
       "number": 988,
       "role": "closes",
       "pinnedAt": "2026-09-05T20:51Z"
+    },
+    {
+      "number": 991,
+      "role": "refs",
+      "pinnedAt": "2026-09-05T22:38Z"
     }
   ],
   "origin": null,

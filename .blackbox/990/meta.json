@@ -1,0 +1,21 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#990",
+  "title": "core: literal(7) builds a boolean literal that renders true",
+  "parent": null,
+  "status": "open",
+  "opened": "2026-09-05",
+  "closed": null,
+  "decisions": [],
+  "work": [],
+  "prs": [
+    {
+      "number": 991,
+      "role": "refs",
+      "pinnedAt": "2026-09-05T22:38Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

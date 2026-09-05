@@ -1,0 +1,53 @@
+{
+  "version": 3,
+  "number": 991,
+  "ref": "quickstart-now/hejbro#991",
+  "title": "chore(openspec): archive expose-core-traversal after d106 round 1 (#515)",
+  "head": "21c505bd38711e6ed8f60a3066f051154130ec80",
+  "headRef": "archive-expose-core-traversal",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-05T22:38Z",
+  "refs": [
+    {
+      "path": "openspec/changes/archive/2026-09-06-expose-core-traversal/design.md",
+      "blob": "9d94870143edaa7cace386f6caa960dcc41a3c49"
+    },
+    {
+      "path": "openspec/changes/expose-core-traversal/design.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-06-expose-core-traversal/evaluation.md",
+      "blob": "0bc1e01cecb4d9d7c080ffef7d0e26a997633dcb"
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-06-expose-core-traversal/proposal.md",
+      "blob": "f16df1f59935cb4050f3be386e0317e9386059e4"
+    },
+    {
+      "path": "openspec/changes/expose-core-traversal/proposal.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-06-expose-core-traversal/specs/package-surface/spec.md",
+      "blob": "cf67292c015ab5a559d63d7daa74633b2a6ce139"
+    },
+    {
+      "path": "openspec/changes/expose-core-traversal/specs/package-surface/spec.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-06-expose-core-traversal/tasks.md",
+      "blob": "5156cb2c1d80fbb3e446b63a33ebcf951365a81b"
+    },
+    {
+      "path": "openspec/changes/expose-core-traversal/tasks.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/specs/package-surface/spec.md",
+      "blob": "8577d88c57dac507d35673ebb254e44994a9c9b7"
+    }
+  ]
+}
