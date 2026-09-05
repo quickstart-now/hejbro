@@ -1,7 +1,7 @@
 # hejbro
 
 <!-- crap-badge:start -->
-[![CRAP ≤ 5 · 0 / 1688](https://img.shields.io/badge/CRAP%20%E2%89%A4%205-0%20%2F%201688-brightgreen)](#status)
+[![CRAP ≤ 5 · 0 / 1693](https://img.shields.io/badge/CRAP%20%E2%89%A4%205-0%20%2F%201693-brightgreen)](#status)
 <!-- crap-badge:end -->
 <!-- tasktime-badges:start -->
 [![tasks · 763 done](https://img.shields.io/badge/tasks-763%20done-blue)](openspec/task-times.csv)
@@ -225,7 +225,7 @@ minor version is supported; see [`SECURITY.md`](SECURITY.md).
 - Roadmap: [`docs/plans/2026-08-19-roadmap.md`](docs/plans/2026-08-19-roadmap.md)
 
 <!-- crap:start -->
-**Code quality gate:** every named function in `@hejbro/core`, `@hejbro/neon`, `@hejbro/nile`, `@hejbro/pg`, `@hejbro/query`, `@hejbro/supabase` must score **CRAP ≤ 5** (CRAP = CC² × (1 − coverage)³ + CC; gated in CI). Current: **0 of 1688 functions** over the threshold, highest score 5.00 — measured at `851f7fca` (2026-09-05).
+**Code quality gate:** every named function in `@hejbro/core`, `@hejbro/neon`, `@hejbro/nile`, `@hejbro/pg`, `@hejbro/query`, `@hejbro/supabase` must score **CRAP ≤ 5** (CRAP = CC² × (1 − coverage)³ + CC; gated in CI). Current: **0 of 1693 functions** over the threshold, highest score 5.00 — measured at `14539fb3` (2026-09-05).
 <!-- crap:end -->
 
 <!-- ai-metrics:start -->
