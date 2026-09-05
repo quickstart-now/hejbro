@@ -4,9 +4,9 @@
   "ref": "quickstart-now/hejbro#674",
   "title": "examples: declare an existing table in the supabase example so the round trip covers the brownfield path",
   "parent": "quickstart-now/hejbro#412",
-  "status": "open",
+  "status": "closed",
   "opened": "2026-09-05",
-  "closed": null,
+  "closed": "2026-09-05",
   "decisions": [],
   "work": [
     {
@@ -17,7 +17,13 @@
       "decisions": []
     }
   ],
-  "prs": [],
+  "prs": [
+    {
+      "number": 897,
+      "role": "closes",
+      "pinnedAt": "2026-09-05T08:45Z"
+    }
+  ],
   "origin": null,
   "followUps": []
 }
