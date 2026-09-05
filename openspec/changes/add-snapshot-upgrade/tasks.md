@@ -191,7 +191,7 @@ and 1.3 are independent after 1.1b; 1.4 needs 1.1b and 1.3; 1.5 needs
       upgrade → verify → history, reporting the narrowing to the
       planner. Files: the test and the fixture.
 
-- [ ] 1.8 (~10m) The refusal rule states what a refusal says, not which
+- [x] 1.8 (~10m) The refusal rule states what a refusal says, not which
       commands refuse. Review measured that `status` and `history` do
       not fail on an older released format — they never read the
       snapshot's contents — while the scenario claimed all four commands
