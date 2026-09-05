@@ -120,10 +120,15 @@ catalog's own rendering through the server in the same statement
 (Postgres often rewrites an expression on write, so comparing rendered
 text directly would false-positive). The report states this coverage
 boundary on every run, pass or fail. It also prints an **inventory**
-section —
-tables inside your declared schemas that no declaration covers, and the
-database's installed extensions — informational only, never a `check`
-finding and never affecting the exit code.
+section — tables inside your declared schemas that no declaration
+covers, and, on a table your declarations *do* manage, any column,
+index or check constraint no declaration covers either — plus the
+database's installed extensions. All of it is informational only, never
+a `check` finding and never affecting the exit code: an index backing a
+declared primary key or unique column is never listed (Postgres created
+it, your declaration accounts for it under that constraint's own name),
+and one backing anything else is listed alongside the constraint it
+backs.
 
 hejbro does not manage a table for one of two reasons — no declaration
 covers it at all (`check`'s own inventory, above), or a declaration
