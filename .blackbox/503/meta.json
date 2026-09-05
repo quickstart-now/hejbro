@@ -140,6 +140,17 @@
       "at": "2026-09-05T20:16Z",
       "title": "the within-family gap is a class, not a list of four: array element types head it",
       "ratified": null
+    },
+    {
+      "id": "R13",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R12"
+      ],
+      "at": "2026-09-05T20:40Z",
+      "title": "arrays unify when their elements do; enums refuse each other; a sql fragment is unseen, not a wildcard",
+      "ratified": null
     }
   ],
   "work": [
