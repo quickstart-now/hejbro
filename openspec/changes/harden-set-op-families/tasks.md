@@ -71,7 +71,7 @@ planner, not into the diff.
       chain-projection.ts`, `packages/query/src/index.ts`,
       `packages/query/test/types/*.test.ts`.
 
-- [ ] 1.2c (~10m) The rule on the chain surface. Red: 1.2a's input
+- [x] 1.2c (~10m) The rule on the chain surface. Red: 1.2a's input
       table on the chain — a refused pair, an accepted same-family
       pair, `"unknown"` on one side, a union-typed family — plus a
       branch carrying no brand (`related()`'s terminal) that stays

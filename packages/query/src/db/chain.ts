@@ -20,6 +20,7 @@ import type {
 	SelectNode,
 	SelectOrdered,
 	SelectProjection,
+	SetOpFamiliesRefused,
 	SetOpNode,
 	SetOpStage,
 	Table,
@@ -105,7 +106,7 @@ export type SelectChainLimited<
 	compile(): CompileResult;
 	/** The underlying statement — runtime surface a combinator on ANOTHER chain reads to take this side as a branch. */
 	readonly selectQuery: SelectNode;
-} & SetOpChainCombinators<SelectResult<TProjection, TLeftJoined>> &
+} & SetOpChainCombinators<SelectResult<TProjection, TLeftJoined>, TProjection> &
 	ChainProjectionBrand<TProjection>;
 
 export type SelectChainOrdered<
@@ -332,34 +333,40 @@ const throwQueryChainError = (): never => {
 	throw Object.assign(error, { code: "invalid-set-op-branch" });
 };
 
-const makeSetOpChain = <TRow>(
+const makeSetOpChain = <
+	TRow,
+	TProjection extends SelectProjection = SelectProjection,
+>(
 	run: ChainRun,
 	node: SetOpNode,
 	tables: Declarations["tables"],
-): SelectChainSetOp<TRow> => ({
+): SelectChainSetOp<TRow, TProjection> => ({
 	setOpQuery: node,
 	...makeChainTerminal<TRow>(run, { setOpQuery: node }, tables),
-	...chainSetOpCombinators<TRow>(run, () => node, tables),
+	...chainSetOpCombinators<TRow, TProjection>(run, () => node, tables),
 	orderBy: (...terms) =>
-		makeSetOpChain<TRow>(
+		makeSetOpChain<TRow, TProjection>(
 			run,
 			{ ...node, orderBy: [...node.orderBy, ...terms.map(resolveOrderTerm)] },
 			tables,
 		),
 	limit: (count) =>
-		makeSetOpChain<TRow>(run, { ...node, limit: count }, tables),
+		makeSetOpChain<TRow, TProjection>(run, { ...node, limit: count }, tables),
 });
 
-const chainSetOpCombinators = <TRow>(
+const chainSetOpCombinators = <
+	TRow,
+	TProjection extends SelectProjection = SelectProjection,
+>(
 	run: ChainRun,
 	left: () => SelectNode | SetOpNode,
 	tables: Declarations["tables"],
-): SetOpChainCombinators<TRow> => {
+): SetOpChainCombinators<TRow, TProjection> => {
 	const combine = <TOther>(
 		operator: SetOpNode["operator"],
 		all: boolean,
 		other: SetOpChainBranch<TOther>,
-	): SelectChainSetOp<SetOpResult<TRow, TOther>> => {
+	): SelectChainSetOp<SetOpResult<TRow, TOther>, TProjection> => {
 		const leftNode = left();
 		const rightNode = chainBranchNode(other);
 		// #487, second half (group 8): the chain surface builds its own
@@ -368,7 +375,7 @@ const chainSetOpCombinators = <TRow>(
 		// would leave this, the primary user-facing surface, still
 		// corrupting data on a same-key-different-order union.
 		assertSameSetOpKeyOrder(leftNode, rightNode);
-		return makeSetOpChain<SetOpResult<TRow, TOther>>(
+		return makeSetOpChain<SetOpResult<TRow, TOther>, TProjection>(
 			run,
 			{
 				queryKind: "setOp",
@@ -409,7 +416,7 @@ const makeLimitedChain = <
 		stage,
 		tables,
 	),
-	...chainSetOpCombinators<SelectResult<TProjection, TLeftJoined>>(
+	...chainSetOpCombinators<SelectResult<TProjection, TLeftJoined>, TProjection>(
 		run,
 		() => stage.selectQuery,
 		tables,
@@ -688,56 +695,106 @@ type CompatibleBranch<TRow, TOther> = [SetOpResult<TRow, TOther>] extends [
 	? never
 	: unknown;
 
+/** Poisons a combinator call whose OTHER branch's own projection disagrees in family with THIS side's (503/R9, R10) — `TOtherProjection` defaults to `never`, so a branch with no {@link ChainProjectionBrand} (a `related()` terminal) infers nothing here and is accepted, fail-open (R9 decision 4); key/shape stays `CompatibleBranch`'s own job. */
+type CompatibleChainProjection<TProjection, TOtherProjection> = [
+	TOtherProjection,
+] extends [never]
+	? unknown
+	: [SetOpFamiliesRefused<TProjection, TOtherProjection>] extends [true]
+		? never
+		: unknown;
+
 export type SelectChainSetOp<
 	TRow,
 	TProjection extends SelectProjection = SelectProjection,
 > = ChainTerminal<TRow> & {
 	readonly setOpQuery: SetOpNode;
-	union<TOther>(
-		other: SetOpChainBranch<TOther> & CompatibleBranch<TRow, TOther>,
-	): SelectChainSetOp<SetOpResult<TRow, TOther>>;
-	unionAll<TOther>(
-		other: SetOpChainBranch<TOther> & CompatibleBranch<TRow, TOther>,
-	): SelectChainSetOp<SetOpResult<TRow, TOther>>;
-	intersect<TOther>(
-		other: SetOpChainBranch<TOther> & CompatibleBranch<TRow, TOther>,
-	): SelectChainSetOp<SetOpResult<TRow, TOther>>;
-	intersectAll<TOther>(
-		other: SetOpChainBranch<TOther> & CompatibleBranch<TRow, TOther>,
-	): SelectChainSetOp<SetOpResult<TRow, TOther>>;
-	except<TOther>(
-		other: SetOpChainBranch<TOther> & CompatibleBranch<TRow, TOther>,
-	): SelectChainSetOp<SetOpResult<TRow, TOther>>;
-	exceptAll<TOther>(
-		other: SetOpChainBranch<TOther> & CompatibleBranch<TRow, TOther>,
-	): SelectChainSetOp<SetOpResult<TRow, TOther>>;
-	orderBy(...terms: ReadonlyArray<OrderTermInput>): SelectChainSetOp<TRow>;
-	limit(count: number): SelectChainSetOp<TRow>;
+	union<TOther, TOtherProjection extends SelectProjection = never>(
+		other: SetOpChainBranch<TOther> &
+			ChainProjectionBrand<TOtherProjection> &
+			CompatibleBranch<TRow, TOther> &
+			CompatibleChainProjection<TProjection, TOtherProjection>,
+	): SelectChainSetOp<SetOpResult<TRow, TOther>, TProjection>;
+	unionAll<TOther, TOtherProjection extends SelectProjection = never>(
+		other: SetOpChainBranch<TOther> &
+			ChainProjectionBrand<TOtherProjection> &
+			CompatibleBranch<TRow, TOther> &
+			CompatibleChainProjection<TProjection, TOtherProjection>,
+	): SelectChainSetOp<SetOpResult<TRow, TOther>, TProjection>;
+	intersect<TOther, TOtherProjection extends SelectProjection = never>(
+		other: SetOpChainBranch<TOther> &
+			ChainProjectionBrand<TOtherProjection> &
+			CompatibleBranch<TRow, TOther> &
+			CompatibleChainProjection<TProjection, TOtherProjection>,
+	): SelectChainSetOp<SetOpResult<TRow, TOther>, TProjection>;
+	intersectAll<TOther, TOtherProjection extends SelectProjection = never>(
+		other: SetOpChainBranch<TOther> &
+			ChainProjectionBrand<TOtherProjection> &
+			CompatibleBranch<TRow, TOther> &
+			CompatibleChainProjection<TProjection, TOtherProjection>,
+	): SelectChainSetOp<SetOpResult<TRow, TOther>, TProjection>;
+	except<TOther, TOtherProjection extends SelectProjection = never>(
+		other: SetOpChainBranch<TOther> &
+			ChainProjectionBrand<TOtherProjection> &
+			CompatibleBranch<TRow, TOther> &
+			CompatibleChainProjection<TProjection, TOtherProjection>,
+	): SelectChainSetOp<SetOpResult<TRow, TOther>, TProjection>;
+	exceptAll<TOther, TOtherProjection extends SelectProjection = never>(
+		other: SetOpChainBranch<TOther> &
+			ChainProjectionBrand<TOtherProjection> &
+			CompatibleBranch<TRow, TOther> &
+			CompatibleChainProjection<TProjection, TOtherProjection>,
+	): SelectChainSetOp<SetOpResult<TRow, TOther>, TProjection>;
+	orderBy(
+		...terms: ReadonlyArray<OrderTermInput>
+	): SelectChainSetOp<TRow, TProjection>;
+	limit(count: number): SelectChainSetOp<TRow, TProjection>;
 } & ChainProjectionBrand<TProjection>;
 
 /** What a chain combinator accepts as its other side: any select chain stage (whole-table or object projection) or a prior chain combination — anything carrying the underlying statement. */
 export type SetOpChainBranch<TRow> = PromiseLike<ReadonlyArray<TRow>>;
 
-/** The six combinators every select chain stage carries (add-set-operations) — typed by the RESULT rows, so a branch-shape mismatch resolves `SetOpResult` to `never` and poisons the call. */
-export type SetOpChainCombinators<TRow> = {
-	union<TOther>(
-		other: SetOpChainBranch<TOther> & CompatibleBranch<TRow, TOther>,
-	): SelectChainSetOp<SetOpResult<TRow, TOther>>;
-	unionAll<TOther>(
-		other: SetOpChainBranch<TOther> & CompatibleBranch<TRow, TOther>,
-	): SelectChainSetOp<SetOpResult<TRow, TOther>>;
-	intersect<TOther>(
-		other: SetOpChainBranch<TOther> & CompatibleBranch<TRow, TOther>,
-	): SelectChainSetOp<SetOpResult<TRow, TOther>>;
-	intersectAll<TOther>(
-		other: SetOpChainBranch<TOther> & CompatibleBranch<TRow, TOther>,
-	): SelectChainSetOp<SetOpResult<TRow, TOther>>;
-	except<TOther>(
-		other: SetOpChainBranch<TOther> & CompatibleBranch<TRow, TOther>,
-	): SelectChainSetOp<SetOpResult<TRow, TOther>>;
-	exceptAll<TOther>(
-		other: SetOpChainBranch<TOther> & CompatibleBranch<TRow, TOther>,
-	): SelectChainSetOp<SetOpResult<TRow, TOther>>;
+/** The six combinators every select chain stage carries (add-set-operations) — typed by the RESULT rows, so a branch-shape mismatch resolves `SetOpResult` to `never` and poisons the call; harden-set-op-families (#503, 503/R9, R10) adds the family verdict alongside it, through `TProjection` (this stage's own projection). */
+export type SetOpChainCombinators<
+	TRow,
+	TProjection extends SelectProjection = SelectProjection,
+> = {
+	union<TOther, TOtherProjection extends SelectProjection = never>(
+		other: SetOpChainBranch<TOther> &
+			ChainProjectionBrand<TOtherProjection> &
+			CompatibleBranch<TRow, TOther> &
+			CompatibleChainProjection<TProjection, TOtherProjection>,
+	): SelectChainSetOp<SetOpResult<TRow, TOther>, TProjection>;
+	unionAll<TOther, TOtherProjection extends SelectProjection = never>(
+		other: SetOpChainBranch<TOther> &
+			ChainProjectionBrand<TOtherProjection> &
+			CompatibleBranch<TRow, TOther> &
+			CompatibleChainProjection<TProjection, TOtherProjection>,
+	): SelectChainSetOp<SetOpResult<TRow, TOther>, TProjection>;
+	intersect<TOther, TOtherProjection extends SelectProjection = never>(
+		other: SetOpChainBranch<TOther> &
+			ChainProjectionBrand<TOtherProjection> &
+			CompatibleBranch<TRow, TOther> &
+			CompatibleChainProjection<TProjection, TOtherProjection>,
+	): SelectChainSetOp<SetOpResult<TRow, TOther>, TProjection>;
+	intersectAll<TOther, TOtherProjection extends SelectProjection = never>(
+		other: SetOpChainBranch<TOther> &
+			ChainProjectionBrand<TOtherProjection> &
+			CompatibleBranch<TRow, TOther> &
+			CompatibleChainProjection<TProjection, TOtherProjection>,
+	): SelectChainSetOp<SetOpResult<TRow, TOther>, TProjection>;
+	except<TOther, TOtherProjection extends SelectProjection = never>(
+		other: SetOpChainBranch<TOther> &
+			ChainProjectionBrand<TOtherProjection> &
+			CompatibleBranch<TRow, TOther> &
+			CompatibleChainProjection<TProjection, TOtherProjection>,
+	): SelectChainSetOp<SetOpResult<TRow, TOther>, TProjection>;
+	exceptAll<TOther, TOtherProjection extends SelectProjection = never>(
+		other: SetOpChainBranch<TOther> &
+			ChainProjectionBrand<TOtherProjection> &
+			CompatibleBranch<TRow, TOther> &
+			CompatibleChainProjection<TProjection, TOtherProjection>,
+	): SelectChainSetOp<SetOpResult<TRow, TOther>, TProjection>;
 };
 
 export type SelectChainRelatedLimited<TRow> = ChainTerminal<TRow>;

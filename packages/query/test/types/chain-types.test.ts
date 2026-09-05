@@ -1,5 +1,6 @@
 import type {
 	DeleteFinal,
+	Expr,
 	InsertConflictable,
 	InsertFinal,
 	IntervalValue,
@@ -23,6 +24,7 @@ import type {
 	SelectChainLimited,
 	SelectChainRelated,
 	SelectChainSetOp,
+	SetOpChainBranch,
 	UpdateChainFilterable,
 	UpdateChainFinal,
 	UpdateChainReturnable,
@@ -481,5 +483,76 @@ describe("the chain stage carries its own projection as a phantom brand (task 1.
 		expectTypeOf<
 			ChainProjectionOf<SelectChainSetOp<Row, Posts>>
 		>().toEqualTypeOf<Posts>();
+	});
+});
+
+// Shared-key branches for the chain surface's own input table (task
+// 1.2c): every branch below projects a single key "v", so the pair
+// tested is exactly the family of that one key.
+declare const textBranch: ReturnType<
+	typeof chainSelect<{ readonly v: typeof posts.status }>
+>;
+declare const otherTextBranch: ReturnType<
+	typeof chainSelect<{ readonly v: typeof posts.status }>
+>;
+declare const numericBranch: ReturnType<
+	typeof chainSelect<{ readonly v: typeof posts.amount }>
+>;
+declare const unknownBranch: ReturnType<
+	typeof chainSelect<{ readonly v: Expr<"unknown"> }>
+>;
+declare const unionFamilyBranch: ReturnType<
+	typeof chainSelect<{ readonly v: Expr<"text" | "numeric"> }>
+>;
+/** A branch carrying no projection at all (R9 decision 4's fail-open shape) -- exactly `related()`'s own `ChainTerminal<TRow>`, never `SelectChainLimited`/`SelectChainSetOp`, so it has no `ChainProjectionBrand` to read. */
+declare const brandlessBranch: SetOpChainBranch<{ readonly v: string }>;
+
+describe("the rule on the chain surface (task 1.2c)", () => {
+	it("a text branch unioned with a numeric branch under the same key is refused at .union()'s parameter", () => {
+		const rejected = () =>
+			// @ts-expect-error textBranch's "v" (text) and numericBranch's "v"
+			// (numeric) are different families and 1.1 measured this pair
+			// refused (42804/42846).
+			textBranch.union(numericBranch);
+		expectTypeOf(rejected).toBeFunction();
+	});
+
+	it("two same-family branches still type-check and the result keeps today's row shape", () => {
+		const accepted = () => textBranch.union(otherTextBranch);
+		expectTypeOf(accepted).toBeFunction();
+		type CombinedRow = Awaited<ReturnType<typeof accepted>>[number];
+		expectTypeOf<CombinedRow>().toEqualTypeOf<
+			Awaited<typeof textBranch>[number]
+		>();
+	});
+
+	it('a branch whose key is a sql fragment (family "unknown") matches any family', () => {
+		const accepted = () => textBranch.union(unknownBranch);
+		expectTypeOf(accepted).toBeFunction();
+	});
+
+	it("a union-typed family (not a single literal) is accepted, not distributed over", () => {
+		const accepted = () => unionFamilyBranch.union(numericBranch);
+		expectTypeOf(accepted).toBeFunction();
+	});
+
+	it("a branch that carries no projection is accepted (fail-open, 503/R9 decision 4)", () => {
+		const accepted = () => textBranch.union(brandlessBranch);
+		expectTypeOf(accepted).toBeFunction();
+	});
+
+	it("a combined stage still carries the left branch's own projection into a further combinator", () => {
+		const acceptedThenCompatible = () =>
+			textBranch.union(otherTextBranch).union(textBranch);
+		expectTypeOf(acceptedThenCompatible).toBeFunction();
+
+		const rejectedThenIncompatible = () =>
+			textBranch.union(otherTextBranch).union(
+				// @ts-expect-error the combined stage still carries the left
+				// branch's own projection (text); numericBranch disagrees on
+				// the shared key's family (numeric), 1.1 measured refused.
+				numericBranch,
+			);
+		expectTypeOf(rejectedThenIncompatible).toBeFunction();
 	});
 });

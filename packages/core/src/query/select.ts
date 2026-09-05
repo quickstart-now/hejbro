@@ -164,8 +164,16 @@ type FamilyPairRefused<TLeft, TRight> = "unknown" extends TLeft
 				: false
 			: false;
 
-/** Folds {@link FamilyPairRefused} over every shared key — one refused key refuses the whole pair. */
-type AnyKeyRefused<TLeft, TRight> = {
+/**
+ * Folds {@link FamilyPairRefused} over every shared key — `true` when some
+ * shared key's two families are a pair the vendored table refuses. The
+ * chain's own combinators (`@hejbro/query`) use this verdict alone, never
+ * {@link SetOpResult} itself: `SetOpResult`'s key-set fold also refuses a
+ * `Table` projection (the `tableMeta` symbol key) against an object
+ * projection the server accepts, and the chain already has its own
+ * row-based key/shape check (503/R9 decision 3).
+ */
+export type SetOpFamiliesRefused<TLeft, TRight> = {
 	[K in keyof TLeft & keyof TRight]: FamilyPairRefused<
 		ProjectedFamily<TLeft[K]>,
 		ProjectedFamily<TRight[K]>
@@ -199,14 +207,14 @@ type AnyKeyRefused<TLeft, TRight> = {
  * it is refused at build time now, matching every other union surface.
  *
  * harden-set-op-families (#503, #966): a matching key set is also folded
- * per key through {@link AnyKeyRefused} — a family mismatch the server
- * refuses (design.md, task 1.1) resolves the whole result to `never`
- * exactly like a key-set mismatch does; `"unknown"` is a wildcard on
- * either side.
+ * per key through {@link SetOpFamiliesRefused} — a family mismatch the
+ * server refuses (design.md, task 1.1) resolves the whole result to
+ * `never` exactly like a key-set mismatch does; `"unknown"` is a wildcard
+ * on either side.
  */
 export type SetOpResult<TLeft, TRight> =
 	SameKeys<TLeft, TRight> extends true
-		? AnyKeyRefused<TLeft, TRight> extends true
+		? SetOpFamiliesRefused<TLeft, TRight> extends true
 			? never
 			: { readonly [K in keyof TLeft]: TLeft[K] | TRight[K & keyof TRight] }
 		: never;

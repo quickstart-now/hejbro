@@ -362,6 +362,7 @@ export type {
 	SelectOrdered,
 	SelectProjection,
 	SetOpBranch,
+	SetOpFamiliesRefused,
 	SetOpResult,
 	SetOpStage,
 } from "./query/select";
