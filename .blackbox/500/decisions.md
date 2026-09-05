@@ -10,7 +10,7 @@ _lead · extension · basis 412/D24, 412/D25; the requirement's own measurement 
 Design (design.md Q1-Q3): the anchor rule governs types (Postgres's 42804), not nullability (a dimension Postgres never resolves); widen the null dimension only, outward reference only (the recursive callback's reference stays anchor-typed); both builder and chain surfaces. query-type-inference: two MODIFIED requirements; the residue paragraph is replaced by the rule. Ratification: owner on return.
 
 <a id="r2"></a>
-## R2 — R2 — nullability is decided in @hejbro/query alone; core only carries the recursive term's projection
+## R2 — nullability is decided in @hejbro/query alone; core only carries the recursive term's projection
 
 _lead · extension · basis R1 · 2026-09-05T12:39Z · ratified: pending_
 
