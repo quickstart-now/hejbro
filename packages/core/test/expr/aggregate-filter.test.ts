@@ -194,50 +194,36 @@ describe("filter() refuses anything that is not a builder aggregate, task 1.1 (#
 		);
 	});
 
-	// Review B1 follow-up (#501/R7 B1): `db.fn`'s real runtime shape
-	// (`@hejbro/query`'s `FnCaller`) is a bare `Promise<unknown>`, exposing
-	// no `functionName`/`schemaName` of its own -- naming it "a declared
-	// function call" anyway would be naming something that isn't there.
-	// It gets the same honest, generic phrase an arbitrary object does.
-	// A bare `Promise` stands in for it here (core has no dependency on
-	// `@hejbro/query` to construct the real thing).
-	it("refuses a db.fn call (a bare promise exposing no identifier of its own)", () => {
+	// #501/R8: `db.fn`'s real runtime shape (`@hejbro/query`'s `FnCaller`)
+	// is a bare `Promise<unknown>` -- a thenable. Core has no marker
+	// identifying WHICH declared function it came from (that needs a
+	// brand core defines and `db.fn`'s own thenable stamps, filed as a
+	// follow-up), so naming it "a declared function call" would assert
+	// what isn't known; naming it "a thenable" states the fact and points
+	// at `db.fn` as the most common cause. A bare `Promise` stands in for
+	// it here (core has no dependency on `@hejbro/query` to construct the
+	// real thing); `packages/query/test/db/fn.test.ts` asserts the same
+	// message against a REAL `handle.fn.*(...)` call.
+	it("refuses a db.fn call (a thenable, named as what it structurally is)", () => {
 		const dbFnResult = Promise.resolve(42) as unknown as Expr;
 		expect(() => filter(dbFnResult, condition)).toThrowError(
 			expect.objectContaining({
 				code: "filter-not-aggregate",
-				message: expect.stringContaining("an expression without a node"),
+				message: expect.stringContaining(
+					"a thenable, not an expression -- a function called through db.fn is one",
+				),
 			}),
 		);
 	});
 
-	// An arbitrary non-Expr object is genuinely unclassified -- neither a
-	// window function nor a declared function call, so it gets its own
+	// An arbitrary non-Expr, non-thenable object is genuinely unclassified
+	// -- neither a window function nor a thenable, so it gets its own
 	// factual phrase instead of guessing.
-	it("refuses an arbitrary non-expression object", () => {
+	it("refuses an arbitrary non-expression, non-thenable object", () => {
 		expect(() => filter({} as unknown as Expr, condition)).toThrowError(
 			expect.objectContaining({
 				code: "filter-not-aggregate",
-				message: expect.stringContaining("an expression without a node"),
-			}),
-		);
-	});
-
-	// The positive counterpart: a handle that DOES expose its own
-	// name/schema (a future or vendored db.fn shape richer than today's
-	// bare Promise) is named accurately from that identifier, never
-	// re-deriving or guessing it.
-	it("refuses a handle that exposes its own function name and schema, named from that identifier", () => {
-		const declaredHandle = {
-			functionName: "my_fn",
-			schemaName: "app",
-		} as unknown as Expr;
-		expect(() => filter(declaredHandle, condition)).toThrowError(
-			expect.objectContaining({
-				code: "filter-not-aggregate",
-				message: expect.stringContaining(
-					'a declared function call "app.my_fn"',
-				),
+				message: expect.stringContaining("a value without an expression node"),
 			}),
 		);
 	});

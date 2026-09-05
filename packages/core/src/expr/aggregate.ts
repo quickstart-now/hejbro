@@ -206,49 +206,38 @@ const describeFunctionCallTarget = (node: FunctionCallNode): string => {
 const isWindowFunctionCall = (target: object): boolean => "windowFn" in target;
 
 /**
- * Reads a non-`Expr` target's own identifying name/schema, if it exposes
- * one -- never guessed. `db.fn`'s real runtime shape (`@hejbro/query`'s
- * `FnCaller`, a bare `Promise<unknown>`) exposes neither, so this reads
- * `undefined` for it; a future or vendored handle that DOES carry
- * `functionName`/`schemaName` is named accurately instead of folded into
- * the generic fallback (#501/R7 B1 follow-up: naming "not available" as
- * if it were known is the exact mistake this fix corrects).
+ * `true` for a thenable -- `db.fn`'s own real runtime shape
+ * (`@hejbro/query`'s `FnCaller`, a bare `Promise<unknown>`). Core has no
+ * marker identifying WHICH declared function a thenable came from (that
+ * needs a brand core defines and `db.fn`'s own thenable stamps, filed as
+ * a follow-up, #501/R8) -- naming it "a declared function call" without
+ * one would assert what isn't known; naming it "a thenable" states the
+ * fact and points at the most common cause (`.then` is the one property
+ * every `Promise` implementation shares).
  */
-const declaredFunctionIdentifierOf = (target: object): string | undefined => {
-	const functionName = (target as { readonly functionName?: unknown })
-		.functionName;
-	if (typeof functionName !== "string") {
-		return undefined;
-	}
-	const schemaName = (target as { readonly schemaName?: unknown }).schemaName;
-	if (typeof schemaName === "string") {
-		return `${schemaName}.${functionName}`;
-	}
-	return functionName;
-};
+const isThenable = (target: object): boolean =>
+	typeof (target as { readonly then?: unknown }).then === "function";
 
 /**
  * Names a non-`Expr` target -- one that carries no `exprNode` at all --
  * told apart by what it actually is: a window-only call (`rowNumber()`)
- * IS a window function; a handle that exposes its own name
- * (`declaredFunctionIdentifierOf`) is named as a declared function call;
- * anything else -- including `db.fn`'s real shape, a bare `Promise` with
- * no exposed identifier -- is genuinely unclassified, its own factual
- * phrase rather than a guess. Split out of {@link describeFilterTarget}
- * to keep each function's own branch count low (CRAP, #501
- * group-completion gate: a single function covering both the non-`Expr`
- * and the `exprNode`-bearing cases scored above the repository's own
- * threshold even at full coverage).
+ * IS a window function; a thenable states the fact and points at `db.fn`
+ * as the most common cause (#501/R8: naming it "a declared function
+ * call" would assert a function identity core cannot know); anything
+ * else is a plain value with no expression node to read at all. Split
+ * out of {@link describeFilterTarget} to keep each function's own branch
+ * count low (CRAP, #501 group-completion gate: a single function
+ * covering both the non-`Expr` and the `exprNode`-bearing cases scored
+ * above the repository's own threshold even at full coverage).
  */
 const describeNonExprTarget = (target: object): string => {
 	if (isWindowFunctionCall(target)) {
 		return "a window function";
 	}
-	const identifier = declaredFunctionIdentifierOf(target);
-	if (identifier !== undefined) {
-		return `a declared function call "${identifier}"`;
+	if (isThenable(target)) {
+		return "a thenable, not an expression -- a function called through db.fn is one";
 	}
-	return "an expression without a node";
+	return "a value without an expression node";
 };
 
 /**
