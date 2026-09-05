@@ -5,16 +5,19 @@ A set-operation combinator — core's `union`/`intersect`/`except` family
 and the chain's — and a recursive CTE's anchor/recursive-term pair
 SHALL fail to type-check when, for one projected key, the two branches
 resolve to different type families and that pair is one Postgres
-refuses to unify in a set operation (`42804`, "UNION types … cannot be
-matched"; the refused pairs are measured on the server and carried as
-the test's input table, not assumed). A branch whose family is
-`"unknown"` — a `sql` fragment, or a literal the type layer cannot place
-— SHALL match every family on the other side: Postgres types such an
-expression against the other branch at parse time, and the builder
-SHALL NOT be stricter than the database. A pair the server unifies
-through an implicit cast SHALL stay accepted. The refusal is
-TypeScript's own, at the combinator's parameter, exactly as a key-set
-mismatch is refused today; no runtime check is added.
+refuses to unify in a set operation (`42804` or `42846` — the server's
+two type-resolution refusals, "types … cannot be matched" and "could
+not convert type"; the refused pairs are measured on the server and
+carried as the test's input table, not assumed). A branch whose family
+is `"unknown"` — a `sql` fragment, or a literal the type layer cannot
+place — SHALL match every family on the other side: Postgres types such
+an expression against the other branch at parse time, and the builder
+SHALL NOT be stricter than the database. The pairs the server unifies
+are the same-family ones and any pair with `"unknown"` on either side;
+those SHALL stay accepted. A cross-family unification measured later is
+added to the table, not to this sentence. The refusal is TypeScript's
+own, at the combinator's parameter, exactly as a key-set mismatch is
+refused today; no runtime check is added.
 
 This rule sees families, not types. A divergence inside one family —
 `integer` against `bigint`, `numeric` against `bigint` — is invisible
@@ -31,8 +34,8 @@ and does not close it.
   the measured table marks refused — on the core builder, the chain,
   or as a recursive CTE's anchor and term
 - **THEN** the program fails to type-check at the combinator's
-  parameter, before any SQL the server would reject with `42804` is
-  compiled
+  parameter, before any SQL the server would reject with `42804` or
+  `42846` is compiled
 
 #### Scenario: An untyped branch matches any family
 - **WHEN** one branch's key is a `sql` fragment or an unplaceable
