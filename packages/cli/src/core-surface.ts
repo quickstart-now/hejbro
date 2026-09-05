@@ -101,6 +101,7 @@ export const VOCABULARY = [
 	"count",
 	"cumeDist",
 	"denseRank",
+	"filter",
 	"firstValue",
 	"lag",
 	"lastValue",

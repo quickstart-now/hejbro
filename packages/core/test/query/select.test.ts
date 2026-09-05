@@ -22,6 +22,7 @@ import {
 	desc,
 	eq,
 	exists,
+	filter,
 	firstValue,
 	gt,
 	interval,
@@ -52,6 +53,7 @@ import {
 	timestamptz,
 	uuid,
 } from "../../src/index";
+import { builderAggregateFunctionName } from "../../src/query/select";
 
 const app = schema("app");
 const posts = table(app, "posts", {
@@ -673,6 +675,96 @@ describe("group 2 review rulings (F1/F2) and the at-risk table", () => {
 	])("%s casts nothing (db.fn guard)", (_label, build) => {
 		expect(rendersCastFor(build(), ledgerBigint)).toBe(false);
 	});
+
+	// add-aggregate-filter task 1.3 (#501/R2 Q4): a filtered call reads
+	// back through its inner call -- design.md's own words, "exactly as a
+	// window node is unwrapped" -- so casting inside a nested read is
+	// unchanged by wrapping an aggregate in filter(...). One row per
+	// read shape, unfiltered vs. filtered vs. filtered-and-windowed all
+	// agreeing.
+	const filterCondition = isNotNull(ledgerBigint.value);
+
+	it.each([
+		["count", () => count(), () => filter(count(), filterCondition)],
+		[
+			"min",
+			() => min(ledgerBigint.value),
+			() => filter(min(ledgerBigint.value), filterCondition),
+		],
+		[
+			"max",
+			() => max(ledgerBigint.value),
+			() => filter(max(ledgerBigint.value), filterCondition),
+		],
+	])(
+		"%s: filter(...) casts the same as its bare aggregate (int8/argument shape)",
+		(_label, buildBare, buildFiltered) => {
+			const bareCast = rendersCastFor(buildBare(), ledgerBigint);
+			expect(rendersCastFor(buildFiltered(), ledgerBigint)).toBe(bareCast);
+			expect(bareCast).toBe(true);
+		},
+	);
+
+	it.each([
+		[
+			"sum",
+			() => sum(ledgerBigint.value),
+			() => filter(sum(ledgerBigint.value), filterCondition),
+		],
+		[
+			"avg",
+			() => avg(ledgerBigint.value),
+			() => filter(avg(ledgerBigint.value), filterCondition),
+		],
+	])(
+		"%s: filter(...) casts nothing, same as its bare aggregate (own shape)",
+		(_label, buildBare, buildFiltered) => {
+			const bareCast = rendersCastFor(buildBare(), ledgerBigint);
+			expect(rendersCastFor(buildFiltered(), ledgerBigint)).toBe(bareCast);
+			expect(bareCast).toBe(false);
+		},
+	);
+
+	it("windowed: over(filter(sum(x), condition), spec) casts nothing, same as unfiltered over(sum(x), spec) (own shape)", () => {
+		const bareWindowedCast = rendersCastFor(
+			over(sum(ledgerBigint.value), ledgerBigintSpec),
+			ledgerBigint,
+		);
+		const filteredWindowedCast = rendersCastFor(
+			over(filter(sum(ledgerBigint.value), filterCondition), ledgerBigintSpec),
+			ledgerBigint,
+		);
+		expect(filteredWindowedCast).toBe(bareWindowedCast);
+		expect(bareWindowedCast).toBe(false);
+	});
+
+	// The cast-suffix assertions above are empty for sum/avg (own shape):
+	// "unwrapped correctly, and own casts nothing" and "failed to unwrap,
+	// so nothing is recognized as a builder aggregate at all" both render
+	// with no cast, so a regression in the unwrap itself would pass those
+	// silently. Asserting the unwrapped name directly closes that gap for
+	// every shape, not just the ones a cast suffix can see.
+	it.each([
+		["count", "count", () => filter(count(), filterCondition)],
+		["min", "min", () => filter(min(ledgerBigint.value), filterCondition)],
+		["max", "max", () => filter(max(ledgerBigint.value), filterCondition)],
+		["sum", "sum", () => filter(sum(ledgerBigint.value), filterCondition)],
+		["avg", "avg", () => filter(avg(ledgerBigint.value), filterCondition)],
+		[
+			"sum (windowed)",
+			"sum",
+			() =>
+				over(
+					filter(sum(ledgerBigint.value), filterCondition),
+					ledgerBigintSpec,
+				),
+		],
+	])(
+		"%s: a filtered call unwraps to its own builder function name (%s)",
+		(_label, expectedName, build) => {
+			expect(builderAggregateFunctionName(build().exprNode)).toBe(expectedName);
+		},
+	);
 });
 
 describe("set operations (add-set-operations tasks 1.1-1.2)", () => {

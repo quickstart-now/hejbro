@@ -221,6 +221,11 @@ const scopeViolationHandlers: ScopeViolationHandlers = {
 			[node.fn, ...node.partitionBy, ...node.orderBy.map((term) => term.expr)],
 			scope,
 		),
+	// A filtered aggregate's condition is a plain sibling expression too
+	// (#501/R2), not a subquery -- checked in the SAME scope as the
+	// aggregate call itself, same reasoning as `window` above.
+	aggregateFilter: (node, scope) =>
+		firstScopeViolation([node.fn, node.where], scope),
 };
 
 /**

@@ -1,4 +1,5 @@
 import type {
+	AggregateFilterNode,
 	BetweenNode,
 	ComparisonNode,
 	ExistsNode,
@@ -282,6 +283,25 @@ const liftSqlTemplateNode = (
 	return { node: { ...node, chunks: chunks.node }, params: chunks.params };
 };
 
+/**
+ * Lifts a filtered aggregate's two child positions in render order
+ * (#501/R2, the same left-to-right discipline `liftWindowNode` below
+ * already applies to `over(...)`): the aggregate's own args first, then
+ * its condition -- matching `render-sql.ts`'s `<fn>(…) filter (where …)`
+ * text.
+ */
+const liftAggregateFilterNode = (
+	node: AggregateFilterNode,
+	startIndex: number,
+): Lifted<ExprNode> => {
+	const fn = liftFunctionCallNode(node.fn, startIndex);
+	const where = liftExprNode(node.where, startIndex + fn.params.length);
+	return {
+		node: { ...node, fn: fn.node as FunctionCallNode, where: where.node },
+		params: [...fn.params, ...where.params],
+	};
+};
+
 const liftExistsNode = (
 	node: ExistsNode,
 	startIndex: number,
@@ -306,13 +326,17 @@ const liftSelectExprNode = (
  * `$n` numbering follows the same left-to-right order a literal appears
  * in. `liftOrderBy` is declared further down this file; referenced here
  * the same way `liftSelectExprNode` above already forward-references
- * `liftSelectNode`.
+ * `liftSelectNode`. `fn` dispatches through the generic {@link
+ * liftExprNode} rather than {@link liftFunctionCallNode} directly
+ * (#501/R3): the widened slot admits a filtered aggregate too, and
+ * `liftAggregateFilterNode`'s own args-then-condition order nests inside
+ * this one exactly as `render-sql.ts` renders it.
  */
 const liftWindowNode = (
 	node: WindowNode,
 	startIndex: number,
 ): Lifted<ExprNode> => {
-	const fn = liftFunctionCallNode(node.fn, startIndex);
+	const fn = liftExprNode(node.fn, startIndex);
 	const partitionBy = liftExprSequence(
 		node.partitionBy,
 		startIndex + fn.params.length,
@@ -324,7 +348,7 @@ const liftWindowNode = (
 	return {
 		node: {
 			...node,
-			fn: fn.node as FunctionCallNode,
+			fn: fn.node as FunctionCallNode | AggregateFilterNode,
 			partitionBy: partitionBy.node,
 			orderBy: orderBy.node,
 		},
@@ -358,6 +382,7 @@ const exprLiftHandlers: {
 	exists: liftExistsNode,
 	selectExpr: liftSelectExprNode,
 	window: liftWindowNode,
+	aggregateFilter: liftAggregateFilterNode,
 };
 
 /** Lifts every {@link LiteralNode} inside `node` to a `$n` bind parameter, dispatching by `nodeKind`. */

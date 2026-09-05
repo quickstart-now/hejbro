@@ -9,8 +9,10 @@ import {
 	date as dateColumn,
 	denseRank,
 	eq,
+	filter,
 	firstValue,
 	interval,
+	isNotNull,
 	jsonArrayFrom,
 	jsonObjectFrom,
 	lag,
@@ -35,6 +37,7 @@ import {
 	uuid,
 } from "@hejbro/core";
 import { describe, expect, it } from "vitest";
+import { unwrappedBuilderFunctionName } from "../../src/db/convert";
 import { db } from "../../src/db/db";
 import { recordingTransactionalDriver } from "./recording-driver";
 
@@ -854,6 +857,81 @@ describe("select.ts casts iff convert.ts revives (#452 task 1.4 ratchet)", () =>
 			const result = await agreementFor("cell", build());
 			expect(result.wasCast).toBe(expected);
 			expect(result.wasRevivedToBigint).toBe(expected);
+		},
+	);
+
+	// add-aggregate-filter task 1.4 (#501/R2 Q4): filter(...) reads back
+	// through its inner call exactly like a window node does -- one row
+	// per read shape (int8/argument/own), same symmetry as the table
+	// above, plus a windowed composition.
+	const filterCondition = isNotNull(comments.payload);
+
+	const filteredRatchetRows: ReadonlyArray<
+		readonly [
+			name: string,
+			expected: boolean,
+			build: () => ReturnType<typeof cellFor>,
+		]
+	> = [
+		["count", true, () => cellFor({ cell: filter(count(), filterCondition) })],
+		[
+			"max",
+			true,
+			() =>
+				cellFor({
+					cell: filter(max(comments.viewCount), filterCondition),
+				}),
+		],
+		[
+			"sum",
+			false,
+			() =>
+				cellFor({
+					cell: filter(sum(comments.viewCount), filterCondition),
+				}),
+		],
+		[
+			"sum (windowed)",
+			false,
+			() =>
+				cellFor({
+					cell: over(
+						filter(sum(comments.viewCount), filterCondition),
+						commentsSpec,
+					),
+				}),
+		],
+	];
+
+	it.each(filteredRatchetRows)(
+		"filter(%s, condition): cast and revive agree (expected %s)",
+		async (_name, expected, build) => {
+			const result = await agreementFor("cell", build());
+			expect(result.wasCast).toBe(expected);
+			expect(result.wasRevivedToBigint).toBe(expected);
+		},
+	);
+
+	// The rows above are empty for sum (own shape): "correctly unwrapped,
+	// own casts/revives nothing" and "failed to unwrap, not recognized at
+	// all" both agree with no cast and no bigint revive -- own's own
+	// ColumnState is `undefined` either way (#452's own design), the same
+	// blind spot task 1.3 found and closed on select.ts's cast side.
+	// Asserting the unwrapped name directly closes it here too.
+	it.each([
+		["count", "count", () => filter(count(), filterCondition)],
+		["max", "max", () => filter(max(comments.viewCount), filterCondition)],
+		["sum", "sum", () => filter(sum(comments.viewCount), filterCondition)],
+		[
+			"sum (windowed)",
+			"sum",
+			() =>
+				over(filter(sum(comments.viewCount), filterCondition), commentsSpec),
+		],
+	])(
+		"filter(%s, condition) unwraps to its own builder function name (%s)",
+		(_label, expectedName, build) => {
+			expect(unwrappedBuilderFunctionName(build().exprNode)).toBe(expectedName);
 		},
 	);
 });

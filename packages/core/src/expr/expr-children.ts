@@ -1,4 +1,5 @@
 import type {
+	AggregateFilterNode,
 	BetweenNode,
 	ComparisonNode,
 	ExprNode,
@@ -205,6 +206,21 @@ const windowChildren: ExprChildTraversal<"window"> = {
 };
 
 /**
+ * Render order matches the scenario's own sentence (#501/R2 Q2, tasks.md
+ * 1.2): the aggregate call, then its condition.
+ */
+const aggregateFilterChildren: ExprChildTraversal<"aggregateFilter"> = {
+	read: (node) => [node.fn, node.where],
+	replace: (node, children) => {
+		const [fn, where] = children as [FunctionCallNode, ExprNode];
+		if (fn === node.fn && where === node.where) {
+			return node;
+		}
+		return { ...node, fn, where } satisfies AggregateFilterNode;
+	},
+};
+
+/**
  * One entry per {@link ExprNode} `nodeKind` — a mapped type over the full
  * union, so a missing entry is a `tsc` error the same way every other
  * exhaustive handler table in this package is (`someExprNodeHandlers`,
@@ -236,6 +252,7 @@ const EXPR_CHILD_TRAVERSALS: {
 	exists: noChildren(),
 	selectExpr: noChildren(),
 	window: windowChildren,
+	aggregateFilter: aggregateFilterChildren,
 };
 
 /**

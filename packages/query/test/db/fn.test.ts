@@ -1,9 +1,10 @@
-import type { FunctionDeclaration } from "@hejbro/core";
+import type { Expr, FunctionDeclaration } from "@hejbro/core";
 import {
 	bigint,
 	defineFunction,
 	defineTrigger,
 	eq,
+	filter,
 	getTableMeta,
 	integer,
 	roleName,
@@ -502,5 +503,35 @@ describe("db.fn.* (task 4.9)", () => {
 		// role statement first, then the function call -- same transaction.
 		expect(sent[0]?.sql).toContain("set local role");
 		expect(sent[1]?.sql).toContain("list_published");
+	});
+
+	// add-aggregate-filter review B1 follow-up (#501/R7): core's own test
+	// suite can only stand in for db.fn's real shape (a bare Promise, no
+	// dependency from @hejbro/core onto @hejbro/query) -- this is the real
+	// thing, `handle.fn.*`'s own unresolved return value, passed straight
+	// into filter() as its target. It exposes no functionName/schemaName
+	// of its own, so filter-not-aggregate names it "an expression without
+	// a node" -- the honest phrase, not a guessed "declared function
+	// call": asserted here verbatim, not inferred, closing the exact gap
+	// the review found (a message only ever proven against a hand-built
+	// stand-in, never the real public path). #501/R8: a thenable is named
+	// as what it structurally is (a thenable, pointing at db.fn as the
+	// most common cause) rather than guessed at as "a declared function
+	// call" -- core has no marker identifying which declared function a
+	// db.fn call's own Promise came from; naming the function exactly is
+	// a follow-up needing a brand core defines and db.fn's thenable stamps.
+	it("filter() names a real handle.fn.*(...) call by what it actually is, not a guess (#501/R7 B1 follow-up, #501/R8)", () => {
+		const { driver } = recordingDriver([{ result: "42" }]);
+		const handle = db(appSchema, driver);
+		const dbFnResult = handle.fn.countPosts({});
+		expect(() =>
+			filter(dbFnResult as unknown as Expr, eq(posts.status, "draft")),
+		).toThrowError(
+			expect.objectContaining({
+				code: "filter-not-aggregate",
+				message:
+					"filter() accepts one of the builder's aggregates -- count(), min(), max(), sum() or avg() -- and got a thenable, not an expression -- a function called through db.fn is one. Next: wrap one of those aggregates, or, to window a filtered aggregate, filter first and window outside: over(filter(count(), condition), spec).",
+			}),
+		);
 	});
 });

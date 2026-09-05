@@ -97,6 +97,9 @@ const childrenOfHandlers: ChildrenOfHandlers = {
 		...node.partitionBy,
 		...node.orderBy.map((term) => term.expr),
 	],
+	// A filtered aggregate's two positions (#501) are plain sibling
+	// expressions too, not a subquery -- same reasoning as `window` above.
+	aggregateFilter: (node) => [node.fn, node.where],
 };
 
 /**

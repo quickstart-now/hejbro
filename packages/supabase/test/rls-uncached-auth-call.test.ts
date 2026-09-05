@@ -600,5 +600,48 @@ describe("rlsUncachedAuthCallValidator", () => {
 			expect(warnings).toHaveLength(1);
 			expect(warnings[0]?.code).toBe("rls-uncached-auth-call");
 		});
+
+		// add-aggregate-filter task (#501): filter(...)'s two positions
+		// (fn, where) are plain sibling expressions, not a subquery -- same
+		// shape as window's own arm just above, same reason it must warn.
+		it("finds a plain authUid() inside a filtered aggregate's condition", () => {
+			const policy: PolicyDeclaration = {
+				...basePolicy,
+				using: {
+					nodeKind: "aggregateFilter",
+					fn: {
+						nodeKind: "functionCall",
+						schemaName: null,
+						functionName: "count",
+						args: [{ nodeKind: "rawSql", sql: "*" }],
+					},
+					where: authUid().exprNode,
+				},
+				withCheck: null,
+			};
+			const warnings = rlsUncachedAuthCallValidator(emptySnapshot, [policy]);
+			expect(warnings).toHaveLength(1);
+			expect(warnings[0]?.code).toBe("rls-uncached-auth-call");
+		});
+
+		it("finds a plain authUid() inside a filtered aggregate's own function argument", () => {
+			const policy: PolicyDeclaration = {
+				...basePolicy,
+				using: {
+					nodeKind: "aggregateFilter",
+					fn: {
+						nodeKind: "functionCall",
+						schemaName: null,
+						functionName: "coalesce",
+						args: [authUid().exprNode, literalTrue],
+					},
+					where: literalTrue,
+				},
+				withCheck: null,
+			};
+			const warnings = rlsUncachedAuthCallValidator(emptySnapshot, [policy]);
+			expect(warnings).toHaveLength(1);
+			expect(warnings[0]?.code).toBe("rls-uncached-auth-call");
+		});
 	});
 });

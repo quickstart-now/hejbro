@@ -1,0 +1,169 @@
+{
+  "version": 3,
+  "number": 963,
+  "ref": "quickstart-now/hejbro#963",
+  "title": "feat(core,query): filter(aggregate, condition) -- the filter (where …) node, its rendering, snapshot token and refusals (#501)",
+  "head": "8a58c154c4beab801a7585df4b22f67f9a232154",
+  "headRef": "add-aggregate-filter",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-05T16:55Z",
+  "refs": [
+    {
+      "path": ".changeset/add-aggregate-filter.md",
+      "blob": "ec2ac34e5c6ab306b3b6b0f89d247568f848d155"
+    },
+    {
+      "path": "README.md",
+      "blob": "a2f2db18f594b42e895379c88aba08a4dbfbdf74"
+    },
+    {
+      "path": "openspec/changes/add-aggregate-filter/design.md",
+      "blob": "e6d05bbb762f0cdca12350afc8bd07e0da182e69"
+    },
+    {
+      "path": "openspec/changes/add-aggregate-filter/proposal.md",
+      "blob": "ac0a1903917c141da4303559f6a8c5fc136a2fef"
+    },
+    {
+      "path": "openspec/changes/add-aggregate-filter/specs/query-builder/spec.md",
+      "blob": "883a8ce88bc15c0558cf7df3ac758e5302057c83"
+    },
+    {
+      "path": "openspec/changes/add-aggregate-filter/specs/snapshot-format/spec.md",
+      "blob": "703e74ae7f086d15d6c67cf670428e35c6a70f7f"
+    },
+    {
+      "path": "openspec/changes/add-aggregate-filter/tasks.md",
+      "blob": "d43300f29d296a3182762b5c402947f2ec09d866"
+    },
+    {
+      "path": "openspec/task-times.csv",
+      "blob": "6f436f37dfa4491b283182fc24466562d71998b3"
+    },
+    {
+      "path": "packages/cli/src/core-surface.ts",
+      "blob": "cde7daa964e07b6eb23dd359804083abaa3450b6"
+    },
+    {
+      "path": "packages/cli/src/index.ts",
+      "blob": "3cd63bf7297b6b07444d66f9faad0fab16aafd3c"
+    },
+    {
+      "path": "packages/cli/test/exports.test.ts",
+      "blob": "63318ba130a488f41e8805c266fd0d1a1d3a4a22"
+    },
+    {
+      "path": "packages/core/src/expr/aggregate.ts",
+      "blob": "c1c2993ff68d90355740e53d83443cef8a6f8242"
+    },
+    {
+      "path": "packages/core/src/expr/ast.ts",
+      "blob": "b7993b8357d4aa38d8abf21eeebbb1536d2a3521"
+    },
+    {
+      "path": "packages/core/src/expr/codec.ts",
+      "blob": "a04e7ecd5d00f27027666c5528bd7b805f85fe85"
+    },
+    {
+      "path": "packages/core/src/expr/expr-children.ts",
+      "blob": "cef34b5d0607195425f33fb2482955759a8955fb"
+    },
+    {
+      "path": "packages/core/src/expr/read-shape.ts",
+      "blob": "c1537b102819db4d9ad08cfbb5cd38ce797df52a"
+    },
+    {
+      "path": "packages/core/src/expr/render-sql.ts",
+      "blob": "700260489ec8802d8bbca599a981407623e4aad3"
+    },
+    {
+      "path": "packages/core/src/expr/walk.ts",
+      "blob": "0d09a591ccdd7e52a6a68e3f92dc06df06dac80f"
+    },
+    {
+      "path": "packages/core/src/expr/window.ts",
+      "blob": "e17e266c37df9a2ce72a929826df169d1b7ac5b6"
+    },
+    {
+      "path": "packages/core/src/index.ts",
+      "blob": "79bfa29566225cf0bab02532251dc0a8b0c662e7"
+    },
+    {
+      "path": "packages/core/src/query/select.ts",
+      "blob": "5e4ff7a4f15d95c974abe65af608175016f7d9b0"
+    },
+    {
+      "path": "packages/core/test/expr/aggregate-filter.test.ts",
+      "blob": "3e7eb66f69a4ee5a786c684d82f4a7d6be7d0f49"
+    },
+    {
+      "path": "packages/core/test/expr/codec.test.ts",
+      "blob": "6946b5a0965700509dafc2b4f34b9f61c17e8716"
+    },
+    {
+      "path": "packages/core/test/expr/expr-children.test.ts",
+      "blob": "8b8bc50e493f9b05981bc9e725ff46f9fb25f1de"
+    },
+    {
+      "path": "packages/core/test/expr/reachable-kinds.ts",
+      "blob": "9987fd550d4a38dfa44c4679148ab632e6ee9598"
+    },
+    {
+      "path": "packages/core/test/expr/read-shape.test.ts",
+      "blob": "48a75080a9f27801a97269918c0356e718fc7af2"
+    },
+    {
+      "path": "packages/core/test/expr/render-sql.test.ts",
+      "blob": "586863527078793bedff5fe467ddb8db5ec86491"
+    },
+    {
+      "path": "packages/core/test/expr/retarget.test.ts",
+      "blob": "779208fae95ef4e490c43126df7396853632512d"
+    },
+    {
+      "path": "packages/core/test/expr/walk.test.ts",
+      "blob": "aacb1c067c3ebe706b5189f24939305aac36db9b"
+    },
+    {
+      "path": "packages/core/test/naming-conventions.test.ts",
+      "blob": "3723d5a1c96ad3c1576448b82db74235386ce03f"
+    },
+    {
+      "path": "packages/core/test/query/select.test.ts",
+      "blob": "a82f850fc22372cc53d44a11e97931dd09ddb456"
+    },
+    {
+      "path": "packages/query/src/compile/params.ts",
+      "blob": "d130833e4d8ed076012cbf8eab66cc44f9c8920f"
+    },
+    {
+      "path": "packages/query/src/db/convert.ts",
+      "blob": "02534e96211005b492aaeb7a9c959434d6a45867"
+    },
+    {
+      "path": "packages/query/test/compile/aggregate-filter.test.ts",
+      "blob": "5b7d20c2292d1b4c446ebec8fc6e9da6e3ccf563"
+    },
+    {
+      "path": "packages/query/test/db/fn.test.ts",
+      "blob": "447026becc1830a3ad1de66c0018b2012a7fe497"
+    },
+    {
+      "path": "packages/query/test/db/nested-revive.test.ts",
+      "blob": "2fe4a7c6c0bd904a0428babb7ff55abdd1f5d2a0"
+    },
+    {
+      "path": "packages/supabase/src/validators/rls-uncached-auth-call.ts",
+      "blob": "274ff3b2d639c45d989c75fd94014e4059120261"
+    },
+    {
+      "path": "packages/supabase/test/rls-uncached-auth-call.test.ts",
+      "blob": "26b28aeef3c96407215cfe8172b958fab1e270a3"
+    },
+    {
+      "path": "skills/hejbro/references/query-layer.md",
+      "blob": "604eca49c88e6792c7884453caba31dabff7f44b"
+    }
+  ]
+}

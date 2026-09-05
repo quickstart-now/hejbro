@@ -922,6 +922,107 @@ describe("WindowNode codec", () => {
 			expect.objectContaining({ code: "malformed-snapshot-node" }),
 		);
 	});
+
+	// add-aggregate-filter task 1.2 (#501/R3): fn's widened slot
+	// (FunctionCallNode | AggregateFilterNode) round-trips a filtered
+	// aggregate, and still refuses anything that is neither.
+	it("a window over a filtered aggregate survives encode/decode", () => {
+		const windowedFilteredCount: ExprNode = {
+			nodeKind: "window",
+			fn: {
+				nodeKind: "aggregateFilter",
+				fn: {
+					nodeKind: "functionCall",
+					schemaName: null,
+					functionName: "count",
+					args: [{ nodeKind: "rawSql", sql: "*" }],
+				},
+				where: customerId,
+			},
+			partitionBy: [],
+			orderBy: [{ expr: createdAt, direction: "asc" }],
+		};
+		const encoded = encodeExprNode(windowedFilteredCount);
+		expect(JSON.stringify(encoded)).toContain('"aggregate-filter"');
+		expect(decodeExprNode(encoded)).toEqual(windowedFilteredCount);
+	});
+});
+
+// add-aggregate-filter task 1.2 (#501/R2 Q4): an AggregateFilterNode's own
+// fn/where round-trip, its snapshot token is "aggregate-filter", and it's
+// new in this format -- a missing fn or where is corruption, never
+// repaired, same reasoning as WindowNode codec's own fn/partitionBy/
+// orderBy above.
+describe("AggregateFilterNode codec", () => {
+	const views: ExprNode = {
+		nodeKind: "columnRef",
+		schemaName: "app",
+		tableName: "posts",
+		columnName: "views",
+	};
+	const publishedCondition: ExprNode = {
+		nodeKind: "nullTest",
+		negated: true,
+		operand: {
+			nodeKind: "columnRef",
+			schemaName: "app",
+			tableName: "posts",
+			columnName: "published_at",
+		},
+	};
+	const aggregateFilterNode: ExprNode = {
+		nodeKind: "aggregateFilter",
+		fn: {
+			nodeKind: "functionCall",
+			schemaName: null,
+			functionName: "sum",
+			args: [views],
+		},
+		where: publishedCondition,
+	};
+
+	it("a filtered aggregate survives encode/decode", () => {
+		const encoded = encodeExprNode(aggregateFilterNode);
+		expect(JSON.stringify(encoded)).toContain('"aggregate-filter"');
+		expect(decodeExprNode(encoded)).toEqual(aggregateFilterNode);
+	});
+
+	it("the stored discriminator is exactly aggregate-filter, per NODE_KIND_TO_SNAPSHOT", () => {
+		expect(NODE_KIND_TO_SNAPSHOT.aggregateFilter).toBe("aggregate-filter");
+	});
+
+	it("a node without its condition is rejected, not repaired", () => {
+		const encoded = encodeExprNode(aggregateFilterNode) as Record<
+			string,
+			JsonValue
+		>;
+		const { where: _where, ...withoutWhere } = encoded;
+		expect(() => decodeExprNode(withoutWhere)).toThrowError(
+			expect.objectContaining({ code: "malformed-snapshot-node" }),
+		);
+	});
+
+	it("a node without its function call is rejected, not repaired", () => {
+		const encoded = encodeExprNode(aggregateFilterNode) as Record<
+			string,
+			JsonValue
+		>;
+		const { fn: _fn, ...withoutFn } = encoded;
+		expect(() => decodeExprNode(withoutFn)).toThrowError(
+			expect.objectContaining({ code: "malformed-snapshot-node" }),
+		);
+	});
+
+	it("a node whose fn is not itself a function call is rejected", () => {
+		const encoded = encodeExprNode(aggregateFilterNode) as Record<
+			string,
+			JsonValue
+		>;
+		const corrupted = { ...encoded, fn: encodeExprNode(views) };
+		expect(() => decodeExprNode(corrupted)).toThrowError(
+			expect.objectContaining({ code: "malformed-snapshot-node" }),
+		);
+	});
 });
 
 describe("with-node codec round-trip (add-ctes task 2.1)", () => {

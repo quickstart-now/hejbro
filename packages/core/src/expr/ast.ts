@@ -129,9 +129,28 @@ export type FunctionCallNode = {
 };
 
 /**
+ * `filter(aggregate, condition)` (add-aggregate-filter, #501/R2 Q2) — its
+ * own `ExprNode` variant, not a field on {@link FunctionCallNode}: a
+ * field is enforced by nothing (a closed-literal codec drops it silently,
+ * and a non-aggregate default becomes representable), while a variant is
+ * enforced by every mapped-type registry, `reachable-kinds` and the D70
+ * completeness assertion (501/R2 Q2). `fn` is narrowed to a
+ * {@link FunctionCallNode}, mirroring {@link WindowNode.fn}'s own
+ * narrowing, so the filtered call is always a real function call.
+ */
+export type AggregateFilterNode = {
+	readonly nodeKind: "aggregateFilter";
+	readonly fn: FunctionCallNode;
+	readonly where: ExprNode;
+};
+
+/**
  * A window function call (`over(...)`, D104) — `fn` is narrowed to a
- * {@link FunctionCallNode}, not a general `ExprNode`: Postgres requires
- * the windowed thing to *be* a function call, and the narrowing makes "a
+ * {@link FunctionCallNode} or an {@link AggregateFilterNode} (#501/R2
+ * Q2: SQL orders `filter … over …`, never the reverse, so a window over
+ * a filtered aggregate is representable and `filter` over a window node
+ * is not), not a general `ExprNode`: Postgres requires the windowed thing
+ * to *be* a function call (filtered or not), and the narrowing makes "a
  * window function inside a window function" unrepresentable rather than
  * merely rejected. `partitionBy`/`orderBy` mirror the shapes
  * {@link SelectNode} already uses for its own grouping/ordering; a frame
@@ -139,7 +158,7 @@ export type FunctionCallNode = {
  */
 export type WindowNode = {
 	readonly nodeKind: "window";
-	readonly fn: FunctionCallNode;
+	readonly fn: FunctionCallNode | AggregateFilterNode;
 	readonly partitionBy: ReadonlyArray<ExprNode>;
 	readonly orderBy: ReadonlyArray<OrderByTerm>;
 };
@@ -191,7 +210,8 @@ export type ExprNode =
 	| RawSqlNode
 	| ExistsNode
 	| SelectExprNode
-	| WindowNode;
+	| WindowNode
+	| AggregateFilterNode;
 
 // --- query statement nodes ---
 

@@ -1,6 +1,7 @@
 import { throwHejbroError } from "../error";
-import type { Expr, ExprNode } from "./ast";
+import type { Condition, Expr, ExprNode, FunctionCallNode } from "./ast";
 import { expr } from "./ast";
+import { AGGREGATE_READ_SHAPES } from "./read-shape";
 import { someExprNode } from "./walk";
 
 /**
@@ -137,3 +138,177 @@ export const sum = (operand: Expr): Expr<"numeric"> =>
 /** `avg(<expr>)`. See {@link aggregate} for why this carries no read-type brand. */
 export const avg = (operand: Expr): Expr<"numeric"> =>
 	expr("numeric", aggregate("avg", [operand.exprNode]));
+
+/**
+ * `target`'s function call, or `undefined` when `target` isn't a real,
+ * unfiltered, unwindowed call one of {@link AGGREGATE_READ_SHAPES}'s five
+ * names -- `filter()`'s own accepted set (#501/R2 Q1: the full builder
+ * key set also holds the eleven window-only names and would wrongly
+ * admit `rowNumber()`). A schema-qualified call is a declared function
+ * (`db.fn`), never the builder's own, same rule `query/select.ts`'s
+ * `builderAggregateFunctionName` already applies (#452).
+ */
+const aggregateFunctionCallOf = (
+	target: object,
+): FunctionCallNode | undefined => {
+	if (!("exprNode" in target)) {
+		return undefined;
+	}
+	const node = (target as { readonly exprNode: ExprNode }).exprNode;
+	if (node.nodeKind !== "functionCall") {
+		return undefined;
+	}
+	if (node.schemaName !== null) {
+		return undefined;
+	}
+	if (!Object.hasOwn(AGGREGATE_READ_SHAPES, node.functionName)) {
+		return undefined;
+	}
+	return node;
+};
+
+/**
+ * A phrase per `nodeKind`, for the shapes that need no field of their
+ * own -- `functionCall` is handled separately below (its phrase depends
+ * on `schemaName`/`functionName`, #501/R7 B1), and any OTHER kind absent
+ * here is a plain "an expression" (#501/R2 Q3). `aggregateFilter` names a
+ * re-filtered expression (review N5) -- it would otherwise fall through
+ * to that same generic default.
+ */
+const FILTER_TARGET_PHRASES: Partial<Record<ExprNode["nodeKind"], string>> = {
+	columnRef: "a column reference",
+	sqlTemplate: "a raw sql fragment",
+	window: "an already-windowed expression",
+	aggregateFilter: "an already-filtered expression",
+};
+
+/**
+ * `functionCall`'s own phrase (#501/R7 B1): reaching here at all means
+ * `aggregateFunctionCallOf` already refused it, so it is some declared
+ * function call other than the builder's own five -- schema-qualified or
+ * not, it is named as one, `"<schema>.<name>"` when a schema is present
+ * and the bare name otherwise (never the generic "an expression": a
+ * schemaless non-aggregate call, e.g. `now()`, is still a declared
+ * function call, just not written through `db.fn`).
+ */
+const describeFunctionCallTarget = (node: FunctionCallNode): string => {
+	if (node.schemaName === null) {
+		return `a declared function call "${node.functionName}"`;
+	}
+	return `a declared function call "${node.schemaName}.${node.functionName}"`;
+};
+
+/**
+ * `true` only for a `WindowFunctionCall` (`expr/window.ts`'s own shape) --
+ * the one non-`Expr` shape `filter()` legitimately receives (`rowNumber()`
+ * and friends).
+ */
+const isWindowFunctionCall = (target: object): boolean => "windowFn" in target;
+
+/**
+ * `true` for a thenable -- `db.fn`'s own real runtime shape
+ * (`@hejbro/query`'s `FnCaller`, a bare `Promise<unknown>`). Core has no
+ * marker identifying WHICH declared function a thenable came from (that
+ * needs a brand core defines and `db.fn`'s own thenable stamps, filed as
+ * a follow-up, #501/R8) -- naming it "a declared function call" without
+ * one would assert what isn't known; naming it "a thenable" states the
+ * fact and points at the most common cause (`.then` is the one property
+ * every `Promise` implementation shares).
+ */
+const isThenable = (target: object): boolean =>
+	typeof (target as { readonly then?: unknown }).then === "function";
+
+/**
+ * Names a non-`Expr` target -- one that carries no `exprNode` at all --
+ * told apart by what it actually is: a window-only call (`rowNumber()`)
+ * IS a window function; a thenable states the fact and points at `db.fn`
+ * as the most common cause (#501/R8: naming it "a declared function
+ * call" would assert a function identity core cannot know); anything
+ * else is a plain value with no expression node to read at all. Split
+ * out of {@link describeFilterTarget} to keep each function's own branch
+ * count low (CRAP, #501 group-completion gate: a single function
+ * covering both the non-`Expr` and the `exprNode`-bearing cases scored
+ * above the repository's own threshold even at full coverage).
+ */
+const describeNonExprTarget = (target: object): string => {
+	if (isWindowFunctionCall(target)) {
+		return "a window function";
+	}
+	if (isThenable(target)) {
+		return "a thenable, not an expression -- a function called through db.fn is one";
+	}
+	return "a value without an expression node";
+};
+
+/**
+ * Names what `filter()` actually received, one phrase per refused shape
+ * (#501/R2 Q3, review B1). `exprNode`-bearing shapes are read off
+ * `exprNode.nodeKind`, a table lookup rather than an if-chain; anything
+ * without `exprNode` at all delegates to {@link describeNonExprTarget}.
+ */
+const describeFilterTarget = (target: object): string => {
+	if (!("exprNode" in target)) {
+		return describeNonExprTarget(target);
+	}
+	const node = (target as { readonly exprNode: ExprNode }).exprNode;
+	if (node.nodeKind === "functionCall") {
+		return describeFunctionCallTarget(node);
+	}
+	return FILTER_TARGET_PHRASES[node.nodeKind] ?? "an expression";
+};
+
+const throwFilterNotAggregate = (target: object): never =>
+	throwHejbroError(
+		"filter-not-aggregate",
+		`filter() accepts one of the builder's aggregates -- count(), min(), max(), sum() or avg() -- and got ${describeFilterTarget(target)}. Next: wrap one of those aggregates, or, to window a filtered aggregate, filter first and window outside: over(filter(count(), condition), spec).`,
+	);
+
+/**
+ * Rejects a `filter()` condition containing a window function (#501/R7
+ * B2, design.md: the condition takes exactly what `where` takes, so a
+ * placement `where` refuses is refused here too) -- the same diagnostic
+ * `query/select.ts`'s own `where`/`groupBy`/`having` guard uses for the
+ * same input, `42P20`, Postgres evaluates window functions after `FILTER
+ * (WHERE …)` runs. A separate, local check rather than importing that
+ * guard: `expr/` never depends on `query/` (D-layering; `query/` depends
+ * on `expr/` throughout this package, never the reverse).
+ */
+const assertNoWindowFunctionInCondition = (condition: Condition): void => {
+	if (someExprNode(condition.exprNode, (node) => node.nodeKind === "window")) {
+		throwHejbroError(
+			"window-function-not-allowed",
+			"filter()'s condition cannot reference a window function -- Postgres evaluates window functions after FILTER (WHERE …) runs, so its result isn't available there yet. Next: move the window function into the select list instead, or filter on it from an outer query.",
+		);
+	}
+};
+
+/**
+ * `filter(aggregate, condition)` — Postgres's own `FILTER (WHERE …)`
+ * clause (#501/R2), applying to any of the five builder aggregates and
+ * keeping the aggregate's own result type and conversion (`Aggregated`,
+ * same rebuild `aggregatedExtremum`/`over()`'s `overAggregate` use: drop
+ * `sqlName`, keep the symbol-keyed read brand). `condition` takes what
+ * `where` takes -- a runtime value inside it is lifted to a bind
+ * parameter like any other condition (`@hejbro/query`'s `params.ts`, a
+ * later task), and a window function inside it is refused the same way
+ * `where` refuses one (#501/R7 B2).
+ */
+export const filter = <TExpr extends Expr>(
+	target: TExpr,
+	condition: Condition,
+): Aggregated<TExpr> => {
+	const fn = aggregateFunctionCallOf(target);
+	if (fn === undefined) {
+		return throwFilterNotAggregate(target);
+	}
+	assertNoWindowFunctionInCondition(condition);
+	const {
+		sqlName: _sqlName,
+		exprNode: _exprNode,
+		...rest
+	} = target as TExpr & { readonly sqlName?: string };
+	return {
+		...rest,
+		exprNode: { nodeKind: "aggregateFilter", fn, where: condition.exprNode },
+	} as Aggregated<TExpr>;
+};
