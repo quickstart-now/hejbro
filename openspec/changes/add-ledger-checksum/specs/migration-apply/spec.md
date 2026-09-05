@@ -340,6 +340,13 @@ what is wrong, so it is the last place a raw driver failure may surface.
 - **THEN** it reports that file as changed since it was applied, with
   the same code `migrate` refuses under, and exits non-zero
 
+#### Scenario: A disagreement is reported before bodies are compared
+- **WHEN** the ledger disagrees with the chain (an orphan row, an
+  unrecorded chain file) and a recorded body was also edited
+- **THEN** `status` reports the disagreement alone, as it does today, and
+  exits non-zero; the body comparison runs on the next `status` once the
+  disagreement is resolved
+
 ## ADDED Requirements
 
 ### Requirement: An applied migration whose body changed is refused
