@@ -29,7 +29,10 @@ callback is interactive by definition.
 A batch failure is reported as a batch: every member statement, in
 order, with a statement that the driver does not report which member
 failed — never naming only the caller's own statement, which may not
-have been the actual cause.
+have been the actual cause. A driver whose `batch` resolves the wrong
+number of row lists (fewer, more, or none) is refused with the new
+`batch-result-count-mismatch`, naming both counts, rather than silently
+handing a context statement's own rows back as the caller's.
 
 A multi-command `sql`-kind text (`select 1; select 2`, only reachable
 through the `sql` escape hatch) now resolves to the **last** command's

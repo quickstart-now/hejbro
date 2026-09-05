@@ -405,36 +405,29 @@ const runContextInBatch = async <T>(
 ): Promise<T> => {
 	const statements = contextStatements(driver, context, operation);
 	const sent: Array<CompileResult> = [];
-	// Captures a count-mismatch's own error, which `sendCompiled` (task 4.5)
-	// would otherwise wrap as `query-execution-failed` (its `cause`) before
-	// it ever reaches the catch below (review finding N3, "trap 2"): the
-	// catch checks this ref first and rethrows the original, coded error
-	// unwrapped, rather than letting the 1.3b rebuild below re-wrap it a
-	// second time under the wrong code.
-	const countMismatch: { current: Error | undefined } = { current: undefined };
 	try {
 		return await send({
 			execute: async (compiled) => {
 				sent.push(compiled);
 				const members = [...statements, compiled];
 				const results = await driver.batch(members);
-				try {
-					return lastBatchRowsChecked(members, results);
-				} catch (error) {
-					if (isBatchResultCountMismatchError(error)) {
-						countMismatch.current = error;
-					}
-					throw error;
-				}
+				return lastBatchRowsChecked(members, results);
 			},
 		});
 	} catch (error) {
-		if (countMismatch.current !== undefined) {
-			throw countMismatch.current;
-		}
 		const callerStatement = sent[0];
 		if (callerStatement === undefined || !isQueryExecutionFailedError(error)) {
 			throw error;
+		}
+		// `sendCompiled` (task 4.5) wraps whatever `execute` throws as
+		// `query-execution-failed`, `cause` set to the original -- so a
+		// count-mismatch thrown above arrives here as `error.cause`, not
+		// `error` itself (review finding N3, "trap 2"). Rethrown unwrapped,
+		// ahead of the 1.3b rebuild below, so its own code reaches the
+		// caller rather than being re-wrapped a second time under the
+		// wrong one.
+		if (isBatchResultCountMismatchError(error.cause)) {
+			throw error.cause;
 		}
 		return throwBatchExecutionFailed(
 			[...statements, callerStatement],

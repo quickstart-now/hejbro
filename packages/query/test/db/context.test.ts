@@ -879,4 +879,17 @@ describe("a failing batch is reported as a batch (task 1.3b, #486, 486/R9)", () 
 			expect(message).not.toContain("a batch of");
 		}
 	});
+
+	it("a batch that itself succeeded but whose row conversion fails afterward propagates the raw result-conversion-failed unchanged, never rebuilt as a batch report", async () => {
+		const { driver } = recordingTransactionalDriver({
+			interactiveTransactions: false,
+			batchedTransactions: true,
+			rows: [{}], // resolves the right member count, but every declared column is missing
+		});
+		const handle = db(appSchema, driver);
+
+		await expect(
+			handle.as({ role: roleName("grant_reader") }).execute(select(posts)),
+		).rejects.toMatchObject({ code: "result-conversion-failed" });
+	});
 });
