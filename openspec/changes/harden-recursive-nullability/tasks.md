@@ -41,7 +41,7 @@ structurally — and it is the only further source file this change may
 touch if that expectation fails. If a task appears to need any other
 file, that goes back to the planner, not into the diff.
 
-**Ordering.** 1.1 → 1.1b → 1.2 → 1.2b → 1.3.
+**Ordering.** 1.1 → 1.1b → 1.2 → 1.2b → 1.3 → 1.4 (review-born).
 
 ## 1. Outward nullability
 
@@ -113,3 +113,101 @@ file, that goes back to the planner, not into the diff.
 - [x] 1.3 (~6m) Docs and changeset. The CTE section of `query-layer.md`
       states "type from the anchor, nullability from either branch";
       `pnpm changeset` → `patch`. Files: the reference, `.changeset/*.md`.
+
+- [x] 1.4 (~14m) Review repair: the set-operation exception, the nested
+      read on both sides, and nine regression rows (#500/R6 and
+      #500/R7; review B1, B2, E7, E11). One source change, in
+      `select-result.ts`, closing one asymmetry from both ends: where
+      `NestedOrExprResult` resolves a `NestedReadMarker` and returns
+      before `ProjectedColumnResult` is ever consulted, a key whose
+      value carries `WidenedBy<R, J>` also unions
+      `RecursiveNullWidening` (review B2: otherwise a recursive term
+      projecting a nullable value for a nested-read key leaves the
+      outward type non-null while the server delivers `null` — the
+      narrowing direction the delta's own SHALL exists to remove); and
+      the widening resolves the recursive term's own value `R` through
+      **`NestedOrExprResult`**, never `ProjectedColumnResult` directly
+      (review E7/E8: that type does not know the nested-read rule and
+      answers "nullable" for a `jsonArrayFrom` value, which renders as
+      `coalesce(json_agg(…), '[]')` and structurally cannot be null).
+      One layer only — the widening must not re-enter itself.
+      Nullability's source of truth stays `ProjectedColumnResult` (R2);
+      `NestedOrExprResult` is its dispatcher, not a second rule.
+      **If the fix needs any file outside `select-result.ts`, stop and
+      report**: the ruling converts to a stated boundary plus an issue
+      instead. For the set-operation half there is no source change: a
+      `SetOpStage` recursive term carries no left-joined set, and an
+      untracked position reads nullable — this repository's frozen contract, "unknown" never
+      read as "empty". What was missing is the sentence and the row.
+      The delta's THEN clause and the skill's CTE sentence each gain
+      the exception ("…stays non-null — unless the recursive term is a
+      set operation, whose left-joined set is not tracked: every key of
+      such a term then reads nullable"), and the reviewer's B1 input
+      (R32) is pinned as a row of 1.2's table, its comment quoting that
+      exception so the next reader does not re-run the investigation.
+      A second row (the reviewer's F1) pins why the exception is not
+      mere over-widening: a set-op recursive term that left-joins
+      inside itself really does deliver `null` for a `notNull` column
+      (measured on postgres:17), and the untracked reading is what
+      covers it — asserting `never` there would type that row non-null.
+      Two more rows come from B2: {a nested-read key whose recursive
+      term projects a nullable `json()` column → outward nullable,
+      the server having delivered `null` for it}, {the same nested-read
+      key whose set-op recursive term projects it as a nested read →
+      the value's own rule answers, not the untracked one (#500/R8), so
+      the key stays non-null, which the server confirms (`[]`, never
+      null) — a non-regression pin, and stated over `unionAll`, since
+      `union` over a `json` column is refused by Postgres outright},
+      and one where the two nested reads meet across the branches
+      {anchor an array read, recursive term an object read for the same
+      key → outward nullable, the object read's own rule answering and
+      the server delivering `null` on the recursive rows}, and two more
+      from the two nested reads differing: {`jsonObjectFrom` is already
+      `… | null` by its own rule, so the union is idempotent},
+      {`jsonArrayFrom` is a non-null array, so the widening is what adds
+      the null}. The table must also hold rows that expect **non-null**,
+      or over-widening passes it unseen (review E7/E11): {anchor and
+      recursive term projecting the same `jsonArrayFrom` → outward
+      non-null, the server unable to deliver null}, {a `notNull`
+      non-json anchor value with a `jsonArrayFrom` recursive value →
+      outward non-null, which the current SHA gets wrong}, {control: the
+      same anchor with a `notNull` text recursive value → outward
+      non-null, so the widening is per key and not blanket}. A json or
+      jsonb column reads back as `unknown` whatever it declares, so a
+      row asserting non-null over a json *column* verifies nothing —
+      state the non-null rows over a non-json anchor. A nested read
+      with no recursive term at all stays non-null — pin that it did
+      not move.
+      In the same pass the
+      false justification is removed everywhere it appears (review
+      N1/N2): a plain set operation keeps the left branch's projection
+      and does **not** union nullability per key, so the delta, the
+      proposal, the design ruling and the skill's own universal
+      sentence each state the recursive form's rule on its own terms.
+      Touching the delta means re-running `openspec validate --strict`
+      and `check:modified-titles`. Files:
+      `packages/query/src/types/select-result.ts`, the query type
+      tests, `skills/hejbro/references/query-layer.md`, this change's
+      `proposal.md`/`design.md`/delta.
+
+      The table, as the reviewer measured it — red first for the four
+      that fail today, the rest pinned green so the fix cannot move
+      them:
+
+      | row | outward key expects | today |
+      |-----|--------------------|-------|
+      | E4 — array-read key, plain recursive term projecting a nullable `json()` column | null | non-null → **red** |
+      | E11a — non-json `notNull` anchor value, array-read recursive value | non-null | null → **red** |
+      | E12 — anchor an array read, recursive term an object read for the same key | null | non-null → **red** |
+      | R32 — set-op recursive term, plain column, non-null on both sides | null | already green |
+      | F1 — set-op recursive term left-joining inside itself | null | already green |
+      | E5 — object-read key | null | already green |
+      | E7 — anchor and recursive term the same array read | non-null | already green |
+      | E11c — same anchor, `text().notNull()` recursive value | non-null | already green |
+      | E2u — `unionAll` set-op recursive term projecting an array read | non-null | already green |
+      | a nested read with no recursive term | unchanged | already green |
+
+      Three rows go red first; the other seven are pins the fix must not
+      move. The reviewer's E6 is the same input class as E4 (an array-read
+      key with a nullable `json()` column in the recursive term) and is
+      not stated twice.
