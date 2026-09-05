@@ -88,6 +88,15 @@
       "at": "2026-09-05T11:10Z",
       "title": "N-1: next and query join the enumerated third source (task 1.6); the source stays an enumeration; the 18 measured-safe words are named as outside the class",
       "ratified": null
+    },
+    {
+      "id": "R7",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [],
+      "at": "2026-09-05T11:32Z",
+      "title": "R7 — Reviewer's stray hejbro init in the main checkout: cleaned, no restore, no issue",
+      "ratified": null
     }
   ],
   "work": [

@@ -44,3 +44,10 @@ _lead · extension · basis 412/D24, D25; 832/R3, R4; fl review (constructor mod
 
 Processed in this piece: reserved set gains next and query with the measurement; the third source's definition remains the enumeration (16 names), never a descriptive widening; the 18 words measured harmless in every rendered position are named in the requirement as outside the class; the reviewer re-runs the full 573-name × 8-form sweep after the rebuild and must find exactly {next, query} newly refused. N-2/N-3 wording corrected by the planner; N-4 and the generate-command load flake filed by the lead. Ratification: owner on return.
 
+<a id="r7"></a>
+## R7 — R7 — Reviewer's stray hejbro init in the main checkout: cleaned, no restore, no issue
+
+_lead · interpretation · 2026-09-05T11:32Z · ratified: pending_
+
+The reviewer's reproduction script used a non-existent --cwd flag; because Bash resets cwd to the main checkout, `hejbro init` ran there and created untracked hejbro.config.ts and hejbro.snapshot.json. Both were confirmed untracked and deleted; an empty untracked migrations/ (mtime 2026-09-02, predating the run) was deleted with them. Lead ruling: nothing is restored — the repository root has no hejbro.config.ts, so no work ever targeted that directory and the stale empty folder was itself residue; git state is unaffected (porcelain empty on dev). No separate issue: the script now runs inside a `( cd "$P" && … )` subshell with an absolute CLI path, which removes the cause (#102 class). Basis: lead verification of the main checkout after cleanup.
+
