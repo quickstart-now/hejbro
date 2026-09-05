@@ -7,56 +7,96 @@ minimal green, then refactor. Every source rule of this repository
 applies (`any`/`let`/`var`/`for`/`while`/ternary banned; comments state
 the constraint only).
 
-**Files edited**: `packages/core/src/plpgsql/reserved.ts`,
-`packages/core/test/plpgsql/reserved*.test.ts`, `packages/pg/test/
-integration.test.ts` or the core Docker witness that already sweeps
-category T (1.1); `packages/core/src/plpgsql/body-context.ts`,
-`packages/core/src/dsl/table.ts`, their tests (1.2); `packages/core/src/
-dsl/define-function.ts`, `packages/core/src/plpgsql/body-context.ts`,
-tests (1.3); `skills/hejbro/references/function-builder-pitfalls.md`,
-one `.changeset/*.md` (1.4). If a task appears to need any other file,
-that goes back to the planner, not into the diff.
+**Files edited**: `openspec/changes/harden-function-locals/design.md`
+(1.1 — the measured table, recorded the way the category-T sweep of
+`harden-core-derivations` was: measured on a live server, vendored into
+the tests as a literal, never added as a Docker-gated suite of its own;
+core's tests stay pure); `packages/core/src/plpgsql/reserved.ts`,
+`packages/core/test/define-function.test.ts`,
+`packages/core/test/plpgsql/body-context.test.ts` (1.2);
+`packages/core/src/plpgsql/body-context.ts`, `packages/core/src/dsl/
+table.ts`, their tests (1.3); `packages/core/src/dsl/define-function.ts`,
+`packages/core/src/plpgsql/body-context.ts`, tests (1.4);
+`skills/hejbro/references/function-builder-pitfalls.md`, one
+`.changeset/*.md` (1.5). If a task appears to need any other file, that
+goes back to the planner, not into the diff.
 
-**Ordering.** 1.1 first (its measured list is what 1.2's tests import);
-1.2 then 1.3 (1.3's seeding relies on 1.2's name rule); 1.4 last.
+**Ordering.** 1.1 first (its measured table is what 1.2 imports); 1.2
+before 1.3 (the reserved check runs inside the name rule); 1.3 then 1.4
+(1.4's seeding relies on 1.3's two name spaces); 1.5 last.
 
 ## 1. Body locals
 
-- [ ] 1.1 (~10m) **[design]** The reserved class is R, T and C. Settles
-      the list and the requirement's class statement. Red: the reserved
-      test file's category sweep gains an `it.each` over every category-C
-      keyword (read from `pg_get_keywords()` on a live `postgres:17`, the
-      way the T sweep was measured, and vendored as a literal table in
-      the test): each is refused as an argument name, as a loop name and
-      as a row-declared local with `reserved-local-name`; `exit` and
-      `elsif` are accepted in all three positions. The Docker witness
-      records, per C name, what the server does with the unrefused
-      spelling (syntax error / mode reparse / declaration failure) so the
-      scenario's claim is measured, not inferred. Files: `reserved.ts`,
-      its tests, the witness.
+- [ ] 1.1 (~10m) **[design]** The measurement the class rests on. The
+      sweep runs on a live `postgres:17` and sweeps three name sets in the
+      three positions a body renders a name — as an argument, as a loop
+      record, as a row-declared local: (a) all 63 category-C keywords
+      read from `pg_get_keywords()`, (b) the 16 names the shipped set
+      holds that are neither R/T/C nor a plpgsql-declared variable
+      (`exception foreach get loop perform raise while` + the `U`-listed
+      `begin by declare execute if new old return strict`), (c) the
+      counter-example pair `exit`/`elsif`. Each result is classified
+      `syntax-error` / `mode-reparse` (created, but the signature
+      changed — `pg_get_function_arguments` confirms) /
+      `declaration-failure` / `harmless` (created **and** the name still
+      means what it was given — verified by calling the function, which
+      is what catches a silent substitution like `current_schema`). The
+      table lands in `design.md` with the server version and the SQL that
+      produced it, so 1.2's literal can be re-measured; `harmless` names
+      are reported to the planner, never removed from the set. Files:
+      `design.md`.
 
-- [ ] 1.2 (~10m) Loop, row and column names. Red (a): `packages/core/
-      test/plpgsql/*.test.ts`, a table over loop and row names
+- [ ] 1.2 (~9m) The reserved set and the class statement. Red:
+      `define-function.test.ts` (argument position) and
+      `plpgsql/body-context.test.ts` (loop name, row-declared local) gain
+      an `it.each` over the whole category-C table vendored as a literal
+      from 1.1's measurement — each name refused as an argument name, as
+      a loop name and as a row-declared local (`json_array` and its ten
+      underscore-bearing siblings are the ones a row read can actually
+      derive; the rest are covered in the argument and loop positions
+      and the table says so) with `reserved-local-name`; `exit` and
+      `elsif` accepted in all three positions. Green: `reserved.ts` gains
+      the 61 missing C names, and its doc comment states the class by its
+      three sources (keyword categories R/T/C; the variables plpgsql
+      declares itself, `new`/`old` among them; the statement words
+      measurement shows failing), not by "plpgsql reserves for its own
+      statements". Files: `reserved.ts`, its tests.
+
+- [ ] 1.3 (~10m) Loop, row and column names. Red (a):
+      `packages/core/test/plpgsql/body-context.test.ts`, a table over
+      loop and row names
       {`my-loop`, `Row`, `2nd`, `a b`, ``, `naïve`} → `invalid-sql-name`
       naming the function and the name; {`row_a` + `Row_a`} →
       `invalid-sql-name` on `Row_a`, never `duplicate-local-name`; {two
-      loops `r`}, {loop `r` + row `r`} → `duplicate-local-name`. Green:
-      `registerLocalName` runs `assertSqlName` first. Red (b):
-      `packages/core/test/dsl/table*.test.ts`, `{userId, user_id}` both
-      orders and `{aB, xY, x_y, a_b}` → `duplicate-column` naming the
-      table, both keys and the shared name. Files: `body-context.ts`,
-      `table.ts`, tests.
+      loops `r`}, {loop `r` + row `r`}, {two rows `r`} →
+      `duplicate-local-name` naming both constructs; {row `found`} →
+      accepted (a row name takes no reserved check). Green: the name
+      rule runs `assertSqlName` first, and the two spaces are recorded
+      separately — rendered (loop record, row-derived scalars) and
+      construct (loop name, row name). Red (b):
+      `packages/core/test/table-surface.test.ts`, `{userId, user_id}`
+      both orders and `{aB, xY, x_y, a_b}` → `duplicate-column` naming
+      the table, both keys and the shared name, in the order
+      `duplicate-argument` uses (the reported pair is the first key whose
+      derived name repeats an earlier key's, with that earlier key).
+      Files: `body-context.ts`, `table.ts`, those two test files.
 
-- [ ] 1.3 (~7m) The ledger is seeded with the argument names. Red: a
-      table {`args: { x }` + loop `x`}, {`args: { x }` + row `x` with
-      column `id` — accepted, derived local `x_id` is free}, {`args:
-      { x_id }` + row `x` over column `id` → refused}, {`args: { x }` +
-      loop `y` — accepted} → `duplicate-local-name` naming the argument
-      where refused. Green: `defineFunction` hands the derived argument
-      names to the recording state before the body runs. Files:
-      `define-function.ts`, `body-context.ts`, tests.
+- [ ] 1.4 (~8m) The rendered space is seeded with the argument names.
+      Red: a table {`args: { x }` + loop `x` → refused, naming the
+      argument}, {`args: { x }` + row `x` over column `id` → accepted,
+      the derived local `x_id` is free}, {`args: { x_id }` + row `x`
+      over column `id` → refused, naming the argument}, {`args: { x }` +
+      loop `x` and separately row `x` in one body → refused},
+      {`args: { x }` + loop `y` → accepted}. Green: `defineFunction`
+      hands the derived argument names to the recording state before the
+      body runs; they seed the rendered space only. Files:
+      `define-function.ts`, `body-context.ts`,
+      `packages/core/test/define-function.test.ts`,
+      `packages/core/test/plpgsql/body-context.test.ts`.
 
-- [ ] 1.4 (~6m) Docs and changeset. `function-builder-pitfalls.md`
-      states the three checks a local name passes (SQL name, reserved
-      including column-name keywords, duplicate including arguments);
-      `pnpm changeset` → `patch`. Files: the reference, `.changeset/*.md`.
+- [ ] 1.5 (~6m) Docs and changeset. `function-builder-pitfalls.md`
+      states the checks a local name passes (SQL name, reserved
+      including column-name keywords, duplicate across the two spaces
+      including arguments) and that a row name is judged by the locals
+      it declares; `pnpm changeset` → `patch`. Files: the reference,
+      `.changeset/*.md`.

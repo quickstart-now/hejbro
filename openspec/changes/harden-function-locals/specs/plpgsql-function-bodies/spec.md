@@ -12,15 +12,28 @@ class is defined by its source, not by how it fails:
   (a column-name keyword, which cannot stand as a function parameter or
   an unquoted local);
 - a variable plpgsql declares on its own — `found` in every function,
-  `sqlstate` and `sqlerrm` inside an exception handler, and the
-  variables a trigger function receives: `tg_name`, `tg_when`,
+  `sqlstate` and `sqlerrm` inside an exception handler, the rows a
+  trigger body receives (`new`, `old`), and the variables a trigger
+  function receives: `tg_name`, `tg_when`,
   `tg_level`, `tg_op`, `tg_relid`, `tg_relname`, `tg_table_name`,
-  `tg_table_schema`, `tg_nargs`, `tg_argv`, `tg_event`, `tg_tag`.
+  `tg_table_schema`, `tg_nargs`, `tg_argv`, `tg_event`, `tg_tag`;
+- a word plpgsql opens one of its own statements with, named one by one
+  because Postgres's keyword table accounts for none of them — it lists
+  some as unreserved and the rest not at all, while plpgsql's own parser
+  takes them as the start of a statement. Measured as a loop record and
+  as a row-declared local, nine fail: `begin`, `by`, `declare`,
+  `execute`, `foreach`, `if`, `loop`, `strict`, `while`. Five more —
+  `exception`, `get`, `perform`, `raise`, `return` — stand in every
+  rendered position and are refused all the same: they have been refused
+  since before this change, and relaxing a refusal is a change of its
+  own, decided on its own evidence.
 
-plpgsql's own statement words that are not Postgres keywords — `exit`,
-`elsif` and their like — are not in the class: measured, they stand as
-an argument, a loop name and a local in every rendered position, so
-refusing them would refuse a working program.
+The three sources reconstruct the shipped set as measured. `exit` and
+`elsif` belong to that last family and are still not in the class:
+measured, they stand as an argument, a loop name and a local in every
+rendered position, and — unlike the five above — no release ever
+refused them, so leaving them out relaxes nothing and refusing them
+would refuse a working program.
 
 A local by such a name either fails somewhere in the body or silently
 changes what the name means, so hejbro refuses it before the body
@@ -92,11 +105,15 @@ refused the same way.
   row read whose derived local is any keyword of category `C` — `int`,
   `row`, `values`, `time`, `timestamp`, `json`, `out`, `trim`,
   `between`, `exists` and the rest of the category, every one of them
-- **THEN** the declaration fails with `reserved-local-name` — as an
-  argument such a name is a syntax error at creation (`(int text)`) or
-  is reparsed as a parameter mode (`out`), and as a local it cannot be
-  declared unquoted — while `exit` and `elsif` are accepted in all three
-  positions
+- **THEN** the declaration fails with `reserved-local-name`. Measured on
+  `postgres:17`: as an argument all 63 fail at creation — 60 with a
+  syntax error (`(int text)`), and `inout`, `out` and `setof` with
+  42P13, the argument list parsed as a parameter mode or a set argument
+  that the return type then contradicts. As a loop record or a
+  row-declared local the server accepts them; hejbro refuses them there
+  too, because the refusal is uniform — one list, one check, one
+  message, wherever a body would render the name. `exit` and `elsif` are
+  accepted in all three positions and stay accepted
 
 #### Scenario: A name that merely contains an owned name is accepted
 - **WHEN** a function declares an argument, or names a loop,
@@ -114,19 +131,31 @@ A loop's record name and a row read's name SHALL be hejbro SQL
 identifiers — lower-case snake_case, exactly the rule an argument key's
 derived name and a column name already meet — and a name that is not
 SHALL be refused at declaration time with `invalid-sql-name`, naming the
-function and the name, before the reserved-name and duplicate checks
-run. Two spellings that fold to one unquoted identifier therefore never
-both pass: the one that is not lower-case is refused as not a SQL name,
-never accepted as a second local.
+function and the name, before any other check on that name runs. Two
+spellings that fold to one unquoted identifier therefore never both
+pass: the one that is not lower-case is refused as not a SQL name,
+never accepted as a second local. A row read's name takes no
+reserved-name check — it renders nowhere, and the scalars the read
+declares are checked in its place, as they already are.
 
-The body's ledger of declared names SHALL be seeded with the function's
-argument SQL names, so a loop or row local whose name — or whose
-derived scalar local — is an argument's name is refused with
-`duplicate-local-name`, naming the argument, exactly as a second local
-of one name already is. Postgres accepts the shadowing (the loop
-variable lives in a nested block), and the body then silently reads the
-loop's value where the author meant the caller's; the declaration is the
-only place the collision is visible.
+The names a body declares live in two spaces. The **rendered** space
+holds the plpgsql identifiers the body writes out — an argument's
+derived SQL name, a loop's record name, the scalars a row read declares
+(`<row>_<col>`) — and SHALL be seeded with the function's argument SQL
+names before the body is recorded, so a loop record or a row's derived
+scalar carrying an argument's name is refused with
+`duplicate-local-name` naming the argument. The **construct** space
+holds the names the author gives the body's constructs — a loop's name
+and a row read's name — so two constructs answering to one name are
+refused with the same code. A loop's name is in both spaces; a row
+read's name is in the construct space only, so a row read may carry an
+argument's name while the scalars it declares are still checked one by
+one. The message names which two constructs collided.
+
+Postgres accepts the shadowing (the loop variable lives in a nested
+block), and the body then silently reads the loop's value where the
+author meant the caller's; the declaration is the only place the
+collision is visible.
 
 #### Scenario: A loop or row name that is not a hejbro SQL name is refused
 - **WHEN** a body names a `ctx.forEach` loop or a `ctx.row` read
@@ -147,6 +176,13 @@ only place the collision is visible.
   over a column `id`)
 - **THEN** the declaration fails with `duplicate-local-name`, naming the
   argument the local would shadow, and no declaration is produced
+
+#### Scenario: A row read may carry an argument's name
+- **WHEN** a function declares `args: { x }` and its body names a row
+  read `x` over a projection whose derived locals are free (a column
+  `id`, deriving `x_id`)
+- **THEN** the declaration succeeds — the row name renders nowhere, and
+  the scalar the read declares is not an argument's name
 
 #### Scenario: Two locals of one name are refused
 - **WHEN** a body names two loops `r`, or a loop `r` and a row read `r`
