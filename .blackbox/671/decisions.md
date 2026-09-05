@@ -21,3 +21,14 @@ Confirms the four contract readings the planner raised at start (a), so the piec
 - The sequence alters are exactly two statements: `alter sequence … as <type>;` and `alter sequence … owned by <table>.<column>;`. Start, increment, min/max, cache and cycle are untouched by this piece.
 - "A handover prints nothing" is scoped to the `adoption-creates` code. Other diagnostics of the same run and their `Next:` lines are unaffected.
 
+<a id="r3"></a>
+## R3 — adoption-creates is a cli Diagnostic literal rendered by renderDiagnostics; cited in brownfield-adoption.md; gate gaps are neighbours
+
+_lead · interpretation · basis 671/R1; design.md Q3; delta cli-commands 'prints adoption-creates for widgets … Next: naming hejbro baseline'; packages/cli/src/diagnostics.ts Diagnostic shape; scripts/check-next-marker.mjs 112-138 and check-diagnostic-xref.mjs 105-120 as measured by the piece; #993 #994 · 2026-09-05T23:16Z · ratified: pending_
+
+Settles the two gate questions the planner raised before 1.3, so the diagnostic's shape is fixed before its wording is designed:
+
+- `adoption-creates` is a CLI `Diagnostic` (the type in `packages/cli/src/diagnostics.ts`), built in `generate.ts` as an object literal with `code: "adoption-creates"` and `severity: "warning"`, rendered through `renderDiagnostics` like the command's other diagnostics. That is the `warning[adoption-creates]: <table identity>` shape the delta's "prints `adoption-creates` for `widgets`" describes, and the `Next:` line is part of that rendered text. Landing inside `check:next-marker`'s candidate set (`code: "` literal) and `check:diagnostic-xref`'s DEFINE set follows from the shape; it is not the reason for it. The message wording itself stays 1.3's `[design]` decision.
+- The code's citation lives in `skills/hejbro/references/brownfield-adoption.md` (task 1.5, this piece's file), as a literal `warning[adoption-creates]` beside the reference's existing `error[baseline-not-first]` citation. `generate-verify-workflow.md` belongs to the lc piece and is not opened here.
+- The two gate gaps the investigation found (next-marker never scans a file whose diagnostics come only from the `diagnostic()` factory; diagnostic-xref never checks that a defined code is cited anywhere) are neighbours: the lead files them under #815; this piece does not touch `scripts/`.
+

@@ -33,6 +33,17 @@
       "at": "2026-09-05T23:11Z",
       "title": "adoption boundary: plain ALTER-time children, columns untouched, two sequence alters, code-scoped silence",
       "ratified": null
+    },
+    {
+      "id": "R3",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "671/R1; design.md Q3; delta cli-commands 'prints adoption-creates for widgets … Next: naming hejbro baseline'; packages/cli/src/diagnostics.ts Diagnostic shape; scripts/check-next-marker.mjs 112-138 and check-diagnostic-xref.mjs 105-120 as measured by the piece; #993 #994"
+      ],
+      "at": "2026-09-05T23:16Z",
+      "title": "adoption-creates is a cli Diagnostic literal rendered by renderDiagnostics; cited in brownfield-adoption.md; gate gaps are neighbours",
+      "ratified": null
     }
   ],
   "work": [],
