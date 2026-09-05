@@ -6,7 +6,7 @@
   "head": "42dfcc016531e9f0331b7bb9ac6dc061024e3ccb",
   "headRef": "fix-ledger-identity",
   "base": "dev",
-  "merged": null,
+  "merged": "2026-09-04T15:15:32Z",
   "pinnedAt": "2026-09-04T15:04Z",
   "refs": [
     {

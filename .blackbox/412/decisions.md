@@ -517,3 +517,24 @@ _owner · 2026-09-04T23:52Z · raw ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#193_
 
 The owner decides: start v3 now. Build it in the agent-skills repository (dd-blackbox), and carry it through to the hejbro vendoring.
 
+<a id="d20"></a>
+## D20 — when every agent has finished its run, write the session memory
+
+_owner · 2026-09-05T00:43Z · raw ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#197,198_
+
+The owner asks that once all the agents (the piece teams in flight) have completed their runs, the session's memory be written — the durable checkpoint for the next session. (Re-recorded: the first recording was lost with a dropped stash while syncing the main checkout onto #867.)
+
+<a id="d21"></a>
+## D21 — are existing dd-blackbox users (v1 or v2 records) migrated to v3 by the skill, and is that verified?
+
+_owner · 2026-09-05T01:10Z · raw ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#211_
+
+The owner asks whether existing dd-blackbox users, whichever record generation they are on (v1 or v2), are migrated to v3 through the skill as it now stands, and whether that migration is verified.
+
+<a id="d22"></a>
+## D22 — write the session memory and end the session
+
+_owner · 2026-09-05T03:57Z · raw ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#245_
+
+The owner closes the session: write the session memory and stop. Memory was written under D20 (phase-cycle checkpoint, ratification queue, workflow rules); this entry marks the close. State at close: every #412 batch change archived (co li ip ck qy so cp ld cv), dev at ac485bc2, no worktrees, no live agents; the .blackbox/412 record (D20-D22) and index refresh stay uncommitted in the main checkout for the next PR. Next slot #819 awaits an explicit go.
+

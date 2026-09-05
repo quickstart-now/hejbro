@@ -528,6 +528,33 @@
       "raw": [
         "ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#193"
       ]
+    },
+    {
+      "id": "D20",
+      "by": "owner",
+      "at": "2026-09-05T00:43Z",
+      "title": "when every agent has finished its run, write the session memory",
+      "raw": [
+        "ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#197,198"
+      ]
+    },
+    {
+      "id": "D21",
+      "by": "owner",
+      "at": "2026-09-05T01:10Z",
+      "title": "are existing dd-blackbox users (v1 or v2 records) migrated to v3 by the skill, and is that verified?",
+      "raw": [
+        "ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#211"
+      ]
+    },
+    {
+      "id": "D22",
+      "by": "owner",
+      "at": "2026-09-05T03:57Z",
+      "title": "write the session memory and end the session",
+      "raw": [
+        "ef19f294-a4fc-4e10-8c65-c2c2a109dcb4#245"
+      ]
     }
   ],
   "work": [
@@ -599,6 +626,11 @@
       "number": 878,
       "role": "refs",
       "pinnedAt": "2026-09-05T02:28Z"
+    },
+    {
+      "number": 880,
+      "role": "refs",
+      "pinnedAt": "2026-09-05T04:01Z"
     }
   ],
   "origin": null,
