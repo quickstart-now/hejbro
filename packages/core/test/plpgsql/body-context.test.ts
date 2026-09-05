@@ -232,7 +232,9 @@ describe("body-context recording", () => {
 				);
 				ctx.return(row);
 			}),
-		).toThrowError(/already declared/);
+		).toThrowError(
+			/the row read named "dup" collides with the row read named "dup"/,
+		);
 	});
 
 	it("reserved local name throws reserved-local-name", () => {
@@ -435,7 +437,7 @@ describe("body-context recording", () => {
 				);
 				ctx.return(row);
 			}),
-		).toThrowError(/already declared/);
+		).toThrowError(/the loop named "dup" collides with the loop named "dup"/);
 	});
 
 	it("reserved loop name throws reserved-local-name", () => {
@@ -800,6 +802,156 @@ describe("body-context recording", () => {
 		).toThrowError(
 			/must return a trigger row.*Next: run the statement with ctx\.execute/,
 		);
+	});
+});
+
+describe("loop and row names are hejbro SQL names, checked before duplicate (#817/#821, D106 832/R2)", () => {
+	const invalidNameCases: ReadonlyArray<{
+		readonly label: string;
+		readonly name: string;
+	}> = [
+		{ label: "a hyphen", name: "my-loop" },
+		{ label: "an upper-case first letter", name: "Item" },
+		{ label: "a leading digit", name: "2nd" },
+		{ label: "a space", name: "a b" },
+		{ label: "the empty string", name: "" },
+		{ label: "a non-ASCII letter", name: "café" },
+	];
+
+	it.each(invalidNameCases)(
+		"refuses a loop named $name ($label) with invalid-sql-name",
+		({ name }) => {
+			expect(() =>
+				defineTrigger(comments, triggerConfig, (ctx, { new: row }) => {
+					ctx.forEach(
+						select(comments).where(eq(comments.parentId, row.id)),
+						() => {},
+						name,
+					);
+					ctx.return(row);
+				}),
+			).toThrowError(/is not a valid hejbro SQL identifier/);
+		},
+	);
+
+	it.each(invalidNameCases)(
+		"refuses a row read named $name ($label) with invalid-sql-name",
+		({ name }) => {
+			expect(() =>
+				defineTrigger(comments, triggerConfig, (ctx, { new: row }) => {
+					ctx.row(
+						select({ postId: comments.postId }, comments).where(
+							eq(comments.id, row.parentId),
+						),
+						name,
+					);
+					ctx.return(row);
+				}),
+			).toThrowError(/is not a valid hejbro SQL identifier/);
+		},
+	);
+
+	it("names the function and the name in a loop's invalid-sql-name refusal", () => {
+		expect(() =>
+			defineTrigger(comments, triggerConfig, (ctx, { new: row }) => {
+				ctx.forEach(
+					select(comments).where(eq(comments.parentId, row.id)),
+					() => {},
+					"my-loop",
+				);
+				ctx.return(row);
+			}),
+		).toThrowError(
+			/loop in app\.comments\.comments_single_depth name "my-loop" is not a valid hejbro SQL identifier/,
+		);
+	});
+
+	it("names the function and the name in a row read's invalid-sql-name refusal", () => {
+		expect(() =>
+			defineTrigger(comments, triggerConfig, (ctx, { new: row }) => {
+				ctx.row(
+					select({ postId: comments.postId }, comments).where(
+						eq(comments.id, row.parentId),
+					),
+					"my-row",
+				);
+				ctx.return(row);
+			}),
+		).toThrowError(
+			/row read in app\.comments\.comments_single_depth name "my-row" is not a valid hejbro SQL identifier/,
+		);
+	});
+
+	it("a loop named Row -- a mixed-case spelling of an owned category-C name -- fails with reserved-local-name, not invalid-sql-name", () => {
+		expect(() =>
+			defineTrigger(comments, triggerConfig, (ctx, { new: row }) => {
+				ctx.forEach(
+					select(comments).where(eq(comments.parentId, row.id)),
+					() => {},
+					"Row",
+				);
+				ctx.return(row);
+			}),
+		).toThrowError(
+			/collides with a name Postgres reserves or plpgsql declares itself/,
+		);
+	});
+
+	it("two spellings that fold to one row name never both pass -- row_a then Row_a fails with invalid-sql-name, before any duplicate check", () => {
+		expect(() =>
+			defineTrigger(comments, triggerConfig, (ctx, { new: row }) => {
+				ctx.row(
+					select({ postId: comments.postId }, comments).where(
+						eq(comments.id, row.parentId),
+					),
+					"row_a",
+				);
+				ctx.row(
+					select({ postId: comments.postId }, comments).where(
+						eq(comments.id, row.id),
+					),
+					"Row_a",
+				);
+				ctx.return(row);
+			}),
+		).toThrowError(/is not a valid hejbro SQL identifier/);
+	});
+
+	it("two loops named r collide with duplicate-local-name, naming both as loops", () => {
+		expect(() =>
+			defineTrigger(comments, triggerConfig, (ctx, { new: row }) => {
+				ctx.forEach(
+					select(comments).where(eq(comments.parentId, row.id)),
+					() => {},
+					"r",
+				);
+				ctx.forEach(
+					select(comments).where(eq(comments.parentId, row.id)),
+					() => {},
+					"r",
+				);
+				ctx.return(row);
+			}),
+		).toThrowError(/the loop named "r" collides with the loop named "r"/);
+	});
+
+	it("a loop r and a row read r collide with duplicate-local-name, naming the loop and the row read", () => {
+		expect(() =>
+			defineTrigger(comments, triggerConfig, (ctx, { new: row }) => {
+				ctx.forEach(
+					select(comments).where(eq(comments.parentId, row.id)),
+					() => {},
+					"r",
+				);
+				ctx.row(
+					select({ postId: comments.postId }, comments).where(
+						eq(comments.id, row.parentId),
+					),
+					"r",
+				);
+				ctx.return(row);
+			}),
+		).toThrowError(/the loop named "r" collides with the row read named "r"/);
 	});
 });
 

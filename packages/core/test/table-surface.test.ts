@@ -78,8 +78,67 @@ describe("table() surface (D15)", () => {
 		expect(() =>
 			// biome-ignore lint/style/useNamingConvention: post_id models the real SQL column name assertSqlName (D36) would derive from postId -- the test's whole point is this exact collision.
 			table(shop, "posts", { postId: uuid(), post_id: uuid() }),
-		).toThrowError(/duplicate-column|duplicate column/);
+		).toThrowError(expect.objectContaining({ code: "duplicate-column" }));
 	});
+});
+
+describe("table() — duplicate-column names both colliding keys (#818)", () => {
+	const collidingCases: ReadonlyArray<{
+		readonly label: string;
+		readonly columns: Record<string, ColumnBuilder>;
+		readonly firstKey: string;
+		readonly secondKey: string;
+		readonly sharedName: string;
+	}> = [
+		{
+			label: "camelCase beside snake_case",
+			// biome-ignore lint/style/useNamingConvention: adversarial snake_case key under test.
+			columns: { userId: uuid(), user_id: uuid() },
+			firstKey: "userId",
+			secondKey: "user_id",
+			sharedName: "user_id",
+		},
+		{
+			label: "snake_case beside camelCase (declaration order reversed)",
+			// biome-ignore lint/style/useNamingConvention: adversarial snake_case key under test.
+			columns: { user_id: uuid(), userId: uuid() },
+			firstKey: "user_id",
+			secondKey: "userId",
+			sharedName: "user_id",
+		},
+		{
+			label: "four keys forming two pairs -- the second pair is reported",
+			// biome-ignore lint/style/useNamingConvention: adversarial snake_case key under test.
+			columns: { aB: uuid(), xY: uuid(), x_y: uuid(), a_b: uuid() },
+			firstKey: "xY",
+			secondKey: "x_y",
+			sharedName: "x_y",
+		},
+	];
+
+	it.each(collidingCases)(
+		"refuses $label with duplicate-column, naming the table and both keys",
+		({ columns, firstKey, secondKey, sharedName }) => {
+			let caught: unknown;
+			try {
+				table(shop, "dup_probe", columns);
+			} catch (error) {
+				caught = error;
+			}
+			expect((caught as { code?: string } | undefined)?.code).toBe(
+				"duplicate-column",
+			);
+			expect((caught as { message?: string } | undefined)?.message).toContain(
+				'table "dup_probe"',
+			);
+			expect((caught as { message?: string } | undefined)?.message).toContain(
+				`"${firstKey}" and "${secondKey}"`,
+			);
+			expect((caught as { message?: string } | undefined)?.message).toContain(
+				`"${sharedName}"`,
+			);
+		},
+	);
 });
 
 const app = schema("app");

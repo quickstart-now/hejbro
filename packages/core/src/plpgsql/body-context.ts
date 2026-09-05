@@ -20,6 +20,7 @@ import type {
 } from "../query/mutate";
 import type { SelectLimited } from "../query/select";
 import { stableJson } from "../snapshot/stable-json";
+import { assertSqlName } from "../sql/identifier-rules";
 import type { BuilderFamily } from "../types/column-builder";
 import type {
 	BodyStatement,
@@ -220,6 +221,25 @@ export type SetofTableIdentity = {
 	readonly tableName: string;
 } | null;
 
+/**
+ * A name a body renders as a plpgsql identifier — an argument's derived
+ * SQL name (seeded in from `defineFunction`/`defineTrigger`, task 1.4), a
+ * loop's record name, or a row read's derived scalar (`<row>_<col>`). A
+ * collision here is one Postgres itself refuses or, worse, silently
+ * resolves to the wrong variable, so a rendered name is also
+ * reserved-checked (#832/R2).
+ */
+type RenderedNameKind = "argument" | "loop" | "row local";
+
+/**
+ * A name the author gives a body construct — a loop's name, or a row
+ * read's own name. A collision here is hejbro's own (two constructs
+ * answering to one name in the same body); a row read's name renders
+ * nowhere, so it is never reserved-checked. A loop's name is both a
+ * rendered identifier and a construct label.
+ */
+type ConstructNameKind = "loop" | "row read";
+
 type RecordingState = {
 	readonly identity: string;
 	readonly declaredAt: string | null;
@@ -230,7 +250,8 @@ type RecordingState = {
 	/** set the moment any return statement is recorded, at any nesting depth — a scalar function that never sets it has no way to produce its value. */
 	readonly returned: { current: boolean };
 	readonly declarations: Array<PlpgsqlVarDeclaration>;
-	readonly declaredNames: Set<string>;
+	readonly renderedNames: Map<string, RenderedNameKind>;
+	readonly constructNames: Map<string, ConstructNameKind>;
 	readonly frames: Array<Array<BodyStatement>>;
 	readonly rowCounter: { current: number };
 	readonly loopCounter: { current: number };
@@ -267,16 +288,95 @@ const pushStatement = (
 	currentFrame(state).push(statement);
 };
 
-const registerLocalName = (state: RecordingState, name: string): void => {
-	assertValidLocalName(name, state.identity, state.declaredAt);
-	if (state.declaredNames.has(name)) {
-		throwHejbroError(
-			"duplicate-local-name",
-			`local name "${name}" is already declared in ${state.identity}. Next: pick a different row name or variable.`,
-			state.declaredAt,
-		);
+/** A `duplicate-local-name` message's construct label for one of the two name-space kinds. */
+const nameKindLabel = (kind: RenderedNameKind | ConstructNameKind): string => {
+	if (kind === "row read") {
+		return "row read";
 	}
-	state.declaredNames.add(name);
+	if (kind === "row local") {
+		return "row-declared local";
+	}
+	return kind;
+};
+
+/** Throws `duplicate-local-name`, naming both colliding constructs by kind (#832/R2) — the already-registered owner and the one being registered now. */
+const throwNameCollision = (
+	state: RecordingState,
+	name: string,
+	ownerKind: RenderedNameKind | ConstructNameKind,
+	requesterKind: RenderedNameKind | ConstructNameKind,
+): never =>
+	throwHejbroError(
+		"duplicate-local-name",
+		`${state.identity}: the ${nameKindLabel(ownerKind)} named "${name}" collides with the ${nameKindLabel(requesterKind)} named "${name}" — one name, two constructs. Next: rename one of them.`,
+		state.declaredAt,
+	);
+
+/**
+ * Registers `name` as a rendered plpgsql identifier — a loop record or a
+ * row-declared local — checked in order: reserved (folds case, so a
+ * mixed-case spelling of an owned name is still caught here, not by the
+ * SQL-name check below), hejbro SQL name, then unique among every other
+ * rendered name (#832/R2, spec.md's "A body local is a hejbro SQL name
+ * and never shadows an argument").
+ */
+const registerRenderedName = (
+	state: RecordingState,
+	name: string,
+	kind: RenderedNameKind,
+	context: string,
+): void => {
+	assertValidLocalName(name, state.identity, state.declaredAt);
+	assertSqlName(name, context, state.declaredAt);
+	const owner = state.renderedNames.get(name);
+	if (owner !== undefined) {
+		throwNameCollision(state, name, owner, kind);
+	}
+	state.renderedNames.set(name, kind);
+};
+
+/**
+ * Registers `name` as a construct label — a row read's own name — checked
+ * as a hejbro SQL name and for uniqueness among other construct labels,
+ * never reserved-checked: the name itself renders nowhere (#832/R2,
+ * design.md Q2/Q3).
+ */
+const registerConstructName = (
+	state: RecordingState,
+	name: string,
+	kind: ConstructNameKind,
+	context: string,
+): void => {
+	assertSqlName(name, context, state.declaredAt);
+	const owner = state.constructNames.get(name);
+	if (owner !== undefined) {
+		throwNameCollision(state, name, owner, kind);
+	}
+	state.constructNames.set(name, kind);
+};
+
+/**
+ * A loop's name is both a rendered plpgsql record identifier and a
+ * construct label — registered in both spaces, so a collision with
+ * either an argument/row-local variable or a row read's own name is
+ * caught (design.md Q3). Reserved-checked before the SQL-name check
+ * (same order as {@link registerRenderedName}): a loop named `FOUND` or
+ * `Row` answers `reserved-local-name`, not `invalid-sql-name`, because
+ * lower-casing it would not make it usable.
+ */
+const registerLoopName = (state: RecordingState, name: string): void => {
+	assertValidLocalName(name, state.identity, state.declaredAt);
+	assertSqlName(name, `loop in ${state.identity}`, state.declaredAt);
+	const renderedOwner = state.renderedNames.get(name);
+	if (renderedOwner !== undefined) {
+		throwNameCollision(state, name, renderedOwner, "loop");
+	}
+	const constructOwner = state.constructNames.get(name);
+	if (constructOwner !== undefined) {
+		throwNameCollision(state, name, constructOwner, "loop");
+	}
+	state.renderedNames.set(name, "loop");
+	state.constructNames.set(name, "loop");
 };
 
 const resolveRowEntries = (
@@ -303,11 +403,22 @@ const recordRow =
 		markConsumed(query.selectQuery);
 		state.rowCounter.current += 1;
 		const rowName = name ?? `row_${state.rowCounter.current}`;
+		registerConstructName(
+			state,
+			rowName,
+			"row read",
+			`row read in ${state.identity}`,
+		);
 		const entries = resolveRowEntries(state, query.projectionInput);
 
 		const composed = entries.map((entry) => {
 			const varName = `${rowName}_${toSnakeCase(entry.key)}`;
-			registerLocalName(state, varName);
+			registerRenderedName(
+				state,
+				varName,
+				"row local",
+				`row-declared local in ${state.identity}`,
+			);
 			state.declarations.push({
 				declKind: "scalar",
 				name: varName,
@@ -716,7 +827,7 @@ const recordForEach = <TProjection extends RowProjection>(
 	markConsumed(query.selectQuery);
 	state.loopCounter.current += 1;
 	const loopName = name ?? `loop_${state.loopCounter.current}`;
-	registerLocalName(state, loopName);
+	registerLoopName(state, loopName);
 	state.declarations.push({ declKind: "record", name: loopName });
 
 	const entries = resolveRowEntries(state, query.projectionInput);
@@ -871,7 +982,8 @@ export const createRecordingContext = (
 		scalarReturnFamily,
 		returned: { current: false },
 		declarations: [],
-		declaredNames: new Set(),
+		renderedNames: new Map(),
+		constructNames: new Map(),
 		frames: [[]],
 		rowCounter: { current: 0 },
 		loopCounter: { current: 0 },
