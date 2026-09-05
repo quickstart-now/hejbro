@@ -383,6 +383,26 @@ recursive-term`, so this is the same union-compatibility rule
 `.union()`/`.unionAll()` already apply between any two branches, not a
 second one.
 
+The outward row's *type* per key is always the anchor's; its
+*nullability* is not — a key reads nullable when either the anchor or
+the recursive term projects it nullable, the recursive term's own
+nested reads (`jsonArrayFrom`/`jsonObjectFrom`) included. **Exception:**
+when the recursive term is itself a set operation (`.union()` and
+friends), a key it projects from a column, or from an expression that
+is not a nested read, reads nullable regardless — a set-op stage
+carries no left-joined set of its own to check, so a real left join
+inside one of its branches would otherwise go unseen. A key it projects
+*through* a nested read does not follow that rule: the nested read's
+own rule answers instead, as it does everywhere else — an array read
+(`jsonArrayFrom`) is never null, an object read (`jsonObjectFrom`) is
+nullable by its own rule. None of this is the same rule a plain
+`union()`/`intersect()`/`except()` result already has: a plain set
+operation keeps the left branch's own projection unchanged, nullability
+included (#944). `handle.with(...)` currently reads every CTE key as
+nullable regardless of any of this (a separate, existing boundary,
+#942), so the rule becomes visible on the chain once that boundary
+narrows.
+
 ```ts prelude=query-handle
 import { eq, select } from "hejbro";
 

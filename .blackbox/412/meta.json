@@ -661,7 +661,7 @@
       "ratified": null
     },
     {
-      "id": "R33",
+      "id": "R34",
       "by": "lead",
       "kind": "extension",
       "basis": [],
@@ -679,6 +679,15 @@
       ],
       "at": "2026-09-05T08:29Z",
       "title": "Lead-direct plain-cycle batches for the remaining uncovered issues",
+      "ratified": null
+    },
+    {
+      "id": "R35",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [],
+      "at": "2026-09-05T13:25Z",
+      "title": "No git stash inside a worktree: the stash stack is shared by every worktree of the repository",
       "ratified": null
     }
   ],
@@ -776,6 +785,11 @@
       "number": 955,
       "role": "refs",
       "pinnedAt": "2026-09-05T16:18Z"
+    },
+    {
+      "number": 956,
+      "role": "refs",
+      "pinnedAt": "2026-09-05T16:37Z"
     }
   ],
   "origin": null,

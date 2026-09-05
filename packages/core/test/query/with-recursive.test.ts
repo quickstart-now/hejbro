@@ -1,4 +1,10 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
+import type {
+	ColumnRefNode,
+	CteFieldRef,
+	UntrackedJoins,
+	WidenedBy,
+} from "../../src/index";
 import {
 	bigint,
 	count,
@@ -21,6 +27,10 @@ const t = table(app, "t", {
 	id: integer().primaryKey(),
 	parent: integer(),
 	v: numeric({ mode: "number" }),
+});
+const other = table(app, "other", {
+	id: integer().primaryKey(),
+	tId: integer(),
 });
 
 describe("withRecursive (add-ctes task 6.1)", () => {
@@ -122,6 +132,7 @@ describe("the recursive term is typed from the anchor (add-ctes task 6.2)", () =
 	});
 
 	it("a field computed differently on each side is accepted and reads back as the anchor's type", () => {
+		const windowedV = over(rowNumber(), { orderBy: [t.id] });
 		const stage = withCte((w) => {
 			const r = w.asRecursive(
 				"r",
@@ -138,10 +149,10 @@ describe("the recursive term is typed from the anchor (add-ctes task 6.2)", () =
 				// `42804` -- a plain union does widen, a recursive CTE does
 				// not, so this builder can't type it as a union either).
 				(self) =>
-					select(
-						{ id: t.id, v: over(rowNumber(), { orderBy: [t.id] }) },
-						self,
-					).innerJoin(t, eq(self.id, t.parent)),
+					select({ id: t.id, v: windowedV }, self).innerJoin(
+						t,
+						eq(self.id, t.parent),
+					),
 			);
 			return select({ id: r.id, v: r.v }, r);
 		});
@@ -151,11 +162,11 @@ describe("the recursive term is typed from the anchor (add-ctes task 6.2)", () =
 
 		// The type-level proof: a recursive CTE built from this exact
 		// anchor exposes the SAME `v` type an ordinary, non-recursive entry
-		// built from that anchor ALONE would -- untouched by the recursive
-		// term's own type. If `r.v` were instead a union with the recursive
-		// term's own type (SetOpResult's own shape, discarded rather than
-		// propagated -- see CompatibleRecursiveTerm's docstring), this
-		// would not hold.
+		// built from that anchor ALONE would, intersected with the outward
+		// `WidenedBy` carriage (#500/R2) -- never a union with the
+		// recursive term's own value type (SetOpResult's own shape,
+		// discarded rather than propagated -- see CompatibleRecursiveTerm's
+		// docstring).
 		const anchorOnly = withCte((w) => {
 			const p = w.as(
 				"p",
@@ -163,9 +174,9 @@ describe("the recursive term is typed from the anchor (add-ctes task 6.2)", () =
 			);
 			return select({ id: p.id, v: p.v }, p);
 		});
-		expectTypeOf(stage.projectionInput.v).toEqualTypeOf(
-			anchorOnly.projectionInput.v,
-		);
+		expectTypeOf(stage.projectionInput.v).toEqualTypeOf<
+			typeof anchorOnly.projectionInput.v & WidenedBy<typeof windowedV, never>
+		>();
 	});
 });
 
@@ -488,6 +499,143 @@ describe("a same-family type divergence between anchor and recursive term is not
 					),
 			);
 			return select({ id: r.id, amount: r.amount }, r);
+		});
+		expect(stage.withQuery.recursive).toBe(true);
+	});
+});
+
+// #500/R2: nullability is decided in @hejbro/query's ProjectedColumnResult
+// alone -- this file only proves core's own half, the structural carriage.
+// A second copy of the null rule here would be a proper subset of
+// ProjectedColumnResult's knowledge (it doesn't see left joins), so no
+// row-nullability assertion belongs in this file; that table lives in
+// @hejbro/query's own type tests (task 1.2).
+describe("the outward reference carries the recursive term's projection (#500/R2, task 1.1)", () => {
+	it("every outward key carries WidenedBy<the recursive term's own projected value for that key>", () => {
+		const stage = withCte((w) => {
+			const r = w.asRecursive(
+				"r",
+				// anchor: "v" is aliased to t.id (non-null) -- only the
+				// recursive term's own value for "v" (t.v) matters for what
+				// WidenedBy carries.
+				select({ id: t.id, v: t.id }, t).where(isNull(t.parent)),
+				(self) =>
+					select({ id: self.id, v: t.v }, self).innerJoin(
+						t,
+						eq(self.id, t.parent),
+					),
+			);
+			expectTypeOf(r.id).toEqualTypeOf<
+				CteFieldRef<typeof t.id> & WidenedBy<CteFieldRef<typeof t.id>, never>
+			>();
+			expectTypeOf(r.v).toEqualTypeOf<
+				CteFieldRef<typeof t.id> & WidenedBy<typeof t.v, never>
+			>();
+			return select({ id: r.id, v: r.v }, r);
+		});
+		expect(stage.withQuery.recursive).toBe(true);
+	});
+
+	it("the reference the recursive callback receives carries none", () => {
+		withCte((w) => {
+			w.asRecursive(
+				"r",
+				select({ id: t.id, v: t.id }, t).where(isNull(t.parent)),
+				(self) => {
+					// unchanged from every other test in this file (Q2) -- the
+					// plain anchor-typed field, no WidenedBy intersected onto it.
+					expectTypeOf(self.v).toEqualTypeOf<CteFieldRef<typeof t.id>>();
+					return select({ id: self.id, v: t.v }, self).innerJoin(
+						t,
+						eq(self.id, t.parent),
+					);
+				},
+			);
+			return select(t);
+		});
+	});
+
+	it("the outward reference is still assignable to FromSource, and its exprNode stays a ColumnRefNode", () => {
+		const stage = withCte((w) => {
+			const r = w.asRecursive(
+				"r",
+				select({ id: t.id, v: t.id }, t).where(isNull(t.parent)),
+				(self) =>
+					select({ id: self.id, v: t.v }, self).innerJoin(
+						t,
+						eq(self.id, t.parent),
+					),
+			);
+			// `r` still type-checks as a from-source here -- WidenedBy is an
+			// optional phantom, never a structural obstacle.
+			const body = select({ id: r.id, v: r.v }, r);
+			expectTypeOf(r.v.exprNode).toEqualTypeOf<ColumnRefNode>();
+			return body;
+		});
+		expect(stage.withQuery.recursive).toBe(true);
+	});
+});
+
+// #500/R3: the recursive term's own left-joined set travels with
+// `WidenedBy` too -- @hejbro/query needs it to tell "left-joined, reads
+// nullable regardless of notNull" from "not joined, notNull survives"
+// when it later resolves `ProjectedColumnResult<R, TRecursiveLeftJoined>`
+// (task 1.2). Reading it here only ever widens a key toward nullable --
+// `select.ts`'s own absorption note forbids narrowing on a set a
+// position never earned, which this is not.
+describe("the outward reference carries the recursive term's left-joined set (#500/R3, task 1.1b)", () => {
+	it("a recursive callback that left-joins a table carries that table in the outward brand", () => {
+		const stage = withCte((w) => {
+			const r = w.asRecursive(
+				"r",
+				select({ id: t.id, v: t.id }, t).where(isNull(t.parent)),
+				(self) =>
+					select({ id: self.id, v: t.v }, self).leftJoin(
+						other,
+						eq(self.id, other.tId),
+					),
+			);
+			expectTypeOf(r.v).toEqualTypeOf<
+				CteFieldRef<typeof t.id> & WidenedBy<typeof t.v, typeof other>
+			>();
+			return select({ id: r.id, v: r.v }, r);
+		});
+		expect(stage.withQuery.recursive).toBe(true);
+	});
+
+	it("a callback that left-joins nothing carries never, the tracked empty set", () => {
+		const stage = withCte((w) => {
+			const r = w.asRecursive(
+				"r",
+				select({ id: t.id, v: t.id }, t).where(isNull(t.parent)),
+				(self) =>
+					select({ id: self.id, v: t.v }, self).innerJoin(
+						t,
+						eq(self.id, t.parent),
+					),
+			);
+			expectTypeOf(r.v).toEqualTypeOf<
+				CteFieldRef<typeof t.id> & WidenedBy<typeof t.v, never>
+			>();
+			return select({ id: r.id, v: r.v }, r);
+		});
+		expect(stage.withQuery.recursive).toBe(true);
+	});
+
+	it("a recursive term that is a SetOpStage carries UntrackedJoins, the fail-safe default", () => {
+		const stage = withCte((w) => {
+			const r = w.asRecursive(
+				"r",
+				select({ id: t.id, v: t.id }, t).where(isNull(t.parent)),
+				(self) =>
+					select({ id: self.id, v: t.v }, self)
+						.innerJoin(t, eq(self.id, t.parent))
+						.union(select({ id: t.id, v: t.v }, t)),
+			);
+			expectTypeOf(r.v).toEqualTypeOf<
+				CteFieldRef<typeof t.id> & WidenedBy<typeof t.v, UntrackedJoins>
+			>();
+			return select({ id: r.id, v: r.v }, r);
 		});
 		expect(stage.withQuery.recursive).toBe(true);
 	});

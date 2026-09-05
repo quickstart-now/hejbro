@@ -250,4 +250,5 @@ export const ENGINE = [
 	"tableIdentity",
 	"tableMeta",
 	"throwHejbroError",
+	"widenedByBrand", // the type layer's carrying mechanism (asRecursive -> ProjectedColumnResult), not a name a schema author or query writer types
 ] as const;

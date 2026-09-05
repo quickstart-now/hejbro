@@ -1,23 +1,38 @@
-import type { CteRowEnvironment, Expr } from "@hejbro/core";
+import type {
+	CteFieldRef,
+	CteRowEnvironment,
+	Expr,
+	RecursiveCteReference,
+	UntrackedJoins,
+	WidenedBy,
+} from "@hejbro/core";
 import {
 	bigint,
 	columnRef,
 	type count,
+	eq,
+	integer,
+	isNull,
 	json,
+	jsonArrayFrom,
 	jsonb,
+	jsonObjectFrom,
 	lag,
 	max,
 	over,
 	pgEnum,
 	schema,
+	select,
 	serial,
 	type sum,
 	table,
 	type tableMeta,
 	text,
 	uuid,
+	withCte,
 } from "@hejbro/core";
-import { describe, expectTypeOf, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
+import { compile } from "../../src/compile/compile";
 import type { SelectResult } from "../../src/types/select-result";
 
 const shop = schema("shop");
@@ -465,5 +480,404 @@ describe("a withCte() reference's read type (add-ctes task 3.2)", () => {
 		}>;
 		type Proj = SelectResult<{ readonly r: Ranked["rn"] }>;
 		expectTypeOf<Proj>().toEqualTypeOf<{ readonly r: bigint | null }>();
+	});
+});
+
+// #500/R2, #500/R3: a recursive CTE's outward row widens per key by the
+// recursive term's own nullability -- `RecursiveCteReference`'s three
+// generic parameters (anchor projection, recursive term's own
+// projection, recursive term's own left-joined set) stand in for an
+// actual `asRecursive` call here, the same type-only style this file
+// already uses for `CteRowEnvironment` above. Every `SelectResult` call
+// below pins its OWN `TLeftJoined` at `never` (the tracked empty set) --
+// `db.with(...)`'s own body absorbs that parameter into the untracked
+// default regardless (narrow-join-nullability task 3.4, already pinned
+// in `chain-types.test.ts`, unrelated to this change and out of its
+// scope), which would make every key nullable and hide the very
+// distinction this table exists to draw.
+describe("a recursive CTE's outward row widens by the recursive term's nullability (#500/R2, #500/R3, task 1.2)", () => {
+	it("anchor non-null, recursive term nullable -> outward nullable", () => {
+		type R = RecursiveCteReference<
+			{ readonly v: typeof posts.amountRequired },
+			{ readonly v: typeof posts.amount },
+			never
+		>;
+		type Row = SelectResult<{ readonly v: R["v"] }, never>;
+		expectTypeOf<Row["v"]>().toEqualTypeOf<number | null>();
+	});
+
+	it("both branches non-null -> non-null", () => {
+		type R = RecursiveCteReference<
+			{ readonly v: typeof posts.amountRequired },
+			{ readonly v: typeof posts.amountRequired },
+			never
+		>;
+		type Row = SelectResult<{ readonly v: R["v"] }, never>;
+		expectTypeOf<Row["v"]>().toEqualTypeOf<number>();
+	});
+
+	it("anchor nullable, recursive term non-null -> nullable (the anchor's own nullability still governs)", () => {
+		type R = RecursiveCteReference<
+			{ readonly v: typeof posts.amount },
+			{ readonly v: typeof posts.amountRequired },
+			never
+		>;
+		type Row = SelectResult<{ readonly v: R["v"] }, never>;
+		expectTypeOf<Row["v"]>().toEqualTypeOf<number | null>();
+	});
+
+	it("the recursive term projects the key through a window function -> nullable, a regression guard rather than evidence of the widening (over(...) already fails IsDirectColumnRef, so this is nullable with or without WidenedBy)", () => {
+		type R = RecursiveCteReference<
+			{ readonly v: typeof posts.amountRequired },
+			{ readonly v: ReturnType<typeof over<typeof posts.amountRequired>> },
+			never
+		>;
+		type Row = SelectResult<{ readonly v: R["v"] }, never>;
+		expectTypeOf<Row["v"]>().toEqualTypeOf<number | null>();
+	});
+
+	it("two keys, one widened and one not", () => {
+		type R = RecursiveCteReference<
+			{
+				readonly id: typeof posts.amountRequired;
+				readonly v: typeof posts.amountRequired;
+			},
+			{
+				readonly id: typeof posts.amountRequired;
+				readonly v: typeof posts.amount;
+			},
+			never
+		>;
+		type Row = SelectResult<
+			{ readonly id: R["id"]; readonly v: R["v"] },
+			never
+		>;
+		expectTypeOf<Row["id"]>().toEqualTypeOf<number>();
+		expectTypeOf<Row["v"]>().toEqualTypeOf<number | null>();
+	});
+
+	it("the recursive term projects a left-joined table's non-null column -> outward nullable (why the rule lives in @hejbro/query, not core)", () => {
+		type R = RecursiveCteReference<
+			{ readonly v: typeof posts.amountRequired },
+			{ readonly v: typeof reactions.weight },
+			typeof reactions
+		>;
+		type Row = SelectResult<{ readonly v: R["v"] }, never>;
+		expectTypeOf<Row["v"]>().toEqualTypeOf<number | null>();
+	});
+
+	// #500/R6 (review B1, corrected): a recursive term ending in a set
+	// operation has no stage of its own to carry a left-joined set on --
+	// `SetOpStage` never mixes in `LeftJoinedBrand` -- so its set is
+	// UNKNOWN, and this repository's frozen contract reads an untracked
+	// position as nullable. A key such a term projects from a column, or
+	// from an expression that is not a nested read, reads nullable
+	// outward, even one neither branch actually projects as nullable
+	// (row R32) -- the delta's own exception, stated so the next reader
+	// doesn't re-derive it. `never` was tried and withdrawn (#500/R6): it
+	// would assert an empty set nobody measured and would drop a real
+	// left join hiding inside a set-op branch (row F1).
+	//
+	// #500/R8: a key such a term projects THROUGH A NESTED READ does not
+	// follow that untracked rule -- the value's own rule answers instead,
+	// as it does everywhere else (row E2u).
+	//
+	// json()/jsonb() read as `unknown` regardless of `notNull` (#500/R7)
+	// -- a row asserting non-null over a json-family column verifies
+	// nothing (`null extends unknown` is always `true`); every non-null
+	// row below uses a non-json anchor value instead.
+	const rn6 = schema("rn6");
+	const setOpTree = table(rn6, "set_op_tree", {
+		id: integer().primaryKey(),
+		parent: integer(),
+		v: integer(),
+		vReq: integer().notNull(),
+	});
+	const rn7 = schema("rn7");
+	const child = table(rn7, "child", {
+		id: integer().primaryKey(),
+		tId: integer(),
+		nameReq: text().notNull(),
+	});
+	const holder = table(rn7, "holder", {
+		id: integer().primaryKey(),
+		parent: integer(),
+		vReq: integer().notNull(),
+		blob: json(),
+	});
+	const f1Other = table(rn7, "f1_other", {
+		id: integer().primaryKey(),
+		tId: integer(),
+		w: integer().notNull(),
+	});
+
+	it("R32 a set-op recursive term with both branches non-null still reads nullable outward (#500/R6 exception)", () => {
+		const stage = withCte((w) => {
+			const r = w.asRecursive(
+				"r",
+				select({ id: setOpTree.id, v: setOpTree.vReq }, setOpTree).where(
+					isNull(setOpTree.parent),
+				),
+				(self) =>
+					select({ id: setOpTree.id, v: setOpTree.vReq }, self)
+						.innerJoin(setOpTree, eq(self.id, setOpTree.parent))
+						.union(
+							select({ id: setOpTree.id, v: setOpTree.vReq }, setOpTree).where(
+								isNull(setOpTree.id),
+							),
+						),
+			);
+			expectTypeOf(r.v).toEqualTypeOf<
+				CteFieldRef<typeof setOpTree.vReq> &
+					WidenedBy<typeof setOpTree.vReq, UntrackedJoins>
+			>();
+			return select({ id: r.id, v: r.v }, r);
+		});
+		const compiled = compile(stage);
+		expect(compiled.sql).toContain("with recursive");
+		expect(compiled.sql).toContain("union");
+		type Row = SelectResult<typeof stage.projectionInput, never>;
+		expectTypeOf<Row["id"]>().toEqualTypeOf<number | null>();
+		expectTypeOf<Row["v"]>().toEqualTypeOf<number | null>();
+	});
+
+	it("F1 a left join inside a set-op recursive term reads nullable outward even though the joined column is notNull (#500/R6 exception, #944)", () => {
+		const stage = withCte((w) => {
+			const r = w.asRecursive(
+				"r",
+				select({ id: holder.id, v: holder.vReq }, holder).where(
+					isNull(holder.parent),
+				),
+				(self) =>
+					select({ id: holder.id, v: f1Other.w }, self)
+						.innerJoin(holder, eq(self.id, holder.parent))
+						.leftJoin(f1Other, eq(holder.id, f1Other.tId))
+						.union(
+							select({ id: holder.id, v: f1Other.w }, holder)
+								.leftJoin(f1Other, eq(holder.id, f1Other.tId))
+								.where(isNull(holder.id)),
+						),
+			);
+			return select({ id: r.id, v: r.v }, r);
+		});
+		type Row = SelectResult<typeof stage.projectionInput, never>;
+		expectTypeOf<Row["v"]>().toEqualTypeOf<number | null>();
+	});
+
+	it("E2u a unionAll set-op recursive term projecting an array read stays non-null (#500/R8 -- unionAll, not union: Postgres refuses to compare json for equality)", () => {
+		const stage = withCte((w) => {
+			const r = w.asRecursive(
+				"r",
+				select(
+					{
+						pid: holder.id,
+						kids: jsonArrayFrom(
+							select({ id: child.id, name: child.nameReq }, child),
+						),
+					},
+					holder,
+				).where(isNull(holder.parent)),
+				(self) =>
+					select(
+						{
+							pid: holder.id,
+							kids: jsonArrayFrom(
+								select({ id: child.id, name: child.nameReq }, child),
+							),
+						},
+						self,
+					)
+						.innerJoin(holder, eq(self.pid, holder.parent))
+						.unionAll(
+							select(
+								{
+									pid: holder.id,
+									kids: jsonArrayFrom(
+										select({ id: child.id, name: child.nameReq }, child),
+									),
+								},
+								holder,
+							).where(isNull(holder.id)),
+						),
+			);
+			return select({ pid: r.pid, kids: r.kids }, r);
+		});
+		type Row = SelectResult<typeof stage.projectionInput, never>;
+		// the value's own rule answers even under a set-op recursive term
+		// (#500/R8): the untracked rule governs a column or a non-nested
+		// expression, never a nested read.
+		expectTypeOf<
+			null extends Row["kids"] ? true : false
+		>().toEqualTypeOf<false>();
+	});
+
+	it("E4 a nested-read key widens when the ordinary recursive term projects the same key as a nullable json column (#500/R7, review B2)", () => {
+		const stage = withCte((w) => {
+			const r = w.asRecursive(
+				"r",
+				select(
+					{
+						pid: holder.id,
+						kids: jsonArrayFrom(
+							select({ id: child.id, name: child.nameReq }, child),
+						),
+					},
+					holder,
+				).where(isNull(holder.parent)),
+				(self) =>
+					select({ pid: holder.id, kids: holder.blob }, self).innerJoin(
+						holder,
+						eq(self.pid, holder.parent),
+					),
+			);
+			return select({ pid: r.pid, kids: r.kids }, r);
+		});
+		type Row = SelectResult<typeof stage.projectionInput, never>;
+		expectTypeOf<
+			null extends Row["kids"] ? true : false
+		>().toEqualTypeOf<true>();
+	});
+
+	it("E5 a jsonObjectFrom key already reads nullable by its own rule; the widening's union is idempotent there (#500/R7)", () => {
+		const stage = withCte((w) => {
+			const r = w.asRecursive(
+				"r",
+				select(
+					{
+						pid: holder.id,
+						kid: jsonObjectFrom(
+							select({ id: child.id, name: child.nameReq }, child),
+						),
+					},
+					holder,
+				).where(isNull(holder.parent)),
+				(self) =>
+					select({ pid: holder.id, kid: holder.blob }, self).innerJoin(
+						holder,
+						eq(self.pid, holder.parent),
+					),
+			);
+			return select({ pid: r.pid, kid: r.kid }, r);
+		});
+		type Row = SelectResult<typeof stage.projectionInput, never>;
+		// jsonObjectFrom's own rule is already `| null` -- the widening's
+		// union with that is idempotent (the null has two reasons here,
+		// not two nulls). E4 above is the array-read control on the same
+		// shape: the array rule alone is never null, so there the
+		// widening is what actually adds it (review E6, the same input
+		// class as E4, is not stated a second time).
+		expectTypeOf<
+			null extends Row["kid"] ? true : false
+		>().toEqualTypeOf<true>();
+	});
+
+	it("E12 anchor an array read, recursive term an object read for the same key -> outward nullable (#500/R8, the two nested-read kinds meeting across branches)", () => {
+		const stage = withCte((w) => {
+			const r = w.asRecursive(
+				"r",
+				select(
+					{
+						pid: holder.id,
+						k: jsonArrayFrom(
+							select({ id: child.id, name: child.nameReq }, child),
+						),
+					},
+					holder,
+				).where(isNull(holder.parent)),
+				(self) =>
+					select(
+						{
+							pid: holder.id,
+							k: jsonObjectFrom(
+								select({ id: child.id, name: child.nameReq }, child),
+							),
+						},
+						self,
+					).innerJoin(holder, eq(self.pid, holder.parent)),
+			);
+			return select({ pid: r.pid, k: r.k }, r);
+		});
+		type Row = SelectResult<typeof stage.projectionInput, never>;
+		// the recursive term's own value is an object read, nullable by
+		// its own rule (#500/R8) -- the anchor's array-read type still
+		// governs the shape, only the object read's nullability widens it.
+		expectTypeOf<null extends Row["k"] ? true : false>().toEqualTypeOf<true>();
+	});
+
+	it("E7 both branches project the identical nested read: it stays non-null, never falsely widened by the recursive value's own resolution (#500/R7)", () => {
+		const stage = withCte((w) => {
+			const r = w.asRecursive(
+				"r",
+				select(
+					{
+						pid: holder.id,
+						kids: jsonArrayFrom(
+							select({ id: child.id, name: child.nameReq }, child),
+						),
+					},
+					holder,
+				).where(isNull(holder.parent)),
+				(self) =>
+					select(
+						{
+							pid: holder.id,
+							kids: jsonArrayFrom(
+								select({ id: child.id, name: child.nameReq }, child),
+							),
+						},
+						self,
+					).innerJoin(holder, eq(self.pid, holder.parent)),
+			);
+			return select({ pid: r.pid, kids: r.kids }, r);
+		});
+		type Row = SelectResult<typeof stage.projectionInput, never>;
+		expectTypeOf<
+			null extends Row["kids"] ? true : false
+		>().toEqualTypeOf<false>();
+	});
+
+	it("E11a a non-null anchor value with a jsonArrayFrom recursive value stays non-null (#500/R7, review E8/E11)", () => {
+		const arrVal = jsonArrayFrom(
+			select({ id: child.id, name: child.nameReq }, child),
+		);
+		type R = RecursiveCteReference<
+			{ readonly k: typeof posts.amountRequired },
+			{ readonly k: typeof arrVal },
+			never
+		>;
+		type Row = SelectResult<{ readonly k: R["k"] }, never>;
+		expectTypeOf<Row["k"]>().toEqualTypeOf<number>();
+	});
+
+	it("E11c control: a non-null anchor value with a non-null recursive column stays non-null (already true before this fix)", () => {
+		type R = RecursiveCteReference<
+			{ readonly k: typeof posts.amountRequired },
+			{ readonly k: typeof posts.titleRequired },
+			never
+		>;
+		type Row = SelectResult<{ readonly k: R["k"] }, never>;
+		expectTypeOf<Row["k"]>().toEqualTypeOf<number>();
+	});
+
+	it("a recursion-free nested read is unaffected -- jsonArrayFrom non-null, jsonObjectFrom nullable, as always", () => {
+		const plain = select(
+			{
+				id: holder.id,
+				kids: jsonArrayFrom(
+					select({ id: child.id, name: child.nameReq }, child),
+				),
+				kid: jsonObjectFrom(
+					select({ id: child.id, name: child.nameReq }, child),
+				),
+			},
+			holder,
+		);
+		type Row = SelectResult<typeof plain.projectionInput, never>;
+		expectTypeOf<
+			null extends Row["kids"] ? true : false
+		>().toEqualTypeOf<false>();
+		expectTypeOf<
+			null extends Row["kid"] ? true : false
+		>().toEqualTypeOf<true>();
 	});
 });

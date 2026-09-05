@@ -371,9 +371,16 @@ export type {
 	CteReference,
 	CteRowEnvironment,
 	CteRowMeta,
+	RecursiveCteReference,
+	WidenedBy,
 	WithStage,
 } from "./query/with";
-export { cteRowMeta, isCteReference, withCte } from "./query/with";
+export {
+	cteRowMeta,
+	isCteReference,
+	widenedByBrand,
+	withCte,
+} from "./query/with";
 export type { ColumnOrderOracle } from "./snapshot/column-order";
 export { computeColumnOrder, noColumnOrder } from "./snapshot/column-order";
 export type { Snapshot, SnapshotUpgrade } from "./snapshot/snapshot";

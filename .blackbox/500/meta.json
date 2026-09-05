@@ -1,0 +1,162 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#500",
+  "title": "recursive CTE row type stays non-null-inferred even when the recursive term is nullable",
+  "parent": "quickstart-now/hejbro#412",
+  "status": "closed",
+  "opened": "2026-09-05",
+  "closed": "2026-09-05",
+  "decisions": [
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "412/D24",
+        "412/D25; the requirement's own measurement (null from the recursive term reaches the rows",
+        "pg_typeof stays the anchor's); STRICT (a type that lies is the one thing the type layer must not do); the set-operation result's existing per-key nullability OR"
+      ],
+      "at": "2026-09-05T05:39Z",
+      "title": "The recursive CTE's outward row type keeps the anchor's types and widens each key's nullability by the recursive term's",
+      "ratified": null
+    },
+    {
+      "id": "R2",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "R1"
+      ],
+      "at": "2026-09-05T12:39Z",
+      "title": "nullability is decided in @hejbro/query alone; core only carries the recursive term's projection",
+      "ratified": null
+    },
+    {
+      "id": "R3",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "R2"
+      ],
+      "at": "2026-09-05T12:59Z",
+      "title": "The recursive term's own left-joined set travels with the widening carrier",
+      "ratified": null
+    },
+    {
+      "id": "R4",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R2",
+        "R3"
+      ],
+      "at": "2026-09-05T13:19Z",
+      "title": "The widening is verified at the layer that decides nullability, not through the chain surface",
+      "ratified": null
+    },
+    {
+      "id": "R5",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R2"
+      ],
+      "at": "2026-09-05T13:49Z",
+      "title": "A new runtime export of core is classified where the barrel curation demands it, as engine",
+      "ratified": null
+    },
+    {
+      "id": "R6",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R3",
+        "R4"
+      ],
+      "at": "2026-09-05T15:02Z",
+      "title": "A set-operation recursive term stays untracked; the contract states the exception",
+      "ratified": null
+    },
+    {
+      "id": "R7",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R2",
+        "R6"
+      ],
+      "at": "2026-09-05T15:02Z",
+      "title": "A nested-read key widens too; the widening is unioned where the nested read resolves",
+      "ratified": null
+    },
+    {
+      "id": "R8",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R6",
+        "R7"
+      ],
+      "at": "2026-09-05T15:20Z",
+      "title": "Nullability is answered by the value's own rule, wherever the value is used",
+      "ratified": null
+    }
+  ],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-05T13:47Z",
+      "title": "Group 1: outward nullability widening for recursive CTEs",
+      "pr": null,
+      "decisions": [
+        "D24",
+        "D25",
+        "R1",
+        "R2",
+        "R3",
+        "R4",
+        "R5"
+      ]
+    },
+    {
+      "id": "W2",
+      "at": "2026-09-05T15:06Z",
+      "title": "Task 1.4: review repair -- set-op exception and nested-read widening",
+      "pr": null,
+      "decisions": [
+        "R6",
+        "R7"
+      ]
+    },
+    {
+      "id": "W3",
+      "at": "2026-09-05T15:27Z",
+      "title": "Task 1.4 finalized: reviewer's E11/E12/E2u classification, red confirmed",
+      "pr": null,
+      "decisions": [
+        "R6",
+        "R7",
+        "R8"
+      ]
+    },
+    {
+      "id": "W4",
+      "at": "2026-09-05T16:06Z",
+      "title": "N2: object read under a set-op recursive term measured nullable too",
+      "pr": null,
+      "decisions": [
+        "R8"
+      ]
+    }
+  ],
+  "prs": [
+    {
+      "number": 956,
+      "role": "closes",
+      "pinnedAt": "2026-09-05T16:37Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

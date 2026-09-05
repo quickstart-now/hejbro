@@ -8,6 +8,7 @@ import type {
 	WithEntryNode,
 	WithNode,
 } from "../expr/ast";
+import type { UntrackedJoins } from "./left-joined";
 import type {
 	SelectLimited,
 	SelectProjection,
@@ -116,6 +117,59 @@ export type CteReference<
 > = CteRowEnvironment<TProjection> & { readonly [cteRowMeta]: CteRowMeta };
 
 /**
+ * Phantom marker (the `columnOriginBrand`/`readAsBrand` precedent), never
+ * assigned at runtime — carries the recursive term's own projected value
+ * for one key, and that term's own left-joined set (#500/R3), onto that
+ * key's OUTWARD reference (#500/R2). Nullability itself is not decided
+ * here: `@hejbro/query`'s `ProjectedColumnResult` is the one place that
+ * already resolves a projected value's null dimension, left joins
+ * included, and reads this brand (as `ProjectedColumnResult<R,
+ * TRecursiveLeftJoined>`) to union it with the anchor's own. A second,
+ * core-side rule would be a proper subset of that knowledge and would
+ * widen too little.
+ *
+ * Reading the recursive term's own left-joined set here only ever
+ * WIDENS a key toward nullable — `select.ts`'s own absorption note
+ * (narrow-join-nullability task 1.4) forbids NARROWING on a set a
+ * position never earned, which this is not.
+ *
+ * Public: `@hejbro/query`'s type tests `infer` against this exact
+ * symbol-keyed property across the package boundary, the same reason
+ * `leftJoinedBrand` is public.
+ */
+export const widenedByBrand: unique symbol = Symbol("hejbro:widened-by");
+
+/** The brand's shape — see {@link widenedByBrand}. */
+export type WidenedBy<
+	TRecursiveValue,
+	TRecursiveLeftJoined = UntrackedJoins,
+> = {
+	readonly [widenedByBrand]?: readonly [TRecursiveValue, TRecursiveLeftJoined];
+};
+
+/**
+ * `asRecursive`'s own outward reference (#500/R2, #500/R3): every key of
+ * the anchor's row environment, each intersected with {@link WidenedBy}
+ * the recursive term's own projected value for that same key and the
+ * recursive term's own left-joined set — every key, never a selected
+ * subset, since which keys actually widen is `@hejbro/query`'s decision,
+ * not this builder's. The reference the recursive callback itself
+ * receives stays a plain {@link CteReference} (Q2: written before its
+ * own type exists, typed from the anchor alone).
+ */
+export type RecursiveCteReference<
+	TProjection extends SelectProjection,
+	TRecursiveProjection extends SelectProjection,
+	TRecursiveLeftJoined = UntrackedJoins,
+> = {
+	readonly [K in keyof CteRowEnvironment<TProjection>]: CteRowEnvironment<TProjection>[K] &
+		WidenedBy<
+			TRecursiveProjection[K & keyof TRecursiveProjection],
+			TRecursiveLeftJoined
+		>;
+} & { readonly [cteRowMeta]: CteRowMeta };
+
+/**
  * Guards that `value` is a {@link CteReference} — the counterpart to
  * `dsl/table.ts`'s `isTable`.
  *
@@ -156,11 +210,12 @@ export type CteEntryOptions = {
  * Only the *compatibility check* is shared with a plain union — the
  * *result type* is not: `SetOpResult`'s own union-of-both-branches typing
  * is used here purely to decide `never`-or-not, and is discarded rather
- * than propagated into `asRecursive`'s own return type ({@link CteReference}
- * `<TProjection>`, the anchor's type — see `asRecursive`'s own docstring).
- * That split matches Postgres: an ordinary `union` widens a mismatched
- * column type (`int` and `bigint` resolve to `bigint`), but a recursive
- * CTE refuses to (measured, `42804`, "column N has type integer in
+ * than propagated into `asRecursive`'s own return type ({@link
+ * RecursiveCteReference}, the anchor's type per key plus that key's
+ * {@link WidenedBy} carriage — see `asRecursive`'s own docstring). That
+ * split matches Postgres: an ordinary `union` widens a mismatched column
+ * type (`int` and `bigint` resolve to `bigint`), but a recursive CTE
+ * refuses to (measured, `42804`, "column N has type integer in
  * non-recursive term but type bigint overall") — its row type is always
  * the anchor's, not a union. The gap this leaves — a recursive term whose
  * column types resolve differently from the anchor's type-checks here and
@@ -171,15 +226,18 @@ export type CteEntryOptions = {
  * an exact match, so nullability rides inside that union same as any
  * other divergence — a nullable recursive term against a non-null
  * anchor still type-checks here, on purpose (measured accepted by
- * Postgres, group 1's M4). The residue this leaves — the CTE's declared
- * row type stays the anchor's non-null type while a real null can reach
- * the rows (measured, M4 addendum: `v_is_null = t`) — is not closed
- * here; widening the declared type to cover it is D105 territory this
- * slice has no standing to revisit. Tracked at #500 (a `#412` sub-issue)
- * and in the `query-type-inference` spec delta. Elision covers
- * nullability only — a `.$type<T>()` brand (TS-only, invisible to
- * Postgres) is a separate axis this fork does not address, recorded as
- * a stated boundary in that same spec delta.
+ * Postgres, group 1's M4). The compatibility check still elides null this
+ * way (a nullability-only divergence is never the reason a recursive term
+ * is refused); the outward reference's own nullability is no longer left
+ * to lie about it (#500/R2) — `asRecursive`'s outward reference carries
+ * {@link WidenedBy} the recursive term's own projected value per key, and
+ * `@hejbro/query`'s `ProjectedColumnResult` is the one place that
+ * resolves that key's actual null dimension, unioning the anchor's and
+ * the recursive term's (left joins included — the reason this core
+ * builder does not decide it itself). Elision covers nullability only —
+ * a `.$type<T>()` brand (TS-only, invisible to Postgres) is a separate
+ * axis this fork does not address, recorded as a stated boundary in the
+ * `query-type-inference` spec delta.
  */
 type CompatibleRecursiveTerm<TProjection, TRecursiveProjection> = [
 	SetOpResult<TProjection, TRecursiveProjection>,
@@ -204,10 +262,15 @@ export type CteBuilder = {
 	) => CteReference<TProjection>;
 	/**
 	 * Declares a recursive entry (add-ctes, task 6.1): `anchor` fixes the
-	 * CTE's own row type (`CteReference<TProjection>` — Postgres takes a
-	 * recursive CTE's column names/types from its anchor, never the
-	 * recursive term), and `recursiveTerm` is written inside a callback
-	 * receiving a reference typed from it. `recursiveTerm`'s own projection
+	 * CTE's own row *type* (Postgres takes a recursive CTE's column names/
+	 * types from its anchor, never the recursive term); the outward
+	 * reference's *nullability* still widens by the recursive term's, per
+	 * key, resolved in `@hejbro/query` rather than decided here (#500/R2)
+	 * — the return type is {@link RecursiveCteReference}, an anchor-typed
+	 * reference with the recursive term's own projected value carried per
+	 * key, not a bare {@link CteReference}. `recursiveTerm` is written
+	 * inside a callback receiving a reference typed from the anchor alone.
+	 * `recursiveTerm`'s own projection
 	 * must be union-compatible with the anchor's (task 6.5, via
 	 * {@link CompatibleRecursiveTerm}): missing or extra keys don't
 	 * type-check (task 6.2), but a key both sides carry may be computed
@@ -229,17 +292,22 @@ export type CteBuilder = {
 	readonly asRecursive: <
 		TProjection extends SelectProjection,
 		TRecursiveProjection extends SelectProjection = TProjection,
+		TRecursiveLeftJoined = UntrackedJoins,
 	>(
 		name: string,
 		anchor: SelectLimited<TProjection> | SetOpStage<TProjection>,
 		recursiveTerm: ((
 			self: CteReference<TProjection>,
 		) =>
-			| SelectLimited<TRecursiveProjection>
+			| SelectLimited<TRecursiveProjection, TRecursiveLeftJoined>
 			| SetOpStage<TRecursiveProjection>) &
 			CompatibleRecursiveTerm<TProjection, TRecursiveProjection>,
 		options?: RecursiveCteEntryOptions,
-	) => CteReference<TProjection>;
+	) => RecursiveCteReference<
+		TProjection,
+		TRecursiveProjection,
+		TRecursiveLeftJoined
+	>;
 };
 
 /**

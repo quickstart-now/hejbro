@@ -622,3 +622,35 @@ _lead · extension · basis 412/D24, D25; AGENTS.md (test-only and example work 
 
 Every open sub-issue is now either in an active team, a written proposal, or one of three lead-direct plain-cycle batches: (a) observer pins #663 #667 #695 (tests only, plus the trivial guard/export items in #695); (b) examples #674 (existingTable in examples/supabase, round trip) and #742 (constructor-review corpus into examples/brownfield); (c) #502 — measure the 18 grep-matched server-behaviour claims on Postgres 17 and correct any wrong sentence through a text-only OpenSpec change if one is found. #772 stays open per 412/D26 (hejbro-assist verifies real Nile). Ratification: owner on return.
 
+<a id="r34"></a>
+## R34 — A recorded ruling's body may be amended in place only while it is unpinned
+
+_lead · extension · 2026-09-05T12:53Z · ratified: pending_
+
+A ruling recorded with `add ruling` may have its body amended by editing
+decisions.md directly only while the entry is pinned to no PR (`prs:
+[]`) and unratified; the amendment is its own commit whose message names
+the ruling, so the history shows what changed and when. Once an entry is
+pinned or ratified, any addition is a new R# with the old one as basis
+-- the pin is what makes the text load-bearing, so that is where
+append-only begins. Basis: 500/R2's O1c rejection (commit 5ab173cd),
+412/D24; owner ratification pending.
+
+After any manual renumbering, verify the id the next `add` prints
+before committing: the tool numbers by entry count (#943), so a gap
+yields a duplicate.
+
+<a id="r35"></a>
+## R35 — No git stash inside a worktree: the stash stack is shared by every worktree of the repository
+
+_lead · extension · 2026-09-05T13:25Z · ratified: pending_
+
+git stash keeps one stack per repository, so every worktree sees and
+can pop every other team's entries (measured: two foreign WIP entries
+visible from the main checkout while three pieces ran). Teams never
+stash inside a worktree; a red reconstruction or a temporary set-aside
+is a patch file (`git diff > /private/tmp/<team>-wip.patch && git
+checkout -- <files>`, then `git apply`) or a WIP commit, which the
+squash merge folds away. Basis: rn implementer's report during 1.2
+(#500), 412/D24; owner ratification pending.
+
