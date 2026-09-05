@@ -532,6 +532,114 @@ describe("a keyword reserved for function and type names is refused as an argume
 	);
 });
 
+describe("a category-C keyword is refused as an argument name (#832)", () => {
+	// `pg_get_keywords()` catcode `C` on `postgres:17.11`; re-measurement SQL
+	// lives in design.md's Measurement (1.1) section.
+	const categoryCNameCases: ReadonlyArray<{ readonly argName: string }> = [
+		{ argName: "between" },
+		{ argName: "bigint" },
+		{ argName: "bit" },
+		{ argName: "boolean" },
+		{ argName: "char" },
+		{ argName: "character" },
+		{ argName: "coalesce" },
+		{ argName: "dec" },
+		{ argName: "decimal" },
+		{ argName: "exists" },
+		{ argName: "extract" },
+		{ argName: "float" },
+		{ argName: "greatest" },
+		{ argName: "grouping" },
+		{ argName: "inout" },
+		{ argName: "int" },
+		{ argName: "integer" },
+		{ argName: "interval" },
+		{ argName: "json" },
+		{ argName: "json_array" },
+		{ argName: "json_arrayagg" },
+		{ argName: "json_exists" },
+		{ argName: "json_object" },
+		{ argName: "json_objectagg" },
+		{ argName: "json_query" },
+		{ argName: "json_scalar" },
+		{ argName: "json_serialize" },
+		{ argName: "json_table" },
+		{ argName: "json_value" },
+		{ argName: "least" },
+		{ argName: "merge_action" },
+		{ argName: "national" },
+		{ argName: "nchar" },
+		{ argName: "none" },
+		{ argName: "normalize" },
+		{ argName: "nullif" },
+		{ argName: "numeric" },
+		{ argName: "out" },
+		{ argName: "overlay" },
+		{ argName: "position" },
+		{ argName: "precision" },
+		{ argName: "real" },
+		{ argName: "row" },
+		{ argName: "setof" },
+		{ argName: "smallint" },
+		{ argName: "substring" },
+		{ argName: "time" },
+		{ argName: "timestamp" },
+		{ argName: "treat" },
+		{ argName: "trim" },
+		{ argName: "values" },
+		{ argName: "varchar" },
+		{ argName: "xmlattributes" },
+		{ argName: "xmlconcat" },
+		{ argName: "xmlelement" },
+		{ argName: "xmlexists" },
+		{ argName: "xmlforest" },
+		{ argName: "xmlnamespaces" },
+		{ argName: "xmlparse" },
+		{ argName: "xmlpi" },
+		{ argName: "xmlroot" },
+		{ argName: "xmlserialize" },
+		{ argName: "xmltable" },
+	];
+
+	it.each(categoryCNameCases)(
+		"refuses an argument whose derived name is $argName with reserved-local-name",
+		({ argName }) => {
+			expect(
+				codeOf(() =>
+					defineFunction(
+						app,
+						"echo_category_c",
+						{ args: { [argName]: uuid() }, returns: { typeName: "uuid" } },
+						(ctx) => {
+							ctx.return(sql`null`);
+						},
+					),
+				),
+			).toBe("reserved-local-name");
+		},
+	);
+
+	const neverRefusedCases: ReadonlyArray<{ readonly argName: string }> = [
+		{ argName: "exit" },
+		{ argName: "elsif" },
+	];
+
+	it.each(neverRefusedCases)(
+		"accepts an argument named $argName -- absent from every category and never refused (control, #832)",
+		({ argName }) => {
+			const fn = defineFunction(
+				app,
+				"echo_never_refused",
+				{ args: { [argName]: uuid() }, returns: { typeName: "uuid" } },
+				(ctx) => {
+					ctx.return(sql`null`);
+				},
+			);
+			expect(fn.args[0]?.argName).toBe(argName);
+		},
+	);
+});
+
 describe("two argument keys deriving to one SQL name are refused (#751)", () => {
 	const collidingCases: ReadonlyArray<{
 		readonly label: string;

@@ -479,6 +479,116 @@ describe("body-context recording", () => {
 		},
 	);
 
+	// `pg_get_keywords()` catcode `C` on `postgres:17.11`; re-measurement SQL
+	// lives in design.md's Measurement (1.1) section.
+	const categoryCLoopNameCases: ReadonlyArray<{ readonly loopName: string }> = [
+		{ loopName: "between" },
+		{ loopName: "bigint" },
+		{ loopName: "bit" },
+		{ loopName: "boolean" },
+		{ loopName: "char" },
+		{ loopName: "character" },
+		{ loopName: "coalesce" },
+		{ loopName: "dec" },
+		{ loopName: "decimal" },
+		{ loopName: "exists" },
+		{ loopName: "extract" },
+		{ loopName: "float" },
+		{ loopName: "greatest" },
+		{ loopName: "grouping" },
+		{ loopName: "inout" },
+		{ loopName: "int" },
+		{ loopName: "integer" },
+		{ loopName: "interval" },
+		{ loopName: "json" },
+		{ loopName: "json_array" },
+		{ loopName: "json_arrayagg" },
+		{ loopName: "json_exists" },
+		{ loopName: "json_object" },
+		{ loopName: "json_objectagg" },
+		{ loopName: "json_query" },
+		{ loopName: "json_scalar" },
+		{ loopName: "json_serialize" },
+		{ loopName: "json_table" },
+		{ loopName: "json_value" },
+		{ loopName: "least" },
+		{ loopName: "merge_action" },
+		{ loopName: "national" },
+		{ loopName: "nchar" },
+		{ loopName: "none" },
+		{ loopName: "normalize" },
+		{ loopName: "nullif" },
+		{ loopName: "numeric" },
+		{ loopName: "out" },
+		{ loopName: "overlay" },
+		{ loopName: "position" },
+		{ loopName: "precision" },
+		{ loopName: "real" },
+		{ loopName: "row" },
+		{ loopName: "setof" },
+		{ loopName: "smallint" },
+		{ loopName: "substring" },
+		{ loopName: "time" },
+		{ loopName: "timestamp" },
+		{ loopName: "treat" },
+		{ loopName: "trim" },
+		{ loopName: "values" },
+		{ loopName: "varchar" },
+		{ loopName: "xmlattributes" },
+		{ loopName: "xmlconcat" },
+		{ loopName: "xmlelement" },
+		{ loopName: "xmlexists" },
+		{ loopName: "xmlforest" },
+		{ loopName: "xmlnamespaces" },
+		{ loopName: "xmlparse" },
+		{ loopName: "xmlpi" },
+		{ loopName: "xmlroot" },
+		{ loopName: "xmlserialize" },
+		{ loopName: "xmltable" },
+	];
+
+	it.each(categoryCLoopNameCases)(
+		"a loop named $loopName -- a category-C keyword -- throws reserved-local-name (#832)",
+		({ loopName }) => {
+			expect(() =>
+				defineTrigger(comments, triggerConfig, (ctx, { new: row }) => {
+					ctx.forEach(
+						select(comments).where(eq(comments.parentId, row.id)),
+						() => {},
+						loopName,
+					);
+					ctx.return(row);
+				}),
+			).toThrowError(
+				/collides with a name Postgres reserves or plpgsql declares itself/,
+			);
+		},
+	);
+
+	const neverRefusedLoopNameCases: ReadonlyArray<{
+		readonly loopName: string;
+	}> = [{ loopName: "exit" }, { loopName: "elsif" }];
+
+	it.each(neverRefusedLoopNameCases)(
+		"a loop named $loopName -- absent from every category and never refused -- is accepted (control, #832)",
+		({ loopName }) => {
+			const declaration = defineTrigger(
+				comments,
+				triggerConfig,
+				(ctx, { new: row }) => {
+					ctx.forEach(
+						select(comments).where(eq(comments.parentId, row.id)),
+						() => {},
+						loopName,
+					);
+					ctx.return(row);
+				},
+			);
+			const [forEachStmt] = declaration.functionDeclaration.body.statements;
+			expect(forEachStmt).toMatchObject({ stmtKind: "forEach", loopName });
+		},
+	);
+
 	it("a row read named found is accepted -- its locals are found_<column>, never a variable under found itself (#748 control)", () => {
 		const declaration = defineTrigger(
 			comments,
@@ -542,6 +652,79 @@ describe("body-context recording", () => {
 			/collides with a name Postgres reserves or plpgsql declares itself/,
 		);
 	});
+
+	// Of the 63 category-C keywords, only these 11 contain an underscore --
+	// a row-declared local is always `<row>_<col>`, so only these can ever
+	// equal one exactly. The other 52 can only ever appear as a substring of
+	// a row-declared local, never as the whole name, and are covered at the
+	// argument and loop positions instead. `pg_get_keywords()` catcode `C`
+	// on `postgres:17.11`; re-measurement SQL lives in design.md's
+	// Measurement (1.1) section.
+	const categoryCRowLocalCases: ReadonlyArray<{
+		readonly rowName: string;
+		readonly key: string;
+		readonly derivedName: string;
+	}> = [
+		{ rowName: "json", key: "array", derivedName: "json_array" },
+		{ rowName: "json", key: "arrayagg", derivedName: "json_arrayagg" },
+		{ rowName: "json", key: "exists", derivedName: "json_exists" },
+		{ rowName: "json", key: "object", derivedName: "json_object" },
+		{ rowName: "json", key: "objectagg", derivedName: "json_objectagg" },
+		{ rowName: "json", key: "query", derivedName: "json_query" },
+		{ rowName: "json", key: "scalar", derivedName: "json_scalar" },
+		{ rowName: "json", key: "serialize", derivedName: "json_serialize" },
+		{ rowName: "json", key: "table", derivedName: "json_table" },
+		{ rowName: "json", key: "value", derivedName: "json_value" },
+		{ rowName: "merge", key: "action", derivedName: "merge_action" },
+	];
+
+	it.each(categoryCRowLocalCases)(
+		"a row-declared local $derivedName (row $rowName, column $key) -- a category-C keyword -- throws reserved-local-name (#832)",
+		({ rowName, key }) => {
+			expect(() =>
+				defineTrigger(comments, triggerConfig, (ctx, { new: row }) => {
+					ctx.row(
+						select({ [key]: comments.postId }, comments).where(
+							eq(comments.id, row.id),
+						),
+						rowName,
+					);
+					ctx.return(row);
+				}),
+			).toThrowError(
+				/collides with a name Postgres reserves or plpgsql declares itself/,
+			);
+		},
+	);
+
+	const neverRefusedRowNameCases: ReadonlyArray<{ readonly rowName: string }> =
+		[{ rowName: "exit" }, { rowName: "elsif" }];
+
+	it.each(neverRefusedRowNameCases)(
+		"a row read named $rowName -- absent from every category and never refused -- is accepted (control, #832)",
+		({ rowName }) => {
+			const declaration = defineTrigger(
+				comments,
+				triggerConfig,
+				(ctx, { new: row }) => {
+					ctx.row(
+						select({ postId: comments.postId }, comments).where(
+							eq(comments.id, row.parentId),
+						),
+						rowName,
+					);
+					ctx.return(row);
+				},
+			);
+			expect(declaration.functionDeclaration.body.declarations).toEqual([
+				{
+					declKind: "scalar",
+					name: `${rowName}_post_id`,
+					typeNode: { typeName: "uuid" },
+				},
+			]);
+		},
+	);
 
 	it("forEach over a derived-expression projection throws row-projection-not-column", () => {
 		expect(() =>
