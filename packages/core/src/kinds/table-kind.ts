@@ -603,10 +603,10 @@ const tableFieldDiffNotes = (diffs: TableFieldDiffs): ReadonlyArray<string> => [
  */
 const foreignKeySortKey = (foreignKey: ForeignKeySnapshot): string =>
 	[
-		foreignKey.columns.join(""),
+		foreignKey.columns.join("\u001f"),
 		foreignKey.referencesTable,
-		foreignKey.referencesColumns.join(""),
-	].join("");
+		foreignKey.referencesColumns.join("\u001f"),
+	].join("\u001f");
 
 /**
  * Sorts `indexes`, `checks`, and `foreignKeys` by their own canonical key

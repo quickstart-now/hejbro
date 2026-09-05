@@ -191,6 +191,28 @@ and 1.3 are independent after 1.1b; 1.4 needs 1.1b and 1.3; 1.5 needs
       upgrade → verify → history, reporting the narrowing to the
       planner. Files: the test and the fixture.
 
+- [ ] 1.8 (~10m) The refusal rule states what a refusal says, not which
+      commands refuse. Review measured that `status` and `history` do
+      not fail on an older released format — they never read the
+      snapshot's contents — while the scenario claimed all four commands
+      do, and the skill reference repeated the claim. Red: the classing
+      measurement comes first — every command `hejbro --help` advertises
+      is run against a real format-5 project and recorded (exit code,
+      whether the older-format diagnostic appears, whether the next step
+      names the upgrade, files changed); the table lands in `design.md`,
+      and a sample is not admissible, since the two findings this change
+      already repaired both came from an oracle that a sample had
+      silenced. Then `packages/cli/test/upgrade-command.test.ts` asserts
+      the delta's own pair — `generate` and `verify` refuse and name the
+      upgrade — and `packages/core/test/snapshot/upgrade.test.ts`'s
+      foreign-key ordering predicate is rebuilt on the separator the
+      serializer uses, with the pair a separator-free join collapses
+      (`(a,b) → t(x,y)` against `(ab) → t(xy)`) in its input table.
+      `upgrade.e2e.test.ts`'s existing `history` assertion agrees with
+      the corrected rule and stays, carrying one line saying why.
+      Files: `skills/hejbro/references/generate-verify-workflow.md`,
+      `design.md`, the two tests.
+
 - [x] 1.7 (~7m) Docs, decision log, changeset. `skills/hejbro/
       references/generate-verify-workflow.md` gains the upgrade section
       (when the refusal appears, what the command rewrites, commit both

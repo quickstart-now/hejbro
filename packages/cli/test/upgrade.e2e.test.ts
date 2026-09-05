@@ -120,6 +120,8 @@ describe("hejbro upgrade (#413, 1.6, e2e over a real 0.1.1 project)", () => {
 			);
 			expect(verifyBefore.stderr).toContain("Next: run `hejbro upgrade`");
 
+			// history never parses the snapshot's content (only git blob
+			// hashes), so a format-5 snapshot never fails it (#413, B1).
 			const historyBefore = await runCli(cwd, ["history"]);
 			expect(historyBefore.exitCode).toBe(0);
 			// tip already self-consistent (the tag's own final state) --

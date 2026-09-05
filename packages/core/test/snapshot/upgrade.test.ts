@@ -15,6 +15,7 @@ import {
 	renderSnapshot,
 	upgradeSnapshot,
 } from "../../src/snapshot/snapshot";
+import { compareKeys } from "../../src/sort";
 import { text, uuid } from "../../src/types/column-builder-factories";
 
 const registry = createDefaultRegistry();
@@ -102,13 +103,22 @@ type ForeignKeySnapshotLike = {
 	readonly referencesColumns: ReadonlyArray<string>;
 };
 
-/** The delta's own canonical key (D1): local columns, then target identity -- reimplemented here, independently of `table-kind.ts`'s private `foreignKeySortKey`, so this test checks the *contract*, not the implementation. */
+/**
+ * The delta's own canonical key (D1): local columns, then target
+ * identity -- reimplemented here, independently of `table-kind.ts`'s
+ * private `foreignKeySortKey`, so this test checks the *contract*, not
+ * the implementation. Joined on the same unit-separator character
+ * `table-kind.ts`'s own key uses (#413, N1) -- an empty-string join is
+ * non-injective (`["a","b"]`+`"t"`+`["x","y"]` and `["ab"]`+`"t"`+
+ * `["xy"]` both concatenate to `"abtxy"`), which let a genuinely
+ * unsorted pair read as sorted; see the dedicated regression below.
+ */
 const foreignKeyCanonicalKey = (foreignKey: ForeignKeySnapshotLike): string =>
 	[
-		foreignKey.columns.join(""),
+		foreignKey.columns.join("\u001f"),
 		foreignKey.referencesTable,
-		foreignKey.referencesColumns.join(""),
-	].join("");
+		foreignKey.referencesColumns.join("\u001f"),
+	].join("\u001f");
 
 const isSortedByCanonicalForeignKeyOrder = (
 	foreignKeys: ReadonlyArray<ForeignKeySnapshotLike>,
@@ -259,6 +269,48 @@ describe("upgradeSnapshot", () => {
 				).toBe(true);
 			});
 		});
+	});
+
+	// #413, N1 (review B1 repair): an empty-string join concatenates
+	// `["a","b"]`+"t"+`["x","y"]` and `["ab"]`+"t"+`["xy"]` to the same
+	// string, so a naive oracle would read a genuinely unsorted pair as
+	// sorted -- the unit-separator join above closes exactly this gap.
+	describe("foreignKeyCanonicalKey separates edges an empty-string join would collide (#413, N1)", () => {
+		const multiColumn: ForeignKeySnapshotLike = {
+			name: "fk_multi",
+			columns: ["a", "b"],
+			referencesTable: "t",
+			referencesColumns: ["x", "y"],
+		};
+		const concatenatedColumn: ForeignKeySnapshotLike = {
+			name: "fk_concatenated",
+			columns: ["ab"],
+			referencesTable: "t",
+			referencesColumns: ["xy"],
+		};
+
+		it("keys the two edges differently despite an empty-string join concatenating both to the same text", () => {
+			expect(foreignKeyCanonicalKey(multiColumn)).not.toBe(
+				foreignKeyCanonicalKey(concatenatedColumn),
+			);
+		});
+
+		it.each([
+			["multi-then-concatenated", [multiColumn, concatenatedColumn]],
+			["concatenated-then-multi", [concatenatedColumn, multiColumn]],
+		])(
+			"%s: the multi-column edge sorts first, in either declared order",
+			(_label, foreignKeys) => {
+				const sorted = [...foreignKeys].sort((a, b) =>
+					compareKeys(foreignKeyCanonicalKey(a), foreignKeyCanonicalKey(b)),
+				);
+				expect(sorted.map((fk) => fk.name)).toEqual([
+					"fk_multi",
+					"fk_concatenated",
+				]);
+				expect(isSortedByCanonicalForeignKeyOrder(sorted)).toBe(true);
+			},
+		);
 	});
 
 	describe("a golden case with unchanged declarations reproduces the writer's bytes", () => {

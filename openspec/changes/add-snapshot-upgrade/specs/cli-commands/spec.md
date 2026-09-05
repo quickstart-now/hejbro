@@ -15,10 +15,14 @@ business, and upgrading over it would hide the break. With no migration
 files there is no tip, and the snapshot alone is rewritten. A snapshot
 already in the current format is left untouched with exit 0 and a line
 saying so. A newer-format snapshot, and one older than any release, are
-refused with the older-format or newer-format diagnostic. Every other
-command meeting an older released format SHALL keep refusing it, naming
-this command as the next step. The command reads only the snapshot path
-and the migrations directory from the configuration.
+refused with the older-format or newer-format diagnostic. Whenever any
+command refuses because the snapshot it read is in an older released
+format, that refusal SHALL name this command as its next step, and
+`generate` and `verify` SHALL be among the commands that so refuse — a
+command that never reads the snapshot's contents is not made to fail by
+this rule, since a user cut off from the diagnostics is a user who
+cannot see what the upgrade is for. The command reads only the snapshot
+path and the migrations directory from the configuration.
 
 #### Scenario: An older snapshot is upgraded and the chain verifies
 - **WHEN** a project carries a format-5 snapshot and a migration chain
@@ -53,10 +57,17 @@ and the migrations directory from the configuration.
   reports no re-chaining
 
 #### Scenario: Other commands point at the upgrade
-- **WHEN** `hejbro generate`, `hejbro verify`, `hejbro status` and
-  `hejbro history` each meet a format-5 snapshot
+- **WHEN** `hejbro generate` and `hejbro verify` each meet a format-5
+  snapshot
 - **THEN** each fails with the older-format diagnostic whose next step
-  names `hejbro upgrade`, and none of them modifies a file
+  names `hejbro upgrade`, and neither modifies a file
+
+#### Scenario: A command that never reads the snapshot is unaffected
+- **WHEN** `hejbro history` runs against a project whose snapshot is in
+  an older released format
+- **THEN** it reports the migrations' states as it always does, because
+  it resolves them from the migration files and the repository's own
+  history rather than from the snapshot's contents
 
 #### Scenario: history and restore still resolve the upgraded tip
 - **WHEN** an upgraded tip's snapshot and banner are committed, and

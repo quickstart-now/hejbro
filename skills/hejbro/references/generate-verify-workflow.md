@@ -192,9 +192,15 @@ dumps — the deeper, pre-merge check `verify` can't do without a database.
 ## `hejbro upgrade`
 
 A snapshot file written by an older *released* hejbro version fails
-every other command (`generate`, `verify`, `status`, `history`) with the
+every command that reads its content — `generate` (and `baseline`,
+which shares its read path), `verify`, `check` and `reset` — with the
 older-format diagnostic, naming `hejbro upgrade` as the next step
-instead of silently reinterpreting an old file.
+instead of silently reinterpreting an old file. A command that never
+parses the snapshot's content is unaffected: `history` and `status`
+read git blobs and the ledger, not the snapshot, and both run
+normally; `restore` only hashes the snapshot's bytes to check the tip
+match, so it succeeds too, adding a note to review the diff manually
+when the restored commit predates the current format.
 
 `upgrade` re-encodes the snapshot at the current format and, if a
 migration chain exists, rewrites its tip's own banner to match: the

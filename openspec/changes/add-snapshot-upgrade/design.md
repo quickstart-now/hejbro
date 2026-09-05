@@ -115,3 +115,49 @@ D101 already states that the upgrade path supersedes its "no command
 exists" sentence once it ships. The row is amended to record the
 shipped shape (lead, under delegation; surfaced to the owner on
 return).
+
+## Q7 — Every advertised command against a real format-5 project (1.8, B1)
+
+Measured, not sampled: every one of the 17 subcommands `hejbro --help`
+lists, run against `packages/cli/test/fixtures/project-0.1.1/commit-3/`
+(the 0.1.1 tag's own real, committed format-5 project) vendored into a
+fresh git repository, plus a throwaway `postgres:17` container for the
+commands that need one (removed after measuring; no other team's
+container touched). Baseline reason: R5's B1 finding — the review's own
+delta scenario claimed `generate`, `verify`, `status` and `history` all
+refuse a format-5 snapshot, but a real run shows `status` and `history`
+exit 0 (neither ever parses the snapshot's content).
+
+| command | reads the snapshot? | exit | names `upgrade`? | files/state changed |
+|---|---|---|---|---|
+| `init` | no (only checks existence) | 0 | — | 0 (every target already existed) |
+| `import` | no | 1 (`import-nothing-to-infer`, empty test schema — unrelated) | no | 0 |
+| `pull` | no | 0 | — | writes `.hejbro/`, `hejbro.lock` (its own destination, never this project's snapshot) |
+| `baseline` | yes | 1 (`unsupported-snapshot-version`) | **yes** | 0 |
+| `generate` | yes | 1 (`unsupported-snapshot-version`) | **yes** | 0 |
+| `verify` | yes | 1 (`unsupported-snapshot-version`) | **yes** | 0 |
+| `check` | yes | 1 (`unsupported-snapshot-version`) | **yes** | 0 |
+| `history` | no (reads git blobs' hashes only, never parses content) | 0 | no | 0 |
+| `restore` | yes, but only after a hash match | 0 for the tip (7); 1 for a squashed migration (1, `restore-state-lost` — unrelated) | no (a plain note: "generated under an older snapshot format ... review the diff manually", no code, no `Next:`) | stages the declaration file only |
+| `migrate` | no (applies migration SQL files directly, never the snapshot) | 1 (`apply-failed`, a missing role in the throwaway database — unrelated) | no | 0 (the failed statement's own transaction rolled back) |
+| `status` | no (reads the ledger and the migration file list only) | 0 | — | 0 |
+| `reset` | yes | 1 (`unsupported-snapshot-version`) | **yes** | 0 |
+| `upgrade` | yes (that is its job) | 0 | — (it *is* the upgrade) | 2 (snapshot + tip migration) |
+| `raise` | no (applies a separately-vendored SQL file named by `--file`, never this project's snapshot) | 0 | — | 0 repo files (writes the ledger row only) |
+| `link` | no | 0 | — | 1 (`hejbro.json`) |
+| `vendor` | no | 1 (`vendor-export-missing`, no linked source exports one — unrelated) | no | 0 |
+| `outdated` | no | 1 (`vendor-not-yet-vendored` — unrelated) | no | 0 |
+
+No command refuses for being an older released format without naming
+`hejbro upgrade` as the next step — the conditional the corrected delta
+scenario states holds over the full command surface, not a sample of
+it. Four commands refuse this way: `generate`, `verify`, `check`,
+`reset` (and `baseline`, which shares `generate`'s read path) — a fifth
+member the original, uncorrected scenario never named. `history`,
+`status`, `init`, `import`, `pull`, `migrate`, `raise`, `link`,
+`vendor` and `outdated` never parse this project's own snapshot content
+at all, so the conditional never applies to them; `restore` sits
+between the two groups (reads the snapshot's *bytes* to check a hash,
+never its *content*, so it can verify a tip without decoding a format
+it doesn't understand) and reports the mismatch as an advisory note
+rather than a refusal.

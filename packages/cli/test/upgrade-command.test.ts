@@ -5,9 +5,16 @@ import {
 	upgradeSnapshot as coreUpgradeSnapshot,
 	createDefaultRegistry,
 } from "@hejbro/core";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { runUpgrade } from "../src/commands/upgrade";
 import { sha256Hex } from "../src/hash";
+import {
+	assertBuiltCli,
+	createCliFixtureDir,
+	removeCliFixtureDir,
+	runCli,
+	writeFixtureFile,
+} from "./support/cli-runner";
 
 // In-process throughout (config-required.test.ts's own style, #413): a
 // hand-written hejbro.config.ts and hand-written snapshot/migration
@@ -213,4 +220,69 @@ describe("hejbro upgrade", () => {
 			`-- upgraded-from: ${originalHash}`,
 		]);
 	});
+});
+
+const SUBPROCESS_CONFIG_SOURCE = `import { defineConfig } from "hejbro";
+
+export default defineConfig({
+	entry: ["src/app.schema.ts"],
+	migrationsDir: "migrations",
+	snapshotPath: "hejbro.snapshot.json",
+	prefixStrategy: "index",
+});
+`;
+
+const SCHEMA_SOURCE = `import { schema, table, text, uuid } from "hejbro";
+
+export const app = schema("app");
+
+export const posts = table(app, "posts", {
+	id: uuid().primaryKey().defaultRandom(),
+	title: text().notNull(),
+});
+`;
+
+// #413, 1.8 (B1): the corrected delta scenario's conditional ("whichever
+// command refuses a released older format names upgrade") needs at least
+// one member pinned by an existential test, not only inferred from the
+// conditional itself -- subprocess, since generate/verify both load
+// declarations via jiti before they ever read the snapshot (unlike
+// upgrade itself, which is why the describe block above stays in-process).
+describe("generate and verify are among the commands that actually refuse a format-5 snapshot (#413, B1)", () => {
+	beforeAll(assertBuiltCli);
+
+	it.each([
+		["generate", ["generate"]],
+		["verify", ["verify"]],
+	])(
+		"%s refuses a format-5 snapshot naming hejbro upgrade",
+		async (_label, args) => {
+			const subprocessCwd = await createCliFixtureDir();
+			try {
+				await writeFixtureFile(
+					subprocessCwd,
+					"hejbro.config.ts",
+					SUBPROCESS_CONFIG_SOURCE,
+				);
+				await writeFixtureFile(
+					subprocessCwd,
+					"src/app.schema.ts",
+					SCHEMA_SOURCE,
+				);
+				await mkdir(join(subprocessCwd, "migrations"), { recursive: true });
+				await writeFile(
+					join(subprocessCwd, "hejbro.snapshot.json"),
+					snapshotText(5),
+				);
+
+				const result = await runCli(subprocessCwd, args);
+
+				expect(result.exitCode).toBe(1);
+				expect(result.stderr).toContain("error[unsupported-snapshot-version]");
+				expect(result.stderr).toContain("Next: run `hejbro upgrade`");
+			} finally {
+				await removeCliFixtureDir(subprocessCwd);
+			}
+		},
+	);
 });
