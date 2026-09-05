@@ -72,6 +72,13 @@
       "title": "the four sites fold onto core's exported traversal and guards",
       "pr": null,
       "decisions": []
+    },
+    {
+      "id": "W2",
+      "at": "2026-09-05T20:32Z",
+      "title": "review found no code defect; three sentences corrected",
+      "pr": null,
+      "decisions": []
     }
   ],
   "prs": [],
