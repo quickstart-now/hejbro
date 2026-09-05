@@ -7,9 +7,9 @@ import type {
 } from "@hejbro/core";
 import {
 	quoteStringLiteral,
+	requireNext,
 	sameJson,
 	statement,
-	throwHejbroError,
 } from "@hejbro/core";
 import type { StorageBucketDeclaration } from "./bucket";
 
@@ -220,18 +220,12 @@ const bucketCreateOrDropChange = (
 
 /** `create`/`alter`'s shared `emit` behavior: render the upsert from `next`, or throw if it's missing (an invalid `KindChange`, not a real reachable state). */
 const emitUpsertOrThrow = (change: KindChange): ReadonlyArray<SqlStatement> => {
-	if (change.next === null) {
-		return throwHejbroError(
-			"invalid-kind-change",
-			`storage bucket ${change.operation} change is missing its next snapshot.`,
-		);
-	}
-	return [statement(bucketUpsertSql(asStorageBucketSnapshot(change.next)))];
+	const next = requireNext(change);
+	return [statement(bucketUpsertSql(asStorageBucketSnapshot(next)))];
 };
 
 /**
- * One handler per {@link ChangeOperation}, same technique as
- * `rls-uncached-auth-call.ts`'s `childrenOfHandlers`/core's own
+ * One handler per {@link ChangeOperation}, same technique as core's own
  * `someExprNodeHandlers`: a mapped type over the closed operation union, so
  * a missing entry is a compile error. Applied here for coverage, not
  * complexity (#154 ratchet-5): the former `switch`'s `default:

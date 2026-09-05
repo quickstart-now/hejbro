@@ -4,9 +4,10 @@ import {
 	expr,
 	quoteIdentifier,
 	quoteStringLiteral,
+	requireNext,
+	requirePrevious,
 	sameJson,
 	statement,
-	throwHejbroError,
 } from "@hejbro/core";
 
 /**
@@ -103,13 +104,7 @@ export const schemaNoteKind: ObjectKind<SchemaNoteDeclaration> = {
 		switch (change.operation) {
 			case "create":
 			case "alter": {
-				if (change.next === null) {
-					return throwHejbroError(
-						"invalid-kind-change",
-						`schema note ${change.operation} change is missing its next snapshot.`,
-					);
-				}
-				const snapshot = asSchemaNoteSnapshot(change.next);
+				const snapshot = asSchemaNoteSnapshot(requireNext(change));
 				return [
 					statement(
 						`comment on schema ${quoteIdentifier(snapshot.schemaName)} is ${quoteStringLiteral(snapshot.note)};`,
@@ -117,13 +112,7 @@ export const schemaNoteKind: ObjectKind<SchemaNoteDeclaration> = {
 				];
 			}
 			case "drop": {
-				if (change.previous === null) {
-					return throwHejbroError(
-						"invalid-kind-change",
-						"schema note drop change is missing its previous snapshot.",
-					);
-				}
-				const snapshot = asSchemaNoteSnapshot(change.previous);
+				const snapshot = asSchemaNoteSnapshot(requirePrevious(change));
 				return [
 					statement(
 						`comment on schema ${quoteIdentifier(snapshot.schemaName)} is null;`,

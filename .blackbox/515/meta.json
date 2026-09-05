@@ -1,0 +1,100 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#515",
+  "title": "core-internal traversal helpers presets/query can't fold without a public export",
+  "parent": "quickstart-now/hejbro#412",
+  "status": "closed",
+  "opened": "2026-09-05",
+  "closed": "2026-09-05",
+  "decisions": [
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "412/D24",
+        "412/D25; .claude/rules/provider-preset.md (a preset needing a core special case means the interface is wrong); the SELECT_CLAUSE_TRAVERSALS precedent; #444's four hand-written traversal sites"
+      ],
+      "at": "2026-09-05T05:44Z",
+      "title": "Core exports its expression traversal registry and kind-change guards as extension surface; the four copies fold",
+      "ratified": null
+    },
+    {
+      "id": "R2",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R1"
+      ],
+      "at": "2026-09-05T18:55Z",
+      "title": "folded guards name the kind token; expr-children.ts joins task 1.1; the lifter keeps three branches",
+      "ratified": null
+    },
+    {
+      "id": "R3",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R1"
+      ],
+      "at": "2026-09-05T19:06Z",
+      "title": "the five exports: a new core exports pin, five barrel-absence lines, engine placement, values only, tsdoc rewrite, two-stage red",
+      "ratified": null
+    },
+    {
+      "id": "R4",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "R1"
+      ],
+      "at": "2026-09-05T19:50Z",
+      "title": "the #473 pin that kept the registry internal is inverted, not deleted",
+      "ratified": null
+    },
+    {
+      "id": "R5",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R2"
+      ],
+      "at": "2026-09-05T20:29Z",
+      "title": "scenario 1 names registry positions only; a query position is not an expression child",
+      "ratified": null
+    }
+  ],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-05T19:46Z",
+      "title": "the four sites fold onto core's exported traversal and guards",
+      "pr": null,
+      "decisions": []
+    },
+    {
+      "id": "W2",
+      "at": "2026-09-05T20:32Z",
+      "title": "review found no code defect; three sentences corrected",
+      "pr": null,
+      "decisions": []
+    },
+    {
+      "id": "W3",
+      "at": "2026-09-05T20:39Z",
+      "title": "the and bullet's path claim corrected after re-review",
+      "pr": null,
+      "decisions": []
+    }
+  ],
+  "prs": [
+    {
+      "number": 988,
+      "role": "closes",
+      "pinnedAt": "2026-09-05T20:51Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

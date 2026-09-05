@@ -342,6 +342,16 @@ describe("hejbro barrel curation (#471)", () => {
 		// curation removes, and what a user's autocomplete stops offering.
 		// @ts-expect-error renderExpr is core's engine, exported from hejbro as a type only (#471).
 		const _engineGone = hejbro.renderExpr;
+		// @ts-expect-error exprChildren is core's engine, exported from hejbro as a type only (#515).
+		const _exprChildrenGone = hejbro.exprChildren;
+		// @ts-expect-error replaceExprChildren is core's engine, exported from hejbro as a type only (#515).
+		const _replaceExprChildrenGone = hejbro.replaceExprChildren;
+		// @ts-expect-error requireBoth is core's engine, exported from hejbro as a type only (#515).
+		const _requireBothGone = hejbro.requireBoth;
+		// @ts-expect-error requireNext is core's engine, exported from hejbro as a type only (#515).
+		const _requireNextGone = hejbro.requireNext;
+		// @ts-expect-error requirePrevious is core's engine, exported from hejbro as a type only (#515).
+		const _requirePreviousGone = hejbro.requirePrevious;
 	});
 
 	it("pins the barrel's runtime export set by set equality", () => {

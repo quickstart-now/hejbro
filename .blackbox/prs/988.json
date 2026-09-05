@@ -1,0 +1,101 @@
+{
+  "version": 3,
+  "number": 988,
+  "ref": "quickstart-now/hejbro#988",
+  "title": "refactor(core,query,supabase): export the expression traversal registry and kind-change guards; fold the four copies (#515)",
+  "head": "04463d379cd5ac8a8dc9615503b39bb56eeb077d",
+  "headRef": "expose-core-traversal",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-05T20:51Z",
+  "refs": [
+    {
+      "path": ".changeset/expose-core-traversal.md",
+      "blob": "f9cf2bbdd7d53d9da8c7be7b9d77ccc230b4d4ce"
+    },
+    {
+      "path": "README.md",
+      "blob": "6342cc31ad7e18ea4c847d6ec25fd62c673400e2"
+    },
+    {
+      "path": "examples/preset-smoke/src/preset.ts",
+      "blob": "045fded0d12ed828b58cdfd75451cd77bbd20827"
+    },
+    {
+      "path": "examples/preset-smoke/test/preset-smoke.test.ts",
+      "blob": "753b10e44aec8b515243421d1edcbaf1d73177a5"
+    },
+    {
+      "path": "openspec/changes/expose-core-traversal/design.md",
+      "blob": "9d94870143edaa7cace386f6caa960dcc41a3c49"
+    },
+    {
+      "path": "openspec/changes/expose-core-traversal/proposal.md",
+      "blob": "f16df1f59935cb4050f3be386e0317e9386059e4"
+    },
+    {
+      "path": "openspec/changes/expose-core-traversal/specs/package-surface/spec.md",
+      "blob": "cf67292c015ab5a559d63d7daa74633b2a6ce139"
+    },
+    {
+      "path": "openspec/changes/expose-core-traversal/tasks.md",
+      "blob": "5156cb2c1d80fbb3e446b63a33ebcf951365a81b"
+    },
+    {
+      "path": "openspec/task-times.csv",
+      "blob": "cd9c5627bedbea7175ab8b6244172160facf39fe"
+    },
+    {
+      "path": "packages/cli/src/core-surface.ts",
+      "blob": "1cc716f2daf099493dab2b5bb1c6dd10d2709312"
+    },
+    {
+      "path": "packages/cli/test/exports.test.ts",
+      "blob": "10a55a7a8564311be2a75aab0d7e9ab3aa120eb9"
+    },
+    {
+      "path": "packages/core/src/expr/expr-children.ts",
+      "blob": "71461f167db7d20d4b71e3382e9871cb3341159e"
+    },
+    {
+      "path": "packages/core/src/index.ts",
+      "blob": "cee00116d33e70091cd997e53ff9581a75406036"
+    },
+    {
+      "path": "packages/core/test/exports.test.ts",
+      "blob": "96876f1a8e70732ada3322561ec53cea244f562d"
+    },
+    {
+      "path": "packages/core/test/expr/expr-children.test.ts",
+      "blob": "7ede9528cce47e1602016070a60eef299667b074"
+    },
+    {
+      "path": "packages/query/src/compile/params.ts",
+      "blob": "e1fcef20951ad81d3d4cbf77cf59d692ca5cc02d"
+    },
+    {
+      "path": "packages/query/test/compile/params.test.ts",
+      "blob": "aa56f7598c932589bdc0a163a7742c699bd18540"
+    },
+    {
+      "path": "packages/supabase/src/storage/bucket-kind.ts",
+      "blob": "0d8b99e183b662bedde143ba4192e8d1538259e6"
+    },
+    {
+      "path": "packages/supabase/src/validators/rls-uncached-auth-call.ts",
+      "blob": "8365141dbf0c6a7ef3dcc5b260cb2f5c32f57be6"
+    },
+    {
+      "path": "packages/supabase/test/rls-uncached-auth-call.test.ts",
+      "blob": "f2af54b1070209e4558b5d423ab29d328f803cb8"
+    },
+    {
+      "path": "packages/supabase/test/storage-bucket-kind.test.ts",
+      "blob": "cd41ea278474591253d47c78698cfdc291ee8c8a"
+    },
+    {
+      "path": "skills/hejbro/references/extension-interface.md",
+      "blob": "f84d5939e21d260da70136574e75ecf370e51dd0"
+    }
+  ]
+}

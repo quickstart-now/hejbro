@@ -90,8 +90,8 @@ describe("exprChildren/replaceExprChildren (#473)", () => {
 		});
 	});
 
-	it("is not re-exported from index.ts — internal to @hejbro/core only", () => {
-		expect("exprChildren" in CoreIndex).toBe(false);
-		expect("replaceExprChildren" in CoreIndex).toBe(false);
+	it("is re-exported from index.ts as extension surface (#515)", () => {
+		expect(CoreIndex.exprChildren).toBe(exprChildren);
+		expect(CoreIndex.replaceExprChildren).toBe(replaceExprChildren);
 	});
 });
