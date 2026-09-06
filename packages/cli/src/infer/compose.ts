@@ -244,17 +244,23 @@ const firstOffendingColumn = (
 };
 
 /**
- * Review round 2 MM3 (lead-approved wording): which of an index's own
- * three column-bearing positions named the chosen offending column --
+ * Review round 2 MM3/NN2 (lead-approved wording): which of an index's
+ * own column-bearing positions named the chosen offending column --
  * checked key list first (Postgres itself never lets a UNIQUE
  * constraint's or a primary key's own column carry a predicate or an
  * expression, so a constraint-backed index's offending column is always
- * found here), else a predicate before an expression when a plain index
- * has both (the same "pick one, deterministically" precedent 712/R9 and
- * `firstOffendingColumn` already apply, carried to the object's own
- * axis rather than to which column is named). `index` is `undefined`
- * for a check constraint, whose axis is always `"key"` -- unread,
- * since `memberReasonClause` never asks a check for its axis.
+ * found here). Once the column is not a key, a plain index carrying
+ * *both* a predicate and an expression key names both: `pg_depend`
+ * records only that the index depends on the column, never which of
+ * the two clauses introduced that dependency (measured live: a
+ * predicate's and an expression's own referenced columns arrive on the
+ * same `deptype = 'a'` row shape, with no clause tag), so picking one
+ * over the other would misattribute the cause the way 712/R8's own B#2
+ * already guards against for a two-cause column -- named indeterminate
+ * only when it actually is (a predicate-only or expression-only index
+ * still gets its own single-clause wording). `index` is `undefined` for
+ * a check constraint, whose axis is always `"key"` -- unread, since
+ * `memberReasonClause` never asks a check for its axis.
  */
 const memberAxisFor = (
 	index: InferredIndex | undefined,
@@ -272,6 +278,12 @@ const memberAxisFor = (
 	);
 	if (isKeyColumn) {
 		return "key";
+	}
+	const hasExpressionKey = index.columns.some(
+		(column) => column.column === null,
+	);
+	if (index.predicate !== null && hasExpressionKey) {
+		return "expressionOrPredicate";
 	}
 	if (index.predicate !== null) {
 		return "predicate";

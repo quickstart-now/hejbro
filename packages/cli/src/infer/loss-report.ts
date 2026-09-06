@@ -420,18 +420,25 @@ export type OmittedForeignKeyColumn = {
  * exclusion closes it).
  */
 /**
- * Which of an index's own three column-bearing positions named the
- * offending column -- its key list, a partial predicate, or an
- * expression key's own text (review round 2 MM3, lead-approved wording:
- * a column found only through a predicate or an expression is not "on"
- * the index the way a key column is, so the reason clause must say
- * which). Meaningless for a check constraint (always its expression) or
- * a UNIQUE constraint (Postgres accepts neither a predicate nor an
- * expression on one, so its own offending column is always a key) --
- * both kinds are always given `"key"` here, and `memberReasonClause`
- * never reads it for either.
+ * Which of an index's own column-bearing positions named the offending
+ * column -- its key list, a partial predicate, an expression key's own
+ * text, or (review round 2 NN2) both a predicate and an expression at
+ * once, when the column is in neither's key list and `pg_depend` itself
+ * cannot say which of the two actually names it (712/R10 B#1, MM3,
+ * lead-approved wording: a column found only through a predicate or an
+ * expression is not "on" the index the way a key column is, so the
+ * reason clause must say which -- and must say both when it does not
+ * know which one). Meaningless for a check constraint (always its
+ * expression) or a UNIQUE constraint (Postgres accepts neither a
+ * predicate nor an expression on one, so its own offending column is
+ * always a key) -- both kinds are always given `"key"` here, and
+ * `memberReasonClause` never reads it for either.
  */
-export type MemberAxis = "key" | "predicate" | "expression";
+export type MemberAxis =
+	| "key"
+	| "predicate"
+	| "expression"
+	| "expressionOrPredicate";
 
 export type OmittedTableMemberAtColumn = {
 	readonly schema: string;
@@ -838,6 +845,9 @@ const memberReasonClause = (
 ): string => {
 	if (kind === "check constraint") {
 		return `its expression names column "${columnIdentity}"`;
+	}
+	if (kind === "index" && axis === "expressionOrPredicate") {
+		return `its expression or predicate names column "${columnIdentity}"`;
 	}
 	if (kind === "index" && axis === "predicate") {
 		return `its predicate names column "${columnIdentity}"`;

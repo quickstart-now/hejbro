@@ -945,4 +945,181 @@ describe("inferFromCatalog / B#1: an index, check or UNIQUE at an omitted column
 			indexNamesIn(result, "app.orders").has("orders_kind_literal_idx"),
 		).toBe(true);
 	});
+
+	// Review round 2 NN2: an index carrying both an expression key and a
+	// predicate at once -- `pg_depend` never tags which of the two
+	// clauses actually names a given referenced column, so when the
+	// offending column is neither's key, the line must name both
+	// clauses rather than guess one (712/R8's own B#2 guard against
+	// misattributing a cause, carried to which clause is named).
+	it("P1: an index with both an expression and a predicate, offending column on the expression side, names both clauses", async () => {
+		const session = buildSession(
+			[{ schema: "app", table: "t5" }],
+			[
+				{ schema: "app", table: "t5", name: "id" },
+				{ schema: "app", table: "t5", name: "A" },
+				{ schema: "app", table: "t5", name: "B" },
+			],
+			[],
+			{
+				indexes: [
+					{
+						schema: "app",
+						table: "t5",
+						name: "t5_expr_pred_idx",
+						columns: [],
+						expressionKeys: ['lower("A")'],
+						predicate: '"B" is not null',
+						referencedColumns: ["A", "B"],
+					},
+				],
+			},
+		);
+
+		const result = await inferFromCatalog({
+			session,
+			schemas: ["app"],
+			command: "import",
+		});
+
+		expect(indexNamesIn(result, "app.t5").has("t5_expr_pred_idx")).toBe(false);
+		expect(result.lossReport).toContain(
+			'Omitted: index "app.t5.t5_expr_pred_idx" -- its expression or predicate names column "app.t5.A", which this reading left out because no declaration can carry its name, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the column in the database, then re-run `hejbro import`.',
+		);
+	});
+
+	it("P2: an index with both an expression and a predicate, offending column on the predicate side, names both clauses", async () => {
+		const session = buildSession(
+			[{ schema: "app", table: "t5" }],
+			[
+				{ schema: "app", table: "t5", name: "id" },
+				{ schema: "app", table: "t5", name: "keep" },
+				{ schema: "app", table: "t5", name: "B" },
+			],
+			[],
+			{
+				indexes: [
+					{
+						schema: "app",
+						table: "t5",
+						name: "t5_expr_pred2_idx",
+						columns: [],
+						expressionKeys: ["lower(keep)"],
+						predicate: '"B" is not null',
+						referencedColumns: ["keep", "B"],
+					},
+				],
+			},
+		);
+
+		const result = await inferFromCatalog({
+			session,
+			schemas: ["app"],
+			command: "import",
+		});
+
+		expect(indexNamesIn(result, "app.t5").has("t5_expr_pred2_idx")).toBe(false);
+		expect(result.lossReport).toContain(
+			'Omitted: index "app.t5.t5_expr_pred2_idx" -- its expression or predicate names column "app.t5.B", which this reading left out because no declaration can carry its name, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the column in the database, then re-run `hejbro import`.',
+		);
+	});
+
+	it("P3 (control): an index with an expression but no predicate keeps the expression-only wording", async () => {
+		const session = buildSession(
+			[{ schema: "app", table: "t5" }],
+			[
+				{ schema: "app", table: "t5", name: "id" },
+				{ schema: "app", table: "t5", name: "A" },
+			],
+			[],
+			{
+				indexes: [
+					{
+						schema: "app",
+						table: "t5",
+						name: "t5_expr_only_idx",
+						columns: [],
+						expressionKeys: ['lower("A")'],
+						referencedColumns: ["A"],
+					},
+				],
+			},
+		);
+
+		const result = await inferFromCatalog({
+			session,
+			schemas: ["app"],
+			command: "import",
+		});
+
+		expect(result.lossReport).toContain(
+			'Omitted: index "app.t5.t5_expr_only_idx" -- its expression names column "app.t5.A", which this reading left out because no declaration can carry its name, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the column in the database, then re-run `hejbro import`.',
+		);
+	});
+
+	it("P4 (control): an index with a predicate but no expression keeps the predicate-only wording", async () => {
+		const session = buildSession(
+			[{ schema: "app", table: "t5" }],
+			[
+				{ schema: "app", table: "t5", name: "id" },
+				{ schema: "app", table: "t5", name: "keep" },
+				{ schema: "app", table: "t5", name: "B" },
+			],
+			[],
+			{
+				indexes: [
+					{
+						schema: "app",
+						table: "t5",
+						name: "t5_pred_only_idx",
+						columns: ["keep"],
+						predicate: '"B" is not null',
+						referencedColumns: ["keep", "B"],
+					},
+				],
+			},
+		);
+
+		const result = await inferFromCatalog({
+			session,
+			schemas: ["app"],
+			command: "import",
+		});
+
+		expect(result.lossReport).toContain(
+			'Omitted: index "app.t5.t5_pred_only_idx" -- its predicate names column "app.t5.B", which this reading left out because no declaration can carry its name, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the column in the database, then re-run `hejbro import`.',
+		);
+	});
+
+	it("P5 (control): the plain key case keeps its own wording, unaffected by the new synthesis clause", async () => {
+		const session = buildSession(
+			[{ schema: "app", table: "t5" }],
+			[
+				{ schema: "app", table: "t5", name: "id" },
+				{ schema: "app", table: "t5", name: "A" },
+			],
+			[],
+			{
+				indexes: [
+					{
+						schema: "app",
+						table: "t5",
+						name: "t5_key_idx",
+						columns: ["A"],
+						referencedColumns: ["A"],
+					},
+				],
+			},
+		);
+
+		const result = await inferFromCatalog({
+			session,
+			schemas: ["app"],
+			command: "import",
+		});
+
+		expect(result.lossReport).toContain(
+			'Omitted: index "app.t5.t5_key_idx" -- it is declared on column "app.t5.A", which this reading left out because no declaration can carry its name, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the column in the database, then re-run `hejbro import`.',
+		);
+	});
 });
