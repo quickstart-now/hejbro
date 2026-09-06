@@ -26,7 +26,7 @@ goes back to the planner, not into the diff.
 
 ## 1. Catalog inference
 
-- [ ] 1.1 (~7m) Roles from policies. Red: the infer tests over a fake
+- [x] 1.1 (~7m) Roles from policies. Red: the infer tests over a fake
       catalog with a `policies` rows table {`to app_reader` only in a
       policy; `to public`; `to {a,b}` (two roles on one policy); a grant
       to `public`} → roles `a`, `app_reader`, `b`, plus the grant
@@ -45,7 +45,7 @@ goes back to the planner, not into the diff.
       the `check` consequence; `status` and its column kept. Files:
       `rest.ts`, `compose.ts`, `loss-report.ts`, tests.
 
-- [ ] 1.3 (~8m) Foreign keys at an omitted column, and the primary-key
+- [x] 1.3 (~8m) Foreign keys at an omitted column, and the primary-key
       name. Red: compose/loss tests — {FK from an omitted column; FK
       into an omitted column; both ends fine} → the first two omitted
       and named with the column, the starter loads (`loadDeclarations`
