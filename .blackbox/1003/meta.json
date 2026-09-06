@@ -1,0 +1,21 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#1003",
+  "title": "query: related() on a self-referential foreign key compiles an uncorrelated self-join and returns null / []",
+  "parent": "quickstart-now/hejbro#995",
+  "status": "open",
+  "opened": "2026-09-06",
+  "closed": null,
+  "decisions": [],
+  "work": [],
+  "prs": [
+    {
+      "number": 1011,
+      "role": "refs",
+      "pinnedAt": "2026-09-06T02:25Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

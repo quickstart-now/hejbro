@@ -268,7 +268,10 @@ running count or a windowed `max` past 2^53 arrives as the exact
 `bigint`, not a rounded JSON number. A relation key that collides with
 a projected column, mixes in a typo, or matches nothing fails to
 type-check — and the runtime throws
-`ambiguous-relation`/`unknown-relation` rather than guessing.
+`ambiguous-relation`/`unknown-relation` rather than guessing. The same
+`related()` reaches a vendored contract's own client too, typed from
+the contract's own `Relations` map rather than re-derived — `polyrepo.md`'s
+own "Following a relation" section.
 
 ## Set operations
 

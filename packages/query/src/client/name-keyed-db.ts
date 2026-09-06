@@ -20,7 +20,13 @@ import { synthesizeFunction } from "./synthesize-function";
 /** {@link synthesizeTable}'s own return type (add-unmanaged-objects, J3): `authority: "usage"`, never migration authority — see that function's doc comment. */
 type SynthesizedTable = Table<Record<string, ColumnBuilder>, "usage">;
 
-/** The shape a vendored `Database` interface always has — just enough to key {@link NameKeyedDb} off it, never imported from `hejbro`/`@hejbro/cli` (this package has no dependency on either, `AGENTS.md`'s own repo map). */
+/** One vendored relation's own shape (653) — mirrors `packages/cli/src/contract/tables.ts`'s `RelationEntry`: `target` names a key of this same `Database["Tables"]`, `mode` picks the nested field's shape (`Row | null` for `"one"`, `ReadonlyArray<Row>` for `"many"`). */
+export type DatabaseRelation = {
+	readonly target: string;
+	readonly mode: "one" | "many";
+};
+
+/** The shape a vendored `Database` interface always has — just enough to key {@link NameKeyedDb} off it, never imported from `hejbro`/`@hejbro/cli` (this package has no dependency on either, `AGENTS.md`'s own repo map). `Relations` is optional (653, design Q2): a contract vendored before it existed carries no such key at all, not an empty one. */
 export type DatabaseShape = {
 	readonly Tables: Record<
 		string,
@@ -28,6 +34,7 @@ export type DatabaseShape = {
 			readonly Row: unknown;
 			readonly Insert: unknown;
 			readonly Update: unknown;
+			readonly Relations?: Record<string, DatabaseRelation>;
 		}
 	>;
 	readonly Functions: Record<
@@ -79,6 +86,85 @@ export type NameKeyedMutationChain = PromiseLike<ReadonlyArray<never>> & {
 };
 
 /**
+ * The chain family `.related()` returns on the name-keyed client (653,
+ * task 1.2) — exactly the stages the declaring side's own related chain
+ * has (`@hejbro/query`'s `db/chain.ts`, `SelectChainRelated` and its
+ * `Ordered`/`Filtered`/`Limited` siblings, 653/R4): `.where()`,
+ * `.orderBy()`, `.limit()`, and no `.offset()` — that stage exists on
+ * neither side (filed as #1000, a `query-layer` change, not this one).
+ */
+export type NameKeyedRelatedLimited<TRow> = PromiseLike<ReadonlyArray<TRow>> & {
+	compile(): CompileResult;
+};
+
+export type NameKeyedRelatedOrdered<TRow> = NameKeyedRelatedLimited<TRow> & {
+	limit(count: number): NameKeyedRelatedLimited<TRow>;
+};
+
+export type NameKeyedRelatedFiltered<TRow> = NameKeyedRelatedOrdered<TRow> & {
+	orderBy(
+		...terms: ReadonlyArray<OrderTermInput>
+	): NameKeyedRelatedOrdered<TRow>;
+};
+
+export type NameKeyedRelatedChain<TRow> = NameKeyedRelatedOrdered<TRow> & {
+	where(condition: Condition): NameKeyedRelatedFiltered<TRow>;
+	orderBy(
+		...terms: ReadonlyArray<OrderTermInput>
+	): NameKeyedRelatedOrdered<TRow>;
+};
+
+/** A table's own vendored `Relations` map, or none at all for a table on a pre-`Relations` contract (design Q2) — structural, never a direct index, so a `TTable` that omits the field entirely does not error here. */
+type RelationsOf<TTable> = TTable extends {
+	readonly Relations: infer TRelations extends Record<string, DatabaseRelation>;
+}
+	? TRelations
+	: Record<never, never>;
+
+/** `.related()`'s key domain for `TTable` — every key its own vendored `Relations` map carries, nothing derived (the emitter has already applied `stripId` and the collision rule, `tables.ts`'s `computeRelationsForTable`). */
+type RelatedKeysOf<TTable> = keyof RelationsOf<TTable> & string;
+
+/** `.related()`'s own parameter type — `true` per vendored relation key, nothing else. */
+type RelatedSpec<TTable> = Partial<Record<RelatedKeysOf<TTable>, true>>;
+
+/** The nested keys a `related(spec)` call adds to the row: `"many"` → a rich row array, `"one"` → `Row | null` — resolving `target` against `TTables` (the contract's own `Database["Tables"]`, threaded in by {@link NameKeyedTableClient}'s own second parameter). A `target` outside `TTables` (653/R3/P6: never emitted in practice) yields no field, rather than guessing. */
+type NameKeyedRelatedResult<
+	TTables extends DatabaseShape["Tables"],
+	TTable,
+	TSpec extends RelatedSpec<TTable>,
+> = {
+	readonly [K in keyof TSpec & string]: K extends keyof RelationsOf<TTable>
+		? RelationsOf<TTable>[K] extends {
+				readonly target: infer TTargetKey extends string;
+				readonly mode: infer TMode;
+			}
+			? TTargetKey extends keyof TTables
+				? [TMode] extends ["many"]
+					? ReadonlyArray<TTables[TTargetKey]["Row"]>
+					: TTables[TTargetKey]["Row"] | null
+				: never
+			: never
+		: never;
+};
+
+/** The `.related()` member a whole-table select gains (653, task 1.2) — mirrors `@hejbro/query`'s own `RelatedCapable` (`db/chain.ts:788-808`): a table with no vendored relations has no `.related` member AT ALL, never a callable that could only ever take `{}`; a key outside the map fails to type-check via the same `Record<Exclude<…>, never>` intersection that file's own F3 finding settled. */
+export type NameKeyedRelated<
+	TTables extends DatabaseShape["Tables"],
+	TTable,
+> = [RelatedKeysOf<TTable>] extends [never]
+	? unknown
+	: {
+			related<TSpec extends RelatedSpec<TTable>>(
+				spec: TSpec &
+					Record<Exclude<keyof TSpec, RelatedKeysOf<TTable>>, never>,
+			): NameKeyedRelatedChain<
+				TTable extends { readonly Row: infer TRow }
+					? TRow & NameKeyedRelatedResult<TTables, TTable, TSpec>
+					: never
+			>;
+		};
+
+/**
  * One table's public surface: `select`/`insert`/`update`/`delete`, plus
  * `columns` — a plain-`Expr` bag (owner seal (가)) a caller combines with
  * `eq`/`and`/`or` (already-public `@hejbro/query` exports) to build a
@@ -97,9 +183,11 @@ export type NameKeyedTableClient<
 		readonly Insert: unknown;
 		readonly Update: unknown;
 	},
+	TTables extends DatabaseShape["Tables"] = Record<string, never>,
 > = {
 	readonly columns: { readonly [K in keyof TTable["Row"]]: Expr };
-	select(): NameKeyedSelectChain<TTable["Row"]>;
+	select(): NameKeyedSelectChain<TTable["Row"]> &
+		NameKeyedRelated<TTables, TTable>;
 	/**
 	 * Resolves to `ReadonlyArray<never>` (#654): the statement this sends
 	 * carries no `RETURNING` clause, so it always resolves to an empty
@@ -117,7 +205,8 @@ export type NameKeyedTableClient<
 /** Every table client, keyed exactly as `Database["Tables"]` is — the shape both the unscoped and `.as(context)`-scoped surfaces share (mirrors `@hejbro/query`'s own unscoped `db()` vs `db.as(context)` pair: a scoped handle never re-nests its own `.as`, task 4.6's "no nesting" rule). */
 export type NameKeyedTables<TDatabase extends DatabaseShape> = {
 	readonly [K in keyof TDatabase["Tables"] & string]: NameKeyedTableClient<
-		TDatabase["Tables"][K]
+		TDatabase["Tables"][K],
+		TDatabase["Tables"]
 	>;
 };
 
@@ -206,7 +295,9 @@ const buildTableClient = <
 		table,
 	) as unknown as NameKeyedTableClient<TTable>["columns"],
 	select: () =>
-		chainSource.select(table) as unknown as NameKeyedSelectChain<TTable["Row"]>,
+		chainSource.select(table) as unknown as ReturnType<
+			NameKeyedTableClient<TTable>["select"]
+		>,
 	insert: async (rows) => await chainSource.insert(table).values(rows as never),
 	update: (values) => chainSource.update(table).set(values as never),
 	delete: () => chainSource.deleteFrom(table),

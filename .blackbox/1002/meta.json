@@ -1,0 +1,21 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#1002",
+  "title": "cli-smoke: the vendored-contract tsc check does not exercise .related() on the emitted contract",
+  "parent": "quickstart-now/hejbro#995",
+  "status": "open",
+  "opened": "2026-09-06",
+  "closed": null,
+  "decisions": [],
+  "work": [],
+  "prs": [
+    {
+      "number": 1011,
+      "role": "refs",
+      "pinnedAt": "2026-09-06T02:25Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

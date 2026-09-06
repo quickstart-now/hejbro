@@ -13,6 +13,9 @@
 // reproduce someone else's convention (Supabase's own generated `Database`
 // shape, which `emitContract` deliberately mirrors), and renaming the keys
 // to satisfy our own rule would defeat the fixture's entire point.
+// `posts`'s `Relationships`/`Relations` shape (653) is copied byte-for-byte
+// from a real `emitContract` run over a managed table referencing another
+// vendored one, not hand-invented.
 import { pgDriver } from "@hejbro/pg";
 import type { Driver } from "hejbro";
 import { createNameKeyedDb } from "hejbro";
@@ -20,10 +23,41 @@ import { createNameKeyedDb } from "hejbro";
 export interface Database {
 	readonly Tables: {
 		posts: {
-			readonly Row: { readonly id: string; readonly title: string };
-			readonly Insert: { readonly id?: string; readonly title: string };
-			readonly Update: { readonly id?: string; readonly title?: string };
+			readonly Row: {
+				readonly id: string;
+				readonly title: string;
+				readonly authorId: string;
+			};
+			readonly Insert: {
+				readonly id?: string;
+				readonly title: string;
+				readonly authorId: string;
+			};
+			readonly Update: {
+				readonly id?: string;
+				readonly title?: string;
+				readonly authorId?: string;
+			};
+			readonly Relationships: readonly [
+				{
+					readonly foreignKeyName: "posts_author_id_fk";
+					readonly columns: readonly ["author_id"];
+					readonly referencedRelation: "app.users";
+					readonly referencedColumns: readonly ["id"];
+				},
+			];
+			readonly Relations: {
+				readonly author: { readonly target: "users"; readonly mode: "one" };
+			};
+		};
+		users: {
+			readonly Row: { readonly id: string; readonly email: string };
+			readonly Insert: { readonly id?: string; readonly email: string };
+			readonly Update: { readonly id?: string; readonly email?: string };
 			readonly Relationships: readonly [];
+			readonly Relations: {
+				readonly posts: { readonly target: "posts"; readonly mode: "many" };
+			};
 		};
 	};
 	readonly Views: { [key: string]: never };
@@ -51,6 +85,42 @@ export const contractMetadata = {
 				{
 					key: "title",
 					sqlName: "title",
+					typeNode: { typeName: "text" },
+					mode: null,
+					notNullElements: false,
+				},
+				{
+					key: "authorId",
+					sqlName: "author_id",
+					typeNode: { typeName: "uuid" },
+					mode: null,
+					notNullElements: false,
+				},
+			],
+			foreignKeys: [
+				{
+					name: "posts_author_id_fk",
+					columns: ["author_id"],
+					referencesSchema: "app",
+					referencesTable: "users",
+					referencedColumns: ["id"],
+				},
+			],
+		},
+		users: {
+			schema: "app",
+			name: "users",
+			columns: [
+				{
+					key: "id",
+					sqlName: "id",
+					typeNode: { typeName: "uuid" },
+					mode: null,
+					notNullElements: false,
+				},
+				{
+					key: "email",
+					sqlName: "email",
 					typeNode: { typeName: "text" },
 					mode: null,
 					notNullElements: false,

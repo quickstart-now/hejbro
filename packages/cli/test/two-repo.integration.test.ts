@@ -61,8 +61,16 @@ type PostsRow = {
 type AuthJoinClient = {
 	select(): Promise<ReadonlyArray<UsersRow>>;
 };
+/** [653, task 1.3] The nested `author` field `.related({ author: true })` adds to a `posts` row -- `auth.users`'s own declared columns, or `null` (forward relation). `.related()` is a member of the whole-table select chain (`select()`'s own return value), not of the table client itself. */
+type PostsRowWithAuthor = PostsRow & { readonly author: UsersRow | null };
+type PostsRelatedChain = Promise<ReadonlyArray<PostsRowWithAuthor>> & {
+	compile(): { readonly sql: string; readonly params: ReadonlyArray<unknown> };
+};
+type PostsSelectChain = Promise<ReadonlyArray<PostsRow>> & {
+	related(spec: Readonly<Record<string, true>>): PostsRelatedChain;
+};
 type PostsClient = {
-	select(): Promise<ReadonlyArray<PostsRow>>;
+	select(): PostsSelectChain;
 };
 type AuthJoinContractModule = {
 	readonly createDb: (conn: Driver) => {
@@ -502,8 +510,8 @@ describe("two-repository witness (#602)", () => {
 	/**
 	 * [add-unmanaged-objects, 3.2] The delta's own narrowed requirement
 	 * (D106/owner judgement, R1-09 — "expose it for reading like any
-	 * other table"; following the relation from the client is out of
-	 * scope, #653): the vendored file alone reads a declared existing
+	 * other table"; following the relation from the client is 3.3's own
+	 * job, #653): the vendored file alone reads a declared existing
 	 * table's real rows, and a managed table's FK onto it inserts
 	 * successfully against the hydrated row -- the real-server question
 	 * this witness uniquely answers (a mock driver can't prove a
@@ -564,6 +572,82 @@ describe("two-repository witness (#602)", () => {
 			const posts = await client.posts.select();
 			expect(posts).toHaveLength(1);
 			expect(posts[0]?.authorId).toBe(userId);
+		} finally {
+			await driver.client.end();
+		}
+	});
+
+	/**
+	 * [653, task 1.3] The relation itself, following 3.2's declared
+	 * existing table -- a managed table's foreign key onto a
+	 * platform-owned one resolves through `.related()` exactly as one
+	 * onto a managed table does (schema-vendoring spec).
+	 */
+	it("3.3: the consumer joins the platform-owned table", async () => {
+		const database = "two_repo_3_3";
+		const init = await runCli(schemaRepo, ["init"]);
+		expect(init.exitCode).toBe(0);
+		await commitSchemaExport(schemaRepo, AUTH_JOIN_SCHEMA, "initial export");
+		const link = await runCli(consumerRepo, ["link", schemaRepo]);
+		expect(link.exitCode).toBe(0);
+		const vendor = await runCli(consumerRepo, ["vendor"]);
+		expect(vendor.exitCode).toBe(0);
+
+		psqlCommand(container, "postgres", `create database ${database};`);
+		hydrateAuthUsers(database);
+		const raise = await runCli(consumerRepo, [
+			"raise",
+			"--file",
+			".hejbro/vendor/snapshot.sql",
+			"--url",
+			hostUrl(database),
+		]);
+		expect(raise.exitCode).toBe(0);
+
+		const userId = "33333333-3333-3333-3333-333333333333";
+		const userEmail = "author@example.com";
+
+		const driver = pgDriver(hostUrl(database));
+		try {
+			await driver.execute({
+				sql: 'insert into "auth"."users" ("id", "email") values ($1, $2)',
+				params: [userId, userEmail],
+				kind: "sql",
+			});
+			await driver.execute({
+				sql: 'insert into "app"."posts" ("author_id") values ($1)',
+				params: [userId],
+				kind: "sql",
+			});
+
+			const jiti = createJiti(consumerRepo);
+			const contractModule = (await jiti.import(
+				vendorContractPath(consumerRepo),
+			)) as AuthJoinContractModule;
+			const client = contractModule.createDb(driver);
+
+			// The contract itself names the relation the client just followed
+			// (653/R3/P1): the runtime path reads `foreignKeys`, so without
+			// this the emitted `Relations` map would be free to vanish.
+			const contractText = await readFile(
+				vendorContractPath(consumerRepo),
+				"utf8",
+			);
+			expect(contractText).toContain(
+				'readonly author: { readonly target: "users"; readonly mode: "one" };',
+			);
+
+			const compiled = client.posts
+				.select()
+				.related({ author: true })
+				.compile();
+			expect(compiled.sql).toContain("row_to_json");
+
+			const posts = await client.posts.select().related({ author: true });
+			expect(posts).toHaveLength(1);
+			expect(posts[0]?.authorId).toBe(userId);
+			expect(posts[0]?.author?.id).toBe(userId);
+			expect(posts[0]?.author?.email).toBe(userEmail);
 		} finally {
 			await driver.client.end();
 		}

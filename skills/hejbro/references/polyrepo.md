@@ -93,11 +93,37 @@ existing, and a managed table's foreign key onto it resolves to a
 relation in the contract exactly as one onto a managed table does (an
 undeclared target still has none). `createDb(driver)` reads it plainly,
 the same as any other table — `db.authUsers.select()`, no different
-shape than a managed one. **What this does not give you yet**:
-*following* that relation from the client — the name-keyed chain has no
-`.related()` for any table, managed or existing (opening that surface is
-separate work, #653) — so a consumer reads the existing table and the
-managed table each on their own, not as one nested/joined query.
+shape than a managed one — and a managed table's own `.related()` call
+follows the relation onto it exactly as it would onto another managed
+table (below).
+
+## Following a relation (`.related()`)
+
+The contract's own `Relations` map (`vendor`'s emitted text, one entry
+per relation `hejbro` can derive from the schema's own foreign keys)
+types `.related(spec)` on the whole-table select chain — the same sugar
+`query-layer.md` documents for a local `db()` handle, forwarded
+unchanged: a forward key (the FK column's TypeScript name minus its
+`Id` tail) types the nested field as the parent row or `null`; a
+reverse key (the referencing table's own name) types it as an array of
+child rows. The result chain keeps exactly the stages the declaring
+side's own related chain has — `.where()`, `.orderBy()`, `.limit()` —
+and no `.offset()` on either side. A table whose `Relations` map is
+empty, or a contract vendored before that map existed, has no
+`.related` member at all — never a callable that could only ever take
+`{}`.
+
+```ts prelude=polyrepo-contract
+const db = createDb(driver);
+const posts = await db.posts.select().related({ author: true });
+const authorEmail = posts[0]?.author?.email;
+```
+
+Re-vendoring the same commit after upgrading the CLI is a diff in
+`contract.ts` (`vendor` writes what it read, "The loop" above) — a
+contract vendored before `Relations` existed gains the map only on its
+next `vendor` run. `hejbro outdated` does not report this: it compares
+commits, not emitters.
 
 ## A database as a marked fallback (`pull`)
 
