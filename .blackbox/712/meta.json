@@ -101,6 +101,17 @@
       "at": "2026-09-06T04:55Z",
       "title": "the foreign-key omission line follows its cause: a column lost with its enum type points at renaming the type",
       "ratified": null
+    },
+    {
+      "id": "R9",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "712/R3 D2 (no object on two lines); 712/R8 (cause-specific clauses); live witness on postgres:17-alpine: an omitted enum type takes both ends of an enum-to-enum foreign key"
+      ],
+      "at": "2026-09-06T04:56Z",
+      "title": "a foreign key lost at both ends is announced once, its reason on the source end",
+      "ratified": null
     }
   ],
   "work": [],

@@ -104,3 +104,12 @@ Ruling: option (A). The foreign-key omission record carries its cause (`"name"` 
 - the target-end variant keeps 712/R5's "it references column …" in place of "it is declared on column …".
 The delta needs no change: "a column left out takes with it every foreign key that references it or is referenced through it" names no cause. A mutation reusing the name-cause sentence for the enum cause must redden the crossing row only.
 
+<a id="r9"></a>
+## R9 — a foreign key lost at both ends is announced once, its reason on the source end
+
+_lead · interpretation · basis 712/R3 D2 (no object on two lines); 712/R8 (cause-specific clauses); live witness on postgres:17-alpine: an omitted enum type takes both ends of an enum-to-enum foreign key · 2026-09-06T04:56Z · ratified: pending_
+
+Task 1.5's live witness (postgres:17-alpine, the crossing-cell database) printed the same foreign key twice — once for its source end, once for its target end — when one omitted enum type took both of its columns out at once (Postgres allows an enum-to-enum foreign key only over the same type, so losing the type loses both ends). 712/R3 D2 forbids an object on two lines; the unit fixtures had only ever lost one end.
+
+Ruling: option (A). A foreign key is announced on exactly one line; when both ends failed, the reason clause names the source end (the column the key is declared on), and the target end's own loss is on that column's or enum's own line, so nothing is lost. Option (B), naming both ends in one sentence, multiplies the cause/way-out branches of 712/R8 and cannot state one way out when the ends differ in cause; option (C), leaving the duplicate, violates D2. The delta is unchanged (it states neither cause nor count). The dedup shares 712/R8's function and commit; a mutation removing it must redden only the both-ends row.
+
