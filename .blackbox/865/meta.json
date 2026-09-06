@@ -4,9 +4,9 @@
   "ref": "quickstart-now/hejbro#865",
   "title": "ledger: forced row-level security hides the ledger's rows and migrate re-applies the chain instead of refusing",
   "parent": "quickstart-now/hejbro#815",
-  "status": "open",
+  "status": "closed",
   "opened": "2026-09-05",
-  "closed": null,
+  "closed": "2026-09-06",
   "decisions": [
     {
       "id": "R1",
@@ -47,6 +47,11 @@
       "number": 877,
       "role": "refs",
       "pinnedAt": "2026-09-05T02:07Z"
+    },
+    {
+      "number": 1005,
+      "role": "closes",
+      "pinnedAt": "2026-09-06T01:23Z"
     }
   ],
   "origin": null,

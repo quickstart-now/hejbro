@@ -84,6 +84,11 @@
       "number": 999,
       "role": "refs",
       "pinnedAt": "2026-09-05T23:36Z"
+    },
+    {
+      "number": 1005,
+      "role": "refs",
+      "pinnedAt": "2026-09-06T01:23Z"
     }
   ],
   "origin": null,

@@ -4,9 +4,9 @@
   "ref": "quickstart-now/hejbro#631",
   "title": "migrate: record a body checksum in the ledger and refuse an applied migration whose SQL changed",
   "parent": "quickstart-now/hejbro#412",
-  "status": "open",
+  "status": "closed",
   "opened": "2026-09-05",
-  "closed": null,
+  "closed": "2026-09-06",
   "decisions": [
     {
       "id": "R1",
@@ -191,7 +191,13 @@
       "decisions": []
     }
   ],
-  "prs": [],
+  "prs": [
+    {
+      "number": 1005,
+      "role": "closes",
+      "pinnedAt": "2026-09-06T01:23Z"
+    }
+  ],
   "origin": null,
   "followUps": []
 }

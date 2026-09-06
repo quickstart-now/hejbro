@@ -1,0 +1,101 @@
+{
+  "version": 3,
+  "number": 1005,
+  "ref": "quickstart-now/hejbro#1005",
+  "title": "feat(cli): record a body checksum in the ledger and refuse a changed migration (#631, #865)",
+  "head": "9ee6c1b404db4946ad81ab79bea097aef61f2c87",
+  "headRef": "add-ledger-checksum",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-06T01:23Z",
+  "refs": [
+    {
+      "path": ".changeset/add-ledger-checksum.md",
+      "blob": "175ab6a4bd4f71be0fc30a41ffc0d0550bb1a236"
+    },
+    {
+      "path": "README.md",
+      "blob": "35be3a8f8b185cf1844dbdf2efa386910e56c6c0"
+    },
+    {
+      "path": "openspec/changes/add-ledger-checksum/design.md",
+      "blob": "717da78f80606a1f5f994ea6bad32bf8eec9e2fe"
+    },
+    {
+      "path": "openspec/changes/add-ledger-checksum/proposal.md",
+      "blob": "b5719eca3784473c8ad79315f7d1db587c13fac6"
+    },
+    {
+      "path": "openspec/changes/add-ledger-checksum/specs/migration-apply/spec.md",
+      "blob": "d479f902392ba924cc7104b299ac744498c6cbe3"
+    },
+    {
+      "path": "openspec/changes/add-ledger-checksum/tasks.md",
+      "blob": "77bd362be5775111a0b4c52ca7d582134c5d9048"
+    },
+    {
+      "path": "openspec/task-times.csv",
+      "blob": "ac31916b5555bdb6b7acde9085e63230b9efd64d"
+    },
+    {
+      "path": "packages/cli/src/apply/execute.ts",
+      "blob": "2659ba37761d09bdcc712104dbad853482bedc1c"
+    },
+    {
+      "path": "packages/cli/src/apply/ledger-identity.ts",
+      "blob": "c19373f42167290a3458b5d0ff3891d48fe1896c"
+    },
+    {
+      "path": "packages/cli/src/apply/ledger.ts",
+      "blob": "8b03278f925ab9b9dc595f206057cbe88f48ef37"
+    },
+    {
+      "path": "packages/cli/src/commands/migrate.ts",
+      "blob": "7084ec47bbcfecf7af07a3ef34e138e2aa009333"
+    },
+    {
+      "path": "packages/cli/src/commands/status.ts",
+      "blob": "f9b987101bf96d3c02963912f592d4aff3666a48"
+    },
+    {
+      "path": "packages/cli/test/apply-execute.test.ts",
+      "blob": "277f15c78e50a738efbe98067febc308d3fe4c9b"
+    },
+    {
+      "path": "packages/cli/test/apply-ledger-identity.test.ts",
+      "blob": "0462784824f0aa79c843db610eb13fe9a8c2a1b8"
+    },
+    {
+      "path": "packages/cli/test/apply-ledger.test.ts",
+      "blob": "e9edacf9812ebed4a192fc5bd42932e7b5270053"
+    },
+    {
+      "path": "packages/cli/test/apply-live.integration.test.ts",
+      "blob": "e393a0e82d71782621e114369f5f39d7d1515498"
+    },
+    {
+      "path": "packages/cli/test/apply-plan.test.ts",
+      "blob": "a3e3ca9950c65996299d941a0c03beea04b95865"
+    },
+    {
+      "path": "packages/cli/test/apply-raise.test.ts",
+      "blob": "37a0e29af3bcae3bf1659e4500c5dd4627ed06d8"
+    },
+    {
+      "path": "packages/cli/test/apply-reset.test.ts",
+      "blob": "bb0f26271776daa0e3ae292863b8010d0f665599"
+    },
+    {
+      "path": "packages/cli/test/migrate-command.test.ts",
+      "blob": "ea19fcca85d113a55d6a058f8f9b50d04fe229ac"
+    },
+    {
+      "path": "packages/cli/test/status-command.test.ts",
+      "blob": "c6a7d9f6a63534fa5924f8fc8da7faf7dc82e022"
+    },
+    {
+      "path": "skills/hejbro/references/generate-verify-workflow.md",
+      "blob": "c9c69bedc5692b5c7647a2c6315f267cad891d59"
+    }
+  ]
+}
