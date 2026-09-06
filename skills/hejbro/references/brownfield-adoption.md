@@ -224,10 +224,9 @@ now orphaned, matching no surviving migration — and `hejbro
 migrate`/`hejbro verify` both refuse it with `error[broken-chain]`.
 Restoring the snapshot alone does not clear that one: `verify` then
 reports `error[snapshot-stale]` beside it, and the divergent migration
-has to go too, which is what `broken-chain`'s own `Next:` already says.
-Reverting only the snapshot leaves it disagreeing with the migration
-file's own recorded hash, and `hejbro verify` refuses with
-`error[snapshot-stale]` and `error[chain-tip-mismatch]` (`hejbro
+has to go too. Reverting only the snapshot leaves it disagreeing with
+the migration file's own recorded hash, and `hejbro verify` refuses
+with `error[snapshot-stale]` and `error[chain-tip-mismatch]` (`hejbro
 migrate` itself never reads the snapshot's content, so it silently
 re-attempts the same failing statement instead of noticing anything is
 wrong). hejbro has no command that discards its own just-written
