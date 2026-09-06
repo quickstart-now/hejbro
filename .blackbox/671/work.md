@@ -115,3 +115,5 @@ no golden changed at any point.
 
 Not fixed here, referred out: #1009, #1001, #1015, #993, #994.
 
+
+Addendum (lead, in place under 412/R34): the reference paragraph on the half-followed way out went through four commits after the review passed — twice it carried claims nobody had measured (that restoring the snapshot alone resolves `broken-chain`; that the divergent migration forks from the same prior state) and once a quotation that rested on a reading of the diagnostic text; the reviewer measured each with an offline `verify` and the final text (`f7134ea9`) states only what was measured. One of those commits was contract text committed before planner approval, against the piece rule.
