@@ -210,11 +210,11 @@ refuses to run a second time.
 
 A child declared on a column the *existing* declaration didn't list is
 not refused at `generate` time, deliberately: `existingTable()` is by
-design a partial claim (D41), so a column merely left off that list is
-an ordinary, working shape — refusing it there can't tell that shape
-apart from a column the database genuinely lacks, since both look
-identical to a declaration-only comparison. The two ways through: list
-every column a child touches in the existing declaration before
+design a partial claim (D106 R2/R2-B2), so a column merely left off
+that list is an ordinary, working shape — refusing it there can't tell
+that shape apart from a column the database genuinely lacks, since both
+look identical to a declaration-only comparison. The two ways through:
+list every column a child touches in the existing declaration before
 adopting (nothing then distinguishes it from any other adoption), or
 adopt with only the columns the database already has and add the
 missing column — and whatever's declared on it — in a following,
