@@ -134,6 +134,13 @@
       "title": "catalog inference hardened: policy roles, enum names, the dropped primary-key name, foreign keys at omitted columns, one comparator",
       "pr": null,
       "decisions": []
+    },
+    {
+      "id": "W2",
+      "at": "2026-09-06T08:50Z",
+      "title": "three constructor-mode review rounds: the omission family widened to indexes, checks and unique constraints, and the record corrected on what a catalog can tell",
+      "pr": null,
+      "decisions": []
     }
   ],
   "prs": [],

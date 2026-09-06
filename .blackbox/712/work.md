@@ -13,3 +13,20 @@ Measured rather than assumed. (1) #873's symptom is one step earlier than the is
 
 Falsification. Every task predicted its mutations' red cells before running them and compared after: the shared comparator (back to `localeCompare`; always 0), role inference (`public` filter; policy source; first role only), the foreign-key column axis (source end only; target end only; whole table), the primary-key name (both gates; swapped names; first table only; name comparison alone), the enum rule (same schema only; columns dropped from the line; a column already omitted for its name; the enum alone; the enum-cause column removed from the foreign-key set), the cause-specific lines (name-cause sentence reused; dedup removed; dedup inverted), and the live witness (`roles` column removed; enum partition disabled; `roles` transported as an empty array). Three predictions were wider or narrower than the run: each was recorded as measured, and two of them corrected the tests instead of the code -- an assertion that read the whole report where it meant one line, and an assertion that sat in the cell of a cause it did not test.
 
+<a id="w2"></a>
+## W2 — three constructor-mode review rounds: the omission family widened to indexes, checks and unique constraints, and the record corrected on what a catalog can tell
+
+_2026-09-06T08:50Z_
+
+Three constructor-mode review rounds on postgres:17, twenty-two databases built and every way out executed against the server.
+
+Round 1 (REWORK, three blocking, six non-blocking) measured base and branch side by side: base crashed on a foreign key at an omitted column, declared an enum whose name D36 rejects, and dropped a non-derived primary-key name in silence; this change closed all three. What it had left: an index, check or unique constraint over an omitted column stayed in the declarations, so `baseline`'s SQL and `pull`'s vendored snapshot failed to apply; a column omitted for two causes stated only one, with a remedy that merely moved it to the other line; the new primary-key line could print a rename Postgres refuses.
+
+Round 2 (REWORK) closed five of seven. The two left were narrow: the index scan read keys only, so a partial index's predicate and an expression index's expression still named omitted columns, and the collision check looked at indexes alone, so a table, sequence or view holding the derived name left the line silent while the rename still failed.
+
+Round 3 (PASS) confirmed both closed, over an eighteen-index table crossed against three omission causes and a nine-way collision table, with five false-positive controls surviving.
+
+Two corrections the rounds forced on the record. `pg_depend` alone is not the authoritative list of the columns an index reads: an index a constraint backs depends on `pg_constraint`, not on its columns, so the rule is the union of the key list and the dependency rows -- the live witness caught the single-source implementation as `column "value" does not exist`. And because those rows do not separate an expression's columns from a predicate's, an index holding both names the column as "its expression or predicate names column" rather than guessing.
+
+Process, recorded rather than smoothed over. Task 1.2's wording (KK5) went in from the approved text without a failing test first: a D88 red-first deviation, reported by the implementer; falsification rests on the mutations, which redden all twelve of those cells. Both the team and the reviewer measured the same interference twice -- gates run in parallel inside one worktree fail each other (#102's pattern) -- so every later run was serial.
+
