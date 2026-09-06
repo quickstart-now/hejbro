@@ -89,6 +89,19 @@ type IndexFixture = {
 	/** Bare column keys only (no expression elements) -- this piece's own rows never need one. */
 	readonly columns: ReadonlyArray<string>;
 	readonly isUnique?: boolean;
+	/** The index's own partial predicate, raw SQL text (LL2, 712/R10 B#1). */
+	readonly predicate?: string;
+	/** Raw SQL text of any expression-only key elements (`column: null` in the catalog row) -- kept apart from `columns` since an expression element names no real column of its own. */
+	readonly expressionKeys?: ReadonlyArray<string>;
+	/**
+	 * Every column this index depends on -- its key list plus any column
+	 * its predicate or an expression key names, mirroring `pg_depend`'s
+	 * own authoritative list (LL2, 712/R10 B#1: this fixture never runs
+	 * real SQL, so it states directly what a live catalog would). Defaults
+	 * to `columns` when omitted -- the shape every pre-LL2 row here still
+	 * has.
+	 */
+	readonly referencedColumns?: ReadonlyArray<string>;
 };
 
 type CheckFixture = {
@@ -120,15 +133,26 @@ const indexDetailRow = (index: IndexFixture): DriverRow => ({
 	name: index.name,
 	isUnique: index.isUnique ?? false,
 	method: "btree",
-	predicate: null,
-	columns: index.columns.map((column) => ({
-		text: column,
-		column,
-		opclass: "",
-		opclassIsDefault: true,
-		descending: false,
-		nullsFirst: false,
-	})),
+	predicate: index.predicate ?? null,
+	columns: [
+		...index.columns.map((column) => ({
+			text: column,
+			column,
+			opclass: "",
+			opclassIsDefault: true,
+			descending: false,
+			nullsFirst: false,
+		})),
+		...(index.expressionKeys ?? []).map((text) => ({
+			text,
+			column: null,
+			opclass: "",
+			opclassIsDefault: true,
+			descending: false,
+			nullsFirst: false,
+		})),
+	],
+	referencedColumns: index.referencedColumns ?? index.columns,
 });
 
 /**
@@ -557,7 +581,7 @@ describe("inferFromCatalog / B#1: an index, check or UNIQUE at an omitted column
 		);
 	});
 
-	it("J7: the migration SQL that creates this reading's own snapshot never names an omitted column (the review's own replay failure, fixed at the source)", async () => {
+	it("J7: the migration SQL that creates this reading's own snapshot never names an omitted column, however the index or check reaches it (key, predicate or expression -- the review's own replay failure, fixed at the source)", async () => {
 		const session = buildSession(
 			[{ schema: "app", table: "t2" }],
 			[
@@ -577,6 +601,25 @@ describe("inferFromCatalog / B#1: an index, check or UNIQUE at an omitted column
 						table: "t2",
 						name: "t2_state2_idx",
 						columns: ["state2"],
+					},
+					// LL3: widens this test's own input to the predicate/
+					// expression axes LL2 adds, matching its title's universal
+					// claim ("never names an omitted column", not only via a key).
+					{
+						schema: "app",
+						table: "t2",
+						name: "t2_id_partial_state2_idx",
+						columns: ["id"],
+						predicate: "state2 is not null",
+						referencedColumns: ["id", "state2"],
+					},
+					{
+						schema: "app",
+						table: "t2",
+						name: "t2_lower_state2_idx",
+						columns: [],
+						expressionKeys: ["lower(state2::text)"],
+						referencedColumns: ["state2"],
 					},
 				],
 				checks: [
@@ -599,6 +642,8 @@ describe("inferFromCatalog / B#1: an index, check or UNIQUE at an omitted column
 
 		expect(result.sql).not.toContain("state2");
 		expect(result.sql).not.toContain("t2_state2_idx");
+		expect(result.sql).not.toContain("t2_id_partial_state2_idx");
+		expect(result.sql).not.toContain("t2_lower_state2_idx");
 		expect(result.sql).not.toContain("t2_state_chk");
 	});
 
@@ -642,5 +687,262 @@ describe("inferFromCatalog / B#1: an index, check or UNIQUE at an omitted column
 		});
 
 		expect(checkNamesIn(result, "app.t2").has("t2_kind_chk")).toBe(true);
+	});
+
+	// Review round 2 LL2: the exclusion used to scan only an index's own
+	// key list, never a partial predicate or an expression key's own
+	// text -- the review's own live replay found each of these still
+	// left in the declaration, replaying against an empty database with
+	// `column "…" does not exist`. Row labels (m_i5/m_i6/m_i10/m_i12)
+	// match the review's own reproduction database.
+	it("m_i5: a partial index whose predicate names a name-omitted column is dropped whole, even though its own key survives", async () => {
+		const session = buildSession(
+			[{ schema: "app", table: "orders" }],
+			[
+				{ schema: "app", table: "orders", name: "id" },
+				{ schema: "app", table: "orders", name: "amount" },
+				{ schema: "app", table: "orders", name: "UserId" },
+			],
+			[],
+			{
+				indexes: [
+					{
+						schema: "app",
+						table: "orders",
+						name: "orders_amount_partial_idx",
+						columns: ["amount"],
+						predicate: '"UserId" is not null',
+						referencedColumns: ["amount", "UserId"],
+					},
+				],
+			},
+		);
+
+		const result = await inferFromCatalog({
+			session,
+			schemas: ["app"],
+			command: "import",
+		});
+
+		expect(
+			indexNamesIn(result, "app.orders").has("orders_amount_partial_idx"),
+		).toBe(false);
+		// MM3 (lead-approved wording): a column found only through the
+		// predicate is not "declared on" the index the way a key column is.
+		expect(result.lossReport).toContain(
+			'Omitted: index "app.orders.orders_amount_partial_idx" -- its predicate names column "app.orders.UserId", which this reading left out because no declaration can carry its name, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the column in the database, then re-run `hejbro import`.',
+		);
+
+		const paths = writeFiles(result);
+		await Promise.all(
+			paths.map((path) => expect(importAsEntry(path)).resolves.toBeDefined()),
+		);
+	});
+
+	it("m_i6: an expression index whose expression names a name-omitted column is dropped", async () => {
+		const session = buildSession(
+			[{ schema: "app", table: "orders" }],
+			[
+				{ schema: "app", table: "orders", name: "id" },
+				{ schema: "app", table: "orders", name: "UserId" },
+			],
+			[],
+			{
+				indexes: [
+					{
+						schema: "app",
+						table: "orders",
+						name: "orders_lower_userid_idx",
+						columns: [],
+						expressionKeys: ['lower("UserId")'],
+						referencedColumns: ["UserId"],
+					},
+				],
+			},
+		);
+
+		const result = await inferFromCatalog({
+			session,
+			schemas: ["app"],
+			command: "import",
+		});
+
+		expect(
+			indexNamesIn(result, "app.orders").has("orders_lower_userid_idx"),
+		).toBe(false);
+		// MM3: a column found only through an expression key -- the same
+		// wording a check constraint's own expression already uses.
+		expect(result.lossReport).toContain(
+			'Omitted: index "app.orders.orders_lower_userid_idx" -- its expression names column "app.orders.UserId", which this reading left out because no declaration can carry its name, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the column in the database, then re-run `hejbro import`.',
+		);
+
+		const paths = writeFiles(result);
+		await Promise.all(
+			paths.map((path) => expect(importAsEntry(path)).resolves.toBeDefined()),
+		);
+	});
+
+	it("m_i10: a partial index whose predicate names an enum-omitted column is dropped whole, even though its own key survives", async () => {
+		const session = buildSession(
+			[{ schema: "app", table: "t2" }],
+			[
+				{ schema: "app", table: "t2", name: "id" },
+				{
+					schema: "app",
+					table: "t2",
+					name: "state2",
+					enumType: { schema: "app", name: "Status" },
+				},
+			],
+			[{ schema: "app", name: "Status", labels: ["open", "closed"] }],
+			{
+				indexes: [
+					{
+						schema: "app",
+						table: "t2",
+						name: "t2_id_partial_state2_idx",
+						columns: ["id"],
+						predicate: "state2 is not null",
+						referencedColumns: ["id", "state2"],
+					},
+				],
+			},
+		);
+
+		const result = await inferFromCatalog({
+			session,
+			schemas: ["app"],
+			command: "import",
+		});
+
+		expect(indexNamesIn(result, "app.t2").has("t2_id_partial_state2_idx")).toBe(
+			false,
+		);
+		expect(result.lossReport).toContain(
+			'Omitted: index "app.t2.t2_id_partial_state2_idx" -- its predicate names column "app.t2.state2", which this reading left out with the enum type "app.Status" that types it, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the type in the database, then re-run `hejbro import`.',
+		);
+
+		const paths = writeFiles(result);
+		await Promise.all(
+			paths.map((path) => expect(importAsEntry(path)).resolves.toBeDefined()),
+		);
+	});
+
+	// A column that loses the TypeScript-key collision it shares with
+	// another (spec: "Two SQL names that collide on one key are both
+	// described") is a name-omitted column the same way an exotic SQL
+	// name is -- this row (m_i12) is that same predicate axis, on that
+	// cause.
+	it("m_i12: a partial index whose predicate names a key-collision-omitted column is dropped whole", async () => {
+		const session = buildSession(
+			[{ schema: "app", table: "t4" }],
+			[
+				{ schema: "app", table: "t4", name: "id" },
+				{ schema: "app", table: "t4", name: "user_id" },
+				{ schema: "app", table: "t4", name: "USER_ID" },
+			],
+			[],
+			{
+				indexes: [
+					{
+						schema: "app",
+						table: "t4",
+						name: "t4_id_partial_useridcol_idx",
+						columns: ["id"],
+						predicate: '"USER_ID" is not null',
+						referencedColumns: ["id", "USER_ID"],
+					},
+				],
+			},
+		);
+
+		const result = await inferFromCatalog({
+			session,
+			schemas: ["app"],
+			command: "import",
+		});
+
+		expect(
+			indexNamesIn(result, "app.t4").has("t4_id_partial_useridcol_idx"),
+		).toBe(false);
+		expect(result.lossReport).toContain(
+			'Omitted: index "app.t4.t4_id_partial_useridcol_idx" -- its predicate names column "app.t4.USER_ID", which this reading left out because no declaration can carry its name, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the column in the database, then re-run `hejbro import`.',
+		);
+
+		const paths = writeFiles(result);
+		await Promise.all(
+			paths.map((path) => expect(importAsEntry(path)).resolves.toBeDefined()),
+		);
+	});
+
+	it("m_i5 control: a partial index whose predicate names only surviving columns is kept", async () => {
+		const session = buildSession(
+			[{ schema: "app", table: "orders" }],
+			[
+				{ schema: "app", table: "orders", name: "id" },
+				{ schema: "app", table: "orders", name: "amount" },
+			],
+			[],
+			{
+				indexes: [
+					{
+						schema: "app",
+						table: "orders",
+						name: "orders_amount_active_idx",
+						columns: ["amount"],
+						predicate: "amount > 0",
+						referencedColumns: ["amount"],
+					},
+				],
+			},
+		);
+
+		const result = await inferFromCatalog({
+			session,
+			schemas: ["app"],
+			command: "import",
+		});
+
+		expect(
+			indexNamesIn(result, "app.orders").has("orders_amount_active_idx"),
+		).toBe(true);
+	});
+
+	// The same false-positive control J8 makes for a check, on a partial
+	// index's own predicate: `pg_depend` (this fixture's own
+	// `referencedColumns`) never names a string literal, so a predicate
+	// that merely reads an omitted column's own name as text is kept.
+	it("m_i5 control (false positive): a partial index whose predicate reads an omitted column's own name as a string literal is kept", async () => {
+		const session = buildSession(
+			[{ schema: "app", table: "orders" }],
+			[
+				{ schema: "app", table: "orders", name: "id" },
+				{ schema: "app", table: "orders", name: "kind" },
+				{ schema: "app", table: "orders", name: "UserId" },
+			],
+			[],
+			{
+				indexes: [
+					{
+						schema: "app",
+						table: "orders",
+						name: "orders_kind_literal_idx",
+						columns: ["kind"],
+						predicate: "kind = 'UserId'",
+						referencedColumns: ["kind"],
+					},
+				],
+			},
+		);
+
+		const result = await inferFromCatalog({
+			session,
+			schemas: ["app"],
+			command: "import",
+		});
+
+		expect(
+			indexNamesIn(result, "app.orders").has("orders_kind_literal_idx"),
+		).toBe(true);
 	});
 });

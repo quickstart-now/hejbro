@@ -291,6 +291,7 @@ describe("inferTable / 1.4 indexes -- the five shapes", () => {
 							nullsFirst: false,
 						},
 					],
+					referencedColumns: ["id"],
 				},
 			],
 		});
@@ -320,6 +321,7 @@ describe("inferTable / 1.4 indexes -- the five shapes", () => {
 							nullsFirst: false,
 						},
 					],
+					referencedColumns: ["id"],
 				},
 			],
 		});
@@ -347,6 +349,7 @@ describe("inferTable / 1.4 indexes -- the five shapes", () => {
 							nullsFirst: false,
 						},
 					],
+					referencedColumns: ["id"],
 				},
 			],
 		});
@@ -373,6 +376,7 @@ describe("inferTable / 1.4 indexes -- the five shapes", () => {
 							nullsFirst: false,
 						},
 					],
+					referencedColumns: ["id"],
 				},
 			],
 		});
@@ -398,6 +402,7 @@ describe("inferTable / 1.4 indexes -- the five shapes", () => {
 							nullsFirst: false,
 						},
 					],
+					referencedColumns: ["id"],
 				},
 			],
 		});
@@ -426,6 +431,7 @@ describe("inferTable / 1.4 indexes -- the five shapes", () => {
 							nullsFirst: true,
 						},
 					],
+					referencedColumns: ["id"],
 				},
 			],
 		});
@@ -461,6 +467,7 @@ describe("inferTable / 1.4 indexes -- the five shapes", () => {
 							nullsFirst: false,
 						},
 					],
+					referencedColumns: ["id"],
 				},
 			],
 		});
@@ -693,6 +700,7 @@ describe("inferTable / 1.4 check and index name omission (D106 R4-B1)", () => {
 					method: "btree",
 					predicate: null,
 					columns: [indexColumn],
+					referencedColumns: ["id"],
 				},
 				{
 					name: "IX_Widgets",
@@ -700,6 +708,7 @@ describe("inferTable / 1.4 check and index name omission (D106 R4-B1)", () => {
 					method: "btree",
 					predicate: null,
 					columns: [indexColumn],
+					referencedColumns: ["id"],
 				},
 			],
 		};

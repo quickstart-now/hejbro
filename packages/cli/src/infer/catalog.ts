@@ -78,6 +78,27 @@ const indexDetailRow = z.object({
 	method: z.string(),
 	predicate: z.string().nullable(),
 	columns: z.array(indexColumnRow),
+	/**
+	 * Every column this index depends on -- its own key list, unioned
+	 * with whatever `pg_depend`'s own auto dependency of the index on its
+	 * table names beyond that (712/R10 B#1, review round 2 LL2: measured
+	 * live, docker postgres:17-alpine). The union is load-bearing, not
+	 * cosmetic: a constraint-backed index (a primary key's or a UNIQUE
+	 * constraint's own backing index) depends on its *constraint*, not
+	 * its table's column, in `pg_depend` (`deptype = 'i'`,
+	 * `refclassid = pg_constraint`) -- `pg_depend` alone would report
+	 * zero referenced columns for one of these, silently keeping a
+	 * UNIQUE constraint's backing index declared on a column this
+	 * reading already excluded (measured live: `status_catalog_value_key`
+	 * on an enum-omitted column replayed with `column "value" does not
+	 * exist` before this union). A predicate or an expression key can
+	 * only ever belong to a *plain* index (Postgres's own `UNIQUE`/
+	 * `PRIMARY KEY` table-constraint syntax accepts neither), and a plain
+	 * index's key columns already reach `pg_depend` directly (measured:
+	 * a string literal reading the same bare text as a column name never
+	 * appears there) -- so the union costs no false positive either way.
+	 */
+	referencedColumns: z.array(z.string()),
 });
 export type IndexDetailRow = z.infer<typeof indexDetailRow>;
 
@@ -188,7 +209,29 @@ export const INFER_CATALOG_QUERIES = {
 					and att.attnum = ix.indkey[ord.n - 1]
 					and ix.indkey[ord.n - 1] <> 0
 				left join pg_opclass opc on opc.oid = ix.indclass[ord.n - 1]
-			), '[]'::json) as columns
+			), '[]'::json) as columns,
+			coalesce((
+				select json_agg(distinct ref_col order by ref_col)
+				from (
+					select key_att.attname as ref_col
+					from generate_series(1, ix.indnkeyatts) as key_ord(n)
+					join pg_attribute key_att
+						on key_att.attrelid = ix.indrelid
+						and key_att.attnum = ix.indkey[key_ord.n - 1]
+						and ix.indkey[key_ord.n - 1] <> 0
+					union
+					select dep_att.attname as ref_col
+					from pg_depend dep
+					join pg_attribute dep_att
+						on dep_att.attrelid = dep.refobjid
+						and dep_att.attnum = dep.refobjsubid
+					where dep.classid = 'pg_class'::regclass
+						and dep.objid = ix.indexrelid
+						and dep.deptype = 'a'
+						and dep.refclassid = 'pg_class'::regclass
+						and dep.refobjsubid > 0
+				) referenced
+			), '[]'::json) as "referencedColumns"
 		from pg_index ix
 		join pg_class c on c.oid = ix.indrelid
 		join pg_class ic on ic.oid = ix.indexrelid

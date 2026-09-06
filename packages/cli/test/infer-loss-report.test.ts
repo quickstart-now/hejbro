@@ -1020,6 +1020,7 @@ describe("buildLossReport / 712/R10 B#1: an index, check or unique constraint at
 					sqlName: "orders_userid_idx",
 					columnIdentity: "app.orders.UserId",
 					cause: "name",
+					axis: "key",
 				},
 			],
 		});
@@ -1038,6 +1039,7 @@ describe("buildLossReport / 712/R10 B#1: an index, check or unique constraint at
 					sqlName: "orders_userid_idx",
 					columnIdentity: "app.orders.UserId",
 					cause: "name",
+					axis: "key",
 				},
 			],
 		});
@@ -1057,6 +1059,7 @@ describe("buildLossReport / 712/R10 B#1: an index, check or unique constraint at
 					columnIdentity: "app.t2.state2",
 					cause: "enum",
 					enumIdentity: "app.Status",
+					axis: "key",
 				},
 			],
 		});
@@ -1076,6 +1079,7 @@ describe("buildLossReport / 712/R10 B#1: an index, check or unique constraint at
 					columnIdentity: "app.t2.state2",
 					cause: "enum",
 					enumIdentity: "app.Status",
+					axis: "key",
 				},
 			],
 		});
@@ -1094,6 +1098,7 @@ describe("buildLossReport / 712/R10 B#1: an index, check or unique constraint at
 					sqlName: "orders_userid_chk",
 					columnIdentity: "app.orders.UserId",
 					cause: "name",
+					axis: "key",
 				},
 			],
 		});
@@ -1112,6 +1117,7 @@ describe("buildLossReport / 712/R10 B#1: an index, check or unique constraint at
 					sqlName: "orders_userid_chk",
 					columnIdentity: "app.orders.UserId",
 					cause: "name",
+					axis: "key",
 				},
 			],
 		});
@@ -1131,6 +1137,7 @@ describe("buildLossReport / 712/R10 B#1: an index, check or unique constraint at
 					columnIdentity: "app.t2.state2",
 					cause: "enum",
 					enumIdentity: "app.Status",
+					axis: "key",
 				},
 			],
 		});
@@ -1150,6 +1157,7 @@ describe("buildLossReport / 712/R10 B#1: an index, check or unique constraint at
 					columnIdentity: "app.t2.state2",
 					cause: "enum",
 					enumIdentity: "app.Status",
+					axis: "key",
 				},
 			],
 		});
@@ -1168,6 +1176,7 @@ describe("buildLossReport / 712/R10 B#1: an index, check or unique constraint at
 					sqlName: "orders_userid_key",
 					columnIdentity: "app.orders.UserId",
 					cause: "name",
+					axis: "key",
 				},
 			],
 		});
@@ -1186,6 +1195,7 @@ describe("buildLossReport / 712/R10 B#1: an index, check or unique constraint at
 					sqlName: "orders_userid_key",
 					columnIdentity: "app.orders.UserId",
 					cause: "name",
+					axis: "key",
 				},
 			],
 		});
@@ -1205,6 +1215,7 @@ describe("buildLossReport / 712/R10 B#1: an index, check or unique constraint at
 					columnIdentity: "app.t3.st",
 					cause: "enum",
 					enumIdentity: "app.Status",
+					axis: "key",
 				},
 			],
 		});
@@ -1224,6 +1235,7 @@ describe("buildLossReport / 712/R10 B#1: an index, check or unique constraint at
 					columnIdentity: "app.t3.st",
 					cause: "enum",
 					enumIdentity: "app.Status",
+					axis: "key",
 				},
 			],
 		});
@@ -1243,6 +1255,7 @@ describe("buildLossReport / 712/R10 B#1: an index, check or unique constraint at
 					columnIdentity: "app.t3.st",
 					cause: "enum",
 					enumIdentity: "app.Status",
+					axis: "key",
 				},
 			],
 		});

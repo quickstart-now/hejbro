@@ -15,6 +15,7 @@ import { readInferenceCatalog } from "./catalog";
 import type { CatalogDescription } from "./description";
 import { describeCatalog } from "./description";
 import type {
+	MemberAxis,
 	OmittedEnum,
 	OmittedForeignKey,
 	OmittedForeignKeyColumn,
@@ -42,7 +43,6 @@ import type {
 	InferredForeignKey,
 	InferredForeignKeyTargetColumn,
 	InferredIndex,
-	InferredIndexColumn,
 	InferredTableFacts,
 } from "./table";
 import {
@@ -168,19 +168,25 @@ const tablesExcludingUndeclarableNames = (
 		}),
 	}));
 
-/** An index's own key list, never its `predicate` -- a real column reference (`column !== null`) naming an omitted identity costs the whole index (J6: a composite index cannot be declared with only some of its own keys). */
+/**
+ * Every column an index depends on -- its key list plus any column its
+ * partial predicate or an expression key's own text names -- read from
+ * `index.referencedColumns` (`pg_depend`'s own auto dependency, threaded
+ * through `infer/catalog.ts`), never scanned from `predicate`/
+ * `columns[].text` (712/R10 B#1, review round 2 LL2: a string literal
+ * reading the same bare text as a column name never appears in
+ * `pg_depend`, measured live, so a text scan's false-positive risk never
+ * arises here). A composite index that names even one omitted column is
+ * dropped whole (J6: it cannot be declared with only some of its keys).
+ */
 const indexOmittedColumnIdentities = (
 	schema: string,
 	table: string,
 	index: InferredIndex,
 	omittedColumnIdentities: ReadonlySet<string>,
 ): ReadonlyArray<string> =>
-	index.columns
-		.filter(
-			(column): column is InferredIndexColumn & { readonly column: string } =>
-				column.column !== null,
-		)
-		.map((column) => `${schema}.${table}.${column.column}`)
+	index.referencedColumns
+		.map((column) => `${schema}.${table}.${column}`)
 		.filter((identity) => omittedColumnIdentities.has(identity));
 
 /**
@@ -237,6 +243,42 @@ const firstOffendingColumn = (
 	return { columnIdentity: first, cause: "name" };
 };
 
+/**
+ * Review round 2 MM3 (lead-approved wording): which of an index's own
+ * three column-bearing positions named the chosen offending column --
+ * checked key list first (Postgres itself never lets a UNIQUE
+ * constraint's or a primary key's own column carry a predicate or an
+ * expression, so a constraint-backed index's offending column is always
+ * found here), else a predicate before an expression when a plain index
+ * has both (the same "pick one, deterministically" precedent 712/R9 and
+ * `firstOffendingColumn` already apply, carried to the object's own
+ * axis rather than to which column is named). `index` is `undefined`
+ * for a check constraint, whose axis is always `"key"` -- unread,
+ * since `memberReasonClause` never asks a check for its axis.
+ */
+const memberAxisFor = (
+	index: InferredIndex | undefined,
+	columnIdentity: string,
+	schema: string,
+	table: string,
+): MemberAxis => {
+	if (index === undefined) {
+		return "key";
+	}
+	const isKeyColumn = index.columns.some(
+		(column) =>
+			column.column !== null &&
+			`${schema}.${table}.${column.column}` === columnIdentity,
+	);
+	if (isKeyColumn) {
+		return "key";
+	}
+	if (index.predicate !== null) {
+		return "predicate";
+	}
+	return "expression";
+};
+
 export type MemberExclusionResult = {
 	readonly tables: ReadonlyArray<InferredTableFacts>;
 	readonly omittedIndexesAtColumn: ReadonlyArray<OmittedTableMemberAtColumn>;
@@ -287,9 +329,18 @@ const excludeMembersReferencingOmittedColumns = (
 			uniqueConstraintIdentities.has(
 				`${table.schema.schemaName}.${table.tableName}.${indexName}`,
 			);
+		/**
+		 * `index` is passed for an index or a UNIQUE constraint (both back
+		 * onto an `InferredIndex`, MM3) so the axis is derived from the
+		 * same object the offending column itself was found on, never
+		 * recomputed a second way -- absent for a check constraint, whose
+		 * axis is always `"key"` (unread: `memberReasonClause` never asks
+		 * a check for its axis).
+		 */
 		const memberEntryFor = (
 			sqlName: string,
 			columnIdentities: ReadonlyArray<string>,
+			index?: InferredIndex,
 		): ReadonlyArray<OmittedTableMemberAtColumn> => {
 			const offending = firstOffendingColumn(
 				columnIdentities,
@@ -298,11 +349,18 @@ const excludeMembersReferencingOmittedColumns = (
 			if (offending === undefined) {
 				return [];
 			}
+			const axis = memberAxisFor(
+				index,
+				offending.columnIdentity,
+				table.schema.schemaName,
+				table.tableName,
+			);
 			return [
 				{
 					schema: table.schema.schemaName,
 					table: table.tableName,
 					sqlName,
+					axis,
 					...offending,
 				},
 			];
@@ -321,12 +379,12 @@ const excludeMembersReferencingOmittedColumns = (
 			omittedIndexesAtColumn: droppedIndexEntries
 				.filter((entry) => !isUniqueConstraint(entry.index.name))
 				.flatMap((entry) =>
-					memberEntryFor(entry.index.name, entry.columnIdentities),
+					memberEntryFor(entry.index.name, entry.columnIdentities, entry.index),
 				),
 			omittedUniqueConstraintsAtColumn: droppedIndexEntries
 				.filter((entry) => isUniqueConstraint(entry.index.name))
 				.flatMap((entry) =>
-					memberEntryFor(entry.index.name, entry.columnIdentities),
+					memberEntryFor(entry.index.name, entry.columnIdentities, entry.index),
 				),
 			omittedChecksAtColumn: checkResults
 				.filter((entry) => entry.columnIdentities.length > 0)

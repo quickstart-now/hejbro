@@ -103,6 +103,7 @@ const INFER_FIXTURE_ROWS: {
 					nullsFirst: false,
 				},
 			],
+			referencedColumns: ["id"],
 		},
 	],
 	enumLabels: [],

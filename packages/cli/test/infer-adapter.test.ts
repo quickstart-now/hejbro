@@ -223,6 +223,7 @@ describe("mergeTableFacts / 1.4b adapter", () => {
 							nullsFirst: false,
 						},
 					],
+					referencedColumns: ["id"],
 				},
 				{
 					schema: "app",
@@ -241,6 +242,7 @@ describe("mergeTableFacts / 1.4b adapter", () => {
 							nullsFirst: false,
 						},
 					],
+					referencedColumns: ["id"],
 				},
 				{
 					schema: "app",
@@ -259,6 +261,7 @@ describe("mergeTableFacts / 1.4b adapter", () => {
 							nullsFirst: false,
 						},
 					],
+					referencedColumns: ["name"],
 				},
 			],
 		};
@@ -545,6 +548,7 @@ describe("mergeTableFacts / 1.4b adapter", () => {
 							nullsFirst: false,
 						},
 					],
+					referencedColumns: ["amount"],
 				},
 				{
 					schema: "app",
@@ -563,6 +567,7 @@ describe("mergeTableFacts / 1.4b adapter", () => {
 							nullsFirst: false,
 						},
 					],
+					referencedColumns: ["amount"],
 				},
 			],
 		};

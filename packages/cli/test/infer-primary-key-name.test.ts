@@ -67,6 +67,28 @@ const foreignKeyDetailRow = (fk: ForeignKeyDetailFixture): DriverRow => ({
 });
 
 /**
+ * 712/R10 B#3, review round 2 LL1: a bare relation `derivedNameCollides`
+ * must also see -- a sequence, a view or a plain index no constraint
+ * backs, keyed by schema and name alone (`check/catalog.ts`'s own row
+ * shapes for each).
+ */
+type ExtraCatalogFixtures = {
+	readonly sequences?: ReadonlyArray<{
+		readonly schema: string;
+		readonly name: string;
+	}>;
+	readonly views?: ReadonlyArray<{
+		readonly schema: string;
+		readonly name: string;
+	}>;
+	readonly bareIndexes?: ReadonlyArray<{
+		readonly schema: string;
+		readonly table: string;
+		readonly name: string;
+	}>;
+};
+
+/**
  * #872/712-R7: a primary key whose catalog name is not the DSL's own
  * derived one (`"<table>_pkey"`) is announced as an approximation, named
  * by both names, with `check`'s own two-sided consequence (a failing
@@ -82,6 +104,7 @@ const buildSession = (
 	columns: ReadonlyArray<ColumnFixture>,
 	constraints: ReadonlyArray<ConstraintFixture>,
 	foreignKeyDetails: ReadonlyArray<ForeignKeyDetailFixture>,
+	extra: ExtraCatalogFixtures = {},
 ): DriverSession => {
 	const positionByColumn = new Map<string, number>();
 	const columnDetails = columns.map((column) => {
@@ -94,15 +117,24 @@ const buildSession = (
 	const checkFixtureRows: {
 		readonly [K in CheckQueryKey]: ReadonlyArray<DriverRow>;
 	} = {
-		schemas: [{ schema: "app" }],
+		schemas: [...new Set(tables.map((table) => table.schema))].map(
+			(schema) => ({ schema }),
+		),
 		tables: tables.map((table) => ({ ...table, rls: false })),
 		columns: columns.map(columnRow),
 		constraints: constraints.map((constraint) => ({ ...constraint })),
-		indexes: [],
+		indexes: (extra.bareIndexes ?? []).map((index) => ({
+			schema: index.schema,
+			table: index.table,
+			name: index.name,
+			predicate: null,
+			keys: [],
+			constraintName: null,
+		})),
 		enums: [],
-		sequences: [],
+		sequences: (extra.sequences ?? []).map((row) => ({ ...row })),
 		functions: [],
-		views: [],
+		views: (extra.views ?? []).map((row) => ({ ...row })),
 		policies: [],
 		triggers: [],
 		tableGrants: [],
@@ -375,6 +407,168 @@ describe("inferFromCatalog / 712-R7: a dropped primary-key name is announced wit
 		expect(result.lossReport).toContain(
 			'Approximated: the primary key "app.orders.pk_orders" is declared under the derived name "orders_pkey" instead -- the DSL derives every primary-key name, so `generate`/`check` will name this constraint differently from the database. Rename the constraint to "orders_pkey" in the database; until you do, `check` reports the declared "orders_pkey" as missing on every run and lists "pk_orders" in its unmanaged-index inventory.',
 		);
+		expect(
+			result.lossReport.some((line) => line.includes("rename that one first")),
+		).toBe(false);
+	});
+
+	// Review round 2 LL1: the collision lookup used to check only an index
+	// or a constraint -- a table, a sequence or a view already named the
+	// derived name is the same `ERROR: relation … already exists` the
+	// review's own live rename hit, and the old lookup stayed silent.
+	it("G8: the derived name collides with a table in the same schema, so the line states it", async () => {
+		const session = buildSession(
+			[
+				{ schema: "app", table: "orders" },
+				{ schema: "app", table: "orders_pkey" },
+			],
+			[
+				{ schema: "app", table: "orders", name: "id" },
+				{ schema: "app", table: "orders_pkey", name: "id" },
+			],
+			[
+				{
+					schema: "app",
+					table: "orders",
+					name: "pk_orders",
+					type: "p",
+					columns: ["id"],
+				},
+			],
+			[],
+		);
+
+		const result = await inferFromCatalog({
+			session,
+			schemas: ["app"],
+			command: "import",
+		});
+
+		expect(
+			result.lossReport.some((line) => line.includes("rename that one first")),
+		).toBe(true);
+	});
+
+	it("G9: the derived name collides with a sequence in the same schema, so the line states it", async () => {
+		const session = buildSession(
+			[{ schema: "app", table: "orders" }],
+			[{ schema: "app", table: "orders", name: "id" }],
+			[
+				{
+					schema: "app",
+					table: "orders",
+					name: "pk_orders",
+					type: "p",
+					columns: ["id"],
+				},
+			],
+			[],
+			{ sequences: [{ schema: "app", name: "orders_pkey" }] },
+		);
+
+		const result = await inferFromCatalog({
+			session,
+			schemas: ["app"],
+			command: "import",
+		});
+
+		expect(
+			result.lossReport.some((line) => line.includes("rename that one first")),
+		).toBe(true);
+	});
+
+	it("G10: the derived name collides with a view in the same schema, so the line states it", async () => {
+		const session = buildSession(
+			[{ schema: "app", table: "orders" }],
+			[{ schema: "app", table: "orders", name: "id" }],
+			[
+				{
+					schema: "app",
+					table: "orders",
+					name: "pk_orders",
+					type: "p",
+					columns: ["id"],
+				},
+			],
+			[],
+			{ views: [{ schema: "app", name: "orders_pkey" }] },
+		);
+
+		const result = await inferFromCatalog({
+			session,
+			schemas: ["app"],
+			command: "import",
+		});
+
+		expect(
+			result.lossReport.some((line) => line.includes("rename that one first")),
+		).toBe(true);
+	});
+
+	it("G11 (regression guard): the derived name still collides with a bare index no constraint backs", async () => {
+		const session = buildSession(
+			[
+				{ schema: "app", table: "orders" },
+				{ schema: "app", table: "archive" },
+			],
+			[
+				{ schema: "app", table: "orders", name: "id" },
+				{ schema: "app", table: "archive", name: "id" },
+			],
+			[
+				{
+					schema: "app",
+					table: "orders",
+					name: "pk_orders",
+					type: "p",
+					columns: ["id"],
+				},
+			],
+			[],
+			{
+				bareIndexes: [{ schema: "app", table: "archive", name: "orders_pkey" }],
+			},
+		);
+
+		const result = await inferFromCatalog({
+			session,
+			schemas: ["app"],
+			command: "import",
+		});
+
+		expect(
+			result.lossReport.some((line) => line.includes("rename that one first")),
+		).toBe(true);
+	});
+
+	it("G12 (control): a same-named relation in a different schema is not a collision", async () => {
+		const session = buildSession(
+			[
+				{ schema: "app", table: "orders" },
+				{ schema: "other", table: "orders_pkey" },
+			],
+			[
+				{ schema: "app", table: "orders", name: "id" },
+				{ schema: "other", table: "orders_pkey", name: "id" },
+			],
+			[
+				{
+					schema: "app",
+					table: "orders",
+					name: "pk_orders",
+					type: "p",
+					columns: ["id"],
+				},
+			],
+			[],
+		);
+
+		const result = await inferFromCatalog({
+			session,
+			schemas: ["app", "other"],
+			command: "import",
+		});
+
 		expect(
 			result.lossReport.some((line) => line.includes("rename that one first")),
 		).toBe(false);

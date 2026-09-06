@@ -58,6 +58,7 @@ const FIXTURE_ROWS: {
 					nullsFirst: false,
 				},
 			],
+			referencedColumns: ["slug"],
 		},
 		{
 			schema: "app",
@@ -76,6 +77,7 @@ const FIXTURE_ROWS: {
 					nullsFirst: false,
 				},
 			],
+			referencedColumns: ["email"],
 		},
 		{
 			schema: "app",
@@ -94,6 +96,7 @@ const FIXTURE_ROWS: {
 					nullsFirst: true,
 				},
 			],
+			referencedColumns: ["due_at"],
 		},
 		{
 			schema: "app",
@@ -112,6 +115,7 @@ const FIXTURE_ROWS: {
 					nullsFirst: false,
 				},
 			],
+			referencedColumns: ["metadata"],
 		},
 		{
 			schema: "app",
@@ -138,6 +142,7 @@ const FIXTURE_ROWS: {
 					nullsFirst: false,
 				},
 			],
+			referencedColumns: ["project_id", "status", "title"],
 		},
 	],
 	enumLabels: [{ schema: "app", name: "status", label: "draft", sortOrder: 1 }],

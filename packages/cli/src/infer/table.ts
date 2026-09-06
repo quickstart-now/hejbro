@@ -62,6 +62,8 @@ export type InferredIndex = {
 	readonly method: string;
 	readonly predicate: string | null;
 	readonly columns: ReadonlyArray<InferredIndexColumn>;
+	/** `pg_depend`'s own record of every column this index depends on -- key columns plus any column its predicate or an expression key names (`infer/catalog.ts`'s `IndexDetailRow.referencedColumns`, 712/R10 B#1). */
+	readonly referencedColumns: ReadonlyArray<string>;
 };
 
 /**

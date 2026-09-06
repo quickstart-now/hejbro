@@ -193,6 +193,13 @@ create index orders_status_idx on app.orders (status);
 alter table app.orders
 	add constraint orders_userid_chk check ("UserId" is not null);
 
+-- Review round 2 LL2 (live review): a partial index's own predicate can
+-- name an omitted column even when its own key does not -- this index
+-- is keyed on the surviving "id", but its predicate reads the
+-- enum-omitted "status", so it must be excluded the same way
+-- orders_status_idx is.
+create index orders_id_partial_status_idx on app.orders (id) where status = 'open';
+
 grant select on app.orders to app_writer;
 
 create policy orders_read_own on app.orders for select to app_reader using (true);
@@ -410,6 +417,18 @@ describe("catalog-inference-2 / live witness: 1.1's roles-from-policies, 1.2's e
 		).toBe(false);
 	});
 
+	// MM3 (712/R10 B#1, lead-approved wording): a partial index caught
+	// only through its own predicate never reaches the starter
+	// declaration, and its own line reads "its predicate names column
+	// …", not "it is declared on column …" -- the index's own key
+	// ("id") survives; only the predicate names the omitted "status".
+	it("MM3: a partial index caught only through its own predicate never reaches the starter declaration, and its own line says so", () => {
+		expect(declarationCode).not.toContain("orders_id_partial_status_idx");
+		expect(importRun.stdout).toContain(
+			'Omitted: index "app.orders.orders_id_partial_status_idx" -- its predicate names column "app.orders.status", which this reading left out with the enum type "app.Status" that types it, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the type in the database, then re-run `hejbro import`.',
+		);
+	});
+
 	it("B#1: baseline's own migration SQL replays cleanly against an empty database, even with an index and a check on omitted columns", async () => {
 		const baselineRun = await runCli(cwd, ["baseline"]);
 		expectExitCode("baseline", baselineRun, 0);
@@ -432,6 +451,9 @@ describe("catalog-inference-2 / live witness: 1.1's roles-from-policies, 1.2's e
 		// J7's own unit test pins, witnessed live.
 		expect(migrationSql).not.toContain("orders_status_idx");
 		expect(migrationSql).not.toContain("orders_userid_chk");
+		// LL2: a partial index caught only through its own predicate (its
+		// key is the surviving "id") must be excluded exactly the same way.
+		expect(migrationSql).not.toContain("orders_id_partial_status_idx");
 
 		const replayDatabase = "catalog_inference_2_replay";
 		execFileSync("docker", [

@@ -163,17 +163,23 @@ export type PrimaryKeyNameApproximation = {
 	readonly derivedName: string;
 	/**
 	 * 712/R10 B#3: whether the derived name is already taken by another
-	 * relation (an index or a constraint) in the same schema -- when it
-	 * is, renaming this constraint to it is not yet possible, and the
-	 * line states the collision rather than a way out that would fail.
+	 * relation (a table, a view, a sequence, an index or a constraint) in
+	 * the same schema -- when it is, renaming this constraint to it is
+	 * not yet possible, and the line states the collision rather than a
+	 * way out that would fail.
 	 */
 	readonly derivedNameCollides: boolean;
 };
 
 /**
  * 712/R10 B#3: whether `derivedName` already names another relation in
- * `schema` -- an index or a constraint, read directly from the catalog
- * this reading already has, never a second connection. The primary
+ * `schema` -- a table, a view, a sequence, an index or a constraint,
+ * read directly from the catalog this reading already has, never a
+ * second connection or a new query. Review round 2 LL1: renaming the
+ * constraint to its derived name fails with `ERROR: relation … already
+ * exists` when a table, sequence or view holds that name too, not only
+ * when an index or a constraint does -- every one of these lives in the
+ * same schema-relation namespace Postgres itself checks. The primary
  * key's own current constraint is never a false hit here: it is named
  * `catalogName`, not `derivedName` (that mismatch is why this is an
  * approximation at all), so its own backing index cannot already carry
@@ -184,6 +190,15 @@ const derivedNameCollides = (
 	schema: string,
 	derivedName: string,
 ): boolean =>
+	catalog.tables.some(
+		(row) => row.schema === schema && row.table === derivedName,
+	) ||
+	catalog.views.some(
+		(row) => row.schema === schema && row.name === derivedName,
+	) ||
+	catalog.sequences.some(
+		(row) => row.schema === schema && row.name === derivedName,
+	) ||
 	catalog.constraints.some(
 		(row) => row.schema === schema && row.name === derivedName,
 	) ||
@@ -404,6 +419,20 @@ export type OmittedForeignKeyColumn = {
  * one exception -- {@link detectUniqueIndexApproximations}'s own
  * exclusion closes it).
  */
+/**
+ * Which of an index's own three column-bearing positions named the
+ * offending column -- its key list, a partial predicate, or an
+ * expression key's own text (review round 2 MM3, lead-approved wording:
+ * a column found only through a predicate or an expression is not "on"
+ * the index the way a key column is, so the reason clause must say
+ * which). Meaningless for a check constraint (always its expression) or
+ * a UNIQUE constraint (Postgres accepts neither a predicate nor an
+ * expression on one, so its own offending column is always a key) --
+ * both kinds are always given `"key"` here, and `memberReasonClause`
+ * never reads it for either.
+ */
+export type MemberAxis = "key" | "predicate" | "expression";
+
 export type OmittedTableMemberAtColumn = {
 	readonly schema: string;
 	readonly table: string;
@@ -411,6 +440,7 @@ export type OmittedTableMemberAtColumn = {
 	readonly columnIdentity: string;
 	readonly cause: "name" | "enum";
 	readonly enumIdentity?: string;
+	readonly axis: MemberAxis;
 };
 
 export type LossReportFacts = {
@@ -804,8 +834,15 @@ type MemberKind = "index" | "check constraint" | "unique constraint";
 const memberReasonClause = (
 	kind: MemberKind,
 	columnIdentity: string,
+	axis: MemberAxis,
 ): string => {
 	if (kind === "check constraint") {
+		return `its expression names column "${columnIdentity}"`;
+	}
+	if (kind === "index" && axis === "predicate") {
+		return `its predicate names column "${columnIdentity}"`;
+	}
+	if (kind === "index" && axis === "expression") {
 		return `its expression names column "${columnIdentity}"`;
 	}
 	return `it is declared on column "${columnIdentity}"`;
@@ -850,13 +887,13 @@ const omittedMemberLineForImport = (
 	entry: OmittedTableMemberAtColumn,
 	kind: MemberKind,
 ): string =>
-	`Omitted: ${kind} "${entry.schema}.${entry.table}.${entry.sqlName}" -- ${memberReasonClause(kind, entry.columnIdentity)}, ${memberCauseClauseForImport(entry, kind)}. \`check\` keeps listing the ${kind} as unmanaged until that column and the ${kind} are both declared. ${memberTailForImport(entry)}`;
+	`Omitted: ${kind} "${entry.schema}.${entry.table}.${entry.sqlName}" -- ${memberReasonClause(kind, entry.columnIdentity, entry.axis)}, ${memberCauseClauseForImport(entry, kind)}. \`check\` keeps listing the ${kind} as unmanaged until that column and the ${kind} are both declared. ${memberTailForImport(entry)}`;
 
 const omittedMemberLineForPull = (
 	entry: OmittedTableMemberAtColumn,
 	kind: MemberKind,
 ): string =>
-	`Omitted: ${kind} "${entry.schema}.${entry.table}.${entry.sqlName}" -- ${memberReasonClause(kind, entry.columnIdentity)}, ${memberCauseClauseForPull(entry, kind)}. ${memberTailForPull(entry)}`;
+	`Omitted: ${kind} "${entry.schema}.${entry.table}.${entry.sqlName}" -- ${memberReasonClause(kind, entry.columnIdentity, entry.axis)}, ${memberCauseClauseForPull(entry, kind)}. ${memberTailForPull(entry)}`;
 
 const omittedMemberLines = (
 	entries: ReadonlyArray<OmittedTableMemberAtColumn>,
