@@ -295,6 +295,14 @@ const isCarriedTarget = (
 			candidate.table.name === relationship.referencesTable,
 	);
 
+/** Whether `relationship` points back at the owning table itself (schema+name identity, 653/R6) — the declaring side's own type layer offers no key for this edge either (`.references()` cannot express a self-reference at all; `RelationKeysOf` is `never` for it), so the emitted map stays narrower, never wider. */
+const isSelfTarget = (
+	relationship: RelationshipEntry,
+	table: TableSnapshot,
+): boolean =>
+	relationship.referencesSchema === table.schema &&
+	relationship.referencesTable === table.name;
+
 /** Forward relations, in `computation.entries`' own physical column order (R3/P3) — one single-column foreign key per entry, its target already schema-vetted by {@link buildRelationships}, filtered again here to the tables this contract actually carries. */
 const forwardRelations = (
 	computation: TableComputation,
@@ -309,7 +317,8 @@ const forwardRelations = (
 			);
 			if (
 				relationship === undefined ||
-				!isCarriedTarget(relationship, tables)
+				!isCarriedTarget(relationship, tables) ||
+				isSelfTarget(relationship, computation.table)
 			) {
 				return null;
 			}
@@ -321,12 +330,17 @@ const forwardRelations = (
 		})
 		.filter((entry): entry is RelationEntry => entry !== null);
 
-/** Reverse relations, in `tables`' own emitted order (R3/P3) — one entry per referencing table with a single-column foreign key onto `computation`, keyed by that table's own name (never excluding a self-reference). */
+/** Reverse relations, in `tables`' own emitted order (R3/P3) — one entry per referencing table with a single-column foreign key onto `computation`, keyed by that table's own name, excluding the owning table itself (653/R6: a self-referential foreign key yields no relation in either direction). */
 const reverseRelations = (
 	computation: TableComputation,
 	tables: ReadonlyArray<TableComputation>,
 ): ReadonlyArray<RelationEntry> =>
 	tables
+		.filter(
+			(candidate) =>
+				candidate.table.schema !== computation.table.schema ||
+				candidate.table.name !== computation.table.name,
+		)
 		.filter((candidate) =>
 			candidate.relationships.some(
 				(relationship) =>

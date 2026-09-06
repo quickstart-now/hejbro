@@ -1441,6 +1441,33 @@ describe("the contract emits Relations (653/R2, R3)", () => {
 		expect(source).not.toContain('\t"users": {');
 	});
 
+	it("row 11: a self-referential foreign key renders no relation in either direction", () => {
+		// `.references()` cannot express a self-reference (the declaration
+		// would reference its own initializer); `extras.foreignKeys` is the
+		// documented path -- `packages/core/test/table-surface.test.ts`.
+		const nodes = table(
+			app,
+			"nodes",
+			{
+				id: uuid().primaryKey().defaultRandom(),
+				name: text().notNull(),
+				parentId: uuid(),
+			},
+			(t) => ({
+				foreignKeys: [
+					{ columns: [t.parentId], references: { columns: [t.id] } },
+				],
+			}),
+		);
+		const payload = buildFixturePayload([app, nodes]);
+		const source = emitContract(payload, ORIGIN);
+
+		const nodesSection = tableEntrySection(source, "nodes");
+		expect(nodesSection).toContain("readonly Relations: {};");
+		// The raw list still names the edge -- only the derived view drops it.
+		expect(nodesSection).toContain('readonly referencedRelation: "app.nodes";');
+	});
+
 	it("the runtime metadata carries no Relations member -- .related() forwards through the existing foreignKeys fact alone", () => {
 		const users = table(app, "users", {
 			id: uuid().primaryKey().defaultRandom(),
