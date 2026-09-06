@@ -66,9 +66,12 @@ DDL has it to look at.
   `if not exists` and altered to its declared type and ownership, the
   row-level-security enablement and the policy are created as they are
   for any managed table, and every index, check, foreign key and primary
-  key the declaration carries is created — while the same declaration
-  handed back to `existingTable()` and adopted again applies cleanly on
-  a database that kept the sequence
+  key the declaration carries is created — while a declaration whose
+  only managed object is that sequence, handed back to `existingTable()`
+  and adopted again, applies cleanly on a database that kept the
+  sequence; a declaration with more (policies, indexes, constraints) is
+  named by `adoption-creates` on re-adoption, and `hejbro baseline`
+  records what the database already holds
 
 #### Scenario: A reserved-schema validator exempts an existing table
 - **WHEN** a schema declares a table with `existingTable()` in a schema

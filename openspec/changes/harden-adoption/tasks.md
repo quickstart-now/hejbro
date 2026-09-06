@@ -46,10 +46,14 @@ into the diff.
       Next; handover and a new table print nothing; the migration is
       written either way. Files: `generate.ts`, tests.
 
-- [ ] 1.4 (~9m) Live witness on `postgres:17-alpine`: managed →
-      handover (sequence kept) → adoption applies cleanly (`42P07` gone),
-      the declared index exists afterwards, and `check` reports no
-      differences. Files: the integration test.
+- [ ] 1.4 (~9m) Live witnesses on `postgres:17-alpine`. (C-1) A
+      declaration whose only managed object is a `serial` sequence:
+      managed → handover (sequence kept) → adoption applies cleanly
+      (`42P07` gone) and `check` reports no differences. (C-2) A bare
+      table created with `psql`, declared `existingTable()` then adopted
+      as `table()` with an index, a check, a foreign key and a primary
+      key: the four children exist in the catalog afterwards and `check`
+      reports no differences. Files: the integration test.
 
 - [ ] 1.5 (~5m) Docs and changeset. `brownfield-adoption.md` states the
       adoption contract (creates children and normalizes sequences,
