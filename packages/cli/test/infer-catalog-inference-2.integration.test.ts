@@ -363,4 +363,21 @@ describe("catalog-inference-2 / live witness: 1.1's roles-from-policies, 1.2's e
 		expect(checkRun.stderr).toContain("app.orders.orders_pkey");
 		expect(checkRun.stderr).toContain("was not found in the database");
 	});
+
+	it("712/R8: the enum-caused foreign key's own line matches the enum-cause wording exactly", () => {
+		expect(importRun.stdout).toContain(
+			'Omitted: foreign key "app.orders.orders_status_fkey" -- it is declared on column "app.orders.status", which this reading left out with the enum type "app.Status" that types it, so the key cannot be declared either. Next: rename the type in the database, then re-run `hejbro import`.',
+		);
+	});
+
+	it("712/R9: orders_status_fkey is named on exactly one omitted-foreign-key line, even though the omitted enum took both of its columns at once", () => {
+		const fkLines = importRun.stdout
+			.split("\n")
+			.filter(
+				(line) =>
+					line.startsWith("Omitted: foreign key") &&
+					line.includes('"app.orders.orders_status_fkey"'),
+			);
+		expect(fkLines).toHaveLength(1);
+	});
 });

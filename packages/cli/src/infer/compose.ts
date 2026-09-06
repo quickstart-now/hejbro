@@ -324,6 +324,16 @@ export type ForeignKeyPartition = {
 };
 
 /**
+ * Which rule excluded a column, and (712/R8) the enum's own identity
+ * when that rule is D36 on the *enum's* name rather than the column's --
+ * the one lookup a foreign key at that column consults for its own
+ * omission line's cause.
+ */
+export type ColumnOmissionCause =
+	| { readonly cause: "name" }
+	| { readonly cause: "enum"; readonly enumIdentity: string };
+
+/**
  * D106 R6-B1: a foreign key is omitted for exactly the reason every
  * other object in this module is -- its own name (here, its *target*'s
  * own schema and table names) is not one a declaration can carry.
@@ -350,10 +360,46 @@ export type ForeignKeyPartition = {
 export const partitionForeignKeys = (
 	tables: ReadonlyArray<InferredTableFacts>,
 	survivingTableIdentities: ReadonlySet<string>,
-	omittedColumnIdentities: ReadonlySet<string>,
+	columnOmissionCauses: ReadonlyMap<string, ColumnOmissionCause>,
 ): ForeignKeyPartition => {
 	const isCarryable = (fk: InferredForeignKey): boolean =>
 		isExpressibleName(fk.targetSchema) && isExpressibleName(fk.targetTable);
+
+	/** 712/R8: an entry only when `identity` was actually excluded -- `flatMap`'s own empty-array-drops-the-row idiom stands in for a filter+map pair that would otherwise re-look-up the same cause twice. */
+	const omissionEntryFor = (
+		facts: InferredTableFacts,
+		fk: InferredForeignKey,
+		identity: string,
+		end: OmittedForeignKeyColumn["end"],
+	): ReadonlyArray<OmittedForeignKeyColumn> => {
+		const cause = columnOmissionCauses.get(identity);
+		if (cause === undefined) {
+			return [];
+		}
+		if (cause.cause === "enum") {
+			return [
+				{
+					schema: facts.schema.schemaName,
+					table: facts.tableName,
+					name: fk.name,
+					columnIdentity: identity,
+					end,
+					cause: "enum",
+					enumIdentity: cause.enumIdentity,
+				},
+			];
+		}
+		return [
+			{
+				schema: facts.schema.schemaName,
+				table: facts.tableName,
+				name: fk.name,
+				columnIdentity: identity,
+				end,
+				cause: "name",
+			},
+		];
+	};
 
 	const columnOmissionsFor = (
 		facts: InferredTableFacts,
@@ -363,14 +409,7 @@ export const partitionForeignKeys = (
 			.map(
 				(column) => `${facts.schema.schemaName}.${facts.tableName}.${column}`,
 			)
-			.filter((identity) => omittedColumnIdentities.has(identity))
-			.map((columnIdentity) => ({
-				schema: facts.schema.schemaName,
-				table: facts.tableName,
-				name: fk.name,
-				columnIdentity,
-				end: "source" as const,
-			}));
+			.flatMap((identity) => omissionEntryFor(facts, fk, identity, "source"));
 		const targetSurvives = survivingTableIdentities.has(
 			`${fk.targetSchema}.${fk.targetTable}`,
 		);
@@ -379,14 +418,7 @@ export const partitionForeignKeys = (
 		}
 		const targetOmissions = fk.targetColumns
 			.map((column) => `${fk.targetSchema}.${fk.targetTable}.${column.sqlName}`)
-			.filter((identity) => omittedColumnIdentities.has(identity))
-			.map((columnIdentity) => ({
-				schema: facts.schema.schemaName,
-				table: facts.tableName,
-				name: fk.name,
-				columnIdentity,
-				end: "target" as const,
-			}));
+			.flatMap((identity) => omissionEntryFor(facts, fk, identity, "target"));
 		return [...sourceOmissions, ...targetOmissions];
 	};
 
@@ -590,7 +622,7 @@ export const inferFromCatalog = async (
 	// 712/R3: a column typed by an omitted enum -- its own name may well
 	// be fine, but its type node can only ever reference a declared enum,
 	// so it is excluded the same way an undeclarable-name column is (and
-	// folded into the same `omittedColumnIdentities` set a foreign key at
+	// folded into the same `columnOmissionCauses` map a foreign key at
 	// that column already checks, D2's own reuse of task 1.3's rule). The
 	// omitted enum's own type identity is read from the raw catalog row
 	// (`baseTypeKind`/`baseTypeSchema`/`baseTypeName`), never re-derived.
@@ -653,16 +685,34 @@ export const inferFromCatalog = async (
 					sqlName: column.sqlName,
 				})),
 		}));
-	const omittedColumnIdentities = new Set([
+	// 712/R8: which rule excluded a column, threaded through to the
+	// foreign-key partition so its own omission line can follow the same
+	// cause -- name and enum causes never collide on one column identity
+	// (D2, `enumOmittedColumns`'s own `isNameDeclarable` guard above), so
+	// this spread order never needs to break a tie.
+	const columnOmissionCauses = new Map<string, ColumnOmissionCause>([
 		...undeclarableColumns.map(
-			(column) => `${column.schema}.${column.table}.${column.sqlName}`,
+			(column) =>
+				[
+					`${column.schema}.${column.table}.${column.sqlName}`,
+					{ cause: "name" as const },
+				] as const,
 		),
-		...enumOmittedColumnIdentities,
+		...enumOmittedColumns.map(
+			(column) =>
+				[
+					`${column.schema}.${column.table}.${column.sqlName}`,
+					{
+						cause: "enum" as const,
+						enumIdentity: `${column.enumSchema}.${column.enumName}`,
+					},
+				] as const,
+		),
 	]);
 	const foreignKeyPartition = partitionForeignKeys(
 		mergedTables,
 		survivingTableIdentities,
-		omittedColumnIdentities,
+		columnOmissionCauses,
 	);
 	const tablesWithReachableForeignKeys = foreignKeyPartition.tables;
 	const outOfScopeHandles = outOfScopeHandlesFor(

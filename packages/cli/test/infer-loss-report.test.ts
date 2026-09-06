@@ -732,6 +732,7 @@ describe("buildLossReport / 712/R5: a foreign key at an omitted column names the
 					name: "orders_userid_fkey",
 					columnIdentity: "app.orders.UserId",
 					end: "source",
+					cause: "name",
 				},
 			],
 		});
@@ -751,6 +752,7 @@ describe("buildLossReport / 712/R5: a foreign key at an omitted column names the
 					name: "audits_user_ref_fkey",
 					columnIdentity: "app.users.UserId",
 					end: "target",
+					cause: "name",
 				},
 			],
 		});
@@ -770,6 +772,7 @@ describe("buildLossReport / 712/R5: a foreign key at an omitted column names the
 					name: "orders_userid_fkey",
 					columnIdentity: "app.orders.UserId",
 					end: "source",
+					cause: "name",
 				},
 			],
 		});
@@ -789,6 +792,7 @@ describe("buildLossReport / 712/R5: a foreign key at an omitted column names the
 					name: "audits_user_ref_fkey",
 					columnIdentity: "app.users.UserId",
 					end: "target",
+					cause: "name",
 				},
 			],
 		});
@@ -820,6 +824,7 @@ describe("buildLossReport / 712/R5: a foreign key at an omitted column names the
 					name: "orders_userid_fkey",
 					columnIdentity: "app.orders.UserId",
 					end: "source",
+					cause: "name",
 				},
 			],
 		});
@@ -827,6 +832,170 @@ describe("buildLossReport / 712/R5: a foreign key at an omitted column names the
 		expect(report).toContain(
 			'Omitted: foreign key "app.orders.fk_widget" -- references table "app.Widgets", whose catalog name is not a valid hejbro SQL identifier, so no declaration can carry it. Next: rename the table in the database, then re-run `hejbro import`.',
 		);
+	});
+});
+
+/**
+ * 712/R8, 712/R9: the foreign-key-at-an-omitted-column line follows the
+ * omitted column's own cause (name vs. enum, 712/R5's sentence is the
+ * name-cause one and never changes), and a key lost at both ends is
+ * announced exactly once, its reason clause on the source end (D2).
+ */
+describe("buildLossReport / 712/R8: the reason follows the cause, 712/R9: one line per foreign key", () => {
+	it("H1: import, source end, enum cause -- names the enum type and points at renaming it", () => {
+		const report = buildLossReport({
+			...emptyFacts("import"),
+			omittedForeignKeysByColumn: [
+				{
+					schema: "app",
+					table: "orders",
+					name: "orders_status_fkey",
+					columnIdentity: "app.orders.status",
+					end: "source",
+					cause: "enum",
+					enumIdentity: "app.Status",
+				},
+			],
+		});
+
+		expect(report).toContain(
+			'Omitted: foreign key "app.orders.orders_status_fkey" -- it is declared on column "app.orders.status", which this reading left out with the enum type "app.Status" that types it, so the key cannot be declared either. Next: rename the type in the database, then re-run `hejbro import`.',
+		);
+	});
+
+	it("H2: import, target end, enum cause -- the target's own reason clause, still pointing at the enum type", () => {
+		const report = buildLossReport({
+			...emptyFacts("import"),
+			omittedForeignKeysByColumn: [
+				{
+					schema: "app",
+					table: "orders",
+					name: "orders_status_fkey",
+					columnIdentity: "app.status_catalog.value",
+					end: "target",
+					cause: "enum",
+					enumIdentity: "app.Status",
+				},
+			],
+		});
+
+		expect(report).toContain(
+			'Omitted: foreign key "app.orders.orders_status_fkey" -- it references column "app.status_catalog.value", which this reading left out with the enum type "app.Status" that types it, so the key cannot be declared either. Next: rename the type in the database, then re-run `hejbro import`.',
+		);
+	});
+
+	it("H3: both ends of the same key failed -- exactly one line, its reason clause on the source end", () => {
+		const report = buildLossReport({
+			...emptyFacts("import"),
+			omittedForeignKeysByColumn: [
+				{
+					schema: "app",
+					table: "orders",
+					name: "orders_status_fkey",
+					columnIdentity: "app.status_catalog.value",
+					end: "target",
+					cause: "enum",
+					enumIdentity: "app.Status",
+				},
+				{
+					schema: "app",
+					table: "orders",
+					name: "orders_status_fkey",
+					columnIdentity: "app.orders.status",
+					end: "source",
+					cause: "enum",
+					enumIdentity: "app.Status",
+				},
+			],
+		});
+
+		const fkLines = report.filter((line) =>
+			line.includes('foreign key "app.orders.orders_status_fkey"'),
+		);
+		expect(fkLines).toHaveLength(1);
+		expect(fkLines[0]).toContain(
+			'it is declared on column "app.orders.status"',
+		);
+	});
+
+	it("H4 (control): import, source end, name cause -- 712/R5's own wording, unchanged", () => {
+		const report = buildLossReport({
+			...emptyFacts("import"),
+			omittedForeignKeysByColumn: [
+				{
+					schema: "app",
+					table: "orders",
+					name: "orders_userid_fkey",
+					columnIdentity: "app.orders.UserId",
+					end: "source",
+					cause: "name",
+				},
+			],
+		});
+
+		expect(report).toContain(
+			'Omitted: foreign key "app.orders.orders_userid_fkey" -- it is declared on column "app.orders.UserId", which this reading left out because no declaration can carry its name, so the key cannot be declared either. Next: rename the column in the database, then re-run `hejbro import`.',
+		);
+	});
+
+	it("H5: pull, source end, enum cause -- the contract-facing consequence, still pointing at the enum type", () => {
+		const report = buildLossReport({
+			...emptyFacts("pull"),
+			omittedForeignKeysByColumn: [
+				{
+					schema: "app",
+					table: "orders",
+					name: "orders_status_fkey",
+					columnIdentity: "app.orders.status",
+					end: "source",
+					cause: "enum",
+					enumIdentity: "app.Status",
+				},
+			],
+		});
+
+		expect(report).toContain(
+			'Omitted: foreign key "app.orders.orders_status_fkey" -- it is declared on column "app.orders.status", which this reading left out with the enum type "app.Status" that types it, so the key cannot be carried either. Rename the type in the database, then link the schema repository.',
+		);
+	});
+
+	// GG1: R8 (cause-specific wording) and R9 (source end wins) multiply on
+	// a key whose two ends failed for *different* causes -- an enum-to-enum
+	// foreign key whose own source column also has an undeclarable name
+	// (D2 already keeps it off the enum's own list) and whose target
+	// column is otherwise fine but typed by the same omitted enum. Pinned
+	// as a full-text match: this is the one cell fixing what the merged
+	// R8/R9 result actually is, not a restatement of either rule alone.
+	it("H6 (cross-cutting): the source end's own name cause wins over the target end's enum cause -- one line, the name-cause wording", () => {
+		const report = buildLossReport({
+			...emptyFacts("import"),
+			omittedForeignKeysByColumn: [
+				{
+					schema: "app",
+					table: "orders",
+					name: "orders_status_fkey",
+					columnIdentity: "app.status_catalog.value",
+					end: "target",
+					cause: "enum",
+					enumIdentity: "app.Status",
+				},
+				{
+					schema: "app",
+					table: "orders",
+					name: "orders_status_fkey",
+					columnIdentity: "app.orders.UserId",
+					end: "source",
+					cause: "name",
+				},
+			],
+		});
+
+		const fkLines = report.filter((line) =>
+			line.includes('foreign key "app.orders.orders_status_fkey"'),
+		);
+		expect(fkLines).toEqual([
+			'Omitted: foreign key "app.orders.orders_status_fkey" -- it is declared on column "app.orders.UserId", which this reading left out because no declaration can carry its name, so the key cannot be declared either. Next: rename the column in the database, then re-run `hejbro import`.',
+		]);
 	});
 });
 

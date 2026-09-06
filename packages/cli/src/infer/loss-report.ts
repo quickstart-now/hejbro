@@ -309,12 +309,19 @@ export type OmittedForeignKey = {
 
 /**
  * A foreign key whose own name and target are both fine, but whose own
- * source column, or its target's own column, was itself omitted for an
- * undeclarable name (#873) -- costs that foreign key alone; the table
- * holding it and everything else on it are still declared. `end` names
- * which side failed, since that side is which column the remedy
- * renames (712/R5): `"source"` reads "it is declared on column …",
- * `"target"` reads "it references column …".
+ * source column, or its target's own column, was itself omitted --
+ * either for an undeclarable name (#873) or with its own enum type
+ * (712/R8) -- costs that foreign key alone; the table holding it and
+ * everything else on it are still declared. `end` names which side
+ * failed, since that side is which column the remedy renames (712/R5):
+ * `"source"` reads "it is declared on column …", `"target"` reads "it
+ * references column …". `cause` is which rule excluded that column --
+ * the reason and way-out clauses follow it (712/R8): a name cause points
+ * at renaming the column, an enum cause (carrying that enum's own
+ * identity) points at renaming the type instead. When both ends of the
+ * same key failed, only one line is ever rendered, for the source end
+ * (712/R9, D2 -- `omittedForeignKeyColumnLines`'s own dedup, not this
+ * type's concern).
  */
 export type OmittedForeignKeyColumn = {
 	readonly schema: string;
@@ -323,6 +330,9 @@ export type OmittedForeignKeyColumn = {
 	/** `"<schema>.<table>.<sqlName>"` of the omitted column that cost this foreign key. */
 	readonly columnIdentity: string;
 	readonly end: "source" | "target";
+	readonly cause: "name" | "enum";
+	/** The enum type's own `"<schema>.<name>"` identity -- present only when `cause` is `"enum"` (712/R8). */
+	readonly enumIdentity?: string;
 };
 
 export type LossReportFacts = {
@@ -743,24 +753,80 @@ const foreignKeyColumnReasonClause = (
 	return "it is declared on column";
 };
 
-/** import's own consequence: the column is gone, so the key referencing it can never be declared either -- renaming in the database is the only remedy (712/R5). */
+/**
+ * 712/R8: the reason and way-out clauses follow the omitted column's own
+ * cause -- a name cause keeps 712/R5's own wording, unchanged; an enum
+ * cause names the enum type itself and points at renaming it instead of
+ * the column, since the column's own name was never the problem.
+ */
+const omittedForeignKeyColumnReasonForImport = (
+	entry: OmittedForeignKeyColumn,
+): string => {
+	if (entry.cause === "enum") {
+		return `${foreignKeyColumnReasonClause(entry.end)} "${entry.columnIdentity}", which this reading left out with the enum type "${entry.enumIdentity}" that types it, so the key cannot be declared either. Next: rename the type in the database, then re-run \`hejbro import\`.`;
+	}
+	return `${foreignKeyColumnReasonClause(entry.end)} "${entry.columnIdentity}", which this reading left out because no declaration can carry its name, so the key cannot be declared either. Next: rename the column in the database, then re-run \`hejbro import\`.`;
+};
+
+/** pull's own consequence, mirroring `undeclarableNameLineForPull`'s own wording for the column itself (712/R5), and 712/R8's own enum-cause branch. */
+const omittedForeignKeyColumnReasonForPull = (
+	entry: OmittedForeignKeyColumn,
+): string => {
+	if (entry.cause === "enum") {
+		return `${foreignKeyColumnReasonClause(entry.end)} "${entry.columnIdentity}", which this reading left out with the enum type "${entry.enumIdentity}" that types it, so the key cannot be carried either. Rename the type in the database, then link the schema repository.`;
+	}
+	return `${foreignKeyColumnReasonClause(entry.end)} "${entry.columnIdentity}", which this reading left out because no declaration can carry its name, so it cannot be carried in the contract, so the key cannot be carried either. Rename the column in the database, then link the schema repository.`;
+};
+
 const omittedForeignKeyColumnLineForImport = (
 	entry: OmittedForeignKeyColumn,
 ): string =>
-	`Omitted: foreign key "${entry.schema}.${entry.table}.${entry.name}" -- ${foreignKeyColumnReasonClause(entry.end)} "${entry.columnIdentity}", which this reading left out because no declaration can carry its name, so the key cannot be declared either. Next: rename the column in the database, then re-run \`hejbro import\`.`;
+	`Omitted: foreign key "${entry.schema}.${entry.table}.${entry.name}" -- ${omittedForeignKeyColumnReasonForImport(entry)}`;
 
-/** pull's own consequence, mirroring `undeclarableNameLineForPull`'s own wording for the column itself (712/R5). */
 const omittedForeignKeyColumnLineForPull = (
 	entry: OmittedForeignKeyColumn,
 ): string =>
-	`Omitted: foreign key "${entry.schema}.${entry.table}.${entry.name}" -- ${foreignKeyColumnReasonClause(entry.end)} "${entry.columnIdentity}", which this reading left out because no declaration can carry its name, so it cannot be carried in the contract, so the key cannot be carried either. Rename the column in the database, then link the schema repository.`;
+	`Omitted: foreign key "${entry.schema}.${entry.table}.${entry.name}" -- ${omittedForeignKeyColumnReasonForPull(entry)}`;
+
+/**
+ * 712/R9, D2: a foreign key lost at both ends is announced once, never
+ * twice -- the source end wins (the column this table's own declaration
+ * is on, per 712/R9's own ruling), so a target-end duplicate for the
+ * same key is dropped here, before rendering, the same way `sortedBy`
+ * normalizes order here rather than trusting an upstream read.
+ */
+const preferSourceEnd = (
+	existing: OmittedForeignKeyColumn,
+	candidate: OmittedForeignKeyColumn,
+): OmittedForeignKeyColumn => {
+	if (existing.end === "source") {
+		return existing;
+	}
+	return candidate;
+};
+
+const oneLinePerForeignKey = (
+	entries: ReadonlyArray<OmittedForeignKeyColumn>,
+): ReadonlyArray<OmittedForeignKeyColumn> => {
+	const byIdentity = entries.reduce((map, entry) => {
+		const identity = `${entry.schema}.${entry.table}.${entry.name}`;
+		const existing = map.get(identity);
+		if (existing === undefined) {
+			map.set(identity, entry);
+			return map;
+		}
+		map.set(identity, preferSourceEnd(existing, entry));
+		return map;
+	}, new Map<string, OmittedForeignKeyColumn>());
+	return [...byIdentity.values()];
+};
 
 const omittedForeignKeyColumnLines = (
 	entries: ReadonlyArray<OmittedForeignKeyColumn>,
 	command: LossReportFacts["command"],
 ): ReadonlyArray<string> => {
 	const ordered = sortedBy(
-		entries,
+		oneLinePerForeignKey(entries),
 		(entry) => `${entry.schema}.${entry.table}.${entry.name}`,
 	);
 	if (command === "pull") {

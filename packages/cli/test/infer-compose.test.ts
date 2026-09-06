@@ -1,6 +1,7 @@
 import { schema } from "@hejbro/core";
 import { describe, expect, it } from "vitest";
 import type { Catalog } from "../src/check/catalog";
+import type { ColumnOmissionCause } from "../src/infer/compose";
 import {
 	partitionForeignKeys,
 	partitionSchemas,
@@ -200,7 +201,7 @@ const survivingTableIdentitiesFor = (
 		tables.map((table) => `${table.schema.schemaName}.${table.tableName}`),
 	);
 
-const noOmittedColumns: ReadonlySet<string> = new Set();
+const noOmittedColumns: ReadonlyMap<string, ColumnOmissionCause> = new Map();
 
 // D106 R6-B1: a foreign key is omitted for exactly the reason every
 // other object in this module is -- its *target*'s own name is one a
