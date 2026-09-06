@@ -19,6 +19,18 @@
       "at": "2026-09-05T05:55Z",
       "title": "harden-catalog-inference-2: roles from policies too (public excluded); an enum name is held to D36 and omitted with its columns",
       "ratified": null
+    },
+    {
+      "id": "R2",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "712/R1; delta catalog-inference 'SHALL NOT promise that check will report it where check will not'; measured: check/inventory.ts has no enum axis",
+        "cli-commands inventory requirement closed list; compareCodeUnits lives in commands/check.ts 229-254; #1006"
+      ],
+      "at": "2026-09-06T01:45Z",
+      "title": "the omitted-enum line says check names the column and not the type; commands/check.ts joins task 1.4 for the comparator move",
+      "ratified": null
     }
   ],
   "work": [],
