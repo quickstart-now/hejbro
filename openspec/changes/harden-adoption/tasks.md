@@ -46,6 +46,16 @@ into the diff.
       Next; handover and a new table print nothing; the migration is
       written either way. Files: `generate.ts`, tests.
 
+- [ ] 1.3a (~8m) The missing-column risk (review round 1, B1/N4).
+      Red: the generate command tests — an input table over {index,
+      check, foreign key} × {the existing declaration carries the
+      column; it does not}, both created either way, the notice
+      carrying its second risk sentence and the `check --url` and
+      `baseline` branches of `Next:`; and an adopted table with a new
+      not-null column prints no column-level warning while a managed
+      one still does. Files: `generate.ts`, tests,
+      `brownfield-adoption.md`.
+
 - [x] 1.4 (~9m) Live witnesses on `postgres:17-alpine`. (C-1) A
       declaration whose only managed object is a `serial` sequence:
       managed → handover (sequence kept) → adoption applies cleanly

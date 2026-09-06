@@ -69,9 +69,11 @@ DDL has it to look at.
   key the declaration carries is created — while a declaration whose
   only managed object is that sequence, handed back to `existingTable()`
   and adopted again, applies cleanly on a database that kept the
-  sequence; a declaration with more (policies, indexes, constraints) is
-  named by `adoption-creates` on re-adoption, and `hejbro baseline`
-  records what the database already holds
+  sequence; a declaration with more (indexes, checks, foreign keys, a
+  primary key) is named by `adoption-creates` on re-adoption, and
+  `hejbro baseline` records what the database already holds; a child on
+  a column the database lacks fails at apply time, and `check --url`
+  names the column beforehand
 
 #### Scenario: A reserved-schema validator exempts an existing table
 - **WHEN** a schema declares a table with `existingTable()` in a schema
