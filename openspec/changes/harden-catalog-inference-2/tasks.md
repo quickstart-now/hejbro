@@ -11,10 +11,13 @@ piece reviewer runs in constructor mode (D110).
 **Files edited**: `packages/cli/src/check/catalog.ts`, `packages/cli/
 src/infer/rest.ts` and tests (1.1); `packages/cli/src/infer/rest.ts`,
 `packages/cli/src/infer/compose.ts`, `packages/cli/src/infer/
-loss-report.ts` and tests (1.2); `packages/cli/src/infer/compose.ts`, `packages/cli/src/infer/
-loss-report.ts` and a shared comparator module (1.3, 1.4);
-`packages/cli/test/infer-*.integration.test.ts` (1.5); `skills/hejbro/
-references/brownfield-adoption.md`, one `.changeset/*.md` (1.6). If a task appears to need any other file, that
+loss-report.ts` and tests (1.2); `packages/cli/src/infer/compose.ts`,
+`packages/cli/src/infer/loss-report.ts`, a shared comparator module and
+`packages/cli/src/commands/check.ts` (the comparator moves out of it;
+nothing else) (1.3, 1.4); `packages/cli/test/infer-*.integration.test.ts`
+(1.5); `skills/hejbro/
+references/brownfield-adoption.md`, one
+`.changeset/*.md` (1.6). If a task appears to need any other file, that
 goes back to the planner, not into the diff.
 
 **Ordering.** 1.1, 1.2, 1.3 and 1.4 are independent; 1.5 after all;
@@ -60,8 +63,9 @@ goes back to the planner, not into the diff.
       `create type app."Status"`, a column of that type, a policy `to
       app_reader` — `hejbro import` writes declarations without the
       enum or its column, names both in the report, and the description
-      carries `app_reader`; `hejbro check` afterwards lists the enum and
-      the column as unmanaged. Files: the integration test.
+      carries `app_reader`; `hejbro check` afterwards lists the column
+      as unmanaged and does not name the enum type. Files: the
+      integration test.
 
 - [ ] 1.6 (~5m) Docs and changeset. The brownfield reference's loss
       list gains the enum and primary-key-name lines and the roles

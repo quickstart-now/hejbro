@@ -224,9 +224,9 @@ and an NFC/NFD pair print the same order.
 - **WHEN** a reading omits an enum type for its name, and with it the
   column typed by it, and the loss report is printed
 - **THEN** one line names the enum and the column, states that `check`
-  keeps listing both as unmanaged until the enum is renamed in the
-  database and declared, and never promises that renaming alone ends
-  the listing
+  keeps naming the column as unmanaged until it is declared and does
+  not name the type — `check`'s inventory has no enum axis — and never
+  promises that renaming the enum alone ends the column's listing
 
 #### Scenario: An omitted object's line says what check will do about it
 - **WHEN** a reading omits an index and a check constraint whose catalog
