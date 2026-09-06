@@ -57,6 +57,17 @@
       "at": "2026-09-06T02:04Z",
       "title": "declare-emit's two localeCompare sorts join task 1.4 and the starter file orders by code points",
       "ratified": null
+    },
+    {
+      "id": "R5",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "712/R1 (design Q3-Q4); 712/R2 (never promise a report check will not make); delta catalog-inference 'references it or is referenced through it'; loss-report.ts foreignKeyNameApproximations precedent; compose.ts holds migration.snapshot before buildLossReport (482-525)"
+      ],
+      "at": "2026-09-06T02:44Z",
+      "title": "task 1.3 lines: foreign-key omission names the failing end; the dropped primary-key name is one approximation line; check's naming is measured before the line is pinned",
+      "ratified": null
     }
   ],
   "work": [],

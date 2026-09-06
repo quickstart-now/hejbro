@@ -54,3 +54,18 @@ The planner reported, before touching it, that `packages/cli/src/declare-emit/em
 
 Ruling: the piece is completed within its purpose (412/D13). `declare-emit/emit.ts` joins task 1.4's files for exactly the two sort sites, which import the shared code-point comparator task 1.4 creates; no other logic moves. The red table gains a row over the starter text: an NFC/NFD pair and a locale-reordered pair of out-of-scope targets print in code-point order under both collators. The delta's first requirement gains one sentence: "Every ordered list the reading writes into the starter declarations SHALL be ordered by code points as the loss report is, so the file `import` writes does not depend on the process locale." No separate issue: the fix is two lines on a module this piece creates, and a follow-up would cost more than the change.
 
+<a id="r5"></a>
+## R5 — task 1.3 lines: foreign-key omission names the failing end; the dropped primary-key name is one approximation line; check's naming is measured before the line is pinned
+
+_lead · extension · basis 712/R1 (design Q3-Q4); 712/R2 (never promise a report check will not make); delta catalog-inference 'references it or is referenced through it'; loss-report.ts foreignKeyNameApproximations precedent; compose.ts holds migration.snapshot before buildLossReport (482-525) · 2026-09-06T02:44Z · ratified: pending_
+
+Settles the loss-report lines task 1.3 adds (CLI output, hence contract), on the planner's submission L1–L4, with the design fact that the primary-key comparison reads the snapshot hejbro is about to write (`migration.snapshot.primaryKeyName`) against the catalog's constraint name, so no core export is added.
+
+L1 (import) and L2 (pull) — a foreign key at an omitted column: the sibling skeleton, with the reason clause naming the end that failed, because that end is the column the user has to rename:
+- source end: `Omitted: foreign key "<schema.table.name>" -- it is declared on column "<schema.table.column>", which this reading left out because no declaration can carry its name, so the key cannot be declared either. Next: rename the column in the database, then re-run \`hejbro import\`.`
+- target end: `… -- it references column "<schema.table.column>", which this reading left out …` (same tail). The pull variant says "cannot be carried in the contract" for the column and "so the key cannot be carried either", ending "Rename the column in the database, then link the schema repository." A single "touches" wording was rejected: which end failed is which column to rename.
+
+L3 — a dropped primary-key name, one line for import and pull alike, following the foreign-key-name approximation precedent: `Approximated: the primary key "<schema.table.catalog-name>" is declared under the derived name "<derived>" instead -- the DSL derives every primary-key name, so \`generate\`/\`check\` will name this constraint differently from the database. Either rename the constraint to "<derived>" in the database, or keep it and read \`check\`'s inventory line for "<catalog-name>" as expected.`
+
+L4 — the last clause promises what `check` will name; before the line is pinned, the planner measures it on `buildInventory` (catalog constraint `pk_orders`, declaration deriving `orders_pkey`) in an uncommitted run and reports the raw output. If `check` does not name the constraint, or names it under another line, the clause is rewritten to the measured fact and re-submitted; the 712/R2 trap is not repeated.
+
