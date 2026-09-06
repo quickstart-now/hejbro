@@ -1,0 +1,61 @@
+{
+  "version": 3,
+  "number": 1014,
+  "ref": "quickstart-now/hejbro#1014",
+  "title": "chore(openspec): archive add-vendored-related after d106 round 2 (#653)",
+  "head": "699a1bb6b00df04f379d9c68249d2b531e1882f2",
+  "headRef": "archive-add-vendored-related",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-06T03:46Z",
+  "refs": [
+    {
+      "path": "docs/guide/polyrepo.md",
+      "blob": "4016675b5f5955611fef7e9443d1f64fb778b9b1"
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-06-add-vendored-related/design.md",
+      "blob": "a890b3f7ef6cdea246ec53cff04fe83c36c694f8"
+    },
+    {
+      "path": "openspec/changes/add-vendored-related/design.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-06-add-vendored-related/evaluation.md",
+      "blob": "0bfdca353c9587f0b0b137dc430a73c2f36cc2d3"
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-06-add-vendored-related/proposal.md",
+      "blob": "aef127fe14c400ff9edbbc3c53c9e0c63bf7a355"
+    },
+    {
+      "path": "openspec/changes/add-vendored-related/proposal.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-06-add-vendored-related/specs/schema-vendoring/spec.md",
+      "blob": "061e54659e4653d532c9717d2390c9fc4e163dd5"
+    },
+    {
+      "path": "openspec/changes/add-vendored-related/specs/schema-vendoring/spec.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-06-add-vendored-related/tasks.md",
+      "blob": "e329052cec754ac9a9a42d4bbad099eef8482377"
+    },
+    {
+      "path": "openspec/changes/add-vendored-related/tasks.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/specs/schema-vendoring/spec.md",
+      "blob": "32f68f941adf1421558b2b45a940e89d81cfb467"
+    },
+    {
+      "path": "skills/hejbro/references/polyrepo.md",
+      "blob": "f601fa94ea548b17e09edc708c0f0944c7846aea"
+    }
+  ]
+}

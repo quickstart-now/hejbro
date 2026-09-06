@@ -1,8 +1,8 @@
 {
   "version": 3,
   "kind": "issue",
-  "ref": "quickstart-now/hejbro#1000",
-  "title": "query: the chain related() returns has no offset() stage while the plain select chain does",
+  "ref": "quickstart-now/hejbro#1012",
+  "title": "query: related() accepts a string spec at the type level and fails at run time with unknown-relation \"0\"",
   "parent": "quickstart-now/hejbro#995",
   "status": "open",
   "opened": "2026-09-06",
@@ -10,11 +10,6 @@
   "decisions": [],
   "work": [],
   "prs": [
-    {
-      "number": 1011,
-      "role": "refs",
-      "pinnedAt": "2026-09-06T02:25Z"
-    },
     {
       "number": 1014,
       "role": "refs",

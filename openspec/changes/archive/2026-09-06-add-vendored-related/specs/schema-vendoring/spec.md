@@ -8,7 +8,11 @@ metadata SHALL mark it existing. The name-keyed client SHALL expose it
 for reading like any other table, and a managed table's foreign key
 onto it SHALL resolve to a relation in the contract exactly as one onto
 a managed table does; a foreign key onto a table the schema does not
-declare at all keeps having none.
+declare at all keeps having none. These sentences hold for a table
+whose name is unique among the carried tables — `Tables` is keyed by
+the SQL name alone, so two carried tables sharing a name across schemas
+(an existing `auth.users` beside a managed `app.users`) are the
+emitter's unresolved collision, outside this requirement.
 
 Following that relation from the client is the name-keyed client's own
 `.related()` (the requirement *The contract names the relations the
@@ -48,7 +52,7 @@ for the reader of the generated file and for tooling built on it.
 ### Requirement: The contract names the relations the client can follow
 Each vendored table SHALL carry a `Relations` map in the generated
 `Database` interface — relation key to `{ target, mode }`, `target` the
-`Tables` key of the related table and `mode` `"one"` for a relation the
+`Tables` key of the related table — a key that presumes the name is unique among the carried tables, as the requirement *An existing table crosses the boundary* qualifies — and `mode` `"one"` for a relation the
 table's own foreign key points along, `"many"` for one another table's
 foreign key points back along — computed when the contract is emitted,
 from the same foreign keys the query layer's `related()` derives from,

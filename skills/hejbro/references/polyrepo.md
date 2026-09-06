@@ -59,7 +59,11 @@ the contract, but TypeScript resolves those names on every object
 type, so a fresh `insert`/`update` write literal against such a table
 cannot type-check even when the property is declared optional —
 TypeScript's own rule, not the emitter's: a schema should not name a
-column that way.
+column that way. The same rule reaches relation keys: a table named
+`constructor`, or a column `valueOfId`, yields a relation key TypeScript
+resolves on every object, so a `.related()` spec that omits it fails to
+type-check (the inherited member's type — `Function`, `() => Object` — is not `true`); a schema should not name a table
+or a foreign-key column that way either.
 
 A vendored contract also carries every `defineFunction` declaration the
 schema repository exports, callable through `db.fn` — `createDb(driver)
