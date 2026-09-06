@@ -392,9 +392,11 @@ hand-written migration whose banner is not followed by a blank line
 therefore had its executed statements outside the checksum, invisible to
 `migrate` and `status` after an edit. The predicate is replaced: the
 first line must be exactly `-- hejbro migration` (otherwise the whole
-file is hashed), the banner is the leading run of comment and blank
-lines, and the body begins at the first statement. A statement can never
-fall into the banner because a statement is never a comment line, and
+file is hashed), the banner is the leading run of blank lines and lines
+that begin with `--` at the start of the line (an indented `--` or a
+`/* ... */` block is body), and the body begins at the first line that
+is neither. A statement can never fall into the banner because a
+statement is never a comment line, and
 every generated file's hash is unchanged, so no recorded checksum moves.
 The spec's "banner of comment lines" is kept and the boundary is stated.
 A comment before the first statement is banner; a comment inside the body
