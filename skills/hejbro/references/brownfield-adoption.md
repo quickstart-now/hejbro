@@ -344,7 +344,11 @@ triggers, view bodies, policy expressions, grants beyond a role's bare
 name (a blanket line — never a per-instance list), a column whose type
 no builder expresses, and a standalone sequence no column owns (the
 DSL has no `defineSequence()` yet); **Approximated** — a named UNIQUE
-constraint as a same-named unique index, a `nextval(...)` default kept
+constraint as a same-named unique index, when its own column survives
+(one omitted for its own name, or for the enum type that typed it,
+costs the constraint too — see **Omitted**, below — and an omitted
+object never gets an approximation line beside its own), a
+`nextval(...)` default kept
 as a raw expression, every default/check/generated/index-predicate
 expression as raw SQL text rather than a typed builder, a foreign
 key whose own catalog name is not a valid hejbro SQL identifier,
@@ -386,7 +390,10 @@ naming the column that cost it and following that column's own cause
 (#873, 712/R8); when an omitted enum type took both of a key's columns
 at once (an enum-to-enum relationship losing its shared type), only
 one line ever announces it, its reason on the declared side (712/R9).
-A foreign key into a schema `import`/`pull` simply never
+An omitted column takes its own index, check constraint and UNIQUE
+constraint with it the same way — each named on its own line, with the
+column that cost it and that column's own cause, and none of them ever
+gets an approximation line either (712/R10). A foreign key into a schema `import`/`pull` simply never
 named is a different case, not an omission: its target's own name may
 be perfectly ordinary, so the relationship is kept, declared against an
 unexported handle to a table this repository does not declare, and the

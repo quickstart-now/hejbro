@@ -47,8 +47,9 @@ trip and fails the rule — the very case a rule predicting the DSL's
 answer got wrong — and both are omitted and named. A table or schema left out for a name
 no declaration can carry takes the objects it holds with it, and the
 foreign keys that point at it; a column left out takes with it every
-foreign key that references it or is referenced through it, so a
-starter declaration always loads: a surviving declaration SHALL never
+index, check and unique constraint that names it, and every foreign
+key that references it or is referenced through it, so a starter
+declaration always loads: a surviving declaration SHALL never
 reference an object this reading omitted for its name, and the report
 SHALL never announce an approximation for one. A target that lies
 outside the schemas the run named is a different case and SHALL be
@@ -74,9 +75,12 @@ database has. Leaving an object out for its name SHALL never stop the
 reading — everything else in the named schemas is still inferred — and
 the loss report SHALL name each of them. A column named there is
 still described: the description records what the database holds, and
-the snapshot records what a declaration can express. Every ordered list the reading writes into the starter
-declarations SHALL be ordered by code points as the loss report is, so
-the file `import` writes does not depend on the process locale.
+the snapshot records what a declaration can express. Every list the
+reading orders by name when writing the starter declarations SHALL be
+ordered by code points as the loss report is, so the file `import`
+writes does not depend on the process locale; a list whose order is
+the catalog's own (an enum's values) or a dependency's (a table
+declared before the table that references it) keeps that order.
 
 #### Scenario: Tables and enums are inferred
 - **WHEN** a database holding two schemas with tables, foreign keys
@@ -157,6 +161,15 @@ the file `import` writes does not depend on the process locale.
   contract, the starter loads, and the loss report names both foreign
   keys and the column that took them out
 
+#### Scenario: An index and a check at an omitted column are omitted with it
+- **WHEN** a table holds a column no declaration can carry and a column
+  typed by an enum this reading omitted, with an index on each and a
+  check constraint naming one of them
+- **THEN** none of them reaches the starter declarations or the
+  contract, the SQL a following `baseline` writes applies to an empty
+  database, and the loss report names each of them with the column that
+  took it out and announces no approximation for any of them
+
 #### Scenario: A role named only by a policy is inferred
 - **WHEN** a database holds a policy `to app_reader` on a table no grant
   names that role on, a policy `to public`, and grants naming `app_writer`
@@ -201,10 +214,13 @@ announces. A line that names the way out SHALL name the whole of it: a
 remedy stated short — renaming an object whose name a declaration could
 not carry, without declaring it afterwards — reads as a promise that the
 reporting stops there, and it does not. Which objects `check` keeps naming is `check`'s own
-inventory rule (`cli-commands`), not a second rule stated here. The
-report's lines SHALL be ordered by code points, never by a collation —
-the same comparator `check`'s inventory uses, shared, so two locales
-and an NFC/NFD pair print the same order.
+inventory rule (`cli-commands`), not a second rule stated here. Within
+each list of lines the report prints, its lines SHALL be ordered by
+code points, never by a collation — the same comparator `check`'s
+inventory uses, shared, so two locales and an NFC/NFD pair print the
+same order; the report's own bands (what was guessed, what was not
+inferred, each approximation, each omission) keep the order stated
+here.
 
 #### Scenario: The report names the way out
 - **WHEN** `pull --db-url` completes
