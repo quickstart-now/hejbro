@@ -45,3 +45,12 @@ D4, the `pull` line: as submitted — "so neither it nor the columns typed by it
 
 D5, position and order: the enum lines follow the omitted-table lines and precede the omitted-index lines (schema-level objects first, then table-level ones); lines sort by `schema.sqlName` and a line's columns by `schema.table.sqlName`, both under the shared code-point comparator of task 1.4, so task 1.4 runs before task 1.2. Golden diffs caused by the new position are reported verbatim.
 
+<a id="r4"></a>
+## R4 — declare-emit's two localeCompare sorts join task 1.4 and the starter file orders by code points
+
+_lead · interpretation · basis 412/D13 (complete within purpose); #874; delta catalog-inference 'ordered by code points, never by a collation'; measured emit.ts 1580 and 1584 · 2026-09-06T02:04Z · ratified: pending_
+
+The planner reported, before touching it, that `packages/cli/src/declare-emit/emit.ts` sorts twice with `localeCompare` (the out-of-scope target handles, and the columns each handle references), and both orders appear in the starter declaration file `import` writes — the same locale dependence #874 removes from the loss report, in the other half of `import`'s output. The file is outside the change's listed files.
+
+Ruling: the piece is completed within its purpose (412/D13). `declare-emit/emit.ts` joins task 1.4's files for exactly the two sort sites, which import the shared code-point comparator task 1.4 creates; no other logic moves. The red table gains a row over the starter text: an NFC/NFD pair and a locale-reordered pair of out-of-scope targets print in code-point order under both collators. The delta's first requirement gains one sentence: "Every ordered list the reading writes into the starter declarations SHALL be ordered by code points as the loss report is, so the file `import` writes does not depend on the process locale." No separate issue: the fix is two lines on a module this piece creates, and a follow-up would cost more than the change.
+

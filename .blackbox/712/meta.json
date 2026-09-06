@@ -45,6 +45,18 @@
       "at": "2026-09-06T02:04Z",
       "title": "task 1.2 design: OmittedEnum names only the columns its omission takes out; import and pull line texts; schema-level position and code-point order",
       "ratified": null
+    },
+    {
+      "id": "R4",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "412/D13 (complete within purpose); #874; delta catalog-inference 'ordered by code points",
+        "never by a collation'; measured emit.ts 1580 and 1584"
+      ],
+      "at": "2026-09-06T02:04Z",
+      "title": "declare-emit's two localeCompare sorts join task 1.4 and the starter file orders by code points",
+      "ratified": null
     }
   ],
   "work": [],
