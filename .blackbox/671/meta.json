@@ -117,6 +117,13 @@
       "title": "adoption creates the table's declared children, normalizes the adopted sequence, and generate names both",
       "pr": null,
       "decisions": []
+    },
+    {
+      "id": "W2",
+      "at": "2026-09-06T05:59Z",
+      "title": "review rounds one to three: the missing-column risk, the withdrawn refusal, and the four-branch measurement",
+      "pr": null,
+      "decisions": []
     }
   ],
   "prs": [],

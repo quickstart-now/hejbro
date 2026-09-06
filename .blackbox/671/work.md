@@ -51,3 +51,67 @@ pattern), #1001 (banner notes describe column diffs that emit no
 statements), #993 and #994 (the two diagnostic gates do not cover what
 their names suggest).
 
+<a id="w2"></a>
+## W2 — review rounds one to three: the missing-column risk, the withdrawn refusal, and the four-branch measurement
+
+_2026-09-06T05:59Z_
+
+After W1 the piece went through three constructor-mode review rounds and
+two reworks.
+
+Round 1 found two blocking facts. B1: adoption emitted a child against a
+column the database does not have, so `migrate` failed with 42703 and
+the whole migration, primary key included, rolled back -- a failure
+shape this piece introduced, which the review's A/B against fd92e4bb
+settled by measurement (the base wrote an empty migration instead). The
+input tables had never built the crossing cell: the column-list cases
+carried no children, and the child cases held the columns identical on
+both sides. B2: "one diagnostic per adopted table" was falsified by an
+adoption with nothing to name.
+
+The lead first ruled a generate-time refusal keyed on the existing
+declaration's columns. The review then measured that a column absent
+from the database and a column merely left off `existingTable()`'s list
+are identical to a declaration-only comparison -- same declarations,
+same snapshots, same emitted SQL -- and that an existing declaration is
+a partial claim by design, so the refusal would have turned a common,
+working shape into an error. That ruling was withdrawn. The risk is
+named instead, and `hejbro check --url` is the command that tells the
+two apart; it already could, and the review ran it before `migrate` to
+show it names the column.
+
+Round 2 passed with two notices. The second branch of the notice's
+`Next:` was a correct recipe for writing the adoption edit but
+incomplete as recovery, because the diagnostic prints after the
+migration is already written. The changeset had not been updated for the
+round.
+
+Closing those raised one more measurement. The reference claimed that
+reverting either file alone breaks the chain; reverting the migration
+alone was measured not to, because a migration that failed at apply was
+never recorded in the ledger, so removing its file leaves the ledger
+consistent. The sentence was rewritten to what reproduced: reverting
+only the migration leaves the snapshot still recording the adoption, so
+the next `generate` reports no changes; reverting only the snapshot is
+refused by `verify` with `snapshot-stale` and `chain-tip-mismatch`,
+while `migrate` never reads the snapshot's content at all.
+
+Round 3 passed and settled the disagreement by building four branches
+from one starting state. Reverting both files and re-adopting succeeds.
+Reverting the migration with the declaration unchanged reports no
+changes. Reverting the snapshot alone is refused by `verify`. Reverting
+the migration after the declaration has already changed writes a
+diverging migration and is then refused by `migrate` and `verify` with
+`broken-chain`. The reviewer's round-one report had generalised that
+last branch into "reverting either one", and corrected its own sentence
+against the measurement; the branch is now named in the reference.
+
+Measured across the rounds: the notice's text is pinned in full for
+every adoption cell; the live suite grew from two witnesses to six
+(sequence-only round trip, brownfield adoption with four children, a
+column present but unlisted, adopt-then-add-in-a-following-edit,
+`check --url` naming the column before 42703, and the recovery path);
+no golden changed at any point.
+
+Not fixed here, referred out: #1009, #1001, #1015, #993, #994.
+
