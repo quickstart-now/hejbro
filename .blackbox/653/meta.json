@@ -55,7 +55,29 @@
       "ratified": null
     }
   ],
-  "work": [],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-06T00:31Z",
+      "title": "the emitter's Relations map and the inputs that fixed its expectations",
+      "pr": null,
+      "decisions": []
+    },
+    {
+      "id": "W2",
+      "at": "2026-09-06T00:31Z",
+      "title": "the client's type layer, and two mutation gaps it exposed",
+      "pr": null,
+      "decisions": []
+    },
+    {
+      "id": "W3",
+      "at": "2026-09-06T00:31Z",
+      "title": "the real-server witness, and a planner claim that was overstated",
+      "pr": null,
+      "decisions": []
+    }
+  ],
   "prs": [],
   "origin": null,
   "followUps": []
