@@ -43,7 +43,14 @@ describe("buildLossReport / 1.7", () => {
 				functions: [{ schema: "app", name: "touch_updated_at" }],
 				triggers: [{ schema: "app", table: "posts", name: "posts_touch" }],
 				views: [{ schema: "app", name: "open_tasks" }],
-				policies: [{ schema: "app", table: "posts", name: "posts_read_all" }],
+				policies: [
+					{
+						schema: "app",
+						table: "posts",
+						name: "posts_read_all",
+						roles: ["app_reader"],
+					},
+				],
 				grantsBeyondRoleName: true,
 			},
 			standaloneSequences: [{ schema: "app", name: "orphan_seq" }],
