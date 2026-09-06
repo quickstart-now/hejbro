@@ -90,6 +90,17 @@
       "at": "2026-09-06T03:38Z",
       "title": "the dropped primary-key name has one way out: check fails on the declared name every run; line, requirement and scenario aligned",
       "ratified": null
+    },
+    {
+      "id": "R8",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "712/R3 (no line states a cause not its own); 712/R5 (name-cause sentences); delta 'the consequence it states SHALL be what hejbro will actually do'; crossing row E7 measured in task 1.2"
+      ],
+      "at": "2026-09-06T04:55Z",
+      "title": "the foreign-key omission line follows its cause: a column lost with its enum type points at renaming the type",
+      "ratified": null
     }
   ],
   "work": [],

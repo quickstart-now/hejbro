@@ -87,7 +87,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#697](697/) | vendored fn guard is count-only and a __proto__ column key loses its column | closed | #739 | 0 | 4 (0 pending) |
 | ↳ [#701](701/) | array order in kind snapshots can produce a semantically empty alter | closed | #858 #861 | 0 | 5 (0 pending) |
 | ↳ [#707](707/) | check is silent about undeclared indexes and check constraints on managed tables | closed | #878 #879 | 0 | 5 (0 pending) |
-| ↳ [#712](712/) | decide whether an enum type's catalog name is held to D36 by the catalog reading | open |  | 0 | 7 (3 pending) |
+| ↳ [#712](712/) | decide whether an enum type's catalog name is held to D36 by the catalog reading | open |  | 0 | 8 (3 pending) |
 | ↳ [#726](726/) | loss report promises check will report an omitted column, but check has no column-level inventory | closed | #878 | 0 | 1 (0 pending) |
 | ↳ [#740](740/) | Vendored contract column order follows JS key order, not the snapshot's physical order | closed | #858 #861 | 0 | 2 (0 pending) |
 | ↳ [#741](741/) | `hejbro init --config <path>` is ignored and scaffolds a competing project | closed | #840 #847 | 0 | 4 (0 pending) |
@@ -235,7 +235,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 
 ## Totals
 
-Owner decisions 95 · rulings 317 (interpretation 209, extension 106, stop 2) · pending extensions 68 · rejected 2
+Owner decisions 95 · rulings 318 (interpretation 210, extension 106, stop 2) · pending extensions 68 · rejected 2
 
 ## Conventions
 

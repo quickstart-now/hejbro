@@ -91,3 +91,16 @@ Ruling: option (A), three texts aligned to the one fact.
 - The scenario's THEN becomes "the loss report names `pk_orders` as dropped and states the way out whole, and `check` after `baseline` both lists `pk_orders` in its unmanaged-index inventory and reports the declared `orders_pkey` as missing, exactly as the report said it would".
 Option (C) — making `check` accept a differently named primary key — is a `cli-commands` comparison-rule change outside this delta; not opened, since the derived name is the DSL's contract. Task 1.5's live witness gains the primary-key case so both signals are observed on a real server. proposal.md §4 is made self-consistent ("is still carried into the declaration step" in place of "is still written").
 
+<a id="r8"></a>
+## R8 — the foreign-key omission line follows its cause: a column lost with its enum type points at renaming the type
+
+_lead · interpretation · basis 712/R3 (no line states a cause not its own); 712/R5 (name-cause sentences); delta 'the consequence it states SHALL be what hejbro will actually do'; crossing row E7 measured in task 1.2 · 2026-09-06T04:55Z · ratified: pending_
+
+Task 1.2 made a second cause for an omitted column (its enum type omitted for its name) and the foreign-key omission line settled in 712/R5 knew only the first (the column's own name): on the crossing input the line said "left out because no declaration can carry its name" and pointed at "rename the column", both wrong for a column that lost its type. The delta's truthfulness rule and 712/R3's "no line states a cause that is not its own" apply.
+
+Ruling: option (A). The foreign-key omission record carries its cause (`"name"` or `"enum"`, with the enum's identifier for the second), and the reason and way-out clauses follow the cause. The name-cause sentences stay as in 712/R5. The enum-cause sentences:
+- import: `Omitted: foreign key "<schema.table.name>" -- it is declared on column "<schema.table.column>", which this reading left out with the enum type "<schema.enum>" that types it, so the key cannot be declared either. Next: rename the type in the database, then re-run \`hejbro import\`.`
+- pull: the same reason clause, "so the key cannot be carried either. Rename the type in the database, then link the schema repository."
+- the target-end variant keeps 712/R5's "it references column …" in place of "it is declared on column …".
+The delta needs no change: "a column left out takes with it every foreign key that references it or is referenced through it" names no cause. A mutation reusing the name-cause sentence for the enum cause must redden the crossing row only.
+
