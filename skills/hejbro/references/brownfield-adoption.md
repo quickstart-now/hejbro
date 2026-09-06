@@ -216,11 +216,16 @@ through version control (e.g. `git checkout -- <migration file>
 <snapshot file>`), never just one: reverting only the migration file
 leaves the snapshot still recording the adoption as done, so the next
 `hejbro generate` reports "no changes" instead of writing back the
-migration you just deleted; reverting only the snapshot leaves it
-disagreeing with the migration file's own recorded hash, and `hejbro
-verify` refuses with `error[snapshot-stale]` and
-`error[chain-tip-mismatch]` (`hejbro migrate` itself never reads the
-snapshot's content, so it silently re-attempts the same failing
+migration you just deleted — unless the declaration has already moved
+on to the recovery's own next step (adopting with the columns the
+database has), in which case `generate` instead writes a second
+migration that diverges from the same prior state the deleted one
+branched from, and `hejbro migrate`/`hejbro verify` both refuse it with
+`error[broken-chain]` until the snapshot comes back too. Reverting only
+the snapshot leaves it disagreeing with the migration file's own
+recorded hash, and `hejbro verify` refuses with `error[snapshot-stale]`
+and `error[chain-tip-mismatch]` (`hejbro migrate` itself never reads
+the snapshot's content, so it silently re-attempts the same failing
 statement instead of noticing anything is wrong). hejbro has no command
 that discards its own just-written output — this step is manual, on
 you, same as any other version-control revert.
