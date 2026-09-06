@@ -68,6 +68,17 @@
       "at": "2026-09-06T02:44Z",
       "title": "task 1.3 lines: foreign-key omission names the failing end; the dropped primary-key name is one approximation line; check's naming is measured before the line is pinned",
       "ratified": null
+    },
+    {
+      "id": "R6",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "712/R1 (design Q4); task 1.3 red run: TypeError in core table.ts findForeignColumnRef via infer/table.ts inferTable and compose.ts; delta catalog-inference 'takes with it every foreign key … so a starter declaration always loads'"
+      ],
+      "at": "2026-09-06T02:45Z",
+      "title": "#873 measured one step earlier: the reading dies in core's foreign-key resolution before writing; proposal §4 corrected",
+      "ratified": null
     }
   ],
   "work": [],

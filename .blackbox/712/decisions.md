@@ -69,3 +69,12 @@ L3 — a dropped primary-key name, one line for import and pull alike, following
 
 L4 — the last clause promises what `check` will name; before the line is pinned, the planner measures it on `buildInventory` (catalog constraint `pk_orders`, declaration deriving `orders_pkey`) in an uncommitted run and reports the raw output. If `check` does not name the constraint, or names it under another line, the clause is rewritten to the measured fact and re-submitted; the 712/R2 trap is not repeated.
 
+<a id="r6"></a>
+## R6 — #873 measured one step earlier: the reading dies in core's foreign-key resolution before writing; proposal §4 corrected
+
+_lead · interpretation · basis 712/R1 (design Q4); task 1.3 red run: TypeError in core table.ts findForeignColumnRef via infer/table.ts inferTable and compose.ts; delta catalog-inference 'takes with it every foreign key … so a starter declaration always loads' · 2026-09-06T02:45Z · ratified: pending_
+
+Task 1.3's red run measured #873 one step earlier than the issue and proposal.md "Why" §4 describe: with a foreign key whose source column is omitted for its name, `inferFromCatalog` does not write a starter that later fails to load — it dies before writing anything, with an unhandled `TypeError` from core's foreign-key resolution (`table.ts` `findForeignColumnRef`: the omitted column is gone from `columns` while the table's `foreignKeys` still name it), so `import`/`pull` produce neither declarations nor a loss report.
+
+Ruling: option (A). proposal.md §4 is corrected to the measured symptom (one sentence, "the reading itself dies with an unhandled error from core's foreign-key resolution before any file is written, so `import` produces neither declarations nor a loss report"); the delta requirement and scenario already state the fix and stay as they are. The remedy is unchanged: an omitted column takes its foreign keys with it before the table is built. The issue gets the measurement as a comment.
+
