@@ -114,7 +114,15 @@
       "ratified": null
     }
   ],
-  "work": [],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-06T05:26Z",
+      "title": "catalog inference hardened: policy roles, enum names, the dropped primary-key name, foreign keys at omitted columns, one comparator",
+      "pr": null,
+      "decisions": []
+    }
+  ],
   "prs": [],
   "origin": null,
   "followUps": []
