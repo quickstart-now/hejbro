@@ -79,6 +79,17 @@
       "at": "2026-09-06T02:45Z",
       "title": "#873 measured one step earlier: the reading dies in core's foreign-key resolution before writing; proposal §4 corrected",
       "ratified": null
+    },
+    {
+      "id": "R7",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "712/R5 (L4 procedure); task 1.3 second measurement: check-object-missing on app.orders.orders_pkey plus unmanagedIndexes pk_orders; delta 'the consequence it states SHALL be what hejbro will actually do'; 712/R2"
+      ],
+      "at": "2026-09-06T03:38Z",
+      "title": "the dropped primary-key name has one way out: check fails on the declared name every run; line, requirement and scenario aligned",
+      "ratified": null
     }
   ],
   "work": [],

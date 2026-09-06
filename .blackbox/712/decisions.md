@@ -78,3 +78,16 @@ Task 1.3's red run measured #873 one step earlier than the issue and proposal.md
 
 Ruling: option (A). proposal.md §4 is corrected to the measured symptom (one sentence, "the reading itself dies with an unhandled error from core's foreign-key resolution before any file is written, so `import` produces neither declarations nor a loss report"); the delta requirement and scenario already state the fix and stay as they are. The remedy is unchanged: an omitted column takes its foreign keys with it before the table is built. The issue gets the measurement as a comment.
 
+<a id="r7"></a>
+## R7 — the dropped primary-key name has one way out: check fails on the declared name every run; line, requirement and scenario aligned
+
+_lead · interpretation · basis 712/R5 (L4 procedure); task 1.3 second measurement: check-object-missing on app.orders.orders_pkey plus unmanagedIndexes pk_orders; delta 'the consequence it states SHALL be what hejbro will actually do'; 712/R2 · 2026-09-06T03:38Z · ratified: pending_
+
+Task 1.3's second measurement (L4) settled what `check` does with a primary key whose catalog name is not the derived one: with the constraint `pk_orders` in the database and the declaration deriving `orders_pkey`, `check` both lists `pk_orders` in its unmanaged-index inventory (informational) and reports the declared `orders_pkey` as missing with `check-object-missing` — a failing finding on every run. The lead's delta paragraph, its scenario and the L3 line all offered "keep it and read the inventory line as expected" as a second way out; that way out does not exist, since keeping the name fails `check` every time.
+
+Ruling: option (A), three texts aligned to the one fact.
+- L3 (import and pull alike): `Approximated: the primary key "<schema.table.catalog-name>" is declared under the derived name "<derived>" instead -- the DSL derives every primary-key name, so \`generate\`/\`check\` will name this constraint differently from the database. Rename the constraint to "<derived>" in the database; until you do, \`check\` reports the declared "<derived>" as missing on every run and lists "<catalog-name>" in its unmanaged-index inventory.`
+- The delta requirement's parenthesis becomes "(rename the constraint in the database to the derived name; keeping it leaves `check` reporting the declared name as missing on every run, beside its inventory line for the catalog's own name)".
+- The scenario's THEN becomes "the loss report names `pk_orders` as dropped and states the way out whole, and `check` after `baseline` both lists `pk_orders` in its unmanaged-index inventory and reports the declared `orders_pkey` as missing, exactly as the report said it would".
+Option (C) — making `check` accept a differently named primary key — is a `cli-commands` comparison-rule change outside this delta; not opened, since the derived name is the DSL's contract. Task 1.5's live witness gains the primary-key case so both signals are observed on a real server. proposal.md §4 is made self-consistent ("is still carried into the declaration step" in place of "is still written").
+
