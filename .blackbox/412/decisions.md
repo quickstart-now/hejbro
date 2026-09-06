@@ -653,4 +653,9 @@ is a patch file (`git diff > /private/tmp/<team>-wip.patch && git
 checkout -- <files>`, then `git apply`) or a WIP commit, which the
 squash merge folds away. Basis: rn implementer's report during 1.2
 (#500), 412/D24; owner ratification pending.
+<a id="d29"></a>
+## D29 — every discovered issue gets a fix or won't-fix verdict from the lead
+_owner · 2026-09-06T01:14Z_
+Owner, 2026-09-06 (while the D28 queue ran three pieces in parallel and the reviews had filed #993–#1002 in one evening): "Many issues are being found. You must also judge yourself whether each one is to be fixed or not. Remember this."
+English rewrite: filing an issue is not the end of the lead's job. For every issue the lead files or receives — from a piece team, a constructor-mode review, a D106 round — the lead decides, in the same session, whether it is to be fixed (it stays in the queue, with the change it will ride in when known) or not (closed with the reason: by design, won't fix, duplicate). An ambiguous case gets a stated assumption, not a deferral; the owner overturns on return from the ratification queue.
 
