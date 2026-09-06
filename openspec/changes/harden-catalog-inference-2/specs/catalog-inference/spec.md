@@ -46,12 +46,13 @@ rule predicting it, since two rules that disagree is precisely how a
 reading stops where it should have omitted: a quoted `"createdAt"`
 fails both halves, while a leading-underscore `_id` passes the round
 trip and fails the rule — the very case a rule predicting the DSL's
-answer got wrong — and both are omitted and named. A table or schema left out for a name
-no declaration can carry takes the objects it holds with it, and the
-foreign keys that point at it; a column left out takes with it every
-index, check and unique constraint that names it, and every foreign
-key that references it or is referenced through it, so a starter
-declaration always loads: a surviving declaration SHALL never
+answer got wrong — and both are omitted and named. A table or schema
+left out for a name no declaration can carry takes the objects it
+holds with it, and the foreign keys that point at it; a column left
+out takes with it every index, check, unique constraint and primary
+key that names it, and every foreign key that references it or is
+referenced through it, so a starter declaration always loads: a
+surviving declaration SHALL never
 reference an object this reading omitted for its name, and the report
 SHALL never announce an approximation for one. A target that lies
 outside the schemas the run named is a different case and SHALL be
@@ -165,8 +166,9 @@ declared before the table that references it) keeps that order.
 
 #### Scenario: An index and a check at an omitted column are omitted with it
 - **WHEN** a table holds a column no declaration can carry and a column
-  typed by an enum this reading omitted, with an index on each and a
-  check constraint naming one of them
+  typed by an enum this reading omitted, with an index on each, a
+  check constraint naming one of them and a primary key naming one of
+  them
 - **THEN** none of them reaches the starter declarations or the
   contract, the SQL a following `baseline` writes applies to an empty
   database, and the loss report names each of them with the column that
