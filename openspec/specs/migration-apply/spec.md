@@ -22,7 +22,24 @@ this tool applied, and it never claims anything about the shape of the
 schema. Reading the catalog to judge the declarations is a different
 question and is not part of this capability. A row's columns are a
 database-assigned identity, the migration's full filename, the origin
-recorded below, and the timestamp the database assigned it.
+recorded below, the timestamp the database assigned it, and the
+checksum of the body that ran — the SHA-256 of the body with line
+endings normalized to `\n`, or of the whole file, normalized the same
+way, for a raised snapshot — so the ledger can later say whether the
+file on disk is the file that ran. The banner is the first line
+`-- hejbro migration` together with the maximal leading run of lines
+that are empty or begin with `--` at the start of the line; the body is
+everything from the first line that is neither — a line holding only
+whitespace is body, and a file whose first line is not the banner
+literal has no banner and is hashed whole. The
+bootstrap SHALL create the checksum column and
+SHALL add it to a ledger written before the column existed; a row
+recorded then carries no checksum and is never compared.
+Reading a ledger that predates the column SHALL succeed with every row's
+checksum null; the first run of a command that records rows (`migrate`,
+`raise`) SHALL add the column before it writes, whether or not that run
+records a row; clearing rows needs no column, and a read-only command
+SHALL leave the ledger as it is.
 
 The ledger is recognized by identity, never by existence alone. The
 relation at that name is hejbro's ledger only when it is an ordinary,
@@ -127,8 +144,9 @@ behind.
 `migrate`'s exit code SHALL distinguish three answers: zero when there
 was nothing pending or every pending migration applied, one when the
 database refused a migration, and two when the run could not act at all
-— an unverifiable chain, a ledger disagreement, a ledger it may not read
-or write, or a missing connection, driver or capability. A ledger
+— an unverifiable chain, a ledger disagreement, an applied migration
+whose body changed, a ledger it may not read or write, or a missing
+connection, driver or capability. A ledger
 failure is two and not one: one is reserved for the database refusing a
 *migration*, which is the one thing a ledger failure proves did not
 happen. Its report SHALL name, in their own buckets, the
@@ -213,7 +231,9 @@ connection string carries a secret.
 ### Requirement: A migration is applied atomically with its own ledger row
 Each migration SHALL be applied inside one transaction that also writes
 its ledger row, so that a database never holds a migration the ledger
-does not record, nor a row for a migration that did not fully apply.
+does not record, nor a row for a migration that did not fully apply. The
+row SHALL carry the checksum of the body that was sent, computed from
+the same text.
 
 The migration's statements SHALL be sent as a single statement text
 carrying no parameters. A parameter turns the same text into a prepared
@@ -323,7 +343,9 @@ exist. The apply path SHALL record it in the ledger with the
 `registered` origin, without executing its statements — never the
 `applied` origin, which is reserved for a migration whose statements
 were actually sent — and SHALL read the marker through the exported
-parser rather than by matching the banner's text.
+parser rather than by matching the banner's text. The row SHALL carry
+the checksum of the baseline's body, the text the database is taken to
+already hold.
 
 #### Scenario: A baseline migration is recorded without being executed
 - **WHEN** a chain whose first migration carries the baseline marker is
@@ -397,8 +419,10 @@ are told apart rather than reported as one condition.
 ### Requirement: What the ledger holds can be read without applying anything
 The CLI SHALL provide a `status` command that reports, without changing
 the database: the migrations the ledger records as applied, the
-migrations on disk it does not record, and the disagreements the
-requirement above enumerates.
+migrations on disk it does not record, the disagreements the
+requirement above enumerates, and every recorded migration whose body
+on disk no longer hashes to the checksum the ledger holds — reported as
+its own line, never as "applied".
 
 `status` SHALL require no driver capability beyond reading, because it
 opens no transaction and applies nothing — the trade the apply path
@@ -447,6 +471,20 @@ what is wrong, so it is the last place a raw driver failure may surface.
 - **THEN** it exits non-zero with `apply-ledger-unreadable`, names the
   ledger, the role and the server's own code and message, gives a `Next:`
   line, and prints no raw database error and no stack trace
+
+#### Scenario: A changed body is reported by status
+- **WHEN** a recorded migration's body on disk differs from what ran and
+  `status` runs
+- **THEN** it reports that file as changed since it was applied, with
+  the same code `migrate` refuses under, exits non-zero, and is not
+  listed among the applied files
+
+#### Scenario: A disagreement is reported before bodies are compared
+- **WHEN** the ledger disagrees with the chain (an orphan row, an
+  unrecorded chain file) and a recorded body was also edited
+- **THEN** `status` reports the disagreement alone, as it does today, and
+  exits non-zero; the body comparison runs on the next `status` once the
+  disagreement is resolved
 
 ### Requirement: A failure names the file, the database's own reason, and the next command
 When applying fails, the report SHALL name the migration that failed,
@@ -707,3 +745,73 @@ for one no migration has ever reached.
 - **THEN** it exits non-zero with `apply-ledger-occupied`, no statement
   from the file is sent, no bootstrap runs, and that relation is left
   exactly as it was
+
+### Requirement: An applied migration whose body changed is refused
+Before applying anything pending, `migrate` SHALL hash the body of every
+recorded migration present on disk the way the ledger hashed it and
+compare it with the checksum the ledger holds; a mismatch SHALL be
+refused with `apply-migration-body-changed` before any statement is
+sent, naming each changed file with the recorded and the current
+checksum, abbreviated to twelve hex digits, and the remedy — restore the
+file from version control, or write a deliberate change as a new
+migration; hejbro never rewrites applied history. One run SHALL name
+every file whose body changed, not the first it finds. A row recorded
+before the checksum column existed carries none and is not compared. A
+row whose origin is `raised` is not compared: its checksum covers the
+whole file, not a body, so comparing it would report a change that did
+not happen. The
+offline walk (`verify`) keeps its stated limit: it never sees a body
+edit; this apply-time check is the half that does, and the
+generate/verify reference says which half answers which question.
+
+#### Scenario: An edited applied body refuses the run before anything is sent
+- **WHEN** the first of two recorded migrations has a statement appended
+  below its banner, a third migration is pending, and `migrate` runs
+- **THEN** it fails with `apply-migration-body-changed` naming the
+  first file and both checksums, the third migration is not applied,
+  and the ledger is unchanged
+
+#### Scenario: A line-ending change is not an edit
+- **WHEN** a recorded migration is checked out with `\r\n` line endings
+  and `migrate` runs
+- **THEN** its checksum matches and the run proceeds
+
+#### Scenario: A row without a checksum is not compared
+- **WHEN** the ledger was written before the column existed, the
+  bootstrap adds the column, and `migrate` runs with a pending migration
+- **THEN** the older rows are not compared, the pending migration
+  applies and its row carries a checksum
+
+#### Scenario: A raised database records the whole file's checksum
+- **WHEN** `raise --file snapshot.sql` succeeds
+- **THEN** the ledger row carries the SHA-256 of the whole file, its
+  line endings normalized to `\n` as a body's are
+
+#### Scenario: A run with nothing pending compares nothing
+- **WHEN** every migration on disk is recorded as applied and one of
+  their bodies was edited afterwards
+- **THEN** `migrate` applies nothing and exits 0 without comparing
+  bodies; the change is reported by `status`, and the next run that has a
+  pending migration refuses with `apply-migration-body-changed`
+
+### Requirement: A ledger whose rows are filtered is refused
+hejbro never enables row-level security on its own ledger, so a
+relation at the ledger's name that carries row-level security — enabled
+or forced — is a ledger whose rows may be hidden from the connecting
+role, and reading it would answer "nothing applied" for a database
+that applied everything. Every command that touches the ledger —
+`migrate`, `status`, `reset` and `raise` — SHALL make that judgement
+where it makes the identity judgement, from the catalog, before any row
+is read, and SHALL refuse with `apply-ledger-filtered`, naming the
+ledger, the connecting role and the policies the catalog holds on it,
+ending with a `Next:` line naming both ways out: disable row-level
+security on the ledger, or connect as the role that applied the chain.
+
+#### Scenario: A ledger under forced row-level security is refused before it is read
+- **WHEN** row-level security is forced on `"hejbro"."migration_ledger"`
+  with a policy that hides its rows from the connecting role, and
+  `status` and `migrate` each run
+- **THEN** each exits non-zero with `apply-ledger-filtered`, naming the
+  ledger, the role and the policy, no ledger row is read and nothing
+  is applied — never an empty ledger and a chain re-applied from the
+  start

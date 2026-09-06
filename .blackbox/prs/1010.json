@@ -1,0 +1,53 @@
+{
+  "version": 3,
+  "number": 1010,
+  "ref": "quickstart-now/hejbro#1010",
+  "title": "chore(openspec): archive add-ledger-checksum after d106 round 1 (#631)",
+  "head": "5e0c61ef3729815ff6533f647d54c43c1ff5b5d9",
+  "headRef": "archive-add-ledger-checksum",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-06T01:59Z",
+  "refs": [
+    {
+      "path": "openspec/changes/archive/2026-09-06-add-ledger-checksum/design.md",
+      "blob": "717da78f80606a1f5f994ea6bad32bf8eec9e2fe"
+    },
+    {
+      "path": "openspec/changes/add-ledger-checksum/design.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-06-add-ledger-checksum/evaluation.md",
+      "blob": "cb89c417db928e363d4c81011b4af76537a7898e"
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-06-add-ledger-checksum/proposal.md",
+      "blob": "b5719eca3784473c8ad79315f7d1db587c13fac6"
+    },
+    {
+      "path": "openspec/changes/add-ledger-checksum/proposal.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-06-add-ledger-checksum/specs/migration-apply/spec.md",
+      "blob": "1d44200f3103f8ee8f8037e81480ec94c9a4aa76"
+    },
+    {
+      "path": "openspec/changes/add-ledger-checksum/specs/migration-apply/spec.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-06-add-ledger-checksum/tasks.md",
+      "blob": "77bd362be5775111a0b4c52ca7d582134c5d9048"
+    },
+    {
+      "path": "openspec/changes/add-ledger-checksum/tasks.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/specs/migration-apply/spec.md",
+      "blob": "9b1b4e6a2d77955e6c6987613453b0bd440818b2"
+    }
+  ]
+}

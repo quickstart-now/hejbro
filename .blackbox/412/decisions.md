@@ -659,3 +659,12 @@ _owner · 2026-09-06T01:14Z_
 Owner, 2026-09-06 (while the D28 queue ran three pieces in parallel and the reviews had filed #993–#1002 in one evening): "Many issues are being found. You must also judge yourself whether each one is to be fixed or not. Remember this."
 English rewrite: filing an issue is not the end of the lead's job. For every issue the lead files or receives — from a piece team, a constructor-mode review, a D106 round — the lead decides, in the same session, whether it is to be fixed (it stays in the queue, with the change it will ride in when known) or not (closed with the reason: by design, won't fix, duplicate). An ambiguous case gets a stated assumption, not a deferral; the owner overturns on return from the ratification queue.
 
+<a id="d30"></a>
+## D30 — #943 is handled next, before the numeric order resumes
+
+_owner · 2026-09-06T01:49Z_
+
+Owner, 2026-09-06 (Korean original: "에이전트 완주하면 그 다음으로는 #943 이거 먼저 처리할 수 있게 큐에 넣어줘"): once the agents currently running finish their pieces, #943 is handled next, ahead of the rest of the queue.
+
+English rewrite: the D28 order (ascending issue number) is interrupted once. After the three active pieces (vr #653, ha #668/#671/#694, cf #678/#712/#872–#874) reach their terminal state, the lead processes #943 — the blackbox tool numbers a new decision/ruling/work entry by entry count, so a renumbered or out-of-order entry yields a duplicate id; fix `nextId` to max+1 and refuse an existing id, in the canonical `dd-blackbox` skill (`quickstart-now/agent-skills`) first, then `blackbox init --update` into this repository — before the numeric order resumes at #738.
+

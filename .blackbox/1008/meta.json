@@ -1,0 +1,21 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#1008",
+  "title": "migrations: a file with bare CR line endings is silently skipped by the chain walk",
+  "parent": "quickstart-now/hejbro#995",
+  "status": "open",
+  "opened": "2026-09-06",
+  "closed": null,
+  "decisions": [],
+  "work": [],
+  "prs": [
+    {
+      "number": 1010,
+      "role": "refs",
+      "pinnedAt": "2026-09-06T01:59Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

@@ -14,19 +14,22 @@ question and is not part of this capability. A row's columns are a
 database-assigned identity, the migration's full filename, the origin
 recorded below, the timestamp the database assigned it, and the
 checksum of the body that ran — the SHA-256 of the body with line
-endings normalized, or of the whole file for a raised snapshot — so the
-ledger can later say whether the file on disk is the file that ran. The
-banner is the first line `-- hejbro migration` together with the
-maximal leading run of lines that are blank or begin with `--` at the
-start of the line; the body is everything from the first line that is
-neither. The
+endings normalized to `\n`, or of the whole file, normalized the same
+way, for a raised snapshot — so the ledger can later say whether the
+file on disk is the file that ran. The banner is the first line
+`-- hejbro migration` together with the maximal leading run of lines
+that are empty or begin with `--` at the start of the line; the body is
+everything from the first line that is neither — a line holding only
+whitespace is body, and a file whose first line is not the banner
+literal has no banner and is hashed whole. The
 bootstrap SHALL create the checksum column and
 SHALL add it to a ledger written before the column existed; a row
 recorded then carries no checksum and is never compared.
 Reading a ledger that predates the column SHALL succeed with every row's
-checksum null; the first command that records a row in such a ledger
-SHALL add the column before that write; clearing rows needs no column,
-and a read-only command SHALL leave the ledger as it is.
+checksum null; the first run of a command that records rows (`migrate`,
+`raise`) SHALL add the column before it writes, whether or not that run
+records a row; clearing rows needs no column, and a read-only command
+SHALL leave the ledger as it is.
 
 The ledger is recognized by identity, never by existence alone. The
 relation at that name is hejbro's ledger only when it is an ordinary,
@@ -397,7 +400,8 @@ generate/verify reference says which half answers which question.
 
 #### Scenario: A raised database records the whole file's checksum
 - **WHEN** `raise --file snapshot.sql` succeeds
-- **THEN** the ledger row carries the SHA-256 of the whole file
+- **THEN** the ledger row carries the SHA-256 of the whole file, its
+  line endings normalized to `\n` as a body's are
 
 #### Scenario: A run with nothing pending compares nothing
 - **WHEN** every migration on disk is recorded as applied and one of

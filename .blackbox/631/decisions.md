@@ -416,3 +416,17 @@ the column is still absent. N1, N3 and N4 add the sentences the review
 found missing (the exit-2 enumeration, "may be hidden", the `raised`
 exclusion); N2 corrects the reference's "byte-for-byte".
 
+<a id="r16"></a>
+## R16 — D106 round 1 wording: raised-file normalization, blank means empty, no banner literal hashes whole, upgrade on the first row-recording run
+
+_lead · interpretation · basis D106 evaluation.md round 1 N2 N4 N5 N10; 631/R13 (upgrade path); 631/R15 (mechanical banner boundary); 412/D29 triage of N1 N3 N6-N9 N11-N13 (#978 #1007 #1008) · 2026-09-06T01:49Z · ratified: pending_
+
+D106 round 1 (ARCHIVE, 13 non-blocking) measured four places where the delta's sentences were less exact than the shipped behaviour; none contradicts a scenario, so the sentences are made exact at archive time rather than the code changed:
+
+- N2: a raised file's checksum is the SHA-256 of the whole file with line endings normalized to `\n`, the same normalization a body gets — the sentence and the scenario said "the whole file" without saying so.
+- N4: "blank" in the banner definition means an empty line; a line holding only whitespace is body. The boundary stays a mechanical two-predicate test (631/R15).
+- N5: a file whose first line is not the banner literal has no banner and is hashed whole — now stated.
+- N10: the column upgrade runs on the first run of a row-recording command (`migrate`, `raise`) whether or not that run records a row; `status` and `reset` never alter — the sentence "the first command that records a row" implied a run with nothing pending would not alter, and it does. Harmless (idempotent), stated.
+
+The other non-blocking findings are triaged under 412/D29: N1 (a single CRLF file among LF files is refused by the chain walk's hash-line comparison) is a second observation on #978 (fix); N3 (`raise --file` re-roots an absolute path, raw `ENOENT`) is #1007 (fix); N9 (a bare-CR file is silently skipped by the walk) is #1008 (fix, low); N6 (the final newline is body), N7 (a hand-edited checksum is compared as written), N11 (`reset` compares no bodies), N12 (`force` without `enable` is refused too) and N13 (a `checksum integer` column passes identity and fails at the write with `apply-ledger-unwritable`) are by design and need no action; N8 (a file with a BOM fails at apply with the server's `42601`) is won't-fix — hejbro never writes a BOM and a hand-written one fails loudly at the server.
+

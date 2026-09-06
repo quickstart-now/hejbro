@@ -1,0 +1,21 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#1007",
+  "title": "raise: an absolute --file path is re-rooted under cwd and fails with a raw ENOENT stack",
+  "parent": "quickstart-now/hejbro#995",
+  "status": "open",
+  "opened": "2026-09-06",
+  "closed": null,
+  "decisions": [],
+  "work": [],
+  "prs": [
+    {
+      "number": 1010,
+      "role": "refs",
+      "pinnedAt": "2026-09-06T01:59Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}
