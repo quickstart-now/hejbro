@@ -67,6 +67,19 @@
       "at": "2026-09-06T00:42Z",
       "title": "the typed-as half of the two-repository scenario is witnessed by the type tests, the contract-text assertion and the copied prelude; tsc over the emitted bytes is #1002",
       "ratified": null
+    },
+    {
+      "id": "R6",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "653/R3 (emission may be narrower than the declaring type layer",
+        "P6); delta schema-vendoring 'from another carried table'; constructor review round 1 B1/N1 (uncorrelated self-join on postgres:17",
+        "examples/postgres comments.parentId); owner: explicit over implicit; 412/D29 triage for N3; #1003 #1004"
+      ],
+      "at": "2026-09-06T01:26Z",
+      "title": "vendor emits no relation for a self-referential foreign key in either direction; the alias defect is the query layer's (#1003)",
+      "ratified": null
     }
   ],
   "work": [
