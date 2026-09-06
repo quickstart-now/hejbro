@@ -34,7 +34,7 @@ goes back to the planner, not into the diff.
       `catalog.ts`, `rest.ts`, tests.
 
 - [ ] 1.2 (~10m) **[design]** Enum names under D36. Settles the
-      omission's data shape (an `EnumNameOmission` carrying the enum and
+      omission's data shape (an `OmittedEnum` carrying the enum and
       the columns typed by it) and the report line. Red: compose/loss
       tests over an input table of enum names {`Status`, `my-enum`,
       `2nd`, `_x` (passes the round trip, fails the rule), `status`
