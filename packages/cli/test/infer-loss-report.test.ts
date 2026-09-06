@@ -39,6 +39,7 @@ const emptyFacts = (command: "import" | "pull"): LossReportFacts => ({
 	omittedIndexesAtColumn: [],
 	omittedChecksAtColumn: [],
 	omittedUniqueConstraintsAtColumn: [],
+	omittedPrimaryKeys: [],
 });
 
 describe("buildLossReport / 1.7", () => {
@@ -1265,6 +1266,87 @@ describe("buildLossReport / 712/R10 B#1: an index, check or unique constraint at
 					line.startsWith("Approximated:") && line.includes("t3_st_key"),
 			),
 		).toBe(false);
+	});
+});
+
+/**
+ * Review round 2 N#7 (712/R10 execution): a primary key naming a column
+ * this reading already excluded is omitted whole -- named on its own
+ * line, cause and command crossed, mirroring the M1-M12 matrix above.
+ */
+describe("buildLossReport / 712/R10 N#7: a primary key naming an omitted column", () => {
+	it("PK1: primary key, name cause, import", () => {
+		const report = buildLossReport({
+			...emptyFacts("import"),
+			omittedPrimaryKeys: [
+				{
+					schema: "app",
+					table: "orders",
+					name: "orders_pkey",
+					columnIdentity: "app.orders.UserId",
+					cause: "name",
+				},
+			],
+		});
+		expect(report).toContain(
+			'Omitted: primary key "app.orders.orders_pkey" -- it names column "app.orders.UserId", which this reading left out because no declaration can carry its name, so the key cannot be declared either; the table is declared without a primary key. `check` keeps listing the index that backs it as unmanaged, naming "app.orders.orders_pkey", until that column and the key are both declared. Next: rename the column in the database, then re-run `hejbro import`.',
+		);
+	});
+
+	it("PK2: primary key, name cause, pull", () => {
+		const report = buildLossReport({
+			...emptyFacts("pull"),
+			omittedPrimaryKeys: [
+				{
+					schema: "app",
+					table: "orders",
+					name: "orders_pkey",
+					columnIdentity: "app.orders.UserId",
+					cause: "name",
+				},
+			],
+		});
+		expect(report).toContain(
+			'Omitted: primary key "app.orders.orders_pkey" -- it names column "app.orders.UserId", which this reading left out because no declaration can carry its name, so the key cannot be carried in the contract either. Rename the column in the database, then link the schema repository.',
+		);
+	});
+
+	it("PK3: primary key, enum cause, import", () => {
+		const report = buildLossReport({
+			...emptyFacts("import"),
+			omittedPrimaryKeys: [
+				{
+					schema: "app",
+					table: "t2",
+					name: "t2_pkey",
+					columnIdentity: "app.t2.state2",
+					cause: "enum",
+					enumIdentity: "app.Status",
+				},
+			],
+		});
+		expect(report).toContain(
+			'Omitted: primary key "app.t2.t2_pkey" -- it names column "app.t2.state2", which this reading left out with the enum type "app.Status" that types it, so the key cannot be declared either; the table is declared without a primary key. `check` keeps listing the index that backs it as unmanaged, naming "app.t2.t2_pkey", until that column and the key are both declared. Next: rename the type in the database, then re-run `hejbro import`.',
+		);
+	});
+
+	it("PK4: primary key, enum cause, pull", () => {
+		const report = buildLossReport({
+			...emptyFacts("pull"),
+			omittedPrimaryKeys: [
+				{
+					schema: "app",
+					table: "t2",
+					name: "t2_pkey",
+					columnIdentity: "app.t2.state2",
+					cause: "enum",
+					enumIdentity: "app.Status",
+				},
+			],
+		});
+		expect(report).toContain(
+			'Omitted: primary key "app.t2.t2_pkey" -- it names column "app.t2.state2", which this reading left out with the enum type "app.Status" that types it, so the key cannot be carried in the contract either. Rename the type in the database, then link the schema repository.',
+		);
 	});
 });
 

@@ -1,6 +1,7 @@
 import type { CompileResult, DriverRow, DriverSession } from "@hejbro/query";
 import { describe, expect, it } from "vitest";
 import { CHECK_CATALOG_QUERIES } from "../src/check/catalog";
+import { tablesInSnapshot } from "../src/contract/read-snapshot";
 import { INFER_CATALOG_QUERIES } from "../src/infer/catalog";
 import { inferFromCatalog } from "../src/infer/compose";
 
@@ -11,6 +12,14 @@ type ColumnFixture = {
 	readonly schema: string;
 	readonly table: string;
 	readonly name: string;
+	/** PP4 (712/R10 N#7): present when this column's type is an omitted enum, mirroring `infer-omitted-column-members.test.ts`'s own fixture. */
+	readonly enumType?: { readonly schema: string; readonly name: string };
+};
+
+type EnumFixture = {
+	readonly schema: string;
+	readonly name: string;
+	readonly labels: ReadonlyArray<string>;
 };
 
 type ConstraintFixture = {
@@ -30,18 +39,47 @@ type ForeignKeyDetailFixture = {
 	readonly targetColumns: ReadonlyArray<string>;
 };
 
+const catalogTypeFor = (column: ColumnFixture): string => {
+	if (column.enumType === undefined) {
+		return "uuid";
+	}
+	return `${column.enumType.schema}."${column.enumType.name}"`;
+};
+
+const baseTypeNameFor = (column: ColumnFixture): string => {
+	if (column.enumType === undefined) {
+		return "uuid";
+	}
+	return column.enumType.name;
+};
+
+const baseTypeKindFor = (column: ColumnFixture): string | null => {
+	if (column.enumType === undefined) {
+		return null;
+	}
+	return "e";
+};
+
 const columnRow = (column: ColumnFixture): DriverRow => ({
 	schema: column.schema,
 	table: column.table,
 	name: column.name,
 	notNull: true,
-	catalogType: "uuid",
-	baseTypeKind: null,
-	baseTypeSchema: null,
-	baseTypeName: "uuid",
+	catalogType: catalogTypeFor(column),
+	baseTypeKind: baseTypeKindFor(column),
+	baseTypeSchema: column.enumType?.schema ?? null,
+	baseTypeName: baseTypeNameFor(column),
 	catalogDefault: null,
 	catalogGenerated: null,
 });
+
+const enumLabelRows = (enumFixture: EnumFixture): ReadonlyArray<DriverRow> =>
+	enumFixture.labels.map((label, index) => ({
+		schema: enumFixture.schema,
+		name: enumFixture.name,
+		label,
+		sortOrder: index + 1,
+	}));
 
 const columnDetailRow = (
 	column: ColumnFixture,
@@ -86,6 +124,7 @@ type ExtraCatalogFixtures = {
 		readonly table: string;
 		readonly name: string;
 	}>;
+	readonly enums?: ReadonlyArray<EnumFixture>;
 };
 
 /**
@@ -131,7 +170,10 @@ const buildSession = (
 			keys: [],
 			constraintName: null,
 		})),
-		enums: [],
+		enums: (extra.enums ?? []).map((enumFixture) => ({
+			schema: enumFixture.schema,
+			name: enumFixture.name,
+		})),
 		sequences: (extra.sequences ?? []).map((row) => ({ ...row })),
 		functions: [],
 		views: (extra.views ?? []).map((row) => ({ ...row })),
@@ -150,7 +192,7 @@ const buildSession = (
 		foreignKeyDetails: foreignKeyDetails.map(foreignKeyDetailRow),
 		checkExpressions: [],
 		indexDetails: [],
-		enumLabels: [],
+		enumLabels: (extra.enums ?? []).flatMap(enumLabelRows),
 		sequenceOwnership: [],
 	};
 
@@ -571,6 +613,234 @@ describe("inferFromCatalog / 712-R7: a dropped primary-key name is announced wit
 
 		expect(
 			result.lossReport.some((line) => line.includes("rename that one first")),
+		).toBe(false);
+	});
+});
+
+// Review round 2 N#7 (712/R10 execution): a primary key naming an
+// omitted column stayed in the declarations as a *partial* key -- a
+// different constraint than the catalog's own composite one -- so
+// `baseline`'s SQL replayed the wrong primary key, silently. Excluded
+// whole here instead: the table is declared with no primary key at all.
+describe("inferFromCatalog / 712/R10 N#7: a primary key naming an omitted column is omitted whole", () => {
+	it("Q1: a single-column primary key naming a name-omitted column is omitted whole", async () => {
+		const session = buildSession(
+			[{ schema: "app", table: "t1" }],
+			[{ schema: "app", table: "t1", name: "Weird" }],
+			[
+				{
+					schema: "app",
+					table: "t1",
+					name: "t1_pkey",
+					type: "p",
+					columns: ["Weird"],
+				},
+			],
+			[],
+		);
+
+		const result = await inferFromCatalog({
+			session,
+			schemas: ["app"],
+			command: "import",
+		});
+
+		const table = tablesInSnapshot(result.snapshot).find(
+			(node) => node.schema === "app" && node.name === "t1",
+		);
+		expect(table?.primaryKeyName).toBeUndefined();
+		expect(result.lossReport).toContain(
+			'Omitted: primary key "app.t1.t1_pkey" -- it names column "app.t1.Weird", which this reading left out because no declaration can carry its name, so the key cannot be declared either; the table is declared without a primary key. `check` keeps listing the index that backs it as unmanaged, naming "app.t1.t1_pkey", until that column and the key are both declared. Next: rename the column in the database, then re-run `hejbro import`.',
+		);
+	});
+
+	it("Q2: a single-column primary key naming an enum-omitted column is omitted whole", async () => {
+		const session = buildSession(
+			[{ schema: "app", table: "t2" }],
+			[
+				{
+					schema: "app",
+					table: "t2",
+					name: "st",
+					enumType: { schema: "app", name: "Status" },
+				},
+			],
+			[
+				{
+					schema: "app",
+					table: "t2",
+					name: "t2_pkey",
+					type: "p",
+					columns: ["st"],
+				},
+			],
+			[],
+			{
+				enums: [{ schema: "app", name: "Status", labels: ["open", "closed"] }],
+			},
+		);
+
+		const result = await inferFromCatalog({
+			session,
+			schemas: ["app"],
+			command: "import",
+		});
+
+		const table = tablesInSnapshot(result.snapshot).find(
+			(node) => node.schema === "app" && node.name === "t2",
+		);
+		expect(table?.primaryKeyName).toBeUndefined();
+		expect(result.lossReport).toContain(
+			'Omitted: primary key "app.t2.t2_pkey" -- it names column "app.t2.st", which this reading left out with the enum type "app.Status" that types it, so the key cannot be declared either; the table is declared without a primary key. `check` keeps listing the index that backs it as unmanaged, naming "app.t2.t2_pkey", until that column and the key are both declared. Next: rename the type in the database, then re-run `hejbro import`.',
+		);
+	});
+
+	it("Q3: a composite primary key with one name-omitted member is omitted whole, keeping the surviving column", async () => {
+		const session = buildSession(
+			[{ schema: "app", table: "comp" }],
+			[
+				{ schema: "app", table: "comp", name: "id" },
+				{ schema: "app", table: "comp", name: "Weird" },
+			],
+			[
+				{
+					schema: "app",
+					table: "comp",
+					name: "pk_comp",
+					type: "p",
+					columns: ["id", "Weird"],
+				},
+			],
+			[],
+		);
+
+		const result = await inferFromCatalog({
+			session,
+			schemas: ["app"],
+			command: "import",
+		});
+
+		const table = tablesInSnapshot(result.snapshot).find(
+			(node) => node.schema === "app" && node.name === "comp",
+		);
+		expect(table?.primaryKeyName).toBeUndefined();
+		expect(table?.columns.some((column) => column.name === "id")).toBe(true);
+		expect(result.lossReport).toContain(
+			'Omitted: primary key "app.comp.pk_comp" -- it names column "app.comp.Weird", which this reading left out because no declaration can carry its name, so the key cannot be declared either; the table is declared without a primary key. `check` keeps listing the index that backs it as unmanaged, naming "app.comp.pk_comp", until that column and the key are both declared. Next: rename the column in the database, then re-run `hejbro import`.',
+		);
+	});
+
+	it("Q4: a composite primary key with one enum-omitted member is omitted whole, keeping the surviving column", async () => {
+		const session = buildSession(
+			[{ schema: "app", table: "comp2" }],
+			[
+				{ schema: "app", table: "comp2", name: "id" },
+				{
+					schema: "app",
+					table: "comp2",
+					name: "st",
+					enumType: { schema: "app", name: "Status" },
+				},
+			],
+			[
+				{
+					schema: "app",
+					table: "comp2",
+					name: "pk_comp2",
+					type: "p",
+					columns: ["id", "st"],
+				},
+			],
+			[],
+			{
+				enums: [{ schema: "app", name: "Status", labels: ["open", "closed"] }],
+			},
+		);
+
+		const result = await inferFromCatalog({
+			session,
+			schemas: ["app"],
+			command: "import",
+		});
+
+		const table = tablesInSnapshot(result.snapshot).find(
+			(node) => node.schema === "app" && node.name === "comp2",
+		);
+		expect(table?.primaryKeyName).toBeUndefined();
+		expect(table?.columns.some((column) => column.name === "id")).toBe(true);
+		expect(result.lossReport).toContain(
+			'Omitted: primary key "app.comp2.pk_comp2" -- it names column "app.comp2.st", which this reading left out with the enum type "app.Status" that types it, so the key cannot be declared either; the table is declared without a primary key. `check` keeps listing the index that backs it as unmanaged, naming "app.comp2.pk_comp2", until that column and the key are both declared. Next: rename the type in the database, then re-run `hejbro import`.',
+		);
+	});
+
+	it("Q5: a non-derived primary key naming an omitted member gets the omission line, never the name approximation", async () => {
+		const session = buildSession(
+			[{ schema: "app", table: "t5" }],
+			[
+				{ schema: "app", table: "t5", name: "id" },
+				{ schema: "app", table: "t5", name: "Weird" },
+			],
+			[
+				{
+					schema: "app",
+					table: "t5",
+					name: "pk_t5",
+					type: "p",
+					columns: ["id", "Weird"],
+				},
+			],
+			[],
+		);
+
+		const result = await inferFromCatalog({
+			session,
+			schemas: ["app"],
+			command: "import",
+		});
+
+		expect(
+			result.lossReport.some(
+				(line) =>
+					line.startsWith("Approximated: the primary key") &&
+					line.includes("app.t5"),
+			),
+		).toBe(false);
+		expect(
+			result.lossReport.some(
+				(line) =>
+					line.startsWith("Omitted: primary key") && line.includes("app.t5"),
+			),
+		).toBe(true);
+	});
+
+	it("Q6 (control): a primary key whose every member survives is declared normally, with no omission line", async () => {
+		const session = buildSession(
+			[{ schema: "app", table: "t6" }],
+			[{ schema: "app", table: "t6", name: "id" }],
+			[
+				{
+					schema: "app",
+					table: "t6",
+					name: "t6_pkey",
+					type: "p",
+					columns: ["id"],
+				},
+			],
+			[],
+		);
+
+		const result = await inferFromCatalog({
+			session,
+			schemas: ["app"],
+			command: "import",
+		});
+
+		const table = tablesInSnapshot(result.snapshot).find(
+			(node) => node.schema === "app" && node.name === "t6",
+		);
+		expect(table?.primaryKeyName).toBe("t6_pkey");
+		expect(
+			result.lossReport.some((line) => line.startsWith("Omitted: primary key")),
 		).toBe(false);
 	});
 });

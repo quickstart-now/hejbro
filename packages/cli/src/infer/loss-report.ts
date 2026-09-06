@@ -404,22 +404,6 @@ export type OmittedForeignKeyColumn = {
 };
 
 /**
- * An index, check constraint or unique constraint whose own name is
- * fine, but which names a column this reading already excluded -- for
- * its own name, or for the enum type that typed it (712/R10, B#1: the
- * review's own live replay, `column "…" does not exist`, found all
- * three left in place). Costs that one object alone; the table holding
- * it and everything else on it are still declared. `cause`/
- * `enumIdentity` mirror {@link OmittedForeignKeyColumn}'s own shape --
- * when several of an object's own columns are omitted at once (a
- * composite index, #B1 J6), `columnIdentity` names the first by code
- * point, and its own cause is the one the line states. No approximation
- * line is ever printed alongside one of these (the delta already says
- * an omitted object never gets one; a UNIQUE constraint used to be the
- * one exception -- {@link detectUniqueIndexApproximations}'s own
- * exclusion closes it).
- */
-/**
  * Which of an index's own column-bearing positions named the offending
  * column -- its key list, a partial predicate, an expression key's own
  * text, or (review round 2 NN2) both a predicate and an expression at
@@ -440,6 +424,22 @@ export type MemberAxis =
 	| "expression"
 	| "expressionOrPredicate";
 
+/**
+ * An index, check constraint or unique constraint whose own name is
+ * fine, but which names a column this reading already excluded -- for
+ * its own name, or for the enum type that typed it (712/R10, B#1: the
+ * review's own live replay, `column "…" does not exist`, found all
+ * three left in place). Costs that one object alone; the table holding
+ * it and everything else on it are still declared. `cause`/
+ * `enumIdentity` mirror {@link OmittedForeignKeyColumn}'s own shape --
+ * when several of an object's own columns are omitted at once (a
+ * composite index, #B1 J6), `columnIdentity` names the first by code
+ * point, and its own cause is the one the line states. No approximation
+ * line is ever printed alongside one of these (the delta already says
+ * an omitted object never gets one; a UNIQUE constraint used to be the
+ * one exception -- {@link detectUniqueIndexApproximations}'s own
+ * exclusion closes it).
+ */
 export type OmittedTableMemberAtColumn = {
 	readonly schema: string;
 	readonly table: string;
@@ -448,6 +448,30 @@ export type OmittedTableMemberAtColumn = {
 	readonly cause: "name" | "enum";
 	readonly enumIdentity?: string;
 	readonly axis: MemberAxis;
+};
+
+/**
+ * A primary key naming a column this reading already excluded -- for its
+ * own name, or for the enum type that typed it (review round 2 N#7,
+ * 712/R10 execution): a partial key would be a different constraint
+ * (Postgres itself would emit `constraint "…" primary key (<survivors>)`,
+ * never the catalog's own composite key), so the table is declared with
+ * *no* primary key at all rather than a narrower one, and this line
+ * names what was lost. `name` is the constraint's own catalog name
+ * (never a derived one -- omitted, not approximated). `cause`/
+ * `enumIdentity`/`columnIdentity` mirror {@link OmittedTableMemberAtColumn}'s
+ * own shape; no `axis` (a primary key accepts neither a predicate nor an
+ * expression). Excluding the table's own primary key this way also
+ * means {@link detectPrimaryKeyNameApproximations} never sees one to
+ * approximate -- the two lines can never collide on the same table.
+ */
+export type OmittedPrimaryKey = {
+	readonly schema: string;
+	readonly table: string;
+	readonly name: string;
+	readonly columnIdentity: string;
+	readonly cause: "name" | "enum";
+	readonly enumIdentity?: string;
 };
 
 export type LossReportFacts = {
@@ -474,6 +498,7 @@ export type LossReportFacts = {
 	readonly omittedIndexesAtColumn: ReadonlyArray<OmittedTableMemberAtColumn>;
 	readonly omittedChecksAtColumn: ReadonlyArray<OmittedTableMemberAtColumn>;
 	readonly omittedUniqueConstraintsAtColumn: ReadonlyArray<OmittedTableMemberAtColumn>;
+	readonly omittedPrimaryKeys: ReadonlyArray<OmittedPrimaryKey>;
 };
 
 const guessedLine = (
@@ -920,6 +945,71 @@ const omittedMemberLines = (
 	return ordered.map((entry) => omittedMemberLineForImport(entry, kind));
 };
 
+/** 712/R8's own cause-specific clause, PP2's own PK wording (review round 2 N#7). */
+const primaryKeyOmissionCauseClauseForImport = (
+	entry: OmittedPrimaryKey,
+): string => {
+	if (entry.cause === "enum") {
+		return `which this reading left out with the enum type "${entry.enumIdentity}" that types it, so the key cannot be declared either`;
+	}
+	return `which this reading left out because no declaration can carry its name, so the key cannot be declared either`;
+};
+
+const primaryKeyOmissionCauseClauseForPull = (
+	entry: OmittedPrimaryKey,
+): string => {
+	if (entry.cause === "enum") {
+		return `which this reading left out with the enum type "${entry.enumIdentity}" that types it, so the key cannot be carried in the contract either`;
+	}
+	return `which this reading left out because no declaration can carry its name, so the key cannot be carried in the contract either`;
+};
+
+const primaryKeyOmissionTailForImport = (entry: OmittedPrimaryKey): string => {
+	if (entry.cause === "enum") {
+		return "Next: rename the type in the database, then re-run `hejbro import`.";
+	}
+	return "Next: rename the column in the database, then re-run `hejbro import`.";
+};
+
+const primaryKeyOmissionTailForPull = (entry: OmittedPrimaryKey): string => {
+	if (entry.cause === "enum") {
+		return "Rename the type in the database, then link the schema repository.";
+	}
+	return "Rename the column in the database, then link the schema repository.";
+};
+
+/**
+ * PP2 (lead-approved wording): unlike the sibling index/check/unique
+ * lines, the `check` sentence repeats the primary key's own identity --
+ * `check`'s own promise here is about the *backing index*, a different
+ * object than the primary key constraint itself, so naming which
+ * constraint it backs is not optional the way it is for a sibling line
+ * that already names the very object `check` is talking about.
+ */
+const omittedPrimaryKeyLineForImport = (entry: OmittedPrimaryKey): string => {
+	const identity = `${entry.schema}.${entry.table}.${entry.name}`;
+	return `Omitted: primary key "${identity}" -- it names column "${entry.columnIdentity}", ${primaryKeyOmissionCauseClauseForImport(entry)}; the table is declared without a primary key. \`check\` keeps listing the index that backs it as unmanaged, naming "${identity}", until that column and the key are both declared. ${primaryKeyOmissionTailForImport(entry)}`;
+};
+
+const omittedPrimaryKeyLineForPull = (entry: OmittedPrimaryKey): string => {
+	const identity = `${entry.schema}.${entry.table}.${entry.name}`;
+	return `Omitted: primary key "${identity}" -- it names column "${entry.columnIdentity}", ${primaryKeyOmissionCauseClauseForPull(entry)}. ${primaryKeyOmissionTailForPull(entry)}`;
+};
+
+const omittedPrimaryKeyLines = (
+	entries: ReadonlyArray<OmittedPrimaryKey>,
+	command: LossReportFacts["command"],
+): ReadonlyArray<string> => {
+	const ordered = sortedBy(
+		entries,
+		(entry) => `${entry.schema}.${entry.table}.${entry.name}`,
+	);
+	if (command === "pull") {
+		return ordered.map(omittedPrimaryKeyLineForPull);
+	}
+	return ordered.map(omittedPrimaryKeyLineForImport);
+};
+
 /** import's own remedy: renaming the target (in the database) is what makes it reachable again, and only a fresh reading picks that up. */
 const omittedForeignKeyRemedyForImport = (
 	targetKind: OmittedForeignKey["targetKind"],
@@ -1128,6 +1218,7 @@ export const buildLossReport = (
 		facts.command,
 		"unique constraint",
 	),
+	...omittedPrimaryKeyLines(facts.omittedPrimaryKeys, facts.command),
 	...omittedForeignKeyLines(facts.omittedForeignKeys, facts.command),
 	...omittedForeignKeyColumnLines(
 		facts.omittedForeignKeysByColumn,

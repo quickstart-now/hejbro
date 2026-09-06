@@ -19,6 +19,7 @@ import type {
 	OmittedEnum,
 	OmittedForeignKey,
 	OmittedForeignKeyColumn,
+	OmittedPrimaryKey,
 	OmittedSchema,
 	OmittedTable,
 	OmittedTableMemberAtColumn,
@@ -241,6 +242,73 @@ const firstOffendingColumn = (
 		};
 	}
 	return { columnIdentity: first, cause: "name" };
+};
+
+export type PrimaryKeyExclusionResult = {
+	readonly tables: ReadonlyArray<InferredTableFacts>;
+	readonly omittedPrimaryKeys: ReadonlyArray<OmittedPrimaryKey>;
+};
+
+/**
+ * Review round 2 N#7 (712/R10 execution): a primary key that names an
+ * already-omitted column is excluded *whole*, before {@link
+ * tablesExcludingUndeclarableNames} ever drops that column from the
+ * table -- a partial key is a different constraint (Postgres itself
+ * would emit `primary key (<survivors>)`, never the catalog's own
+ * composite key), so every surviving member's own `isPrimaryKey` is
+ * cleared too, and the table ends up with no primary key at all rather
+ * than a narrower one. Read against `table.columns` exactly as `adapter.ts`
+ * built it (before column-stripping), since a member already dropped by
+ * that step would otherwise look, from here, like it was never part of
+ * the key in the first place. `primaryKeyNamesByTable` supplies the
+ * constraint's own catalog name (never a derived one -- an omitted key is
+ * never approximated), read once from `catalog.constraints` the same way
+ * {@link excludeMembersReferencingOmittedColumns}'s own
+ * `uniqueConstraintIdentities` is.
+ */
+const excludePrimaryKeysReferencingOmittedColumns = (
+	tables: ReadonlyArray<InferredTableFacts>,
+	columnOmissionCauses: ReadonlyMap<string, ColumnOmissionCause>,
+	primaryKeyNamesByTable: ReadonlyMap<string, string>,
+): PrimaryKeyExclusionResult => {
+	const perTable = tables.map((table) => {
+		const identity = `${table.schema.schemaName}.${table.tableName}`;
+		const pkColumnIdentities = table.columns
+			.filter((column) => column.isPrimaryKey)
+			.map((column) => `${identity}.${column.sqlName}`);
+		const omittedPkColumnIdentities = pkColumnIdentities.filter((columnIdentity) =>
+			columnOmissionCauses.has(columnIdentity),
+		);
+		const offending = firstOffendingColumn(
+			omittedPkColumnIdentities,
+			columnOmissionCauses,
+		);
+		const name = primaryKeyNamesByTable.get(identity);
+		if (offending === undefined || name === undefined) {
+			return { table, omittedPrimaryKey: undefined };
+		}
+		return {
+			table: {
+				...table,
+				columns: table.columns.map((column) => ({
+					...column,
+					isPrimaryKey: false,
+				})),
+			},
+			omittedPrimaryKey: {
+				schema: table.schema.schemaName,
+				table: table.tableName,
+				name,
+				...offending,
+			},
+		};
+	});
+	return {
+		tables: perTable.map((entry) => entry.table),
+		omittedPrimaryKeys: perTable.flatMap((entry) =>
+			entry.omittedPrimaryKey === undefined ? [] : [entry.omittedPrimaryKey],
+		),
+	};
 };
 
 /**
@@ -1018,8 +1086,22 @@ export const inferFromCatalog = async (
 		survivingTableIdentities,
 	);
 
-	const snapshotTables = tablesExcludingUndeclarableNames(
+	// 712/R10 execution (N#7): the catalog's own primary-key constraint
+	// name per table, read once here -- an omitted key is never
+	// approximated, so this is never the derived name a mismatch would
+	// otherwise print.
+	const primaryKeyNamesByTable = new Map(
+		catalog.constraints
+			.filter((row) => row.type === "p")
+			.map((row) => [`${row.schema}.${row.table}`, row.name] as const),
+	);
+	const primaryKeyExclusion = excludePrimaryKeysReferencingOmittedColumns(
 		tablesWithReachableForeignKeys,
+		columnOmissionCauses,
+		primaryKeyNamesByTable,
+	);
+	const snapshotTables = tablesExcludingUndeclarableNames(
+		primaryKeyExclusion.tables,
 		enumOmittedColumnIdentities,
 	);
 	const memberExclusion = excludeMembersReferencingOmittedColumns(
@@ -1086,6 +1168,7 @@ export const inferFromCatalog = async (
 		omittedChecksAtColumn: memberExclusion.omittedChecksAtColumn,
 		omittedUniqueConstraintsAtColumn:
 			memberExclusion.omittedUniqueConstraintsAtColumn,
+		omittedPrimaryKeys: primaryKeyExclusion.omittedPrimaryKeys,
 	});
 
 	return {
