@@ -153,6 +153,17 @@ const db = createDb(pgDriver(pool));
 const rows = await db.posts.select();
 ```
 
+The contract's own `Relations` map (visible above as `readonly
+Relations: {}` on `posts`, since that illustration has no foreign key)
+decides which tables get a `.related(spec)` method on their select
+chain, and which keys it accepts: a forward key types the nested field
+as the parent row or `null`, a reverse key as an array of child rows,
+and the result chain keeps `.where()`, `.orderBy()` and `.limit()`
+afterward. A table whose map is empty — like `posts` here — has no
+`.related` member at all. See `skills/hejbro/references/polyrepo.md`
+for the full account, including the re-vendor note for a contract
+vendored before this map existed.
+
 ## `--strict`, and what happens without a TTY
 
 `vendor --check` (and `vendor` itself, for the situations that can apply
