@@ -51,13 +51,16 @@ Each vendored table SHALL carry a `Relations` map in the generated
 `Tables` key of the related table and `mode` `"one"` for a relation the
 table's own foreign key points along, `"many"` for one another table's
 foreign key points back along — computed when the contract is emitted,
-by the same rules the query layer's `related()` derives with: a
-single-column foreign key whose column key ends in `Id` yields a forward
-relation under the stripped key; a single-column foreign key from
-another carried table onto this one yields a reverse relation under that
-table's `Tables` key; a key that would be both, or that names one of the
-table's own columns, is omitted; a composite foreign key and a foreign
-key onto a table the contract does not carry yield none.
+from the same foreign keys the query layer's `related()` derives from,
+by the rules below, which are narrower than the declaring side's type
+layer wherever the emitted file must be stricter: a single-column
+foreign key whose column key ends in `Id` yields a forward relation
+under the stripped key; a single-column foreign key from another
+carried table onto this one yields a reverse relation under that
+table's `Tables` key; a key that would be both, or that names one of
+the table's own columns, is omitted; a composite foreign key and a
+foreign key onto a table the contract does not carry yield none; a
+foreign key onto the table itself yields none in either direction.
 
 The name-keyed client's type layer SHALL offer `.related(spec)` on the
 whole-table select of every table whose map is non-empty, and on no
@@ -95,9 +98,12 @@ caller that reaches past the types.
   `Relations` — a misspelling, a composite foreign key's column, a
   relation onto a table the contract does not carry, or a key the emit
   omitted for colliding with a column
-- **THEN** the program fails to type-check; a JS caller reaching the
-  runtime is refused with `unknown-relation` or `ambiguous-relation`
-  exactly as on the declaring side
+- **THEN** the program fails to type-check, and a JS caller reaching
+  past the types meets exactly the declaring side's own behaviour: a
+  misspelling or a key colliding with one of the table's own columns is
+  refused with `unknown-relation` or `ambiguous-relation`, while a key
+  omitted only for being both forward and reverse resolves along the
+  forward edge there as it does here
 
 #### Scenario: A table with no relation has no member
 - **WHEN** a vendored table's `Relations` is empty, or the contract was
