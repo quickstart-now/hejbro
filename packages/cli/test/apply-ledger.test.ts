@@ -819,6 +819,21 @@ describe("bodyChecksum / 1.1, 631/R2", () => {
 			`${banner}\n${body}\n-- inline note\ncreate index "idx" on "public"."t" ("id");\n`,
 			`${body}\n-- inline note\ncreate index "idx" on "public"."t" ("id");\n`,
 		],
+		// [631/R15, N5] The banner line judgement is `--` at the start of
+		// the line, never SQL's own comment syntax -- an indented `--` or
+		// a `/* ... */` block is body, not banner, so the boundary never
+		// depends on parsing SQL comments (which would drag in multi-line
+		// and nested block comments too).
+		[
+			"631/R15 (N5-a): an indented comment after the banner is body, not banner",
+			`${banner}   -- indented comment\ncreate schema "ops9";\n`,
+			'   -- indented comment\ncreate schema "ops9";\n',
+		],
+		[
+			"631/R15 (N5-b): a block comment after the banner is body, not banner",
+			`${banner}/* block comment */\ncreate schema "ops9";\n`,
+			'/* block comment */\ncreate schema "ops9";\n',
+		],
 	])("%s", (_label, fileText, expectedBodyText) => {
 		expect(bodyChecksum(fileText)).toBe(sha256Hex(expectedBodyText));
 	});
