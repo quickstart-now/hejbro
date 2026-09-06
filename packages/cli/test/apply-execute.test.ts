@@ -8,9 +8,12 @@ import { describe, expect, it } from "vitest";
 import type { Migration } from "../src/apply/execute";
 import {
 	applyMigration,
+	changedBodies,
 	stripQuotedAndCommentedText,
+	throwMigrationBodyChanged,
 } from "../src/apply/execute";
-import { asLedgerAccessFailure } from "../src/apply/ledger";
+import type { LedgerRow } from "../src/apply/ledger";
+import { asLedgerAccessFailure, bodyChecksum } from "../src/apply/ledger";
 
 type FailWhen = (compiled: CompileResult) => boolean;
 type RowsWhen = (
@@ -110,6 +113,32 @@ describe("applyMigration / 3.1", () => {
 		expect(ledgerCall?.params).toEqual([
 			okMigration.fileName,
 			okMigration.origin,
+			bodyChecksum(okMigration.sql),
+		]);
+	});
+});
+
+describe("applyMigration / 1.2, 631/R6 (checksum)", () => {
+	it("records the body checksum of a registered baseline too, even though its SQL is never sent", async () => {
+		const baselineMigration: Migration = {
+			fileName: "0001_adopt.sql",
+			sql: '-- hejbro migration\n-- hejbro: 0.1.0\n\ncreate table "app"."adopted" (id integer);\n',
+			origin: "registered",
+		};
+		const { driver, calls } = makeFakeDriver();
+
+		await applyMigration(driver, baselineMigration, NEXT_COMMAND);
+
+		expect(calls.some((call) => call.sql === baselineMigration.sql)).toBe(
+			false,
+		);
+		const ledgerCall = calls.find((call) =>
+			call.sql.toLowerCase().includes("insert into"),
+		);
+		expect(ledgerCall?.params).toEqual([
+			baselineMigration.fileName,
+			baselineMigration.origin,
+			bodyChecksum(baselineMigration.sql),
 		]);
 	});
 });
@@ -565,6 +594,157 @@ describe("stripQuotedAndCommentedText", () => {
 	it("removes a line comment through the end of its line, keeping what follows", () => {
 		expect(stripQuotedAndCommentedText("select 1; -- commit\nselect 2;")).toBe(
 			"select 1; \nselect 2;",
+		);
+	});
+});
+
+/**
+ * [task 1.3, 631/R9] `changedBodies` is pure -- `(rows, bodiesOnDisk) =>
+ * findings`, no filesystem -- so `migrate.ts` and `status.ts` share the
+ * one comparison instead of each re-deriving it. `bodiesOnDisk` is
+ * filename -> full file text, already read from disk by the caller.
+ */
+describe("changedBodies / 1.3, 631/R9", () => {
+	const banner = "-- hejbro migration\n-- hejbro: 0.1.0\n";
+	const recordedBody = 'create table "app"."t" (id integer);\n';
+	const recordedFile = `${banner}\n${recordedBody}`;
+	const changedBody = `${recordedBody}alter table "app"."t" add column "y" integer;\n`;
+	const changedFile = `${banner}\n${changedBody}`;
+	const recordedChecksum = bodyChecksum(recordedFile);
+	const diskChecksum = bodyChecksum(changedFile);
+
+	const appliedRow = (
+		filename: string,
+		checksum: string | null,
+	): LedgerRow => ({ filename, origin: "applied", checksum });
+
+	it("a recorded row whose disk body differs is a finding, carrying both checksums", () => {
+		const rows: ReadonlyArray<LedgerRow> = [
+			appliedRow("0001_a.sql", recordedChecksum),
+		];
+		const bodiesOnDisk = new Map([["0001_a.sql", changedFile]]);
+
+		expect(changedBodies(rows, bodiesOnDisk)).toEqual([
+			{
+				filename: "0001_a.sql",
+				recordedChecksum,
+				diskChecksum,
+			},
+		]);
+	});
+
+	it("a recorded row whose disk body is unchanged is not a finding", () => {
+		const rows: ReadonlyArray<LedgerRow> = [
+			appliedRow("0001_a.sql", recordedChecksum),
+		];
+		const bodiesOnDisk = new Map([["0001_a.sql", recordedFile]]);
+
+		expect(changedBodies(rows, bodiesOnDisk)).toEqual([]);
+	});
+
+	it("a row with a null checksum is not compared, even when the disk body differs", () => {
+		const rows: ReadonlyArray<LedgerRow> = [appliedRow("0001_a.sql", null)];
+		const bodiesOnDisk = new Map([["0001_a.sql", changedFile]]);
+
+		expect(changedBodies(rows, bodiesOnDisk)).toEqual([]);
+	});
+
+	it("a row whose filename is absent from bodiesOnDisk is not a finding -- that is apply-ledger-orphan-row's own case", () => {
+		const rows: ReadonlyArray<LedgerRow> = [
+			appliedRow("0001_a.sql", recordedChecksum),
+		];
+		const bodiesOnDisk = new Map<string, string>();
+
+		expect(changedBodies(rows, bodiesOnDisk)).toEqual([]);
+	});
+
+	it("a raised row is never a finding -- its filename is not a chain entry", () => {
+		const rows: ReadonlyArray<LedgerRow> = [
+			{
+				filename: "vendor/schema.sql",
+				origin: "raised",
+				checksum: recordedChecksum,
+			},
+		];
+		const bodiesOnDisk = new Map([["vendor/schema.sql", changedFile]]);
+
+		expect(changedBodies(rows, bodiesOnDisk)).toEqual([]);
+	});
+
+	it("two changed rows are two findings, in input order", () => {
+		const rows: ReadonlyArray<LedgerRow> = [
+			appliedRow("0001_a.sql", recordedChecksum),
+			appliedRow("0002_b.sql", recordedChecksum),
+		];
+		const bodiesOnDisk = new Map([
+			["0001_a.sql", changedFile],
+			["0002_b.sql", changedFile],
+		]);
+
+		expect(changedBodies(rows, bodiesOnDisk)).toEqual([
+			{ filename: "0001_a.sql", recordedChecksum, diskChecksum },
+			{ filename: "0002_b.sql", recordedChecksum, diskChecksum },
+		]);
+	});
+});
+
+/**
+ * [task 1.3, 631/R9, lead: 12] `throwMigrationBodyChanged` owns both the
+ * `apply-migration-body-changed` code and its message template inline at
+ * the throw site (`check:next-marker` only resolves a same-file `const`
+ * for a bare-identifier `Next:` search), the same shape
+ * `assertLedgerNotOccupied` already uses in `ledger-identity.ts`.
+ */
+describe("throwMigrationBodyChanged / 1.3, 631/R9", () => {
+	const banner = "-- hejbro migration\n-- hejbro: 0.1.0\n";
+	const recordedBody = 'create table "app"."t" (id integer);\n';
+	const recordedFile = `${banner}\n${recordedBody}`;
+	const changedBody = `${recordedBody}alter table "app"."t" add column "y" integer;\n`;
+	const changedFile = `${banner}\n${changedBody}`;
+
+	it("names one changed file with both checksums abbreviated to twelve hex digits", () => {
+		const finding = {
+			filename: "0001_a.sql",
+			recordedChecksum: bodyChecksum(recordedFile),
+			diskChecksum: bodyChecksum(changedFile),
+		};
+
+		let thrown: unknown;
+		try {
+			throwMigrationBodyChanged([finding]);
+		} catch (error) {
+			thrown = error;
+		}
+
+		expect((thrown as { readonly code?: string })?.code).toBe(
+			"apply-migration-body-changed",
+		);
+		expect((thrown as Error)?.message).toBe(
+			`the body of a recorded migration changed after it was applied: "0001_a.sql" (recorded ${finding.recordedChecksum.slice(0, 12)}, on disk ${finding.diskChecksum.slice(0, 12)}). Nothing was applied: a migration sent on top of a body that differs from what ran would build on a history this repository no longer holds. Next: restore the file from version control, or, if the change was deliberate, write it as a new migration -- hejbro never rewrites applied history -- then rerun \`hejbro migrate\`.`,
+		);
+	});
+
+	it("joins two changed files with a comma and a space", () => {
+		const findingA = {
+			filename: "0001_a.sql",
+			recordedChecksum: bodyChecksum(recordedFile),
+			diskChecksum: bodyChecksum(changedFile),
+		};
+		const findingB = {
+			filename: "0002_b.sql",
+			recordedChecksum: bodyChecksum(recordedFile),
+			diskChecksum: bodyChecksum(changedFile),
+		};
+
+		let thrown: unknown;
+		try {
+			throwMigrationBodyChanged([findingA, findingB]);
+		} catch (error) {
+			thrown = error;
+		}
+
+		expect((thrown as Error)?.message).toBe(
+			`the body of a recorded migration changed after it was applied: "0001_a.sql" (recorded ${findingA.recordedChecksum.slice(0, 12)}, on disk ${findingA.diskChecksum.slice(0, 12)}), "0002_b.sql" (recorded ${findingB.recordedChecksum.slice(0, 12)}, on disk ${findingB.diskChecksum.slice(0, 12)}). Nothing was applied: a migration sent on top of a body that differs from what ran would build on a history this repository no longer holds. Next: restore the file from version control, or, if the change was deliberate, write it as a new migration -- hejbro never rewrites applied history -- then rerun \`hejbro migrate\`.`,
 		);
 	});
 });

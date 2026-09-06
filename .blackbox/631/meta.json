@@ -1,0 +1,203 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#631",
+  "title": "migrate: record a body checksum in the ledger and refuse an applied migration whose SQL changed",
+  "parent": "quickstart-now/hejbro#412",
+  "status": "closed",
+  "opened": "2026-09-05",
+  "closed": "2026-09-06",
+  "decisions": [
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "412/D24",
+        "D25; #616 (the offline limit stated); the ledger identity rule's own tolerance for a fifth column; Prisma checksum / Drizzle hash precedent"
+      ],
+      "at": "2026-09-05T05:46Z",
+      "title": "The ledger records a body checksum; migrate refuses an applied migration whose body changed; status reports it",
+      "ratified": null
+    },
+    {
+      "id": "R2",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R1"
+      ],
+      "at": "2026-09-05T16:52Z",
+      "title": "the banner boundary, the normalization and the checksum's stored form",
+      "ratified": null
+    },
+    {
+      "id": "R3",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R1"
+      ],
+      "at": "2026-09-05T17:13Z",
+      "title": "the working-directory pattern: one cd per call, never a persistent one",
+      "ratified": null
+    },
+    {
+      "id": "R4",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R2"
+      ],
+      "at": "2026-09-05T17:13Z",
+      "title": "the banner literal stays local to the ledger; the live witness is its drift detector",
+      "ratified": null
+    },
+    {
+      "id": "R5",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "R4"
+      ],
+      "at": "2026-09-05T17:14Z",
+      "title": "test fakes that identify statements by prefix gain one alter-table branch; production is untouched",
+      "ratified": null
+    },
+    {
+      "id": "R6",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "R2"
+      ],
+      "at": "2026-09-05T17:43Z",
+      "title": "the checksum argument is required; a fake that only lacks the new column changes minimally",
+      "ratified": null
+    },
+    {
+      "id": "R7",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R2"
+      ],
+      "at": "2026-09-05T17:43Z",
+      "title": "a raised file is hashed whole, banner or not",
+      "ratified": null
+    },
+    {
+      "id": "R8",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "R6"
+      ],
+      "at": "2026-09-05T18:01Z",
+      "title": "a file that fails only because it lacks the new field or argument gains exactly that",
+      "ratified": null
+    },
+    {
+      "id": "R9",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R2"
+      ],
+      "at": "2026-09-05T18:09Z",
+      "title": "apply-migration-body-changed: every changed file, abbreviated checksums, one pure comparison shared by migrate and status",
+      "ratified": null
+    },
+    {
+      "id": "R10",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R9"
+      ],
+      "at": "2026-09-05T18:36Z",
+      "title": "a run with nothing pending compares nothing; status is where a changed body is reported",
+      "ratified": null
+    },
+    {
+      "id": "R11",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R9"
+      ],
+      "at": "2026-09-05T18:51Z",
+      "title": "status compares bodies on a run with no disagreement; a disagreement is reported alone, as today",
+      "ratified": null
+    },
+    {
+      "id": "R12",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "R8"
+      ],
+      "at": "2026-09-05T19:16Z",
+      "title": "the planner decides non-contract questions on the spot; instructions carry both branches",
+      "ratified": null
+    },
+    {
+      "id": "R13",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R5"
+      ],
+      "at": "2026-09-05T19:32Z",
+      "title": "an old ledger is read through a four-column fallback and upgraded by the first command that writes",
+      "ratified": null
+    },
+    {
+      "id": "R14",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R1"
+      ],
+      "at": "2026-09-05T20:12Z",
+      "title": "apply-ledger-filtered: judged where identity is judged, catalog read only on detection, the message names state, role and policies",
+      "ratified": null
+    },
+    {
+      "id": "R15",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "R2"
+      ],
+      "at": "2026-09-05T22:48Z",
+      "title": "the banner ends where the leading comment block ends; status never lists a changed body as applied; reset upgrades too",
+      "ratified": null
+    }
+  ],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-05T20:52Z",
+      "title": "the ledger's body checksum, and the live witness that found the gap the fakes could not",
+      "pr": null,
+      "decisions": []
+    },
+    {
+      "id": "W2",
+      "at": "2026-09-06T01:12Z",
+      "title": "what two constructor-mode reviews found, and what the repairs cost",
+      "pr": null,
+      "decisions": []
+    }
+  ],
+  "prs": [
+    {
+      "number": 1005,
+      "role": "closes",
+      "pinnedAt": "2026-09-06T01:23Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

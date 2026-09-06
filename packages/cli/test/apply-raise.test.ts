@@ -9,7 +9,7 @@ import {
 } from "@hejbro/core";
 import type { CompileResult, Driver, DriverSession } from "@hejbro/query";
 import { describe, expect, it } from "vitest";
-import { readLedger } from "../src/apply/ledger";
+import { readLedger, wholeFileChecksum } from "../src/apply/ledger";
 import type { SnapshotFile } from "../src/apply/raise";
 import { applyRaise, assertDatabaseEmptyByLedger } from "../src/apply/raise";
 
@@ -136,7 +136,9 @@ describe("assertDatabaseEmptyByLedger / 6.2", () => {
 			assertDatabaseEmptyByLedger(
 				{
 					exists: true,
-					applied: [{ filename: "0001_init.sql", origin: "applied" }],
+					applied: [
+						{ filename: "0001_init.sql", origin: "applied", checksum: null },
+					],
 				},
 				COMMAND,
 			),
@@ -246,7 +248,9 @@ describe("applyRaise / 6.3", () => {
 		const state = await readLedger(driver);
 		expect(state).toEqual({
 			exists: true,
-			applied: [{ filename: snapshotFile.fileName, origin: "raised" }],
+			applied: [
+				{ filename: snapshotFile.fileName, origin: "raised", checksum: null },
+			],
 		});
 	});
 
@@ -271,7 +275,9 @@ describe("applyRaise / 6.3", () => {
 		const state = await readLedger(driver);
 		expect(state).toEqual({
 			exists: true,
-			applied: [{ filename: vendoredFile.fileName, origin: "raised" }],
+			applied: [
+				{ filename: vendoredFile.fileName, origin: "raised", checksum: null },
+			],
 		});
 	});
 });
@@ -314,7 +320,9 @@ describe("applyRaise / 6.1 (D106 R1, N6)", () => {
 		const state = await readLedger(driver);
 		expect(state).toEqual({
 			exists: true,
-			applied: [{ filename: generatedFile.fileName, origin: "raised" }],
+			applied: [
+				{ filename: generatedFile.fileName, origin: "raised", checksum: null },
+			],
 		});
 		expect(generatedFile.sql.toLowerCase()).not.toContain(
 			'create table "uo_raise"."users"',
@@ -347,7 +355,9 @@ describe("applyRaise — a relation that is not the ledger at the ledger's name 
 		const state = await readLedger(driver);
 		expect(state).toEqual({
 			exists: true,
-			applied: [{ filename: snapshotFile.fileName, origin: "raised" }],
+			applied: [
+				{ filename: snapshotFile.fileName, origin: "raised", checksum: null },
+			],
 		});
 	});
 });
@@ -427,5 +437,46 @@ describe("applyRaise — a ledger raise may not read refuses before the bootstra
 		expect(message).toContain(
 			"the statements from that file ran in the same transaction and rolled back with it",
 		);
+	});
+});
+
+/**
+ * [task 1.2, 631/R6, R7] `raise` records the whole file's checksum,
+ * banner or not -- it never strips one the way `bodyChecksum` does.
+ */
+describe("applyRaise / 1.2, 631/R6, R7 (checksum)", () => {
+	it("records the whole file's checksum for an ordinary snapshot with no banner", async () => {
+		const { driver, calls } = makeFakeDriver();
+
+		await applyRaise(driver, snapshotFile, COMMAND);
+
+		const ledgerCall = calls.find((call) =>
+			call.sql.toLowerCase().startsWith("insert into"),
+		);
+		expect(ledgerCall?.params).toEqual([
+			snapshotFile.fileName,
+			snapshotFile.origin,
+			wholeFileChecksum(snapshotFile.sql),
+		]);
+	});
+
+	it("still hashes the whole file, unstripped, when the first line is the banner literal", async () => {
+		const bannerFile: SnapshotFile = {
+			fileName: "vendor/banner-schema.sql",
+			sql: '-- hejbro migration\n-- hejbro: 0.1.0\n\ncreate schema "app";\ncreate table "app"."t" (id integer);',
+			origin: "raised",
+		};
+		const { driver, calls } = makeFakeDriver();
+
+		await applyRaise(driver, bannerFile, COMMAND);
+
+		const ledgerCall = calls.find((call) =>
+			call.sql.toLowerCase().startsWith("insert into"),
+		);
+		expect(ledgerCall?.params).toEqual([
+			bannerFile.fileName,
+			bannerFile.origin,
+			wholeFileChecksum(bannerFile.sql),
+		]);
 	});
 });

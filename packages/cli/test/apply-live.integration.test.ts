@@ -1,8 +1,9 @@
 import { execFileSync } from "node:child_process";
-import { readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pgDriver } from "@hejbro/pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { bodyChecksum } from "../src/apply/ledger";
 import { removeContainer } from "./docker-volumes";
 import {
 	assertBuiltCli,
@@ -264,6 +265,62 @@ export const widgets = table(
 	}),
 );
 `;
+
+// [task 1.5, 631/R9-R11] Three sequential schema versions -- each
+// `generate` run below adds exactly one new table, so each of the real
+// migration files these witnesses need is `hejbro generate`'s own
+// output, never hand-written.
+const CHECKSUM_WITNESS_V1_SOURCE = `import { schema, table, uuid } from "hejbro";
+
+export const app = schema("app");
+export const seed = table(app, "seed", {
+	id: uuid().primaryKey().defaultRandom(),
+});
+`;
+
+const CHECKSUM_WITNESS_V2_SOURCE = `import { schema, table, uuid } from "hejbro";
+
+export const app = schema("app");
+export const seed = table(app, "seed", {
+	id: uuid().primaryKey().defaultRandom(),
+});
+export const second = table(app, "second", {
+	id: uuid().primaryKey().defaultRandom(),
+});
+`;
+
+const CHECKSUM_WITNESS_V3_SOURCE = `import { schema, table, uuid } from "hejbro";
+
+export const app = schema("app");
+export const seed = table(app, "seed", {
+	id: uuid().primaryKey().defaultRandom(),
+});
+export const second = table(app, "second", {
+	id: uuid().primaryKey().defaultRandom(),
+});
+export const third = table(app, "third", {
+	id: uuid().primaryKey().defaultRandom(),
+});
+`;
+
+const CONFIRM_DROP_PATTERN = /--confirm-drop (\S+) to confirm/;
+
+/**
+ * Extracts the exact `<database>:<count>` confirmation `reset`'s own
+ * refusal names, from a first, unconfirmed run's stderr -- rather than
+ * re-deriving `planReset`'s own count in the test (mirrors `apply-reset.
+ * integration.test.ts`'s own helper, out of this piece's file boundary
+ * to import from, so kept local here too).
+ */
+const extractRequiredConfirmation = (stderr: string): string => {
+	const match = CONFIRM_DROP_PATTERN.exec(stderr);
+	if (match === null) {
+		throw new Error(
+			`could not find the required --confirm-drop value in: ${stderr}`,
+		);
+	}
+	return match[1] as string;
+};
 
 describe.each(PG_IMAGES)("apply engine live witness / %s", (image) => {
 	const container = `hejbro-cli-apply-${process.pid}-${image.replace(/[^a-z0-9]/gi, "")}`;
@@ -1004,5 +1061,579 @@ describe.each(PG_IMAGES)("apply engine live witness / %s", (image) => {
 				await removeCliFixtureDir(cwd);
 			}
 		});
+	});
+
+	/**
+	 * [task 1.5, 631/R9, R10, R11] The checksum column against a real
+	 * server -- not TDD (tasks.md carries no `Red:` for this task): the
+	 * earlier tasks' fakes already drove every branch, so this witnesses
+	 * that the real thing means what those fakes assumed. Every equality
+	 * below reads the checksum a real `select` actually returned and
+	 * compares it against `bodyChecksum` computed in-process from the real
+	 * file text -- a weaker assertion (non-null, a fixed length) would
+	 * still pass with a wrong value inside.
+	 */
+	describe("1.5 the checksum column against a real server", () => {
+		describe("a recorded body edited on disk refuses migrate and is reported by status", () => {
+			const database = "checksum_body_changed";
+			let cwd = "";
+			let migrationsDir = "";
+			let fileNames: string[] = [];
+			let originalFirstFileText = "";
+
+			beforeAll(async () => {
+				cwd = await createCliFixtureDir();
+				psqlCommand(container, "postgres", `create database ${database};`);
+				await runCli(cwd, ["init"]);
+				await writeFixtureFile(
+					cwd,
+					"src/app.schema.ts",
+					CHECKSUM_WITNESS_V1_SOURCE,
+				);
+				await runCli(cwd, ["generate"]);
+				const first = await runCli(cwd, [
+					"migrate",
+					"--url",
+					hostUrl(database),
+				]);
+				if (first.exitCode !== 0) {
+					throw new Error(
+						`fixture setup's own first migrate failed: ${first.stderr}`,
+					);
+				}
+
+				await writeFixtureFile(
+					cwd,
+					"src/app.schema.ts",
+					CHECKSUM_WITNESS_V2_SOURCE,
+				);
+				await runCli(cwd, ["generate"]);
+				const second = await runCli(cwd, [
+					"migrate",
+					"--url",
+					hostUrl(database),
+				]);
+				if (second.exitCode !== 0) {
+					throw new Error(
+						`fixture setup's own second migrate failed: ${second.stderr}`,
+					);
+				}
+
+				await writeFixtureFile(
+					cwd,
+					"src/app.schema.ts",
+					CHECKSUM_WITNESS_V3_SOURCE,
+				);
+				await runCli(cwd, ["generate"]);
+
+				migrationsDir = resolve(cwd, "migrations");
+				fileNames = readdirSync(migrationsDir)
+					.filter((name) => name.endsWith(".sql"))
+					.sort();
+				if (fileNames.length !== 3) {
+					throw new Error(
+						`fixture assumption broke: expected 3 migration files, got ${fileNames.length}: ${fileNames.join(", ")}`,
+					);
+				}
+				const firstFileName = fileNames[0] as string;
+				originalFirstFileText = readFileSync(
+					resolve(migrationsDir, firstFileName),
+					"utf-8",
+				);
+				await writeFixtureFile(
+					cwd,
+					`migrations/${firstFileName}`,
+					`${originalFirstFileText}\nalter table "app"."seed" add column "z" text;\n`,
+				);
+			}, 60_000);
+
+			afterAll(async () => {
+				await removeCliFixtureDir(cwd);
+			});
+
+			it("migrate refuses before sending, and the third migration's objects are absent from the catalog", async () => {
+				const firstFileName = fileNames[0] as string;
+
+				const result = await runCli(cwd, [
+					"migrate",
+					"--url",
+					hostUrl(database),
+				]);
+
+				expect(result.exitCode).toBe(2);
+				expect(result.stderr).toContain("error[apply-migration-body-changed]");
+				expect(result.stderr).toContain(firstFileName);
+
+				const driver = pgDriver(hostUrl(database));
+				try {
+					const catalogRows = await driver.execute({
+						sql: "select to_regclass('app.third') as third",
+						params: [],
+						kind: "sql",
+					});
+					expect(catalogRows[0]?.third).toBeNull();
+
+					const ledgerRows = await driver.execute({
+						sql: 'select "filename", "checksum" from "hejbro"."migration_ledger" order by "id"',
+						params: [],
+						kind: "sql",
+					});
+					// Only the first two migrations were ever recorded -- the
+					// edit happened after, and the refused run wrote nothing,
+					// so the row count is exactly what fixture setup left it.
+					expect(ledgerRows).toHaveLength(2);
+					const recordedFirstRow = ledgerRows.find(
+						(row) => row.filename === firstFileName,
+					);
+					expect(recordedFirstRow?.checksum).toBe(
+						bodyChecksum(originalFirstFileText),
+					);
+				} finally {
+					await driver.client.end();
+				}
+			});
+
+			it("status reports the same code and exits non-zero", async () => {
+				const firstFileName = fileNames[0] as string;
+
+				const result = await runCli(cwd, [
+					"status",
+					"--url",
+					hostUrl(database),
+				]);
+
+				expect(result.exitCode).toBe(1);
+				expect(result.stderr).toContain("error[apply-migration-body-changed]");
+				expect(result.stderr).toContain(firstFileName);
+			});
+		});
+
+		describe("a ledger without the checksum column is upgraded by the bootstrap", () => {
+			const database = "checksum_bootstrap_upgrade";
+			let cwd = "";
+			let firstFileName = "";
+			let secondFileName = "";
+			let secondFileText = "";
+
+			// [task 1.5, 631/R13] The old ledger this witness needs is built
+			// by applying the first migration for real and then dropping the
+			// column -- a hand-written insert would risk drifting from the
+			// row hejbro itself writes (column order, `applied_at`, `origin`),
+			// so the "old" state is a genuine hejbro-written ledger missing
+			// only the one column, never an approximation of one.
+			beforeAll(async () => {
+				cwd = await createCliFixtureDir();
+				psqlCommand(container, "postgres", `create database ${database};`);
+				await runCli(cwd, ["init"]);
+				await writeFixtureFile(
+					cwd,
+					"src/app.schema.ts",
+					CHECKSUM_WITNESS_V1_SOURCE,
+				);
+				await runCli(cwd, ["generate"]);
+				const migrationsDir = resolve(cwd, "migrations");
+				firstFileName = readdirSync(migrationsDir)
+					.filter((name) => name.endsWith(".sql"))
+					.sort()[0] as string;
+
+				const first = await runCli(cwd, [
+					"migrate",
+					"--url",
+					hostUrl(database),
+				]);
+				if (first.exitCode !== 0) {
+					throw new Error(
+						`fixture setup's own first migrate failed: ${first.stderr}`,
+					);
+				}
+
+				psqlCommand(
+					container,
+					database,
+					'alter table "hejbro"."migration_ledger" drop column "checksum";',
+				);
+
+				await writeFixtureFile(
+					cwd,
+					"src/app.schema.ts",
+					CHECKSUM_WITNESS_V2_SOURCE,
+				);
+				await runCli(cwd, ["generate"]);
+				const fileNames = readdirSync(migrationsDir)
+					.filter((name) => name.endsWith(".sql"))
+					.sort();
+				secondFileName = fileNames[1] as string;
+				secondFileText = readFileSync(
+					resolve(migrationsDir, secondFileName),
+					"utf-8",
+				);
+			}, 60_000);
+
+			afterAll(async () => {
+				await removeCliFixtureDir(cwd);
+			});
+
+			it("the write path's alter adds the column, the older row stays null, and the newly applied row carries a checksum", async () => {
+				const result = await runCli(cwd, [
+					"migrate",
+					"--url",
+					hostUrl(database),
+				]);
+
+				expect(result.exitCode).toBe(0);
+
+				const driver = pgDriver(hostUrl(database));
+				try {
+					const rows = await driver.execute({
+						sql: 'select "filename", "checksum" from "hejbro"."migration_ledger" order by "id"',
+						params: [],
+						kind: "sql",
+					});
+					expect(rows).toHaveLength(2);
+					const firstRow = rows.find((row) => row.filename === firstFileName);
+					const secondRow = rows.find((row) => row.filename === secondFileName);
+					expect(firstRow?.checksum).toBeNull();
+					expect(secondRow?.checksum).toBe(bodyChecksum(secondFileText));
+				} finally {
+					await driver.client.end();
+				}
+			});
+		});
+
+		describe("a ledger without the checksum column is left as it is by status", () => {
+			const database = "checksum_status_read_only";
+			let cwd = "";
+
+			// [task 1.5, 631/R13] Same construction as the write-path witness
+			// above (apply for real, then drop the column) -- the fact this
+			// witness proves is that a read-only command never adds the
+			// column back, so the old ledger it starts from has to be as
+			// genuine as the one that witness uses.
+			beforeAll(async () => {
+				cwd = await createCliFixtureDir();
+				psqlCommand(container, "postgres", `create database ${database};`);
+				await runCli(cwd, ["init"]);
+				await writeFixtureFile(
+					cwd,
+					"src/app.schema.ts",
+					CHECKSUM_WITNESS_V1_SOURCE,
+				);
+				await runCli(cwd, ["generate"]);
+				const first = await runCli(cwd, [
+					"migrate",
+					"--url",
+					hostUrl(database),
+				]);
+				if (first.exitCode !== 0) {
+					throw new Error(
+						`fixture setup's own first migrate failed: ${first.stderr}`,
+					);
+				}
+
+				psqlCommand(
+					container,
+					database,
+					'alter table "hejbro"."migration_ledger" drop column "checksum";',
+				);
+			}, 60_000);
+
+			afterAll(async () => {
+				await removeCliFixtureDir(cwd);
+			});
+
+			it("status exits zero and the checksum column stays absent", async () => {
+				const result = await runCli(cwd, [
+					"status",
+					"--url",
+					hostUrl(database),
+				]);
+
+				expect(result.exitCode).toBe(0);
+
+				const driver = pgDriver(hostUrl(database));
+				try {
+					const columns = await driver.execute({
+						sql: "select column_name from information_schema.columns where table_schema = 'hejbro' and table_name = 'migration_ledger' and column_name = 'checksum'",
+						params: [],
+						kind: "sql",
+					});
+					expect(columns).toHaveLength(0);
+				} finally {
+					await driver.client.end();
+				}
+			});
+		});
+
+		describe("the checksum column survives reset (631/R5)", () => {
+			it("the ledger still has the checksum column after reset", async () => {
+				const database = "checksum_after_reset";
+				psqlCommand(container, "postgres", `create database ${database};`);
+				const cwd = await createCliFixtureDir();
+				try {
+					await runCli(cwd, ["init"]);
+					await writeFixtureFile(
+						cwd,
+						"src/app.schema.ts",
+						CHECKSUM_WITNESS_V1_SOURCE,
+					);
+					await runCli(cwd, ["generate"]);
+					const migrate = await runCli(cwd, [
+						"migrate",
+						"--url",
+						hostUrl(database),
+					]);
+					expect(migrate.exitCode).toBe(0);
+
+					const refused = await runCli(cwd, [
+						"reset",
+						"--url",
+						hostUrl(database),
+					]);
+					expect(refused.exitCode).toBe(1);
+					const confirmation = extractRequiredConfirmation(refused.stderr);
+
+					const result = await runCli(cwd, [
+						"reset",
+						"--url",
+						hostUrl(database),
+						"--confirm-drop",
+						confirmation,
+					]);
+					expect(result.exitCode).toBe(0);
+
+					const driver = pgDriver(hostUrl(database));
+					try {
+						const rows = await driver.execute({
+							sql: "select column_name from information_schema.columns where table_schema = 'hejbro' and table_name = 'migration_ledger' and column_name = 'checksum'",
+							params: [],
+							kind: "sql",
+						});
+						expect(rows).toHaveLength(1);
+					} finally {
+						await driver.client.end();
+					}
+				} finally {
+					await removeCliFixtureDir(cwd);
+				}
+			}, 60_000);
+		});
+
+		// This case claims only the body checksum; the banner hash chain's
+		// own CRLF handling is out of this piece's scope and tracked as
+		// #978.
+		describe("a CRLF checkout of every recorded file reports no changed body", () => {
+			it("status sees no change when the whole checkout is CRLF", async () => {
+				const database = "checksum_crlf";
+				psqlCommand(container, "postgres", `create database ${database};`);
+				const cwd = await createCliFixtureDir();
+				try {
+					await runCli(cwd, ["init"]);
+					await writeFixtureFile(
+						cwd,
+						"src/app.schema.ts",
+						CHECKSUM_WITNESS_V1_SOURCE,
+					);
+					await runCli(cwd, ["generate"]);
+					const first = await runCli(cwd, [
+						"migrate",
+						"--url",
+						hostUrl(database),
+					]);
+					expect(first.exitCode).toBe(0);
+
+					await writeFixtureFile(
+						cwd,
+						"src/app.schema.ts",
+						CHECKSUM_WITNESS_V2_SOURCE,
+					);
+					await runCli(cwd, ["generate"]);
+					const second = await runCli(cwd, [
+						"migrate",
+						"--url",
+						hostUrl(database),
+					]);
+					expect(second.exitCode).toBe(0);
+
+					// Every recorded chain file, not just one -- a lone CRLF
+					// file desyncs the chain's own parent/current hash lines
+					// from its siblings (measured in task 1.3), a chain-
+					// validity break this witness does not mean to exercise.
+					const migrationsDir = resolve(cwd, "migrations");
+					const fileNames = readdirSync(migrationsDir).filter((name) =>
+						name.endsWith(".sql"),
+					);
+					fileNames.map((name) => {
+						const filePath = resolve(migrationsDir, name);
+						const text = readFileSync(filePath, "utf-8");
+						writeFileSync(filePath, text.replace(/\n/g, "\r\n"));
+						return name;
+					});
+
+					const result = await runCli(cwd, [
+						"status",
+						"--url",
+						hostUrl(database),
+					]);
+
+					expect(result.exitCode).toBe(0);
+					expect(result.stderr).not.toContain("apply-migration-body-changed");
+				} finally {
+					await removeCliFixtureDir(cwd);
+				}
+			}, 60_000);
+		});
+	});
+
+	/**
+	 * [task 1.6, 631/R14] Setup follows the same principle 1.5's own
+	 * witnesses do -- hejbro builds the ledger itself (a real `migrate`),
+	 * and only then does `psqlCommand` turn on what hejbro never turns on
+	 * itself (row-level security, forced, with one named policy). The
+	 * second migration is generated but deliberately left pending, so
+	 * `migrate`'s refusal (before sending anything) is witnessed by its
+	 * absence from the catalog, not by an error alone.
+	 */
+	describe("1.6 the filtered ledger against a real server, 631/R14", () => {
+		const database = "checksum_filtered_ledger";
+		let cwd = "";
+		const policyName = "ld_deny_all";
+
+		beforeAll(async () => {
+			cwd = await createCliFixtureDir();
+			psqlCommand(container, "postgres", `create database ${database};`);
+			await runCli(cwd, ["init"]);
+			await writeFixtureFile(
+				cwd,
+				"src/app.schema.ts",
+				CHECKSUM_WITNESS_V1_SOURCE,
+			);
+			await runCli(cwd, ["generate"]);
+			const first = await runCli(cwd, ["migrate", "--url", hostUrl(database)]);
+			if (first.exitCode !== 0) {
+				throw new Error(
+					`fixture setup's own first migrate failed: ${first.stderr}`,
+				);
+			}
+
+			await writeFixtureFile(
+				cwd,
+				"src/app.schema.ts",
+				CHECKSUM_WITNESS_V2_SOURCE,
+			);
+			await runCli(cwd, ["generate"]);
+
+			psqlCommand(
+				container,
+				database,
+				'alter table "hejbro"."migration_ledger" enable row level security;',
+			);
+			psqlCommand(
+				container,
+				database,
+				'alter table "hejbro"."migration_ledger" force row level security;',
+			);
+			psqlCommand(
+				container,
+				database,
+				`create policy "${policyName}" on "hejbro"."migration_ledger" using (false);`,
+			);
+		}, 60_000);
+
+		afterAll(async () => {
+			await removeCliFixtureDir(cwd);
+		});
+
+		it("status exits non-zero with apply-ledger-filtered naming the ledger, role and policy", async () => {
+			const result = await runCli(cwd, ["status", "--url", hostUrl(database)]);
+
+			expect(result.exitCode).toBe(1);
+			expect(result.stderr).toContain("error[apply-ledger-filtered]");
+			expect(result.stderr).toContain('"hejbro"."migration_ledger"');
+			expect(result.stderr).toContain("enabled and forced");
+			expect(result.stderr).toContain(policyName);
+		});
+
+		it("migrate refuses with apply-ledger-filtered and sends no migration statement", async () => {
+			const result = await runCli(cwd, ["migrate", "--url", hostUrl(database)]);
+
+			expect(result.exitCode).toBe(2);
+			expect(result.stderr).toContain("error[apply-ledger-filtered]");
+			expect(result.stderr).toContain(policyName);
+
+			const driver = pgDriver(hostUrl(database));
+			try {
+				const catalogRows = await driver.execute({
+					sql: "select to_regclass('app.second') as second",
+					params: [],
+					kind: "sql",
+				});
+				expect(catalogRows[0]?.second).toBeNull();
+			} finally {
+				await driver.client.end();
+			}
+		});
+	});
+
+	// [631/R15(B2)] A write that does not record a row (this deletes them)
+	// carries no checksum, so it needs no column -- the column is added by
+	// the next command that records one, never by `reset`.
+	describe("reset does not add the checksum column, 631/R15(B2)", () => {
+		it("reset succeeds against an old ledger and the column is still absent afterward", async () => {
+			const database = "checksum_reset_no_upgrade";
+			psqlCommand(container, "postgres", `create database ${database};`);
+			const cwd = await createCliFixtureDir();
+			try {
+				await runCli(cwd, ["init"]);
+				await writeFixtureFile(
+					cwd,
+					"src/app.schema.ts",
+					CHECKSUM_WITNESS_V1_SOURCE,
+				);
+				await runCli(cwd, ["generate"]);
+				const migrate = await runCli(cwd, [
+					"migrate",
+					"--url",
+					hostUrl(database),
+				]);
+				expect(migrate.exitCode).toBe(0);
+
+				psqlCommand(
+					container,
+					database,
+					'alter table "hejbro"."migration_ledger" drop column "checksum";',
+				);
+
+				const refused = await runCli(cwd, [
+					"reset",
+					"--url",
+					hostUrl(database),
+				]);
+				expect(refused.exitCode).toBe(1);
+				const confirmation = extractRequiredConfirmation(refused.stderr);
+
+				const result = await runCli(cwd, [
+					"reset",
+					"--url",
+					hostUrl(database),
+					"--confirm-drop",
+					confirmation,
+				]);
+				expect(result.exitCode).toBe(0);
+
+				const driver = pgDriver(hostUrl(database));
+				try {
+					const rows = await driver.execute({
+						sql: "select column_name from information_schema.columns where table_schema = 'hejbro' and table_name = 'migration_ledger' and column_name = 'checksum'",
+						params: [],
+						kind: "sql",
+					});
+					expect(rows).toHaveLength(0);
+				} finally {
+					await driver.client.end();
+				}
+			} finally {
+				await removeCliFixtureDir(cwd);
+			}
+		}, 60_000);
 	});
 });

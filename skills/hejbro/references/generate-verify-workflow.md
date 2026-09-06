@@ -189,6 +189,17 @@ goes further: it applies the full committed migration chain to one
 database and a single fresh migration to another, then diffs the schema
 dumps — the deeper, pre-merge check `verify` can't do without a database.
 
+`verify` and the checksum answer two different questions: `verify`'s
+tip-hash check confirms the files *chain* correctly (each one's banner
+names the parent it was generated against), entirely offline, but never
+reads whether a file's own body was edited afterward — the banner above
+that body still hashes the same either way. That half is the ledger's
+own to answer, since only it knows what actually ran: `migrate` refuses
+before sending anything pending when an applied file's body no longer
+matches the checksum recorded for it, and `status` reports the same
+disagreement as a line of its own. Passing `verify` and passing
+`migrate`'s or `status`'s checksum comparison are not the same claim.
+
 ## `hejbro upgrade`
 
 A snapshot file written by an older *released* hejbro version fails
@@ -263,6 +274,15 @@ confirmation. None of the four commands reads, writes or clears that
 object: it's left exactly as it was, and the error says to move or drop
 it yourself, or point `--url` at the database hejbro actually manages.
 
+That same check also catches a relation that *is* the ledger's own
+shape but has row-level security turned on — hejbro never enables it on
+its own ledger, so a role that check filters would read a ledger that
+recorded nothing and re-apply the whole chain from the start. This is
+refused with the coded `apply-ledger-filtered` error, naming the
+ledger, whether security is enabled, forced, or both, the connecting
+role, and the policies found on it (or that it carries none at all) —
+same timing as `apply-ledger-occupied`, before anything else is read.
+
 Once that check passes, the ledger's own reads and writes can still be
 refused by the server: `status`'s and `migrate`'s own read of it,
 `raise`'s bootstrap and the row it records, `reset`'s clearing of its
@@ -294,6 +314,20 @@ an external pipeline) has no ledger table at all — `reset` still drops
 every object the declarations manage, but its report says so: "There was
 no hejbro ledger to clear" rather than claiming a clear that never
 happened.
+
+`hejbro migrate` also compares an already-applied migration's body
+against what the ledger recorded when it was applied — not a chain-hash
+check (`hejbro verify`'s own job, which never sees a body edit), but a
+comparison of the SQL below its banner, with line endings normalised. A
+file the ledger recorded whose body on disk no longer matches surfaces
+as the coded
+`apply-migration-body-changed` error before anything pending is sent,
+naming every such file with the checksum the ledger holds and the
+checksum on disk now, each abbreviated to twelve hex digits. A row
+recorded before this checksum column existed carries none and is never
+compared. The remedy: restore the file from version control, or, if the
+edit was deliberate, write it as a new migration — hejbro never rewrites
+applied history.
 
 ## When an apply step fails partway through
 

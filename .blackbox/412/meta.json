@@ -689,6 +689,22 @@
       "at": "2026-09-05T13:25Z",
       "title": "No git stash inside a worktree: the stash stack is shared by every worktree of the repository",
       "ratified": null
+    },
+    {
+      "id": "R33",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [],
+      "at": "2026-09-05T12:31Z",
+      "title": "Sealed reviewer measurement for pieces whose input is not hejbro's own output",
+      "ratified": null
+    },
+    {
+      "id": "D29",
+      "by": "owner",
+      "at": "2026-09-06T01:14Z",
+      "title": "every discovered issue gets a fix or won't-fix verdict from the lead",
+      "raw": []
     }
   ],
   "work": [
@@ -835,6 +851,11 @@
       "number": 999,
       "role": "refs",
       "pinnedAt": "2026-09-05T23:36Z"
+    },
+    {
+      "number": 1005,
+      "role": "refs",
+      "pinnedAt": "2026-09-06T01:23Z"
     }
   ],
   "origin": null,

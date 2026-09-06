@@ -1,4 +1,5 @@
 import type { CompileResult, DriverRow, DriverSession } from "@hejbro/query";
+import { sha256Hex } from "../hash";
 
 /*
  * [design, task 1.1] The error codes `add-apply-engine` raises, settled
@@ -38,6 +39,13 @@ import type { CompileResult, DriverRow, DriverSession } from "@hejbro/query";
  *   `migrate`, `status`, `reset` and `raise` all raise it for the same
  *   one operation (judging the ledger's identity), thrown by
  *   `ledger-identity.ts`'s own `assertLedgerNotOccupied`.
+ * - `apply-ledger-filtered` (1.6, 631/R14) -- the relation at the
+ *   ledger's name has the ledger's own shape, but row-level security is
+ *   on; hejbro never enables it, so a role this filters would silently
+ *   read a ledger that recorded nothing. `apply-*` for the same reason
+ *   as `apply-ledger-occupied`: `migrate`, `status`, `reset` and `raise`
+ *   all raise it for the same identity judgement, thrown by the same
+ *   `assertLedgerNotOccupied`.
  * - `apply-ledger-unreadable` (harden-ledger-diagnostics, task 1.2) -- a
  *   read `exec` sent to the ledger failed for any reason other than the
  *   table not existing yet. `apply-*`: `status`, `migrate` and `raise`
@@ -200,6 +208,15 @@ const isUndefinedTableError = (error: unknown): boolean =>
 	"code" in error &&
 	(error as { readonly code?: unknown }).code === UNDEFINED_TABLE;
 
+/** [task 1.5, 631/R13] Postgres's own code for "the named column does not exist" -- the one failure `readLedger`'s own fallback interprets, on the one column (`checksum`) a ledger predating this piece's own bootstrap can lack. */
+const UNDEFINED_COLUMN = "42703";
+
+const isUndefinedColumnError = (error: unknown): boolean =>
+	typeof error === "object" &&
+	error !== null &&
+	"code" in error &&
+	(error as { readonly code?: unknown }).code === UNDEFINED_COLUMN;
+
 /**
  * [task 1.1, design.md D4] Which way a statement `exec` sent moved data --
  * every ledger-touching command's read is answered by a grant or by
@@ -318,17 +335,99 @@ export const bootstrapLedger = async (
 	);
 	await exec(
 		session,
-		`create table if not exists ${QUALIFIED_LEDGER_TABLE} (\n\t"id" bigint generated always as identity primary key,\n\t"filename" text not null unique,\n\t"origin" text not null check ("origin" in (${LEDGER_ORIGIN_CHECK_LIST})),\n\t"applied_at" timestamptz not null default now()\n)`,
+		`create table if not exists ${QUALIFIED_LEDGER_TABLE} (\n\t"id" bigint generated always as identity primary key,\n\t"filename" text not null unique,\n\t"origin" text not null check ("origin" in (${LEDGER_ORIGIN_CHECK_LIST})),\n\t"applied_at" timestamptz not null default now(),\n\t"checksum" text\n)`,
+		[],
+		"write",
+		"bootstrap",
+	);
+	// `create table if not exists` never touches an already-existing ledger,
+	// so a ledger bootstrapped before this column existed needs its own
+	// statement to gain it.
+	await upgradeLedgerColumns(session);
+};
+
+/**
+ * [task 1.5, 631/R13] The one place `alter table ... add column if not
+ * exists "checksum" text` is written -- `bootstrapLedger` calls this for
+ * a freshly-created table, and a command that writes to an
+ * already-existing ledger (`execute.ts`, on the write path only) calls it
+ * once before its first write, so a ledger created before this piece
+ * gains the column the same idempotent way either caller reaches it. A
+ * role that may not alter the ledger surfaces this as
+ * `apply-ledger-unwritable` at the `bootstrap` site, the same as any
+ * other bootstrap statement.
+ */
+export const upgradeLedgerColumns = async (
+	session: DriverSession,
+): Promise<void> => {
+	await exec(
+		session,
+		`alter table ${QUALIFIED_LEDGER_TABLE} add column if not exists "checksum" text`,
 		[],
 		"write",
 		"bootstrap",
 	);
 };
 
-/** [task 16.1, D106 M7] One ledger row, as `readLedger` reads it back: the filename it identifies its migration by, and how it entered the ledger. */
+/** [task 1.1, 631/R2] `@hejbro/core`'s `renderBanner` writes this as a migration file's first line; kept in sync by hand, not imported (core is outside this change's file boundary) -- if the two spellings ever drift, a banner is hashed into the body instead of stripped from it. */
+const BANNER_FIRST_LINE = "-- hejbro migration";
+
+/** [task 1.2, 631/R7] `\r\n` -> `\n` only, nothing else -- the one normalization `bodyChecksum` and `wholeFileChecksum` share, so a checkout the platform rewrote never differs from the file that was hashed on either path. */
+const normalizeLineEndings = (text: string): string =>
+	text.replace(/\r\n/g, "\n");
+
+/** [1.6 review repair, 631/R15] A line the banner can end with: a comment (`--`-prefixed) or blank. A statement is never either, so it can never sit inside the banner under this predicate. */
+const isBannerContinuationLine = (line: string): boolean =>
+	line === "" || line.startsWith("--");
+
+/**
+ * [task 1.1, 631/R2; repaired 1.6 review, 631/R15] SHA-256 hex of a
+ * migration file's body: the file with line endings normalized, split
+ * into lines. A file whose first line is not exactly
+ * {@link BANNER_FIRST_LINE} carries no banner and is hashed whole.
+ * Otherwise the banner is the first line together with the maximal
+ * leading run of lines after it that are comments or blank; the body is
+ * everything from the first line that is neither, to the end (a comment
+ * or blank line inside the body stays body). A banner with nothing after
+ * it hashes the empty body.
+ */
+export const bodyChecksum = (fileText: string): string => {
+	const normalized = normalizeLineEndings(fileText);
+	const lines = normalized.split("\n");
+	if (lines[0] !== BANNER_FIRST_LINE) {
+		return sha256Hex(normalized);
+	}
+	const bodyStart = lines.findIndex(
+		(line, index) => index > 0 && !isBannerContinuationLine(line),
+	);
+	if (bodyStart === -1) {
+		return sha256Hex("");
+	}
+	return sha256Hex(lines.slice(bodyStart).join("\n"));
+};
+
+/**
+ * [task 1.2, 631/R7] SHA-256 hex of the whole file, line endings
+ * normalized -- never consults the banner. A raised row records this, not
+ * {@link bodyChecksum}: the requirement states the whole file
+ * unconditionally, not "unless the file happens to carry a banner".
+ */
+export const wholeFileChecksum = (text: string): string =>
+	sha256Hex(normalizeLineEndings(text));
+
+/** [task 16.1, D106 M7] One ledger row, as `readLedger` reads it back: the filename it identifies its migration by, and how it entered the ledger. `checksum` (task 1.2, 631/R6) is `null` for a row written before this column existed -- a fact about the past, never compared, not the string `"null"`. */
 export type LedgerRow = {
 	readonly filename: string;
 	readonly origin: LedgerOrigin;
+	readonly checksum: string | null;
+};
+
+/** [task 1.2, 631/R6] `null` and `undefined` both fold to `null` -- `String(...)` would turn either into the literal text `"null"`/`"undefined"`, which compares unequal to every real checksum and would make an old row look like a mismatch instead of "not compared". */
+const foldChecksum = (value: unknown): string | null => {
+	if (typeof value === "string") {
+		return value;
+	}
+	return null;
 };
 
 /**
@@ -356,7 +455,7 @@ export const readLedger = async (
 	try {
 		const rows = await exec(
 			session,
-			`select "filename", "origin" from ${QUALIFIED_LEDGER_TABLE} order by "id"`,
+			`select "filename", "origin", "checksum" from ${QUALIFIED_LEDGER_TABLE} order by "id"`,
 			[],
 			"read",
 			"read",
@@ -366,12 +465,37 @@ export const readLedger = async (
 			applied: rows.map((row) => ({
 				filename: String(row.filename),
 				origin: String(row.origin) as LedgerOrigin,
+				checksum: foldChecksum(row.checksum),
 			})),
 		};
 	} catch (error) {
 		const tag = asLedgerAccessFailure(error);
 		if (tag !== null && isUndefinedTableError(tag.cause)) {
 			return { exists: false };
+		}
+		// [task 1.5, 631/R13] A ledger created before this piece's own
+		// `checksum` column lacks it. Every caller of `readLedger` has
+		// already passed `probeLedgerIdentity`/`assertLedgerNotOccupied`,
+		// which guarantee the four original bootstrap columns exist with
+		// the right types -- `checksum` is the only column this select can
+		// be missing, so re-reading with the four original columns and
+		// folding every row's checksum to `null` is safe, not a guess.
+		if (tag !== null && isUndefinedColumnError(tag.cause)) {
+			const rows = await exec(
+				session,
+				`select "filename", "origin" from ${QUALIFIED_LEDGER_TABLE} order by "id"`,
+				[],
+				"read",
+				"read",
+			);
+			return {
+				exists: true,
+				applied: rows.map((row) => ({
+					filename: String(row.filename),
+					origin: String(row.origin) as LedgerOrigin,
+					checksum: null,
+				})),
+			};
 		}
 		throw error;
 	}
@@ -422,26 +546,30 @@ export const isMigrationRecorded = async (
  * Records one migration as applied, identified by its full filename --
  * never its version prefix alone (spec: `verify`'s own duplicate message
  * is why; a tool keyed on the prefix can only ever apply one of a
- * colliding pair). `origin` (task 16.1, D106 M7) is required, never
- * defaulted: a caller SHALL say how this row entered the ledger, the
- * same reasoning that keeps this column itself `not null` with no
- * default at the database layer.
+ * colliding pair). `origin` (task 16.1, D106 M7) and `checksum` (task 1.2,
+ * 631/R6) are both required, never defaulted: a caller SHALL say how this
+ * row entered the ledger and what it recorded as the file's own hash --
+ * there is no value a caller may assume on a new row, the same reasoning
+ * that keeps both columns `not null` with no default at the database
+ * layer (a pre-existing row's `checksum` can be `null`; a new one may not
+ * choose to leave it unstated).
  *
  * This is also the whole of the baseline path (spec: "A baseline is
  * registered rather than run"): this function has no parameter for a
  * migration's own SQL, so calling it can never send that SQL. Registering
  * a baseline is calling this once, with the baseline migration's
- * filename, `origin: "registered"`, and nothing else.
+ * filename, `origin: "registered"`, its checksum, and nothing else.
  */
 export const recordAppliedMigration = async (
 	session: DriverSession,
 	filename: string,
 	origin: LedgerOrigin,
+	checksum: string,
 ): Promise<void> => {
 	await exec(
 		session,
-		`insert into ${QUALIFIED_LEDGER_TABLE} ("filename", "origin") values ($1, $2)`,
-		[filename, origin],
+		`insert into ${QUALIFIED_LEDGER_TABLE} ("filename", "origin", "checksum") values ($1, $2, $3)`,
+		[filename, origin, checksum],
 		"write",
 		"row",
 	);

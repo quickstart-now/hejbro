@@ -7,7 +7,11 @@ const NOT_APPLIED: LedgerState = { exists: true, applied: [] };
 
 const applied = (filenames: ReadonlyArray<string>): LedgerState => ({
 	exists: true,
-	applied: filenames.map((filename) => ({ filename, origin: "applied" })),
+	applied: filenames.map((filename) => ({
+		filename,
+		origin: "applied",
+		checksum: null,
+	})),
 });
 
 /** [task 16.2, D106 M7] A ledger holding exactly the rows given, each with its own stated origin -- for building a mixed applied/baseline/raised fixture without every row defaulting to `"applied"`. */
@@ -110,8 +114,8 @@ describe("planApply / 16.2 (D106 M7)", () => {
 		// filename is the chain's own first file, already present in
 		// `chain`, and so never at risk of this misclassification).
 		const ledger = ledgerOf([
-			{ filename: "0001_init.sql", origin: "applied" },
-			{ filename: "snapshot.sql", origin: "raised" },
+			{ filename: "0001_init.sql", origin: "applied", checksum: null },
+			{ filename: "snapshot.sql", origin: "raised", checksum: null },
 		]);
 
 		const result = planApply(chain, ledger);
@@ -128,7 +132,7 @@ describe("planApply / 16.2 (D106 M7)", () => {
 			{ fileName: "0001_baseline.sql", parent: "root", current: "h1" },
 		];
 		const ledger = ledgerOf([
-			{ filename: "0001_baseline.sql", origin: "registered" },
+			{ filename: "0001_baseline.sql", origin: "registered", checksum: null },
 		]);
 
 		const result = planApply(chain, ledger);

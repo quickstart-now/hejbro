@@ -6,12 +6,16 @@ import type {
 } from "../src/apply/ledger";
 import {
 	asLedgerAccessFailure,
+	bodyChecksum,
 	bootstrapLedger,
 	clearLedgerRows,
 	isMigrationRecorded,
 	readLedger,
 	recordAppliedMigration,
+	upgradeLedgerColumns,
+	wholeFileChecksum,
 } from "../src/apply/ledger";
+import { sha256Hex } from "../src/hash";
 
 /** Postgres's own code for "the relation named in this statement does not exist" -- what a `select`/`insert` against a ledger table that was never bootstrapped fails with. */
 const UNDEFINED_TABLE = "42P01";
@@ -45,19 +49,32 @@ const makeUnbootstrappedSession = (): DriverSession => ({
  * A tiny in-memory stand-in for the ledger table itself -- enough to prove
  * a bootstrap-then-write-then-read round trip actually behaves like a
  * table with a server-assigned identity order, without a real database.
- * `create`/`insert`/`select` are matched by the shape of SQL `bootstrapLedger`
- * and `recordAppliedMigration`/`readLedger` are expected to send; anything
- * else is a bug in the code under test, not a fixture gap, so it throws.
+ * `create`/`alter`/`insert`/`select` are matched by the shape of SQL
+ * `bootstrapLedger` and `recordAppliedMigration`/`readLedger` are expected
+ * to send; anything else is a bug in the code under test, not a fixture
+ * gap, so it throws.
  */
 const makeInMemoryLedgerSession = (): { readonly session: DriverSession } => {
 	let bootstrapped = false;
-	const rows: Array<{ readonly filename: string; readonly origin: string }> =
-		[];
+	const rows: Array<{
+		readonly filename: string;
+		readonly origin: string;
+		readonly checksum: string;
+	}> = [];
 	const session: DriverSession = {
 		execute: async (compiled): Promise<ReadonlyArray<DriverRow>> => {
 			const sql = compiled.sql.trim().toLowerCase();
 			if (sql.startsWith("create schema") || sql.startsWith("create table")) {
 				bootstrapped = true;
+				return [];
+			}
+			if (sql.startsWith("alter table")) {
+				if (!bootstrapped) {
+					throw Object.assign(
+						new Error('relation "hejbro.migration_ledger" does not exist'),
+						{ code: UNDEFINED_TABLE },
+					);
+				}
 				return [];
 			}
 			if (sql.startsWith("insert into")) {
@@ -70,6 +87,7 @@ const makeInMemoryLedgerSession = (): { readonly session: DriverSession } => {
 				rows.push({
 					filename: String(compiled.params[0]),
 					origin: String(compiled.params[1]),
+					checksum: String(compiled.params[2]),
 				});
 				return [];
 			}
@@ -226,7 +244,9 @@ describe("a failed ledger statement says which statement failed / 1.1 (harden-le
 
 			await expect(readLedger(session)).resolves.toEqual({
 				exists: true,
-				applied: [{ filename: "0001_init.sql", origin: "applied" }],
+				applied: [
+					{ filename: "0001_init.sql", origin: "applied", checksum: null },
+				],
 			});
 		});
 	});
@@ -318,7 +338,11 @@ describe("a failed ledger statement says which statement failed / 1.1 (harden-le
 		});
 
 		it("success control: an ordinary bootstrap is not tagged at all", async () => {
-			const { session } = makeScriptedSession([{ rows: [] }, { rows: [] }]);
+			const { session } = makeScriptedSession([
+				{ rows: [] },
+				{ rows: [] },
+				{ rows: [] },
+			]);
 
 			await expect(bootstrapLedger(session)).resolves.toBeUndefined();
 		});
@@ -335,7 +359,12 @@ describe("a failed ledger statement says which statement failed / 1.1 (harden-le
 			const { session } = makeScriptedSession([{ throws: error }]);
 
 			await expect(
-				recordAppliedMigration(session, "0001_init.sql", "applied"),
+				recordAppliedMigration(
+					session,
+					"0001_init.sql",
+					"applied",
+					"a".repeat(64),
+				),
 			).rejects.toSatisfy((thrown: unknown) => {
 				const tag = asLedgerAccessFailure(thrown);
 				return (
@@ -351,7 +380,12 @@ describe("a failed ledger statement says which statement failed / 1.1 (harden-le
 			const { session } = makeScriptedSession([{ rows: [] }]);
 
 			await expect(
-				recordAppliedMigration(session, "0001_init.sql", "applied"),
+				recordAppliedMigration(
+					session,
+					"0001_init.sql",
+					"applied",
+					"a".repeat(64),
+				),
 			).resolves.toBeUndefined();
 		});
 	});
@@ -429,6 +463,52 @@ describe("bootstrapLedger / 1.2", () => {
 	});
 });
 
+describe("bootstrapLedger / 1.1 (checksum column)", () => {
+	it("create table declares the checksum column, nullable, and an alter statement follows to upgrade an existing ledger", async () => {
+		const { session, calls } = makeRecordingSession();
+
+		await bootstrapLedger(session);
+
+		const tableIndex = calls.findIndex((call) =>
+			call.sql.toLowerCase().includes("create table"),
+		);
+		const alterIndex = calls.findIndex((call) =>
+			call.sql.toLowerCase().includes("alter table"),
+		);
+		expect(tableIndex).toBeGreaterThanOrEqual(0);
+		expect(alterIndex).toBe(tableIndex + 1);
+		const checksumLine = calls[tableIndex]?.sql
+			.split("\n")
+			.find((line) => line.toLowerCase().includes('"checksum"'));
+		expect(checksumLine).toMatch(/"checksum"\s+text/i);
+		expect(checksumLine?.toLowerCase()).not.toContain("not null");
+		expect(calls[alterIndex]?.sql).toBe(
+			'alter table "hejbro"."migration_ledger" add column if not exists "checksum" text',
+		);
+	});
+
+	it("42501 on the checksum column's alter is a tagged write failure at the bootstrap site", async () => {
+		const error = permissionDeniedTable();
+		const { session } = makeScriptedSession([
+			{ rows: [] },
+			{ rows: [] },
+			{ throws: error },
+		]);
+
+		await expect(bootstrapLedger(session)).rejects.toSatisfy(
+			(thrown: unknown) => {
+				const tag = asLedgerAccessFailure(thrown);
+				return (
+					tag !== null &&
+					tag.direction === "write" &&
+					tag.site === "bootstrap" &&
+					tag.cause === error
+				);
+			},
+		);
+	});
+});
+
 describe("bootstrapLedger / 11.3 (#620)", () => {
 	it('declares "filename" not null unique -- a second insert of the same filename is impossible however the application logic gets there, independent of task 11.1\'s own in-transaction recheck (a defence nobody remembers is a defence nobody keeps)', async () => {
 		const { session, calls } = makeRecordingSession();
@@ -467,15 +547,33 @@ describe("recordAppliedMigration / 1.4", () => {
 		const { session } = makeInMemoryLedgerSession();
 		await bootstrapLedger(session);
 
-		await recordAppliedMigration(session, "0001_init.sql", "applied");
-		await recordAppliedMigration(session, "0002_add_column.sql", "applied");
+		await recordAppliedMigration(
+			session,
+			"0001_init.sql",
+			"applied",
+			"a".repeat(64),
+		);
+		await recordAppliedMigration(
+			session,
+			"0002_add_column.sql",
+			"applied",
+			"b".repeat(64),
+		);
 		const state = await readLedger(session);
 
 		expect(state).toEqual({
 			exists: true,
 			applied: [
-				{ filename: "0001_init.sql", origin: "applied" },
-				{ filename: "0002_add_column.sql", origin: "applied" },
+				{
+					filename: "0001_init.sql",
+					origin: "applied",
+					checksum: "a".repeat(64),
+				},
+				{
+					filename: "0002_add_column.sql",
+					origin: "applied",
+					checksum: "b".repeat(64),
+				},
 			],
 		});
 	});
@@ -483,14 +581,48 @@ describe("recordAppliedMigration / 1.4", () => {
 	it("registers a baseline without executing its statements", async () => {
 		const { session, calls } = makeRecordingSession();
 
-		await recordAppliedMigration(session, "0001_adopt.sql", "registered");
+		await recordAppliedMigration(
+			session,
+			"0001_adopt.sql",
+			"registered",
+			"c".repeat(64),
+		);
 
 		// The ledger has no facility to send a migration's own DDL -- the
 		// baseline path (spec: "A baseline is registered rather than run")
 		// is exactly this one insert and nothing else, at this layer.
 		expect(calls).toHaveLength(1);
 		expect(calls[0]?.sql.toLowerCase()).toMatch(/^insert into/);
-		expect(calls[0]?.params).toEqual(["0001_adopt.sql", "registered"]);
+		expect(calls[0]?.params).toEqual([
+			"0001_adopt.sql",
+			"registered",
+			"c".repeat(64),
+		]);
+	});
+});
+
+describe("recordAppliedMigration / 1.2, 631/R6 (checksum required)", () => {
+	it("the insert declares filename, origin and checksum in that order, with three params", async () => {
+		const { session, calls } = makeRecordingSession();
+
+		await recordAppliedMigration(
+			session,
+			"0001_init.sql",
+			"applied",
+			"a".repeat(64),
+		);
+
+		const insertStatement = calls.find((call) =>
+			call.sql.toLowerCase().startsWith("insert into"),
+		);
+		expect(insertStatement?.sql).toMatch(
+			/\(\s*"filename"\s*,\s*"origin"\s*,\s*"checksum"\s*\)/i,
+		);
+		expect(insertStatement?.params).toEqual([
+			"0001_init.sql",
+			"applied",
+			"a".repeat(64),
+		]);
 	});
 });
 
@@ -499,17 +631,44 @@ describe("recordAppliedMigration / 16.1 (D106 M7)", () => {
 		const { session } = makeInMemoryLedgerSession();
 		await bootstrapLedger(session);
 
-		await recordAppliedMigration(session, "0001_init.sql", "applied");
-		await recordAppliedMigration(session, "0002_baseline.sql", "registered");
-		await recordAppliedMigration(session, "snapshot.sql", "raised");
+		await recordAppliedMigration(
+			session,
+			"0001_init.sql",
+			"applied",
+			"a".repeat(64),
+		);
+		await recordAppliedMigration(
+			session,
+			"0002_baseline.sql",
+			"registered",
+			"b".repeat(64),
+		);
+		await recordAppliedMigration(
+			session,
+			"snapshot.sql",
+			"raised",
+			"c".repeat(64),
+		);
 		const state = await readLedger(session);
 
 		expect(state).toEqual({
 			exists: true,
 			applied: [
-				{ filename: "0001_init.sql", origin: "applied" },
-				{ filename: "0002_baseline.sql", origin: "registered" },
-				{ filename: "snapshot.sql", origin: "raised" },
+				{
+					filename: "0001_init.sql",
+					origin: "applied",
+					checksum: "a".repeat(64),
+				},
+				{
+					filename: "0002_baseline.sql",
+					origin: "registered",
+					checksum: "b".repeat(64),
+				},
+				{
+					filename: "snapshot.sql",
+					origin: "raised",
+					checksum: "c".repeat(64),
+				},
 			],
 		});
 	});
@@ -538,8 +697,18 @@ describe("clearLedgerRows / 5.3, D106 R1 B1", () => {
 	it("clears every row in the ledger", async () => {
 		const { session } = makeInMemoryLedgerSession();
 		await bootstrapLedger(session);
-		await recordAppliedMigration(session, "0001_init.sql", "applied");
-		await recordAppliedMigration(session, "0002_add_column.sql", "applied");
+		await recordAppliedMigration(
+			session,
+			"0001_init.sql",
+			"applied",
+			"a".repeat(64),
+		);
+		await recordAppliedMigration(
+			session,
+			"0002_add_column.sql",
+			"applied",
+			"b".repeat(64),
+		);
 
 		await clearLedgerRows(session);
 		const state = await readLedger(session);
@@ -568,6 +737,300 @@ describe("clearLedgerRows / 5.3, D106 R1 B1", () => {
 					tag.direction === "write" &&
 					tag.site === "clear" &&
 					(tag.cause as { readonly code?: unknown } | null)?.code === "42P01"
+				);
+			},
+		);
+	});
+});
+
+/**
+ * [task 1.1, 631/R2] The banner boundary is two predicates, not a scan: a
+ * banner is exactly a first line (after `\r\n` -> `\n`) equal to the
+ * literal `-- hejbro migration`; the body is everything after the first
+ * `"\n\n"`, that separator excluded. No banner means the whole file is
+ * the input. Expected values are computed through `sha256Hex`, never
+ * hardcoded hex, so a change to `sha256Hex` itself cannot make this suite
+ * lie about `bodyChecksum`'s own boundary logic.
+ */
+describe("bodyChecksum / 1.1, 631/R2", () => {
+	const banner = "-- hejbro migration\n-- hejbro: 0.1.0\n";
+	const body = 'create table "public"."t" ("id" bigint);\n';
+	const file1 = `${banner}\n${body}`;
+	const bodyWithBlankLine = "stmt1;\n\nstmt2;";
+	const noBannerFile = 'create table "public"."t" ();\n';
+	const dashFirstLineFile =
+		'-- a snapshot of the database\n\ncreate table "public"."t" ();\n';
+	const bannerWithUpgraded = `${banner}-- upgraded-from: sha256:${"0".repeat(64)}\n`;
+	const bodyWithTrailingSpace = body.replace(
+		'("id" bigint);',
+		'("id" bigint); ',
+	);
+	const bodyWithLoneCr = body.replace("bigint", "big\rint");
+
+	it.each<[string, string, string]>([
+		["banner + body -- the checksum is the body's own hash", file1, body],
+		[
+			"the same file with every \\n written as \\r\\n -- equal to LF",
+			file1.replace(/\n/g, "\r\n"),
+			body,
+		],
+		[
+			"no banner -- first line is DDL, the whole file is hashed",
+			noBannerFile,
+			noBannerFile,
+		],
+		[
+			"no banner -- first line starts with -- but is not the literal banner, the whole file is hashed",
+			dashFirstLineFile,
+			dashFirstLineFile,
+		],
+		[
+			"the banner gains a line (upgraded-from) -- the checksum is unchanged",
+			`${bannerWithUpgraded}\n${body}`,
+			body,
+		],
+		[
+			"a blank line inside the body stays in the body -- only the first \\n\\n separates",
+			`${banner}\n${bodyWithBlankLine}`,
+			bodyWithBlankLine,
+		],
+		[
+			"a trailing space inside the body is an edit, not whitespace to trim",
+			`${banner}\n${bodyWithTrailingSpace}`,
+			bodyWithTrailingSpace,
+		],
+		[
+			"a lone \\r is not a line ending -- only \\r\\n is normalized",
+			`${banner}\n${bodyWithLoneCr}`,
+			bodyWithLoneCr,
+		],
+		[
+			"631/R15: no blank line right after the banner -- the statement right after it is still body",
+			`${banner}create schema "ops";\n\ncreate index "idx" on "ops"."t" ("id");\n`,
+			'create schema "ops";\n\ncreate index "idx" on "ops"."t" ("id");\n',
+		],
+		[
+			"631/R15: a comment line before the first statement is still banner",
+			`${banner}\n-- a note\n\ncreate table "public"."t" ("id" bigint);\n`,
+			'create table "public"."t" ("id" bigint);\n',
+		],
+		[
+			"631/R15: a comment line and a blank line after the first statement stay body",
+			`${banner}\n${body}\n-- inline note\ncreate index "idx" on "public"."t" ("id");\n`,
+			`${body}\n-- inline note\ncreate index "idx" on "public"."t" ("id");\n`,
+		],
+		// [631/R15, N5] The banner line judgement is `--` at the start of
+		// the line, never SQL's own comment syntax -- an indented `--` or
+		// a `/* ... */` block is body, not banner, so the boundary never
+		// depends on parsing SQL comments (which would drag in multi-line
+		// and nested block comments too).
+		[
+			"631/R15 (N5-a): an indented comment after the banner is body, not banner",
+			`${banner}   -- indented comment\ncreate schema "ops9";\n`,
+			'   -- indented comment\ncreate schema "ops9";\n',
+		],
+		[
+			"631/R15 (N5-b): a block comment after the banner is body, not banner",
+			`${banner}/* block comment */\ncreate schema "ops9";\n`,
+			'/* block comment */\ncreate schema "ops9";\n',
+		],
+	])("%s", (_label, fileText, expectedBodyText) => {
+		expect(bodyChecksum(fileText)).toBe(sha256Hex(expectedBodyText));
+	});
+
+	// [631/R15] Regression lock for the first row above (banner + body):
+	// the new leading comment/blank-run rule reaches the exact same split
+	// point a generated file's banner already produces (its own trailing
+	// blank line is consumed as part of the run either way), so this
+	// value must not move.
+	it("631/R15 regression: a generated file's own banner+body split is unchanged", () => {
+		expect(bodyChecksum(file1)).toBe(sha256Hex(body));
+	});
+
+	it("banner only, no blank-line separator anywhere -- the empty body", () => {
+		expect(bodyChecksum(banner)).toBe(sha256Hex(""));
+	});
+});
+
+/**
+ * [task 1.2, 631/R6] `raise` hashes the whole file, banner or not -- the
+ * one difference from `bodyChecksum`, which strips a banner when the
+ * first line matches it. The two share only line-ending normalization
+ * (`\r\n` -> `\n`).
+ */
+describe("wholeFileChecksum / 1.2, 631/R6", () => {
+	const noBannerSnapshot = 'create table "public"."t" ("id" bigint);\n';
+	const bannerText = "-- hejbro migration\n-- hejbro: 0.1.0\n";
+	const bodyText = 'create table "public"."t" ("id" bigint);\n';
+	const bannerFile = `${bannerText}\n${bodyText}`;
+
+	it("a snapshot file with no banner hashes the whole text", () => {
+		expect(wholeFileChecksum(noBannerSnapshot)).toBe(
+			sha256Hex(noBannerSnapshot),
+		);
+	});
+
+	it("the same file with every \\n written as \\r\\n -- equal to LF", () => {
+		expect(wholeFileChecksum(noBannerSnapshot.replace(/\n/g, "\r\n"))).toBe(
+			sha256Hex(noBannerSnapshot),
+		);
+	});
+
+	it("a file whose first line is the banner is still hashed whole -- unlike bodyChecksum, which strips it", () => {
+		expect(wholeFileChecksum(bannerFile)).toBe(sha256Hex(bannerFile));
+		expect(bodyChecksum(bannerFile)).toBe(sha256Hex(bodyText));
+	});
+});
+
+/**
+ * [task 1.2, 631/R6] `readLedger` reads the checksum column back exactly
+ * as recorded; a row from before this column existed (the key absent, not
+ * merely `null`) folds to `null` the same as an explicit `null` -- neither
+ * becomes the string `"null"` or `"undefined"`, which would make an
+ * uncompared old row look like a mismatch against every other row.
+ */
+describe("readLedger / 1.2, 631/R6 (checksum column)", () => {
+	it("a row with a checksum string reads that string back", async () => {
+		const { session } = makeScriptedSession([
+			{
+				rows: [
+					{
+						filename: "0001_init.sql",
+						origin: "applied",
+						checksum: "a".repeat(64),
+					},
+				],
+			},
+		]);
+
+		await expect(readLedger(session)).resolves.toEqual({
+			exists: true,
+			applied: [
+				{
+					filename: "0001_init.sql",
+					origin: "applied",
+					checksum: "a".repeat(64),
+				},
+			],
+		});
+	});
+
+	it("a row with an explicit null checksum reads null", async () => {
+		const { session } = makeScriptedSession([
+			{
+				rows: [
+					{ filename: "0001_init.sql", origin: "applied", checksum: null },
+				],
+			},
+		]);
+
+		await expect(readLedger(session)).resolves.toEqual({
+			exists: true,
+			applied: [
+				{ filename: "0001_init.sql", origin: "applied", checksum: null },
+			],
+		});
+	});
+
+	it('a row with no checksum key at all (an older row) reads null, not the string "undefined"', async () => {
+		const { session } = makeScriptedSession([
+			{ rows: [{ filename: "0001_init.sql", origin: "applied" }] },
+		]);
+
+		await expect(readLedger(session)).resolves.toEqual({
+			exists: true,
+			applied: [
+				{ filename: "0001_init.sql", origin: "applied", checksum: null },
+			],
+		});
+	});
+
+	it("the select statement reads the checksum column", async () => {
+		const { session, calls } = makeRecordingSession();
+
+		await readLedger(session);
+
+		const selectStatement = calls.find((call) =>
+			call.sql.toLowerCase().startsWith("select"),
+		);
+		expect(selectStatement?.sql).toMatch(/"checksum"/i);
+	});
+});
+
+/**
+ * [task 1.5, 631/R13] A ledger created before this piece's own `checksum`
+ * column exists as an ordinary relation the four bootstrap columns
+ * describe -- `probeLedgerIdentity`/`assertLedgerNotOccupied` (already run
+ * by every caller before `readLedger`) guarantee those four columns exist
+ * with the right types, so a `42703` on the three-column select can only
+ * mean `checksum` itself, never a different missing column.
+ */
+describe("readLedger / 1.5, 631/R13 (old ledger fallback)", () => {
+	it("a 42703 on the checksum select retries with the four original columns, folding every row's checksum to null", async () => {
+		const { session, calls } = makeScriptedSession([
+			{
+				throws: Object.assign(new Error('column "checksum" does not exist'), {
+					code: "42703",
+				}),
+			},
+			{
+				rows: [
+					{ filename: "0001_init.sql", origin: "applied" },
+					{ filename: "0002_add_column.sql", origin: "applied" },
+				],
+			},
+		]);
+
+		await expect(readLedger(session)).resolves.toEqual({
+			exists: true,
+			applied: [
+				{ filename: "0001_init.sql", origin: "applied", checksum: null },
+				{
+					filename: "0002_add_column.sql",
+					origin: "applied",
+					checksum: null,
+				},
+			],
+		});
+		expect(calls).toHaveLength(2);
+		expect(calls[1]?.sql.toLowerCase()).toMatch(
+			/^select "filename", "origin" from/,
+		);
+	});
+});
+
+/**
+ * [task 1.5, 631/R13] `upgradeLedgerColumns` is the one place the
+ * idempotent upgrade statement is written -- `bootstrapLedger` reuses it
+ * (already pinned by the bootstrap tests above), and a write command
+ * calls it directly on an already-existing ledger (migrate-command.test.ts's
+ * own command-level test pins that call site and its ordering, since a
+ * unit call here cannot witness whether `migrate.ts` still makes it).
+ */
+describe("upgradeLedgerColumns / 1.5, 631/R13", () => {
+	it("sends the idempotent alter, tagged write/bootstrap", async () => {
+		const { session, calls } = makeRecordingSession();
+
+		await upgradeLedgerColumns(session);
+
+		expect(calls).toHaveLength(1);
+		expect(calls[0]?.sql).toBe(
+			'alter table "hejbro"."migration_ledger" add column if not exists "checksum" text',
+		);
+	});
+
+	it("42501 on the alter is a tagged write failure at the bootstrap site", async () => {
+		const error = permissionDeniedTable();
+		const { session } = makeScriptedSession([{ throws: error }]);
+
+		await expect(upgradeLedgerColumns(session)).rejects.toSatisfy(
+			(thrown: unknown) => {
+				const tag = asLedgerAccessFailure(thrown);
+				return (
+					tag !== null &&
+					tag.direction === "write" &&
+					tag.site === "bootstrap" &&
+					tag.cause === error
 				);
 			},
 		);

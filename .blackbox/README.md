@@ -45,7 +45,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | [#374](374/) | adversarial spec-only review stage in the opsx cycle | closed | #539 | 1 | 0 (0 pending) |
 | [#377](377/) | snapshot format stability policy for 1.0 | closed | #383 | 1 | 0 (0 pending) |
 | [#378](378/) | defect-leakage metric over escaped defects | closed | #384 | 1 | 0 (0 pending) |
-| [#412](412/) | 0.2.x: post-release commitments | open | #715 #808 #824 #835 #840 #849 #851 #858 #867 #868 #871 #878 #880 #895 #910 #923 #955 #956 #963 #968 #976 #979 #980 #988 #991 #992 #999 #894 (via #303) #903 (via #303) #881 (via #375) #941 (via #413) #850 (via #449) #882 (via #450) #901 (via #452) #906 (via #452) #909 (via #458) #911 (via #458) #962 (via #486) #883 (via #491) #885 (via #497) #884 (via #510) #737 (via #528) #760 (via #528) #773 (via #533) #886 (via #652) #896 (via #663) #897 (via #674) #733 (via #679) #758 (via #679) #739 (via #687) #759 (via #687) #770 (via #687) #861 (via #701) #879 (via #707) #847 (via #741) #900 (via #742) #889 (via #745) #833 (via #748) #784 (via #750) #802 (via #750) #775 (via #752) #799 (via #752) #780 (via #754) #795 (via #754) #887 (via #765) #855 (via #778) #838 (via #783) #786 (via #785) #789 (via #787) #790 (via #788) #792 (via #791) #794 (via #793) #890 (via #798) #898 (via #798) #822 (via #800) #806 (via #804) #813 (via #807) #811 (via #810) | 28 | 35 (4 pending) |
+| [#412](412/) | 0.2.x: post-release commitments | open | #715 #808 #824 #835 #840 #849 #851 #858 #867 #868 #871 #878 #880 #895 #910 #923 #955 #956 #963 #968 #976 #979 #980 #988 #991 #992 #999 #1005 #894 (via #303) #903 (via #303) #881 (via #375) #941 (via #413) #850 (via #449) #882 (via #450) #901 (via #452) #906 (via #452) #909 (via #458) #911 (via #458) #962 (via #486) #883 (via #491) #885 (via #497) #884 (via #510) #737 (via #528) #760 (via #528) #773 (via #533) #886 (via #652) #896 (via #663) #897 (via #674) #733 (via #679) #758 (via #679) #739 (via #687) #759 (via #687) #770 (via #687) #861 (via #701) #879 (via #707) #847 (via #741) #900 (via #742) #889 (via #745) #833 (via #748) #784 (via #750) #802 (via #750) #775 (via #752) #799 (via #752) #780 (via #754) #795 (via #754) #887 (via #765) #855 (via #778) #838 (via #783) #786 (via #785) #789 (via #787) #790 (via #788) #792 (via #791) #794 (via #793) #890 (via #798) #898 (via #798) #822 (via #800) #806 (via #804) #813 (via #807) #811 (via #810) | 29 | 36 (5 pending) |
 | ↳ [#303](303/) | Prepared-statement caching behind the driver capability contract | closed | #894 #903 | 0 | 3 (2 pending) |
 | ↳ [#375](375/) | run the d49 round-trip witness in ci | closed | #881 | 0 | 1 (1 pending) |
 | ↳ [#413](413/) | snapshot format upgrade path across released versions | closed | #923 #941 | 0 | 6 (2 pending) |
@@ -69,6 +69,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#544](544/) | query-execution: qualify the preview-equals-executed scenario for provider handles | closed | #901 #906 | 0 | 1 (0 pending) |
 | ↳ [#551](551/) | execute() of a core-built set operation loses per-key result typing | closed | #737 | 0 | 2 (0 pending) |
 | ↳ [#552](552/) | whole-table projection renders unqualified columns under a join | closed | #737 | 0 | 3 (0 pending) |
+| ↳ [#631](631/) | migrate: record a body checksum in the ledger and refuse an applied migration whose SQL changed | closed | #1005 | 0 | 15 (6 pending) |
 | ↳ [#652](652/) | ci: changeset gate never checks the PR itself while unreleased changesets cover the fixed group | closed | #886 | 0 | 0 (0 pending) |
 | ↳ [#663](663/) | test: the scoped vendored fn observer never asserts the context SQL | closed | #896 | 0 | 0 (0 pending) |
 | ↳ [#667](667/) | test: the vendored read of an existing table is witnessed only under Docker | closed | #896 | 0 | 0 (0 pending) |
@@ -142,7 +143,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | [#573](573/) | nile preset: measure identity columns and keyless tables on tenant-aware tables (D106 F9) | closed | #578 | 1 | 0 (0 pending) |
 | [#603](603/) | Apply engine (D12 revised): hejbro owns migrate and reset, production included | closed | #628 | 0 | 0 (0 pending) |
 | [#714](714/) | add a brownfield corpus: a database hejbro did not create, with a standing import→baseline→check witness | open | #851 #858 #868 #871 #878 #910 | 0 | 0 (0 pending) |
-| [#815](815/) | 0.2.x: post-release commitments (2) | open | #867 #868 #871 #878 #968 #976 #979 #980 #988 #991 #992 #999 #893 (via #814) #910 (via #816) #924 (via #816) #840 (via #819) #876 (via #820) #835 (via #823) #877 (via #823) #833 (via #832) #838 (via #836) #851 (via #841) #855 (via #841) #849 (via #845) #850 (via #845) #847 (via #846) #858 (via #856) #861 (via #856) #955 (via #891) #962 (via #891) #900 (via #899) #963 (via #931) #956 (via #932) | 0 | 1 (1 pending) |
+| [#815](815/) | 0.2.x: post-release commitments (2) | open | #867 #868 #871 #878 #968 #976 #979 #980 #988 #991 #992 #999 #1005 #893 (via #814) #910 (via #816) #924 (via #816) #840 (via #819) #876 (via #820) #835 (via #823) #877 (via #823) #833 (via #832) #838 (via #836) #851 (via #841) #855 (via #841) #849 (via #845) #850 (via #845) #847 (via #846) #858 (via #856) #861 (via #856) #955 (via #891) #962 (via #891) #900 (via #899) #963 (via #931) #956 (via #932) | 0 | 1 (1 pending) |
 | ↳ [#814](814/) | release: changesets leaves the pre dist-tag stale on packages without a stable version | open | #893 | 0 | 1 (0 pending) |
 | ↳ [#816](816/) | core: an argument name is not checked against the body's own row and loop names | closed | #910 #924 | 0 | 0 (0 pending) |
 | ↳ [#817](817/) | core: loop and row names in a function body bypass the D36 SQL-name check | closed | #910 #924 | 0 | 0 (0 pending) |
@@ -173,7 +174,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#860](860/) | loader: stripAbsolutePrefixes misses the bare cwd, so a config-load-failed can still carry an absolute path | open | #868 | 0 | 0 (0 pending) |
 | ↳ [#862](862/) | apply-live integration: "a second runner waits for the first" is timing-dependent (waitedCount 0 once) | open | #871 | 0 | 0 (0 pending) |
 | ↳ [#864](864/) | pg driver: a lost connection kills the process through an unhandled pool 'error' event, dumping a raw stack | closed | #871 #877 | 0 | 0 (0 pending) |
-| ↳ [#865](865/) | ledger: forced row-level security hides the ledger's rows and migrate re-applies the chain instead of refusing | open | #871 #877 | 0 | 0 (0 pending) |
+| ↳ [#865](865/) | ledger: forced row-level security hides the ledger's rows and migrate re-applies the chain instead of refusing | closed | #871 #877 #1005 | 0 | 1 (1 pending) |
 | ↳ [#866](866/) | chore: vendor dd-blackbox meta v3 and migrate the record (pins once per PR) | closed | #867 | 0 | 0 (0 pending) |
 | ↳ [#869](869/) | cli integration suites are excluded from pnpm test, so the done-gates never run the live witnesses | open | #878 | 0 | 0 (0 pending) |
 | ↳ [#870](870/) | cli integration suite: 14 concurrent postgres containers contend and a failed run leaves orphans | open | #871 | 0 | 0 (0 pending) |
@@ -195,6 +196,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#966](966/) | query: a cross-family type divergence on a recursive-cte key passes the type layer and fails on the server | closed | #968 #992 #999 | 0 | 1 (0 pending) |
 | [#834](834/) | skills: the bare npx skills add still installs the seven internal .claude/skills — metadata.internal hides them (measured on skills 1.5.23) | closed | #888 | 0 | 0 (0 pending) |
 | [#967](967/) | skills: nested combinators inside a recursive term are allowed; the doc says they cannot be spelled | open | #968 | 0 | 0 (0 pending) |
+| [#969](969/) | cli: a git probe's stderr leaks fatal/no-such-remote lines into every green test run | open | #1005 | 0 | 0 (0 pending) |
 | [#970](970/) | core: an unknown referential action string reaches the DDL unrefused on the type-check-free path | open | #979 #980 | 0 | 0 (0 pending) |
 | [#971](971/) | core: a derived foreign-key name over 63 bytes is truncated by the server, snapshot and catalog disagree | open | #979 | 0 | 0 (0 pending) |
 | [#972](972/) | core: a repeated .references() on one column replaces the first silently; refuse or state the rule | open | #979 #980 | 0 | 0 (0 pending) |
@@ -202,17 +204,19 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | [#974](974/) | query: count() reads as bigint | null while the reference says bigint; count is never null | open | #976 | 0 | 0 (0 pending) |
 | [#975](975/) | core: a damaged aggregate-filter snapshot node calls its missing child slot a discriminator | open | #976 | 0 | 0 (0 pending) |
 | [#977](977/) | query: same-family type pairs the server refuses (26 measured classes, arrays of different element types first) pass the type layer | open | #992 | 0 | 0 (0 pending) |
+| [#978](978/) | core/cli: banner hash lines keep a trailing CR on a CRLF checkout, so verify and history compare sha256:…\r against … | open | #1005 | 0 | 0 (0 pending) |
+| [#981](981/) | cli integration suites drifted from examples/postgres after #900: check-live 6.3 and declare-emit-roundtrip 2.2 fail on dev | open | #1005 | 0 | 0 (0 pending) |
 | [#986](986/) | core: replaceExprChildren accepts a children array of the wrong length and returns a silently damaged node | open | #991 | 0 | 0 (0 pending) |
 | [#989](989/) | core: exprChildren/replaceExprChildren throw a raw TypeError on an unregistered node or a DSL wrapper | open | #991 | 0 | 0 (0 pending) |
 | [#990](990/) | core: literal(7) builds a boolean literal that renders true | open | #991 | 0 | 0 (0 pending) |
-| [#995](995/) | 0.2.x: post-release commitments (3) | open | #999 | 0 | 0 (0 pending) |
+| [#995](995/) | 0.2.x: post-release commitments (3) | open | #999 #1005 | 0 | 0 (0 pending) |
 | ↳ [#996](996/) | query: a nested set operation with an unknown left head hides the right branch's family from the outer combinator | open | #999 | 0 | 0 (0 pending) |
 | ↳ [#997](997/) | query: deduplicating set operations on a json key pass the type layer and fail on the server with 42883 | open | #999 | 0 | 0 (0 pending) |
 | ↳ [#998](998/) | spec: the set-operation family scenario over sqlTypeFamilies is not verifiable from the public surface | open | #999 | 0 | 0 (0 pending) |
 
 ## Totals
 
-Owner decisions 93 · rulings 275 (interpretation 185, extension 88, stop 2) · pending extensions 50 · rejected 2
+Owner decisions 94 · rulings 292 (interpretation 194, extension 96, stop 2) · pending extensions 58 · rejected 2
 
 ## Conventions
 

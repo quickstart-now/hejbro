@@ -4,11 +4,39 @@
   "ref": "quickstart-now/hejbro#865",
   "title": "ledger: forced row-level security hides the ledger's rows and migrate re-applies the chain instead of refusing",
   "parent": "quickstart-now/hejbro#815",
-  "status": "open",
+  "status": "closed",
   "opened": "2026-09-05",
-  "closed": null,
-  "decisions": [],
-  "work": [],
+  "closed": "2026-09-06",
+  "decisions": [
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "412/D24",
+        "D25; the ld reviewer's constructor finding; the identity judgement already reads the ledger's pg_class row"
+      ],
+      "at": "2026-09-05T06:18Z",
+      "title": "#865 folds into add-ledger-checksum: a ledger carrying row-level security is refused from the catalog before any row is read",
+      "ratified": null
+    }
+  ],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-05T20:52Z",
+      "title": "a ledger carrying row-level security is refused where its identity is judged",
+      "pr": null,
+      "decisions": []
+    },
+    {
+      "id": "W2",
+      "at": "2026-09-06T01:12Z",
+      "title": "the filtered ledger under review: one false sentence, and the refusal confirmed on a real server",
+      "pr": null,
+      "decisions": []
+    }
+  ],
   "prs": [
     {
       "number": 871,
@@ -19,6 +47,11 @@
       "number": 877,
       "role": "refs",
       "pinnedAt": "2026-09-05T02:07Z"
+    },
+    {
+      "number": 1005,
+      "role": "closes",
+      "pinnedAt": "2026-09-06T01:23Z"
     }
   ],
   "origin": null,

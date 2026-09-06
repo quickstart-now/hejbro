@@ -11,6 +11,7 @@ import type {
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { assertInteractiveTransactions } from "../src/apply/capability";
 import type { Migration } from "../src/apply/execute";
+import { bodyChecksum } from "../src/apply/ledger";
 import type { PlanResult } from "../src/apply/plan";
 import type {
 	CheckDriverConnection,
@@ -236,6 +237,7 @@ describe("applyFrom / 12.2 (#624)", () => {
 		expect(ledgerInsertCall?.params).toEqual([
 			baselineMigration.fileName,
 			baselineMigration.origin,
+			bodyChecksum(baselineMigration.sql),
 		]);
 	});
 
@@ -1136,6 +1138,326 @@ describe("runMigrate — a ledger that exists but cannot be read is not reported
 		expect(
 			calls.some((sql) => sql.toLowerCase().startsWith("create schema")),
 		).toBe(false);
+	});
+});
+
+/**
+ * [task 1.3, 631/R9] Five classes: an edited body refuses before anything
+ * is sent, an edited banner proceeds, a CRLF checkout proceeds, a
+ * null-checksum row is never compared, and a recorded-but-missing file
+ * stays `apply-ledger-orphan-row`'s own case, not this one.
+ */
+describe("runMigrate — an applied migration's body changed / 1.3, 631/R9", () => {
+	let cwd: string;
+
+	const bannerBlock = (
+		parent: string,
+		current: string,
+		extraLines: ReadonlyArray<string> = [],
+	): string =>
+		[
+			"-- hejbro migration",
+			...extraLines,
+			`-- parent-snapshot: ${parent}`,
+			`-- snapshot: ${current}`,
+		].join("\n");
+
+	const migrationFileText = (
+		parent: string,
+		current: string,
+		body: string,
+		extraLines: ReadonlyArray<string> = [],
+	): string => `${bannerBlock(parent, current, extraLines)}\n\n${body}`;
+
+	const file1Body = 'create table "app"."a" (id integer);';
+	const file2Body = 'create table "app"."b" (id integer);';
+	const originalFile1 = migrationFileText(
+		"sha256:aaaa",
+		"sha256:bbbb",
+		file1Body,
+	);
+	const file2 = migrationFileText("sha256:bbbb", "sha256:cccc", file2Body);
+
+	beforeEach(async () => {
+		cwd = await createCliFixtureDir();
+		await writeFixtureFile(cwd, "hejbro.config.ts", CONFIG_SOURCE);
+	});
+
+	afterEach(async () => {
+		await removeCliFixtureDir(cwd);
+	});
+
+	it("1: a recorded file edited below its banner refuses before anything is sent", async () => {
+		const editedFile1 = migrationFileText(
+			"sha256:aaaa",
+			"sha256:bbbb",
+			`${file1Body}\nalter table "app"."a" add column "z" integer;`,
+		);
+		await writeFixtureFile(cwd, "migrations/0001_a.sql", editedFile1);
+		await writeFixtureFile(cwd, "migrations/0002_b.sql", file2);
+		const { importer, calls } = makeFailingLedgerImporter(
+			() => false,
+			new Error("unreachable"),
+			{
+				ledgerRows: [
+					{
+						filename: "0001_a.sql",
+						origin: "applied",
+						checksum: bodyChecksum(originalFile1),
+					},
+				],
+			},
+		);
+
+		const result = await runMigrate(
+			cwd,
+			["--url", "postgres://fake"],
+			importer,
+		);
+
+		expect(result.exitCode).toBe(2);
+		expect(result.stderr).toContain("apply-migration-body-changed");
+		expect(result.stdout).toEqual([]);
+		expect(calls.some((sql) => sql.includes(file2Body))).toBe(false);
+		expect(
+			calls.some((sql) => sql.toLowerCase().startsWith("insert into")),
+		).toBe(false);
+	});
+
+	it("2: an edited banner line proceeds -- the body below it is unchanged", async () => {
+		const editedFile1 = migrationFileText(
+			"sha256:aaaa",
+			"sha256:bbbb",
+			file1Body,
+			["-- hejbro: 0.1.0"],
+		);
+		await writeFixtureFile(cwd, "migrations/0001_a.sql", editedFile1);
+		await writeFixtureFile(cwd, "migrations/0002_b.sql", file2);
+		const { importer } = makeFailingLedgerImporter(
+			() => false,
+			new Error("unreachable"),
+			{
+				ledgerRows: [
+					{
+						filename: "0001_a.sql",
+						origin: "applied",
+						checksum: bodyChecksum(originalFile1),
+					},
+				],
+			},
+		);
+
+		const result = await runMigrate(
+			cwd,
+			["--url", "postgres://fake"],
+			importer,
+		);
+
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toEqual([
+			"migrate: applied 1 migration(s):",
+			" - 0002_b.sql",
+		]);
+	});
+
+	it("3: a recorded file checked out with CRLF line endings proceeds", async () => {
+		// Both files go through the same CRLF checkout -- the chain link
+		// comparison (0001's current vs 0002's parent, `@hejbro/core`'s own
+		// `parseBannerHashes`, unrelated to this task) reads a stray `\r`
+		// appended to both sides alike and still agrees; only `bodyChecksum`
+		// needs to tolerate CRLF, which 1.1 already pins at the unit level.
+		const crlfFile1 = originalFile1.replace(/\n/g, "\r\n");
+		const crlfFile2 = file2.replace(/\n/g, "\r\n");
+		await writeFixtureFile(cwd, "migrations/0001_a.sql", crlfFile1);
+		await writeFixtureFile(cwd, "migrations/0002_b.sql", crlfFile2);
+		const { importer } = makeFailingLedgerImporter(
+			() => false,
+			new Error("unreachable"),
+			{
+				ledgerRows: [
+					{
+						filename: "0001_a.sql",
+						origin: "applied",
+						checksum: bodyChecksum(originalFile1),
+					},
+				],
+			},
+		);
+
+		const result = await runMigrate(
+			cwd,
+			["--url", "postgres://fake"],
+			importer,
+		);
+
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toEqual([
+			"migrate: applied 1 migration(s):",
+			" - 0002_b.sql",
+		]);
+	});
+
+	it("4: an older row with a null checksum is never compared, and the newly applied file still records its own checksum", async () => {
+		await writeFixtureFile(cwd, "migrations/0001_a.sql", originalFile1);
+		await writeFixtureFile(cwd, "migrations/0002_b.sql", file2);
+		const { importer, calls } = makeFailingLedgerImporter(
+			() => false,
+			new Error("unreachable"),
+			{
+				ledgerRows: [
+					{ filename: "0001_a.sql", origin: "applied", checksum: null },
+				],
+			},
+		);
+
+		const result = await runMigrate(
+			cwd,
+			["--url", "postgres://fake"],
+			importer,
+		);
+
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toEqual([
+			"migrate: applied 1 migration(s):",
+			" - 0002_b.sql",
+		]);
+		expect(
+			calls.some(
+				(sql) =>
+					sql.toLowerCase().startsWith("insert into") &&
+					sql.toLowerCase().includes('"checksum"'),
+			),
+		).toBe(true);
+	});
+
+	// [lead, 631/R9] This is a regression pin for orphan-row priority, not
+	// a mutation witness for `changedBodies`'s own "absent from
+	// bodiesOnDisk" guard -- `migrate`'s `chain` only ever contains files
+	// present on disk, so a recorded-but-missing filename is always
+	// refused by `planApply` as `apply-ledger-orphan-row` before
+	// `changedBodies` is ever called, regardless of that guard's own
+	// correctness. Under strict TypeScript, `ReadonlyMap.get()` answers
+	// `T | undefined`, so the guard itself is the type contract's own
+	// handling, not a defensive guess; the one path that reaches
+	// `undefined` there is a race (the file removed between the chain
+	// read and the body read), where falling through to "not a finding"
+	// is correct -- hashing the empty string would misreport a vanished
+	// file as a changed one.
+	it("5: a recorded file missing from disk stays apply-ledger-orphan-row's own case, not this code", async () => {
+		await writeFixtureFile(cwd, "migrations/0002_b.sql", file2);
+		const { importer } = makeFailingLedgerImporter(
+			() => false,
+			new Error("unreachable"),
+			{
+				ledgerRows: [
+					{
+						filename: "0001_a.sql",
+						origin: "applied",
+						checksum: bodyChecksum(originalFile1),
+					},
+				],
+			},
+		);
+
+		const result = await runMigrate(
+			cwd,
+			["--url", "postgres://fake"],
+			importer,
+		);
+
+		expect(result.exitCode).toBe(2);
+		expect(result.stderr).toContain("apply-ledger-orphan-row");
+		expect(result.stderr).not.toContain("apply-migration-body-changed");
+	});
+
+	it("6: nothing pending compares nothing, even though a recorded body was edited afterwards -- 631/R10", async () => {
+		const editedFile1 = migrationFileText(
+			"sha256:aaaa",
+			"sha256:bbbb",
+			`${file1Body}\nalter table "app"."a" add column "z" integer;`,
+		);
+		await writeFixtureFile(cwd, "migrations/0001_a.sql", editedFile1);
+		await writeFixtureFile(cwd, "migrations/0002_b.sql", file2);
+		const { importer, calls } = makeFailingLedgerImporter(
+			() => false,
+			new Error("unreachable"),
+			{
+				ledgerRows: [
+					{
+						filename: "0001_a.sql",
+						origin: "applied",
+						checksum: bodyChecksum(originalFile1),
+					},
+					{
+						filename: "0002_b.sql",
+						origin: "applied",
+						checksum: bodyChecksum(file2),
+					},
+				],
+			},
+		);
+
+		const result = await runMigrate(
+			cwd,
+			["--url", "postgres://fake"],
+			importer,
+		);
+
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toEqual([NOTHING_TO_APPLY_LINE]);
+		expect(result.stderr).toBeNull();
+		expect(
+			calls.some((sql) => sql.toLowerCase().startsWith("create table")),
+		).toBe(false);
+	});
+});
+
+describe("runMigrate — an already-existing ledger is upgraded, never bootstrapped / 1.5, 631/R13", () => {
+	let cwd: string;
+
+	beforeEach(async () => {
+		cwd = await createCliFixtureDir();
+		await writeFixtureFile(cwd, "hejbro.config.ts", CONFIG_SOURCE);
+		await writeFixtureFile(
+			cwd,
+			"migrations/0001_a.sql",
+			[
+				"-- hejbro migration",
+				"-- parent-snapshot: sha256:aaaa",
+				"-- snapshot: sha256:bbbb",
+				'create table "app"."a" (id integer);',
+			].join("\n"),
+		);
+	});
+
+	afterEach(async () => {
+		await removeCliFixtureDir(cwd);
+	});
+
+	it("sends the checksum-column alter before the pending migration's own ledger insert, and never bootstraps", async () => {
+		const { importer, calls } = makeFailingLedgerImporter(
+			() => false,
+			new Error("unreachable"),
+			{ ledgerRows: [] },
+		);
+
+		const result = await runMigrate(
+			cwd,
+			["--url", "postgres://fake"],
+			importer,
+		);
+
+		expect(result.exitCode).toBe(0);
+		const lowered = calls.map((sql) => sql.trim().toLowerCase());
+		const alterIndex = lowered.findIndex((sql) =>
+			sql.startsWith("alter table"),
+		);
+		const insertIndex = lowered.findIndex((sql) =>
+			sql.startsWith("insert into"),
+		);
+		expect(alterIndex).toBeGreaterThanOrEqual(0);
+		expect(insertIndex).toBeGreaterThan(alterIndex);
+		expect(lowered.some((sql) => sql.startsWith("create schema"))).toBe(false);
 	});
 });
 

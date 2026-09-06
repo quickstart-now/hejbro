@@ -9,14 +9,24 @@ import {
 	assertInteractiveTransactions,
 } from "../apply/capability";
 import type { Migration } from "../apply/execute";
-import { applyMigration } from "../apply/execute";
-import type { LedgerAccessDirection, LedgerOrigin } from "../apply/ledger";
+import {
+	applyMigration,
+	changedBodies,
+	throwMigrationBodyChanged,
+} from "../apply/execute";
+import type {
+	LedgerAccessDirection,
+	LedgerOrigin,
+	LedgerRow,
+	LedgerState,
+} from "../apply/ledger";
 import {
 	asLedgerAccessFailure,
 	bootstrapLedger,
 	LEDGER_SCHEMA,
 	LEDGER_TABLE,
 	readLedger,
+	upgradeLedgerColumns,
 } from "../apply/ledger";
 import {
 	throwLedgerReadFailure,
@@ -419,6 +429,14 @@ export const planFailureResult = (
 	};
 };
 
+/** [task 1.3, 631/R9] `ledger.exists` narrows which arm carries `applied` -- mirrors `plan.ts`'s own private `ledgerRows` helper; an absent ledger has recorded nothing to compare. */
+const recordedRows = (ledger: LedgerState): ReadonlyArray<LedgerRow> => {
+	if (ledger.exists) {
+		return ledger.applied;
+	}
+	return [];
+};
+
 const preconditionResult = (error: unknown): MigrateResult => {
 	const hejbroErr = asHejbroError(error);
 	return {
@@ -497,6 +515,13 @@ export const runMigrate = async (
 					const ledgerState = await readLedger(driver);
 					if (!ledgerState.exists) {
 						await bootstrapLedger(driver);
+					} else {
+						// [task 1.5, 631/R13] The read fallback above already lets
+						// a pre-checksum ledger answer `exists: true` with every
+						// row's checksum null -- this is what actually adds the
+						// column to it, once per apply run, before this run's
+						// own writes (if any).
+						await upgradeLedgerColumns(driver);
 					}
 					const plan = planApply(chain, ledgerState, baselineFileNames);
 					if (!plan.ok) {
@@ -508,6 +533,31 @@ export const runMigrate = async (
 							stdout: [NOTHING_TO_APPLY_LINE],
 							stderr: null,
 						};
+					}
+					// [task 1.3, 631/R9] Before applying anything pending: every
+					// recorded chain file present on disk, read once here -- a
+					// file the ledger records but disk does not have is left out
+					// of this map (never hashed as "") and stays
+					// apply-ledger-orphan-row's own case, judged above by
+					// planApply. A finding throws `apply-migration-body-changed`,
+					// uncaught here -- not a tagged ledger-access failure, so the
+					// catch below rethrows it to `preconditionResult`, the same
+					// exit-2 path `assertLedgerNotOccupied`'s own throw already
+					// takes. [631/R10] Placed after the nothing-pending exit, not
+					// before: an idle run compares nothing and exits 0 -- the
+					// change is `status`'s (task 1.4) to report.
+					const bodiesOnDisk = new Map<string, string>(
+						chain.map((entry) => [
+							entry.fileName,
+							readFileSync(join(migrationsDirPath, entry.fileName), "utf8"),
+						]),
+					);
+					const findings = changedBodies(
+						recordedRows(ledgerState),
+						bodiesOnDisk,
+					);
+					if (findings.length > 0) {
+						throwMigrationBodyChanged(findings);
 					}
 					const migrations: ReadonlyArray<Migration> = plan.pending.map(
 						(fileName) => ({
