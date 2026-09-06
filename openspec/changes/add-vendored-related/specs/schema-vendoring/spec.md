@@ -52,7 +52,7 @@ for the reader of the generated file and for tooling built on it.
 ### Requirement: The contract names the relations the client can follow
 Each vendored table SHALL carry a `Relations` map in the generated
 `Database` interface — relation key to `{ target, mode }`, `target` the
-`Tables` key of the related table and `mode` `"one"` for a relation the
+`Tables` key of the related table — a key that presumes the name is unique among the carried tables, as the requirement *An existing table crosses the boundary* qualifies — and `mode` `"one"` for a relation the
 table's own foreign key points along, `"many"` for one another table's
 foreign key points back along — computed when the contract is emitted,
 from the same foreign keys the query layer's `related()` derives from,

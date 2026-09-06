@@ -274,3 +274,89 @@ the SQL name `users` in another schema; root pre-existing in the
 non-blocking findings (N1–N8). Every other delta sentence held on real
 inputs, with consumer and declaring outputs byte-identical across all
 36 runtime cases save one message text (N2).
+
+## Round 2 (after the B1 scoping)
+
+Read: the corrected delta (`archive-vr` at `9e2cb5b5`), the corrected
+`skills/hejbro/references/polyrepo.md` (N1 caveat) and
+`docs/guide/polyrepo.md` (N6 correction) — each diffed against the
+round-1 text; the only delta change is the scope sentence appended to
+the MODIFIED requirement's first paragraph. This copy of the evaluation
+was `cmp`-identical to the round-1 original before this section was
+appended. Code is unchanged (`3b7e0d60`), so the runs below reuse the
+round-1 corpus under `/private/tmp/d106-vr/` on a rebuilt
+`d106-vr-pg` (both migrations applied, same seed; container removed
+after).
+
+### Method
+
+1. **Scope sentence vs B1 input.** "These sentences hold for a table
+   whose name is unique among the carried tables — `Tables` is keyed by
+   the SQL name alone, so two carried tables sharing a name across
+   schemas (an existing `auth.users` beside a managed `app.users`) are
+   the emitter's unresolved collision, outside this requirement." The
+   B1 input (commit `d24b1bf`: `auth.users` + `app.users`, both
+   carried) is named verbatim and excluded; the round-1 evidence
+   (`evidence/contract-a-commit1-dup-users.ts`) is exactly that
+   collision, so it no longer contradicts the requirement. The
+   unique-name layout (commit `64ff4b8`: existing `auth.users` beside
+   managed `app.accounts`) was re-run: `vendor --check --strict` up to
+   date, the contract compiles under `--strict
+   --exactOptionalPropertyTypes`, cases 06/07 read `authUser.email =
+   "u1@auth"` ×2 and `users.profiles = ["PR1","PR2"]` — the sentences
+   hold there as round 1 found.
+2. **Other scenarios.** All 36 runtime cases re-run on both sides:
+   `evidence/consumer-compare-r2.json` and
+   `evidence/declaring-compare-r2.json` are byte-identical to their
+   round-1 files, and to each other except the one N2 message line.
+   The positive assertion file (`types-pass.ts`, 29 assertions) passes
+   once its `accounts` spec names `constructor` (the N1 caveat, now
+   documented); the 25 negative probes are unchanged. Scenarios 1–9 of
+   round 1 therefore stand; the scope sentence adds no behavioural
+   claim and removes only the collision input.
+3. **N1 caveat text vs measurement.** "a table named `constructor`, or
+   a column `valueOfId`, yields a relation key TypeScript resolves on
+   every object, so a `.related()` spec that omits it fails to
+   type-check (`Function` is not `true`)": measured `Type 'Function' is
+   not assignable to type 'true'` for `departments.related({ employees:
+   true })` and `Type '() => Object' is not assignable to type 'true'`
+   for `constructor.related({ user: true })`; `{ posts: true,
+   constructor: true }` compiles. The parenthetical quotes the
+   `constructor` case; the `valueOf` case reads `() => Object` — same
+   rule, different literal. **N6 correction vs measurement.** `hejbro
+   pull --db-url … --schema app --schema auth` ran on the rebuilt
+   database (`pulled pg (app, auth)`), the written contract compiled,
+   and `profiles.related({ authUser: true })` / `users.related({
+   profiles: true })` read the same rows as the vendored contract; the
+   skill's `## A database as a marked fallback (`pull`)` section the
+   guide now points to exists.
+
+Rows this round: 29 positive type assertions + 25 negative probes
+re-run, 3 whole-contract strict compiles (consumer-a, pull-both, and
+the contract's own `tsc -p`); 5 CLI invocations (migrate, vendor
+--check, pull, plus 2 earlier-corpus rebuild steps); 72 server
+executions (36 cases × 2 sides) + 2 pull-contract reads.
+
+### Findings
+
+No blocking finding. Two wording notes, non-blocking:
+
+- **R2-N1** — the scope sentence lives in the MODIFIED requirement only;
+  the ADDED requirement's "`target` the `Tables` key of the related
+  table" is not itself qualified. For the collision input the whole
+  contract is uncompilable and the sentence calls that "the emitter's
+  unresolved collision", which a reader can take as covering every
+  emitted map, so this is a nit, not a contradiction; a cross-reference
+  from the ADDED paragraph (or "the emitted map, like every other part
+  of the contract, …") would remove the reading that `target` is
+  promised for a colliding name.
+- **R2-N2** — the skill's parenthetical "(`Function` is not `true`)"
+  matches the `constructor` key only; the `valueOf` key it names in the
+  same sentence fails with `() => Object`. Illustrative, not wrong.
+
+### Verdict
+
+**ARCHIVE** — B1 is scoped out by a sentence that names the exact
+input, the unique-name existing-table layout still satisfies every
+sentence it scopes, all nine scenarios reproduce the round-1 results on
+unchanged code, and the N1/N6 document corrections match measurement.
