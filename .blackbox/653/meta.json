@@ -53,6 +53,20 @@
       "at": "2026-09-05T23:42Z",
       "title": "vendored related chain keeps exactly the declaring chain's stages; offset() after related() exists on neither",
       "ratified": null
+    },
+    {
+      "id": "R5",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "653/R2 (owner seal: forward",
+        "not a reimplementation); design Q3; measured in task 1.3: runtime related() reads contractMetadata foreignKeys not Relations",
+        "two-repo.integration.test.ts casts jiti modules to local types",
+        "mutation on computeRelationsForTable left 6/6 green until the contract-text assertion; #1002"
+      ],
+      "at": "2026-09-06T00:42Z",
+      "title": "the typed-as half of the two-repository scenario is witnessed by the type tests, the contract-text assertion and the copied prelude; tsc over the emitted bytes is #1002",
+      "ratified": null
     }
   ],
   "work": [
