@@ -33,3 +33,20 @@ The `Relations` blocks the skills prelude carries were copied from a real `emitC
 
 Recorded against the planner: the instruction that settled the render position claimed a current assertion would break if `Relations` were placed between `Update` and `Relationships`. It would not -- every assertion in that slice is `toContain`. The position ruling stands on its other grounds (the raw list first, the derived view after it; a widened slice would let a later `not.toContain` be silently wrong), but the breakage claim was an overstatement, made without reading the assertions it named.
 
+<a id="w4"></a>
+## W4 — what the declaring side actually offers for a self-referential foreign key
+
+_2026-09-06T01:31Z_
+
+Constructor review round 1 returned REWORK on one axis: a self-referential foreign key. Measured afterwards, with a probe deleted before any commit:
+
+`.references()` cannot express a self-reference at all -- the declaration would reference its own initializer, and TypeScript refuses it (TS7022/TS7024). Core's own comment on `.references()` routes that case elsewhere: "Self-referencing and composite foreign keys stay on the `extras` path." An `extras` foreign key never populates a column's `TMeta.references`, which is the only thing the type layer reads, so the declaring side's own `RelationKeysOf` for such a table is `never` -- it offers no self-relation key at all, forward or reverse.
+
+The runtime derives both anyway: nothing in `ReverseRelations`, `deriveOne` or `buildReverse` excludes the parent table from its own schema-map lookup. Both reads compile, and both are wrong, because neither aliases the target: the nested `from "app"."nodes"` shadows the outer row, so the forward read compiles `where "app"."nodes"."id" = "app"."nodes"."parent_id"` and the reverse one `where "app"."nodes"."parent_id" = "app"."nodes"."id"` -- self-loops only. On a real server the reviewer measured `parent: null` on a child row and `nodes: []` on a parent row.
+
+The emitter reads snapshot foreign keys, which do carry `extras` edges, so it emitted what the declaring type layer could not offer: the vendored surface was WIDER than the declaring one, and a consumer's `tsc` accepted a key that returns a wrong value. Excluding self-references from emission (653/R6) restores parity with the declaring type layer rather than diverging from it. The alias defect itself is the query layer's, filed as its own issue.
+
+Two attributions. The instruction that produced this told the implementer, in so many words, not to exclude self-references, reasoning from the runtime's schema-map lookup and missing the delta's own word "another" -- the mirror of the earlier `.offset()` failure, where the spec sentence was carried without opening the code.
+
+And a correction: the two integration failures reported at the end of group 1 (`check-live` 6.3, `declare-emit-roundtrip` 2.2) are a known pre-existing drift, reproduced on a clean dev by the lead, not host interference by another team's container. The interference reading rested on nothing but a concurrent container being up.
+

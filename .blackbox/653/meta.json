@@ -103,6 +103,13 @@
       "title": "the real-server witness, and a planner claim that was overstated",
       "pr": null,
       "decisions": []
+    },
+    {
+      "id": "W4",
+      "at": "2026-09-06T01:31Z",
+      "title": "what the declaring side actually offers for a self-referential foreign key",
+      "pr": null,
+      "decisions": []
     }
   ],
   "prs": [],
