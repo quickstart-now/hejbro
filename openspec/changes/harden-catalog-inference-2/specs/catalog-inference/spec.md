@@ -7,9 +7,11 @@ markers, primary keys, foreign keys, checks and indexes; enum types;
 and the sequences an identity or serial column owns, carried as that
 column rather than as sequences of their own — through read-only
 catalog queries: `check`'s own inventory
-queries plus the column-, constraint-, index- and enum-detail queries
-inference needs on top of them, all read-only, none writing to the
-database. It SHALL also yield a schema description whose
+queries plus the column-, constraint-, index-, index-dependency- and
+enum-detail queries inference needs on top of them — the dependency
+rows are what name the columns an index reads through an expression
+or a predicate, which its key list alone does not — all read-only,
+none writing to the database. It SHALL also yield a schema description whose
 declaration-time facts are guessed by the rules stated here, and whose
 guessing the loss report announces: a column's TypeScript key from its
 SQL name by lower-casing
