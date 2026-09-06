@@ -80,6 +80,19 @@
       "at": "2026-09-06T01:26Z",
       "title": "vendor emits no relation for a self-referential foreign key in either direction; the alias defect is the query layer's (#1003)",
       "ratified": null
+    },
+    {
+      "id": "R7",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "653/R6; constructor review round 2 PASS (nodes",
+        "comments",
+        "three-edge F input; declaring key domain 'c' | 'project' vs emitted 'comments'); delta schema-vendoring ADDED requirement"
+      ],
+      "at": "2026-09-06T02:04Z",
+      "title": "round 2 wording: a self-referential scenario, no comparative against the declaring type layer, the self key named among runtime-reachable keys",
+      "ratified": null
     }
   ],
   "work": [

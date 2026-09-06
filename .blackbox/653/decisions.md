@@ -52,3 +52,16 @@ Ruling, option (A): `vendor` emits no relation for a self-referential foreign ke
 
 Non-blocking: N1 is absorbed by #1003. N2 (same-name tables in two schemas collide in the contract's `Tables` keys; pre-existing on 0c972860) is #1004 (fix: refuse at `vendor`). N3 (a key omitted because of a two-way overlap is not refused at runtime) is by design — the type layer refuses the key, and only untyped JavaScript reaches the runtime path (412/D29 triage as for #970); the delta sentence is checked to claim a type-level refusal only and is otherwise left alone. N4 (`docs/guide/polyrepo.md` lacks the `.related()` paragraph) is closed in this piece with B1. N5 (i) gets one mutation on the composite-key reverse guard; (ii) is already witnessed by the hand-built payload row.
 
+<a id="r7"></a>
+## R7 — round 2 wording: a self-referential scenario, no comparative against the declaring type layer, the self key named among runtime-reachable keys
+
+_lead · interpretation · basis 653/R6; constructor review round 2 PASS (nodes, comments, three-edge F input; declaring key domain 'c' | 'project' vs emitted 'comments'); delta schema-vendoring ADDED requirement · 2026-09-06T02:04Z · ratified: pending_
+
+Round 2 of the constructor-mode review passed (B 0): the self-referential exclusion removes only the table's own edge (the `nodes`, `comments` and three-edge `F` inputs) and the emitted map now equals the declaring side's key domain. Three wording findings are closed in the piece, all delta text, no code:
+
+- N8: the new rule gets its own scenario, "A self-referential foreign key names no relation" — WHEN a vendored table's own single-column foreign key points at that same table, alone or beside its other foreign keys; THEN the contract names no relation for that edge in either direction and every other relation of that table is unaffected (the review's three-edge input is that scenario's input).
+- N7: "narrower than the declaring side's type layer" was not a subset relation — the reverse key spaces differ (emitted: the target's `Tables` key, the SQL name; declaring: the schema map's export name, measured `"c" | "project"` against `comments`). The intro clause drops the comparative and keeps the enumeration's authority: "by the rules below, which govern the emitted map whatever the declaring side's own type layer derives".
+- N6: the refusal scenario's THEN now names the self-referential key among the keys a JavaScript caller can reach past the types: "a key omitted only for being both forward and reverse, or for pointing at the table itself, resolves along the declaring side's own edge there as it does here" (the alias defect it then meets is #1003).
+
+N5's `isCarriedTarget` axis stays unverified by the reviewer — the state cannot be built through `vendor` alone because `existingTable` is carried transitively by `.references()` — and is witnessed by the piece's hand-built payload row; no action. The reviewer's own correction (a missing `tsc` symlink read as "compiles" until re-measured with a control) is recorded with the review.
+
