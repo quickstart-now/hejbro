@@ -96,6 +96,18 @@
       "at": "2026-09-06T01:59Z",
       "title": "task 1.4: the round-trip clause is narrowed to a sequence-only declaration; two live witnesses; the general round trip is #1009",
       "ratified": null
+    },
+    {
+      "id": "R8",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "671/R2; 671/R3 R5; constructor review round 1 B1 with controls p6/p7/p9 and the A/B against fd92e4bb (B1 and N4 are this piece's); owner rule #220 (detect + options + commands",
+        "no prevention on incomplete information); lead's first ruling withdrawn"
+      ],
+      "at": "2026-09-06T04:05Z",
+      "title": "review B1: adoption-creates names the missing-column risk and check --url; no generate-time refusal (a partial existing declaration is by design); N4 fixed in the piece; B2 N3 N1 wording",
+      "ratified": null
     }
   ],
   "work": [
