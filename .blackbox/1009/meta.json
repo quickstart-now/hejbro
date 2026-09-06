@@ -1,0 +1,21 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#1009",
+  "title": "adoption: re-adopting a table a handover left in the database re-creates its policies and constraints (42710 / 42P16)",
+  "parent": "quickstart-now/hejbro#995",
+  "status": "open",
+  "opened": "2026-09-06",
+  "closed": null,
+  "decisions": [],
+  "work": [],
+  "prs": [
+    {
+      "number": 1019,
+      "role": "refs",
+      "pinnedAt": "2026-09-06T06:17Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

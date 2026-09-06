@@ -1,0 +1,89 @@
+{
+  "version": 3,
+  "number": 1019,
+  "ref": "quickstart-now/hejbro#1019",
+  "title": "feat(core,cli): adoption creates the table's children, normalizes its sequence and names what it creates (#668, #671, #694)",
+  "head": "b61b40b3fedfc62b846c4337d3ee9f52adabf2be",
+  "headRef": "harden-adoption",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-06T06:17Z",
+  "refs": [
+    {
+      "path": ".changeset/harden-table-adoption.md",
+      "blob": "ce1e759e33768c13837929752a5c9f5c41772c50"
+    },
+    {
+      "path": "README.md",
+      "blob": "a5bb16d9e71c8b4743d273b75bff58fa7360bcd5"
+    },
+    {
+      "path": "openspec/changes/harden-adoption/design.md",
+      "blob": "bfeb35cee15a192ef9f08a0a319b681b43080260"
+    },
+    {
+      "path": "openspec/changes/harden-adoption/proposal.md",
+      "blob": "2d542d06488e142c2efbd7648b3bcb5bf1aa0cc4"
+    },
+    {
+      "path": "openspec/changes/harden-adoption/specs/cli-commands/spec.md",
+      "blob": "06cf0478577516de0e01f025ef33e642047fc42b"
+    },
+    {
+      "path": "openspec/changes/harden-adoption/specs/table-declaration/spec.md",
+      "blob": "4b76ab7fb1bc69fd94ce6e3ac6e36d70c77c8f39"
+    },
+    {
+      "path": "openspec/changes/harden-adoption/tasks.md",
+      "blob": "6b3d5931a7d104728f0f49d566ef5b12f3b6f347"
+    },
+    {
+      "path": "openspec/task-times.csv",
+      "blob": "ec2bcd2dbf50ded59218d39dc50034fcf8b894f4"
+    },
+    {
+      "path": "packages/cli/src/commands/generate.ts",
+      "blob": "34f8c5ddcb1553745172a7300a10203884935aa0"
+    },
+    {
+      "path": "packages/cli/test/adoption-handover.integration.test.ts",
+      "blob": "86542ac5f9052b7cf9ec9384f6af06bdb52f3dc0"
+    },
+    {
+      "path": "packages/cli/test/generate-command.test.ts",
+      "blob": "9f64d8228f67e159820b599b1d419304ba0b0bbf"
+    },
+    {
+      "path": "packages/core/src/engine/diff-engine.ts",
+      "blob": "f49f3b9c83b15608f6e185a587ad40e7962ebd77"
+    },
+    {
+      "path": "packages/core/src/kind/object-kind.ts",
+      "blob": "e60f0967910b6b3502b1032934db33bf5ce4d5e0"
+    },
+    {
+      "path": "packages/core/src/kinds/sequence-kind.ts",
+      "blob": "ef64bb0cab18c74d6a599d03f3796beb796cd005"
+    },
+    {
+      "path": "packages/core/src/kinds/table-kind-emit.ts",
+      "blob": "c4a5ef06225f383daa27bdf8021901ddc7a3ef36"
+    },
+    {
+      "path": "packages/core/src/kinds/table-kind.ts",
+      "blob": "e28d3006ac493543201c959071b883ee48ebf858"
+    },
+    {
+      "path": "packages/core/test/generate.test.ts",
+      "blob": "5769fcf520f8403bd24161b99a30ebee6b40c218"
+    },
+    {
+      "path": "skills/hejbro/references/brownfield-adoption.md",
+      "blob": "a82e92e4d852eb96a6b5e588cc0788c70b2ac2ae"
+    },
+    {
+      "path": "skills/hejbro/references/extension-interface.md",
+      "blob": "712ae8b2713291cad570ae6bd4878d8d15da11cc"
+    }
+  ]
+}

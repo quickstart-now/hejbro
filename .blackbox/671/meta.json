@@ -1,0 +1,138 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#671",
+  "title": "existing: adoption never creates the adopted table's declared indexes, checks, FKs or primary key",
+  "parent": "quickstart-now/hejbro#412",
+  "status": "closed",
+  "opened": "2026-09-05",
+  "closed": "2026-09-06",
+  "decisions": [
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "412/D24",
+        "D25; ruling J10 (adoption creates what hejbro manages); the owner's detect-and-name rule (no silent prevention); #694's analysis of fixes A and C; #671 and #668 measurements"
+      ],
+      "at": "2026-09-05T05:53Z",
+      "title": "harden-adoption: adoption creates the table's additive children, normalizes a leftover sequence idempotently, and generate names what it will create",
+      "ratified": null
+    },
+    {
+      "id": "R2",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "671/R1; design.md Q1-Q2; delta table-declaration (children enumerated: indexes",
+        "checks",
+        "foreign keys",
+        "primary key); base scenarios 'An existing declaration produces no statement'; delta cli-commands 'print nothing under this code'"
+      ],
+      "at": "2026-09-05T23:11Z",
+      "title": "adoption boundary: plain ALTER-time children, columns untouched, two sequence alters, code-scoped silence",
+      "ratified": null
+    },
+    {
+      "id": "R3",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "671/R1; design.md Q3; delta cli-commands 'prints adoption-creates for widgets … Next: naming hejbro baseline'; packages/cli/src/diagnostics.ts Diagnostic shape; scripts/check-next-marker.mjs 112-138 and check-diagnostic-xref.mjs 105-120 as measured by the piece; #993 #994"
+      ],
+      "at": "2026-09-05T23:16Z",
+      "title": "adoption-creates is a cli Diagnostic literal rendered by renderDiagnostics; cited in brownfield-adoption.md; gate gaps are neighbours",
+      "ratified": null
+    },
+    {
+      "id": "R4",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "671/R1 (design Q1-Q2); 671/R2 (columns untouched",
+        "plain children); D57 (TypeScript-only unions camelCase); .claude/rules/provider-preset.md; measured: core index.ts exports KindChange and ObjectKind",
+        "exports.test.ts six-field fixture",
+        "bucket-kind.ts and preset-smoke implement ObjectKind",
+        "diff-engine.ts:420 ownerIsExisting",
+        "notes consumed only by migration-file.ts banner"
+      ],
+      "at": "2026-09-05T23:19Z",
+      "title": "task 1.1 design: KindChange.transition optional field marks an adopted owner; adoption flows the alter path with children only",
+      "ratified": null
+    },
+    {
+      "id": "R5",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "671/R1 (design Q3); 671/R3 (cli Diagnostic literal",
+        "Next in the rendered text); delta cli-commands enumeration order; measured: core index.ts exports TableSnapshot/ColumnSnapshot/ForeignKeySnapshot/SequenceSnapshot",
+        "contract/read-snapshot.ts and declare-emit/emit.ts precedent",
+        "generate-command.test.ts 726/738/750 summary assertions declare managed tables only"
+      ],
+      "at": "2026-09-06T00:37Z",
+      "title": "task 1.3 design: adoption-creates names children from the table snapshot, one list per adopted table, before core warnings and counted in the summary",
+      "ratified": null
+    },
+    {
+      "id": "R6",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "671/R2 (columns untouched on adoption); delta table-declaration (sequence altered to its declared type and ownership); #694 round trip keeps the column default because a handover drops nothing; tasks.md 1.4 witness"
+      ],
+      "at": "2026-09-06T00:46Z",
+      "title": "adoption does not set the owning column's default; a default the database lacks is check's inventory",
+      "ratified": null
+    },
+    {
+      "id": "R7",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "671/R1 (children created on adoption); 671/R4 (plain ALTER-time children); J10 (a handover drops nothing); task 1.4 live witness 42P16 on postgres:17-alpine; #694; #1009"
+      ],
+      "at": "2026-09-06T01:59Z",
+      "title": "task 1.4: the round-trip clause is narrowed to a sequence-only declaration; two live witnesses; the general round trip is #1009",
+      "ratified": null
+    },
+    {
+      "id": "R8",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "671/R2; 671/R3 R5; constructor review round 1 B1 with controls p6/p7/p9 and the A/B against fd92e4bb (B1 and N4 are this piece's); owner rule #220 (detect + options + commands",
+        "no prevention on incomplete information); lead's first ruling withdrawn"
+      ],
+      "at": "2026-09-06T04:05Z",
+      "title": "review B1: adoption-creates names the missing-column risk and check --url; no generate-time refusal (a partial existing declaration is by design); N4 fixed in the piece; B2 N3 N1 wording",
+      "ratified": null
+    }
+  ],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-06T02:48Z",
+      "title": "adoption creates the table's declared children, normalizes the adopted sequence, and generate names both",
+      "pr": null,
+      "decisions": []
+    },
+    {
+      "id": "W2",
+      "at": "2026-09-06T05:59Z",
+      "title": "review rounds one to three: the missing-column risk, the withdrawn refusal, and the four-branch measurement",
+      "pr": null,
+      "decisions": []
+    }
+  ],
+  "prs": [
+    {
+      "number": 1019,
+      "role": "closes",
+      "pinnedAt": "2026-09-06T06:17Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

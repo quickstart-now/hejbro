@@ -80,6 +80,19 @@ const createSequenceSql = (snapshot: SequenceSnapshot): string =>
 	`create sequence ${qualifyName(snapshot.schema, snapshot.name)}${baseTypeClause(snapshot.baseType)};`;
 
 /**
+ * `create sequence if not exists …;` — no `as` clause (671/R2, R4): an
+ * adopted owner's sequence may already exist on the live database from
+ * before a handover, so the create alone must never fail on a genuine
+ * collision the way the plain, non-idempotent {@link createSequenceSql}
+ * is meant to (a real new-table name clash still fails loudly there).
+ * The declared base type is asserted afterward, unconditionally, by
+ * {@link alterBaseTypeSql} — never inlined here, since `if not exists`
+ * would otherwise silently keep a leftover sequence's own prior type.
+ */
+const createSequenceIfNotExistsSql = (snapshot: SequenceSnapshot): string =>
+	`create sequence if not exists ${qualifyName(snapshot.schema, snapshot.name)};`;
+
+/**
  * `drop sequence …;` — bare, not `if exists`. A drop change's statements
  * (this and `dropDefaultSql` below) go out on the `predrop` stage (see
  * `emit` below), which runs before every `main`-stage statement across
@@ -178,12 +191,34 @@ const dropDefaultSql = (snapshot: SequenceSnapshot): string =>
 const alterBaseTypeSql = (snapshot: SequenceSnapshot): string =>
 	`alter sequence ${qualifyName(snapshot.schema, snapshot.name)} as ${snapshot.baseType ?? "bigint"};`;
 
+/**
+ * {@link sequenceKind}'s `emit`, `"create"` case for an adopted owner
+ * (671/R2, R4) — idempotent create, then the declared type and the owning
+ * column asserted unconditionally: `if not exists`, `as <type>`,
+ * `owned by`, exactly these three, all `main`-stage (the owning table
+ * already exists on the live database for an adoption, unlike a
+ * brand-new table's own `create table` in the same migration, so none of
+ * these need to wait for `deferred`). No `set default`: adoption never
+ * touches the owning column (671/R2), and this statement is the one
+ * place this kind would otherwise alter one.
+ */
+const emitAdoptedCreate = (
+	nextSnapshot: SequenceSnapshot,
+): ReadonlyArray<SqlStatement> => [
+	statement(createSequenceIfNotExistsSql(nextSnapshot)),
+	statement(alterBaseTypeSql(nextSnapshot)),
+	statement(ownedBySql(nextSnapshot)),
+];
+
 /** {@link sequenceKind}'s `emit`, `"create"` case: create the sequence, link it to its column, and (for a brand-new table only) set the column's default. */
 const emitCreate = (
 	change: KindChange,
 	siblingChanges: ReadonlyArray<KindChange>,
 ): ReadonlyArray<SqlStatement> => {
 	const nextSnapshot = asSequenceSnapshot(requireNext(change));
+	if (change.transition === "adopted") {
+		return emitAdoptedCreate(nextSnapshot);
+	}
 	if (ownedColumnAddedToExistingTable(nextSnapshot, siblingChanges)) {
 		return [
 			statement(createSequenceSql(nextSnapshot)),

@@ -29,6 +29,18 @@ carries these narrower members:
   `verify`'s check 2 apply it again before every comparison, so a kind
   that skips it is compared exactly as it always was.
 
+## `KindChange.transition`
+
+`KindChange` (`packages/core/src/kind/object-kind.ts`) also carries an
+optional `transition?: "adopted"` field: it marks a change whose own
+node, or whose owning table (`ownerTableIdentity` above), moved from
+`existingTable()` to a managed `table()` in this run (671). The engine's
+`diffSnapshots` (`packages/core/src/engine/diff-engine.ts`) is this
+field's one writer; a kind's own `diff`/`emit` only ever reads it, never
+sets it. It is absent from a handover's changes, from an
+already-managed object's ordinary change, and from a brand-new table's
+own creates.
+
 ## Traversal and kind-change helpers
 
 `@hejbro/core` also exports five names a preset legitimately needs: the

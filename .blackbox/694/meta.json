@@ -1,0 +1,21 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#694",
+  "title": "handover then adoption fails to apply: sequence already exists",
+  "parent": "quickstart-now/hejbro#412",
+  "status": "closed",
+  "opened": "2026-09-05",
+  "closed": "2026-09-06",
+  "decisions": [],
+  "work": [],
+  "prs": [
+    {
+      "number": 1019,
+      "role": "closes",
+      "pinnedAt": "2026-09-06T06:17Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}
