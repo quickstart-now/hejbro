@@ -183,9 +183,10 @@ builders a hand-written declaration would use; a foreign key whose own
 catalog name D36 cannot carry is declared under the derived name,
 naming both; a primary key whose catalog name is not the derived one is
 declared under the derived name, naming the name it dropped and the way
-out whole (rename the constraint to the derived name, or keep it and
-read `check`'s inventory line as expected) — and the command that
-removes the loss:
+out whole (rename the constraint in the database to the derived name;
+keeping it leaves `check` reporting the declared name as missing on
+every run, beside its inventory line for the catalog's own name) — and
+the command that removes the loss:
 linking the schema repository for `pull`, hand-editing the starter
 declarations for `import`.
 
@@ -213,9 +214,10 @@ and an NFC/NFD pair print the same order.
 #### Scenario: A dropped primary-key name is announced with the way out
 - **WHEN** a table's primary key is named `pk_orders` in the catalog and
   the reading infers it under the derived `orders_pkey`
-- **THEN** the loss report names `pk_orders` as dropped and states both
-  ways out, and `check` after `baseline` lists `pk_orders` under its
-  inventory as the report said it would
+- **THEN** the loss report names `pk_orders` as dropped and states the
+  way out whole, and `check` after `baseline` both lists `pk_orders` in
+  its unmanaged-index inventory and reports the declared `orders_pkey`
+  as missing, exactly as the report said it would
 
 #### Scenario: The report's order does not depend on the locale
 - **WHEN** the same database is imported under two locales, holding two

@@ -25,12 +25,12 @@ D106 rounds of `add-catalog-inference` and the constructor review of
    lost with no loss-report line; after the inventory landed, `check`
    on the untouched database then reports two lines for what the user
    never chose.
-4. **A foreign key to an omitted column makes the starter fail to load
-   (#873).** When a column is omitted for its name, the foreign key that
-   references it is still written, and the reading itself dies with an
-   unhandled error from core's foreign-key resolution before any file
-   is written (measured), so `import` produces neither declarations nor
-   a loss report.
+4. **A foreign key to an omitted column stops the reading (#873).** When
+   a column is omitted for its name, the foreign key that references it
+   is still carried into the declaration step, and the reading itself
+   dies there with an unhandled error from core's foreign-key
+   resolution before any file is written (measured), so `import`
+   produces neither declarations nor a loss report.
 5. **The loss report sorts by locale (#874).** `sortedBy` uses
    `localeCompare`, so `import`/`pull` output order depends on the
    process locale and treats NFC/NFD pairs as equal — the rule `check`'s
