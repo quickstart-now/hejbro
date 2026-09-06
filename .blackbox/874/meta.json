@@ -4,9 +4,9 @@
   "ref": "quickstart-now/hejbro#874",
   "title": "loss report: sortedBy uses localeCompare, so import/pull output order depends on the locale",
   "parent": "quickstart-now/hejbro#815",
-  "status": "open",
+  "status": "closed",
   "opened": "2026-09-05",
-  "closed": null,
+  "closed": "2026-09-06",
   "decisions": [],
   "work": [],
   "prs": [
@@ -14,6 +14,11 @@
       "number": 878,
       "role": "refs",
       "pinnedAt": "2026-09-05T02:28Z"
+    },
+    {
+      "number": 1026,
+      "role": "closes",
+      "pinnedAt": "2026-09-06T11:29Z"
     }
   ],
   "origin": null,
