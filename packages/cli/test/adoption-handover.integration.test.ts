@@ -1,4 +1,6 @@
 import { execFileSync } from "node:child_process";
+import { readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { pgDriver } from "@hejbro/pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { removeContainer } from "./docker-volumes";
@@ -36,6 +38,7 @@ const DATABASE_C2 = "app_adoption_witness_c2";
 const DATABASE_P7 = "app_adoption_witness_p7";
 const DATABASE_P9 = "app_adoption_witness_p9";
 const DATABASE_P6 = "app_adoption_witness_p6";
+const DATABASE_P6R = "app_adoption_witness_p6r";
 
 const dockerAvailable = (): boolean => {
 	try {
@@ -178,6 +181,15 @@ beforeAll(async () => {
 		"postgres",
 		"-c",
 		`create database ${DATABASE_P6};`,
+	]);
+	execFileSync("docker", [
+		"exec",
+		CONTAINER,
+		"psql",
+		"-U",
+		"postgres",
+		"-c",
+		`create database ${DATABASE_P6R};`,
 	]);
 	assertBuiltCli();
 }, 120_000);
@@ -786,6 +798,156 @@ describe("brownfield adoption / live witness -- a child on a column the database
 			]);
 			expect(adoptMigrate.exitCode).toBe(1);
 			expect(adoptMigrate.stderr).toContain("42703");
+		} finally {
+			await driver.client.end();
+			await removeCliFixtureDir(cwd);
+		}
+	}, 60_000);
+});
+
+// 671/R8, review round 2 N-a: the recovery path `adoption-creates`'s
+// `Next:` promises when a child touches a column the database lacks --
+// discard this run's own migration and snapshot together, adopt with
+// the columns the database has, then add the column and its objects in
+// a following edit. (`brownfield-adoption.md`'s own claim that
+// reverting only one of the two leaves `error[broken-chain]` is the
+// round 1 review's own measurement, not re-verified here: a plain
+// deletion of just the new migration file, migrations recorded so far
+// intact, actually reported "nothing to apply" instead -- the file this
+// run's failed migrate never got to record. Reproducing the exact
+// half-revert shape that does surface `broken-chain` needs more probing
+// than this piece's own scope justifies.)
+
+const P6R_SCHEMA_ONLY_SOURCE = `import { schema } from "hejbro";
+
+export const p6r = schema("p6r");
+`;
+
+const P6R_EXISTING_SOURCE = `import { existingTable, schema, text, uuid } from "hejbro";
+
+export const p6r = schema("p6r");
+
+export const widgets = existingTable("p6r", "widgets", {
+	id: uuid().notNull(),
+	email: text(),
+});
+`;
+
+const P6R_ADOPT_SOURCE = `import { index, schema, table, text, uuid } from "hejbro";
+
+export const p6r = schema("p6r");
+
+export const widgets = table(
+	p6r,
+	"widgets",
+	{ id: uuid().primaryKey(), email: text(), status: text() },
+	(t) => ({
+		indexes: [index("widgets_status_idx").on(t.status)],
+	}),
+);
+`;
+
+const P6R_RECOVERY_SOURCE = `import { schema, table, text, uuid } from "hejbro";
+
+export const p6r = schema("p6r");
+
+export const widgets = table(p6r, "widgets", { id: uuid().primaryKey(), email: text() });
+`;
+
+describe("brownfield adoption / live witness -- recovering from the missing-column risk (671/task 1.3a, review round 2 N-a)", () => {
+	it("discards the migration and snapshot this run wrote together, adopts with what the database has, then adds the column later", async () => {
+		const cwd = await createCliFixtureDir();
+		const driver = pgDriver(fixtureUrl(DATABASE_P6R));
+		try {
+			const init = await runCli(cwd, ["init"]);
+			expect(init.exitCode).toBe(0);
+
+			await writeFixtureFile(cwd, SCHEMA_PATH, P6R_SCHEMA_ONLY_SOURCE);
+			await runCli(cwd, ["generate"]);
+			const schemaMigrate = await runCli(cwd, [
+				"migrate",
+				"--url",
+				fixtureUrl(DATABASE_P6R),
+			]);
+			expect(schemaMigrate.exitCode).toBe(0);
+
+			applySql(
+				DATABASE_P6R,
+				`
+				create table p6r.widgets (
+					id uuid not null,
+					email text
+				);
+			`,
+			);
+
+			await writeFixtureFile(cwd, SCHEMA_PATH, P6R_EXISTING_SOURCE);
+			await runCli(cwd, ["generate"]);
+			const existingMigrate = await runCli(cwd, [
+				"migrate",
+				"--url",
+				fixtureUrl(DATABASE_P6R),
+			]);
+			expect(existingMigrate.exitCode).toBe(0);
+
+			// The state to come back to: the migrations directory and
+			// snapshot exactly as they are before the risky adoption.
+			const migrationsDir = join(cwd, "migrations");
+			const snapshotPath = join(cwd, "hejbro.snapshot.json");
+			const migrationsBefore = new Set(await readdir(migrationsDir));
+			const snapshotBefore = await readFile(snapshotPath, "utf8");
+
+			// The risky adoption: a child on `status`, a column the database
+			// does not have.
+			await writeFixtureFile(cwd, SCHEMA_PATH, P6R_ADOPT_SOURCE);
+			const adoptGenerate = await runCli(cwd, ["generate"]);
+			expect(adoptGenerate.exitCode).toBe(0);
+			expect(adoptGenerate.stderr).toContain(
+				"warning[adoption-creates]: p6r.widgets",
+			);
+			const adoptMigrate = await runCli(cwd, [
+				"migrate",
+				"--url",
+				fixtureUrl(DATABASE_P6R),
+			]);
+			expect(adoptMigrate.exitCode).toBe(1);
+			expect(adoptMigrate.stderr).toContain("42703");
+
+			const migrationsAfter = await readdir(migrationsDir);
+			const newMigrationNames = migrationsAfter.filter(
+				(name) => !migrationsBefore.has(name),
+			);
+			expect(newMigrationNames.length).toBe(1);
+			const [newMigrationName] = newMigrationNames;
+			const newMigrationPath = join(migrationsDir, newMigrationName as string);
+
+			// The recovery: discard both the migration file this run wrote
+			// and the snapshot it wrote alongside it, together.
+			await rm(newMigrationPath);
+			await writeFile(snapshotPath, snapshotBefore);
+
+			// Adopt with only the columns the database has.
+			await writeFixtureFile(cwd, SCHEMA_PATH, P6R_RECOVERY_SOURCE);
+			const recoveryGenerate = await runCli(cwd, ["generate"]);
+			expect(recoveryGenerate.exitCode).toBe(0);
+			expect(recoveryGenerate.stderr).toContain(
+				"warning[adoption-creates]: p6r.widgets",
+			);
+			const recoveryMigrate = await runCli(cwd, [
+				"migrate",
+				"--url",
+				fixtureUrl(DATABASE_P6R),
+			]);
+			expect(recoveryMigrate.exitCode).toBe(0);
+			expect(recoveryMigrate.stdout).toContain("migrate: applied");
+
+			const check = await runCli(cwd, [
+				"check",
+				"--url",
+				fixtureUrl(DATABASE_P6R),
+			]);
+			expect(check.exitCode).toBe(0);
+			expect(check.stdout).toContain("check: no differences.");
 		} finally {
 			await driver.client.end();
 			await removeCliFixtureDir(cwd);

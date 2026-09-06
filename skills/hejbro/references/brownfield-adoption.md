@@ -203,10 +203,23 @@ The block also states that apply fails if the database lacks a column
 one of the named objects needs, and that `hejbro check --url <url>`
 names such a column beforehand; its `Next:` line then offers two
 branches — run `hejbro baseline` for a database that already holds
-these objects, or add the missing column in a following edit and adopt
-with the columns the database has for one that lacks one. `hejbro
+these objects, or, for one that lacks a column, discard the migration
+and snapshot this run just wrote, adopt with the columns the database
+has, then add the column and its objects in a following edit. `hejbro
 baseline` is the same command `error[baseline-not-first]` (above)
 refuses to run a second time.
+
+The diagnostic prints *after* `generate` has already written the
+migration file and the new snapshot, so the second branch's first step
+is undoing what this run just wrote — both files, restored together
+through version control (e.g. `git checkout -- <migration file>
+<snapshot file>`), never just one: the migration file and the snapshot
+form one hash-chained pair, and reverting only one leaves the chain
+broken (`error[broken-chain]`) on the next `hejbro migrate` or
+`verify` — both check the chain offline, before either ever opens a
+database connection. hejbro has no command that discards its own
+just-written output — this step is manual, on you, same as any other
+version-control revert.
 
 A child declared on a column the *existing* declaration didn't list is
 not refused at `generate` time, deliberately: `existingTable()` is by

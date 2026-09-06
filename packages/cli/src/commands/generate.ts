@@ -401,7 +401,7 @@ const ADOPTION_CREATES_INTRO =
 const ADOPTION_CREATES_MISSING_COLUMN_RISK =
 	'apply also fails if the database lacks a column one of these objects needs — "hejbro check --url <url>" names such a column before you migrate';
 const ADOPTION_CREATES_NEXT =
-	'Next: if the database already holds these, run "hejbro baseline" to record them instead of applying this migration; if it lacks a column, add the column in a following edit and adopt with the columns the database has.';
+	'Next: if the database already holds these, run "hejbro baseline" to record them instead of applying this migration; if it lacks a column, discard the migration and snapshot this run just wrote, adopt with the columns the database has, then add the column and its objects in a following edit.';
 
 /** The owning table's identity string for one adopted change (671/R5, D-3-A) — `table`/`rls` already carry it as their own identity; `policy`'s own identity is `<schema>.<table>.<name>`, so its first two segments are the table's; `sequence`'s own identity never names its owning table at all, so its owning table comes from its own snapshot's `schema`/`table` fields instead (`SequenceSnapshot`, a public export). No other kind ever carries `transition: "adopted"` (D-3-A: only kinds implementing `ownerTableIdentity`, plus `table` itself, do). */
 const owningTableIdentity = (change: KindChange): string => {

@@ -1495,7 +1495,7 @@ describe("hejbro generate — adoption-creates (671/task 1.3, 1.3a)", () => {
 	const missingColumnRisk =
 		'apply also fails if the database lacks a column one of these objects needs — "hejbro check --url <url>" names such a column before you migrate';
 	const nextLine =
-		'Next: if the database already holds these, run "hejbro baseline" to record them instead of applying this migration; if it lacks a column, add the column in a following edit and adopt with the columns the database has.';
+		'Next: if the database already holds these, run "hejbro baseline" to record them instead of applying this migration; if it lacks a column, discard the migration and snapshot this run just wrote, adopt with the columns the database has, then add the column and its objects in a following edit.';
 
 	it("names only the sequence for an adoption that fans out into a sequence alone (671/task 1.3, table A: sequence)", async () => {
 		await runCli(cwd, ["init"]);
