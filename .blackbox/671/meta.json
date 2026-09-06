@@ -74,6 +74,17 @@
       "at": "2026-09-06T00:37Z",
       "title": "task 1.3 design: adoption-creates names children from the table snapshot, one list per adopted table, before core warnings and counted in the summary",
       "ratified": null
+    },
+    {
+      "id": "R6",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "671/R2 (columns untouched on adoption); delta table-declaration (sequence altered to its declared type and ownership); #694 round trip keeps the column default because a handover drops nothing; tasks.md 1.4 witness"
+      ],
+      "at": "2026-09-06T00:46Z",
+      "title": "adoption does not set the owning column's default; a default the database lacks is check's inventory",
+      "ratified": null
     }
   ],
   "work": [],

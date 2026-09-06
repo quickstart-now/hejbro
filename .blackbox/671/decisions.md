@@ -69,3 +69,12 @@ Identity is the plain unquoted `schema.table` the other CLI diagnostics use. Obj
 
 D-3-C, wiring: the `adoption-creates` blocks are rendered before the core warnings, and the stdout summary line counts them together with the core warnings (the summary must match the blocks below it). The three existing assertions on that summary line declare managed tables only and are unaffected, as measured.
 
+<a id="r6"></a>
+## R6 — adoption does not set the owning column's default; a default the database lacks is check's inventory
+
+_lead · interpretation · basis 671/R2 (columns untouched on adoption); delta table-declaration (sequence altered to its declared type and ownership); #694 round trip keeps the column default because a handover drops nothing; tasks.md 1.4 witness · 2026-09-06T00:46Z · ratified: pending_
+
+The planner asked, before task 1.4, whether adoption should also emit `alter column … set default nextval(…)` for the adopted table's `serial` column, since the brand-new-table path emits that deferred statement and the adoption path does not.
+
+Ruling: it does not. The default is an attribute of the owning column, and 671/R2 fixes that adoption touches no column; the delta promises only that the sequence is created idempotently and altered to its declared type and ownership. In the handover-then-adoption round trip (#694) the column's default survives the handover because a handover drops nothing, so the live witness's "`check` reports no differences" is expected to hold; a table adopted from a database that never had the default is `check`'s inventory to report, and the user's `baseline` or fix, not adoption's business. If task 1.4's witness does show a `check` difference, the raw output comes to the lead before anything is changed — the test is not adjusted to pass, and the contract is not widened by the implementer.
+
