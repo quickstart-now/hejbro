@@ -5,9 +5,13 @@ import type {
 	ConfirmDropSpec,
 	Diagnostic as CoreDiagnostic,
 	HejbroError,
+	JsonValue,
+	KindChange,
 	RenameAmbiguity,
 	RenameSpec,
+	SequenceSnapshot,
 	Snapshot,
+	TableSnapshot,
 } from "@hejbro/core";
 import {
 	deriveExistingTransitionSlug,
@@ -362,32 +366,168 @@ const errorResult = (
 	};
 };
 
-/** `["${N} warning(s) — see below"]` when there are warnings, else `[]` — inserted into stdout right after the `wrote <file>` line (O3), so a stdout-only consumer still learns warnings exist. */
+/** `["${N} warning(s) — see below"]` when there are warnings, else `[]` — inserted into stdout right after the `wrote <file>` line (O3), so a stdout-only consumer still learns warnings exist. `totalWarningCount` (671/R5, D-3-C) is the adoption-creates blocks and the preset validator warnings counted together, since both render below this line in the same stderr. */
 const warningSummaryLines = (
-	warnings: ReadonlyArray<CoreDiagnostic>,
+	totalWarningCount: number,
 ): ReadonlyArray<string> => {
-	if (warnings.length === 0) {
+	if (totalWarningCount === 0) {
 		return [];
 	}
-	return [`${warnings.length} warning(s) — see below`];
+	return [`${totalWarningCount} warning(s) — see below`];
 };
 
-/** Renders every preset validator warning to the stderr block generate prints alongside its success stdout (O3, D55) — `null` when there are none. Exit code stays 0: warnings never block generation. */
+/** Renders every preset validator warning to the stderr block generate prints alongside its success stdout (O3, D55) — `null` when there are none. Exit code stays 0: warnings never block generation. `adoptionDiagnostics` (671/R5, D-3-C) render first. */
 const warningStderr = (
+	adoptionDiagnostics: ReadonlyArray<Diagnostic>,
 	warnings: ReadonlyArray<CoreDiagnostic>,
 	fallbackIdentity: string,
 ): string | null => {
-	if (warnings.length === 0) {
+	const coreDiagnostics = warnings.map((warning) =>
+		fromWarning(
+			warning,
+			identityFromMessage(warning.message, fallbackIdentity),
+		),
+	);
+	const allDiagnostics = [...adoptionDiagnostics, ...coreDiagnostics];
+	if (allDiagnostics.length === 0) {
 		return null;
 	}
-	return renderDiagnostics(
-		warnings.map((warning) =>
-			fromWarning(
-				warning,
-				identityFromMessage(warning.message, fallbackIdentity),
-			),
+	return renderDiagnostics(allDiagnostics, null);
+};
+
+/** 671/R5's fixed body opener and closer for `adoption-creates` — the text between them names each object this run's adoption fans out into, one line per object, in the delta's own enumeration order. */
+const ADOPTION_CREATES_INTRO =
+	"adoption creates objects for a table hejbro did not create; apply fails if the database already holds any of them";
+const ADOPTION_CREATES_NEXT =
+	'Next: if the database already holds these, run "hejbro baseline" to record them instead of applying this migration.';
+
+/** The owning table's identity string for one adopted change (671/R5, D-3-A) — `table`/`rls` already carry it as their own identity; `policy`'s own identity is `<schema>.<table>.<name>`, so its first two segments are the table's; `sequence`'s own identity never names its owning table at all, so its owning table comes from its own snapshot's `schema`/`table` fields instead (`SequenceSnapshot`, a public export). No other kind ever carries `transition: "adopted"` (D-3-A: only kinds implementing `ownerTableIdentity`, plus `table` itself, do). */
+const owningTableIdentity = (change: KindChange): string => {
+	if (change.kind === "sequence") {
+		const sequence = change.next as SequenceSnapshot;
+		return `${sequence.schema}.${sequence.table}`;
+	}
+	if (change.kind === "policy") {
+		const [schemaName, tableName] = change.identity.split(".");
+		return `${schemaName}.${tableName}`;
+	}
+	return change.identity;
+};
+
+/** Groups `changes` by {@link owningTableIdentity}, preserving each table's first-seen order (the same order `result.changes` already carries — kind rank, then identity) — a local `Map` built by `.push` into per-key arrays it alone ever sees, the same technique `diff-engine.ts`'s own `groupContiguousByKind`/`refineByDependsOnIdentities` use for the identical reason (D57/no mutation escapes this function). */
+const groupByOwningTable = (
+	changes: ReadonlyArray<KindChange>,
+): ReadonlyMap<string, ReadonlyArray<KindChange>> =>
+	changes.reduce<Map<string, Array<KindChange>>>((groups, change) => {
+		const identity = owningTableIdentity(change);
+		const existing = groups.get(identity);
+		if (existing !== undefined) {
+			existing.push(change);
+			return groups;
+		}
+		groups.set(identity, [change]);
+		return groups;
+	}, new Map());
+
+/** `packages/cli/src/contract/read-snapshot.ts`'s own cast, reused here: `TableSnapshot` is a public export, `asTableSnapshot` is not (core purity). */
+const asTableSnapshotLoose = (node: JsonValue): TableSnapshot =>
+	node as TableSnapshot;
+
+/** `[]` when `table` declares no primary key, `[the one line]` otherwise (compact snapshot: `primaryKeyName` is absent exactly when there is none). */
+const primaryKeyLineOrEmpty = (table: TableSnapshot): ReadonlyArray<string> => {
+	if (table.primaryKeyName === undefined) {
+		return [];
+	}
+	return [`primary key "${table.primaryKeyName}"`];
+};
+
+/** One line per object the adopted table's own `next` snapshot node declares in `indexes`/`checks`/`foreignKeys`/`primaryKeyName` (671/R5, D-3-A) — read structurally, `KindChange.notes` is never parsed. `[]` when this table's own `table`-kind change didn't fire at all (671/R2: no column differed and nothing else changed either — e.g. an adoption that only fans out into rls/policy/sequence, table A's own "rls + policy" cell). */
+const tableChildLines = (
+	tableChange: KindChange | undefined,
+): ReadonlyArray<string> => {
+	if (tableChange === undefined || tableChange.next === null) {
+		return [];
+	}
+	const table = asTableSnapshotLoose(tableChange.next);
+	return [
+		...table.indexes.map((index) => `index "${index.name}"`),
+		...(table.checks ?? []).map((check) => `check "${check.name}"`),
+		...table.foreignKeys.map(
+			(foreignKey) => `foreign key "${foreignKey.name}"`,
 		),
-		null,
+		...primaryKeyLineOrEmpty(table),
+	];
+};
+
+/** One `sequence "<schema>.<name>"` line per adopted sequence (671/R5). */
+const sequenceLine = (change: KindChange): string => {
+	const sequence = change.next as SequenceSnapshot;
+	return `sequence "${sequence.schema}.${sequence.name}"`;
+};
+
+/** One `policy "<name>"` line per adopted policy (671/R5) — the policy's own name is its identity's third segment (`<schema>.<table>.<name>`). */
+const policyLine = (change: KindChange): string => {
+	const [, , policyName] = change.identity.split(".");
+	return `policy "${policyName}"`;
+};
+
+/** This adopted table's full object list, in the delta's own fixed enumeration order (671/R5, D-3-B): sequence, row-level security, policy, index, check, foreign key, primary key — a kind with nothing to create contributes no line, and nothing is ever counted. */
+const adoptionObjectLines = (
+	changes: ReadonlyArray<KindChange>,
+): ReadonlyArray<string> => [
+	...changes.filter((change) => change.kind === "sequence").map(sequenceLine),
+	...changes
+		.filter((change) => change.kind === "rls")
+		.map(() => "row-level security"),
+	...changes.filter((change) => change.kind === "policy").map(policyLine),
+	...tableChildLines(changes.find((change) => change.kind === "table")),
+];
+
+/** One `adoption-creates` `Diagnostic` per adopted table (671/R3, R5) — a CLI-only literal, never core's `diagnostic()` factory. */
+const adoptionCreatesDiagnostic = (
+	tableIdentity: string,
+	changes: ReadonlyArray<KindChange>,
+): Diagnostic => ({
+	code: "adoption-creates",
+	identity: tableIdentity,
+	body: [
+		ADOPTION_CREATES_INTRO,
+		...adoptionObjectLines(changes),
+		ADOPTION_CREATES_NEXT,
+	],
+	suggestions: [],
+	at: null,
+	severity: "warning",
+});
+
+/** Byte-order comparison for two table identity strings — never `first < second ? -1 : ...` (this codebase bans ternary). */
+const compareTableIdentities = (first: string, second: string): number => {
+	if (first < second) {
+		return -1;
+	}
+	if (first > second) {
+		return 1;
+	}
+	return 0;
+};
+
+/** Every `adoption-creates` diagnostic this run's migrations carry (671/R3, R5) — one per table whose owner-or-self transitioned to managed this run (`transition: "adopted"`, stamped once by `engine/diff-engine.ts`, D-3-A: never recomputed here), grouped across every migration file `generateMigrations` wrote (a split run can carry the same table's fan-out across more than one file). `[]` for a handover or a new table: neither ever carries the stamp. */
+const adoptionCreatesDiagnostics = (
+	migrations: ReadonlyArray<{ readonly changes: ReadonlyArray<KindChange> }>,
+): ReadonlyArray<Diagnostic> => {
+	const adopted = migrations
+		.flatMap((migration) => migration.changes)
+		.filter((change) => change.transition === "adopted");
+	// Sorted by table identity (671/R5 amendment), never the order the
+	// changes happen to arrive in -- arrival order tracks which fan-out
+	// kind's own rank happens to sort first, an implementation detail no
+	// user can predict from the declarations alone.
+	const sortedEntries = Array.from(groupByOwningTable(adopted).entries()).sort(
+		([firstIdentity], [secondIdentity]) =>
+			compareTableIdentities(firstIdentity, secondIdentity),
+	);
+	return sortedEntries.map(([tableIdentity, changes]) =>
+		adoptionCreatesDiagnostic(tableIdentity, changes),
 	);
 };
 
@@ -894,6 +1034,9 @@ export const runGenerate = async (
 				writeExportArtifact(finalSnapshot);
 			}
 
+			const adoptionDiagnostics = adoptionCreatesDiagnostics(
+				finalPass.migrations,
+			);
 			return {
 				exitCode: 0,
 				stdout: [
@@ -903,12 +1046,18 @@ export const runGenerate = async (
 						writtenMigrations,
 						finalPass.hasChanges,
 					),
-					...warningSummaryLines(finalPass.warnings),
+					...warningSummaryLines(
+						adoptionDiagnostics.length + finalPass.warnings.length,
+					),
 					...writtenMigrations.map(
 						(written) => written.sql.split("\n\n")[0] ?? "",
 					),
 				],
-				stderr: warningStderr(finalPass.warnings, fallbackIdentity),
+				stderr: warningStderr(
+					adoptionDiagnostics,
+					finalPass.warnings,
+					fallbackIdentity,
+				),
 			};
 		} catch (error) {
 			const hejbroErr = asHejbroError(error);

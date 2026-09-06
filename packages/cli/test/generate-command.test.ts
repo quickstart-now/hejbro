@@ -255,6 +255,191 @@ export const app = schema("app");
 export const gadgets = existingTable("app", "gadgets", { id: uuid() });
 `;
 
+// 671/R5 (task 1.3): adoption-creates fixtures -- an existingTable()
+// declaration replaced by a managed declaration that fans out into one
+// or more of the objects the diagnostic names.
+
+const ADOPT_SEQUENCE_EXISTING_SOURCE = `import { existingTable, integer, schema } from "hejbro";
+
+export const j1 = schema("j1");
+
+export const widgets = existingTable("j1", "widgets", { id: integer() });
+`;
+
+const ADOPT_SEQUENCE_MANAGED_SOURCE = `import { schema, serial, table } from "hejbro";
+
+export const j1 = schema("j1");
+
+export const widgets = table(j1, "widgets", { id: serial() });
+`;
+
+const ADOPT_RLS_EXISTING_SOURCE = `import { existingTable, schema, uuid } from "hejbro";
+
+export const j2 = schema("j2");
+
+export const widgets = existingTable("j2", "widgets", { id: uuid() });
+`;
+
+const ADOPT_RLS_MANAGED_SOURCE = `import { grant, literal, rls, schema, table, uuid } from "hejbro";
+
+export const j2 = schema("j2");
+
+export const j2Usage = grant(j2).usage.to("anon");
+
+export const widgets = table(j2, "widgets", { id: uuid() }, () => ({
+	rls: rls.enabled({
+		readLow: rls.policy("read_low").for("select").to("anon").using(literal(true)),
+	}),
+}));
+`;
+
+const ADOPT_CHILDREN_EXISTING_SOURCE = `import { existingTable, integer, schema, table, text, uuid } from "hejbro";
+
+export const j3 = schema("j3");
+
+export const owners = table(j3, "owners", { id: uuid().primaryKey() });
+
+export const widgets = existingTable("j3", "widgets", {
+	id: uuid(),
+	ownerId: uuid(),
+	email: text(),
+	qty: integer(),
+});
+`;
+
+const ADOPT_CHILDREN_MANAGED_SOURCE = `import { check, gt, index, integer, schema, table, text, uuid } from "hejbro";
+
+export const j3 = schema("j3");
+
+export const owners = table(j3, "owners", { id: uuid().primaryKey() });
+
+export const widgets = table(
+	j3,
+	"widgets",
+	{
+		id: uuid().primaryKey(),
+		ownerId: uuid(),
+		email: text(),
+		qty: integer(),
+	},
+	(t) => ({
+		indexes: [index("widgets_email_idx").on(t.email)],
+		checks: [check("widgets_qty_positive", gt(t.qty, 0))],
+		foreignKeys: [
+			{
+				name: "widgets_owner_fk",
+				columns: [t.ownerId],
+				references: { table: owners, columns: [owners.id] },
+			},
+		],
+	}),
+);
+`;
+
+const ADOPT_MIXED_EXISTING_SOURCE = `import { existingTable, integer, schema, text } from "hejbro";
+
+export const j4 = schema("j4");
+
+export const widgets = existingTable("j4", "widgets", {
+	id: integer(),
+	email: text(),
+});
+`;
+
+const ADOPT_MIXED_MANAGED_SOURCE = `import { grant, index, literal, rls, schema, serial, table, text } from "hejbro";
+
+export const j4 = schema("j4");
+
+export const j4Usage = grant(j4).usage.to("anon");
+
+export const widgets = table(
+	j4,
+	"widgets",
+	{ id: serial(), email: text() },
+	(t) => ({
+		rls: rls.enabled({
+			readLow: rls.policy("read_low").for("select").to("anon").using(literal(true)),
+		}),
+		indexes: [index("widgets_email_idx").on(t.email)],
+	}),
+);
+`;
+
+const ADOPT_TWO_TABLES_EXISTING_SOURCE = `import { existingTable, schema, uuid } from "hejbro";
+
+export const j5 = schema("j5");
+
+export const widgets = existingTable("j5", "widgets", { id: uuid() });
+
+export const gadgets = existingTable("j5", "gadgets", { id: uuid() });
+`;
+
+const ADOPT_TWO_TABLES_MANAGED_SOURCE = `import { schema, serial, table } from "hejbro";
+
+export const j5 = schema("j5");
+
+export const widgets = table(j5, "widgets", { id: serial() });
+
+export const gadgets = table(j5, "gadgets", { id: serial() });
+`;
+
+// 671/R5, table D2: two adopted tables where first-seen arrival order and
+// table-identity order disagree -- `zebra` declares a serial column (its
+// sequence change arrives before any `table`-kind change, kind rank
+// ahead of `table`), while `alpha` declares only an index (its own
+// content surfaces solely through the `table`-kind change) and sorts
+// first by identity despite arriving second.
+
+const ADOPT_ORDER_EXISTING_SOURCE = `import { existingTable, integer, schema, text, uuid } from "hejbro";
+
+export const j7 = schema("j7");
+
+export const alpha = existingTable("j7", "alpha", { id: uuid(), name: text() });
+
+export const zebra = existingTable("j7", "zebra", { id: integer() });
+`;
+
+const ADOPT_ORDER_MANAGED_SOURCE = `import { index, schema, serial, table, text, uuid } from "hejbro";
+
+export const j7 = schema("j7");
+
+export const alpha = table(j7, "alpha", { id: uuid(), name: text() }, (t) => ({
+	indexes: [index("alpha_name_idx").on(t.name)],
+}));
+
+export const zebra = table(j7, "zebra", { id: serial() });
+`;
+
+// 671/R5, table F: an adoption and a core preset-validator warning
+// (not-null-without-default) in the same run -- D-3-C's own witness that
+// adoption-creates renders before core warnings and the summary counts
+// both together.
+
+const ADOPT_AND_WARN_EXISTING_SOURCE = `import { existingTable, integer, schema, table, text, uuid } from "hejbro";
+
+export const j6 = schema("j6");
+
+export const widgets = existingTable("j6", "widgets", { id: integer() });
+
+export const posts = table(j6, "posts", {
+	id: uuid().primaryKey().defaultRandom(),
+	title: text().notNull(),
+});
+`;
+
+const ADOPT_AND_WARN_MANAGED_SOURCE = `import { schema, serial, table, text, uuid } from "hejbro";
+
+export const j6 = schema("j6");
+
+export const widgets = table(j6, "widgets", { id: serial() });
+
+export const posts = table(j6, "posts", {
+	id: uuid().primaryKey().defaultRandom(),
+	title: text().notNull(),
+	status: text().notNull(),
+});
+`;
+
 let cwd: string;
 
 beforeEach(async () => {
@@ -1114,6 +1299,211 @@ export default defineConfig({
 		expect(handoverResult.stdout).toContain("carries no statements.");
 		const secondVerify = await runCli(cwd, ["verify"]);
 		expect(secondVerify.exitCode).toBe(0);
+	});
+});
+
+describe("hejbro generate — adoption-creates (671/task 1.3)", () => {
+	const adoptionCreatesIntro =
+		"adoption creates objects for a table hejbro did not create; apply fails if the database already holds any of them";
+	const nextLine =
+		'Next: if the database already holds these, run "hejbro baseline" to record them instead of applying this migration.';
+
+	it("names only the sequence for an adoption that fans out into a sequence alone (671/task 1.3, table A: sequence)", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(ADOPT_SEQUENCE_EXISTING_SOURCE);
+		await runCli(cwd, ["generate"]);
+
+		await writeSchema(ADOPT_SEQUENCE_MANAGED_SOURCE);
+		const result = await runCli(cwd, ["generate"]);
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("wrote migrations/");
+		expect(result.stdout).toContain("1 warning(s) — see below");
+		expect(result.stderr).toBe(
+			[
+				"warning[adoption-creates]: j1.widgets",
+				`  ${adoptionCreatesIntro}`,
+				'  sequence "j1.widgets_id_seq"',
+				`  ${nextLine}`,
+				"",
+			].join("\n"),
+		);
+	});
+
+	it("names row-level security and its policy for an adoption that fans out into rls alone (671/task 1.3, table A: rls + policy)", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(ADOPT_RLS_EXISTING_SOURCE);
+		await runCli(cwd, ["generate"]);
+
+		await writeSchema(ADOPT_RLS_MANAGED_SOURCE);
+		const result = await runCli(cwd, ["generate"]);
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("wrote migrations/");
+		expect(result.stdout).toContain("1 warning(s) — see below");
+		expect(result.stderr).toBe(
+			[
+				"warning[adoption-creates]: j2.widgets",
+				`  ${adoptionCreatesIntro}`,
+				"  row-level security",
+				'  policy "read_low"',
+				`  ${nextLine}`,
+				"",
+			].join("\n"),
+		);
+	});
+
+	it("names every declared child in enumeration order for an adoption that fans out into index, check, foreign key and primary key (671/task 1.3, table A: children)", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(ADOPT_CHILDREN_EXISTING_SOURCE);
+		await runCli(cwd, ["generate"]);
+
+		await writeSchema(ADOPT_CHILDREN_MANAGED_SOURCE);
+		const result = await runCli(cwd, ["generate"]);
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("wrote migrations/");
+		expect(result.stdout).toContain("1 warning(s) — see below");
+		expect(result.stderr).toBe(
+			[
+				"warning[adoption-creates]: j3.widgets",
+				`  ${adoptionCreatesIntro}`,
+				'  index "widgets_email_idx"',
+				'  check "widgets_qty_positive"',
+				'  foreign key "widgets_owner_fk"',
+				'  primary key "widgets_pkey"',
+				`  ${nextLine}`,
+				"",
+			].join("\n"),
+		);
+	});
+
+	it("names every kind in enumeration order for an adoption that mixes a sequence, rls and an index (671/task 1.3, table A: mixed)", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(ADOPT_MIXED_EXISTING_SOURCE);
+		await runCli(cwd, ["generate"]);
+
+		await writeSchema(ADOPT_MIXED_MANAGED_SOURCE);
+		const result = await runCli(cwd, ["generate"]);
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("wrote migrations/");
+		expect(result.stdout).toContain("1 warning(s) — see below");
+		expect(result.stderr).toBe(
+			[
+				"warning[adoption-creates]: j4.widgets",
+				`  ${adoptionCreatesIntro}`,
+				'  sequence "j4.widgets_id_seq"',
+				"  row-level security",
+				'  policy "read_low"',
+				'  index "widgets_email_idx"',
+				`  ${nextLine}`,
+				"",
+			].join("\n"),
+		);
+	});
+
+	it("prints nothing under adoption-creates for a handover, though the migration is still written (671/task 1.3, table B: handover)", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(HANDOVER_MANAGED_SCHEMA_SOURCE);
+		await runCli(cwd, ["generate"]);
+
+		await writeSchema(HANDOVER_EXISTING_SCHEMA_SOURCE);
+		const result = await runCli(cwd, ["generate"]);
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("wrote migrations/");
+		expect(result.stderr).not.toContain("adoption-creates");
+	});
+
+	it("prints nothing under adoption-creates for a brand-new table, though the migration is still written (671/task 1.3, table C: new table)", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(SCHEMA_SOURCE);
+		const result = await runCli(cwd, ["generate"]);
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("wrote migrations/");
+		expect(result.stderr).not.toContain("adoption-creates");
+	});
+
+	it("prints one block per adopted table, blank-line separated, with the summary counting both (671/task 1.3, table D: two tables)", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(ADOPT_TWO_TABLES_EXISTING_SOURCE);
+		await runCli(cwd, ["generate"]);
+
+		await writeSchema(ADOPT_TWO_TABLES_MANAGED_SOURCE);
+		const result = await runCli(cwd, ["generate"]);
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("wrote migrations/");
+		expect(result.stdout).toContain("2 warning(s) — see below");
+		// `gadgets` before `widgets`: table identity byte order
+		// ("j5.gadgets" < "j5.widgets", 671/R5 amendment) -- this cell
+		// can't tell that rule apart from first-seen arrival order on its
+		// own, since both give the same result here; table D2 (below)
+		// picks a pair where the two rules disagree.
+		expect(result.stderr).toBe(
+			[
+				"warning[adoption-creates]: j5.gadgets",
+				`  ${adoptionCreatesIntro}`,
+				'  sequence "j5.gadgets_id_seq"',
+				`  ${nextLine}`,
+				"",
+				"warning[adoption-creates]: j5.widgets",
+				`  ${adoptionCreatesIntro}`,
+				'  sequence "j5.widgets_id_seq"',
+				`  ${nextLine}`,
+				"",
+			].join("\n"),
+		);
+	});
+
+	it("orders adopted-table blocks by table identity, not by which one's change happens to arrive first (671/task 1.3, table D2: identity order vs. arrival order)", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(ADOPT_ORDER_EXISTING_SOURCE);
+		await runCli(cwd, ["generate"]);
+
+		await writeSchema(ADOPT_ORDER_MANAGED_SOURCE);
+		const result = await runCli(cwd, ["generate"]);
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("wrote migrations/");
+		expect(result.stdout).toContain("2 warning(s) — see below");
+		// `zebra`'s sequence change arrives before `alpha`'s own `table`
+		// change in `result.changes` (sequence outranks table), so a
+		// first-seen order would print `zebra` first -- the contract
+		// (671/R5 amendment) instead sorts by table identity, so `alpha`
+		// prints first despite arriving second.
+		expect(result.stderr).toBe(
+			[
+				"warning[adoption-creates]: j7.alpha",
+				`  ${adoptionCreatesIntro}`,
+				'  index "alpha_name_idx"',
+				`  ${nextLine}`,
+				"",
+				"warning[adoption-creates]: j7.zebra",
+				`  ${adoptionCreatesIntro}`,
+				'  sequence "j7.zebra_id_seq"',
+				`  ${nextLine}`,
+				"",
+			].join("\n"),
+		);
+	});
+
+	it("renders before a core preset-validator warning in the same run, the summary counting both (671/task 1.3, table F: adoption + core warning)", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(ADOPT_AND_WARN_EXISTING_SOURCE);
+		await runCli(cwd, ["generate"]);
+
+		await writeSchema(ADOPT_AND_WARN_MANAGED_SOURCE);
+		const result = await runCli(cwd, ["generate"]);
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("wrote migrations/");
+		expect(result.stdout).toContain("2 warning(s) — see below");
+		expect(result.stderr).toBe(
+			[
+				"warning[adoption-creates]: j6.widgets",
+				`  ${adoptionCreatesIntro}`,
+				'  sequence "j6.widgets_id_seq"',
+				`  ${nextLine}`,
+				"",
+				"warning[not-null-without-default]: j6.posts",
+				'  column "j6"."posts"."status" is added as not null without a default — this migration will fail if the table already has rows. Next: add .default(...), or add the column nullable now and set it not null in a later migration.',
+				"",
+			].join("\n"),
+		);
 	});
 });
 
