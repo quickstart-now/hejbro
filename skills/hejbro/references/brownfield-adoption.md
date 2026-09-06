@@ -175,27 +175,46 @@ table to the platform and emits nothing at all, for the table or for
 anything hejbro managed on it (its sequences, its row-level security,
 its policies). The reverse — replacing an `existingTable()` with a
 managed `table()` of the same identity — **adopts** it: no `create
-table` is emitted for the table itself (it already exists), and only
-the three things a handover also spares are created for it — a serial
-column's sequence, row-level security, its policies. **Not** created:
-the declaration's own columns beyond those the existing declaration
-already named, its indexes, check constraints, foreign keys, or
-primary key, even though the snapshot afterwards records them as if
-they were (#671) — and because the snapshot already records them as
-present, no *later* `hejbro generate` run will ever diff them into DDL
-either, before or after #671 closes (a recorded object never appears
-"new" to a future diff). Closing that gap for an already-adopted table
-needs out-of-band DDL run directly against the database, or a
-hand-corrected snapshot — not a follow-up `hejbro generate`.
+table` is emitted for the table itself (it already exists). What
+adoption creates for that table: a serial column's sequence, row-level
+security, its policies, and every index, check constraint, foreign key
+and primary key the declaration itself carries. Adoption never drops
+anything, in either direction — an object the database holds that no
+declaration covers at all is `hejbro check`'s inventory to report, never
+something adoption or a handover removes on its own.
 
-Handing a table over and then adopting it back is not yet safe to
-apply, though: the handover deliberately leaves a `serial` column's
-sequence behind (nothing hejbro managed on the table is dropped), and
-adoption's own `create sequence` collides with it — `hejbro migrate`
-fails with `relation "..." already exists` (#694). Until that's fixed,
-either drop the leftover sequence out of band before re-adopting the
-table, or treat the re-adopted state as a fresh `hejbro baseline`
-instead of a `hejbro generate` continuation of the handed-over chain.
+A serial column's sequence is the one object adoption normalizes rather
+than creating outright: `create sequence if not exists`, then the
+sequence is altered, unconditionally, to the declared type and to be
+owned by the declared column — regardless of whatever type or ownership
+it already carried. A brand-new table's own sequence stays a plain
+`create sequence`, so a genuine name collision there still fails
+loudly, exactly as any other `create` would.
+
+`hejbro generate` names every object an adoption will create with a
+literal `warning[adoption-creates]` diagnostic, one block per adopted
+table, and its `Next:` line points at `hejbro baseline` — the same
+command `error[baseline-not-first]` (above) refuses to run a second
+time.
+
+Round-tripping a table — handing it over to `existingTable()`, then
+adopting it back with a managed `table()` — round-trips cleanly for a
+declaration whose only managed object is that one sequence. A
+declaration that also carries an index, a check constraint, a foreign
+key or a primary key does not: the earlier handover left those very
+objects in the database untouched, and adoption creates each one the
+same plain way a first-time managed table's own creation would, so
+re-adopting such a declaration fails against what the handover already
+left in place. `warning[adoption-creates]` already named what it would
+have tried to create, so the way through is `hejbro baseline` instead
+of `hejbro generate` — it records what the database already holds
+rather than trying to create it again.
+
+**Adoption is a step after `baseline`**: what a database already
+holds — its schemas and its objects — is `baseline`'s to record.
+Adoption's own job starts from that point on, moving a table
+`baseline` never claimed (or one added to the database afterwards)
+from `existingTable()` into managed `table()`.
 
 A handover only stays unambiguous when the identity doesn't move: if
 the same edit also renames the table (a managed declaration removed,
@@ -367,6 +386,22 @@ renaming the column in the database ends that one, the same remedy
   `isExistingSide`, opening `tableKind.diff`) — the two together are
   why declaring one is never a hard error and never produces a
   migration, add-unmanaged-objects (#605).
+- Adoption itself (671): `packages/core/src/engine/diff-engine.ts`
+  stamps `KindChange.transition: "adopted"` (`packages/core/src/kind/object-kind.ts`)
+  the one time a change's own node or owning table moves from existing
+  to managed in a run — see `skills/hejbro/references/extension-interface.md`
+  for the field itself. `packages/core/src/kinds/table-kind.ts`'s
+  `isAdoptionTransition`/`suppressTableDiff` let that one transition
+  through the otherwise-silent existing-side guard;
+  `packages/core/src/kinds/table-kind-emit.ts`'s `isAdoption` flag keeps
+  an adoption's own emitted SQL off the table's columns while still
+  emitting its index/check/foreign-key/primary-key creates.
+  `packages/core/src/kinds/sequence-kind.ts` reads the same field to
+  choose its idempotent, normalizing form over a plain `create
+  sequence`. `packages/cli/src/commands/generate.ts`'s
+  `adoptionCreatesDiagnostics` is the one place the `warning[adoption-creates]`
+  literal is defined, reading `transition` off the migrations
+  `generate` already computed rather than recomputing anything.
 - Gates: every path cited above is checked by
   `packages/skills/test/links.test.ts`; the `ts` block on this page is
   type-checked against this repo's real source by

@@ -483,7 +483,7 @@ const adoptionObjectLines = (
 	...tableChildLines(changes.find((change) => change.kind === "table")),
 ];
 
-/** One `adoption-creates` `Diagnostic` per adopted table (671/R3, R5) — a CLI-only literal, never core's `diagnostic()` factory. */
+/** One `adoption-creates` `Diagnostic` per adopted table (671/R3, R5) — a CLI-only literal, never core's `diagnostic()` factory. `renderDiagnostics` prints it as `warning[adoption-creates]: <schema>.<table>`. */
 const adoptionCreatesDiagnostic = (
 	tableIdentity: string,
 	changes: ReadonlyArray<KindChange>,
