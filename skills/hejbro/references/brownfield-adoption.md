@@ -178,10 +178,14 @@ managed `table()` of the same identity — **adopts** it: no `create
 table` is emitted for the table itself (it already exists). What
 adoption creates for that table: a serial column's sequence, row-level
 security, its policies, and every index, check constraint, foreign key
-and primary key the declaration itself carries. Adoption never drops
-anything, in either direction — an object the database holds that no
-declaration covers at all is `hejbro check`'s inventory to report, never
-something adoption or a handover removes on its own.
+and primary key the declaration itself carries. Adoption never adds,
+changes or drops a column, and never drops anything else either, in
+either direction — an object the database holds that no declaration
+covers at all is `hejbro check`'s inventory to report, never something
+adoption or a handover removes on its own. A column the managed
+declaration adds that the database lacks is `hejbro check`'s
+`check-object-missing`, naming it as `"<schema>.<table>.<column>"`; the
+way to add the column is a following edit, not adoption itself.
 
 A serial column's sequence is the one object adoption normalizes rather
 than creating outright: `create sequence if not exists`, then the
@@ -193,9 +197,28 @@ loudly, exactly as any other `create` would.
 
 `hejbro generate` names every object an adoption will create with a
 literal `warning[adoption-creates]` diagnostic, one block per adopted
-table, and its `Next:` line points at `hejbro baseline` — the same
-command `error[baseline-not-first]` (above) refuses to run a second
-time.
+table that the migration creates anything for — a table adopted with
+nothing to create (only a column changed, say) is adopted silently.
+The block also states that apply fails if the database lacks a column
+one of the named objects needs, and that `hejbro check --url <url>`
+names such a column beforehand; its `Next:` line then offers two
+branches — run `hejbro baseline` for a database that already holds
+these objects, or add the missing column in a following edit and adopt
+with the columns the database has for one that lacks one. `hejbro
+baseline` is the same command `error[baseline-not-first]` (above)
+refuses to run a second time.
+
+A child declared on a column the *existing* declaration didn't list is
+not refused at `generate` time, deliberately: `existingTable()` is by
+design a partial claim (D41), so a column merely left off that list is
+an ordinary, working shape — refusing it there can't tell that shape
+apart from a column the database genuinely lacks, since both look
+identical to a declaration-only comparison. The two ways through: list
+every column a child touches in the existing declaration before
+adopting (nothing then distinguishes it from any other adoption), or
+adopt with only the columns the database already has and add the
+missing column — and whatever's declared on it — in a following,
+ordinary managed edit, no longer an adoption at all.
 
 Round-tripping a table — handing it over to `existingTable()`, then
 adopting it back with a managed `table()` — round-trips cleanly for a
@@ -401,7 +424,12 @@ renaming the column in the database ends that one, the same remedy
   sequence`. `packages/cli/src/commands/generate.ts`'s
   `adoptionCreatesDiagnostics` is the one place the `warning[adoption-creates]`
   literal is defined, reading `transition` off the migrations
-  `generate` already computed rather than recomputing anything.
+  `generate` already computed rather than recomputing anything, and
+  (671/R8) filtering to a table `adoptionObjectLines` names at least one
+  object for. The same file's `suppressAdoptedColumnWarnings` drops a
+  `not-null-without-default` warning for a table `adoptedTableIdentities`
+  names, entirely on the CLI side — `packages/core/src/engine/core-validators.ts`,
+  which raises that warning, is untouched.
 - Gates: every path cited above is checked by
   `packages/skills/test/links.test.ts`; the `ts` block on this page is
   type-checked against this repo's real source by

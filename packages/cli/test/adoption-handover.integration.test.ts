@@ -25,12 +25,17 @@ import {
  */
 const IMAGE = process.env.HEJBRO_PG_IMAGE ?? "postgres:17-alpine";
 const CONTAINER = `ha-pg-${process.pid}`;
-// Two databases, not one: hejbro's own migration ledger lives inside the
-// target database, so C-1 and C-2's independent projects (separate
-// `hejbro init` runs, separate migration directories) would otherwise
-// collide on the same ledger rows across two unrelated projects.
+// One database per independent `hejbro init` project, not one shared:
+// hejbro's own migration ledger lives inside the target database, so two
+// unrelated projects' migration directories would otherwise collide on
+// the same ledger rows.
 const DATABASE_C1 = "app_adoption_witness_c1";
 const DATABASE_C2 = "app_adoption_witness_c2";
+// 671/R8, review round 1: p7/p9/p6, the three live witnesses for the
+// missing-column risk `adoption-creates` now names.
+const DATABASE_P7 = "app_adoption_witness_p7";
+const DATABASE_P9 = "app_adoption_witness_p9";
+const DATABASE_P6 = "app_adoption_witness_p6";
 
 const dockerAvailable = (): boolean => {
 	try {
@@ -146,6 +151,33 @@ beforeAll(async () => {
 		"postgres",
 		"-c",
 		`create database ${DATABASE_C2};`,
+	]);
+	execFileSync("docker", [
+		"exec",
+		CONTAINER,
+		"psql",
+		"-U",
+		"postgres",
+		"-c",
+		`create database ${DATABASE_P7};`,
+	]);
+	execFileSync("docker", [
+		"exec",
+		CONTAINER,
+		"psql",
+		"-U",
+		"postgres",
+		"-c",
+		`create database ${DATABASE_P9};`,
+	]);
+	execFileSync("docker", [
+		"exec",
+		CONTAINER,
+		"psql",
+		"-U",
+		"postgres",
+		"-c",
+		`create database ${DATABASE_P6};`,
 	]);
 	assertBuiltCli();
 }, 120_000);
@@ -409,6 +441,351 @@ describe("brownfield adoption / live witness -- a table hejbro never created (67
 			]);
 			expect(check.exitCode).toBe(0);
 			expect(check.stdout).toContain("check: no differences.");
+		} finally {
+			await driver.client.end();
+			await removeCliFixtureDir(cwd);
+		}
+	}, 60_000);
+});
+
+// 671/R8, review round 1: p7 -- a column the database has, but the
+// existing declaration never listed. No child ever touches that column,
+// so nothing about B1's missing-column risk applies -- this is the
+// ordinary partial-claim shape `existingTable()` is designed to allow,
+// witnessed live so it isn't a claim resting on offline reasoning alone.
+
+const P7_SCHEMA_ONLY_SOURCE = `import { schema } from "hejbro";
+
+export const p7 = schema("p7");
+`;
+
+const P7_EXISTING_SOURCE = `import { existingTable, schema, text, uuid } from "hejbro";
+
+export const p7 = schema("p7");
+
+export const widgets = existingTable("p7", "widgets", {
+	id: uuid().notNull(),
+	email: text(),
+});
+`;
+
+const P7_ADOPT_SOURCE = `import { index, schema, table, text, uuid } from "hejbro";
+
+export const p7 = schema("p7");
+
+export const widgets = table(
+	p7,
+	"widgets",
+	{ id: uuid().primaryKey(), email: text() },
+	(t) => ({
+		indexes: [index("widgets_email_idx").on(t.email)],
+	}),
+);
+`;
+
+describe("brownfield adoption / live witness -- a column present but unlisted (671/task 1.3a, p7)", () => {
+	it("adopts cleanly when the database holds a column the existing declaration never listed, as long as nothing declares a child on it", async () => {
+		const cwd = await createCliFixtureDir();
+		const driver = pgDriver(fixtureUrl(DATABASE_P7));
+		try {
+			const init = await runCli(cwd, ["init"]);
+			expect(init.exitCode).toBe(0);
+
+			await writeFixtureFile(cwd, SCHEMA_PATH, P7_SCHEMA_ONLY_SOURCE);
+			await runCli(cwd, ["generate"]);
+			const schemaMigrate = await runCli(cwd, [
+				"migrate",
+				"--url",
+				fixtureUrl(DATABASE_P7),
+			]);
+			expect(schemaMigrate.exitCode).toBe(0);
+
+			// The database holds `extra`; the existing declaration never
+			// lists it -- exactly p7's own shape.
+			applySql(
+				DATABASE_P7,
+				`
+				create table p7.widgets (
+					id uuid not null,
+					email text,
+					extra text
+				);
+			`,
+			);
+
+			await writeFixtureFile(cwd, SCHEMA_PATH, P7_EXISTING_SOURCE);
+			const existingGenerate = await runCli(cwd, ["generate"]);
+			expect(existingGenerate.exitCode).toBe(0);
+			const existingMigrate = await runCli(cwd, [
+				"migrate",
+				"--url",
+				fixtureUrl(DATABASE_P7),
+			]);
+			expect(existingMigrate.exitCode).toBe(0);
+
+			await writeFixtureFile(cwd, SCHEMA_PATH, P7_ADOPT_SOURCE);
+			const adoptGenerate = await runCli(cwd, ["generate"]);
+			expect(adoptGenerate.exitCode).toBe(0);
+			expect(adoptGenerate.stderr).toContain(
+				"warning[adoption-creates]: p7.widgets",
+			);
+			const adoptMigrate = await runCli(cwd, [
+				"migrate",
+				"--url",
+				fixtureUrl(DATABASE_P7),
+			]);
+			expect(adoptMigrate.exitCode).toBe(0);
+			expect(adoptMigrate.stdout).toContain("migrate: applied");
+
+			const indexRows = await driver.client.query(
+				"select indexname from pg_indexes where schemaname = $1 and tablename = $2 and indexname = $3",
+				["p7", "widgets", "widgets_email_idx"],
+			);
+			expect(indexRows.rowCount).toBe(1);
+
+			const check = await runCli(cwd, [
+				"check",
+				"--url",
+				fixtureUrl(DATABASE_P7),
+			]);
+			expect(check.exitCode).toBe(0);
+			expect(check.stdout).toContain("check: no differences.");
+		} finally {
+			await driver.client.end();
+			await removeCliFixtureDir(cwd);
+		}
+	}, 60_000);
+});
+
+// 671/R8, review round 1: p9 -- adopt with only the columns the database
+// has, then a *following edit* (an ordinary managed-table alter, no
+// longer an adoption) adds the column and its objects together. Both
+// steps apply, and `check` reports no differences -- the way through
+// `adoption-creates`'s own `Next:` names.
+
+const P9_SCHEMA_ONLY_SOURCE = `import { schema } from "hejbro";
+
+export const p9 = schema("p9");
+`;
+
+const P9_EXISTING_SOURCE = `import { existingTable, schema, text, uuid } from "hejbro";
+
+export const p9 = schema("p9");
+
+export const widgets = existingTable("p9", "widgets", {
+	id: uuid().notNull(),
+	email: text(),
+});
+`;
+
+const P9_ADOPT_SOURCE = `import { schema, table, text, uuid } from "hejbro";
+
+export const p9 = schema("p9");
+
+export const widgets = table(p9, "widgets", { id: uuid().primaryKey(), email: text() });
+`;
+
+const P9_FOLLOWING_EDIT_SOURCE = `import { index, schema, table, text, uuid } from "hejbro";
+
+export const p9 = schema("p9");
+
+export const widgets = table(
+	p9,
+	"widgets",
+	{ id: uuid().primaryKey(), email: text(), status: text() },
+	(t) => ({
+		indexes: [index("widgets_status_idx").on(t.status)],
+	}),
+);
+`;
+
+describe("brownfield adoption / live witness -- adopt with what the database has, add the rest later (671/task 1.3a, p9)", () => {
+	it("adopts with the database's own columns, then a following managed edit adds the missing column and its index, and check reports no differences", async () => {
+		const cwd = await createCliFixtureDir();
+		const driver = pgDriver(fixtureUrl(DATABASE_P9));
+		try {
+			const init = await runCli(cwd, ["init"]);
+			expect(init.exitCode).toBe(0);
+
+			await writeFixtureFile(cwd, SCHEMA_PATH, P9_SCHEMA_ONLY_SOURCE);
+			await runCli(cwd, ["generate"]);
+			const schemaMigrate = await runCli(cwd, [
+				"migrate",
+				"--url",
+				fixtureUrl(DATABASE_P9),
+			]);
+			expect(schemaMigrate.exitCode).toBe(0);
+
+			applySql(
+				DATABASE_P9,
+				`
+				create table p9.widgets (
+					id uuid not null,
+					email text
+				);
+			`,
+			);
+
+			await writeFixtureFile(cwd, SCHEMA_PATH, P9_EXISTING_SOURCE);
+			await runCli(cwd, ["generate"]);
+			const existingMigrate = await runCli(cwd, [
+				"migrate",
+				"--url",
+				fixtureUrl(DATABASE_P9),
+			]);
+			expect(existingMigrate.exitCode).toBe(0);
+
+			// Adopt with only the columns the database has -- a primary key
+			// on `id`, nothing on any column the existing declaration didn't
+			// carry (there is none here).
+			await writeFixtureFile(cwd, SCHEMA_PATH, P9_ADOPT_SOURCE);
+			const adoptGenerate = await runCli(cwd, ["generate"]);
+			expect(adoptGenerate.exitCode).toBe(0);
+			expect(adoptGenerate.stderr).toContain(
+				"warning[adoption-creates]: p9.widgets",
+			);
+			const adoptMigrate = await runCli(cwd, [
+				"migrate",
+				"--url",
+				fixtureUrl(DATABASE_P9),
+			]);
+			expect(adoptMigrate.exitCode).toBe(0);
+			expect(adoptMigrate.stdout).toContain("migrate: applied");
+
+			// A following edit: the table is managed now, so adding `status`
+			// and its index together is an ordinary alter, not an adoption --
+			// `generate` never mentions `adoption-creates` for it.
+			await writeFixtureFile(cwd, SCHEMA_PATH, P9_FOLLOWING_EDIT_SOURCE);
+			const followUpGenerate = await runCli(cwd, ["generate"]);
+			expect(followUpGenerate.exitCode).toBe(0);
+			expect(followUpGenerate.stderr).not.toContain("adoption-creates");
+			const followUpMigrate = await runCli(cwd, [
+				"migrate",
+				"--url",
+				fixtureUrl(DATABASE_P9),
+			]);
+			expect(followUpMigrate.exitCode).toBe(0);
+			expect(followUpMigrate.stdout).toContain("migrate: applied");
+
+			const indexRows = await driver.client.query(
+				"select indexname from pg_indexes where schemaname = $1 and tablename = $2 and indexname = $3",
+				["p9", "widgets", "widgets_status_idx"],
+			);
+			expect(indexRows.rowCount).toBe(1);
+
+			const check = await runCli(cwd, [
+				"check",
+				"--url",
+				fixtureUrl(DATABASE_P9),
+			]);
+			expect(check.exitCode).toBe(0);
+			expect(check.stdout).toContain("check: no differences.");
+		} finally {
+			await driver.client.end();
+			await removeCliFixtureDir(cwd);
+		}
+	}, 60_000);
+});
+
+// 671/R8, review round 1: p6 -- a child on a column the database
+// genuinely lacks. `hejbro check --url` names the column beforehand
+// (`error[check-object-missing]`, computed straight from declarations
+// against the live catalog, no `generate` run needed first), and
+// `hejbro migrate` fails loudly (`42703`) rather than being refused
+// earlier -- the `Next:` line's own promise, witnessed live.
+
+const P6_SCHEMA_ONLY_SOURCE = `import { schema } from "hejbro";
+
+export const p6 = schema("p6");
+`;
+
+const P6_EXISTING_SOURCE = `import { existingTable, schema, text, uuid } from "hejbro";
+
+export const p6 = schema("p6");
+
+export const widgets = existingTable("p6", "widgets", {
+	id: uuid().notNull(),
+	email: text(),
+});
+`;
+
+const P6_ADOPT_SOURCE = `import { index, schema, table, text, uuid } from "hejbro";
+
+export const p6 = schema("p6");
+
+export const widgets = table(
+	p6,
+	"widgets",
+	{ id: uuid().primaryKey(), email: text(), status: text() },
+	(t) => ({
+		indexes: [index("widgets_status_idx").on(t.status)],
+	}),
+);
+`;
+
+describe("brownfield adoption / live witness -- a child on a column the database lacks (671/task 1.3a, p6)", () => {
+	it("hejbro check names the missing column before migrate fails on it with 42703", async () => {
+		const cwd = await createCliFixtureDir();
+		const driver = pgDriver(fixtureUrl(DATABASE_P6));
+		try {
+			const init = await runCli(cwd, ["init"]);
+			expect(init.exitCode).toBe(0);
+
+			await writeFixtureFile(cwd, SCHEMA_PATH, P6_SCHEMA_ONLY_SOURCE);
+			await runCli(cwd, ["generate"]);
+			const schemaMigrate = await runCli(cwd, [
+				"migrate",
+				"--url",
+				fixtureUrl(DATABASE_P6),
+			]);
+			expect(schemaMigrate.exitCode).toBe(0);
+
+			applySql(
+				DATABASE_P6,
+				`
+				create table p6.widgets (
+					id uuid not null,
+					email text
+				);
+			`,
+			);
+
+			await writeFixtureFile(cwd, SCHEMA_PATH, P6_EXISTING_SOURCE);
+			await runCli(cwd, ["generate"]);
+			const existingMigrate = await runCli(cwd, [
+				"migrate",
+				"--url",
+				fixtureUrl(DATABASE_P6),
+			]);
+			expect(existingMigrate.exitCode).toBe(0);
+
+			// The declaration now names `status`, a column the database
+			// genuinely does not have -- `check` reads declarations straight
+			// (`generateMigration` against the on-disk snapshot), so it
+			// catches this before any `generate`/`migrate` for it ever runs.
+			await writeFixtureFile(cwd, SCHEMA_PATH, P6_ADOPT_SOURCE);
+			const checkBeforeGenerate = await runCli(cwd, [
+				"check",
+				"--url",
+				fixtureUrl(DATABASE_P6),
+			]);
+			expect(checkBeforeGenerate.exitCode).toBe(1);
+			expect(checkBeforeGenerate.stderr).toContain(
+				"error[check-object-missing]: p6.widgets.status",
+			);
+
+			const adoptGenerate = await runCli(cwd, ["generate"]);
+			expect(adoptGenerate.exitCode).toBe(0);
+			expect(adoptGenerate.stderr).toContain(
+				"warning[adoption-creates]: p6.widgets",
+			);
+			const adoptMigrate = await runCli(cwd, [
+				"migrate",
+				"--url",
+				fixtureUrl(DATABASE_P6),
+			]);
+			expect(adoptMigrate.exitCode).toBe(1);
+			expect(adoptMigrate.stderr).toContain("42703");
 		} finally {
 			await driver.client.end();
 			await removeCliFixtureDir(cwd);

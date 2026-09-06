@@ -440,6 +440,193 @@ export const posts = table(j6, "posts", {
 });
 `;
 
+// 671/R8, review round 1 B1: the crossing cell the piece's own input
+// table never built -- a child on a column the *existing* declaration
+// never listed. Settled as a notice, not a refusal (a generate-time
+// refusal can't tell "the database lacks this column" from "the
+// database has it, `existingTable()` just didn't list it", and
+// `existingTable()` is by design a partial claim) -- the child is
+// created either way, and the notice gains a second risk sentence.
+// {index, check, foreign key} x {column carried by the existing
+// declaration; column absent from it}.
+
+const ADOPT_INDEX_COLUMN_CARRIED_EXISTING_SOURCE = `import { existingTable, schema, text, uuid } from "hejbro";
+
+export const j8 = schema("j8");
+
+export const widgets = existingTable("j8", "widgets", { id: uuid(), email: text() });
+`;
+
+const ADOPT_INDEX_COLUMN_CARRIED_MANAGED_SOURCE = `import { index, schema, table, text, uuid } from "hejbro";
+
+export const j8 = schema("j8");
+
+export const widgets = table(j8, "widgets", { id: uuid(), email: text() }, (t) => ({
+	indexes: [index("widgets_email_idx").on(t.email)],
+}));
+`;
+
+const ADOPT_INDEX_COLUMN_ABSENT_EXISTING_SOURCE = `import { existingTable, schema, uuid } from "hejbro";
+
+export const j9 = schema("j9");
+
+export const widgets = existingTable("j9", "widgets", { id: uuid() });
+`;
+
+const ADOPT_INDEX_COLUMN_ABSENT_MANAGED_SOURCE = `import { index, schema, table, text, uuid } from "hejbro";
+
+export const j9 = schema("j9");
+
+export const widgets = table(j9, "widgets", { id: uuid(), email: text() }, (t) => ({
+	indexes: [index("widgets_email_idx").on(t.email)],
+}));
+`;
+
+const ADOPT_CHECK_COLUMN_CARRIED_EXISTING_SOURCE = `import { existingTable, integer, schema, uuid } from "hejbro";
+
+export const j10 = schema("j10");
+
+export const widgets = existingTable("j10", "widgets", { id: uuid(), qty: integer() });
+`;
+
+const ADOPT_CHECK_COLUMN_CARRIED_MANAGED_SOURCE = `import { check, gt, integer, schema, table, uuid } from "hejbro";
+
+export const j10 = schema("j10");
+
+export const widgets = table(j10, "widgets", { id: uuid(), qty: integer() }, (t) => ({
+	checks: [check("widgets_qty_positive", gt(t.qty, 0))],
+}));
+`;
+
+const ADOPT_CHECK_COLUMN_ABSENT_EXISTING_SOURCE = `import { existingTable, schema, uuid } from "hejbro";
+
+export const j11 = schema("j11");
+
+export const widgets = existingTable("j11", "widgets", { id: uuid() });
+`;
+
+const ADOPT_CHECK_COLUMN_ABSENT_MANAGED_SOURCE = `import { check, gt, integer, schema, table, uuid } from "hejbro";
+
+export const j11 = schema("j11");
+
+export const widgets = table(j11, "widgets", { id: uuid(), qty: integer() }, (t) => ({
+	checks: [check("widgets_qty_positive", gt(t.qty, 0))],
+}));
+`;
+
+const ADOPT_FK_COLUMN_CARRIED_EXISTING_SOURCE = `import { existingTable, schema, table, uuid } from "hejbro";
+
+export const j12 = schema("j12");
+
+export const owners = table(j12, "owners", { id: uuid().primaryKey() });
+
+export const widgets = existingTable("j12", "widgets", { id: uuid(), ownerId: uuid() });
+`;
+
+const ADOPT_FK_COLUMN_CARRIED_MANAGED_SOURCE = `import { schema, table, uuid } from "hejbro";
+
+export const j12 = schema("j12");
+
+export const owners = table(j12, "owners", { id: uuid().primaryKey() });
+
+export const widgets = table(j12, "widgets", { id: uuid(), ownerId: uuid() }, (t) => ({
+	foreignKeys: [
+		{
+			name: "widgets_owner_fk",
+			columns: [t.ownerId],
+			references: { table: owners, columns: [owners.id] },
+		},
+	],
+}));
+`;
+
+const ADOPT_FK_COLUMN_ABSENT_EXISTING_SOURCE = `import { existingTable, schema, table, uuid } from "hejbro";
+
+export const j13 = schema("j13");
+
+export const owners = table(j13, "owners", { id: uuid().primaryKey() });
+
+export const widgets = existingTable("j13", "widgets", { id: uuid() });
+`;
+
+const ADOPT_FK_COLUMN_ABSENT_MANAGED_SOURCE = `import { schema, table, uuid } from "hejbro";
+
+export const j13 = schema("j13");
+
+export const owners = table(j13, "owners", { id: uuid().primaryKey() });
+
+export const widgets = table(j13, "widgets", { id: uuid(), ownerId: uuid() }, (t) => ({
+	foreignKeys: [
+		{
+			name: "widgets_owner_fk",
+			columns: [t.ownerId],
+			references: { table: owners, columns: [owners.id] },
+		},
+	],
+}));
+`;
+
+// 671/R8, N4: adoption emits no column statement (671/R2), so a
+// not-null column the managed declaration adds gets no
+// not-null-without-default warning on an adopted table -- the managed
+// control (no existingTable() at all) still gets it.
+
+const ADOPT_NOT_NULL_COLUMN_EXISTING_SOURCE = `import { existingTable, schema, uuid } from "hejbro";
+
+export const j14 = schema("j14");
+
+export const widgets = existingTable("j14", "widgets", { id: uuid() });
+`;
+
+const ADOPT_NOT_NULL_COLUMN_MANAGED_SOURCE = `import { schema, table, text, uuid } from "hejbro";
+
+export const j14 = schema("j14");
+
+export const widgets = table(j14, "widgets", { id: uuid(), status: text().notNull() });
+`;
+
+const MANAGED_NOT_NULL_COLUMN_BEFORE_SOURCE = `import { schema, table, uuid } from "hejbro";
+
+export const j15 = schema("j15");
+
+export const widgets = table(j15, "widgets", { id: uuid() });
+`;
+
+const MANAGED_NOT_NULL_COLUMN_AFTER_SOURCE = `import { schema, table, text, uuid } from "hejbro";
+
+export const j15 = schema("j15");
+
+export const widgets = table(j15, "widgets", { id: uuid(), status: text().notNull() });
+`;
+
+// N4-b: the exact middle of the pair -- an adoption that both creates
+// something (an index over a column the existing declaration already
+// carries, so B1 never enters this cell) and adds a not-null column in
+// the same edit. The diagnostic still fires; the column-level warning
+// still does not -- proving N4's suppression is scoped to the column
+// warning alone, not to the whole diagnostic path.
+
+const ADOPT_NOT_NULL_COLUMN_WITH_CHILD_EXISTING_SOURCE = `import { existingTable, schema, text, uuid } from "hejbro";
+
+export const j16 = schema("j16");
+
+export const widgets = existingTable("j16", "widgets", { id: uuid(), email: text() });
+`;
+
+const ADOPT_NOT_NULL_COLUMN_WITH_CHILD_MANAGED_SOURCE = `import { index, schema, table, text, uuid } from "hejbro";
+
+export const j16 = schema("j16");
+
+export const widgets = table(
+	j16,
+	"widgets",
+	{ id: uuid(), email: text(), status: text().notNull() },
+	(t) => ({
+		indexes: [index("widgets_email_idx").on(t.email)],
+	}),
+);
+`;
+
 let cwd: string;
 
 beforeEach(async () => {
@@ -1302,11 +1489,13 @@ export default defineConfig({
 	});
 });
 
-describe("hejbro generate — adoption-creates (671/task 1.3)", () => {
+describe("hejbro generate — adoption-creates (671/task 1.3, 1.3a)", () => {
 	const adoptionCreatesIntro =
 		"adoption creates objects for a table hejbro did not create; apply fails if the database already holds any of them";
+	const missingColumnRisk =
+		'apply also fails if the database lacks a column one of these objects needs — "hejbro check --url <url>" names such a column before you migrate';
 	const nextLine =
-		'Next: if the database already holds these, run "hejbro baseline" to record them instead of applying this migration.';
+		'Next: if the database already holds these, run "hejbro baseline" to record them instead of applying this migration; if it lacks a column, add the column in a following edit and adopt with the columns the database has.';
 
 	it("names only the sequence for an adoption that fans out into a sequence alone (671/task 1.3, table A: sequence)", async () => {
 		await runCli(cwd, ["init"]);
@@ -1322,6 +1511,7 @@ describe("hejbro generate — adoption-creates (671/task 1.3)", () => {
 			[
 				"warning[adoption-creates]: j1.widgets",
 				`  ${adoptionCreatesIntro}`,
+				`  ${missingColumnRisk}`,
 				'  sequence "j1.widgets_id_seq"',
 				`  ${nextLine}`,
 				"",
@@ -1343,6 +1533,7 @@ describe("hejbro generate — adoption-creates (671/task 1.3)", () => {
 			[
 				"warning[adoption-creates]: j2.widgets",
 				`  ${adoptionCreatesIntro}`,
+				`  ${missingColumnRisk}`,
 				"  row-level security",
 				'  policy "read_low"',
 				`  ${nextLine}`,
@@ -1365,6 +1556,7 @@ describe("hejbro generate — adoption-creates (671/task 1.3)", () => {
 			[
 				"warning[adoption-creates]: j3.widgets",
 				`  ${adoptionCreatesIntro}`,
+				`  ${missingColumnRisk}`,
 				'  index "widgets_email_idx"',
 				'  check "widgets_qty_positive"',
 				'  foreign key "widgets_owner_fk"',
@@ -1389,6 +1581,7 @@ describe("hejbro generate — adoption-creates (671/task 1.3)", () => {
 			[
 				"warning[adoption-creates]: j4.widgets",
 				`  ${adoptionCreatesIntro}`,
+				`  ${missingColumnRisk}`,
 				'  sequence "j4.widgets_id_seq"',
 				"  row-level security",
 				'  policy "read_low"',
@@ -1439,11 +1632,13 @@ describe("hejbro generate — adoption-creates (671/task 1.3)", () => {
 			[
 				"warning[adoption-creates]: j5.gadgets",
 				`  ${adoptionCreatesIntro}`,
+				`  ${missingColumnRisk}`,
 				'  sequence "j5.gadgets_id_seq"',
 				`  ${nextLine}`,
 				"",
 				"warning[adoption-creates]: j5.widgets",
 				`  ${adoptionCreatesIntro}`,
+				`  ${missingColumnRisk}`,
 				'  sequence "j5.widgets_id_seq"',
 				`  ${nextLine}`,
 				"",
@@ -1470,11 +1665,13 @@ describe("hejbro generate — adoption-creates (671/task 1.3)", () => {
 			[
 				"warning[adoption-creates]: j7.alpha",
 				`  ${adoptionCreatesIntro}`,
+				`  ${missingColumnRisk}`,
 				'  index "alpha_name_idx"',
 				`  ${nextLine}`,
 				"",
 				"warning[adoption-creates]: j7.zebra",
 				`  ${adoptionCreatesIntro}`,
+				`  ${missingColumnRisk}`,
 				'  sequence "j7.zebra_id_seq"',
 				`  ${nextLine}`,
 				"",
@@ -1496,6 +1693,7 @@ describe("hejbro generate — adoption-creates (671/task 1.3)", () => {
 			[
 				"warning[adoption-creates]: j6.widgets",
 				`  ${adoptionCreatesIntro}`,
+				`  ${missingColumnRisk}`,
 				'  sequence "j6.widgets_id_seq"',
 				`  ${nextLine}`,
 				"",
@@ -1503,6 +1701,179 @@ describe("hejbro generate — adoption-creates (671/task 1.3)", () => {
 				'  column "j6"."posts"."status" is added as not null without a default — this migration will fail if the table already has rows. Next: add .default(...), or add the column nullable now and set it not null in a later migration.',
 				"",
 			].join("\n"),
+		);
+	});
+
+	it("still creates an index over a column the existing declaration carries (671/task 1.3a, index x column carried)", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(ADOPT_INDEX_COLUMN_CARRIED_EXISTING_SOURCE);
+		await runCli(cwd, ["generate"]);
+
+		await writeSchema(ADOPT_INDEX_COLUMN_CARRIED_MANAGED_SOURCE);
+		const result = await runCli(cwd, ["generate"]);
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("wrote migrations/");
+		expect(result.stderr).toBe(
+			[
+				"warning[adoption-creates]: j8.widgets",
+				`  ${adoptionCreatesIntro}`,
+				`  ${missingColumnRisk}`,
+				'  index "widgets_email_idx"',
+				`  ${nextLine}`,
+				"",
+			].join("\n"),
+		);
+	});
+
+	it("still creates an index over a column the existing declaration never carried, not a refusal (671/task 1.3a, index x column absent)", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(ADOPT_INDEX_COLUMN_ABSENT_EXISTING_SOURCE);
+		await runCli(cwd, ["generate"]);
+
+		await writeSchema(ADOPT_INDEX_COLUMN_ABSENT_MANAGED_SOURCE);
+		const result = await runCli(cwd, ["generate"]);
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("wrote migrations/");
+		expect(result.stderr).toBe(
+			[
+				"warning[adoption-creates]: j9.widgets",
+				`  ${adoptionCreatesIntro}`,
+				`  ${missingColumnRisk}`,
+				'  index "widgets_email_idx"',
+				`  ${nextLine}`,
+				"",
+			].join("\n"),
+		);
+	});
+
+	it("still creates a check over a column the existing declaration carries (671/task 1.3a, check x column carried)", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(ADOPT_CHECK_COLUMN_CARRIED_EXISTING_SOURCE);
+		await runCli(cwd, ["generate"]);
+
+		await writeSchema(ADOPT_CHECK_COLUMN_CARRIED_MANAGED_SOURCE);
+		const result = await runCli(cwd, ["generate"]);
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("wrote migrations/");
+		expect(result.stderr).toBe(
+			[
+				"warning[adoption-creates]: j10.widgets",
+				`  ${adoptionCreatesIntro}`,
+				`  ${missingColumnRisk}`,
+				'  check "widgets_qty_positive"',
+				`  ${nextLine}`,
+				"",
+			].join("\n"),
+		);
+	});
+
+	it("still creates a check over a column the existing declaration never carried, not a refusal (671/task 1.3a, check x column absent)", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(ADOPT_CHECK_COLUMN_ABSENT_EXISTING_SOURCE);
+		await runCli(cwd, ["generate"]);
+
+		await writeSchema(ADOPT_CHECK_COLUMN_ABSENT_MANAGED_SOURCE);
+		const result = await runCli(cwd, ["generate"]);
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("wrote migrations/");
+		expect(result.stderr).toBe(
+			[
+				"warning[adoption-creates]: j11.widgets",
+				`  ${adoptionCreatesIntro}`,
+				`  ${missingColumnRisk}`,
+				'  check "widgets_qty_positive"',
+				`  ${nextLine}`,
+				"",
+			].join("\n"),
+		);
+	});
+
+	it("still creates a foreign key over a column the existing declaration carries (671/task 1.3a, foreign key x column carried)", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(ADOPT_FK_COLUMN_CARRIED_EXISTING_SOURCE);
+		await runCli(cwd, ["generate"]);
+
+		await writeSchema(ADOPT_FK_COLUMN_CARRIED_MANAGED_SOURCE);
+		const result = await runCli(cwd, ["generate"]);
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("wrote migrations/");
+		expect(result.stderr).toBe(
+			[
+				"warning[adoption-creates]: j12.widgets",
+				`  ${adoptionCreatesIntro}`,
+				`  ${missingColumnRisk}`,
+				'  foreign key "widgets_owner_fk"',
+				`  ${nextLine}`,
+				"",
+			].join("\n"),
+		);
+	});
+
+	it("still creates a foreign key over a column the existing declaration never carried, not a refusal (671/task 1.3a, foreign key x column absent)", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(ADOPT_FK_COLUMN_ABSENT_EXISTING_SOURCE);
+		await runCli(cwd, ["generate"]);
+
+		await writeSchema(ADOPT_FK_COLUMN_ABSENT_MANAGED_SOURCE);
+		const result = await runCli(cwd, ["generate"]);
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("wrote migrations/");
+		expect(result.stderr).toBe(
+			[
+				"warning[adoption-creates]: j13.widgets",
+				`  ${adoptionCreatesIntro}`,
+				`  ${missingColumnRisk}`,
+				'  foreign key "widgets_owner_fk"',
+				`  ${nextLine}`,
+				"",
+			].join("\n"),
+		);
+	});
+
+	it("prints no not-null-without-default warning for a not-null column an adoption adds, since adoption emits no column statement (671/task 1.3a, N4: adopted)", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(ADOPT_NOT_NULL_COLUMN_EXISTING_SOURCE);
+		await runCli(cwd, ["generate"]);
+
+		await writeSchema(ADOPT_NOT_NULL_COLUMN_MANAGED_SOURCE);
+		const result = await runCli(cwd, ["generate"]);
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("wrote migrations/");
+		expect(result.stderr).toBe("");
+	});
+
+	it("names the index it creates but prints no not-null-without-default warning for a not-null column the same adoption adds (671/task 1.3a, N4-b: adoption creates something and adds a not-null column)", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(ADOPT_NOT_NULL_COLUMN_WITH_CHILD_EXISTING_SOURCE);
+		await runCli(cwd, ["generate"]);
+
+		await writeSchema(ADOPT_NOT_NULL_COLUMN_WITH_CHILD_MANAGED_SOURCE);
+		const result = await runCli(cwd, ["generate"]);
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("wrote migrations/");
+		expect(result.stderr).toBe(
+			[
+				"warning[adoption-creates]: j16.widgets",
+				`  ${adoptionCreatesIntro}`,
+				`  ${missingColumnRisk}`,
+				'  index "widgets_email_idx"',
+				`  ${nextLine}`,
+				"",
+			].join("\n"),
+		);
+	});
+
+	it("still prints not-null-without-default for a not-null column a managed table adds outside adoption (671/task 1.3a, N4: managed control)", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(MANAGED_NOT_NULL_COLUMN_BEFORE_SOURCE);
+		await runCli(cwd, ["generate"]);
+
+		await writeSchema(MANAGED_NOT_NULL_COLUMN_AFTER_SOURCE);
+		const result = await runCli(cwd, ["generate"]);
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("wrote migrations/");
+		expect(result.stderr).toContain(
+			"warning[not-null-without-default]: j15.widgets",
 		);
 	});
 });

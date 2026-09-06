@@ -395,11 +395,13 @@ const warningStderr = (
 	return renderDiagnostics(allDiagnostics, null);
 };
 
-/** 671/R5's fixed body opener and closer for `adoption-creates` — the text between them names each object this run's adoption fans out into, one line per object, in the delta's own enumeration order. */
+/** 671/R5's fixed body opener and closer for `adoption-creates` — the text between them names each object this run's adoption fans out into, one line per object, in the delta's own enumeration order. 671/R8 adds the second line: a generate-time refusal can't tell "the database lacks this column" from "the database has it, `existingTable()` just didn't list it" (both read identically offline), so the risk is named instead — `hejbro check --url` is the command that can tell the two apart. */
 const ADOPTION_CREATES_INTRO =
 	"adoption creates objects for a table hejbro did not create; apply fails if the database already holds any of them";
+const ADOPTION_CREATES_MISSING_COLUMN_RISK =
+	'apply also fails if the database lacks a column one of these objects needs — "hejbro check --url <url>" names such a column before you migrate';
 const ADOPTION_CREATES_NEXT =
-	'Next: if the database already holds these, run "hejbro baseline" to record them instead of applying this migration.';
+	'Next: if the database already holds these, run "hejbro baseline" to record them instead of applying this migration; if it lacks a column, add the column in a following edit and adopt with the columns the database has.';
 
 /** The owning table's identity string for one adopted change (671/R5, D-3-A) — `table`/`rls` already carry it as their own identity; `policy`'s own identity is `<schema>.<table>.<name>`, so its first two segments are the table's; `sequence`'s own identity never names its owning table at all, so its owning table comes from its own snapshot's `schema`/`table` fields instead (`SequenceSnapshot`, a public export). No other kind ever carries `transition: "adopted"` (D-3-A: only kinds implementing `ownerTableIdentity`, plus `table` itself, do). */
 const owningTableIdentity = (change: KindChange): string => {
@@ -483,7 +485,7 @@ const adoptionObjectLines = (
 	...tableChildLines(changes.find((change) => change.kind === "table")),
 ];
 
-/** One `adoption-creates` `Diagnostic` per adopted table (671/R3, R5) — a CLI-only literal, never core's `diagnostic()` factory. `renderDiagnostics` prints it as `warning[adoption-creates]: <schema>.<table>`. */
+/** One `adoption-creates` `Diagnostic` per adopted table that the migration creates anything for (671/R3, R5, R8) — a CLI-only literal, never core's `diagnostic()` factory. `renderDiagnostics` prints it as `warning[adoption-creates]: <schema>.<table>`. */
 const adoptionCreatesDiagnostic = (
 	tableIdentity: string,
 	changes: ReadonlyArray<KindChange>,
@@ -492,6 +494,7 @@ const adoptionCreatesDiagnostic = (
 	identity: tableIdentity,
 	body: [
 		ADOPTION_CREATES_INTRO,
+		ADOPTION_CREATES_MISSING_COLUMN_RISK,
 		...adoptionObjectLines(changes),
 		ADOPTION_CREATES_NEXT,
 	],
@@ -511,7 +514,7 @@ const compareTableIdentities = (first: string, second: string): number => {
 	return 0;
 };
 
-/** Every `adoption-creates` diagnostic this run's migrations carry (671/R3, R5) — one per table whose owner-or-self transitioned to managed this run (`transition: "adopted"`, stamped once by `engine/diff-engine.ts`, D-3-A: never recomputed here), grouped across every migration file `generateMigrations` wrote (a split run can carry the same table's fan-out across more than one file). `[]` for a handover or a new table: neither ever carries the stamp. */
+/** Every `adoption-creates` diagnostic this run's migrations carry (671/R3, R5, R8) — one per table whose owner-or-self transitioned to managed this run (`transition: "adopted"`, stamped once by `engine/diff-engine.ts`, D-3-A: never recomputed here) *and* that the migration creates at least one object for (671/R8, B2) — a table adopted with nothing for `adoptionObjectLines` to name (e.g. only a column changed, which adoption never emits a statement for) is adopted silently. Grouped across every migration file `generateMigrations` wrote (a split run can carry the same table's fan-out across more than one file). `[]` for a handover or a new table: neither ever carries the stamp. */
 const adoptionCreatesDiagnostics = (
 	migrations: ReadonlyArray<{ readonly changes: ReadonlyArray<KindChange> }>,
 ): ReadonlyArray<Diagnostic> => {
@@ -522,14 +525,39 @@ const adoptionCreatesDiagnostics = (
 	// changes happen to arrive in -- arrival order tracks which fan-out
 	// kind's own rank happens to sort first, an implementation detail no
 	// user can predict from the declarations alone.
-	const sortedEntries = Array.from(groupByOwningTable(adopted).entries()).sort(
-		([firstIdentity], [secondIdentity]) =>
+	const sortedEntries = Array.from(groupByOwningTable(adopted).entries())
+		.filter(([, changes]) => adoptionObjectLines(changes).length > 0)
+		.sort(([firstIdentity], [secondIdentity]) =>
 			compareTableIdentities(firstIdentity, secondIdentity),
-	);
+		);
 	return sortedEntries.map(([tableIdentity, changes]) =>
 		adoptionCreatesDiagnostic(tableIdentity, changes),
 	);
 };
+
+/** Every table identity that transitioned from existing to managed this run (671/R8, N4) — unlike {@link adoptionCreatesDiagnostics}, this reads every `transition: "adopted"` change, not only the ones with something to name: a column-only adoption still needs to suppress the column warning below even though it names nothing under `adoption-creates`. */
+const adoptedTableIdentities = (
+	migrations: ReadonlyArray<{ readonly changes: ReadonlyArray<KindChange> }>,
+): ReadonlySet<string> =>
+	new Set(
+		migrations
+			.flatMap((migration) => migration.changes)
+			.filter((change) => change.transition === "adopted")
+			.map(owningTableIdentity),
+	);
+
+/** Drops a `not-null-without-default` warning for a table this run adopted (671/R8, N4): adoption never emits a column statement for the table it adopts (671/R2), so the warning would be describing a statement `migrate` never sends. A managed table's own such warning is untouched — its identity is never in `adopted`. */
+const suppressAdoptedColumnWarnings = (
+	warnings: ReadonlyArray<CoreDiagnostic>,
+	adopted: ReadonlySet<string>,
+	fallbackIdentity: string,
+): ReadonlyArray<CoreDiagnostic> =>
+	warnings.filter((warning) => {
+		if (warning.code !== "not-null-without-default") {
+			return true;
+		}
+		return !adopted.has(identityFromMessage(warning.message, fallbackIdentity));
+	});
 
 /**
  * `hejbro generate`'s full flow (Task 13): parse flags → load config +
@@ -1037,6 +1065,12 @@ export const runGenerate = async (
 			const adoptionDiagnostics = adoptionCreatesDiagnostics(
 				finalPass.migrations,
 			);
+			const adopted = adoptedTableIdentities(finalPass.migrations);
+			const warnings = suppressAdoptedColumnWarnings(
+				finalPass.warnings,
+				adopted,
+				fallbackIdentity,
+			);
 			return {
 				exitCode: 0,
 				stdout: [
@@ -1046,18 +1080,12 @@ export const runGenerate = async (
 						writtenMigrations,
 						finalPass.hasChanges,
 					),
-					...warningSummaryLines(
-						adoptionDiagnostics.length + finalPass.warnings.length,
-					),
+					...warningSummaryLines(adoptionDiagnostics.length + warnings.length),
 					...writtenMigrations.map(
 						(written) => written.sql.split("\n\n")[0] ?? "",
 					),
 				],
-				stderr: warningStderr(
-					adoptionDiagnostics,
-					finalPass.warnings,
-					fallbackIdentity,
-				),
+				stderr: warningStderr(adoptionDiagnostics, warnings, fallbackIdentity),
 			};
 		} catch (error) {
 			const hejbroErr = asHejbroError(error);
