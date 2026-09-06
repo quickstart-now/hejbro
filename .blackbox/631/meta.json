@@ -173,6 +173,17 @@
       "at": "2026-09-05T22:48Z",
       "title": "the banner ends where the leading comment block ends; status never lists a changed body as applied; reset upgrades too",
       "ratified": null
+    },
+    {
+      "id": "R16",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "D106 evaluation.md round 1 N2 N4 N5 N10; 631/R13 (upgrade path); 631/R15 (mechanical banner boundary); 412/D29 triage of N1 N3 N6-N9 N11-N13 (#978 #1007 #1008)"
+      ],
+      "at": "2026-09-06T01:49Z",
+      "title": "D106 round 1 wording: raised-file normalization, blank means empty, no banner literal hashes whole, upgrade on the first row-recording run",
+      "ratified": null
     }
   ],
   "work": [
