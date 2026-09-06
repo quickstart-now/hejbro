@@ -112,6 +112,19 @@
       "at": "2026-09-06T04:56Z",
       "title": "a foreign key lost at both ends is announced once, its reason on the source end",
       "ratified": null
+    },
+    {
+      "id": "R10",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "constructor review round 1 (11 databases on postgres:17.11",
+        "B1-B3",
+        "N1-N6); 712/R3 D2; 712/R5 R8 (reason clauses); delta 'a surviving declaration SHALL never reference an object this reading omitted'; 412/D13; 412/D29 (#1016 #1017 #1018)"
+      ],
+      "at": "2026-09-06T06:40Z",
+      "title": "review round 1: an omitted column takes its indexes, checks and unique constraints too; two-cause columns name both ways out; the primary-key line states a name collision; ordering sentences narrowed",
+      "ratified": null
     }
   ],
   "work": [
