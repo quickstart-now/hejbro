@@ -98,7 +98,15 @@
       "ratified": null
     }
   ],
-  "work": [],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-06T02:48Z",
+      "title": "adoption creates the table's declared children, normalizes the adopted sequence, and generate names both",
+      "pr": null,
+      "decisions": []
+    }
+  ],
   "prs": [],
   "origin": null,
   "followUps": []

@@ -23,7 +23,7 @@ into the diff.
 
 ## 1. Adoption
 
-- [ ] 1.1 (~10m) **[design]** The table's children on adoption. Settles
+- [x] 1.1 (~10m) **[design]** The table's children on adoption. Settles
       how the diff engine tells a kind "this owner was adopted" (a
       transition on the `KindChange`, or a separate create per child
       derived from the table diff). Red: the table-kind diff/emit tests,
@@ -32,7 +32,7 @@ into the diff.
       nothing; new table → inside `create table` as today}. Files:
       `diff-engine.ts`, `table-kind*.ts`, tests, goldens.
 
-- [ ] 1.2 (~9m) The adopted sequence. Red: sequence-kind tests — for an
+- [x] 1.2 (~9m) The adopted sequence. Red: sequence-kind tests — for an
       adopted owner, `create sequence if not exists …;` then `alter
       sequence … as <type>;` and `alter sequence … owned by …;`; for a
       new table, the plain `create sequence` unchanged (a golden pins
@@ -40,13 +40,13 @@ into the diff.
       yields the idempotent form. Files: `sequence-kind.ts`,
       `diff-engine.ts`, tests, goldens.
 
-- [ ] 1.3 (~7m) **[design]** `adoption-creates`. Settles the message.
+- [x] 1.3 (~7m) **[design]** `adoption-creates`. Settles the message.
       Red: the generate command tests — adoption prints one line per
       adopted table naming each created object kind and the `baseline`
       Next; handover and a new table print nothing; the migration is
       written either way. Files: `generate.ts`, tests.
 
-- [ ] 1.4 (~9m) Live witnesses on `postgres:17-alpine`. (C-1) A
+- [x] 1.4 (~9m) Live witnesses on `postgres:17-alpine`. (C-1) A
       declaration whose only managed object is a `serial` sequence:
       managed → handover (sequence kept) → adoption applies cleanly
       (`42P07` gone) and `check` reports no differences. (C-2) A bare
@@ -55,7 +55,7 @@ into the diff.
       key: the four children exist in the catalog afterwards and `check`
       reports no differences. Files: the integration test.
 
-- [ ] 1.5 (~5m) Docs and changeset. `brownfield-adoption.md` states the
+- [x] 1.5 (~5m) Docs and changeset. `brownfield-adoption.md` states the
       adoption contract (creates children and normalizes sequences,
       never drops) and the notice, citing the literal
       `warning[adoption-creates]` beside the existing
