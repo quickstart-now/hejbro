@@ -52,8 +52,8 @@ Each vendored table SHALL carry a `Relations` map in the generated
 table's own foreign key points along, `"many"` for one another table's
 foreign key points back along — computed when the contract is emitted,
 from the same foreign keys the query layer's `related()` derives from,
-by the rules below, which are narrower than the declaring side's type
-layer wherever the emitted file must be stricter: a single-column
+by the rules below, which govern the emitted map whatever the declaring
+side's own type layer derives: a single-column
 foreign key whose column key ends in `Id` yields a forward relation
 under the stripped key; a single-column foreign key from another
 carried table onto this one yields a reverse relation under that
@@ -102,8 +102,15 @@ caller that reaches past the types.
   past the types meets exactly the declaring side's own behaviour: a
   misspelling or a key colliding with one of the table's own columns is
   refused with `unknown-relation` or `ambiguous-relation`, while a key
-  omitted only for being both forward and reverse resolves along the
-  forward edge there as it does here
+  omitted only for being both forward and reverse, or for pointing at
+  the table itself, resolves along the declaring side's own edge there
+  as it does here
+
+#### Scenario: A self-referential foreign key names no relation
+- **WHEN** a vendored table's own single-column foreign key points at
+  that same table, alone or beside its other foreign keys
+- **THEN** the contract names no relation for that edge in either
+  direction, and every other relation of that table is unaffected
 
 #### Scenario: A table with no relation has no member
 - **WHEN** a vendored table's `Relations` is empty, or the contract was
