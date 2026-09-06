@@ -281,9 +281,28 @@ const targetIdentifierFor = (
 	return `${fk.targetSchema}.${fk.targetTable}`;
 };
 
+/**
+ * #873: a foreign key whose own source column, or whose *target*'s own
+ * column, is itself omitted for an undeclarable name -- named by the
+ * offending column's own identity (`"<schema>.<table>.<sqlName>"`) and
+ * which end it sits on, since the two ends read differently in a report
+ * line (the FK's own table declares only part of itself; the target's
+ * table does). A target this run never read is never checked here (its
+ * own columns are simply unknown, not omitted -- {@link
+ * partitionForeignKeys}'s own `survivingTableIdentities` guard).
+ */
+export type OmittedForeignKeyColumn = {
+	readonly schema: string;
+	readonly table: string;
+	readonly name: string;
+	readonly columnIdentity: string;
+	readonly end: "source" | "target";
+};
+
 export type ForeignKeyPartition = {
 	readonly tables: ReadonlyArray<InferredTableFacts>;
 	readonly omittedForeignKeys: ReadonlyArray<OmittedForeignKey>;
+	readonly omittedForeignKeysByColumn: ReadonlyArray<OmittedForeignKeyColumn>;
 };
 
 /**
@@ -299,12 +318,78 @@ export type ForeignKeyPartition = {
  * target's own names, rather than membership in a surviving-table set,
  * is what tells the two cases apart (D106 R6-B1: the survivor-set
  * check could not).
+ *
+ * #873 widens this to a second, independent axis: a foreign key whose
+ * own name is fine (both schema and table) can still name a column,
+ * on either end, that a *different* rule (D36 on the column's own
+ * name) already excluded -- writing it anyway is what left the starter
+ * declaration referencing a column that does not exist on either
+ * table's own object. `survivingTableIdentities` tells a target this
+ * run never read (whose own columns are simply unknown) apart from one
+ * that survived minus the very column this foreign key needs -- only
+ * the latter costs the foreign key.
  */
 export const partitionForeignKeys = (
 	tables: ReadonlyArray<InferredTableFacts>,
+	survivingTableIdentities: ReadonlySet<string>,
+	omittedColumnIdentities: ReadonlySet<string>,
 ): ForeignKeyPartition => {
 	const isCarryable = (fk: InferredForeignKey): boolean =>
 		isExpressibleName(fk.targetSchema) && isExpressibleName(fk.targetTable);
+
+	const columnOmissionsFor = (
+		facts: InferredTableFacts,
+		fk: InferredForeignKey,
+	): ReadonlyArray<OmittedForeignKeyColumn> => {
+		const sourceOmissions = fk.sourceColumns
+			.map(
+				(column) => `${facts.schema.schemaName}.${facts.tableName}.${column}`,
+			)
+			.filter((identity) => omittedColumnIdentities.has(identity))
+			.map((columnIdentity) => ({
+				schema: facts.schema.schemaName,
+				table: facts.tableName,
+				name: fk.name,
+				columnIdentity,
+				end: "source" as const,
+			}));
+		const targetSurvives = survivingTableIdentities.has(
+			`${fk.targetSchema}.${fk.targetTable}`,
+		);
+		if (!targetSurvives) {
+			return sourceOmissions;
+		}
+		const targetOmissions = fk.targetColumns
+			.map((column) => `${fk.targetSchema}.${fk.targetTable}.${column.sqlName}`)
+			.filter((identity) => omittedColumnIdentities.has(identity))
+			.map((columnIdentity) => ({
+				schema: facts.schema.schemaName,
+				table: facts.tableName,
+				name: fk.name,
+				columnIdentity,
+				end: "target" as const,
+			}));
+		return [...sourceOmissions, ...targetOmissions];
+	};
+
+	const omittedForeignKeysByColumn = tables.flatMap((facts) =>
+		facts.foreignKeys
+			.filter((fk) => isCarryable(fk))
+			.flatMap((fk) => columnOmissionsFor(facts, fk)),
+	);
+	const omittedByColumnKeys = new Set(
+		omittedForeignKeysByColumn.map(
+			(entry) => `${entry.schema}.${entry.table}.${entry.name}`,
+		),
+	);
+	const isKeptByColumnCheck = (
+		facts: InferredTableFacts,
+		fk: InferredForeignKey,
+	): boolean =>
+		!omittedByColumnKeys.has(
+			`${facts.schema.schemaName}.${facts.tableName}.${fk.name}`,
+		);
+
 	const omittedForeignKeys = tables.flatMap((facts) =>
 		facts.foreignKeys
 			.filter((fk) => !isCarryable(fk))
@@ -322,9 +407,12 @@ export const partitionForeignKeys = (
 	return {
 		tables: tables.map((facts) => ({
 			...facts,
-			foreignKeys: facts.foreignKeys.filter((fk) => isCarryable(fk)),
+			foreignKeys: facts.foreignKeys.filter(
+				(fk) => isCarryable(fk) && isKeptByColumnCheck(facts, fk),
+			),
 		})),
 		omittedForeignKeys,
+		omittedForeignKeysByColumn,
 	};
 };
 
@@ -472,7 +560,21 @@ export const inferFromCatalog = async (
 		tablePartition.omittedTables,
 		schemasWithOtherDeclarations,
 	);
-	const foreignKeyPartition = partitionForeignKeys(mergedTables);
+	// #873: computed once, ahead of the foreign-key partition below (which
+	// needs it) and reused for the loss report's own enumeration (which
+	// used to re-derive it a second time, later) -- the same judgment,
+	// asked once.
+	const undeclarableColumns = undeclarableNameColumnsFor(mergedTables);
+	const omittedColumnIdentities = new Set(
+		undeclarableColumns.map(
+			(column) => `${column.schema}.${column.table}.${column.sqlName}`,
+		),
+	);
+	const foreignKeyPartition = partitionForeignKeys(
+		mergedTables,
+		survivingTableIdentities,
+		omittedColumnIdentities,
+	);
 	const tablesWithReachableForeignKeys = foreignKeyPartition.tables;
 	const outOfScopeHandles = outOfScopeHandlesFor(
 		tablesWithReachableForeignKeys,
@@ -514,9 +616,7 @@ export const inferFromCatalog = async (
 		foreignKeyNameApproximations: detectForeignKeyNameApproximations(
 			tablesWithReachableForeignKeys,
 		),
-		undeclarableNameColumns: undeclarableNameColumnsFor(
-			tablesWithReachableForeignKeys,
-		),
+		undeclarableNameColumns: undeclarableColumns,
 		omittedSchemas: schemaPartition.omittedSchemas,
 		omittedTables,
 		omittedIndexes: built.flatMap((result) => result.omittedIndexes),
