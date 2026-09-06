@@ -27,6 +27,7 @@ const emptyFacts = (command: "import" | "pull"): LossReportFacts => ({
 	uniqueIndexApproximations: [],
 	nextvalDefaults: [],
 	foreignKeyNameApproximations: [],
+	primaryKeyNameApproximations: [],
 	undeclarableNameColumns: [],
 	omittedSchemas: [],
 	omittedTables: [],

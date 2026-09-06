@@ -7,6 +7,7 @@ import {
 import type { DriverSession } from "@hejbro/query";
 import type { Catalog } from "../check/catalog";
 import { readCatalog } from "../check/catalog";
+import { tablesInSnapshot } from "../contract/read-snapshot";
 import { mergeTableFacts } from "./adapter";
 import type { InferenceCatalog } from "./catalog";
 import { readInferenceCatalog } from "./catalog";
@@ -23,6 +24,7 @@ import {
 	buildLossReport,
 	detectForeignKeyNameApproximations,
 	detectNextvalDefaultApproximations,
+	detectPrimaryKeyNameApproximations,
 	detectUniqueIndexApproximations,
 } from "./loss-report";
 import {
@@ -598,6 +600,12 @@ export const inferFromCatalog = async (
 		),
 		foreignKeyNameApproximations: detectForeignKeyNameApproximations(
 			tablesWithReachableForeignKeys,
+		),
+		// 712/R7: measured against the snapshot core itself just built, never
+		// a second, local re-implementation of the derivation rule.
+		primaryKeyNameApproximations: detectPrimaryKeyNameApproximations(
+			catalog,
+			tablesInSnapshot(migration.snapshot),
 		),
 		undeclarableNameColumns: undeclarableColumns,
 		omittedSchemas: schemaPartition.omittedSchemas,

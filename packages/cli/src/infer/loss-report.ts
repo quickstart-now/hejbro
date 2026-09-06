@@ -1,3 +1,4 @@
+import type { TableSnapshot } from "@hejbro/core";
 import { deriveForeignKeyName } from "@hejbro/core";
 import type { Catalog } from "../check/catalog";
 import { compareCodeUnits } from "../compare-code-units";
@@ -141,6 +142,52 @@ export const detectForeignKeyNameApproximations = (
 		}),
 	);
 
+export type PrimaryKeyNameApproximation = {
+	readonly schema: string;
+	readonly table: string;
+	/** The catalog's own constraint name -- kept as raw SQL text, never written into a declaration (the DSL derives every primary-key name, D68). */
+	readonly catalogName: string;
+	/** What `generate`/`check` derive instead, and what a rename must target. */
+	readonly derivedName: string;
+};
+
+/**
+ * A primary key whose catalog constraint name is not the one the DSL
+ * itself derives (`"<table>_pkey"`, D68) -- measured directly against
+ * `migration.snapshot`'s own `primaryKeyName` (712/R7), never a second,
+ * local re-implementation of the derivation rule core already applies
+ * when it builds that snapshot. Only a surviving, primary-keyed table
+ * can differ this way: `tables` here is `migration.snapshot`'s own
+ * table nodes, so an omitted table (no node at all) or a table with no
+ * primary key (`primaryKeyName` absent) never reaches this comparison.
+ */
+export const detectPrimaryKeyNameApproximations = (
+	catalog: Catalog,
+	tables: ReadonlyArray<TableSnapshot>,
+): ReadonlyArray<PrimaryKeyNameApproximation> =>
+	tables.flatMap((table) => {
+		if (table.primaryKeyName === undefined) {
+			return [];
+		}
+		const constraint = catalog.constraints.find(
+			(row) =>
+				row.type === "p" &&
+				row.schema === table.schema &&
+				row.table === table.name,
+		);
+		if (constraint === undefined || constraint.name === table.primaryKeyName) {
+			return [];
+		}
+		return [
+			{
+				schema: table.schema,
+				table: table.name,
+				catalogName: constraint.name,
+				derivedName: table.primaryKeyName,
+			},
+		];
+	});
+
 /**
  * A column whose SQL name a declaration cannot carry, for one of two
  * different reasons ({@link cause}) -- excluded from both commands' own
@@ -270,6 +317,7 @@ export type LossReportFacts = {
 	readonly uniqueIndexApproximations: ReadonlyArray<UniqueIndexApproximation>;
 	readonly nextvalDefaults: ReadonlyArray<NextvalDefaultApproximation>;
 	readonly foreignKeyNameApproximations: ReadonlyArray<ForeignKeyNameApproximation>;
+	readonly primaryKeyNameApproximations: ReadonlyArray<PrimaryKeyNameApproximation>;
 	readonly undeclarableNameColumns: ReadonlyArray<UndeclarableNameColumn>;
 	readonly omittedSchemas: ReadonlyArray<OmittedSchema>;
 	readonly omittedTables: ReadonlyArray<OmittedTable>;
@@ -355,6 +403,7 @@ const approximationLines = (
 	uniqueIndexApproximations: ReadonlyArray<UniqueIndexApproximation>,
 	nextvalDefaults: ReadonlyArray<NextvalDefaultApproximation>,
 	foreignKeyNameApproximations: ReadonlyArray<ForeignKeyNameApproximation>,
+	primaryKeyNameApproximations: ReadonlyArray<PrimaryKeyNameApproximation>,
 ): ReadonlyArray<string> => [
 	...sortedBy(
 		uniqueIndexApproximations,
@@ -378,6 +427,14 @@ const approximationLines = (
 	).map(
 		(approximation) =>
 			`Approximated: the foreign key "${approximation.schema}.${approximation.table}.${approximation.catalogName}" is declared under the derived name "${approximation.derivedName}" instead -- its own catalog name is not a valid hejbro SQL identifier, so \`generate\`/\`check\` will name this constraint differently from the database.`,
+	),
+	...sortedBy(
+		primaryKeyNameApproximations,
+		(approximation) =>
+			`${approximation.schema}.${approximation.table}.${approximation.catalogName}`,
+	).map(
+		(approximation) =>
+			`Approximated: the primary key "${approximation.schema}.${approximation.table}.${approximation.catalogName}" is declared under the derived name "${approximation.derivedName}" instead -- the DSL derives every primary-key name, so \`generate\`/\`check\` will name this constraint differently from the database. Rename the constraint to "${approximation.derivedName}" in the database; until you do, \`check\` reports the declared "${approximation.derivedName}" as missing on every run and lists "${approximation.catalogName}" in its unmanaged-index inventory.`,
 	),
 	EXPRESSION_APPROXIMATION_LINE,
 ];
@@ -680,6 +737,7 @@ export const buildLossReport = (
 		facts.uniqueIndexApproximations,
 		facts.nextvalDefaults,
 		facts.foreignKeyNameApproximations,
+		facts.primaryKeyNameApproximations,
 	),
 	...omittedSchemaLines(facts.omittedSchemas, facts.command),
 	...omittedTableLines(facts.omittedTables, facts.command),
