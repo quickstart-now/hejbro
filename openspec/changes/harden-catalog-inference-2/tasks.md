@@ -54,7 +54,7 @@ goes back to the planner, not into the diff.
       derived name → no line}. Files: `compose.ts`, `loss-report.ts`,
       tests.
 
-- [ ] 1.4 (~5m) One comparator. Red: the loss-report tests — an NFC/NFD
+- [x] 1.4 (~5m) One comparator. Red: the loss-report tests — an NFC/NFD
       pair and two names a locale reorders sort by code points under
       `LC_ALL=C` and `LC_ALL=en_US.UTF-8` alike; `sortedBy` imports the
       inventory's comparator from one shared module. Files:
