@@ -31,6 +31,20 @@
       "at": "2026-09-06T01:45Z",
       "title": "the omitted-enum line says check names the column and not the type; commands/check.ts joins task 1.4 for the comparator move",
       "ratified": null
+    },
+    {
+      "id": "R3",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "712/R1 (design Q2); 712/R2 (check names the column",
+        "not the type); delta catalog-inference 'one line names the enum and the column'; loss-report.ts sibling Omitted* family and line skeleton (measured 183-240",
+        "400-577",
+        "614-635)"
+      ],
+      "at": "2026-09-06T02:04Z",
+      "title": "task 1.2 design: OmittedEnum names only the columns its omission takes out; import and pull line texts; schema-level position and code-point order",
+      "ratified": null
     }
   ],
   "work": [],

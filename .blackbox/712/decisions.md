@@ -20,3 +20,28 @@ Q1 — the omitted-enum line's `check` consequence. The delta's scenario "An omi
 
 Q2 — file boundary for task 1.4. The comparator to share is `compareCodeUnits` in `packages/cli/src/commands/check.ts` (229–254), not in `check/inventory.ts`; moving it to a shared module means editing `commands/check.ts`, which tasks.md did not list. Ruling: `packages/cli/src/commands/check.ts` joins task 1.4's files for exactly the move and its import line — no assertion or logic moves with it; tasks.md's header names it. A copy in `loss-report.ts` would contradict the delta's "the same comparator, shared" and is refused.
 
+<a id="r3"></a>
+## R3 — task 1.2 design: OmittedEnum names only the columns its omission takes out; import and pull line texts; schema-level position and code-point order
+
+_lead · extension · basis 712/R1 (design Q2); 712/R2 (check names the column, not the type); delta catalog-inference 'one line names the enum and the column'; loss-report.ts sibling Omitted* family and line skeleton (measured 183-240, 400-577, 614-635) · 2026-09-06T02:04Z · ratified: pending_
+
+Settles task 1.2's `[design]` question — the omitted-enum omission's data shape and the loss-report line — on the planner's submission D1–D5.
+
+D1, the type: `OmittedEnum` (`schema`, `sqlName`, `columns: ReadonlyArray<{ schema, table, sqlName }>`), named like its five siblings in `loss-report.ts`; tasks.md's `EnumNameOmission` was the lead's wording and is corrected to match.
+
+D2, the columns a line names: only the columns the enum's omission itself takes out — columns on a surviving table whose own names pass. A column already omitted for its own name is reported by its own line, and a column on an omitted table by that table's line; no object appears on two lines and no line states a cause that is not its own.
+
+D3, the `import` line. With columns:
+```
+Omitted: enum type "app.Status" -- its catalog name is not a valid hejbro SQL identifier, so no declaration can carry it, and every column typed by it is left out with it: "app.orders.status". `check` keeps naming each of them as unmanaged until it is declared, and never names the type itself -- its inventory has no enum axis. Next: rename the type in the database, re-run `hejbro import`, and declare both.
+```
+Without columns:
+```
+Omitted: enum type "app.Status" -- its catalog name is not a valid hejbro SQL identifier, so no declaration can carry it. No column is typed by it, so nothing else is left out, and `check` never names the type -- its inventory has no enum axis. Next: rename the type in the database and re-run `hejbro import`.
+```
+"each of them … until it is declared" reads for one column and for many, so the line has no singular/plural branch.
+
+D4, the `pull` line: as submitted — "so neither it nor the columns typed by it can be carried in the contract: …" with columns, "so it cannot be carried in the contract." without; both end "Rename the type in the database, then link the schema repository." No `check` sentence on the pull side, as the sibling lines.
+
+D5, position and order: the enum lines follow the omitted-table lines and precede the omitted-index lines (schema-level objects first, then table-level ones); lines sort by `schema.sqlName` and a line's columns by `schema.table.sqlName`, both under the shared code-point comparator of task 1.4, so task 1.4 runs before task 1.2. Golden diffs caused by the new position are reported verbatim.
+
