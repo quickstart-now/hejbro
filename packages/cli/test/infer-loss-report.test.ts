@@ -31,6 +31,7 @@ const emptyFacts = (command: "import" | "pull"): LossReportFacts => ({
 	undeclarableNameColumns: [],
 	omittedSchemas: [],
 	omittedTables: [],
+	omittedEnums: [],
 	omittedIndexes: [],
 	omittedChecks: [],
 	omittedForeignKeys: [],
@@ -826,6 +827,100 @@ describe("buildLossReport / 712/R5: a foreign key at an omitted column names the
 		expect(report).toContain(
 			'Omitted: foreign key "app.orders.fk_widget" -- references table "app.Widgets", whose catalog name is not a valid hejbro SQL identifier, so no declaration can carry it. Next: rename the table in the database, then re-run `hejbro import`.',
 		);
+	});
+});
+
+/**
+ * 712/R3: an enum type held to D36 -- the line's own text branches on
+ * command (import/pull) and on whether any column was typed by it, four
+ * cells total, plus D5's own ordering (enum lines by `schema.sqlName`,
+ * a line's own columns by `schema.table.sqlName`).
+ */
+describe("buildLossReport / 712/R3: an enum type held to D36", () => {
+	it("import, with columns: names the type, every column it took with it, and check's own two-sided consequence", () => {
+		const report = buildLossReport({
+			...emptyFacts("import"),
+			omittedEnums: [
+				{
+					schema: "app",
+					sqlName: "Status",
+					columns: [{ schema: "app", table: "orders", sqlName: "status" }],
+				},
+			],
+		});
+
+		expect(report).toContain(
+			'Omitted: enum type "app.Status" -- its catalog name is not a valid hejbro SQL identifier, so no declaration can carry it, and every column typed by it is left out with it: "app.orders.status". `check` keeps naming each of them as unmanaged until it is declared, and never names the type itself -- its inventory has no enum axis. Next: rename the type in the database, re-run `hejbro import`, and declare both.',
+		);
+	});
+
+	it("import, without columns: names the type alone, and states nothing else is left out", () => {
+		const report = buildLossReport({
+			...emptyFacts("import"),
+			omittedEnums: [{ schema: "app", sqlName: "2nd", columns: [] }],
+		});
+
+		expect(report).toContain(
+			'Omitted: enum type "app.2nd" -- its catalog name is not a valid hejbro SQL identifier, so no declaration can carry it. No column is typed by it, so nothing else is left out, and `check` never names the type -- its inventory has no enum axis. Next: rename the type in the database and re-run `hejbro import`.',
+		);
+	});
+
+	it("pull, with columns: names the type and its columns as uncarriable, with no check sentence", () => {
+		const report = buildLossReport({
+			...emptyFacts("pull"),
+			omittedEnums: [
+				{
+					schema: "app",
+					sqlName: "Status",
+					columns: [{ schema: "app", table: "orders", sqlName: "status" }],
+				},
+			],
+		});
+
+		expect(report).toContain(
+			'Omitted: enum type "app.Status" -- its catalog name is not a valid hejbro SQL identifier, so neither it nor the columns typed by it can be carried in the contract: "app.orders.status". Rename the type in the database, then link the schema repository.',
+		);
+	});
+
+	it("pull, without columns: names the type alone as uncarriable, with no check sentence", () => {
+		const report = buildLossReport({
+			...emptyFacts("pull"),
+			omittedEnums: [{ schema: "app", sqlName: "2nd", columns: [] }],
+		});
+
+		expect(report).toContain(
+			'Omitted: enum type "app.2nd" -- its catalog name is not a valid hejbro SQL identifier, so it cannot be carried in the contract. Rename the type in the database, then link the schema repository.',
+		);
+	});
+
+	it("D5: orders two omitted enums by schema.sqlName, and one enum's own columns by schema.table.sqlName, regardless of the order the facts arrived in", () => {
+		const report = buildLossReport({
+			...emptyFacts("import"),
+			omittedEnums: [
+				{ schema: "app", sqlName: "Zeta", columns: [] },
+				{
+					schema: "app",
+					sqlName: "Alpha",
+					columns: [
+						{ schema: "app", table: "orders", sqlName: "z_col" },
+						{ schema: "app", table: "orders", sqlName: "a_col" },
+					],
+				},
+			],
+		});
+
+		const alphaLine = report.find((line) => line.includes('"app.Alpha"'));
+		const zetaLine = report.find((line) => line.includes('"app.Zeta"'));
+		if (alphaLine === undefined || zetaLine === undefined) {
+			throw new Error(`expected both enum lines:\n${report.join("\n")}`);
+		}
+		expect(report.indexOf(alphaLine)).toBeLessThan(report.indexOf(zetaLine));
+
+		const aColIndex = alphaLine.indexOf('"app.orders.a_col"');
+		const zColIndex = alphaLine.indexOf('"app.orders.z_col"');
+		expect(aColIndex).toBeGreaterThanOrEqual(0);
+		expect(zColIndex).toBeGreaterThanOrEqual(0);
+		expect(aColIndex).toBeLessThan(zColIndex);
 	});
 });
 

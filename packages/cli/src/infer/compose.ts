@@ -5,7 +5,7 @@ import {
 	generateMigration,
 } from "@hejbro/core";
 import type { DriverSession } from "@hejbro/query";
-import type { Catalog } from "../check/catalog";
+import type { Catalog, EnumRow } from "../check/catalog";
 import { readCatalog } from "../check/catalog";
 import { tablesInSnapshot } from "../contract/read-snapshot";
 import { mergeTableFacts } from "./adapter";
@@ -14,6 +14,7 @@ import { readInferenceCatalog } from "./catalog";
 import type { CatalogDescription } from "./description";
 import { describeCatalog } from "./description";
 import type {
+	OmittedEnum,
 	OmittedForeignKey,
 	OmittedForeignKeyColumn,
 	OmittedSchema,
@@ -140,15 +141,26 @@ const filterInferenceCatalogToSchemas = (
  * guessed at") means `pull`'s contract would silently declare a
  * column under the wrong name if the snapshot carried it -- excluded
  * here for both commands, `command` no longer branches this half.
+ * `enumOmittedColumnIdentities` (712/R3) widens the same exclusion to a
+ * column whose own name is fine but whose *type* is an omitted enum --
+ * a type node can only ever reference a declared enum, so this column
+ * must never reach `inferTable` either (it would otherwise surface a
+ * second time as a plain type loss, D2's forbidden double report).
  */
 const tablesExcludingUndeclarableNames = (
 	tables: ReadonlyArray<InferredTableFacts>,
+	enumOmittedColumnIdentities: ReadonlySet<string>,
 ): ReadonlyArray<InferredTableFacts> =>
 	tables.map((table) => ({
 		...table,
-		columns: table.columns.filter((column) =>
-			isNameDeclarable(column.sqlName, column.tsKey),
-		),
+		columns: table.columns.filter((column) => {
+			if (!isNameDeclarable(column.sqlName, column.tsKey)) {
+				return false;
+			}
+			return !enumOmittedColumnIdentities.has(
+				`${table.schema.schemaName}.${table.tableName}.${column.sqlName}`,
+			);
+		}),
 	}));
 
 /**
@@ -207,6 +219,27 @@ export const partitionSchemas = (catalog: Catalog): SchemaPartition => ({
 	omittedSchemas: catalog.schemas
 		.filter((row) => !isExpressibleName(row.schema))
 		.map((row) => ({ sqlName: row.schema })),
+});
+
+export type EnumPartition = {
+	/** Every enum row whose own catalog name is a valid hejbro SQL identifier -- safe to pass to `inferEnums`/`pgEnum`. */
+	readonly expressibleEnums: ReadonlyArray<EnumRow>;
+	readonly omittedEnums: ReadonlyArray<EnumRow>;
+};
+
+/**
+ * 712/R3 (D36): `pgEnum` asserts nothing about its own name, so a
+ * catalog name D36 rejects would otherwise reach the snapshot, the
+ * starter and the emitted DDL unchanged -- filtered here, before
+ * `inferEnums` ever calls `pgEnum`, the same reason {@link
+ * partitionSchemas}/{@link partitionTables} filter ahead of their own
+ * constructors. An enum has no TypeScript key of its own (unlike a
+ * column), so `isExpressibleName` alone settles it -- no round-trip
+ * half to ask.
+ */
+export const partitionEnums = (catalog: Catalog): EnumPartition => ({
+	expressibleEnums: catalog.enums.filter((row) => isExpressibleName(row.name)),
+	omittedEnums: catalog.enums.filter((row) => !isExpressibleName(row.name)),
 });
 
 /** A table's identity alone, before `withInventorySignal` below can say whether `check` will keep naming it (that needs the final declared schema/enum set, not yet known at partition time). */
@@ -505,8 +538,12 @@ export const inferFromCatalog = async (
 		return declareSchema(name);
 	};
 
+	// 712/R3: a catalog name D36 rejects never reaches `pgEnum` -- filtered
+	// before `inferEnums` calls it, the same reason `partitionSchemas`
+	// filters ahead of `declareSchema`.
+	const enumPartition = partitionEnums(catalog);
 	const enums = inferEnums(
-		catalog.enums,
+		enumPartition.expressibleEnums,
 		inferenceCatalog.enumLabels,
 		schemaFor,
 	);
@@ -550,11 +587,78 @@ export const inferFromCatalog = async (
 	// used to re-derive it a second time, later) -- the same judgment,
 	// asked once.
 	const undeclarableColumns = undeclarableNameColumnsFor(mergedTables);
-	const omittedColumnIdentities = new Set(
-		undeclarableColumns.map(
+	// 712/R3: a column typed by an omitted enum -- its own name may well
+	// be fine, but its type node can only ever reference a declared enum,
+	// so it is excluded the same way an undeclarable-name column is (and
+	// folded into the same `omittedColumnIdentities` set a foreign key at
+	// that column already checks, D2's own reuse of task 1.3's rule). The
+	// omitted enum's own type identity is read from the raw catalog row
+	// (`baseTypeKind`/`baseTypeSchema`/`baseTypeName`), never re-derived.
+	const omittedEnumIdentities = new Set(
+		enumPartition.omittedEnums.map((row) => `${row.schema}.${row.name}`),
+	);
+	const columnRowsByIdentity = new Map(
+		catalog.columns.map(
+			(row) => [`${row.schema}.${row.table}.${row.name}`, row] as const,
+		),
+	);
+	const enumOmittedColumns = mergedTables.flatMap((table) =>
+		table.columns.flatMap((column) => {
+			const row = columnRowsByIdentity.get(
+				`${table.schema.schemaName}.${table.tableName}.${column.sqlName}`,
+			);
+			if (
+				row === undefined ||
+				row.baseTypeKind !== "e" ||
+				row.baseTypeSchema === null ||
+				row.baseTypeName === null ||
+				!omittedEnumIdentities.has(`${row.baseTypeSchema}.${row.baseTypeName}`)
+			) {
+				return [];
+			}
+			// D2: a column already omitted for its own name is reported by
+			// that column's own line, never by the enum's line too.
+			if (!isNameDeclarable(column.sqlName, column.tsKey)) {
+				return [];
+			}
+			return [
+				{
+					enumSchema: row.baseTypeSchema,
+					enumName: row.baseTypeName,
+					schema: table.schema.schemaName,
+					table: table.tableName,
+					sqlName: column.sqlName,
+				},
+			];
+		}),
+	);
+	const enumOmittedColumnIdentities = new Set(
+		enumOmittedColumns.map(
 			(column) => `${column.schema}.${column.table}.${column.sqlName}`,
 		),
 	);
+	const omittedEnums: ReadonlyArray<OmittedEnum> =
+		enumPartition.omittedEnums.map((enumRow) => ({
+			schema: enumRow.schema,
+			sqlName: enumRow.name,
+			columns: enumOmittedColumns
+				.filter(
+					(column) =>
+						column.enumSchema === enumRow.schema &&
+						column.enumName === enumRow.name,
+				)
+				.map((column) => ({
+					schema: column.schema,
+					table: column.table,
+					sqlName: column.sqlName,
+				})),
+		}));
+	const omittedColumnIdentities = new Set([
+		...undeclarableColumns.map(
+			(column) => `${column.schema}.${column.table}.${column.sqlName}`,
+		),
+		...enumOmittedColumnIdentities,
+	]);
 	const foreignKeyPartition = partitionForeignKeys(
 		mergedTables,
 		survivingTableIdentities,
@@ -568,6 +672,7 @@ export const inferFromCatalog = async (
 
 	const snapshotTables = tablesExcludingUndeclarableNames(
 		tablesWithReachableForeignKeys,
+		enumOmittedColumnIdentities,
 	);
 	const built = snapshotTables.map((table) =>
 		inferTable(table, outOfScopeHandles),
@@ -610,6 +715,7 @@ export const inferFromCatalog = async (
 		undeclarableNameColumns: undeclarableColumns,
 		omittedSchemas: schemaPartition.omittedSchemas,
 		omittedTables,
+		omittedEnums,
 		omittedIndexes: built.flatMap((result) => result.omittedIndexes),
 		omittedChecks: built.flatMap((result) => result.omittedChecks),
 		omittedForeignKeys: foreignKeyPartition.omittedForeignKeys,

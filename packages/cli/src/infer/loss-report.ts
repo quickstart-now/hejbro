@@ -249,6 +249,26 @@ export type OmittedTable = {
 	readonly stillReportedInInventory: boolean;
 };
 
+/**
+ * An enum type whose catalog name is not a valid hejbro SQL identifier
+ * (712/R3, D36) -- `pgEnum` asserts nothing about its own name, so this
+ * is the one identifier the DSL never rejects on its own; omitted here
+ * along with every column typed by it, since a column's type node can
+ * only ever reference a declared enum. `columns` names only the ones
+ * the enum's own omission itself takes out -- a column already omitted
+ * for its own name is reported by that column's own line instead
+ * (D2: no object appears on two lines).
+ */
+export type OmittedEnum = {
+	readonly schema: string;
+	readonly sqlName: string;
+	readonly columns: ReadonlyArray<{
+		readonly schema: string;
+		readonly table: string;
+		readonly sqlName: string;
+	}>;
+};
+
 /** An index whose catalog name is not a valid hejbro SQL identifier (D106 R4-B1) -- costs that index alone; the table and its other objects are still declared. */
 export type OmittedIndex = {
 	readonly schema: string;
@@ -321,6 +341,7 @@ export type LossReportFacts = {
 	readonly undeclarableNameColumns: ReadonlyArray<UndeclarableNameColumn>;
 	readonly omittedSchemas: ReadonlyArray<OmittedSchema>;
 	readonly omittedTables: ReadonlyArray<OmittedTable>;
+	readonly omittedEnums: ReadonlyArray<OmittedEnum>;
 	readonly omittedIndexes: ReadonlyArray<OmittedIndex>;
 	readonly omittedChecks: ReadonlyArray<OmittedCheck>;
 	readonly omittedForeignKeys: ReadonlyArray<OmittedForeignKey>;
@@ -545,6 +566,65 @@ const omittedTableLines = (
 	return ordered.map(omittedTableLineForImport);
 };
 
+/** The enum's own columns, sorted by `schema.table.sqlName` (1.4's shared comparator) and quoted -- the identity list a line's own sentence names inline. */
+const omittedEnumColumnList = (columns: OmittedEnum["columns"]): string =>
+	sortedBy(
+		columns,
+		(column) => `${column.schema}.${column.table}.${column.sqlName}`,
+	)
+		.map((column) => `"${column.schema}.${column.table}.${column.sqlName}"`)
+		.join(", ");
+
+/** import's own consequence, with columns: the type and every column it takes with it are both left out, and `check` never names the type itself -- its inventory has no enum axis (712/R2's own measured rule, extended to the type's own omission). */
+const omittedEnumLineForImportWithColumns = (
+	enumOmission: OmittedEnum,
+): string =>
+	`Omitted: enum type "${enumOmission.schema}.${enumOmission.sqlName}" -- its catalog name is not a valid hejbro SQL identifier, so no declaration can carry it, and every column typed by it is left out with it: ${omittedEnumColumnList(enumOmission.columns)}. \`check\` keeps naming each of them as unmanaged until it is declared, and never names the type itself -- its inventory has no enum axis. Next: rename the type in the database, re-run \`hejbro import\`, and declare both.`;
+
+/** import's own consequence, no column typed by it: nothing else is left out. */
+const omittedEnumLineForImportWithoutColumns = (
+	enumOmission: OmittedEnum,
+): string =>
+	`Omitted: enum type "${enumOmission.schema}.${enumOmission.sqlName}" -- its catalog name is not a valid hejbro SQL identifier, so no declaration can carry it. No column is typed by it, so nothing else is left out, and \`check\` never names the type -- its inventory has no enum axis. Next: rename the type in the database and re-run \`hejbro import\`.`;
+
+const omittedEnumLineForImport = (enumOmission: OmittedEnum): string => {
+	if (enumOmission.columns.length === 0) {
+		return omittedEnumLineForImportWithoutColumns(enumOmission);
+	}
+	return omittedEnumLineForImportWithColumns(enumOmission);
+};
+
+/** pull's own consequence, with columns: mirrors `undeclarableNameLineForPull`'s own "cannot be carried in the contract" wording, extended to the type and every column it takes with it. No `check` sentence, as every pull-side sibling line. */
+const omittedEnumLineForPullWithColumns = (enumOmission: OmittedEnum): string =>
+	`Omitted: enum type "${enumOmission.schema}.${enumOmission.sqlName}" -- its catalog name is not a valid hejbro SQL identifier, so neither it nor the columns typed by it can be carried in the contract: ${omittedEnumColumnList(enumOmission.columns)}. Rename the type in the database, then link the schema repository.`;
+
+const omittedEnumLineForPullWithoutColumns = (
+	enumOmission: OmittedEnum,
+): string =>
+	`Omitted: enum type "${enumOmission.schema}.${enumOmission.sqlName}" -- its catalog name is not a valid hejbro SQL identifier, so it cannot be carried in the contract. Rename the type in the database, then link the schema repository.`;
+
+const omittedEnumLineForPull = (enumOmission: OmittedEnum): string => {
+	if (enumOmission.columns.length === 0) {
+		return omittedEnumLineForPullWithoutColumns(enumOmission);
+	}
+	return omittedEnumLineForPullWithColumns(enumOmission);
+};
+
+/** D5 (712/R3): follows the omitted-table lines, precedes the omitted-index lines -- schema-level objects first, then table-level ones; sorted by `schema.sqlName`, 1.4's shared comparator. */
+const omittedEnumLines = (
+	enums: ReadonlyArray<OmittedEnum>,
+	command: LossReportFacts["command"],
+): ReadonlyArray<string> => {
+	const ordered = sortedBy(
+		enums,
+		(enumOmission) => `${enumOmission.schema}.${enumOmission.sqlName}`,
+	);
+	if (command === "pull") {
+		return ordered.map(omittedEnumLineForPull);
+	}
+	return ordered.map(omittedEnumLineForImport);
+};
+
 /**
  * An index's own name is compared by `check`, so declaring it under any
  * other name than the catalog's would leave `check` reporting the
@@ -741,6 +821,7 @@ export const buildLossReport = (
 	),
 	...omittedSchemaLines(facts.omittedSchemas, facts.command),
 	...omittedTableLines(facts.omittedTables, facts.command),
+	...omittedEnumLines(facts.omittedEnums, facts.command),
 	...omittedIndexLines(facts.omittedIndexes, facts.command),
 	...omittedCheckLines(facts.omittedChecks, facts.command),
 	...omittedForeignKeyLines(facts.omittedForeignKeys, facts.command),
