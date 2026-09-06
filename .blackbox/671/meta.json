@@ -85,6 +85,17 @@
       "at": "2026-09-06T00:46Z",
       "title": "adoption does not set the owning column's default; a default the database lacks is check's inventory",
       "ratified": null
+    },
+    {
+      "id": "R7",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "671/R1 (children created on adoption); 671/R4 (plain ALTER-time children); J10 (a handover drops nothing); task 1.4 live witness 42P16 on postgres:17-alpine; #694; #1009"
+      ],
+      "at": "2026-09-06T01:59Z",
+      "title": "task 1.4: the round-trip clause is narrowed to a sequence-only declaration; two live witnesses; the general round trip is #1009",
+      "ratified": null
     }
   ],
   "work": [],
