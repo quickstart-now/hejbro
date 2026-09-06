@@ -17,9 +17,9 @@ checksum of the body that ran — the SHA-256 of the body with line
 endings normalized, or of the whole file for a raised snapshot — so the
 ledger can later say whether the file on disk is the file that ran. The
 banner is the first line `-- hejbro migration` together with the
-maximal leading run of comment and blank lines that follows it; the
-body is everything from the first line that is neither a comment nor
-blank. A comment or a blank line inside the body stays body. The
+maximal leading run of lines that are blank or begin with `--` at the
+start of the line; the body is everything from the first line that is
+neither. The
 bootstrap SHALL create the checksum column and
 SHALL add it to a ledger written before the column existed; a row
 recorded then carries no checksum and is never compared.
