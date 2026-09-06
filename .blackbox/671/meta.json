@@ -4,9 +4,9 @@
   "ref": "quickstart-now/hejbro#671",
   "title": "existing: adoption never creates the adopted table's declared indexes, checks, FKs or primary key",
   "parent": "quickstart-now/hejbro#412",
-  "status": "open",
+  "status": "closed",
   "opened": "2026-09-05",
-  "closed": null,
+  "closed": "2026-09-06",
   "decisions": [
     {
       "id": "R1",
@@ -126,7 +126,13 @@
       "decisions": []
     }
   ],
-  "prs": [],
+  "prs": [
+    {
+      "number": 1019,
+      "role": "closes",
+      "pinnedAt": "2026-09-06T06:17Z"
+    }
+  ],
   "origin": null,
   "followUps": []
 }

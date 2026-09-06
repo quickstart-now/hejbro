@@ -1,0 +1,21 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#1001",
+  "title": "generate: adoption's banner notes describe column diffs that emit no statements",
+  "parent": "quickstart-now/hejbro#995",
+  "status": "open",
+  "opened": "2026-09-06",
+  "closed": null,
+  "decisions": [],
+  "work": [],
+  "prs": [
+    {
+      "number": 1019,
+      "role": "refs",
+      "pinnedAt": "2026-09-06T06:17Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}
