@@ -221,8 +221,11 @@ on to the recovery's own next step (adopting with the columns the
 database has), in which case `generate` instead writes a second
 migration that diverges from the same prior state the deleted one
 branched from, and `hejbro migrate`/`hejbro verify` both refuse it with
-`error[broken-chain]` until the snapshot comes back too. Reverting only
-the snapshot leaves it disagreeing with the migration file's own
+`error[broken-chain]` — not a dead end, since that diagnostic already
+walks through checking whether a migration was deleted, renamed or
+hand-edited and restoring it from version control, one step short of
+naming the snapshot as the other half of that same restore. Reverting
+only the snapshot leaves it disagreeing with the migration file's own
 recorded hash, and `hejbro verify` refuses with `error[snapshot-stale]`
 and `error[chain-tip-mismatch]` (`hejbro migrate` itself never reads
 the snapshot's content, so it silently re-attempts the same failing
