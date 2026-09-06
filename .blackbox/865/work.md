@@ -56,3 +56,31 @@ Measured, and worth keeping.
    which is the mechanical proof the new code is registered rather than
    spelled somewhere by hand.
 
+<a id="w2"></a>
+## W2 — the filtered ledger under review: one false sentence, and the refusal confirmed on a real server
+
+_2026-09-06T01:12Z_
+
+The constructor-mode review built a filtered ledger four ways -- row-level
+security enabled, forced with two policies, forced with none, and enabled
+on a relation that is not the ledger -- and ran all four commands against
+each. `migrate` (exit 2), `status` (1), `raise` (1) and `reset` (1) all
+refuse with `apply-ledger-filtered`, naming the ledger, the state, the
+connecting role and the policies, and the ledger is left untouched. A
+relation that is not the ledger still loses to `apply-ledger-occupied`.
+
+One note was upheld. The message asserted that with no policy at all
+"every row is hidden from that role", which is false for the ledger's
+owner and for a `BYPASSRLS` role, since row-level security does not apply
+to them. The delta had always said rows "may be hidden"; the message,
+written during task 1.6, had drifted from the spec's own hedge into a
+claim about a role it cannot check. It now says "may be hidden". The
+refusal itself never depended on it -- the judgement is made from the
+catalog alone, before any row is read.
+
+Confirmed from the server's own log across both rounds: a normal run
+still sends exactly one catalog statement, and `pg_policy` is read only
+on the refusal path. The second statement's absence on a clean run is
+asserted by a test, so the decision not to widen the hot path fails
+loudly rather than surviving as a comment.
+

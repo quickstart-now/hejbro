@@ -182,6 +182,13 @@
       "title": "the ledger's body checksum, and the live witness that found the gap the fakes could not",
       "pr": null,
       "decisions": []
+    },
+    {
+      "id": "W2",
+      "at": "2026-09-06T01:12Z",
+      "title": "what two constructor-mode reviews found, and what the repairs cost",
+      "pr": null,
+      "decisions": []
     }
   ],
   "prs": [],

@@ -28,6 +28,13 @@
       "title": "a ledger carrying row-level security is refused where its identity is judged",
       "pr": null,
       "decisions": []
+    },
+    {
+      "id": "W2",
+      "at": "2026-09-06T01:12Z",
+      "title": "the filtered ledger under review: one false sentence, and the refusal confirmed on a real server",
+      "pr": null,
+      "decisions": []
     }
   ],
   "prs": [

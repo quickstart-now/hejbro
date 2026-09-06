@@ -96,3 +96,102 @@ row; recording rulings and editing the delta; re-sent instructions after
 a message crossing (eleven before 631/R12 was adopted); and a defect only
 the live layer could surface.
 
+<a id="w2"></a>
+## W2 — what two constructor-mode reviews found, and what the repairs cost
+
+_2026-09-06T01:12Z_
+
+Two review rounds, both in constructor mode: 36 constructed inputs and
+914 observed server statements in the first, 26 and 643 in the second,
+with no implementation source read either time. Round one returned three
+blocking findings and four notes; round two returned none blocking and
+one note, and confirmed every earlier finding closed by measurement.
+
+What the reviews found, and where it came from.
+
+1. Two of the three blocking findings trace to the planner reading a
+   contract sentence too narrowly, not to the implementation drifting.
+   B1: the delta says a changed body is "reported as its own line, never
+   as 'applied'", and `status` kept listing it in stdout's applied bucket
+   while the diagnostic went to stderr -- a caller parsing stdout saw it
+   as plainly applied. The prohibition was in the sentence; task 1.4
+   verified "own line, same code, non-zero exit" and never looked at the
+   bucket. B3: R2's body predicate ("everything after the first blank
+   line") meant a hand-written migration whose banner is not followed by
+   a blank line had its executed statements outside the checksum, and an
+   edit to them afterwards was invisible to both `migrate` and `status`.
+   The alternative had been rejected for an ambiguity that was in fact
+   resolvable. Neither could have been caught by a mutation: they are
+   misreadings of the first of D110's three layers, and the layer a
+   constructor-mode review reads directly.
+
+2. The final predicate, and why the tempting fix was refused. The banner
+   is the first line plus the leading run of blank lines and lines that
+   begin with `--` at the start of the line; the body begins at the first
+   line that is neither. An indented `--` and a `/* ... */` block are
+   therefore body. Making "a comment" true in SQL's terms would pull in
+   block comments, which span lines and nest, and the checksum boundary
+   would then depend on parsing SQL -- the one thing this boundary has
+   avoided since R2, whose design goal was two mechanically decidable
+   predicates. The deviation is in the safe direction: coverage widens,
+   and executed text can never fall outside the hash. Two rows pin the
+   consequence and two mutations give them falsification power -- `trim()`
+   before the check reddens the indented case, and treating `/*` as a
+   banner prefix reddens the block case. That second mutation is the
+   direct guard against a later attempt at the refused fix.
+
+3. Recorded plainly, as the lead asked: the lead's R15 formulation of B3
+   flipped twice across three messages, and the final is the first one.
+   The planner had warned that replacing R2's predicate would invalidate
+   every recorded checksum; under the final formulation it does not, and
+   the second review verified it from outside -- the generated file's
+   checksum is `6aa6634f8a7f` in both rounds.
+
+4. B2 was closed by correcting a sentence rather than code. R13 said "the
+   first command that writes"; `reset` writes (it deletes rows) and did
+   not add the column. The reason a command must add the column first is
+   that its write carries a checksum, and a `delete` does not, so the
+   true invariant is "the first command that records a row". `reset` was
+   left outside the piece, and the reviewer's own input became a witness
+   that the corrected sentence holds: `reset` succeeds and the column is
+   still absent.
+
+5. N3 was an alignment, not a discovery. The delta already said a
+   filtered ledger's rows "may be hidden"; the message asserted they are
+   hidden, which is false for the ledger's owner and for a `BYPASSRLS`
+   role. The message had drifted from the spec's own hedge.
+
+What the reviews confirmed from outside. The input that passed at exit 0
+in round one now fails with `apply-migration-body-changed` and exit 2. A
+normal run still sends exactly one catalog statement, counted from the
+server's `log_statement=all` rather than from our own test, in both
+rounds. The integration suite's pass count rose from 105 to 107, so the
+new live witnesses really run.
+
+How the work was done. The implementer implemented one repair before its
+red, caught it himself before committing, reverted, and re-ran the cycle
+in order -- and reported it. Every revert in the rework was proved rather
+than asserted: `git diff <pre-ruling commit> -- <file>` empty for each
+file, with `check:pr-changeset` falling from six published source files
+to five as independent corroboration. One wording change moved the
+message and its equality test together and so never went red at that
+spot; no extra mutation was demanded because task 1.6's fourth mutation
+had already proved that same equality can falsify, and the reasoning is
+recorded rather than assumed.
+
+One planner rule came out of this round. A message to a reviewer carries
+the commit range, the spec, the finding names and the known boundaries,
+and nothing else. A list of "inputs the reviewer might construct" was
+drafted for the lead's briefing and would have destroyed the property
+that made the first review worth its cost: B3 exists because the reviewer
+asked "what if there is no blank line after the banner?" unprompted, and
+a list of what to try becomes the boundary of what gets tried.
+
+Cost. The rework took 85 minutes on top of the group's 561, plus 20 for
+the last repair. The overrun sources are now six: a new field or argument
+reaching existing tests; a mutation witness for every control row;
+recording rulings and editing the delta; (d1) re-sent instructions after
+a message crossing, thirteen of them; (d2) re-instruction after a ruling
+was revised, which is the lead's own line; and a defect only the live
+layer could surface.
+
