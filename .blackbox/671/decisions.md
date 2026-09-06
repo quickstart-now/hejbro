@@ -65,7 +65,7 @@ warning[adoption-creates]: <schema>.<table>
   primary key "<name>"
   Next: if the database already holds these, run "hejbro baseline" to record them instead of applying this migration.
 ```
-Identity is the plain unquoted `schema.table` the other CLI diagnostics use. Object lines follow the delta's enumeration order (sequences, row-level security, policies, indexes, checks, foreign keys, primary key); a kind with nothing to create has no line; no counts are printed; `Next:` is the body's last line, not a `suggestions` entry. A handover and a new table print nothing under this code; the migration is written either way.
+Identity is the plain unquoted `schema.table` the other CLI diagnostics use. Object lines follow the delta's enumeration order (sequences, row-level security, policies, indexes, checks, foreign keys, primary key); when one run adopts several tables their blocks are ordered by table identity (`schema.table`, byte order), not by the order the changes happen to arrive in (added in place by the lead, 412/R34); a kind with nothing to create has no line; no counts are printed; `Next:` is the body's last line, not a `suggestions` entry. A handover and a new table print nothing under this code; the migration is written either way.
 
 D-3-C, wiring: the `adoption-creates` blocks are rendered before the core warnings, and the stdout summary line counts them together with the core warnings (the summary must match the blocks below it). The three existing assertions on that summary line declare managed tables only and are unaffected, as measured.
 
