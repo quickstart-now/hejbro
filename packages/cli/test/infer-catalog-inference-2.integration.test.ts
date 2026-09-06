@@ -200,6 +200,13 @@ alter table app.orders
 -- orders_status_idx is.
 create index orders_id_partial_status_idx on app.orders (id) where status = 'open';
 
+-- Review round 2 NN2/OO2 (live review): an index carrying both an
+-- expression key and a predicate at once -- pg_depend never tags which
+-- of the two clauses names a given referenced column, so when the
+-- omitted "UserId" is named only through the expression (the predicate
+-- names the surviving "state"), the line must name both clauses.
+create index orders_lower_userid_active_idx on app.orders (lower("UserId"::text)) where state = 'open';
+
 grant select on app.orders to app_writer;
 
 create policy orders_read_own on app.orders for select to app_reader using (true);
@@ -429,6 +436,17 @@ describe("catalog-inference-2 / live witness: 1.1's roles-from-policies, 1.2's e
 		);
 	});
 
+	// OO2 (712/R10 B#1, NN2 lead-approved wording): an index carrying
+	// both an expression key and a predicate at once -- pg_depend never
+	// tags which clause names the omitted "UserId" (the predicate reads
+	// only the surviving "state"), so the line must name both clauses.
+	it("OO2: an index with both an expression and a predicate never reaches the starter declaration, and its own line names both clauses", () => {
+		expect(declarationCode).not.toContain("orders_lower_userid_active_idx");
+		expect(importRun.stdout).toContain(
+			'Omitted: index "app.orders.orders_lower_userid_active_idx" -- its expression or predicate names column "app.orders.UserId", which this reading left out because no declaration can carry its name, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the column in the database, then re-run `hejbro import`.',
+		);
+	});
+
 	it("B#1: baseline's own migration SQL replays cleanly against an empty database, even with an index and a check on omitted columns", async () => {
 		const baselineRun = await runCli(cwd, ["baseline"]);
 		expectExitCode("baseline", baselineRun, 0);
@@ -454,6 +472,9 @@ describe("catalog-inference-2 / live witness: 1.1's roles-from-policies, 1.2's e
 		// LL2: a partial index caught only through its own predicate (its
 		// key is the surviving "id") must be excluded exactly the same way.
 		expect(migrationSql).not.toContain("orders_id_partial_status_idx");
+		// OO2: the expression-and-predicate index must be excluded the
+		// same way, whichever clause the omitted column actually names.
+		expect(migrationSql).not.toContain("orders_lower_userid_active_idx");
 
 		const replayDatabase = "catalog_inference_2_replay";
 		execFileSync("docker", [
