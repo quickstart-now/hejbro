@@ -118,6 +118,7 @@ export interface Database {
 			readonly Insert: { readonly id?: string; readonly title: string };
 			readonly Update: { readonly id?: string; readonly title?: string };
 			readonly Relationships: readonly [];
+			readonly Relations: {};
 		};
 	};
 	readonly Views: { [key: string]: never };
