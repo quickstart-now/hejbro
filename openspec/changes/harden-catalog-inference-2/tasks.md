@@ -12,9 +12,10 @@ piece reviewer runs in constructor mode (D110).
 src/infer/rest.ts` and tests (1.1); `packages/cli/src/infer/rest.ts`,
 `packages/cli/src/infer/compose.ts`, `packages/cli/src/infer/
 loss-report.ts` and tests (1.2); `packages/cli/src/infer/compose.ts`,
-`packages/cli/src/infer/loss-report.ts`, a shared comparator module and
+`packages/cli/src/infer/loss-report.ts`, a shared comparator module,
 `packages/cli/src/commands/check.ts` (the comparator moves out of it;
-nothing else) (1.3, 1.4); `packages/cli/test/infer-*.integration.test.ts`
+nothing else) and `packages/cli/src/declare-emit/emit.ts` (its two
+sorts only) (1.3, 1.4); `packages/cli/test/infer-*.integration.test.ts`
 (1.5); `skills/hejbro/
 references/brownfield-adoption.md`, one
 `.changeset/*.md` (1.6). If a task appears to need any other file, that

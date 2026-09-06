@@ -74,7 +74,9 @@ database has. Leaving an object out for its name SHALL never stop the
 reading — everything else in the named schemas is still inferred — and
 the loss report SHALL name each of them. A column named there is
 still described: the description records what the database holds, and
-the snapshot records what a declaration can express.
+the snapshot records what a declaration can express. Every ordered list the reading writes into the starter
+declarations SHALL be ordered by code points as the loss report is, so
+the file `import` writes does not depend on the process locale.
 
 #### Scenario: Tables and enums are inferred
 - **WHEN** a database holding two schemas with tables, foreign keys
