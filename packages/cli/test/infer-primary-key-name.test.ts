@@ -17,7 +17,7 @@ type ConstraintFixture = {
 	readonly schema: string;
 	readonly table: string;
 	readonly name: string;
-	readonly type: "p" | "f";
+	readonly type: "p" | "f" | "u";
 	readonly columns: ReadonlyArray<string>;
 };
 
@@ -309,5 +309,74 @@ describe("inferFromCatalog / 712-R7: a dropped primary-key name is announced wit
 		expect(result.lossReport.indexOf(legacyLine)).toBeLessThan(
 			result.lossReport.indexOf(ordersLine),
 		);
+	});
+
+	// 712/R10 B#3: the derived name a dropped primary-key name would move
+	// to is already taken by another relation in the same schema -- the
+	// rename the line proposes cannot actually be run yet.
+	it("G6: the derived name collides with another relation in the same schema, so the line states it", async () => {
+		const session = buildSession(
+			[
+				{ schema: "app", table: "orders" },
+				{ schema: "app", table: "archive" },
+			],
+			[
+				{ schema: "app", table: "orders", name: "id" },
+				{ schema: "app", table: "archive", name: "id" },
+			],
+			[
+				{
+					schema: "app",
+					table: "orders",
+					name: "pk_orders",
+					type: "p",
+					columns: ["id"],
+				},
+				{
+					schema: "app",
+					table: "archive",
+					name: "archive_pkey",
+					type: "p",
+					columns: ["id"],
+				},
+				// A UNIQUE constraint on an unrelated table already carries the
+				// name "orders_pkey" -- deriving it for app.orders's own primary
+				// key would collide with this constraint, not with anything the
+				// declaration itself is about to create.
+				{
+					schema: "app",
+					table: "archive",
+					name: "orders_pkey",
+					type: "u",
+					columns: ["id"],
+				},
+			],
+			[],
+		);
+
+		const result = await inferFromCatalog({
+			session,
+			schemas: ["app"],
+			command: "import",
+		});
+
+		expect(result.lossReport).toContain(
+			'Approximated: the primary key "app.orders.pk_orders" is declared under the derived name "orders_pkey" instead -- the DSL derives every primary-key name, so `generate`/`check` will name this constraint differently from the database. Rename the constraint to "orders_pkey" in the database; that name is already taken by another relation in "app", so rename that one first. Until you do, `check` reports the declared "orders_pkey" as missing on every run and lists "pk_orders" in its unmanaged-index inventory.',
+		);
+	});
+
+	it("G7 (control): no collision in the same schema keeps G1's own wording, unchanged", async () => {
+		const result = await inferFromCatalog({
+			session: singleTablePkSession("orders", "pk_orders"),
+			schemas: ["app"],
+			command: "import",
+		});
+
+		expect(result.lossReport).toContain(
+			'Approximated: the primary key "app.orders.pk_orders" is declared under the derived name "orders_pkey" instead -- the DSL derives every primary-key name, so `generate`/`check` will name this constraint differently from the database. Rename the constraint to "orders_pkey" in the database; until you do, `check` reports the declared "orders_pkey" as missing on every run and lists "pk_orders" in its unmanaged-index inventory.',
+		);
+		expect(
+			result.lossReport.some((line) => line.includes("rename that one first")),
+		).toBe(false);
 	});
 });

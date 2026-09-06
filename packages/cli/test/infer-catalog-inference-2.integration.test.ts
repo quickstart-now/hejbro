@@ -391,6 +391,25 @@ describe("catalog-inference-2 / live witness: 1.1's roles-from-policies, 1.2's e
 		expect(fkLines).toHaveLength(1);
 	});
 
+	it("KK5 (712/R10 B#1): the omitted index and check constraint each match the approved wording exactly, and neither gets an approximation line", () => {
+		expect(importRun.stdout).toContain(
+			'Omitted: index "app.orders.orders_status_idx" -- it is declared on column "app.orders.status", which this reading left out with the enum type "app.Status" that types it, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the type in the database, then re-run `hejbro import`.',
+		);
+		expect(importRun.stdout).toContain(
+			'Omitted: check constraint "app.orders.orders_userid_chk" -- its expression names column "app.orders.UserId", which this reading left out because no declaration can carry its name, so the check constraint cannot be declared either. `check` keeps listing the check constraint as unmanaged until that column and the check constraint are both declared. Next: rename the column in the database, then re-run `hejbro import`.',
+		);
+		const approximationLines = importRun.stdout
+			.split("\n")
+			.filter((line) => line.startsWith("Approximated:"));
+		expect(
+			approximationLines.some(
+				(line) =>
+					line.includes("orders_status_idx") ||
+					line.includes("orders_userid_chk"),
+			),
+		).toBe(false);
+	});
+
 	it("B#1: baseline's own migration SQL replays cleanly against an empty database, even with an index and a check on omitted columns", async () => {
 		const baselineRun = await runCli(cwd, ["baseline"]);
 		expectExitCode("baseline", baselineRun, 0);

@@ -161,7 +161,35 @@ export type PrimaryKeyNameApproximation = {
 	readonly catalogName: string;
 	/** What `generate`/`check` derive instead, and what a rename must target. */
 	readonly derivedName: string;
+	/**
+	 * 712/R10 B#3: whether the derived name is already taken by another
+	 * relation (an index or a constraint) in the same schema -- when it
+	 * is, renaming this constraint to it is not yet possible, and the
+	 * line states the collision rather than a way out that would fail.
+	 */
+	readonly derivedNameCollides: boolean;
 };
+
+/**
+ * 712/R10 B#3: whether `derivedName` already names another relation in
+ * `schema` -- an index or a constraint, read directly from the catalog
+ * this reading already has, never a second connection. The primary
+ * key's own current constraint is never a false hit here: it is named
+ * `catalogName`, not `derivedName` (that mismatch is why this is an
+ * approximation at all), so its own backing index cannot already carry
+ * the derived name either.
+ */
+const derivedNameCollides = (
+	catalog: Catalog,
+	schema: string,
+	derivedName: string,
+): boolean =>
+	catalog.constraints.some(
+		(row) => row.schema === schema && row.name === derivedName,
+	) ||
+	catalog.indexes.some(
+		(row) => row.schema === schema && row.name === derivedName,
+	);
 
 /**
  * A primary key whose catalog constraint name is not the one the DSL
@@ -196,6 +224,11 @@ export const detectPrimaryKeyNameApproximations = (
 				table: table.name,
 				catalogName: constraint.name,
 				derivedName: table.primaryKeyName,
+				derivedNameCollides: derivedNameCollides(
+					catalog,
+					table.schema,
+					table.primaryKeyName,
+				),
 			},
 		];
 	});
@@ -232,6 +265,14 @@ export type UndeclarableNameColumn = {
 	 * for either cause.
 	 */
 	readonly cause: "noDeclarationKey" | "identifierRuleRejects";
+	/**
+	 * 712/R10 B#2: present when this column has a *second*, independent
+	 * cause -- it is also typed by an enum this reading omitted (712/R3).
+	 * One line still names the column (D2), but its way out now names
+	 * both renames: renaming the column alone only moves it to the
+	 * enum's own line, since its type still cannot be declared.
+	 */
+	readonly enumIdentity?: string;
 };
 
 /**
@@ -347,6 +388,31 @@ export type OmittedForeignKeyColumn = {
 	readonly enumIdentity?: string;
 };
 
+/**
+ * An index, check constraint or unique constraint whose own name is
+ * fine, but which names a column this reading already excluded -- for
+ * its own name, or for the enum type that typed it (712/R10, B#1: the
+ * review's own live replay, `column "…" does not exist`, found all
+ * three left in place). Costs that one object alone; the table holding
+ * it and everything else on it are still declared. `cause`/
+ * `enumIdentity` mirror {@link OmittedForeignKeyColumn}'s own shape --
+ * when several of an object's own columns are omitted at once (a
+ * composite index, #B1 J6), `columnIdentity` names the first by code
+ * point, and its own cause is the one the line states. No approximation
+ * line is ever printed alongside one of these (the delta already says
+ * an omitted object never gets one; a UNIQUE constraint used to be the
+ * one exception -- {@link detectUniqueIndexApproximations}'s own
+ * exclusion closes it).
+ */
+export type OmittedTableMemberAtColumn = {
+	readonly schema: string;
+	readonly table: string;
+	readonly sqlName: string;
+	readonly columnIdentity: string;
+	readonly cause: "name" | "enum";
+	readonly enumIdentity?: string;
+};
+
 export type LossReportFacts = {
 	readonly command: "import" | "pull";
 	readonly roleNames: ReadonlyArray<string>;
@@ -368,6 +434,9 @@ export type LossReportFacts = {
 	readonly omittedChecks: ReadonlyArray<OmittedCheck>;
 	readonly omittedForeignKeys: ReadonlyArray<OmittedForeignKey>;
 	readonly omittedForeignKeysByColumn: ReadonlyArray<OmittedForeignKeyColumn>;
+	readonly omittedIndexesAtColumn: ReadonlyArray<OmittedTableMemberAtColumn>;
+	readonly omittedChecksAtColumn: ReadonlyArray<OmittedTableMemberAtColumn>;
+	readonly omittedUniqueConstraintsAtColumn: ReadonlyArray<OmittedTableMemberAtColumn>;
 };
 
 const guessedLine = (
@@ -438,6 +507,16 @@ const notInferredLines = (
 	),
 ];
 
+/** 712/R10 B#3: the clause between "rename the constraint" and the `check` consequence -- unchanged (a semicolon-joined continuation) when the derived name is free, a new sentence naming the collision when it is not. */
+const primaryKeyNameCollisionClause = (
+	approximation: PrimaryKeyNameApproximation,
+): string => {
+	if (approximation.derivedNameCollides) {
+		return `; that name is already taken by another relation in "${approximation.schema}", so rename that one first. Until you do,`;
+	}
+	return "; until you do,";
+};
+
 /** Unconditional (CI-G2-R1-06 Q4 follow-up, lead-approved): every reading carries default/check/generated/index-predicate expressions as raw SQL text, never the typed builders (`inArray`, `gte`, ...) a hand-written declaration would use -- there is no per-instance list to derive this from, the same shape as the "grants beyond their role name" line below it. */
 const EXPRESSION_APPROXIMATION_LINE =
 	"Approximated: every default, check, generated, and index-predicate expression is carried as raw SQL text, not the typed builders a hand-written declaration would use.";
@@ -477,7 +556,7 @@ const approximationLines = (
 			`${approximation.schema}.${approximation.table}.${approximation.catalogName}`,
 	).map(
 		(approximation) =>
-			`Approximated: the primary key "${approximation.schema}.${approximation.table}.${approximation.catalogName}" is declared under the derived name "${approximation.derivedName}" instead -- the DSL derives every primary-key name, so \`generate\`/\`check\` will name this constraint differently from the database. Rename the constraint to "${approximation.derivedName}" in the database; until you do, \`check\` reports the declared "${approximation.derivedName}" as missing on every run and lists "${approximation.catalogName}" in its unmanaged-index inventory.`,
+			`Approximated: the primary key "${approximation.schema}.${approximation.table}.${approximation.catalogName}" is declared under the derived name "${approximation.derivedName}" instead -- the DSL derives every primary-key name, so \`generate\`/\`check\` will name this constraint differently from the database. Rename the constraint to "${approximation.derivedName}" in the database${primaryKeyNameCollisionClause(approximation)} \`check\` reports the declared "${approximation.derivedName}" as missing on every run and lists "${approximation.catalogName}" in its unmanaged-index inventory.`,
 	),
 	EXPRESSION_APPROXIMATION_LINE,
 ];
@@ -492,15 +571,25 @@ const undeclarableColumnReason = (
 	return "no declaration key produces this SQL name back";
 };
 
-/** import's own consequence: the table is left only partly declared, and `check` keeps reporting the column until it is renamed in the database -- the only remedy that exists for either cause (D106 R6-N1: "declared by hand" never was one). Review round 1 N3, lead ruling 707/R3: renaming alone only makes the name one a declaration can carry -- `check` goes on naming the column as unmanaged until a declaration actually covers it, so the line names the whole exit condition. */
+/** import's own consequence: the table is left only partly declared, and `check` keeps reporting the column until it is renamed in the database -- the only remedy that exists for either cause (D106 R6-N1: "declared by hand" never was one). Review round 1 N3, lead ruling 707/R3: renaming alone only makes the name one a declaration can carry -- `check` goes on naming the column as unmanaged until a declaration actually covers it, so the line names the whole exit condition. 712/R10 B#2: a column with a second, independent cause (its own type is an omitted enum) states both renames -- renaming the column alone only moves it to the enum's own line, since its type still cannot be declared. */
 const undeclarableNameLineForImport = (
 	column: UndeclarableNameColumn,
-): string =>
-	`Omitted: column "${column.schema}.${column.table}.${column.sqlName}" -- ${undeclarableColumnReason(column.cause)}. The table "${column.schema}.${column.table}" is only partly declared, and \`check\` reports this column until it is renamed in the database and declared.`;
+): string => {
+	if (column.enumIdentity !== undefined) {
+		return `Omitted: column "${column.schema}.${column.table}.${column.sqlName}" -- ${undeclarableColumnReason(column.cause)}, and the enum type "${column.enumIdentity}" that types it is left out for its own name. The table "${column.schema}.${column.table}" is only partly declared, and \`check\` reports this column until both are renamed in the database and declared: renaming the column alone moves it to the enum type's own line.`;
+	}
+	return `Omitted: column "${column.schema}.${column.table}.${column.sqlName}" -- ${undeclarableColumnReason(column.cause)}. The table "${column.schema}.${column.table}" is only partly declared, and \`check\` reports this column until it is renamed in the database and declared.`;
+};
 
-/** pull's own consequence (CI-G1-R1-16): `contract/from-catalog.ts`'s own `computeTable`/`buildColumnEntries` iterate the snapshot's columns, never the description's, so a column excluded from the snapshot never reaches the contract -- renaming in the database, then linking the schema repository, is the only way out (D106 R6-N1: not "declared by hand", for either cause). */
-const undeclarableNameLineForPull = (column: UndeclarableNameColumn): string =>
-	`Omitted: column "${column.schema}.${column.table}.${column.sqlName}" -- ${undeclarableColumnReason(column.cause)}, so it cannot be carried in the contract. Rename the column in the database, then link the schema repository.`;
+/** pull's own consequence (CI-G1-R1-16): `contract/from-catalog.ts`'s own `computeTable`/`buildColumnEntries` iterate the snapshot's columns, never the description's, so a column excluded from the snapshot never reaches the contract -- renaming in the database, then linking the schema repository, is the only way out (D106 R6-N1: not "declared by hand", for either cause). 712/R10 B#2: the two-cause variant, mirroring the import one. */
+const undeclarableNameLineForPull = (
+	column: UndeclarableNameColumn,
+): string => {
+	if (column.enumIdentity !== undefined) {
+		return `Omitted: column "${column.schema}.${column.table}.${column.sqlName}" -- ${undeclarableColumnReason(column.cause)}, and the enum type "${column.enumIdentity}" that types it is left out for its own name, so the column cannot be carried in the contract. Rename both the column and the type in the database, then link the schema repository.`;
+	}
+	return `Omitted: column "${column.schema}.${column.table}.${column.sqlName}" -- ${undeclarableColumnReason(column.cause)}, so it cannot be carried in the contract. Rename the column in the database, then link the schema repository.`;
+};
 
 /** Excluded from both commands' snapshots (CI-G1-R1-16) -- neither can carry a column under a name the database does not have. Only the consequence sentence differs. */
 const undeclarableNameLines = (
@@ -705,6 +794,85 @@ const omittedCheckLines = (
 	return ordered.map(omittedCheckLine);
 };
 
+/**
+ * 712/R10 B#1: the one skeleton every "omitted at a column" member line
+ * shares -- an index or unique constraint is *declared on* its column,
+ * a check constraint's own binding is its expression naming one.
+ */
+type MemberKind = "index" | "check constraint" | "unique constraint";
+
+const memberReasonClause = (
+	kind: MemberKind,
+	columnIdentity: string,
+): string => {
+	if (kind === "check constraint") {
+		return `its expression names column "${columnIdentity}"`;
+	}
+	return `it is declared on column "${columnIdentity}"`;
+};
+
+/** 712/R8's own cause-specific clause, reused verbatim for every member kind -- only the noun (`kind`) changes. */
+const memberCauseClauseForImport = (
+	entry: OmittedTableMemberAtColumn,
+	kind: MemberKind,
+): string => {
+	if (entry.cause === "enum") {
+		return `which this reading left out with the enum type "${entry.enumIdentity}" that types it, so the ${kind} cannot be declared either`;
+	}
+	return `which this reading left out because no declaration can carry its name, so the ${kind} cannot be declared either`;
+};
+
+const memberCauseClauseForPull = (
+	entry: OmittedTableMemberAtColumn,
+	kind: MemberKind,
+): string => {
+	if (entry.cause === "enum") {
+		return `which this reading left out with the enum type "${entry.enumIdentity}" that types it, so the ${kind} cannot be carried in the contract either`;
+	}
+	return `which this reading left out because no declaration can carry its name, so the ${kind} cannot be carried in the contract either`;
+};
+
+const memberTailForImport = (entry: OmittedTableMemberAtColumn): string => {
+	if (entry.cause === "enum") {
+		return "Next: rename the type in the database, then re-run `hejbro import`.";
+	}
+	return "Next: rename the column in the database, then re-run `hejbro import`.";
+};
+
+const memberTailForPull = (entry: OmittedTableMemberAtColumn): string => {
+	if (entry.cause === "enum") {
+		return "Rename the type in the database, then link the schema repository.";
+	}
+	return "Rename the column in the database, then link the schema repository.";
+};
+
+const omittedMemberLineForImport = (
+	entry: OmittedTableMemberAtColumn,
+	kind: MemberKind,
+): string =>
+	`Omitted: ${kind} "${entry.schema}.${entry.table}.${entry.sqlName}" -- ${memberReasonClause(kind, entry.columnIdentity)}, ${memberCauseClauseForImport(entry, kind)}. \`check\` keeps listing the ${kind} as unmanaged until that column and the ${kind} are both declared. ${memberTailForImport(entry)}`;
+
+const omittedMemberLineForPull = (
+	entry: OmittedTableMemberAtColumn,
+	kind: MemberKind,
+): string =>
+	`Omitted: ${kind} "${entry.schema}.${entry.table}.${entry.sqlName}" -- ${memberReasonClause(kind, entry.columnIdentity)}, ${memberCauseClauseForPull(entry, kind)}. ${memberTailForPull(entry)}`;
+
+const omittedMemberLines = (
+	entries: ReadonlyArray<OmittedTableMemberAtColumn>,
+	command: LossReportFacts["command"],
+	kind: MemberKind,
+): ReadonlyArray<string> => {
+	const ordered = sortedBy(
+		entries,
+		(entry) => `${entry.schema}.${entry.table}.${entry.sqlName}`,
+	);
+	if (command === "pull") {
+		return ordered.map((entry) => omittedMemberLineForPull(entry, kind));
+	}
+	return ordered.map((entry) => omittedMemberLineForImport(entry, kind));
+};
+
 /** import's own remedy: renaming the target (in the database) is what makes it reachable again, and only a fresh reading picks that up. */
 const omittedForeignKeyRemedyForImport = (
 	targetKind: OmittedForeignKey["targetKind"],
@@ -902,6 +1070,17 @@ export const buildLossReport = (
 	...omittedEnumLines(facts.omittedEnums, facts.command),
 	...omittedIndexLines(facts.omittedIndexes, facts.command),
 	...omittedCheckLines(facts.omittedChecks, facts.command),
+	...omittedMemberLines(facts.omittedIndexesAtColumn, facts.command, "index"),
+	...omittedMemberLines(
+		facts.omittedChecksAtColumn,
+		facts.command,
+		"check constraint",
+	),
+	...omittedMemberLines(
+		facts.omittedUniqueConstraintsAtColumn,
+		facts.command,
+		"unique constraint",
+	),
 	...omittedForeignKeyLines(facts.omittedForeignKeys, facts.command),
 	...omittedForeignKeyColumnLines(
 		facts.omittedForeignKeysByColumn,

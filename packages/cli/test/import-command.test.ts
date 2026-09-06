@@ -397,6 +397,50 @@ describe("runImport / 3.1", () => {
 	});
 
 	/**
+	 * 712/R10 N#4: a schema that produced zero snapshot objects only
+	 * because everything it held was itself omitted (an enum whose own
+	 * name D36 rejects, here) is not "nothing to infer" -- the loss
+	 * report's own "Omitted: …" line already gives the real reason, and
+	 * stating both would tell the reader two different stories about the
+	 * same schema. The test right above this one is this test's own
+	 * control: a genuinely empty schema (no such line at all) still gets
+	 * the plain "nothing to infer" line.
+	 */
+	it("N#4: suppresses the empty-schema line when the loss report already named an object this schema's own content cost it", async () => {
+		const outcome = await runImport(
+			cwd,
+			[
+				"--url",
+				"postgres://fixture",
+				"--schema",
+				"app",
+				"--schema",
+				"billing",
+				"--out",
+				"src/schema",
+			],
+			depsFor(
+				resultFor(
+					[table("app", "widgets", [idColumn])],
+					[
+						'Omitted: enum type "billing.Status" -- its catalog name is not a valid hejbro SQL identifier, so no declaration can carry it.',
+					],
+				),
+			),
+		);
+
+		expect(outcome.exitCode).toBe(0);
+		expect(
+			outcome.stdout.some((line) =>
+				line.includes('Not inferred: nothing to infer in schema "billing"'),
+			),
+		).toBe(false);
+		expect(outcome.stdout).toContain(
+			'Omitted: enum type "billing.Status" -- its catalog name is not a valid hejbro SQL identifier, so no declaration can carry it.',
+		);
+	});
+
+	/**
 	 * D106 R4-B4/#707: a schema `Omitted: schema …` already names is not
 	 * "empty" -- it held something, hejbro just could not carry its own
 	 * name. Stating both lines side by side would tell the reader two

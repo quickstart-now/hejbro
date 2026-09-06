@@ -36,6 +36,9 @@ const emptyFacts = (command: "import" | "pull"): LossReportFacts => ({
 	omittedChecks: [],
 	omittedForeignKeys: [],
 	omittedForeignKeysByColumn: [],
+	omittedIndexesAtColumn: [],
+	omittedChecksAtColumn: [],
+	omittedUniqueConstraintsAtColumn: [],
 });
 
 describe("buildLossReport / 1.7", () => {
@@ -996,6 +999,319 @@ describe("buildLossReport / 712/R8: the reason follows the cause, 712/R9: one li
 		expect(fkLines).toEqual([
 			'Omitted: foreign key "app.orders.orders_status_fkey" -- it is declared on column "app.orders.UserId", which this reading left out because no declaration can carry its name, so the key cannot be declared either. Next: rename the column in the database, then re-run `hejbro import`.',
 		]);
+	});
+});
+
+/**
+ * 712/R10 B#1: an index, check constraint or unique constraint at an
+ * omitted column reuses the omitted-foreign-key-column skeleton (712/R5
+ * name form, 712/R8 enum form), with a reason clause of its own and an
+ * extra `check`-inventory sentence import never omits. Full cross:
+ * three kinds x two causes x two commands.
+ */
+describe("buildLossReport / 712/R10 B#1: an index, check or unique constraint at an omitted column", () => {
+	it("M1: index, name cause, import", () => {
+		const report = buildLossReport({
+			...emptyFacts("import"),
+			omittedIndexesAtColumn: [
+				{
+					schema: "app",
+					table: "orders",
+					sqlName: "orders_userid_idx",
+					columnIdentity: "app.orders.UserId",
+					cause: "name",
+				},
+			],
+		});
+		expect(report).toContain(
+			'Omitted: index "app.orders.orders_userid_idx" -- it is declared on column "app.orders.UserId", which this reading left out because no declaration can carry its name, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the column in the database, then re-run `hejbro import`.',
+		);
+	});
+
+	it("M2: index, name cause, pull", () => {
+		const report = buildLossReport({
+			...emptyFacts("pull"),
+			omittedIndexesAtColumn: [
+				{
+					schema: "app",
+					table: "orders",
+					sqlName: "orders_userid_idx",
+					columnIdentity: "app.orders.UserId",
+					cause: "name",
+				},
+			],
+		});
+		expect(report).toContain(
+			'Omitted: index "app.orders.orders_userid_idx" -- it is declared on column "app.orders.UserId", which this reading left out because no declaration can carry its name, so the index cannot be carried in the contract either. Rename the column in the database, then link the schema repository.',
+		);
+	});
+
+	it("M3: index, enum cause, import", () => {
+		const report = buildLossReport({
+			...emptyFacts("import"),
+			omittedIndexesAtColumn: [
+				{
+					schema: "app",
+					table: "t2",
+					sqlName: "t2_state2_idx",
+					columnIdentity: "app.t2.state2",
+					cause: "enum",
+					enumIdentity: "app.Status",
+				},
+			],
+		});
+		expect(report).toContain(
+			'Omitted: index "app.t2.t2_state2_idx" -- it is declared on column "app.t2.state2", which this reading left out with the enum type "app.Status" that types it, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the type in the database, then re-run `hejbro import`.',
+		);
+	});
+
+	it("M4: index, enum cause, pull", () => {
+		const report = buildLossReport({
+			...emptyFacts("pull"),
+			omittedIndexesAtColumn: [
+				{
+					schema: "app",
+					table: "t2",
+					sqlName: "t2_state2_idx",
+					columnIdentity: "app.t2.state2",
+					cause: "enum",
+					enumIdentity: "app.Status",
+				},
+			],
+		});
+		expect(report).toContain(
+			'Omitted: index "app.t2.t2_state2_idx" -- it is declared on column "app.t2.state2", which this reading left out with the enum type "app.Status" that types it, so the index cannot be carried in the contract either. Rename the type in the database, then link the schema repository.',
+		);
+	});
+
+	it("M5: check constraint, name cause, import", () => {
+		const report = buildLossReport({
+			...emptyFacts("import"),
+			omittedChecksAtColumn: [
+				{
+					schema: "app",
+					table: "orders",
+					sqlName: "orders_userid_chk",
+					columnIdentity: "app.orders.UserId",
+					cause: "name",
+				},
+			],
+		});
+		expect(report).toContain(
+			'Omitted: check constraint "app.orders.orders_userid_chk" -- its expression names column "app.orders.UserId", which this reading left out because no declaration can carry its name, so the check constraint cannot be declared either. `check` keeps listing the check constraint as unmanaged until that column and the check constraint are both declared. Next: rename the column in the database, then re-run `hejbro import`.',
+		);
+	});
+
+	it("M6: check constraint, name cause, pull", () => {
+		const report = buildLossReport({
+			...emptyFacts("pull"),
+			omittedChecksAtColumn: [
+				{
+					schema: "app",
+					table: "orders",
+					sqlName: "orders_userid_chk",
+					columnIdentity: "app.orders.UserId",
+					cause: "name",
+				},
+			],
+		});
+		expect(report).toContain(
+			'Omitted: check constraint "app.orders.orders_userid_chk" -- its expression names column "app.orders.UserId", which this reading left out because no declaration can carry its name, so the check constraint cannot be carried in the contract either. Rename the column in the database, then link the schema repository.',
+		);
+	});
+
+	it("M7: check constraint, enum cause, import", () => {
+		const report = buildLossReport({
+			...emptyFacts("import"),
+			omittedChecksAtColumn: [
+				{
+					schema: "app",
+					table: "t2",
+					sqlName: "t2_state_chk",
+					columnIdentity: "app.t2.state2",
+					cause: "enum",
+					enumIdentity: "app.Status",
+				},
+			],
+		});
+		expect(report).toContain(
+			'Omitted: check constraint "app.t2.t2_state_chk" -- its expression names column "app.t2.state2", which this reading left out with the enum type "app.Status" that types it, so the check constraint cannot be declared either. `check` keeps listing the check constraint as unmanaged until that column and the check constraint are both declared. Next: rename the type in the database, then re-run `hejbro import`.',
+		);
+	});
+
+	it("M8: check constraint, enum cause, pull", () => {
+		const report = buildLossReport({
+			...emptyFacts("pull"),
+			omittedChecksAtColumn: [
+				{
+					schema: "app",
+					table: "t2",
+					sqlName: "t2_state_chk",
+					columnIdentity: "app.t2.state2",
+					cause: "enum",
+					enumIdentity: "app.Status",
+				},
+			],
+		});
+		expect(report).toContain(
+			'Omitted: check constraint "app.t2.t2_state_chk" -- its expression names column "app.t2.state2", which this reading left out with the enum type "app.Status" that types it, so the check constraint cannot be carried in the contract either. Rename the type in the database, then link the schema repository.',
+		);
+	});
+
+	it("M9: unique constraint, name cause, import", () => {
+		const report = buildLossReport({
+			...emptyFacts("import"),
+			omittedUniqueConstraintsAtColumn: [
+				{
+					schema: "app",
+					table: "orders",
+					sqlName: "orders_userid_key",
+					columnIdentity: "app.orders.UserId",
+					cause: "name",
+				},
+			],
+		});
+		expect(report).toContain(
+			'Omitted: unique constraint "app.orders.orders_userid_key" -- it is declared on column "app.orders.UserId", which this reading left out because no declaration can carry its name, so the unique constraint cannot be declared either. `check` keeps listing the unique constraint as unmanaged until that column and the unique constraint are both declared. Next: rename the column in the database, then re-run `hejbro import`.',
+		);
+	});
+
+	it("M10: unique constraint, name cause, pull", () => {
+		const report = buildLossReport({
+			...emptyFacts("pull"),
+			omittedUniqueConstraintsAtColumn: [
+				{
+					schema: "app",
+					table: "orders",
+					sqlName: "orders_userid_key",
+					columnIdentity: "app.orders.UserId",
+					cause: "name",
+				},
+			],
+		});
+		expect(report).toContain(
+			'Omitted: unique constraint "app.orders.orders_userid_key" -- it is declared on column "app.orders.UserId", which this reading left out because no declaration can carry its name, so the unique constraint cannot be carried in the contract either. Rename the column in the database, then link the schema repository.',
+		);
+	});
+
+	it("M11: unique constraint, enum cause, import", () => {
+		const report = buildLossReport({
+			...emptyFacts("import"),
+			omittedUniqueConstraintsAtColumn: [
+				{
+					schema: "app",
+					table: "t3",
+					sqlName: "t3_st_key",
+					columnIdentity: "app.t3.st",
+					cause: "enum",
+					enumIdentity: "app.Status",
+				},
+			],
+		});
+		expect(report).toContain(
+			'Omitted: unique constraint "app.t3.t3_st_key" -- it is declared on column "app.t3.st", which this reading left out with the enum type "app.Status" that types it, so the unique constraint cannot be declared either. `check` keeps listing the unique constraint as unmanaged until that column and the unique constraint are both declared. Next: rename the type in the database, then re-run `hejbro import`.',
+		);
+	});
+
+	it("M12: unique constraint, enum cause, pull", () => {
+		const report = buildLossReport({
+			...emptyFacts("pull"),
+			omittedUniqueConstraintsAtColumn: [
+				{
+					schema: "app",
+					table: "t3",
+					sqlName: "t3_st_key",
+					columnIdentity: "app.t3.st",
+					cause: "enum",
+					enumIdentity: "app.Status",
+				},
+			],
+		});
+		expect(report).toContain(
+			'Omitted: unique constraint "app.t3.t3_st_key" -- it is declared on column "app.t3.st", which this reading left out with the enum type "app.Status" that types it, so the unique constraint cannot be carried in the contract either. Rename the type in the database, then link the schema repository.',
+		);
+	});
+
+	it("control: an omitted index at an omitted column never gets an approximation line either", () => {
+		const report = buildLossReport({
+			...emptyFacts("import"),
+			omittedUniqueConstraintsAtColumn: [
+				{
+					schema: "app",
+					table: "t3",
+					sqlName: "t3_st_key",
+					columnIdentity: "app.t3.st",
+					cause: "enum",
+					enumIdentity: "app.Status",
+				},
+			],
+		});
+		expect(
+			report.some(
+				(line) =>
+					line.startsWith("Approximated:") && line.includes("t3_st_key"),
+			),
+		).toBe(false);
+	});
+});
+
+/**
+ * 712/R10 B#2: a column omitted for two independent causes (its own
+ * name, and the enum type that types it) keeps 712/R3 D2's own "one
+ * line" rule, but that line's own way out now names both renames.
+ */
+describe("buildLossReport / 712/R10 B#2: a column omitted for two causes names both ways out", () => {
+	it("TC1: import -- both renames, and which one only moves the column to the enum's own line", () => {
+		const report = buildLossReport({
+			...emptyFacts("import"),
+			undeclarableNameColumns: [
+				{
+					schema: "app",
+					table: "orders",
+					sqlName: "BadState",
+					cause: "identifierRuleRejects",
+					enumIdentity: "app.Status",
+				},
+			],
+		});
+		expect(report).toContain(
+			'Omitted: column "app.orders.BadState" -- a key does produce this name back, but it is not a valid hejbro SQL identifier, and the enum type "app.Status" that types it is left out for its own name. The table "app.orders" is only partly declared, and `check` reports this column until both are renamed in the database and declared: renaming the column alone moves it to the enum type\'s own line.',
+		);
+	});
+
+	it("TC2: pull -- both renames, then link the schema repository", () => {
+		const report = buildLossReport({
+			...emptyFacts("pull"),
+			undeclarableNameColumns: [
+				{
+					schema: "app",
+					table: "orders",
+					sqlName: "BadState",
+					cause: "identifierRuleRejects",
+					enumIdentity: "app.Status",
+				},
+			],
+		});
+		expect(report).toContain(
+			'Omitted: column "app.orders.BadState" -- a key does produce this name back, but it is not a valid hejbro SQL identifier, and the enum type "app.Status" that types it is left out for its own name, so the column cannot be carried in the contract. Rename both the column and the type in the database, then link the schema repository.',
+		);
+	});
+
+	it("control: a single-cause column keeps 712/R5's own wording, unchanged", () => {
+		const report = buildLossReport({
+			...emptyFacts("import"),
+			undeclarableNameColumns: [
+				{
+					schema: "app",
+					table: "orders",
+					sqlName: "createdAt",
+					cause: "noDeclarationKey",
+				},
+			],
+		});
+		expect(report).toContain(
+			'Omitted: column "app.orders.createdAt" -- no declaration key produces this SQL name back. The table "app.orders" is only partly declared, and `check` reports this column until it is renamed in the database and declared.',
+		);
 	});
 });
 

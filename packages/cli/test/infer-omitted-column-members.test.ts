@@ -406,9 +406,22 @@ describe("inferFromCatalog / B#1: an index, check or UNIQUE at an omitted column
 		});
 
 		expect(indexNamesIn(result, "app.t3").has("t3_st_key")).toBe(false);
-		expect(result.lossReport.some((line) => line.includes("t3_st_key"))).toBe(
-			false,
-		);
+		// KK5 (712/R10 B#1): the omission itself is now announced (an
+		// "Omitted: unique constraint …" line, naming the object and its
+		// cause) -- what must never appear is the old "Approximated: the
+		// UNIQUE constraint … is inferred as a unique index" line, which
+		// the delta forbids for anything the reading omitted outright.
+		expect(
+			result.lossReport.some(
+				(line) =>
+					line.startsWith("Approximated:") && line.includes("t3_st_key"),
+			),
+		).toBe(false);
+		expect(
+			result.lossReport.some(
+				(line) => line.startsWith("Omitted:") && line.includes("t3_st_key"),
+			),
+		).toBe(true);
 
 		const paths = writeFiles(result);
 		await Promise.all(
