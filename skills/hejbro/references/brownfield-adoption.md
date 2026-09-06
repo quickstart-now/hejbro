@@ -213,13 +213,17 @@ The diagnostic prints *after* `generate` has already written the
 migration file and the new snapshot, so the second branch's first step
 is undoing what this run just wrote — both files, restored together
 through version control (e.g. `git checkout -- <migration file>
-<snapshot file>`), never just one: the migration file and the snapshot
-form one hash-chained pair, and reverting only one leaves the chain
-broken (`error[broken-chain]`) on the next `hejbro migrate` or
-`verify` — both check the chain offline, before either ever opens a
-database connection. hejbro has no command that discards its own
-just-written output — this step is manual, on you, same as any other
-version-control revert.
+<snapshot file>`), never just one: reverting only the migration file
+leaves the snapshot still recording the adoption as done, so the next
+`hejbro generate` reports "no changes" instead of writing back the
+migration you just deleted; reverting only the snapshot leaves it
+disagreeing with the migration file's own recorded hash, and `hejbro
+verify` refuses with `error[snapshot-stale]` and
+`error[chain-tip-mismatch]` (`hejbro migrate` itself never reads the
+snapshot's content, so it silently re-attempts the same failing
+statement instead of noticing anything is wrong). hejbro has no command
+that discards its own just-written output — this step is manual, on
+you, same as any other version-control revert.
 
 A child declared on a column the *existing* declaration didn't list is
 not refused at `generate` time, deliberately: `existingTable()` is by
