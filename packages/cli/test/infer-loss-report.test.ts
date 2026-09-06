@@ -33,6 +33,7 @@ const emptyFacts = (command: "import" | "pull"): LossReportFacts => ({
 	omittedIndexes: [],
 	omittedChecks: [],
 	omittedForeignKeys: [],
+	omittedForeignKeysByColumn: [],
 });
 
 describe("buildLossReport / 1.7", () => {
@@ -707,6 +708,122 @@ describe("buildLossReport / #874: order by code point, not the locale", () => {
 		).toBeGreaterThan(0);
 		expect(new Intl.Collator("sv-SE").compare("z_idx", "ä_idx")).toBeLessThan(
 			0,
+		);
+	});
+});
+
+/**
+ * 712/R5: a foreign key at an omitted column names the failing end --
+ * which end failed is which column the remedy renames, so `"source"`
+ * and `"target"` read as different reason clauses, in both commands.
+ * The control row proves the new line does not disturb the existing
+ * name-cause omission line's own wording.
+ */
+describe("buildLossReport / 712/R5: a foreign key at an omitted column names the failing end", () => {
+	it("import, source end: names the key, the source column, and rename+re-run", () => {
+		const report = buildLossReport({
+			...emptyFacts("import"),
+			omittedForeignKeysByColumn: [
+				{
+					schema: "app",
+					table: "orders",
+					name: "orders_userid_fkey",
+					columnIdentity: "app.orders.UserId",
+					end: "source",
+				},
+			],
+		});
+
+		expect(report).toContain(
+			'Omitted: foreign key "app.orders.orders_userid_fkey" -- it is declared on column "app.orders.UserId", which this reading left out because no declaration can carry its name, so the key cannot be declared either. Next: rename the column in the database, then re-run `hejbro import`.',
+		);
+	});
+
+	it("import, target end: names the key, the target column, and rename+re-run", () => {
+		const report = buildLossReport({
+			...emptyFacts("import"),
+			omittedForeignKeysByColumn: [
+				{
+					schema: "app",
+					table: "audits",
+					name: "audits_user_ref_fkey",
+					columnIdentity: "app.users.UserId",
+					end: "target",
+				},
+			],
+		});
+
+		expect(report).toContain(
+			'Omitted: foreign key "app.audits.audits_user_ref_fkey" -- it references column "app.users.UserId", which this reading left out because no declaration can carry its name, so the key cannot be declared either. Next: rename the column in the database, then re-run `hejbro import`.',
+		);
+	});
+
+	it("pull, source end: names the key, the source column, and the contract-facing consequence", () => {
+		const report = buildLossReport({
+			...emptyFacts("pull"),
+			omittedForeignKeysByColumn: [
+				{
+					schema: "app",
+					table: "orders",
+					name: "orders_userid_fkey",
+					columnIdentity: "app.orders.UserId",
+					end: "source",
+				},
+			],
+		});
+
+		expect(report).toContain(
+			'Omitted: foreign key "app.orders.orders_userid_fkey" -- it is declared on column "app.orders.UserId", which this reading left out because no declaration can carry its name, so it cannot be carried in the contract, so the key cannot be carried either. Rename the column in the database, then link the schema repository.',
+		);
+	});
+
+	it("pull, target end: names the key, the target column, and the contract-facing consequence", () => {
+		const report = buildLossReport({
+			...emptyFacts("pull"),
+			omittedForeignKeysByColumn: [
+				{
+					schema: "app",
+					table: "audits",
+					name: "audits_user_ref_fkey",
+					columnIdentity: "app.users.UserId",
+					end: "target",
+				},
+			],
+		});
+
+		expect(report).toContain(
+			'Omitted: foreign key "app.audits.audits_user_ref_fkey" -- it references column "app.users.UserId", which this reading left out because no declaration can carry its name, so it cannot be carried in the contract, so the key cannot be carried either. Rename the column in the database, then link the schema repository.',
+		);
+	});
+
+	// Control row: a name-cause omission (a different axis, D106 R6-B1)
+	// must keep its own, unchanged wording alongside the new column-cause
+	// line, in the same report.
+	it("control: a name-cause foreign-key omission keeps its own existing wording, unaffected by the new column-cause line", () => {
+		const report = buildLossReport({
+			...emptyFacts("import"),
+			omittedForeignKeys: [
+				{
+					schema: "app",
+					table: "orders",
+					name: "fk_widget",
+					targetKind: "table",
+					target: "app.Widgets",
+				},
+			],
+			omittedForeignKeysByColumn: [
+				{
+					schema: "app",
+					table: "orders",
+					name: "orders_userid_fkey",
+					columnIdentity: "app.orders.UserId",
+					end: "source",
+				},
+			],
+		});
+
+		expect(report).toContain(
+			'Omitted: foreign key "app.orders.fk_widget" -- references table "app.Widgets", whose catalog name is not a valid hejbro SQL identifier, so no declaration can carry it. Next: rename the table in the database, then re-run `hejbro import`.',
 		);
 	});
 });

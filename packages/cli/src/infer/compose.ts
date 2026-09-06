@@ -14,6 +14,7 @@ import type { CatalogDescription } from "./description";
 import { describeCatalog } from "./description";
 import type {
 	OmittedForeignKey,
+	OmittedForeignKeyColumn,
 	OmittedSchema,
 	OmittedTable,
 	UndeclarableNameColumn,
@@ -279,24 +280,6 @@ const targetIdentifierFor = (
 		return fk.targetSchema;
 	}
 	return `${fk.targetSchema}.${fk.targetTable}`;
-};
-
-/**
- * #873: a foreign key whose own source column, or whose *target*'s own
- * column, is itself omitted for an undeclarable name -- named by the
- * offending column's own identity (`"<schema>.<table>.<sqlName>"`) and
- * which end it sits on, since the two ends read differently in a report
- * line (the FK's own table declares only part of itself; the target's
- * table does). A target this run never read is never checked here (its
- * own columns are simply unknown, not omitted -- {@link
- * partitionForeignKeys}'s own `survivingTableIdentities` guard).
- */
-export type OmittedForeignKeyColumn = {
-	readonly schema: string;
-	readonly table: string;
-	readonly name: string;
-	readonly columnIdentity: string;
-	readonly end: "source" | "target";
 };
 
 export type ForeignKeyPartition = {
@@ -622,6 +605,7 @@ export const inferFromCatalog = async (
 		omittedIndexes: built.flatMap((result) => result.omittedIndexes),
 		omittedChecks: built.flatMap((result) => result.omittedChecks),
 		omittedForeignKeys: foreignKeyPartition.omittedForeignKeys,
+		omittedForeignKeysByColumn: foreignKeyPartition.omittedForeignKeysByColumn,
 	});
 
 	return {

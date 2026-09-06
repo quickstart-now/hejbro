@@ -240,6 +240,24 @@ export type OmittedForeignKey = {
 	readonly target: string;
 };
 
+/**
+ * A foreign key whose own name and target are both fine, but whose own
+ * source column, or its target's own column, was itself omitted for an
+ * undeclarable name (#873) -- costs that foreign key alone; the table
+ * holding it and everything else on it are still declared. `end` names
+ * which side failed, since that side is which column the remedy
+ * renames (712/R5): `"source"` reads "it is declared on column …",
+ * `"target"` reads "it references column …".
+ */
+export type OmittedForeignKeyColumn = {
+	readonly schema: string;
+	readonly table: string;
+	readonly name: string;
+	/** `"<schema>.<table>.<sqlName>"` of the omitted column that cost this foreign key. */
+	readonly columnIdentity: string;
+	readonly end: "source" | "target";
+};
+
 export type LossReportFacts = {
 	readonly command: "import" | "pull";
 	readonly roleNames: ReadonlyArray<string>;
@@ -258,6 +276,7 @@ export type LossReportFacts = {
 	readonly omittedIndexes: ReadonlyArray<OmittedIndex>;
 	readonly omittedChecks: ReadonlyArray<OmittedCheck>;
 	readonly omittedForeignKeys: ReadonlyArray<OmittedForeignKey>;
+	readonly omittedForeignKeysByColumn: ReadonlyArray<OmittedForeignKeyColumn>;
 };
 
 const guessedLine = (
@@ -577,6 +596,42 @@ const omittedForeignKeyLines = (
 	return ordered.map(omittedForeignKeyLineForImport);
 };
 
+/** 712/R5: which end failed is which column the remedy renames -- `"source"` reads as this table's own column, `"target"` as the far table's. */
+const foreignKeyColumnReasonClause = (
+	end: OmittedForeignKeyColumn["end"],
+): string => {
+	if (end === "target") {
+		return "it references column";
+	}
+	return "it is declared on column";
+};
+
+/** import's own consequence: the column is gone, so the key referencing it can never be declared either -- renaming in the database is the only remedy (712/R5). */
+const omittedForeignKeyColumnLineForImport = (
+	entry: OmittedForeignKeyColumn,
+): string =>
+	`Omitted: foreign key "${entry.schema}.${entry.table}.${entry.name}" -- ${foreignKeyColumnReasonClause(entry.end)} "${entry.columnIdentity}", which this reading left out because no declaration can carry its name, so the key cannot be declared either. Next: rename the column in the database, then re-run \`hejbro import\`.`;
+
+/** pull's own consequence, mirroring `undeclarableNameLineForPull`'s own wording for the column itself (712/R5). */
+const omittedForeignKeyColumnLineForPull = (
+	entry: OmittedForeignKeyColumn,
+): string =>
+	`Omitted: foreign key "${entry.schema}.${entry.table}.${entry.name}" -- ${foreignKeyColumnReasonClause(entry.end)} "${entry.columnIdentity}", which this reading left out because no declaration can carry its name, so it cannot be carried in the contract, so the key cannot be carried either. Rename the column in the database, then link the schema repository.`;
+
+const omittedForeignKeyColumnLines = (
+	entries: ReadonlyArray<OmittedForeignKeyColumn>,
+	command: LossReportFacts["command"],
+): ReadonlyArray<string> => {
+	const ordered = sortedBy(
+		entries,
+		(entry) => `${entry.schema}.${entry.table}.${entry.name}`,
+	);
+	if (command === "pull") {
+		return ordered.map(omittedForeignKeyColumnLineForPull);
+	}
+	return ordered.map(omittedForeignKeyColumnLineForImport);
+};
+
 const wayOutLine = (command: LossReportFacts["command"]): string => {
 	if (command === "pull") {
 		return "The loss ends when you link the schema repository.";
@@ -631,6 +686,10 @@ export const buildLossReport = (
 	...omittedIndexLines(facts.omittedIndexes, facts.command),
 	...omittedCheckLines(facts.omittedChecks, facts.command),
 	...omittedForeignKeyLines(facts.omittedForeignKeys, facts.command),
+	...omittedForeignKeyColumnLines(
+		facts.omittedForeignKeysByColumn,
+		facts.command,
+	),
 	...undeclarableNameLines(facts.undeclarableNameColumns, facts.command),
 	wayOutLine(facts.command),
 ];
