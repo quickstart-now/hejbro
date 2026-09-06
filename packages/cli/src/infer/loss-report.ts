@@ -1,5 +1,6 @@
 import { deriveForeignKeyName } from "@hejbro/core";
 import type { Catalog } from "../check/catalog";
+import { compareCodeUnits } from "../compare-code-units";
 import type { ColumnLoss } from "./columns";
 import type { NotInferredSummary } from "./rest";
 import type { InferredTableFacts } from "./table";
@@ -282,7 +283,7 @@ const sortedBy = <T>(
 	items: ReadonlyArray<T>,
 	keyOf: (item: T) => string,
 ): ReadonlyArray<T> =>
-	[...items].sort((a, b) => keyOf(a).localeCompare(keyOf(b)));
+	[...items].sort((a, b) => compareCodeUnits(keyOf(a), keyOf(b)));
 
 const countedKindLine = (
 	label: string,

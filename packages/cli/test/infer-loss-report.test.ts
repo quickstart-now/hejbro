@@ -631,6 +631,79 @@ describe("buildLossReport / 1.7", () => {
 	});
 });
 
+/**
+ * #874: `buildLossReport`'s per-instance lines must order by code point,
+ * never by the running process's own collation -- a normalization pair
+ * (NFC/NFD, canonically equivalent) is two different code-point
+ * sequences and must not tie, and a pair two real collations rank in
+ * opposite directions (`"z_idx"`/`"ä_idx"`) must still land in one
+ * fixed, locale-independent order. `omittedIndexes` is the vehicle:
+ * its own line carries `sqlName` verbatim, with no other transform
+ * between the fact and the printed text.
+ */
+describe("buildLossReport / #874: order by code point, not the locale", () => {
+	const nfcCafeIdx = "café_idx";
+	const nfdCafeIdx = "café_idx";
+	const IndexLinePrefix = 'Omitted: index "app.widgets.';
+
+	// Fed in an order matching none of the three rows' own expected
+	// order, so a report that happened to preserve input order would
+	// not pass by accident.
+	const orderedNames = (): ReadonlyArray<string> => {
+		const report = buildLossReport({
+			...emptyFacts("import"),
+			omittedIndexes: [
+				{ schema: "app", table: "widgets", sqlName: "zeta_idx" },
+				{ schema: "app", table: "widgets", sqlName: nfcCafeIdx },
+				{ schema: "app", table: "widgets", sqlName: "ä_idx" },
+				{ schema: "app", table: "widgets", sqlName: "alpha_idx" },
+				{ schema: "app", table: "widgets", sqlName: "z_idx" },
+				{ schema: "app", table: "widgets", sqlName: nfdCafeIdx },
+			],
+		});
+		return report
+			.filter((line) => line.startsWith(IndexLinePrefix))
+			.map((line) =>
+				line.slice(
+					IndexLinePrefix.length,
+					line.indexOf('"', IndexLinePrefix.length),
+				),
+			);
+	};
+
+	it("row A (NFC/NFD pair): the decomposed form sorts before the composed one, by code unit", () => {
+		const names = orderedNames();
+		expect(names.indexOf(nfdCafeIdx)).toBeLessThan(names.indexOf(nfcCafeIdx));
+	});
+
+	it('row B (locale-reordered pair): "z_idx" sorts before "ä_idx", by code unit, though en-US collation would reverse it', () => {
+		const names = orderedNames();
+		expect(names.indexOf("z_idx")).toBeLessThan(names.indexOf("ä_idx"));
+	});
+
+	it('row C (control): "alpha_idx" sorts before "zeta_idx" under every ordering', () => {
+		const names = orderedNames();
+		expect(names.indexOf("alpha_idx")).toBeLessThan(names.indexOf("zeta_idx"));
+	});
+
+	it("pins the locale control this ordering must not depend on (explicit-locale collators, no subprocess)", () => {
+		// NFC and NFD are canonically equivalent -- every collator (any
+		// locale) treats them as equal; this alone is not what makes the
+		// report's own order locale-independent.
+		expect(new Intl.Collator("en-US").compare(nfcCafeIdx, nfdCafeIdx)).toBe(0);
+		expect(new Intl.Collator("sv-SE").compare(nfcCafeIdx, nfdCafeIdx)).toBe(0);
+		// en-US collates "ä" next to "a" (before "z"); sv-SE collates it as
+		// its own letter after "z" -- the two locales disagree with each
+		// other, and only sv-SE happens to agree with code-unit order here.
+		expect(
+			new Intl.Collator("en-US").compare("z_idx", "ä_idx"),
+		).toBeGreaterThan(0);
+		expect(new Intl.Collator("sv-SE").compare("z_idx", "ä_idx")).toBeLessThan(
+			0,
+		);
+	});
+});
+
 describe("detectUniqueIndexApproximations / 1.7", () => {
 	it("names every UNIQUE constraint, since each is inferred as its own backing index (CI-G1-R1-06 (B))", () => {
 		const catalog: Catalog = {
