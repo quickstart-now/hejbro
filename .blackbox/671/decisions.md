@@ -43,3 +43,29 @@ D-1, mechanism: option A. `KindChange` gains one optional field, `transition?: "
 
 D-2, the table's change on adoption: the table kind's transition guard narrows from "either side existing" to "next side existing". A handover stays silent in full. An adoption flows through the alter path with the column diff suppressed (671/R2) and only the children — indexes, checks, foreign keys, primary key — rendered as creates in the plain ALTER-time forms the kind already owns. The alternative (operation `create` with `emitCreate` skipping `create table`) is rejected: it shares the new-table path and its goldens. Existing witnesses uo9 (handover silence) and uo10 (no column statements on adoption) stay green and are kept as the boundary's control rows.
 
+<a id="r5"></a>
+## R5 — task 1.3 design: adoption-creates names children from the table snapshot, one list per adopted table, before core warnings and counted in the summary
+
+_lead · extension · basis 671/R1 (design Q3); 671/R3 (cli Diagnostic literal, Next in the rendered text); delta cli-commands enumeration order; measured: core index.ts exports TableSnapshot/ColumnSnapshot/ForeignKeySnapshot/SequenceSnapshot, contract/read-snapshot.ts and declare-emit/emit.ts precedent, generate-command.test.ts 726/738/750 summary assertions declare managed tables only · 2026-09-06T00:37Z · ratified: pending_
+
+Settles task 1.3's `[design]` question — the text and wiring of `adoption-creates` — on the planner's final submission.
+
+D-3-A, the source of the children's names: read them structurally from the adopted table's `KindChange.next` snapshot node (`indexes[].name`, `checks?.[].name`, `foreignKeys[].name`, `primaryKeyName`), the way `contract/read-snapshot.ts` and `declare-emit/emit.ts` already read a table snapshot in the CLI; `TableSnapshot`, `ColumnSnapshot`, `ForeignKeySnapshot` and `SequenceSnapshot` are public exports, so no core change and no new public surface. Sequences, row-level security and policies arrive as their own adopted changes (the engine stamps `transition` on every kind implementing `ownerTableIdentity`) and are named from their identities. `KindChange.notes` is never parsed: it is banner text.
+
+D-3-B, the text: one diagnostic per adopted table, rendered through `renderDiagnostics` as
+```
+warning[adoption-creates]: <schema>.<table>
+  adoption creates objects for a table hejbro did not create; apply fails if the database already holds any of them
+  sequence "<schema>.<sequence>"
+  row-level security
+  policy "<name>"
+  index "<name>"
+  check "<name>"
+  foreign key "<name>"
+  primary key "<name>"
+  Next: if the database already holds these, run "hejbro baseline" to record them instead of applying this migration.
+```
+Identity is the plain unquoted `schema.table` the other CLI diagnostics use. Object lines follow the delta's enumeration order (sequences, row-level security, policies, indexes, checks, foreign keys, primary key); a kind with nothing to create has no line; no counts are printed; `Next:` is the body's last line, not a `suggestions` entry. A handover and a new table print nothing under this code; the migration is written either way.
+
+D-3-C, wiring: the `adoption-creates` blocks are rendered before the core warnings, and the stdout summary line counts them together with the core warnings (the summary must match the blocks below it). The three existing assertions on that summary line declare managed tables only and are unaffected, as measured.
+
