@@ -17,9 +17,12 @@ import { update } from "../src/query/mutate";
 import type { Snapshot } from "../src/snapshot/snapshot";
 import { buildSnapshot, emptySnapshot } from "../src/snapshot/snapshot";
 import {
+	bigint,
 	bigserial,
 	integer,
 	serial,
+	smallint,
+	smallserial,
 	text,
 	timestamptz,
 	uuid,
@@ -1660,6 +1663,183 @@ describe("an existing declaration emits nothing (add-unmanaged-objects, #605)", 
 		const addForeignKey =
 			'alter table "uo25"."widgets" add constraint "widgets_parent_fk" foreign key ("parent_id") references "uo25"."widgets" ("id");';
 		expect(secondResult.sql).toBe([banner, addForeignKey].join("\n\n"));
+	});
+
+	// 671/R4 (task 1.2): an adopted owner's sequence -- idempotent create,
+	// then normalized to the declared type and owning column, never a
+	// column-touching statement.
+
+	it("an adopted table normalizes its serial column's sequence idempotently (671/task 1.2, table A: serial)", () => {
+		const app = schema("uo26");
+		const existingWidgets = existingTable("uo26", "widgets", {
+			id: integer(),
+		});
+		const managedWidgets = table(app, "widgets", { id: serial() });
+		const firstResult = generateMigration({
+			declarations: [app, getTableMeta(existingWidgets)],
+			previousSnapshot: emptySnapshot,
+		});
+		const secondResult = generateMigration({
+			declarations: [app, managedWidgets],
+			previousSnapshot: firstResult.snapshot,
+		});
+		const banner =
+			'-- hejbro migration\n-- + sequence uo26.widgets_id_seq [new]\n-- ~ table uo26.widgets [column "id" changed]';
+		const createSequence =
+			'create sequence if not exists "uo26"."widgets_id_seq";';
+		const alterType = 'alter sequence "uo26"."widgets_id_seq" as integer;';
+		const ownedBy =
+			'alter sequence "uo26"."widgets_id_seq" owned by "uo26"."widgets"."id";';
+		expect(secondResult.sql).toBe(
+			[banner, createSequence, alterType, ownedBy].join("\n\n"),
+		);
+	});
+
+	it("an adopted table normalizes its bigserial column's sequence idempotently (671/task 1.2, table A: bigserial)", () => {
+		const app = schema("uo27");
+		const existingWidgets = existingTable("uo27", "widgets", {
+			id: bigint(),
+		});
+		const managedWidgets = table(app, "widgets", { id: bigserial() });
+		const firstResult = generateMigration({
+			declarations: [app, getTableMeta(existingWidgets)],
+			previousSnapshot: emptySnapshot,
+		});
+		const secondResult = generateMigration({
+			declarations: [app, managedWidgets],
+			previousSnapshot: firstResult.snapshot,
+		});
+		const banner =
+			'-- hejbro migration\n-- + sequence uo27.widgets_id_seq [new]\n-- ~ table uo27.widgets [column "id" changed]';
+		const createSequence =
+			'create sequence if not exists "uo27"."widgets_id_seq";';
+		const alterType = 'alter sequence "uo27"."widgets_id_seq" as bigint;';
+		const ownedBy =
+			'alter sequence "uo27"."widgets_id_seq" owned by "uo27"."widgets"."id";';
+		expect(secondResult.sql).toBe(
+			[banner, createSequence, alterType, ownedBy].join("\n\n"),
+		);
+	});
+
+	it("an adopted table normalizes its smallserial column's sequence idempotently (671/task 1.2, table A: smallserial)", () => {
+		const app = schema("uo28");
+		const existingWidgets = existingTable("uo28", "widgets", {
+			id: smallint(),
+		});
+		const managedWidgets = table(app, "widgets", { id: smallserial() });
+		const firstResult = generateMigration({
+			declarations: [app, getTableMeta(existingWidgets)],
+			previousSnapshot: emptySnapshot,
+		});
+		const secondResult = generateMigration({
+			declarations: [app, managedWidgets],
+			previousSnapshot: firstResult.snapshot,
+		});
+		const banner =
+			'-- hejbro migration\n-- + sequence uo28.widgets_id_seq [new]\n-- ~ table uo28.widgets [column "id" changed]';
+		const createSequence =
+			'create sequence if not exists "uo28"."widgets_id_seq";';
+		const alterType = 'alter sequence "uo28"."widgets_id_seq" as smallint;';
+		const ownedBy =
+			'alter sequence "uo28"."widgets_id_seq" owned by "uo28"."widgets"."id";';
+		expect(secondResult.sql).toBe(
+			[banner, createSequence, alterType, ownedBy].join("\n\n"),
+		);
+	});
+
+	it("an adopted table's owned-by statement never crosses schemas when two same-named tables are adopted together (671/task 1.2, table B: cross-schema)", () => {
+		const appA = schema("uo29a");
+		const appB = schema("uo29b");
+		const existingA = existingTable("uo29a", "widgets", { id: integer() });
+		const existingB = existingTable("uo29b", "widgets", { id: integer() });
+		const managedA = table(appA, "widgets", { id: serial() });
+		const managedB = table(appB, "widgets", { id: serial() });
+		const firstResult = generateMigration({
+			declarations: [
+				appA,
+				appB,
+				getTableMeta(existingA),
+				getTableMeta(existingB),
+			],
+			previousSnapshot: emptySnapshot,
+		});
+		const secondResult = generateMigration({
+			declarations: [appA, appB, managedA, managedB],
+			previousSnapshot: firstResult.snapshot,
+		});
+		const banner =
+			"-- hejbro migration\n" +
+			"-- + sequence uo29a.widgets_id_seq [new]\n" +
+			"-- + sequence uo29b.widgets_id_seq [new]\n" +
+			'-- ~ table uo29a.widgets [column "id" changed]\n' +
+			'-- ~ table uo29b.widgets [column "id" changed]';
+		const createSequenceA =
+			'create sequence if not exists "uo29a"."widgets_id_seq";';
+		const alterTypeA = 'alter sequence "uo29a"."widgets_id_seq" as integer;';
+		const ownedByA =
+			'alter sequence "uo29a"."widgets_id_seq" owned by "uo29a"."widgets"."id";';
+		const createSequenceB =
+			'create sequence if not exists "uo29b"."widgets_id_seq";';
+		const alterTypeB = 'alter sequence "uo29b"."widgets_id_seq" as integer;';
+		const ownedByB =
+			'alter sequence "uo29b"."widgets_id_seq" owned by "uo29b"."widgets"."id";';
+		expect(secondResult.sql).toBe(
+			[
+				banner,
+				createSequenceA,
+				alterTypeA,
+				ownedByA,
+				createSequenceB,
+				alterTypeB,
+				ownedByB,
+			].join("\n\n"),
+		);
+	});
+
+	it("a second handover-then-adoption round trip renders the same idempotent form as the first (671/task 1.2, table C: round trip, #694)", () => {
+		const app = schema("uo30");
+		const managedWidgets = table(app, "widgets", { id: serial() });
+		const existingWidgets = existingTable("uo30", "widgets", { id: integer() });
+
+		const managedResult = generateMigration({
+			declarations: [app, managedWidgets],
+			previousSnapshot: emptySnapshot,
+		});
+		const firstHandoverResult = generateMigration({
+			declarations: [app, getTableMeta(existingWidgets)],
+			previousSnapshot: managedResult.snapshot,
+		});
+		expect(firstHandoverResult.hasChanges).toBe(false);
+		expect(firstHandoverResult.sql).toBe("");
+
+		const firstAdoptionResult = generateMigration({
+			declarations: [app, managedWidgets],
+			previousSnapshot: firstHandoverResult.snapshot,
+		});
+		const banner =
+			'-- hejbro migration\n-- + sequence uo30.widgets_id_seq [new]\n-- ~ table uo30.widgets [column "id" changed]';
+		const createSequence =
+			'create sequence if not exists "uo30"."widgets_id_seq";';
+		const alterType = 'alter sequence "uo30"."widgets_id_seq" as integer;';
+		const ownedBy =
+			'alter sequence "uo30"."widgets_id_seq" owned by "uo30"."widgets"."id";';
+		expect(firstAdoptionResult.sql).toBe(
+			[banner, createSequence, alterType, ownedBy].join("\n\n"),
+		);
+
+		const secondHandoverResult = generateMigration({
+			declarations: [app, getTableMeta(existingWidgets)],
+			previousSnapshot: firstAdoptionResult.snapshot,
+		});
+		expect(secondHandoverResult.hasChanges).toBe(false);
+		expect(secondHandoverResult.sql).toBe("");
+
+		const secondAdoptionResult = generateMigration({
+			declarations: [app, managedWidgets],
+			previousSnapshot: secondHandoverResult.snapshot,
+		});
+		expect(secondAdoptionResult.sql).toContain("create sequence if not exists");
+		expect(secondAdoptionResult.sql).toBe(firstAdoptionResult.sql);
 	});
 
 	// D106 R2, R2-B1: `planRenames` runs before `diffSnapshots`, entirely
