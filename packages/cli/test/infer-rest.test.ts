@@ -80,6 +80,75 @@ describe("inferRoleNames / 1.5", () => {
 
 		expect(inferRoleNames(catalog)).toEqual(["app_reader", "app_writer"]);
 	});
+
+	/**
+	 * #678: `pg_policies.roles` names a role that no grant names on its
+	 * own -- unioned in alongside the three existing grant sources, with
+	 * `public` excluded regardless of which source names it (D110: a
+	 * universal claim starts from an input table, not one example).
+	 */
+	it("unions role names named only by a policy's own TO clause with every grant kind, drops public everywhere, sorted by code point", () => {
+		const catalog: Catalog = {
+			...emptyCatalog(),
+			policies: [
+				// Row R1: a role no grant names, named only by a policy.
+				{
+					schema: "app",
+					table: "posts",
+					name: "posts_read_own",
+					roles: ["app_reader"],
+				},
+				// Row R2: an unrestricted policy names "public" -- not a role.
+				{
+					schema: "app",
+					table: "posts",
+					name: "posts_read_all",
+					roles: ["public"],
+				},
+				// Row R3: one policy naming two roles, fed unsorted.
+				{
+					schema: "app",
+					table: "comments",
+					name: "comments_moderate",
+					roles: ["b", "a"],
+				},
+			],
+			tableGrants: [
+				// Row R4: a table grant to "public" -- not a role either.
+				{
+					schema: "app",
+					table: "posts",
+					role: "public",
+					privilege: "SELECT",
+				},
+				// Row R5 (tableGrants source).
+				{
+					schema: "app",
+					table: "posts",
+					role: "app_writer",
+					privilege: "SELECT",
+				},
+			],
+			// Row R5 (schemaUsageGrants source) -- "app_reader" also appears
+			// here, proving the union deduplicates across a policy and a
+			// grant naming the same role.
+			schemaUsageGrants: [
+				{ schema: "app", role: "app_reader", privilege: "USAGE" },
+			],
+			// Row R5 (defaultTableGrants source).
+			defaultTableGrants: [
+				{ schema: "app", role: "app_owner", privilege: "SELECT" },
+			],
+		};
+
+		expect(inferRoleNames(catalog)).toEqual([
+			"a",
+			"app_owner",
+			"app_reader",
+			"app_writer",
+			"b",
+		]);
+	});
 });
 
 describe("notInferredSummary / 1.5", () => {
@@ -89,7 +158,14 @@ describe("notInferredSummary / 1.5", () => {
 			functions: [{ schema: "app", name: "touch_updated_at" }],
 			triggers: [{ schema: "app", table: "posts", name: "posts_touch" }],
 			views: [{ schema: "app", name: "open_tasks" }],
-			policies: [{ schema: "app", table: "posts", name: "posts_read_all" }],
+			policies: [
+				{
+					schema: "app",
+					table: "posts",
+					name: "posts_read_all",
+					roles: ["app_reader"],
+				},
+			],
 		};
 
 		const summary = notInferredSummary(catalog);
@@ -105,7 +181,12 @@ describe("notInferredSummary / 1.5", () => {
 		// the shared inventory) -- this reports every policy present, since
 		// none of them has its expression inferred.
 		expect(summary.policies).toEqual([
-			{ schema: "app", table: "posts", name: "posts_read_all" },
+			{
+				schema: "app",
+				table: "posts",
+				name: "posts_read_all",
+				roles: ["app_reader"],
+			},
 		]);
 		// "grant beyond its role name" is a blanket rule, not per-instance --
 		// there is no per-grant list to name (declaration-inference delta).

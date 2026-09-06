@@ -1,6 +1,7 @@
 import { schema } from "@hejbro/core";
 import { describe, expect, it } from "vitest";
 import type { Catalog } from "../src/check/catalog";
+import type { ColumnOmissionCause } from "../src/infer/compose";
 import {
 	partitionForeignKeys,
 	partitionSchemas,
@@ -192,6 +193,16 @@ describe("isNameDeclarable / D106 R5-B2", () => {
 	});
 });
 
+/** #873: none of this suite's fixtures carry an undeclarable-name column (`tableFacts`'s own default is always `columns: []`) -- `survivingTableIdentitiesFor` supplies `partitionForeignKeys`'s other new, required parameter with the same set `compose.ts` itself derives from its own tables list, and an empty omitted-column set is exactly right here (631/R8: the added parameter, nothing else). */
+const survivingTableIdentitiesFor = (
+	tables: ReadonlyArray<InferredTableFacts>,
+): ReadonlySet<string> =>
+	new Set(
+		tables.map((table) => `${table.schema.schemaName}.${table.tableName}`),
+	);
+
+const noOmittedColumns: ReadonlyMap<string, ColumnOmissionCause> = new Map();
+
 // D106 R6-B1: a foreign key is omitted for exactly the reason every
 // other object in this module is -- its *target*'s own name is one a
 // declaration cannot carry. Whether the target's schema was ever named
@@ -203,7 +214,12 @@ describe("partitionForeignKeys / D106 R6-B1", () => {
 	it("keeps a foreign key whose target table survived", () => {
 		const orders = tableFacts("orders", [foreignKeyTo("app", "widgets")]);
 		const widgets = tableFacts("widgets");
-		const result = partitionForeignKeys([orders, widgets]);
+		const tables = [orders, widgets];
+		const result = partitionForeignKeys(
+			tables,
+			survivingTableIdentitiesFor(tables),
+			noOmittedColumns,
+		);
 
 		expect(result.omittedForeignKeys).toEqual([]);
 		expect(
@@ -218,7 +234,11 @@ describe("partitionForeignKeys / D106 R6-B1", () => {
 		const orders = tableFacts("orders", [
 			foreignKeyTo("ext", "users", "fk_owner"),
 		]);
-		const result = partitionForeignKeys([orders]);
+		const result = partitionForeignKeys(
+			[orders],
+			survivingTableIdentitiesFor([orders]),
+			noOmittedColumns,
+		);
 
 		expect(result.omittedForeignKeys).toEqual([]);
 		expect(result.tables[0]?.foreignKeys).toEqual([
@@ -230,7 +250,11 @@ describe("partitionForeignKeys / D106 R6-B1", () => {
 		const orders = tableFacts("orders", [
 			foreignKeyTo("app", "Widgets", "fk_widget"),
 		]);
-		const result = partitionForeignKeys([orders]);
+		const result = partitionForeignKeys(
+			[orders],
+			survivingTableIdentitiesFor([orders]),
+			noOmittedColumns,
+		);
 
 		expect(result.omittedForeignKeys).toEqual([
 			{
@@ -248,7 +272,11 @@ describe("partitionForeignKeys / D106 R6-B1", () => {
 		const orders = tableFacts("orders", [
 			foreignKeyTo("App", "orders", "fk_owner"),
 		]);
-		const result = partitionForeignKeys([orders]);
+		const result = partitionForeignKeys(
+			[orders],
+			survivingTableIdentitiesFor([orders]),
+			noOmittedColumns,
+		);
 
 		expect(result.omittedForeignKeys).toEqual([
 			{
@@ -266,7 +294,11 @@ describe("partitionForeignKeys / D106 R6-B1", () => {
 		const widgets = tableFacts("widgets", [
 			foreignKeyTo("app", "widgets", "fk_parent"),
 		]);
-		const result = partitionForeignKeys([widgets]);
+		const result = partitionForeignKeys(
+			[widgets],
+			survivingTableIdentitiesFor([widgets]),
+			noOmittedColumns,
+		);
 
 		expect(result.omittedForeignKeys).toEqual([]);
 		expect(result.tables[0]?.foreignKeys).toHaveLength(1);

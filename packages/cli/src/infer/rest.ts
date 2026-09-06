@@ -9,6 +9,7 @@ import type {
 	TriggerRow,
 	ViewRow,
 } from "../check/catalog";
+import { compareCodeUnits } from "../compare-code-units";
 import type { EnumLabelRow, InferenceCatalog } from "./catalog";
 
 export type InferredEnums = {
@@ -66,17 +67,23 @@ export const inferEnums = (
 
 /**
  * Distinct role names appearing in any grant the shared inventory reads
- * (table, schema-usage, default-table) -- the only role fact the
- * catalog-inference delta guesses; the grant relationships themselves
- * are never inferred.
+ * (table, schema-usage, default-table) or named only in a policy's own
+ * `TO <role>` clause (#678: `pg_policies.roles`) -- the only role fact
+ * the catalog-inference delta guesses; the grant and policy
+ * relationships themselves are never inferred. `"public"` is Postgres's
+ * own spelling for "every role", not a role name, from either source --
+ * excluded regardless of which one names it. Sorted by code point
+ * (1.4): every list hejbro prints orders the same way.
  */
 export const inferRoleNames = (catalog: Catalog): ReadonlyArray<string> => {
 	const names = new Set([
 		...catalog.tableGrants.map((row) => row.role),
 		...catalog.schemaUsageGrants.map((row) => row.role),
 		...catalog.defaultTableGrants.map((row) => row.role),
+		...catalog.policies.flatMap((row) => row.roles),
 	]);
-	return [...names].sort();
+	names.delete("public");
+	return [...names].sort(compareCodeUnits);
 };
 
 export type NotInferredSummary = {

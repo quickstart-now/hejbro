@@ -1,0 +1,21 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#1021",
+  "title": "import: a primary key over an omitted column is silently weakened (composite) or dropped without a line",
+  "parent": "quickstart-now/hejbro#995",
+  "status": "closed",
+  "opened": "2026-09-06",
+  "closed": "2026-09-06",
+  "decisions": [],
+  "work": [],
+  "prs": [
+    {
+      "number": 1026,
+      "role": "closes",
+      "pinnedAt": "2026-09-06T11:29Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

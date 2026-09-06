@@ -1,0 +1,21 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#1020",
+  "title": "import: the primary-key name collision check does not see composite types or foreign tables holding the derived name",
+  "parent": "quickstart-now/hejbro#995",
+  "status": "open",
+  "opened": "2026-09-06",
+  "closed": null,
+  "decisions": [],
+  "work": [],
+  "prs": [
+    {
+      "number": 1026,
+      "role": "refs",
+      "pinnedAt": "2026-09-06T11:29Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

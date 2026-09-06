@@ -1,0 +1,21 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#678",
+  "title": "infer: role names from policies, not only from grants",
+  "parent": "quickstart-now/hejbro#412",
+  "status": "closed",
+  "opened": "2026-09-05",
+  "closed": "2026-09-06",
+  "decisions": [],
+  "work": [],
+  "prs": [
+    {
+      "number": 1026,
+      "role": "closes",
+      "pinnedAt": "2026-09-06T11:29Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

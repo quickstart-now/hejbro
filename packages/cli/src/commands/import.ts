@@ -179,6 +179,34 @@ const nothingDeclarableResult = (
  * says so with the real reason. Stating both would tell the reader two
  * different stories about the same schema.
  */
+/** A quoted identity's own leading segment, up to its first `.` -- `"app.Status"` names schema `app`, `"app"` alone (a bare schema-only identity) names itself. */
+const QUOTED_IDENTITY = /"([^"]+)"/g;
+
+/**
+ * 712/R10 N#4: a schema that held only objects the loss report already
+ * named as omitted (an enum with no expressible name, an index at an
+ * omitted column, …) produces zero snapshot objects the same way a
+ * genuinely empty schema does -- `schemasWithInferredObjects` cannot
+ * tell the two apart, since neither ever reaches the snapshot. Checked
+ * against the rendered report itself, the one place that already knows
+ * every "Omitted: …" line and the identity each one names.
+ */
+const schemaHasNamedOmission = (
+	lossReport: ReadonlyArray<string>,
+	schemaName: string,
+): boolean =>
+	lossReport
+		.filter((line) => line.startsWith("Omitted:"))
+		.some((line) =>
+			[...line.matchAll(QUOTED_IDENTITY)].some((match) => {
+				const identity = match[1];
+				return (
+					identity !== undefined &&
+					(identity === schemaName || identity.startsWith(`${schemaName}.`))
+				);
+			}),
+		);
+
 const emptySchemaLines = (
 	result: InferCatalogResult,
 	schemas: ReadonlyArray<string>,
@@ -188,6 +216,9 @@ const emptySchemaLines = (
 	return schemas
 		.filter((schemaName) => !withObjects.has(schemaName))
 		.filter((schemaName) => !omitted.has(schemaName))
+		.filter(
+			(schemaName) => !schemaHasNamedOmission(result.lossReport, schemaName),
+		)
 		.map(
 			(schemaName) =>
 				`Not inferred: nothing to infer in schema "${schemaName}".`,

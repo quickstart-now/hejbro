@@ -5,23 +5,31 @@ import {
 	generateMigration,
 } from "@hejbro/core";
 import type { DriverSession } from "@hejbro/query";
-import type { Catalog } from "../check/catalog";
+import type { Catalog, EnumRow } from "../check/catalog";
 import { readCatalog } from "../check/catalog";
+import { compareCodeUnits } from "../compare-code-units";
+import { tablesInSnapshot } from "../contract/read-snapshot";
 import { mergeTableFacts } from "./adapter";
 import type { InferenceCatalog } from "./catalog";
 import { readInferenceCatalog } from "./catalog";
 import type { CatalogDescription } from "./description";
 import { describeCatalog } from "./description";
 import type {
+	MemberAxis,
+	OmittedEnum,
 	OmittedForeignKey,
+	OmittedForeignKeyColumn,
+	OmittedPrimaryKey,
 	OmittedSchema,
 	OmittedTable,
+	OmittedTableMemberAtColumn,
 	UndeclarableNameColumn,
 } from "./loss-report";
 import {
 	buildLossReport,
 	detectForeignKeyNameApproximations,
 	detectNextvalDefaultApproximations,
+	detectPrimaryKeyNameApproximations,
 	detectUniqueIndexApproximations,
 } from "./loss-report";
 import {
@@ -32,8 +40,10 @@ import {
 } from "./rest";
 import type {
 	ExistingTableHandle,
+	InferredCheck,
 	InferredForeignKey,
 	InferredForeignKeyTargetColumn,
+	InferredIndex,
 	InferredTableFacts,
 } from "./table";
 import {
@@ -137,16 +147,349 @@ const filterInferenceCatalogToSchemas = (
  * guessed at") means `pull`'s contract would silently declare a
  * column under the wrong name if the snapshot carried it -- excluded
  * here for both commands, `command` no longer branches this half.
+ * `enumOmittedColumnIdentities` (712/R3) widens the same exclusion to a
+ * column whose own name is fine but whose *type* is an omitted enum --
+ * a type node can only ever reference a declared enum, so this column
+ * must never reach `inferTable` either (it would otherwise surface a
+ * second time as a plain type loss, D2's forbidden double report).
  */
 const tablesExcludingUndeclarableNames = (
 	tables: ReadonlyArray<InferredTableFacts>,
+	enumOmittedColumnIdentities: ReadonlySet<string>,
 ): ReadonlyArray<InferredTableFacts> =>
 	tables.map((table) => ({
 		...table,
-		columns: table.columns.filter((column) =>
-			isNameDeclarable(column.sqlName, column.tsKey),
-		),
+		columns: table.columns.filter((column) => {
+			if (!isNameDeclarable(column.sqlName, column.tsKey)) {
+				return false;
+			}
+			return !enumOmittedColumnIdentities.has(
+				`${table.schema.schemaName}.${table.tableName}.${column.sqlName}`,
+			);
+		}),
 	}));
+
+/**
+ * Every column an index depends on -- its key list plus any column its
+ * partial predicate or an expression key's own text names -- read from
+ * `index.referencedColumns` (`pg_depend`'s own auto dependency, threaded
+ * through `infer/catalog.ts`), never scanned from `predicate`/
+ * `columns[].text` (712/R10 B#1, review round 2 LL2: a string literal
+ * reading the same bare text as a column name never appears in
+ * `pg_depend`, measured live, so a text scan's false-positive risk never
+ * arises here). A composite index that names even one omitted column is
+ * dropped whole (J6: it cannot be declared with only some of its keys).
+ */
+const indexOmittedColumnIdentities = (
+	schema: string,
+	table: string,
+	index: InferredIndex,
+	omittedColumnIdentities: ReadonlySet<string>,
+): ReadonlyArray<string> =>
+	index.referencedColumns
+		.map((column) => `${schema}.${table}.${column}`)
+		.filter((identity) => omittedColumnIdentities.has(identity));
+
+/**
+ * 712/R10: which of a check constraint's own columns are omitted --
+ * read from `pg_constraint.conkey` (`check/catalog.ts`'s own
+ * `ConstraintRow.columns`, threaded through by `adapter.ts`'s
+ * `checksFor`), never from scanning the expression's own text. Measured
+ * live (postgres:17.11): a string literal reading the same bare text as
+ * a column name (`check (kind = 'state2')`) never appears in `conkey`,
+ * so the catalog's own list is authoritative where a text match would
+ * have false-positived.
+ */
+const checkOmittedColumnIdentities = (
+	schema: string,
+	table: string,
+	check: InferredCheck,
+	omittedColumnIdentities: ReadonlySet<string>,
+): ReadonlyArray<string> =>
+	check.columns
+		.map((columnName) => `${schema}.${table}.${columnName}`)
+		.filter((identity) => omittedColumnIdentities.has(identity));
+
+/**
+ * 712/R10 B#1: which single column a multi-column member's own line
+ * names, and that column's own cause -- the first by code point when
+ * several were omitted at once (a composite index, J6), the same
+ * "pick one, deterministically" shape 712/R9 already settled for a
+ * foreign key lost at both ends.
+ */
+const firstOffendingColumn = (
+	columnIdentities: ReadonlyArray<string>,
+	columnOmissionCauses: ReadonlyMap<string, ColumnOmissionCause>,
+):
+	| Pick<
+			OmittedTableMemberAtColumn,
+			"columnIdentity" | "cause" | "enumIdentity"
+	  >
+	| undefined => {
+	const [first] = [...columnIdentities].sort(compareCodeUnits);
+	if (first === undefined) {
+		return undefined;
+	}
+	const cause = columnOmissionCauses.get(first);
+	if (cause === undefined) {
+		return undefined;
+	}
+	if (cause.cause === "enum") {
+		return {
+			columnIdentity: first,
+			cause: "enum",
+			enumIdentity: cause.enumIdentity,
+		};
+	}
+	return { columnIdentity: first, cause: "name" };
+};
+
+export type PrimaryKeyExclusionResult = {
+	readonly tables: ReadonlyArray<InferredTableFacts>;
+	readonly omittedPrimaryKeys: ReadonlyArray<OmittedPrimaryKey>;
+};
+
+/**
+ * Review round 2 N#7 (712/R10 execution): a primary key that names an
+ * already-omitted column is excluded *whole*, before {@link
+ * tablesExcludingUndeclarableNames} ever drops that column from the
+ * table -- a partial key is a different constraint (Postgres itself
+ * would emit `primary key (<survivors>)`, never the catalog's own
+ * composite key), so every surviving member's own `isPrimaryKey` is
+ * cleared too, and the table ends up with no primary key at all rather
+ * than a narrower one. Read against `table.columns` exactly as `adapter.ts`
+ * built it (before column-stripping), since a member already dropped by
+ * that step would otherwise look, from here, like it was never part of
+ * the key in the first place. `primaryKeyNamesByTable` supplies the
+ * constraint's own catalog name (never a derived one -- an omitted key is
+ * never approximated), read once from `catalog.constraints` the same way
+ * {@link excludeMembersReferencingOmittedColumns}'s own
+ * `uniqueConstraintIdentities` is.
+ */
+const excludePrimaryKeysReferencingOmittedColumns = (
+	tables: ReadonlyArray<InferredTableFacts>,
+	columnOmissionCauses: ReadonlyMap<string, ColumnOmissionCause>,
+	primaryKeyNamesByTable: ReadonlyMap<string, string>,
+): PrimaryKeyExclusionResult => {
+	const perTable = tables.map((table) => {
+		const identity = `${table.schema.schemaName}.${table.tableName}`;
+		const pkColumnIdentities = table.columns
+			.filter((column) => column.isPrimaryKey)
+			.map((column) => `${identity}.${column.sqlName}`);
+		const omittedPkColumnIdentities = pkColumnIdentities.filter(
+			(columnIdentity) => columnOmissionCauses.has(columnIdentity),
+		);
+		const offending = firstOffendingColumn(
+			omittedPkColumnIdentities,
+			columnOmissionCauses,
+		);
+		const name = primaryKeyNamesByTable.get(identity);
+		if (offending === undefined || name === undefined) {
+			return { table, omittedPrimaryKey: undefined };
+		}
+		return {
+			table: {
+				...table,
+				columns: table.columns.map((column) => ({
+					...column,
+					isPrimaryKey: false,
+				})),
+			},
+			omittedPrimaryKey: {
+				schema: table.schema.schemaName,
+				table: table.tableName,
+				name,
+				...offending,
+			},
+		};
+	});
+	return {
+		tables: perTable.map((entry) => entry.table),
+		omittedPrimaryKeys: perTable.flatMap((entry) => {
+			if (entry.omittedPrimaryKey === undefined) {
+				return [];
+			}
+			return [entry.omittedPrimaryKey];
+		}),
+	};
+};
+
+/**
+ * Review round 2 MM3/NN2 (lead-approved wording): which of an index's
+ * own column-bearing positions named the chosen offending column --
+ * checked key list first (Postgres itself never lets a UNIQUE
+ * constraint's or a primary key's own column carry a predicate or an
+ * expression, so a constraint-backed index's offending column is always
+ * found here). Once the column is not a key, a plain index carrying
+ * *both* a predicate and an expression key names both: `pg_depend`
+ * records only that the index depends on the column, never which of
+ * the two clauses introduced that dependency (measured live: a
+ * predicate's and an expression's own referenced columns arrive on the
+ * same `deptype = 'a'` row shape, with no clause tag), so picking one
+ * over the other would misattribute the cause the way 712/R8's own B#2
+ * already guards against for a two-cause column -- named indeterminate
+ * only when it actually is (a predicate-only or expression-only index
+ * still gets its own single-clause wording). `index` is `undefined` for
+ * a check constraint, whose axis is always `"key"` -- unread, since
+ * `memberReasonClause` never asks a check for its axis.
+ */
+const memberAxisFor = (
+	index: InferredIndex | undefined,
+	columnIdentity: string,
+	schema: string,
+	table: string,
+): MemberAxis => {
+	if (index === undefined) {
+		return "key";
+	}
+	const isKeyColumn = index.columns.some(
+		(column) =>
+			column.column !== null &&
+			`${schema}.${table}.${column.column}` === columnIdentity,
+	);
+	if (isKeyColumn) {
+		return "key";
+	}
+	const hasExpressionKey = index.columns.some(
+		(column) => column.column === null,
+	);
+	if (index.predicate !== null && hasExpressionKey) {
+		return "expressionOrPredicate";
+	}
+	if (index.predicate !== null) {
+		return "predicate";
+	}
+	return "expression";
+};
+
+export type MemberExclusionResult = {
+	readonly tables: ReadonlyArray<InferredTableFacts>;
+	readonly omittedIndexesAtColumn: ReadonlyArray<OmittedTableMemberAtColumn>;
+	readonly omittedChecksAtColumn: ReadonlyArray<OmittedTableMemberAtColumn>;
+	readonly omittedUniqueConstraintsAtColumn: ReadonlyArray<OmittedTableMemberAtColumn>;
+};
+
+/**
+ * Runs after {@link tablesExcludingUndeclarableNames}: that step has
+ * already dropped every omitted column itself, so an index or check
+ * still naming one here is exactly the object B#1 needs excluded too.
+ * `uniqueConstraintIdentities` tells an ordinary index apart from one
+ * backing a UNIQUE constraint (both arrive here as `InferredIndex`,
+ * `check/catalog.ts`'s own `constraints` reading is the only place that
+ * knows which) -- the loss report names the two differently (712/R10).
+ */
+const excludeMembersReferencingOmittedColumns = (
+	tables: ReadonlyArray<InferredTableFacts>,
+	columnOmissionCauses: ReadonlyMap<string, ColumnOmissionCause>,
+	uniqueConstraintIdentities: ReadonlySet<string>,
+): MemberExclusionResult => {
+	const omittedColumnIdentities = new Set(columnOmissionCauses.keys());
+
+	const perTable = tables.map((table) => {
+		const indexResults = table.indexes.map((index) => ({
+			index,
+			columnIdentities: indexOmittedColumnIdentities(
+				table.schema.schemaName,
+				table.tableName,
+				index,
+				omittedColumnIdentities,
+			),
+		}));
+		const checkResults = table.checks.map((check) => ({
+			check,
+			columnIdentities: checkOmittedColumnIdentities(
+				table.schema.schemaName,
+				table.tableName,
+				check,
+				omittedColumnIdentities,
+			),
+		}));
+
+		const droppedIndexEntries = indexResults.filter(
+			(entry) => entry.columnIdentities.length > 0,
+		);
+		const isUniqueConstraint = (indexName: string): boolean =>
+			uniqueConstraintIdentities.has(
+				`${table.schema.schemaName}.${table.tableName}.${indexName}`,
+			);
+		/**
+		 * `index` is passed for an index or a UNIQUE constraint (both back
+		 * onto an `InferredIndex`, MM3) so the axis is derived from the
+		 * same object the offending column itself was found on, never
+		 * recomputed a second way -- absent for a check constraint, whose
+		 * axis is always `"key"` (unread: `memberReasonClause` never asks
+		 * a check for its axis).
+		 */
+		const memberEntryFor = (
+			sqlName: string,
+			columnIdentities: ReadonlyArray<string>,
+			index?: InferredIndex,
+		): ReadonlyArray<OmittedTableMemberAtColumn> => {
+			const offending = firstOffendingColumn(
+				columnIdentities,
+				columnOmissionCauses,
+			);
+			if (offending === undefined) {
+				return [];
+			}
+			const axis = memberAxisFor(
+				index,
+				offending.columnIdentity,
+				table.schema.schemaName,
+				table.tableName,
+			);
+			return [
+				{
+					schema: table.schema.schemaName,
+					table: table.tableName,
+					sqlName,
+					axis,
+					...offending,
+				},
+			];
+		};
+
+		return {
+			table: {
+				...table,
+				indexes: indexResults
+					.filter((entry) => entry.columnIdentities.length === 0)
+					.map((entry) => entry.index),
+				checks: checkResults
+					.filter((entry) => entry.columnIdentities.length === 0)
+					.map((entry) => entry.check),
+			},
+			omittedIndexesAtColumn: droppedIndexEntries
+				.filter((entry) => !isUniqueConstraint(entry.index.name))
+				.flatMap((entry) =>
+					memberEntryFor(entry.index.name, entry.columnIdentities, entry.index),
+				),
+			omittedUniqueConstraintsAtColumn: droppedIndexEntries
+				.filter((entry) => isUniqueConstraint(entry.index.name))
+				.flatMap((entry) =>
+					memberEntryFor(entry.index.name, entry.columnIdentities, entry.index),
+				),
+			omittedChecksAtColumn: checkResults
+				.filter((entry) => entry.columnIdentities.length > 0)
+				.flatMap((entry) =>
+					memberEntryFor(entry.check.name, entry.columnIdentities),
+				),
+		};
+	});
+
+	return {
+		tables: perTable.map((entry) => entry.table),
+		omittedIndexesAtColumn: perTable.flatMap(
+			(entry) => entry.omittedIndexesAtColumn,
+		),
+		omittedChecksAtColumn: perTable.flatMap(
+			(entry) => entry.omittedChecksAtColumn,
+		),
+		omittedUniqueConstraintsAtColumn: perTable.flatMap(
+			(entry) => entry.omittedUniqueConstraintsAtColumn,
+		),
+	};
+};
 
 /**
  * D106 R6-N1: which half of `isNameDeclarable` failed, set here where
@@ -204,6 +547,27 @@ export const partitionSchemas = (catalog: Catalog): SchemaPartition => ({
 	omittedSchemas: catalog.schemas
 		.filter((row) => !isExpressibleName(row.schema))
 		.map((row) => ({ sqlName: row.schema })),
+});
+
+export type EnumPartition = {
+	/** Every enum row whose own catalog name is a valid hejbro SQL identifier -- safe to pass to `inferEnums`/`pgEnum`. */
+	readonly expressibleEnums: ReadonlyArray<EnumRow>;
+	readonly omittedEnums: ReadonlyArray<EnumRow>;
+};
+
+/**
+ * 712/R3 (D36): `pgEnum` asserts nothing about its own name, so a
+ * catalog name D36 rejects would otherwise reach the snapshot, the
+ * starter and the emitted DDL unchanged -- filtered here, before
+ * `inferEnums` ever calls `pgEnum`, the same reason {@link
+ * partitionSchemas}/{@link partitionTables} filter ahead of their own
+ * constructors. An enum has no TypeScript key of its own (unlike a
+ * column), so `isExpressibleName` alone settles it -- no round-trip
+ * half to ask.
+ */
+export const partitionEnums = (catalog: Catalog): EnumPartition => ({
+	expressibleEnums: catalog.enums.filter((row) => isExpressibleName(row.name)),
+	omittedEnums: catalog.enums.filter((row) => !isExpressibleName(row.name)),
 });
 
 /** A table's identity alone, before `withInventorySignal` below can say whether `check` will keep naming it (that needs the final declared schema/enum set, not yet known at partition time). */
@@ -284,7 +648,18 @@ const targetIdentifierFor = (
 export type ForeignKeyPartition = {
 	readonly tables: ReadonlyArray<InferredTableFacts>;
 	readonly omittedForeignKeys: ReadonlyArray<OmittedForeignKey>;
+	readonly omittedForeignKeysByColumn: ReadonlyArray<OmittedForeignKeyColumn>;
 };
+
+/**
+ * Which rule excluded a column, and (712/R8) the enum's own identity
+ * when that rule is D36 on the *enum's* name rather than the column's --
+ * the one lookup a foreign key at that column consults for its own
+ * omission line's cause.
+ */
+export type ColumnOmissionCause =
+	| { readonly cause: "name" }
+	| { readonly cause: "enum"; readonly enumIdentity: string };
 
 /**
  * D106 R6-B1: a foreign key is omitted for exactly the reason every
@@ -299,12 +674,100 @@ export type ForeignKeyPartition = {
  * target's own names, rather than membership in a surviving-table set,
  * is what tells the two cases apart (D106 R6-B1: the survivor-set
  * check could not).
+ *
+ * #873 widens this to a second, independent axis: a foreign key whose
+ * own name is fine (both schema and table) can still name a column,
+ * on either end, that a *different* rule (D36 on the column's own
+ * name) already excluded -- writing it anyway is what left the starter
+ * declaration referencing a column that does not exist on either
+ * table's own object. `survivingTableIdentities` tells a target this
+ * run never read (whose own columns are simply unknown) apart from one
+ * that survived minus the very column this foreign key needs -- only
+ * the latter costs the foreign key.
  */
 export const partitionForeignKeys = (
 	tables: ReadonlyArray<InferredTableFacts>,
+	survivingTableIdentities: ReadonlySet<string>,
+	columnOmissionCauses: ReadonlyMap<string, ColumnOmissionCause>,
 ): ForeignKeyPartition => {
 	const isCarryable = (fk: InferredForeignKey): boolean =>
 		isExpressibleName(fk.targetSchema) && isExpressibleName(fk.targetTable);
+
+	/** 712/R8: an entry only when `identity` was actually excluded -- `flatMap`'s own empty-array-drops-the-row idiom stands in for a filter+map pair that would otherwise re-look-up the same cause twice. */
+	const omissionEntryFor = (
+		facts: InferredTableFacts,
+		fk: InferredForeignKey,
+		identity: string,
+		end: OmittedForeignKeyColumn["end"],
+	): ReadonlyArray<OmittedForeignKeyColumn> => {
+		const cause = columnOmissionCauses.get(identity);
+		if (cause === undefined) {
+			return [];
+		}
+		if (cause.cause === "enum") {
+			return [
+				{
+					schema: facts.schema.schemaName,
+					table: facts.tableName,
+					name: fk.name,
+					columnIdentity: identity,
+					end,
+					cause: "enum",
+					enumIdentity: cause.enumIdentity,
+				},
+			];
+		}
+		return [
+			{
+				schema: facts.schema.schemaName,
+				table: facts.tableName,
+				name: fk.name,
+				columnIdentity: identity,
+				end,
+				cause: "name",
+			},
+		];
+	};
+
+	const columnOmissionsFor = (
+		facts: InferredTableFacts,
+		fk: InferredForeignKey,
+	): ReadonlyArray<OmittedForeignKeyColumn> => {
+		const sourceOmissions = fk.sourceColumns
+			.map(
+				(column) => `${facts.schema.schemaName}.${facts.tableName}.${column}`,
+			)
+			.flatMap((identity) => omissionEntryFor(facts, fk, identity, "source"));
+		const targetSurvives = survivingTableIdentities.has(
+			`${fk.targetSchema}.${fk.targetTable}`,
+		);
+		if (!targetSurvives) {
+			return sourceOmissions;
+		}
+		const targetOmissions = fk.targetColumns
+			.map((column) => `${fk.targetSchema}.${fk.targetTable}.${column.sqlName}`)
+			.flatMap((identity) => omissionEntryFor(facts, fk, identity, "target"));
+		return [...sourceOmissions, ...targetOmissions];
+	};
+
+	const omittedForeignKeysByColumn = tables.flatMap((facts) =>
+		facts.foreignKeys
+			.filter((fk) => isCarryable(fk))
+			.flatMap((fk) => columnOmissionsFor(facts, fk)),
+	);
+	const omittedByColumnKeys = new Set(
+		omittedForeignKeysByColumn.map(
+			(entry) => `${entry.schema}.${entry.table}.${entry.name}`,
+		),
+	);
+	const isKeptByColumnCheck = (
+		facts: InferredTableFacts,
+		fk: InferredForeignKey,
+	): boolean =>
+		!omittedByColumnKeys.has(
+			`${facts.schema.schemaName}.${facts.tableName}.${fk.name}`,
+		);
+
 	const omittedForeignKeys = tables.flatMap((facts) =>
 		facts.foreignKeys
 			.filter((fk) => !isCarryable(fk))
@@ -322,9 +785,12 @@ export const partitionForeignKeys = (
 	return {
 		tables: tables.map((facts) => ({
 			...facts,
-			foreignKeys: facts.foreignKeys.filter((fk) => isCarryable(fk)),
+			foreignKeys: facts.foreignKeys.filter(
+				(fk) => isCarryable(fk) && isKeptByColumnCheck(facts, fk),
+			),
 		})),
 		omittedForeignKeys,
+		omittedForeignKeysByColumn,
 	};
 };
 
@@ -432,8 +898,12 @@ export const inferFromCatalog = async (
 		return declareSchema(name);
 	};
 
+	// 712/R3: a catalog name D36 rejects never reaches `pgEnum` -- filtered
+	// before `inferEnums` calls it, the same reason `partitionSchemas`
+	// filters ahead of `declareSchema`.
+	const enumPartition = partitionEnums(catalog);
 	const enums = inferEnums(
-		catalog.enums,
+		enumPartition.expressibleEnums,
 		inferenceCatalog.enumLabels,
 		schemaFor,
 	);
@@ -472,17 +942,177 @@ export const inferFromCatalog = async (
 		tablePartition.omittedTables,
 		schemasWithOtherDeclarations,
 	);
-	const foreignKeyPartition = partitionForeignKeys(mergedTables);
+	// #873: computed once, ahead of the foreign-key partition below (which
+	// needs it) and reused for the loss report's own enumeration (which
+	// used to re-derive it a second time, later) -- the same judgment,
+	// asked once.
+	const undeclarableColumns = undeclarableNameColumnsFor(mergedTables);
+	// 712/R3: a column typed by an omitted enum -- its own name may well
+	// be fine, but its type node can only ever reference a declared enum,
+	// so it is excluded the same way an undeclarable-name column is (and
+	// folded into the same `columnOmissionCauses` map a foreign key at
+	// that column already checks, D2's own reuse of task 1.3's rule). The
+	// omitted enum's own type identity is read from the raw catalog row
+	// (`baseTypeKind`/`baseTypeSchema`/`baseTypeName`), never re-derived.
+	const omittedEnumIdentities = new Set(
+		enumPartition.omittedEnums.map((row) => `${row.schema}.${row.name}`),
+	);
+	const columnRowsByIdentity = new Map(
+		catalog.columns.map(
+			(row) => [`${row.schema}.${row.table}.${row.name}`, row] as const,
+		),
+	);
+	const enumOmittedColumns = mergedTables.flatMap((table) =>
+		table.columns.flatMap((column) => {
+			const row = columnRowsByIdentity.get(
+				`${table.schema.schemaName}.${table.tableName}.${column.sqlName}`,
+			);
+			if (
+				row === undefined ||
+				row.baseTypeKind !== "e" ||
+				row.baseTypeSchema === null ||
+				row.baseTypeName === null ||
+				!omittedEnumIdentities.has(`${row.baseTypeSchema}.${row.baseTypeName}`)
+			) {
+				return [];
+			}
+			// D2: a column already omitted for its own name is reported by
+			// that column's own line, never by the enum's line too.
+			if (!isNameDeclarable(column.sqlName, column.tsKey)) {
+				return [];
+			}
+			return [
+				{
+					enumSchema: row.baseTypeSchema,
+					enumName: row.baseTypeName,
+					schema: table.schema.schemaName,
+					table: table.tableName,
+					sqlName: column.sqlName,
+				},
+			];
+		}),
+	);
+	const enumOmittedColumnIdentities = new Set(
+		enumOmittedColumns.map(
+			(column) => `${column.schema}.${column.table}.${column.sqlName}`,
+		),
+	);
+	// 712/R10 B#2: a column already reported for its own name
+	// (`undeclarableColumns`) that is *also* typed by an omitted enum --
+	// the D2 guard above keeps a two-cause column off the enum's own
+	// line, but the column's own line now names both, since renaming it
+	// alone only moves it to the enum's line (its type still cannot be
+	// declared).
+	const twoCauseEnumIdentityByColumn = new Map<string, string>(
+		undeclarableColumns.flatMap((column) => {
+			const row = columnRowsByIdentity.get(
+				`${column.schema}.${column.table}.${column.sqlName}`,
+			);
+			if (
+				row === undefined ||
+				row.baseTypeKind !== "e" ||
+				row.baseTypeSchema === null ||
+				row.baseTypeName === null ||
+				!omittedEnumIdentities.has(`${row.baseTypeSchema}.${row.baseTypeName}`)
+			) {
+				return [];
+			}
+			return [
+				[
+					`${column.schema}.${column.table}.${column.sqlName}`,
+					`${row.baseTypeSchema}.${row.baseTypeName}`,
+				] as const,
+			];
+		}),
+	);
+	const omittedEnums: ReadonlyArray<OmittedEnum> =
+		enumPartition.omittedEnums.map((enumRow) => ({
+			schema: enumRow.schema,
+			sqlName: enumRow.name,
+			columns: enumOmittedColumns
+				.filter(
+					(column) =>
+						column.enumSchema === enumRow.schema &&
+						column.enumName === enumRow.name,
+				)
+				.map((column) => ({
+					schema: column.schema,
+					table: column.table,
+					sqlName: column.sqlName,
+				})),
+		}));
+	// 712/R8: which rule excluded a column, threaded through to the
+	// foreign-key partition so its own omission line can follow the same
+	// cause -- name and enum causes never collide on one column identity
+	// (D2, `enumOmittedColumns`'s own `isNameDeclarable` guard above), so
+	// this spread order never needs to break a tie.
+	const columnOmissionCauses = new Map<string, ColumnOmissionCause>([
+		...undeclarableColumns.map(
+			(column) =>
+				[
+					`${column.schema}.${column.table}.${column.sqlName}`,
+					{ cause: "name" as const },
+				] as const,
+		),
+		...enumOmittedColumns.map(
+			(column) =>
+				[
+					`${column.schema}.${column.table}.${column.sqlName}`,
+					{
+						cause: "enum" as const,
+						enumIdentity: `${column.enumSchema}.${column.enumName}`,
+					},
+				] as const,
+		),
+	]);
+	// B#1 (live review): the same unified set every index/check/unique
+	// exclusion below reads -- never re-derived per caller.
+	const omittedColumnIdentities = new Set(columnOmissionCauses.keys());
+	// 712/R10 B#1: which excluded index is really a UNIQUE constraint's
+	// own backing index -- the loss report names the two differently, and
+	// only the raw catalog's own `constraints` reading (never
+	// `indexDetails`, which carries both alike) knows which is which.
+	const uniqueConstraintIdentities = new Set(
+		catalog.constraints
+			.filter((row) => row.type === "u")
+			.map((row) => `${row.schema}.${row.table}.${row.name}`),
+	);
+
+	const foreignKeyPartition = partitionForeignKeys(
+		mergedTables,
+		survivingTableIdentities,
+		columnOmissionCauses,
+	);
 	const tablesWithReachableForeignKeys = foreignKeyPartition.tables;
 	const outOfScopeHandles = outOfScopeHandlesFor(
 		tablesWithReachableForeignKeys,
 		survivingTableIdentities,
 	);
 
-	const snapshotTables = tablesExcludingUndeclarableNames(
-		tablesWithReachableForeignKeys,
+	// 712/R10 execution (N#7): the catalog's own primary-key constraint
+	// name per table, read once here -- an omitted key is never
+	// approximated, so this is never the derived name a mismatch would
+	// otherwise print.
+	const primaryKeyNamesByTable = new Map(
+		catalog.constraints
+			.filter((row) => row.type === "p")
+			.map((row) => [`${row.schema}.${row.table}`, row.name] as const),
 	);
-	const built = snapshotTables.map((table) =>
+	const primaryKeyExclusion = excludePrimaryKeysReferencingOmittedColumns(
+		tablesWithReachableForeignKeys,
+		columnOmissionCauses,
+		primaryKeyNamesByTable,
+	);
+	const snapshotTables = tablesExcludingUndeclarableNames(
+		primaryKeyExclusion.tables,
+		enumOmittedColumnIdentities,
+	);
+	const memberExclusion = excludeMembersReferencingOmittedColumns(
+		snapshotTables,
+		columnOmissionCauses,
+		uniqueConstraintIdentities,
+	);
+	const built = memberExclusion.tables.map((table) =>
 		inferTable(table, outOfScopeHandles),
 	);
 	const typeLosses = built.flatMap((result) => result.losses);
@@ -507,6 +1137,7 @@ export const inferFromCatalog = async (
 		uniqueIndexApproximations: detectUniqueIndexApproximations(
 			catalog,
 			survivingTableIdentities,
+			omittedColumnIdentities,
 		),
 		nextvalDefaults: detectNextvalDefaultApproximations(
 			tablesWithReachableForeignKeys,
@@ -514,14 +1145,33 @@ export const inferFromCatalog = async (
 		foreignKeyNameApproximations: detectForeignKeyNameApproximations(
 			tablesWithReachableForeignKeys,
 		),
-		undeclarableNameColumns: undeclarableNameColumnsFor(
-			tablesWithReachableForeignKeys,
+		// 712/R7: measured against the snapshot core itself just built, never
+		// a second, local re-implementation of the derivation rule.
+		primaryKeyNameApproximations: detectPrimaryKeyNameApproximations(
+			catalog,
+			tablesInSnapshot(migration.snapshot),
 		),
+		undeclarableNameColumns: undeclarableColumns.map((column) => {
+			const enumIdentity = twoCauseEnumIdentityByColumn.get(
+				`${column.schema}.${column.table}.${column.sqlName}`,
+			);
+			if (enumIdentity === undefined) {
+				return column;
+			}
+			return { ...column, enumIdentity };
+		}),
 		omittedSchemas: schemaPartition.omittedSchemas,
 		omittedTables,
+		omittedEnums,
 		omittedIndexes: built.flatMap((result) => result.omittedIndexes),
 		omittedChecks: built.flatMap((result) => result.omittedChecks),
 		omittedForeignKeys: foreignKeyPartition.omittedForeignKeys,
+		omittedForeignKeysByColumn: foreignKeyPartition.omittedForeignKeysByColumn,
+		omittedIndexesAtColumn: memberExclusion.omittedIndexesAtColumn,
+		omittedChecksAtColumn: memberExclusion.omittedChecksAtColumn,
+		omittedUniqueConstraintsAtColumn:
+			memberExclusion.omittedUniqueConstraintsAtColumn,
+		omittedPrimaryKeys: primaryKeyExclusion.omittedPrimaryKeys,
 	});
 
 	return {

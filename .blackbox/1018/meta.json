@@ -1,0 +1,21 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#1018",
+  "title": "loss report ordering: no server-collation axis and no unit test for compareCodeUnits",
+  "parent": "quickstart-now/hejbro#995",
+  "status": "open",
+  "opened": "2026-09-06",
+  "closed": null,
+  "decisions": [],
+  "work": [],
+  "prs": [
+    {
+      "number": 1026,
+      "role": "refs",
+      "pinnedAt": "2026-09-06T11:29Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

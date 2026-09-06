@@ -81,7 +81,11 @@ describe("inferTable / 1.4 checks", () => {
 				},
 			],
 			checks: [
-				{ name: "widgets_name_not_blank", expression: "(length(name) > 0)" },
+				{
+					name: "widgets_name_not_blank",
+					expression: "(length(name) > 0)",
+					columns: ["name"],
+				},
 			],
 		};
 
@@ -170,8 +174,12 @@ describe("mergeTableFacts / 1.4b checks are scoped per table (D106 R5-B3)", () =
 		const tableA = result.find((table) => table.tableName === "a");
 		const tableB = result.find((table) => table.tableName === "b");
 
-		expect(tableA?.checks).toEqual([{ name: "pos", expression: "(x > 0)" }]);
-		expect(tableB?.checks).toEqual([{ name: "pos", expression: "(y < 0)" }]);
+		expect(tableA?.checks).toEqual([
+			{ name: "pos", expression: "(x > 0)", columns: [] },
+		]);
+		expect(tableB?.checks).toEqual([
+			{ name: "pos", expression: "(y < 0)", columns: [] },
+		]);
 	});
 });
 
@@ -283,6 +291,7 @@ describe("inferTable / 1.4 indexes -- the five shapes", () => {
 							nullsFirst: false,
 						},
 					],
+					referencedColumns: ["id"],
 				},
 			],
 		});
@@ -312,6 +321,7 @@ describe("inferTable / 1.4 indexes -- the five shapes", () => {
 							nullsFirst: false,
 						},
 					],
+					referencedColumns: ["id"],
 				},
 			],
 		});
@@ -339,6 +349,7 @@ describe("inferTable / 1.4 indexes -- the five shapes", () => {
 							nullsFirst: false,
 						},
 					],
+					referencedColumns: ["id"],
 				},
 			],
 		});
@@ -365,6 +376,7 @@ describe("inferTable / 1.4 indexes -- the five shapes", () => {
 							nullsFirst: false,
 						},
 					],
+					referencedColumns: ["id"],
 				},
 			],
 		});
@@ -390,6 +402,7 @@ describe("inferTable / 1.4 indexes -- the five shapes", () => {
 							nullsFirst: false,
 						},
 					],
+					referencedColumns: ["id"],
 				},
 			],
 		});
@@ -418,6 +431,7 @@ describe("inferTable / 1.4 indexes -- the five shapes", () => {
 							nullsFirst: true,
 						},
 					],
+					referencedColumns: ["id"],
 				},
 			],
 		});
@@ -453,6 +467,7 @@ describe("inferTable / 1.4 indexes -- the five shapes", () => {
 							nullsFirst: false,
 						},
 					],
+					referencedColumns: ["id"],
 				},
 			],
 		});
@@ -643,8 +658,12 @@ describe("inferTable / 1.4 check and index name omission (D106 R4-B1)", () => {
 		const facts: InferredTableFacts = {
 			...emptyTableFacts,
 			checks: [
-				{ name: "widgets_name_not_blank", expression: "(length(name) > 0)" },
-				{ name: "CK_Widgets", expression: "(true)" },
+				{
+					name: "widgets_name_not_blank",
+					expression: "(length(name) > 0)",
+					columns: ["name"],
+				},
+				{ name: "CK_Widgets", expression: "(true)", columns: [] },
 			],
 		};
 
@@ -681,6 +700,7 @@ describe("inferTable / 1.4 check and index name omission (D106 R4-B1)", () => {
 					method: "btree",
 					predicate: null,
 					columns: [indexColumn],
+					referencedColumns: ["id"],
 				},
 				{
 					name: "IX_Widgets",
@@ -688,6 +708,7 @@ describe("inferTable / 1.4 check and index name omission (D106 R4-B1)", () => {
 					method: "btree",
 					predicate: null,
 					columns: [indexColumn],
+					referencedColumns: ["id"],
 				},
 			],
 		};

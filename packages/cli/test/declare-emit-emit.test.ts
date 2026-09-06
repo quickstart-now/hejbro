@@ -1316,3 +1316,148 @@ describe("emitDeclarationFiles / D106 R7-N3", () => {
 		expect(file.source).toContain("schema was never read by this run");
 	});
 });
+
+/**
+ * #874/1.4: `buildFilePlan`'s two sorts (`emit.ts:1580` across handles,
+ * `emit.ts:1584` within one handle's own referenced columns) must order
+ * by code point, never by the running process's own collation -- the
+ * same rule already settled for the loss report and `check`'s
+ * inventory. NFC/NFD is a canonically-equivalent pair (two different
+ * code-point sequences); the `"z…"`/`"ä…"` pair is a pair two real
+ * collations rank in opposite directions.
+ */
+describe("emitDeclarationFiles / #874: out-of-scope handles order by code point, not the locale", () => {
+	const nfcCafe = "café";
+	const nfdCafe = "café";
+
+	const referencingTable = (
+		name: string,
+		columnName: string,
+		targetIdentity: string,
+	): TableSnapshot => ({
+		schema: "app",
+		name,
+		columns: [
+			{
+				name: "id",
+				typeNode: { typeName: "uuid" },
+				notNull: true,
+				primaryKey: true,
+			},
+			{ name: columnName, typeNode: { typeName: "uuid" }, notNull: true },
+		],
+		indexes: [],
+		foreignKeys: [
+			{
+				name: `${name}_${columnName}_fkey`,
+				columns: [columnName],
+				referencesTable: targetIdentity,
+				referencesColumns: ["id"],
+			},
+		],
+		primaryKeyName: `${name}_pkey`,
+	});
+
+	// Fed in an order matching neither pair's own expected order, so a
+	// plan that happened to preserve input order would not pass by
+	// accident.
+	it("row D: orders out-of-scope existingTable handles by code point (NFC/NFD pair, locale-reordered pair)", () => {
+		const tables = [
+			referencingTable("t_z", "z_id", "ext.z_users"),
+			referencingTable("t_nfc", "cafe_id_a", `ext.${nfcCafe}`),
+			referencingTable("t_ae", "ae_id", `ext.ä_users`),
+			referencingTable("t_nfd", "cafe_id_b", `ext.${nfdCafe}`),
+		];
+
+		const files = emitDeclarationFiles(resultFor(tables));
+		expect(files).toHaveLength(1);
+		const [file] = files;
+		if (file === undefined) {
+			throw new Error("expected exactly one emitted file");
+		}
+
+		const indexOfHandle = (tableName: string): number => {
+			const index = file.source.indexOf(
+				`existingTable("ext", ${JSON.stringify(tableName)}`,
+			);
+			if (index === -1) {
+				throw new Error(
+					`expected an existingTable("ext", ${JSON.stringify(tableName)}, ...) handle:\n${file.source}`,
+				);
+			}
+			return index;
+		};
+
+		expect(indexOfHandle(nfdCafe)).toBeLessThan(indexOfHandle(nfcCafe));
+		expect(indexOfHandle("z_users")).toBeLessThan(indexOfHandle("ä_users"));
+	});
+
+	it("row E: orders one handle's own referenced-column list by code point (NFC/NFD pair, locale-reordered pair)", () => {
+		const orders: TableSnapshot = {
+			schema: "app",
+			name: "orders",
+			columns: [
+				{
+					name: "id",
+					typeNode: { typeName: "uuid" },
+					notNull: true,
+					primaryKey: true,
+				},
+			],
+			indexes: [],
+			// One composite foreign key into one out-of-scope target names
+			// all four columns at once, so `referencedColumns` is built
+			// from a single already-deduplicated union -- this test is
+			// about the sort applied to it, not the union step.
+			foreignKeys: [
+				{
+					name: "orders_shared_fkey",
+					columns: ["ref_z", "ref_nfc", "ref_ae", "ref_nfd"],
+					referencesTable: "ext.shared",
+					referencesColumns: [
+						"z_col",
+						`${nfcCafe}_col`,
+						"ä_col",
+						`${nfdCafe}_col`,
+					],
+				},
+			],
+			primaryKeyName: "orders_pkey",
+		};
+
+		const files = emitDeclarationFiles(resultFor([orders]));
+		expect(files).toHaveLength(1);
+		const [file] = files;
+		if (file === undefined) {
+			throw new Error("expected exactly one emitted file");
+		}
+
+		const handleMatch = file.source.match(
+			/const \w+ = existingTable\("ext", "shared", \{([^}]*)\}\);/,
+		);
+		if (handleMatch === null) {
+			throw new Error(
+				`expected an existingTable("ext", "shared", ...) handle:\n${file.source}`,
+			);
+		}
+		const [, columnsObject] = handleMatch;
+		if (columnsObject === undefined) {
+			throw new Error(`expected a non-empty columns object:\n${file.source}`);
+		}
+
+		const indexOfColumn = (columnName: string): number => {
+			const index = columnsObject.indexOf(columnName);
+			if (index === -1) {
+				throw new Error(
+					`expected column "${columnName}" in the handle's columns object:\n${columnsObject}`,
+				);
+			}
+			return index;
+		};
+
+		expect(indexOfColumn(`${nfdCafe}_col`)).toBeLessThan(
+			indexOfColumn(`${nfcCafe}_col`),
+		);
+		expect(indexOfColumn("z_col")).toBeLessThan(indexOfColumn("ä_col"));
+	});
+});

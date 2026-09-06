@@ -17,6 +17,7 @@ import {
 	renderExpr,
 	tableIdentity,
 } from "@hejbro/core";
+import { compareCodeUnits } from "../compare-code-units";
 import {
 	enumsInSnapshot,
 	sequencesInSnapshot,
@@ -1577,11 +1578,11 @@ export const emitDeclarationFiles = (
 		const schemaHandles: ReadonlyArray<HandleNeed> = [
 			...handledColumnsByTarget.entries(),
 		]
-			.sort(([a], [b]) => a.localeCompare(b))
+			.sort(([a], [b]) => compareCodeUnits(a, b))
 			.map(([targetIdentity, columns]) => ({
 				targetIdentity,
 				handleBaseName: handleBaseNameFor(targetIdentity),
-				referencedColumns: [...columns].sort((a, b) => a.localeCompare(b)),
+				referencedColumns: [...columns].sort(compareCodeUnits),
 			}));
 		const schemaEnumClones: ReadonlyArray<EnumCloneNeed> = [
 			...new Map(

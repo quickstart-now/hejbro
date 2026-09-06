@@ -1,0 +1,21 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#1023",
+  "title": "import: an index key's COLLATE clause is dropped silently",
+  "parent": "quickstart-now/hejbro#995",
+  "status": "open",
+  "opened": "2026-09-06",
+  "closed": null,
+  "decisions": [],
+  "work": [],
+  "prs": [
+    {
+      "number": 1026,
+      "role": "refs",
+      "pinnedAt": "2026-09-06T11:29Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

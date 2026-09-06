@@ -46,7 +46,14 @@ const FIXTURE_ROWS: {
 	sequences: [{ schema: "app", name: "posts_id_seq" }],
 	functions: [{ schema: "app", name: "touch_updated_at" }],
 	views: [{ schema: "app", name: "posts_view" }],
-	policies: [{ schema: "app", table: "posts", name: "posts_select" }],
+	policies: [
+		{
+			schema: "app",
+			table: "posts",
+			name: "posts_select",
+			roles: ["app_reader"],
+		},
+	],
 	triggers: [{ schema: "app", table: "posts", name: "posts_touch" }],
 	tableGrants: [
 		{

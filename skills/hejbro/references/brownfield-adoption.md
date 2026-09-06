@@ -101,6 +101,14 @@ platform, "restate the declaration in the catalog's own spelling, then
 rerun") as different answers, not one red build indistinguishable from
 the other.
 
+A dropped, non-derived primary-key name (above) is `check`'s own live
+example of a two-channel report: the catalog's own name still shows up
+in the plain **inventory** section on stdout (as an unmanaged index
+backing that constraint), but the declared name being missing is a
+finding, printed on stderr alongside every other `check-object-missing`
+line — reading only stdout misses that the run failed at all (measured
+live, 712/R7).
+
 `check` does not compare everything. View bodies are never compared
 (only that a declared view exists). Primary keys, unique constraints
 and foreign keys are checked for existence only, not their exact shape.
@@ -331,17 +339,25 @@ declaration, and every reading prints a loss report saying exactly
 which kind of approximation it made, in four bands: **Guessed** — a
 column's TypeScript key from its SQL name, the default numeric mode,
 and unknown array-element nullability (read as nullable), plus any
-role name a grant names; **Not inferred** — functions,
+role name grants and policies name; **Not inferred** — functions,
 triggers, view bodies, policy expressions, grants beyond a role's bare
 name (a blanket line — never a per-instance list), a column whose type
 no builder expresses, and a standalone sequence no column owns (the
 DSL has no `defineSequence()` yet); **Approximated** — a named UNIQUE
-constraint as a same-named unique index, a `nextval(...)` default kept
+constraint as a same-named unique index, when its own column survives
+(one omitted for its own name, or for the enum type that typed it,
+costs the constraint too — see **Omitted**, below — and an omitted
+object never gets an approximation line beside its own), a
+`nextval(...)` default kept
 as a raw expression, every default/check/generated/index-predicate
-expression as raw SQL text rather than a typed builder, and a foreign
+expression as raw SQL text rather than a typed builder, a foreign
 key whose own catalog name is not a valid hejbro SQL identifier,
-declared under the derived name instead (D106 round 3); and
-**Omitted** — each left out of the starter file entirely rather than
+declared under the derived name instead (D106 round 3), and a primary
+key whose own catalog constraint name is not the one the DSL itself
+derives, declared under that derived name instead — `check` keeps
+reporting the declared name as missing and the catalog's own name as
+an unmanaged index until the constraint is renamed to match (712/R7);
+and **Omitted** — each left out of the starter file entirely rather than
 guessed at under the wrong name, and named in the report instead. A
 column whose SQL name no declaration key can produce, either because
 it doesn't round-trip through snake_case (a quoted `"createdAt"`) or
@@ -351,19 +367,33 @@ keeps reporting that column as undeclared until it's renamed in the
 database *and declared* (renaming alone only makes the name one a
 declaration can carry): the DSL derives every column's SQL name from its TypeScript
 key and accepts no override, so no declaration, hand-written or not,
-can carry either kind of name. Beyond a column, five further kinds of
+can carry either kind of name. Beyond a column, six further kinds of
 catalog name cost hejbro the object that carries it: a **schema**
 whose own name is not a valid hejbro SQL identifier (everything it
 holds — tables, enums, sequences — is omitted with it, unreported by
 `check` since nothing in it is declared); a **table** whose own name
 is not (everything it holds — columns, checks, indexes, foreign
-keys — is left undeclared with it); an **index** or a **check
+keys — is left undeclared with it); an **enum type** whose own name
+is not (every column typed by it is left out with it, and `check`
+keeps naming each of those columns as unmanaged until it is declared,
+but never names the type itself — its inventory has no enum axis,
+712/R3); an **index** or a **check
 constraint** whose own name is not (`check` keeps listing each as
 unmanaged until it is renamed in the database and declared); and a **foreign key**
 whose own *target*'s name — its schema, or its table — is not one
 hejbro can carry — the relationship is left out and named, naming the
 missing target, while the column that carried it stays declared as a
-plain column. A foreign key into a schema `import`/`pull` simply never
+plain column. A foreign key whose own source or target column was
+itself omitted — for its own name, or because it was typed by an enum
+that was itself omitted — is left out the same way, its own line
+naming the column that cost it and following that column's own cause
+(#873, 712/R8); when an omitted enum type took both of a key's columns
+at once (an enum-to-enum relationship losing its shared type), only
+one line ever announces it, its reason on the declared side (712/R9).
+An omitted column takes its own index, check constraint and UNIQUE
+constraint with it the same way — each named on its own line, with the
+column that cost it and that column's own cause, and none of them ever
+gets an approximation line either (712/R10). A foreign key into a schema `import`/`pull` simply never
 named is a different case, not an omission: its target's own name may
 be perfectly ordinary, so the relationship is kept, declared against an
 unexported handle to a table this repository does not declare, and the

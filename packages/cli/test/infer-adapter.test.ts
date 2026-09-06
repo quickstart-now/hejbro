@@ -223,6 +223,7 @@ describe("mergeTableFacts / 1.4b adapter", () => {
 							nullsFirst: false,
 						},
 					],
+					referencedColumns: ["id"],
 				},
 				{
 					schema: "app",
@@ -241,6 +242,7 @@ describe("mergeTableFacts / 1.4b adapter", () => {
 							nullsFirst: false,
 						},
 					],
+					referencedColumns: ["id"],
 				},
 				{
 					schema: "app",
@@ -259,6 +261,7 @@ describe("mergeTableFacts / 1.4b adapter", () => {
 							nullsFirst: false,
 						},
 					],
+					referencedColumns: ["name"],
 				},
 			],
 		};
@@ -285,7 +288,11 @@ describe("mergeTableFacts / 1.4b adapter", () => {
 		expect(childrenFacts.foreignKeys).toHaveLength(1);
 		expect(childrenFacts.foreignKeys[0]?.targetTable).toBe("parents");
 		expect(childrenFacts.checks).toEqual([
-			{ name: "children_name_check", expression: "(length(name) > 0)" },
+			{
+				name: "children_name_check",
+				expression: "(length(name) > 0)",
+				columns: ["name"],
+			},
 		]);
 		// The PK-backing index is excluded; only the genuinely separate one remains.
 		expect(childrenFacts.indexes.map((i) => i.name)).toEqual([
@@ -541,6 +548,7 @@ describe("mergeTableFacts / 1.4b adapter", () => {
 							nullsFirst: false,
 						},
 					],
+					referencedColumns: ["amount"],
 				},
 				{
 					schema: "app",
@@ -559,6 +567,7 @@ describe("mergeTableFacts / 1.4b adapter", () => {
 							nullsFirst: false,
 						},
 					],
+					referencedColumns: ["amount"],
 				},
 			],
 		};
@@ -600,8 +609,16 @@ describe("mergeTableFacts / 1.4b adapter", () => {
 			reversed.foreignKeys.map((fk) => fk.sourceColumns),
 		);
 		expect(forward.checks).toEqual([
-			{ name: "widgets_a_check", expression: "(amount < 100)" },
-			{ name: "widgets_z_check", expression: "(amount > 0)" },
+			{
+				name: "widgets_a_check",
+				expression: "(amount < 100)",
+				columns: ["amount"],
+			},
+			{
+				name: "widgets_z_check",
+				expression: "(amount > 0)",
+				columns: ["amount"],
+			},
 		]);
 		expect(forward.checks).toEqual(reversed.checks);
 		expect(forward.indexes.map((idx) => idx.name)).toEqual([

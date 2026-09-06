@@ -79,8 +79,13 @@ const tableScopedObjectRow = z.object({
 	table: z.string(),
 	name: z.string(),
 });
-export type PolicyRow = z.infer<typeof tableScopedObjectRow>;
 export type TriggerRow = z.infer<typeof tableScopedObjectRow>;
+
+/** `roles`: `pg_policies.roles`, `{public}` for an unrestricted policy (#678) -- a policy's own name-bearing shape plus the role array `inferRoleNames` (`infer/rest.ts`) reads from, so a role named only in a `TO <role>` clause still reaches the inferred role set. */
+const policyRow = tableScopedObjectRow.extend({
+	roles: z.array(z.string()),
+});
+export type PolicyRow = z.infer<typeof policyRow>;
 
 const tableGrantRow = z.object({
 	schema: z.string(),
@@ -213,7 +218,8 @@ export const CHECK_CATALOG_QUERIES = {
 		order by schema, name
 	`,
 	policies: `
-		select schemaname as schema, tablename as "table", policyname as name
+		select schemaname as schema, tablename as "table", policyname as name,
+			coalesce((select json_agg(r order by r) from unnest(roles) as r), '[]'::json) as roles
 		from pg_policies
 		order by schema, "table", name
 	`,
@@ -328,11 +334,7 @@ const readCatalogRows = async (session: DriverSession): Promise<Catalog> => {
 		runCatalogQuery(session, CHECK_CATALOG_QUERIES.sequences, namedObjectRow),
 		runCatalogQuery(session, CHECK_CATALOG_QUERIES.functions, namedObjectRow),
 		runCatalogQuery(session, CHECK_CATALOG_QUERIES.views, namedObjectRow),
-		runCatalogQuery(
-			session,
-			CHECK_CATALOG_QUERIES.policies,
-			tableScopedObjectRow,
-		),
+		runCatalogQuery(session, CHECK_CATALOG_QUERIES.policies, policyRow),
 		runCatalogQuery(
 			session,
 			CHECK_CATALOG_QUERIES.triggers,

@@ -1,0 +1,149 @@
+{
+  "version": 3,
+  "number": 1026,
+  "ref": "quickstart-now/hejbro#1026",
+  "title": "fix(cli): five gaps in the catalog reading and its loss report (#678, #712, #872, #873, #874)",
+  "head": "b190e12bd1aa24a3ccb575e1cc2fa35d02d02a78",
+  "headRef": "harden-catalog-inference-2",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-06T11:29Z",
+  "refs": [
+    {
+      "path": ".changeset/harden-catalog-inference-docs.md",
+      "blob": "4564c74f4e8c135ef519a9cf06e5c685b0703fe0"
+    },
+    {
+      "path": "README.md",
+      "blob": "5f7063e4548faf5d96403d4c26741110c151530d"
+    },
+    {
+      "path": "openspec/changes/harden-catalog-inference-2/design.md",
+      "blob": "9463c0aaaae5fb133f3e78dbb52f14ffb72a272b"
+    },
+    {
+      "path": "openspec/changes/harden-catalog-inference-2/proposal.md",
+      "blob": "645b0dd109533b2a5dd63db02edc7f5da6776331"
+    },
+    {
+      "path": "openspec/changes/harden-catalog-inference-2/specs/catalog-inference/spec.md",
+      "blob": "15b11ef603a834a17145f6ba5c9e6ed27ef728a4"
+    },
+    {
+      "path": "openspec/changes/harden-catalog-inference-2/tasks.md",
+      "blob": "8d868647f90e7a3fdc5c16920fffc786ae29edda"
+    },
+    {
+      "path": "openspec/task-times.csv",
+      "blob": "97222394ba02bc8f1bf5c1c1703cada97951c1a4"
+    },
+    {
+      "path": "packages/cli/src/check/catalog.ts",
+      "blob": "a3ab9964be4d0293b33338de5f028f15ec015662"
+    },
+    {
+      "path": "packages/cli/src/commands/check.ts",
+      "blob": "7f788014a3a7dc01276ffbf807ccb730251ff07c"
+    },
+    {
+      "path": "packages/cli/src/commands/import.ts",
+      "blob": "b621a7fbd436a68639cb008e80b677134d6a37fb"
+    },
+    {
+      "path": "packages/cli/src/compare-code-units.ts",
+      "blob": "d1719b633c9a06cbef008eefca8a656433cd6e83"
+    },
+    {
+      "path": "packages/cli/src/declare-emit/emit.ts",
+      "blob": "ca2c0e29b547194cf89077e94b073ab88a578b9a"
+    },
+    {
+      "path": "packages/cli/src/infer/adapter.ts",
+      "blob": "8f2bad789206352203788691f4c952c0bc4dc9c1"
+    },
+    {
+      "path": "packages/cli/src/infer/catalog.ts",
+      "blob": "5bf4fc41bd3c296c51aacafa3f6c1cd0bd7e9d8f"
+    },
+    {
+      "path": "packages/cli/src/infer/compose.ts",
+      "blob": "d832e2fc117c9863c7b46e2daf265b56c011056f"
+    },
+    {
+      "path": "packages/cli/src/infer/loss-report.ts",
+      "blob": "e8f0070399a988f42c8bd76c5466e19a2c199ce8"
+    },
+    {
+      "path": "packages/cli/src/infer/rest.ts",
+      "blob": "1b21e800c374599e3895e5bd01c582c2b941c279"
+    },
+    {
+      "path": "packages/cli/src/infer/table.ts",
+      "blob": "cfd79125f36907baf3c6e20d0b684a94a02bba15"
+    },
+    {
+      "path": "packages/cli/test/check-catalog.test.ts",
+      "blob": "77dceab1dda74b4e567015a4dbe6b13dec6428a0"
+    },
+    {
+      "path": "packages/cli/test/declare-emit-emit.test.ts",
+      "blob": "90029ad6ec296f88ccfa144391ce04e22360398d"
+    },
+    {
+      "path": "packages/cli/test/import-command.test.ts",
+      "blob": "a207c1fc7625d4bb106fbcf0d81af58d61f6834a"
+    },
+    {
+      "path": "packages/cli/test/infer-adapter.test.ts",
+      "blob": "0caaa5cd7236e029d1a8b6c8f3f3ae3e3d728104"
+    },
+    {
+      "path": "packages/cli/test/infer-catalog-inference-2.integration.test.ts",
+      "blob": "89b5aaefb1f612e12963a5595934f60612e2e5bc"
+    },
+    {
+      "path": "packages/cli/test/infer-catalog-read.test.ts",
+      "blob": "3d167d604c2e7c26a81d063942967501e77615e4"
+    },
+    {
+      "path": "packages/cli/test/infer-compose.test.ts",
+      "blob": "23f3b02e719a5874feb6ad64c9527137a9eba098"
+    },
+    {
+      "path": "packages/cli/test/infer-constraints.test.ts",
+      "blob": "7c5488e2b8ac5f67db18c54997e8623744c762bf"
+    },
+    {
+      "path": "packages/cli/test/infer-loss-report.test.ts",
+      "blob": "d90ad2e71a0ecab7151c155fb23655558ea1e92f"
+    },
+    {
+      "path": "packages/cli/test/infer-omitted-column-foreign-keys.test.ts",
+      "blob": "43d6bbc2d7fe07f8920bb9ab8ef4d77c8d2a7348"
+    },
+    {
+      "path": "packages/cli/test/infer-omitted-column-members.test.ts",
+      "blob": "2ed10477d0ecddf43a17518078a212a9717582bc"
+    },
+    {
+      "path": "packages/cli/test/infer-omitted-enum.test.ts",
+      "blob": "c93b72557a27012d6b073c2c17f5b802eb301507"
+    },
+    {
+      "path": "packages/cli/test/infer-primary-key-name.test.ts",
+      "blob": "8900832435e80dc4546933ae60f2af5f84b90dcb"
+    },
+    {
+      "path": "packages/cli/test/infer-rest.test.ts",
+      "blob": "388878e64c98cdf70561675528cd332c4d7e3c70"
+    },
+    {
+      "path": "packages/cli/test/infer-unique-on-omitted-table.test.ts",
+      "blob": "787185ae677022e07345a6b6c5c919b7bc231412"
+    },
+    {
+      "path": "skills/hejbro/references/brownfield-adoption.md",
+      "blob": "2656b182e0af56181bbc2e558a8695cad783f9aa"
+    }
+  ]
+}

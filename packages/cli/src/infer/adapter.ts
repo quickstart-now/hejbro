@@ -196,7 +196,13 @@ const checksFor = (
 			if (detail === undefined) {
 				return [];
 			}
-			return [{ name: constraint.name, expression: detail.expression }];
+			return [
+				{
+					name: constraint.name,
+					expression: detail.expression,
+					columns: constraint.columns,
+				},
+			];
 		});
 
 const indexesFor = (
