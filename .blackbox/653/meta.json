@@ -4,9 +4,9 @@
   "ref": "quickstart-now/hejbro#653",
   "title": "vendored client: expose .related() on the name-keyed chain",
   "parent": "quickstart-now/hejbro#412",
-  "status": "open",
+  "status": "closed",
   "opened": "2026-09-05",
-  "closed": null,
+  "closed": "2026-09-06",
   "decisions": [
     {
       "id": "R1",
@@ -125,7 +125,13 @@
       "decisions": []
     }
   ],
-  "prs": [],
+  "prs": [
+    {
+      "number": 1011,
+      "role": "closes",
+      "pinnedAt": "2026-09-06T02:25Z"
+    }
+  ],
   "origin": null,
   "followUps": []
 }

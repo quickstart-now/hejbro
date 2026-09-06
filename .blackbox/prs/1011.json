@@ -1,0 +1,85 @@
+{
+  "version": 3,
+  "number": 1011,
+  "ref": "quickstart-now/hejbro#1011",
+  "title": "feat(cli,query): the vendored contract carries relations and the client offers .related() (#653)",
+  "head": "6893a9be5af2e53676f5c6b662264363e726c427",
+  "headRef": "add-vendored-related",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-06T02:25Z",
+  "refs": [
+    {
+      "path": ".changeset/add-vendored-related.md",
+      "blob": "661d3006ce85d98e713060ce3a6f3c2fcd440f38"
+    },
+    {
+      "path": "README.md",
+      "blob": "e735c66048166676079d88840fb29fbbc4f39c65"
+    },
+    {
+      "path": "docs/guide/polyrepo.md",
+      "blob": "c280810a723a7a0f56568e88c08eaa42e5588c40"
+    },
+    {
+      "path": "openspec/changes/add-vendored-related/design.md",
+      "blob": "a890b3f7ef6cdea246ec53cff04fe83c36c694f8"
+    },
+    {
+      "path": "openspec/changes/add-vendored-related/proposal.md",
+      "blob": "aef127fe14c400ff9edbbc3c53c9e0c63bf7a355"
+    },
+    {
+      "path": "openspec/changes/add-vendored-related/specs/schema-vendoring/spec.md",
+      "blob": "d220d0179512627383cb72ed644ecaaa34d19d28"
+    },
+    {
+      "path": "openspec/changes/add-vendored-related/tasks.md",
+      "blob": "e329052cec754ac9a9a42d4bbad099eef8482377"
+    },
+    {
+      "path": "openspec/task-times.csv",
+      "blob": "4b5c4e99bc1651b8d1023cacad00c54b919d15b8"
+    },
+    {
+      "path": "packages/cli/src/contract/emit.ts",
+      "blob": "112aa76176adab92adb5150d23959a1e05e46945"
+    },
+    {
+      "path": "packages/cli/src/contract/tables.ts",
+      "blob": "f3a4dea6b15771244f69012479c863dd7d1d34f6"
+    },
+    {
+      "path": "packages/cli/test/contract-emit.test.ts",
+      "blob": "0f89326bd48cd099ddcfc805af2d16d88eb06f6b"
+    },
+    {
+      "path": "packages/cli/test/contract-origin.test.ts",
+      "blob": "03120251693355e40440be30f6a4d0c4fecd8113"
+    },
+    {
+      "path": "packages/cli/test/two-repo.integration.test.ts",
+      "blob": "e231bfc3419c031058288eeb76fa28eb8102a882"
+    },
+    {
+      "path": "packages/query/src/client/name-keyed-db.ts",
+      "blob": "c3b7e53e1ae7d89bc66baf9786c86735df5cab70"
+    },
+    {
+      "path": "packages/query/test/client/relations.test.ts",
+      "blob": "66c7c62cb974a4c17718798248e7a71e935b88d2"
+    },
+    {
+      "path": "packages/skills/test/fixtures/preludes/polyrepo-contract.ts",
+      "blob": "dc729903facfe2b5e8db05da2628951352714c1e"
+    },
+    {
+      "path": "skills/hejbro/references/polyrepo.md",
+      "blob": "d299c6eaea90773a4e4f78adb689064f037975fe"
+    },
+    {
+      "path": "skills/hejbro/references/query-layer.md",
+      "blob": "4e1d4e8695235d608a001363a054f3185ee2a135"
+    }
+  ]
+}
