@@ -76,9 +76,9 @@ repository's own `generate --export`, covered separately below:
 A schema-owning repository doesn't run any of these — it runs
 `hejbro generate --export` (below) and commits the result.
 
-Not built here: a database-fallback path (`pull --db-url`, reading an
-existing database's shape when the owning repository doesn't use
-hejbro) is tracked separately (#604) and does not exist yet.
+The database-fallback path — `pull --db-url`, reading an existing
+database's shape when the owning repository doesn't use hejbro — is
+covered in the reference's polyrepo section.
 
 ## Day-to-day, only `vendor` moves the pin — and needs the network to do it
 

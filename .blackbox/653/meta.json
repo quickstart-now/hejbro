@@ -93,6 +93,18 @@
       "at": "2026-09-06T02:04Z",
       "title": "round 2 wording: a self-referential scenario, no comparative against the declaring type layer, the self key named among runtime-reachable keys",
       "ratified": null
+    },
+    {
+      "id": "R8",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "D106 evaluation.md round 1 (B1",
+        "N1-N8); 653/R6; base schema-vendoring 'Every emitted key compiles' already broken by a same-name pair on 0c972860; #1004 #1012 #1013; 412/D29 D30"
+      ],
+      "at": "2026-09-06T02:57Z",
+      "title": "D106 B1: the existing-table sentences are scoped to a unique carried name; the same-name collision is #1004; N1 N6 corrected here",
+      "ratified": null
     }
   ],
   "work": [

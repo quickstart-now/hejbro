@@ -8,7 +8,11 @@ metadata SHALL mark it existing. The name-keyed client SHALL expose it
 for reading like any other table, and a managed table's foreign key
 onto it SHALL resolve to a relation in the contract exactly as one onto
 a managed table does; a foreign key onto a table the schema does not
-declare at all keeps having none.
+declare at all keeps having none. These sentences hold for a table
+whose name is unique among the carried tables — `Tables` is keyed by
+the SQL name alone, so two carried tables sharing a name across schemas
+(an existing `auth.users` beside a managed `app.users`) are the
+emitter's unresolved collision, outside this requirement.
 
 Following that relation from the client is the name-keyed client's own
 `.related()` (the requirement *The contract names the relations the
