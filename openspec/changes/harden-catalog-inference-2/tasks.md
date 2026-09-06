@@ -34,7 +34,7 @@ goes back to the planner, not into the diff.
       `inferRoleNames` unions them and drops `public`. Files:
       `catalog.ts`, `rest.ts`, tests.
 
-- [ ] 1.2 (~10m) **[design]** Enum names under D36. Settles the
+- [x] 1.2 (~10m) **[design]** Enum names under D36. Settles the
       omission's data shape (an `OmittedEnum` carrying the enum and
       the columns typed by it) and the report line. Red: compose/loss
       tests over an input table of enum names {`Status`, `my-enum`,
@@ -60,7 +60,7 @@ goes back to the planner, not into the diff.
       inventory's comparator from one shared module. Files:
       `loss-report.ts`, the shared module, tests.
 
-- [ ] 1.5 (~8m) Live witness on `postgres:17-alpine`: a database with
+- [x] 1.5 (~8m) Live witness on `postgres:17-alpine`: a database with
       `create type app."Status"`, a column of that type, a policy `to
       app_reader` — `hejbro import` writes declarations without the
       enum or its column, names both in the report, and the description
@@ -68,7 +68,7 @@ goes back to the planner, not into the diff.
       as unmanaged and does not name the enum type. Files: the
       integration test.
 
-- [ ] 1.6 (~5m) Docs and changeset. The brownfield reference's loss
+- [x] 1.6 (~5m) Docs and changeset. The brownfield reference's loss
       list gains the enum and primary-key-name lines and the roles
       sentence says "grants and policies"; `pnpm changeset` → `patch`.
       Files: the reference, `.changeset/*.md`.
