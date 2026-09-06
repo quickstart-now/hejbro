@@ -1289,7 +1289,7 @@ describe("buildLossReport / 712/R10 N#7: a primary key naming an omitted column"
 			],
 		});
 		expect(report).toContain(
-			'Omitted: primary key "app.orders.orders_pkey" -- it names column "app.orders.UserId", which this reading left out because no declaration can carry its name, so the key cannot be declared either; the table is declared without a primary key. `check` keeps listing the index that backs it as unmanaged, naming "app.orders.orders_pkey", until that column and the key are both declared. Next: rename the column in the database, then re-run `hejbro import`.',
+			'Omitted: primary key "app.orders.orders_pkey" -- it names column "app.orders.UserId", which this reading left out because no declaration can carry its name, so the key cannot be declared either; the table is declared without a primary key. `check` keeps listing the index that backs it as unmanaged, naming "app.orders.orders_pkey", until every column the key names can be declared and the key with them. Next: rename the column in the database, then re-run `hejbro import`.',
 		);
 	});
 
@@ -1326,7 +1326,7 @@ describe("buildLossReport / 712/R10 N#7: a primary key naming an omitted column"
 			],
 		});
 		expect(report).toContain(
-			'Omitted: primary key "app.t2.t2_pkey" -- it names column "app.t2.state2", which this reading left out with the enum type "app.Status" that types it, so the key cannot be declared either; the table is declared without a primary key. `check` keeps listing the index that backs it as unmanaged, naming "app.t2.t2_pkey", until that column and the key are both declared. Next: rename the type in the database, then re-run `hejbro import`.',
+			'Omitted: primary key "app.t2.t2_pkey" -- it names column "app.t2.state2", which this reading left out with the enum type "app.Status" that types it, so the key cannot be declared either; the table is declared without a primary key. `check` keeps listing the index that backs it as unmanaged, naming "app.t2.t2_pkey", until every column the key names can be declared and the key with them. Next: rename the type in the database, then re-run `hejbro import`.',
 		);
 	});
 

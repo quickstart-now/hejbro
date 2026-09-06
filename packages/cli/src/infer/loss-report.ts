@@ -985,10 +985,18 @@ const primaryKeyOmissionTailForPull = (entry: OmittedPrimaryKey): string => {
  * object than the primary key constraint itself, so naming which
  * constraint it backs is not optional the way it is for a sibling line
  * that already names the very object `check` is talking about.
+ * Review round 2 N#10: the sentence's own closing condition names every
+ * column the key names, never just the one this line's own reason
+ * clause happens to point at -- a key with more than one omitted member
+ * only comes back once all of them are renamed and declared, and the
+ * reason clause's own choice of column (712/R9's "pick one" precedent)
+ * must not be read as a promise that fixing that one alone is enough.
+ * Each omitted member already has its own `Omitted: column` line, so
+ * this sentence never enumerates them again.
  */
 const omittedPrimaryKeyLineForImport = (entry: OmittedPrimaryKey): string => {
 	const identity = `${entry.schema}.${entry.table}.${entry.name}`;
-	return `Omitted: primary key "${identity}" -- it names column "${entry.columnIdentity}", ${primaryKeyOmissionCauseClauseForImport(entry)}; the table is declared without a primary key. \`check\` keeps listing the index that backs it as unmanaged, naming "${identity}", until that column and the key are both declared. ${primaryKeyOmissionTailForImport(entry)}`;
+	return `Omitted: primary key "${identity}" -- it names column "${entry.columnIdentity}", ${primaryKeyOmissionCauseClauseForImport(entry)}; the table is declared without a primary key. \`check\` keeps listing the index that backs it as unmanaged, naming "${identity}", until every column the key names can be declared and the key with them. ${primaryKeyOmissionTailForImport(entry)}`;
 };
 
 const omittedPrimaryKeyLineForPull = (entry: OmittedPrimaryKey): string => {

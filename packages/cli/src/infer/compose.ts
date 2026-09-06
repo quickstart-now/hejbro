@@ -276,8 +276,8 @@ const excludePrimaryKeysReferencingOmittedColumns = (
 		const pkColumnIdentities = table.columns
 			.filter((column) => column.isPrimaryKey)
 			.map((column) => `${identity}.${column.sqlName}`);
-		const omittedPkColumnIdentities = pkColumnIdentities.filter((columnIdentity) =>
-			columnOmissionCauses.has(columnIdentity),
+		const omittedPkColumnIdentities = pkColumnIdentities.filter(
+			(columnIdentity) => columnOmissionCauses.has(columnIdentity),
 		);
 		const offending = firstOffendingColumn(
 			omittedPkColumnIdentities,
@@ -305,9 +305,12 @@ const excludePrimaryKeysReferencingOmittedColumns = (
 	});
 	return {
 		tables: perTable.map((entry) => entry.table),
-		omittedPrimaryKeys: perTable.flatMap((entry) =>
-			entry.omittedPrimaryKey === undefined ? [] : [entry.omittedPrimaryKey],
-		),
+		omittedPrimaryKeys: perTable.flatMap((entry) => {
+			if (entry.omittedPrimaryKey === undefined) {
+				return [];
+			}
+			return [entry.omittedPrimaryKey];
+		}),
 	};
 };
 

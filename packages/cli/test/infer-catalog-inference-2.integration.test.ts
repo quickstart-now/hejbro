@@ -466,7 +466,7 @@ describe("catalog-inference-2 / live witness: 1.1's roles-from-policies, 1.2's e
 		expect(declarationCode).toContain("lineNo");
 		expect(declarationCode).not.toContain("pk_line_items");
 		expect(importRun.stdout).toContain(
-			'Omitted: primary key "app.line_items.pk_line_items" -- it names column "app.line_items.Weird", which this reading left out because no declaration can carry its name, so the key cannot be declared either; the table is declared without a primary key. `check` keeps listing the index that backs it as unmanaged, naming "app.line_items.pk_line_items", until that column and the key are both declared. Next: rename the column in the database, then re-run `hejbro import`.',
+			'Omitted: primary key "app.line_items.pk_line_items" -- it names column "app.line_items.Weird", which this reading left out because no declaration can carry its name, so the key cannot be declared either; the table is declared without a primary key. `check` keeps listing the index that backs it as unmanaged, naming "app.line_items.pk_line_items", until every column the key names can be declared and the key with them. Next: rename the column in the database, then re-run `hejbro import`.',
 		);
 	});
 
