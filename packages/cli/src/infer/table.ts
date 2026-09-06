@@ -42,6 +42,8 @@ export type InferredTableColumn = {
 export type InferredCheck = {
 	readonly name: string;
 	readonly expression: string;
+	/** `pg_constraint.conkey`, decoded server-side (`check/catalog.ts`'s own `ConstraintRow.columns`) -- the authoritative list of columns this check depends on, never re-derived by scanning the expression's own text (712/R10: a string literal or a differently-scoped name can read the same bare text as a column name). */
+	readonly columns: ReadonlyArray<string>;
 };
 
 export type InferredIndexColumn = {

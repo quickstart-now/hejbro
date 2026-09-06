@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { resolve } from "node:path";
 import { createJiti } from "jiti";
@@ -145,14 +145,15 @@ const psqlFile = (database: string, sql: string): void => {
 /**
  * `app.orders` carries, at once: `status` (typed by the omitted enum
  * `"Status"`, with its own foreign key into `app.status_catalog`,
- * enum-to-enum so Postgres itself accepts the constraint), `"UserId"`
- * (omitted for its own name, with its own foreign key into
- * `app.users`), `state` (typed by the ordinary, surviving enum
- * `app.status`), and a primary key named `pk_orders` (not the derived
- * `orders_pkey`). A policy on `orders` names `app_reader` in its own
- * `TO` clause and nowhere else (#678); a plain grant names
- * `app_writer`; a second policy is `TO public`, which must never be
- * read as a role name (712/R1's own `{public}` rule).
+ * enum-to-enum so Postgres itself accepts the constraint, and its own
+ * index -- B#1), `"UserId"` (omitted for its own name, with its own
+ * foreign key into `app.users`, and its own check constraint -- B#1),
+ * `state` (typed by the ordinary, surviving enum `app.status`), and a
+ * primary key named `pk_orders` (not the derived `orders_pkey`). A
+ * policy on `orders` names `app_reader` in its own `TO` clause and
+ * nowhere else (#678); a plain grant names `app_writer`; a second
+ * policy is `TO public`, which must never be read as a role name
+ * (712/R1's own `{public}` rule).
  */
 const SCHEMA_SQL = `
 create schema app;
@@ -182,6 +183,15 @@ alter table app.orders
 	add constraint orders_status_fkey foreign key (status) references app.status_catalog (value);
 alter table app.orders
 	add constraint orders_userid_fkey foreign key ("UserId") references app.users (id);
+
+-- B#1 (live review): an index on the enum-omitted column and a check
+-- constraint on the name-omitted column -- both must be left out of the
+-- declaration, and neither may reach the migration SQL baseline
+-- writes, or replaying it against an empty database fails exactly the
+-- way the review's own db2-enum.sql / out-db2-replay.txt did.
+create index orders_status_idx on app.orders (status);
+alter table app.orders
+	add constraint orders_userid_chk check ("UserId" is not null);
 
 grant select on app.orders to app_writer;
 
@@ -379,5 +389,45 @@ describe("catalog-inference-2 / live witness: 1.1's roles-from-policies, 1.2's e
 					line.includes('"app.orders.orders_status_fkey"'),
 			);
 		expect(fkLines).toHaveLength(1);
+	});
+
+	it("B#1: baseline's own migration SQL replays cleanly against an empty database, even with an index and a check on omitted columns", async () => {
+		const baselineRun = await runCli(cwd, ["baseline"]);
+		expectExitCode("baseline", baselineRun, 0);
+
+		const migrationFileNames = readdirSync(resolve(cwd, "migrations")).filter(
+			(name) => name.endsWith(".sql"),
+		);
+		if (migrationFileNames.length !== 1) {
+			throw new Error(
+				`expected exactly one baseline migration file, found: ${migrationFileNames.join(", ")}`,
+			);
+		}
+		const [migrationFileName] = migrationFileNames;
+		const migrationSql = readFileSync(
+			resolve(cwd, "migrations", migrationFileName as string),
+			"utf8",
+		);
+		// Neither the enum-omitted nor the name-omitted column's own name
+		// may reach the SQL this file actually replays -- the same fact
+		// J7's own unit test pins, witnessed live.
+		expect(migrationSql).not.toContain("orders_status_idx");
+		expect(migrationSql).not.toContain("orders_userid_chk");
+
+		const replayDatabase = "catalog_inference_2_replay";
+		execFileSync("docker", [
+			"exec",
+			CONTAINER,
+			"psql",
+			"-U",
+			"postgres",
+			"-c",
+			`create database ${replayDatabase};`,
+		]);
+		// The review's own reproduction, reversed: `db2-enum.sql`'s replay
+		// against an empty database failed with `column "..." does not
+		// exist` -- `psqlFile`'s own `ON_ERROR_STOP=1` makes the same
+		// failure here throw, which is this assertion in its entirety.
+		psqlFile(replayDatabase, migrationSql);
 	});
 });

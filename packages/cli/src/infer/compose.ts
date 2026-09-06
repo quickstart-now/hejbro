@@ -36,8 +36,11 @@ import {
 } from "./rest";
 import type {
 	ExistingTableHandle,
+	InferredCheck,
 	InferredForeignKey,
 	InferredForeignKeyTargetColumn,
+	InferredIndex,
+	InferredIndexColumn,
 	InferredTableFacts,
 } from "./table";
 import {
@@ -162,6 +165,137 @@ const tablesExcludingUndeclarableNames = (
 			);
 		}),
 	}));
+
+/**
+ * B#1 (live review, postgres 17.11): an index, check constraint or
+ * UNIQUE constraint referencing a column this reading already excluded
+ * -- for its own name (D36) or for the enum type that typed it -- must
+ * be excluded with it. Left in place, a surviving declaration named it
+ * anyway (the delta's own "a surviving declaration SHALL never
+ * reference an object this reading omitted"), and replaying the
+ * generated SQL against an empty database failed with `column "..."
+ * does not exist` -- measured directly (the review's own `db2-enum.sql`
+ * / `out-db2-replay.txt`). Data only for now (712 follow-up owns the
+ * report line): the identity of every column that cost a member is
+ * carried alongside it, not yet rendered.
+ */
+export type OmittedTableMemberAtColumn = {
+	readonly schema: string;
+	readonly table: string;
+	readonly sqlName: string;
+	/** Every omitted column identity this member's own key list or expression named -- at least one, D110's "a table, not one example" in miniature: a composite index can lose more than one key at once (J6). */
+	readonly columnIdentities: ReadonlyArray<string>;
+};
+
+/** An index's own key list, never its `predicate` -- a real column reference (`column !== null`) naming an omitted identity costs the whole index (J6: a composite index cannot be declared with only some of its own keys). */
+const indexOmittedColumnIdentities = (
+	schema: string,
+	table: string,
+	index: InferredIndex,
+	omittedColumnIdentities: ReadonlySet<string>,
+): ReadonlyArray<string> =>
+	index.columns
+		.filter(
+			(column): column is InferredIndexColumn & { readonly column: string } =>
+				column.column !== null,
+		)
+		.map((column) => `${schema}.${table}.${column.column}`)
+		.filter((identity) => omittedColumnIdentities.has(identity));
+
+/**
+ * 712/R10: which of a check constraint's own columns are omitted --
+ * read from `pg_constraint.conkey` (`check/catalog.ts`'s own
+ * `ConstraintRow.columns`, threaded through by `adapter.ts`'s
+ * `checksFor`), never from scanning the expression's own text. Measured
+ * live (postgres:17.11): a string literal reading the same bare text as
+ * a column name (`check (kind = 'state2')`) never appears in `conkey`,
+ * so the catalog's own list is authoritative where a text match would
+ * have false-positived.
+ */
+const checkOmittedColumnIdentities = (
+	schema: string,
+	table: string,
+	check: InferredCheck,
+	omittedColumnIdentities: ReadonlySet<string>,
+): ReadonlyArray<string> =>
+	check.columns
+		.map((columnName) => `${schema}.${table}.${columnName}`)
+		.filter((identity) => omittedColumnIdentities.has(identity));
+
+export type MemberExclusionResult = {
+	readonly tables: ReadonlyArray<InferredTableFacts>;
+	readonly omittedIndexesAtColumn: ReadonlyArray<OmittedTableMemberAtColumn>;
+	readonly omittedChecksAtColumn: ReadonlyArray<OmittedTableMemberAtColumn>;
+};
+
+/**
+ * Runs after {@link tablesExcludingUndeclarableNames}: that step has
+ * already dropped every omitted column itself, so an index or check
+ * still naming one here is exactly the object B#1 needs excluded too.
+ */
+const excludeMembersReferencingOmittedColumns = (
+	tables: ReadonlyArray<InferredTableFacts>,
+	omittedColumnIdentities: ReadonlySet<string>,
+): MemberExclusionResult => {
+	const perTable = tables.map((table) => {
+		const indexResults = table.indexes.map((index) => ({
+			index,
+			columnIdentities: indexOmittedColumnIdentities(
+				table.schema.schemaName,
+				table.tableName,
+				index,
+				omittedColumnIdentities,
+			),
+		}));
+		const checkResults = table.checks.map((check) => ({
+			check,
+			columnIdentities: checkOmittedColumnIdentities(
+				table.schema.schemaName,
+				table.tableName,
+				check,
+				omittedColumnIdentities,
+			),
+		}));
+
+		return {
+			table: {
+				...table,
+				indexes: indexResults
+					.filter((entry) => entry.columnIdentities.length === 0)
+					.map((entry) => entry.index),
+				checks: checkResults
+					.filter((entry) => entry.columnIdentities.length === 0)
+					.map((entry) => entry.check),
+			},
+			omittedIndexesAtColumn: indexResults
+				.filter((entry) => entry.columnIdentities.length > 0)
+				.map((entry) => ({
+					schema: table.schema.schemaName,
+					table: table.tableName,
+					sqlName: entry.index.name,
+					columnIdentities: entry.columnIdentities,
+				})),
+			omittedChecksAtColumn: checkResults
+				.filter((entry) => entry.columnIdentities.length > 0)
+				.map((entry) => ({
+					schema: table.schema.schemaName,
+					table: table.tableName,
+					sqlName: entry.check.name,
+					columnIdentities: entry.columnIdentities,
+				})),
+		};
+	});
+
+	return {
+		tables: perTable.map((entry) => entry.table),
+		omittedIndexesAtColumn: perTable.flatMap(
+			(entry) => entry.omittedIndexesAtColumn,
+		),
+		omittedChecksAtColumn: perTable.flatMap(
+			(entry) => entry.omittedChecksAtColumn,
+		),
+	};
+};
 
 /**
  * D106 R6-N1: which half of `isNameDeclarable` failed, set here where
@@ -709,6 +843,10 @@ export const inferFromCatalog = async (
 				] as const,
 		),
 	]);
+	// B#1 (live review): the same unified set every index/check/unique
+	// exclusion below reads -- never re-derived per caller.
+	const omittedColumnIdentities = new Set(columnOmissionCauses.keys());
+
 	const foreignKeyPartition = partitionForeignKeys(
 		mergedTables,
 		survivingTableIdentities,
@@ -724,7 +862,11 @@ export const inferFromCatalog = async (
 		tablesWithReachableForeignKeys,
 		enumOmittedColumnIdentities,
 	);
-	const built = snapshotTables.map((table) =>
+	const memberExclusion = excludeMembersReferencingOmittedColumns(
+		snapshotTables,
+		omittedColumnIdentities,
+	);
+	const built = memberExclusion.tables.map((table) =>
 		inferTable(table, outOfScopeHandles),
 	);
 	const typeLosses = built.flatMap((result) => result.losses);
@@ -749,6 +891,7 @@ export const inferFromCatalog = async (
 		uniqueIndexApproximations: detectUniqueIndexApproximations(
 			catalog,
 			survivingTableIdentities,
+			omittedColumnIdentities,
 		),
 		nextvalDefaults: detectNextvalDefaultApproximations(
 			tablesWithReachableForeignKeys,

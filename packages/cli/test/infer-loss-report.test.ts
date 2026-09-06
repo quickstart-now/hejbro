@@ -1129,7 +1129,11 @@ describe("detectUniqueIndexApproximations / 1.7", () => {
 		};
 
 		expect(
-			detectUniqueIndexApproximations(catalog, new Set(["app.pairs"])),
+			detectUniqueIndexApproximations(
+				catalog,
+				new Set(["app.pairs"]),
+				new Set(),
+			),
 		).toEqual([{ schema: "app", table: "pairs", name: "pairs_a_b_unique" }]);
 	});
 
@@ -1164,7 +1168,9 @@ describe("detectUniqueIndexApproximations / 1.7", () => {
 			extensions: [],
 		};
 
-		expect(detectUniqueIndexApproximations(catalog, new Set())).toEqual([]);
+		expect(
+			detectUniqueIndexApproximations(catalog, new Set(), new Set()),
+		).toEqual([]);
 	});
 
 	// D106 R8-N1/#724: R5-N2's shape one level down -- a surviving table's
@@ -1209,7 +1215,11 @@ describe("detectUniqueIndexApproximations / 1.7", () => {
 		};
 
 		expect(
-			detectUniqueIndexApproximations(catalog, new Set(["app.pairs"])),
+			detectUniqueIndexApproximations(
+				catalog,
+				new Set(["app.pairs"]),
+				new Set(),
+			),
 		).toEqual([{ schema: "app", table: "pairs", name: "pairs_a_b_unique" }]);
 	});
 });

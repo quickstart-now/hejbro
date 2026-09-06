@@ -34,11 +34,15 @@ export type UniqueIndexApproximation = {
  * `omittedIndexes` already asks of this same object (a UNIQUE
  * constraint's backing index carries its identical name), asked here
  * so the report-side half never disagrees with the declaration-side
- * one about which UNIQUE constraints exist at all.
+ * one about which UNIQUE constraints exist at all. `omittedColumnIdentities`
+ * (B#1, live review) excludes a constraint whose own column was itself
+ * omitted -- the delta never announces an approximation for an object
+ * this reading left out entirely.
  */
 export const detectUniqueIndexApproximations = (
 	catalog: Catalog,
 	survivingTableIdentities: ReadonlySet<string>,
+	omittedColumnIdentities: ReadonlySet<string>,
 ): ReadonlyArray<UniqueIndexApproximation> =>
 	catalog.constraints
 		.filter((constraint) => constraint.type === "u")
@@ -46,6 +50,14 @@ export const detectUniqueIndexApproximations = (
 			survivingTableIdentities.has(`${constraint.schema}.${constraint.table}`),
 		)
 		.filter((constraint) => isExpressibleName(constraint.name))
+		.filter(
+			(constraint) =>
+				!constraint.columns.some((column) =>
+					omittedColumnIdentities.has(
+						`${constraint.schema}.${constraint.table}.${column}`,
+					),
+				),
+		)
 		.map((constraint) => ({
 			schema: constraint.schema,
 			table: constraint.table,
