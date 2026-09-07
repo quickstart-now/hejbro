@@ -21,7 +21,7 @@ any other file, that is a stop, not a diff.
 
 ## 1. Refuse the collision at emission
 
-- [ ] 1.1 (~10m) **[design]** The guard and both messages (codes and
+- [x] 1.1 (~10m) **[design]** The guard and both messages (codes and
       remedies settled by 1004/R1). Red:
       `packages/cli/test/contract-name-collision.test.ts`, an input
       table {managed `a.widgets` + managed `b.widgets`; existing
@@ -47,7 +47,7 @@ any other file, that is a stop, not a diff.
       identity-order rows.
       Files: `name-collision.ts`, `emit.ts`, the new test.
 
-- [ ] 1.2 (~8m) The CLI surface. Red: `packages/cli/test/vendor.test.ts`
+- [x] 1.2 (~8m) The CLI surface. Red: `packages/cli/test/vendor.test.ts`
       — a linked export whose `schema.json` carries `auth.users`
       (existing) beside `app.users` (managed, one snapshot with both
       tables): `hejbro vendor` exits 1, stderr contains
@@ -60,7 +60,7 @@ any other file, that is a stop, not a diff.
       existing `EXPORT_SCHEMA_V1` shape with two table facts and a
       two-table snapshot).
 
-- [ ] 1.3 (~5m) Reference, changeset, ledger. `polyrepo.md`'s "Two
+- [x] 1.3 (~5m) Reference, changeset, ledger. `polyrepo.md`'s "Two
       different keying rules" paragraph states that two carried tables
       of one SQL name are refused at emission, the two codes, and the
       way out per command; `pnpm changeset` → `patch` (`hejbro`); one

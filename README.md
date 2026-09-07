@@ -4,10 +4,10 @@
 [![CRAP ≤ 5 · 0 / 1728](https://img.shields.io/badge/CRAP%20%E2%89%A4%205-0%20%2F%201728-brightgreen)](#status)
 <!-- crap-badge:end -->
 <!-- tasktime-badges:start -->
-[![tasks · 826 done](https://img.shields.io/badge/tasks-826%20done-blue)](openspec/task-times.csv)
+[![tasks · 829 done](https://img.shields.io/badge/tasks-829%20done-blue)](openspec/task-times.csv)
 [![avg task · 16m](https://img.shields.io/badge/avg%20task-16m-blue)](openspec/task-times.csv)
 [![estimate · 1.71x](https://img.shields.io/badge/estimate-1.71x-blue)](openspec/task-times.csv)
-[![overhead · 23%](https://img.shields.io/badge/overhead-23%25-blue)](openspec/task-times.csv)
+[![overhead · 22%](https://img.shields.io/badge/overhead-22%25-blue)](openspec/task-times.csv)
 <!-- tasktime-badges:end -->
 
 > hej (Swedish: "hello") + bro (Swedish: "bridge") — hello, bridge.
