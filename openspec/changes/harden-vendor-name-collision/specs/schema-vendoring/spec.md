@@ -8,8 +8,8 @@ metadata keeps whichever came last, and a relation onto the pair names
 a key that is not defined. The emitter SHALL refuse such a contract
 before any file is written, under a coded diagnostic that names every
 colliding SQL name with each of its schema-qualified tables in identity
-order. The collision is decided on the exact SQL name: two names that
-differ only in case are two names. Function keys are not affected —
+order. The collision is decided on the SQL name exactly as the payload
+carries it, never on a normalized form. Function keys are not affected —
 they are export names, and *Every emitted key compiles* owns them.
 
 The remedy differs by command, so each has its own code. `vendor` has
@@ -42,10 +42,6 @@ vendored schema and whose scope `pull` never enters.
   `widgets` in two
 - **THEN** one diagnostic names both SQL names, each with all of its
   qualified tables, in identity order
-
-#### Scenario: Names that differ only in case are not a collision
-- **WHEN** the carried tables are `a.Users` and `b.users`
-- **THEN** the contract is emitted with both keys
 
 #### Scenario: A unique-name layout is unchanged
 - **WHEN** every carried table's SQL name is unique across the carried

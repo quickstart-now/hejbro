@@ -5,6 +5,7 @@ import {
 	computeFunctions,
 	renderFunctionEntry,
 } from "./functions";
+import { assertUniqueTableNames } from "./name-collision";
 import type { ContractEnumFact } from "./read-snapshot";
 import { enumsInSnapshot, tablesInSnapshot } from "./read-snapshot";
 import type { TableClientMeta, TableComputation } from "./tables";
@@ -386,6 +387,7 @@ export const emitContract = (
 ): string => {
 	const enumLookup = buildEnumLookup(enumsInSnapshot(payload.snapshot));
 	const tables = computeTables(payload, enumLookup);
+	assertUniqueTableNames(tables, origin);
 	const functions = computeFunctions(payload, tables, enumLookup);
 	const needsInterval = contractNamesInterval(tables, functions);
 	return `${renderHeader(origin, needsInterval)}

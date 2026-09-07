@@ -27,14 +27,13 @@ any other file, that is a stop, not a diff.
       table {managed `a.widgets` + managed `b.widgets`; existing
       `auth.users` + managed `app.users`; `users` in three schemas;
       `users` in three schemas beside `widgets` in two (one message,
-      both names, identity order, every qualified table); `a.Users` +
-      `b.users` (emits, both keys present); a unique-name layout with
-      an existing table beside managed tables (emitted text
-      byte-identical to the current emitter's, pinned by emitting once
-      before and once after the guard is wired — the guard is a pure
-      predicate, so the pin is the same call with the guard's own
-      helper asserting no collision)} × {origin `git`, origin
-      `database`}: the thrown `HejbroError`'s `code` is
+      both names, identity order, every qualified table); a unique-name layout with
+      an existing table beside managed tables (emits every key — the
+      guard is a pure predicate that either throws or does nothing, so
+      the emitted text is the current emitter's by construction)} ×
+      {origin `git`, origin `database`}. The DSL refuses a mixed-case
+      table name, so a pair differing only in case is unreachable from
+      declarations and is not a row: the thrown `HejbroError`'s `code` is
       `vendor-table-name-collision` for `git` and
       `pull-table-name-collision` for `database`; the message contains
       each SQL name and each `"schema"."table"` in identity order, and
@@ -42,9 +41,10 @@ any other file, that is a stop, not a diff.
       one table per SQL name in the export; pull: drop a schema from
       `--schema`). Green: `assertUniqueTableNames(tables, origin)` in
       `name-collision.ts`, called from `emitContract` after
-      `computeTables` and before any rendering. Mutation: dropping the
-      schema comparison (collide on name alone) reddens the `Users`/
-      `users` row; comparing lowercase names reddens it the other way.
+      `computeTables` and before any rendering. Mutation: grouping by
+      schema-qualified name instead of SQL name turns every colliding
+      row green; listing groups in first-seen order reddens the
+      identity-order rows.
       Files: `name-collision.ts`, `emit.ts`, the new test.
 
 - [ ] 1.2 (~8m) The CLI surface. Red: `packages/cli/test/vendor.test.ts`
