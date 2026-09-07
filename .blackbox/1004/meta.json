@@ -21,7 +21,17 @@
       "ratified": null
     }
   ],
-  "work": [],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-07T14:24Z",
+      "title": "refuse two carried tables of one SQL name at emission",
+      "pr": null,
+      "decisions": [
+        "R1"
+      ]
+    }
+  ],
   "prs": [
     {
       "number": 1011,
