@@ -195,6 +195,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#931](931/) | core: an aggregate call inside a filter() condition is accepted at build time and refused by Postgres (42803) | open | #963 #976 | 0 | 0 (0 pending) |
 | ↳ [#932](932/) | core: a CTE or view body's left-join set is absorbed, so an anchor projecting a left-joined non-null column reads non-null outward | open | #956 | 0 | 0 (0 pending) |
 | ↳ [#942](942/) | query: db.with reads every CTE key nullable (untracked boundary), so the recursive-nullability widening is not observable on the chain surface | open | #956 | 0 | 0 (0 pending) |
+| ↳ [#943](943/) | blackbox: add decision/ruling/work numbers by entry count, so a renumbered or out-of-order entry yields a duplicate id | open |  | 0 | 0 (0 pending) |
 | ↳ [#946](946/) | query: a batch result whose list count differs from the member count is not detected, so a context statement's rows can be returned as the caller's | closed | #955 #962 | 0 | 0 (0 pending) |
 | ↳ [#953](953/) | core/query: a db.fn call refused by filter() or over() cannot be named exactly -- the thenable carries no brand core can read | open | #976 | 0 | 0 (0 pending) |
 | ↳ [#964](964/) | spec: name the surface on which the recursive-cte nullability rule is observable | open | #968 | 0 | 0 (0 pending) |
