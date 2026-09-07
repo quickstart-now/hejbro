@@ -1191,8 +1191,31 @@ const appendEntry = (root, folder, file, block) => {
 const entryBlock = (id, title, metaLine, body) =>
 	`<a id="${id.toLowerCase()}"></a>\n## ${id} — ${title}\n\n_${metaLine}_\n\n${body.trim()}\n\n`;
 
-const nextId = (entries, prefix) =>
-	`${prefix}${entries.filter((entry) => entry.id.startsWith(prefix)).length + 1}`;
+// The next id is one past the highest number on record, never the count:
+// a renumbered or out-of-order entry leaves a gap, and count + 1 lands in
+// it (#34). An entry the file holds without a meta line is refused rather
+// than twinned — the two must be reconciled by hand first.
+const nextId = (root, folder, file, prefix) => {
+	const entries = {
+		"work.md": folder.meta.work,
+		"decisions.md": folder.meta.decisions,
+	}[file];
+	const numbers = entries
+		.filter((entry) => entry.id.startsWith(prefix))
+		.map((entry) => Number(entry.id.slice(prefix.length)))
+		.filter((n) => Number.isInteger(n));
+	const id = `${prefix}${Math.max(0, ...numbers) + 1}`;
+	const text = readFileSync(join(root, `${folder.dir}/${file}`), "utf8");
+	const held =
+		text.includes(`<a id="${id.toLowerCase()}">`) ||
+		new RegExp(`^## ${id}\\b`, "m").test(text);
+	if (held) {
+		fail(
+			`${id} already exists in ${folder.dir}/${file} but not in meta.json; reconcile them before adding`,
+		);
+	}
+	return id;
+};
 
 const writeIndex = (root, repo) => {
 	const state = loadState(fsReader(root));
@@ -1387,7 +1410,7 @@ const addDecision = (root, folder, opts, body, at) => {
 	if (by !== "owner") {
 		fail("a decision is the owner's; record the AI's as `add ruling`");
 	}
-	const id = nextId(folder.meta.decisions, "D");
+	const id = nextId(root, folder, "decisions.md", "D");
 	const raw = String(opts.raw ?? "")
 		.split(/\s+/)
 		.filter(Boolean);
@@ -1419,7 +1442,7 @@ const addRuling = (root, folder, opts, body, at) => {
 	if (!RULING_KINDS.includes(kind)) {
 		fail(`--kind must be ${RULING_KINDS.join("|")}`);
 	}
-	const id = nextId(folder.meta.decisions, "R");
+	const id = nextId(root, folder, "decisions.md", "R");
 	const by = opts.by ?? "lead";
 	const basis = listOpt(opts.basis);
 	folder.meta.decisions.push({
@@ -1446,7 +1469,7 @@ const addRuling = (root, folder, opts, body, at) => {
 };
 
 const addWork = (root, folder, opts, body, at) => {
-	const id = nextId(folder.meta.work, "W");
+	const id = nextId(root, folder, "work.md", "W");
 	const pr = (() => {
 		if (opts.pr) {
 			return Number(opts.pr);

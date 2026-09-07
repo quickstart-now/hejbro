@@ -1,0 +1,29 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#943",
+  "title": "blackbox: add decision/ruling/work numbers by entry count, so a renumbered or out-of-order entry yields a duplicate id",
+  "parent": "quickstart-now/hejbro#815",
+  "status": "closed",
+  "opened": "2026-09-07",
+  "closed": "2026-09-07",
+  "decisions": [],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-07T13:53Z",
+      "title": "re-vendor blackbox.mjs with the max-plus-one numbering",
+      "pr": null,
+      "decisions": []
+    }
+  ],
+  "prs": [
+    {
+      "number": 1027,
+      "role": "closes",
+      "pinnedAt": "2026-09-07T13:53Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}
