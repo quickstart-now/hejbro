@@ -1680,6 +1680,23 @@ describe("hejbro generate — adoption-creates (671/task 1.3, 1.3a, 671/R10 D106
 				"",
 			].join("\n"),
 		);
+		// 671/R9, D106 R1 B1, review round 1 F1 re-review: the notice above
+		// is read structurally off the snapshot (`generate.ts`'s
+		// `tableChildLines` reads `next.primaryKeyName`, never the
+		// migration's own emitted SQL), so it names the primary key whether
+		// or not the migration actually creates it -- exactly B1's original
+		// shape. This is the one CLI-surface assertion that also reads the
+		// migration body, so a regression back to B1 (notice names it,
+		// migration skips it) reddens here even though the notice text
+		// above would stay unchanged.
+		const fileName = (await sqlFileNames()).at(-1);
+		const migrationSql = await readFile(
+			join(cwd, "migrations", fileName as string),
+			"utf8",
+		);
+		expect(migrationSql).toContain(
+			'alter table "j18"."widgets" add constraint "widgets_pkey" primary key ("id");',
+		);
 	});
 
 	it("prints one block per adopted table, blank-line separated, with the summary counting both (671/task 1.3, table D: two tables)", async () => {
