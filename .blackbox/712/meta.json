@@ -125,6 +125,18 @@
       "at": "2026-09-06T06:40Z",
       "title": "review round 1: an omitted column takes its indexes, checks and unique constraints too; two-cause columns name both ways out; the primary-key line states a name collision; ordering sentences narrowed",
       "ratified": null
+    },
+    {
+      "id": "R11",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "712/R1",
+        "412/D29"
+      ],
+      "at": "2026-09-07T14:29Z",
+      "title": "generated columns are read, the unread-target sentence narrows to metadata (D106 R1)",
+      "ratified": null
     }
   ],
   "work": [

@@ -72,3 +72,77 @@ goes back to the planner, not into the diff.
       list gains the enum and primary-key-name lines and the roles
       sentence says "grants and policies"; `pnpm changeset` → `patch`.
       Files: the reference, `.changeset/*.md`.
+
+## 2. D106 round 1 corrections (evaluation.md B1, B2, N2, N5, N8, N11 + docs N1, N4, N6, N9, N10)
+
+One group, one team, sequential; lands on
+`fix-catalog-inference-2-d106-r1` as its own PR with a `patch`
+changeset. The reviewer is summoned in constructor mode (the input is a
+catalog, D110). **Files edited**: `packages/cli/src/infer/*` and its
+tests, `packages/cli/src/contract/from-catalog.ts` if the pulled
+contract's Insert/Update shapes need the generated family (2.1);
+`packages/cli/src/infer/loss-report.ts`, `packages/cli/src/commands/
+pull.ts`, `packages/cli/src/commands/import.ts` and their tests,
+`openspec/changes/harden-catalog-inference-2/specs/catalog-inference/
+spec.md` (2.2); `skills/hejbro/references/brownfield-adoption.md`, one
+`.changeset/*.md`, `openspec/task-times.csv` (2.3). Anything else goes
+back to the planner. Commit condition, serial: `TURBO_FORCE=1 pnpm
+check` first, then `check-types`, `test`, `check:crap`; report exit
+codes and the SHA.
+
+**Ordering.** 2.1 → 2.2 → 2.3.
+
+- [ ] 2.1 (~10m) B1 / #1022 — a generated column is read as generated
+      (712/R11). Red: the infer tests over a fake catalog and the live
+      witness over an input table {stored generated column whose
+      expression names one column; one naming two columns with a cast;
+      a generated column beside an identity column on the same table;
+      a generated column whose own name the declaration cannot carry
+      (the existing Omitted rule wins and its line says so)}: the
+      starter emits the DSL's generated-column builder with the
+      catalog's expression text (`pg_get_expr`, the same reading the
+      defaults use) and never a plain column; `hejbro check --url`
+      against the imported database reports no differences for that
+      column; the pulled contract's Insert and Update shapes omit the
+      column (the ALWAYS family, as `contract/tables.ts` already does
+      for identity). If the DSL cannot carry the expression the reading
+      found, an Approximated line names the column and says what was
+      dropped — never silence. Live: the review's `gen1` database
+      (`/private/tmp/d106-cf/sql`) round-trips `total` and `label`
+      through import → baseline → dump diff with `GENERATED ALWAYS AS
+      … STORED` on both sides. Files: infer sources and tests,
+      `from-catalog.ts` if needed, live witness.
+
+- [ ] 2.2 (~8m) Text that the review measured false or unstated. B2:
+      the delta's scenario *A reference into a schema the run did not
+      name is kept* and requirement 1's sentence say the reference is
+      carried in the foreign-key metadata and `Relationships` and that
+      no relation exists for it (a relation needs a `Tables` key for
+      its target — schema-vendoring's own rule); the reviewer's
+      `proj-gen1` and corpus contracts are the pins. N2: every loss
+      line whose `Next:` says "then re-run `hejbro import`" says "re-run
+      `hejbro import` into a fresh `--out` and merge the declarations,
+      or declare it by hand" (import never overwrites). N5: the
+      requirement says the four outer bands keep the stated order and
+      the Approximated band's inner order is by object identity. N8:
+      (a) one "cannot be carried" clause per pull FK line, (b) pull's PK
+      line speaks to the consumer (no `generate`/`check` promise), (c)
+      one noun per constraint kind (a UNIQUE constraint is announced as
+      a unique constraint whatever caused its omission). N11: pull's
+      "pulled (…)" line and the lock list the schemas read, not the one
+      the loss report omitted whole. Red: the loss-report and pull
+      tests pin each sentence. Files: `loss-report.ts`, `pull.ts`,
+      `import.ts`, their tests, the delta spec.
+
+- [ ] 2.3 (~5m) Docs, changeset, ledger. The brownfield reference
+      states: the grants the reading models are schema-usage and
+      table-level (column- and sequence-level grants contribute no role
+      name, N1); partitioning, inheritance, UNLOGGED, comments and RLS
+      enablement are not read and are listed in the "Not inferred" band
+      only when #1034 lands (N4 — until then the reference names
+      them); a collision where neither name yields its key back is
+      resolved by physical order (N6); `to current_user`/`session_user`
+      policies report the resolved role (N9); not-inferred column lines
+      say nothing about `check` (N10). `pnpm changeset` → `patch`; one
+      ledger row per task; README badges. Files: the reference,
+      `.changeset/*.md`, `task-times.csv`, `README.md`.
