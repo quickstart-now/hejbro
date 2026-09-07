@@ -1,0 +1,21 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#1039",
+  "title": "pull: --schema repeated with the same name is accepted and recorded twice in the lock and the contract metadata",
+  "parent": "quickstart-now/hejbro#995",
+  "status": "open",
+  "opened": "2026-09-07",
+  "closed": null,
+  "decisions": [],
+  "work": [],
+  "prs": [
+    {
+      "number": 1041,
+      "role": "refs",
+      "pinnedAt": "2026-09-07T14:53Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

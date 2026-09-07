@@ -1,0 +1,53 @@
+{
+  "version": 3,
+  "number": 1041,
+  "ref": "quickstart-now/hejbro#1041",
+  "title": "chore(openspec): archive harden-vendor-name-collision after d106 round 1 (#1004)",
+  "head": "e19b132f2c54b9df9ae45a480dbc343b07ba864c",
+  "headRef": "archive-vendor-name-collision",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-07T14:53Z",
+  "refs": [
+    {
+      "path": "openspec/changes/archive/2026-09-07-harden-vendor-name-collision/design.md",
+      "blob": "8350cf84c211fd3fdbd1a3abfbd918ac788bdf40"
+    },
+    {
+      "path": "openspec/changes/harden-vendor-name-collision/design.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-07-harden-vendor-name-collision/evaluation.md",
+      "blob": "ae05e441d611a0b383a363e234672dc0357a4db6"
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-07-harden-vendor-name-collision/proposal.md",
+      "blob": "3df67bb55ec951e5779b3362e31e57d981b24357"
+    },
+    {
+      "path": "openspec/changes/harden-vendor-name-collision/proposal.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-07-harden-vendor-name-collision/specs/schema-vendoring/spec.md",
+      "blob": "e09f6d4fcf5cea53c1c0d6c9abcea9133357880e"
+    },
+    {
+      "path": "openspec/changes/harden-vendor-name-collision/specs/schema-vendoring/spec.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-07-harden-vendor-name-collision/tasks.md",
+      "blob": "d508eaf840ae42fe998d8f711d563a0a84c07c79"
+    },
+    {
+      "path": "openspec/changes/harden-vendor-name-collision/tasks.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/specs/schema-vendoring/spec.md",
+      "blob": "3e5e5f810533ad00d606d229c81d065624541510"
+    }
+  ]
+}
