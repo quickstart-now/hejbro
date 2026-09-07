@@ -148,6 +148,16 @@
       "title": "review rounds one to three: the missing-column risk, the withdrawn refusal, and the four-branch measurement",
       "pr": null,
       "decisions": []
+    },
+    {
+      "id": "W3",
+      "at": "2026-09-07T16:15Z",
+      "title": "D106 round 1 corrections: B1 (671/R9) and B2 (671/R10) fixed",
+      "pr": null,
+      "decisions": [
+        "R9",
+        "R10"
+      ]
     }
   ],
   "prs": [
