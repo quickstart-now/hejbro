@@ -1,0 +1,21 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#1040",
+  "title": "vendor: --ref <commit sha> does not resolve on a local-path source, while a tag on the same commit does",
+  "parent": "quickstart-now/hejbro#995",
+  "status": "open",
+  "opened": "2026-09-07",
+  "closed": null,
+  "decisions": [],
+  "work": [],
+  "prs": [
+    {
+      "number": 1041,
+      "role": "refs",
+      "pinnedAt": "2026-09-07T14:53Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}
