@@ -398,9 +398,13 @@ export type OmittedForeignKeyColumn = {
 	/** `"<schema>.<table>.<sqlName>"` of the omitted column that cost this foreign key. */
 	readonly columnIdentity: string;
 	readonly end: "source" | "target";
-	readonly cause: "name" | "enum";
+	readonly cause: "name" | "enum" | "generatedExpression";
 	/** The enum type's own `"<schema>.<name>"` identity -- present only when `cause` is `"enum"` (712/R8). */
 	readonly enumIdentity?: string;
+	/** 712/R12 (B), cfr1-planner's own measurement: the column a generated column's own expression names, and *that* column's own cause -- present only when `cause` is `"generatedExpression"`, so the line can name the root rather than an anonymous "a column this reading already left out" and pick the tail its own root cause (not this column's) actually earns. */
+	readonly rootColumnIdentity?: string;
+	readonly rootCause?: "name" | "enum";
+	readonly rootEnumIdentity?: string;
 };
 
 /**
@@ -445,8 +449,12 @@ export type OmittedTableMemberAtColumn = {
 	readonly table: string;
 	readonly sqlName: string;
 	readonly columnIdentity: string;
-	readonly cause: "name" | "enum";
+	readonly cause: "name" | "enum" | "generatedExpression";
 	readonly enumIdentity?: string;
+	/** 712/R12 (B): mirrors {@link OmittedForeignKeyColumn}'s own root fields -- present only when `cause` is `"generatedExpression"`. */
+	readonly rootColumnIdentity?: string;
+	readonly rootCause?: "name" | "enum";
+	readonly rootEnumIdentity?: string;
 	readonly axis: MemberAxis;
 };
 
@@ -470,8 +478,12 @@ export type OmittedPrimaryKey = {
 	readonly table: string;
 	readonly name: string;
 	readonly columnIdentity: string;
-	readonly cause: "name" | "enum";
+	readonly cause: "name" | "enum" | "generatedExpression";
 	readonly enumIdentity?: string;
+	/** 712/R12 (B): mirrors {@link OmittedForeignKeyColumn}'s own root fields -- present only when `cause` is `"generatedExpression"`. */
+	readonly rootColumnIdentity?: string;
+	readonly rootCause?: "name" | "enum";
+	readonly rootEnumIdentity?: string;
 };
 
 export type LossReportFacts = {
@@ -498,6 +510,8 @@ export type LossReportFacts = {
 	readonly omittedIndexesAtColumn: ReadonlyArray<OmittedTableMemberAtColumn>;
 	readonly omittedChecksAtColumn: ReadonlyArray<OmittedTableMemberAtColumn>;
 	readonly omittedUniqueConstraintsAtColumn: ReadonlyArray<OmittedTableMemberAtColumn>;
+	/** 712/R11/R12: a stored generated column whose own expression names a column this reading already omitted (for its own name, or for the enum type that typed it) -- the generated column itself is left out with it, the same "member at an omitted column" shape B#1 already gives an index or a check constraint. */
+	readonly omittedGeneratedColumnsAtColumn: ReadonlyArray<OmittedTableMemberAtColumn>;
 	readonly omittedPrimaryKeys: ReadonlyArray<OmittedPrimaryKey>;
 };
 
@@ -858,17 +872,26 @@ const omittedCheckLines = (
 
 /**
  * 712/R10 B#1: the one skeleton every "omitted at a column" member line
- * shares -- an index or unique constraint is *declared on* its column,
- * a check constraint's own binding is its expression naming one.
+ * shares -- an index or unique constraint is *declared on* its column, a
+ * check constraint's own binding is its expression naming one. 712/R11/
+ * R12: a stored generated column's own binding is its expression too --
+ * the same reason clause a check constraint gets, reused rather than
+ * invented (a generated column left in place after the column its own
+ * expression names is gone is the same "references what this reading
+ * omitted" shape B#1 already covers, never a new one).
  */
-type MemberKind = "index" | "check constraint" | "unique constraint";
+type MemberKind =
+	| "index"
+	| "check constraint"
+	| "unique constraint"
+	| "generated column";
 
 const memberReasonClause = (
 	kind: MemberKind,
 	columnIdentity: string,
 	axis: MemberAxis,
 ): string => {
-	if (kind === "check constraint") {
+	if (kind === "check constraint" || kind === "generated column") {
 		return `its expression names column "${columnIdentity}"`;
 	}
 	if (kind === "index" && axis === "expressionOrPredicate") {
@@ -883,6 +906,49 @@ const memberReasonClause = (
 	return `it is declared on column "${columnIdentity}"`;
 };
 
+/**
+ * 712/R12 (B, cfr1-planner's own measurement 2, lead ruling): the root
+ * cause's own clause, nested inside a `"generatedExpression"` cause's
+ * "its expression names column "<root>", …" opening -- naming the root
+ * is load-bearing (an anonymous "a column this reading already left
+ * out" sent the reader hunting a different line for it), and the enum
+ * branch is the *existing* enum clause repeated verbatim, since a
+ * root cause of `"enum"` means "rename the column" would be an outright
+ * wrong exit (the type is what has to be renamed, not the column).
+ * `consequenceClause` is the caller's own "so the … cannot be …
+ * either" tail -- import and pull, member/PK/FK, all share this one
+ * function rather than each re-deriving the root branch. The name
+ * branch below is the *compressed* form the lead chose over nesting
+ * the sibling name-cause clause verbatim ("which this reading left
+ * out because no declaration can carry its name") -- doing that would
+ * read as "which this reading left out ... which this reading left
+ * out ...", doubled; swapping to the verbatim form (if ever needed)
+ * touches only this one branch.
+ */
+const generatedExpressionRootClause = (
+	entry: Pick<
+		OmittedTableMemberAtColumn,
+		"rootColumnIdentity" | "rootCause" | "rootEnumIdentity"
+	>,
+	consequenceClause: string,
+): string => {
+	const opening = `which this reading left out because its expression names column "${entry.rootColumnIdentity}"`;
+	if (entry.rootCause === "enum") {
+		return `${opening}, which this reading left out with the enum type "${entry.rootEnumIdentity}" that types it, ${consequenceClause}`;
+	}
+	return `${opening}, whose own name no declaration can carry, ${consequenceClause}`;
+};
+
+/** Whether the tail this entry earns is the enum branch ("rename the type") -- true for a direct enum cause, or a `"generatedExpression"` cause whose own root cause is `"enum"`; false (the name/default branch, "rename the column") otherwise, including a `"generatedExpression"` cause whose root is `"name"`. */
+const takesEnumTail = (
+	entry: Pick<OmittedTableMemberAtColumn, "cause" | "rootCause">,
+): boolean => {
+	if (entry.cause === "enum") {
+		return true;
+	}
+	return entry.cause === "generatedExpression" && entry.rootCause === "enum";
+};
+
 /** 712/R8's own cause-specific clause, reused verbatim for every member kind -- only the noun (`kind`) changes. */
 const memberCauseClauseForImport = (
 	entry: OmittedTableMemberAtColumn,
@@ -890,6 +956,12 @@ const memberCauseClauseForImport = (
 ): string => {
 	if (entry.cause === "enum") {
 		return `which this reading left out with the enum type "${entry.enumIdentity}" that types it, so the ${kind} cannot be declared either`;
+	}
+	if (entry.cause === "generatedExpression") {
+		return generatedExpressionRootClause(
+			entry,
+			`so the ${kind} cannot be declared either`,
+		);
 	}
 	return `which this reading left out because no declaration can carry its name, so the ${kind} cannot be declared either`;
 };
@@ -901,18 +973,24 @@ const memberCauseClauseForPull = (
 	if (entry.cause === "enum") {
 		return `which this reading left out with the enum type "${entry.enumIdentity}" that types it, so the ${kind} cannot be carried in the contract either`;
 	}
+	if (entry.cause === "generatedExpression") {
+		return generatedExpressionRootClause(
+			entry,
+			`so the ${kind} cannot be carried in the contract either`,
+		);
+	}
 	return `which this reading left out because no declaration can carry its name, so the ${kind} cannot be carried in the contract either`;
 };
 
 const memberTailForImport = (entry: OmittedTableMemberAtColumn): string => {
-	if (entry.cause === "enum") {
+	if (takesEnumTail(entry)) {
 		return "Next: rename the type in the database, then re-run `hejbro import`.";
 	}
 	return "Next: rename the column in the database, then re-run `hejbro import`.";
 };
 
 const memberTailForPull = (entry: OmittedTableMemberAtColumn): string => {
-	if (entry.cause === "enum") {
+	if (takesEnumTail(entry)) {
 		return "Rename the type in the database, then link the schema repository.";
 	}
 	return "Rename the column in the database, then link the schema repository.";
@@ -945,12 +1023,18 @@ const omittedMemberLines = (
 	return ordered.map((entry) => omittedMemberLineForImport(entry, kind));
 };
 
-/** 712/R8's own cause-specific clause, PP2's own PK wording (review round 2 N#7). */
+/** 712/R8's own cause-specific clause, PP2's own PK wording (review round 2 N#7); 712/R12 (B) shares {@link generatedExpressionRootClause} with the member family, `OmittedPrimaryKey` carrying the same `rootColumnIdentity`/`rootCause`/`rootEnumIdentity` fields. */
 const primaryKeyOmissionCauseClauseForImport = (
 	entry: OmittedPrimaryKey,
 ): string => {
 	if (entry.cause === "enum") {
 		return `which this reading left out with the enum type "${entry.enumIdentity}" that types it, so the key cannot be declared either`;
+	}
+	if (entry.cause === "generatedExpression") {
+		return generatedExpressionRootClause(
+			entry,
+			"so the key cannot be declared either",
+		);
 	}
 	return `which this reading left out because no declaration can carry its name, so the key cannot be declared either`;
 };
@@ -961,18 +1045,24 @@ const primaryKeyOmissionCauseClauseForPull = (
 	if (entry.cause === "enum") {
 		return `which this reading left out with the enum type "${entry.enumIdentity}" that types it, so the key cannot be carried in the contract either`;
 	}
+	if (entry.cause === "generatedExpression") {
+		return generatedExpressionRootClause(
+			entry,
+			"so the key cannot be carried in the contract either",
+		);
+	}
 	return `which this reading left out because no declaration can carry its name, so the key cannot be carried in the contract either`;
 };
 
 const primaryKeyOmissionTailForImport = (entry: OmittedPrimaryKey): string => {
-	if (entry.cause === "enum") {
+	if (takesEnumTail(entry)) {
 		return "Next: rename the type in the database, then re-run `hejbro import`.";
 	}
 	return "Next: rename the column in the database, then re-run `hejbro import`.";
 };
 
 const primaryKeyOmissionTailForPull = (entry: OmittedPrimaryKey): string => {
-	if (entry.cause === "enum") {
+	if (takesEnumTail(entry)) {
 		return "Rename the type in the database, then link the schema repository.";
 	}
 	return "Rename the column in the database, then link the schema repository.";
@@ -1090,7 +1180,20 @@ const omittedForeignKeyColumnReasonForImport = (
 	if (entry.cause === "enum") {
 		return `${foreignKeyColumnReasonClause(entry.end)} "${entry.columnIdentity}", which this reading left out with the enum type "${entry.enumIdentity}" that types it, so the key cannot be declared either. Next: rename the type in the database, then re-run \`hejbro import\`.`;
 	}
+	if (entry.cause === "generatedExpression") {
+		return `${foreignKeyColumnReasonClause(entry.end)} "${entry.columnIdentity}", ${generatedExpressionRootClause(entry, "so the key cannot be declared either")}. ${foreignKeyGeneratedExpressionTailForImport(entry)}`;
+	}
 	return `${foreignKeyColumnReasonClause(entry.end)} "${entry.columnIdentity}", which this reading left out because no declaration can carry its name, so the key cannot be declared either. Next: rename the column in the database, then re-run \`hejbro import\`.`;
+};
+
+/** The tail {@link omittedForeignKeyColumnReasonForImport}'s own `"generatedExpression"` branch earns -- the enum branch (root cause `"enum"`) points at the type, never the column. */
+const foreignKeyGeneratedExpressionTailForImport = (
+	entry: Pick<OmittedForeignKeyColumn, "cause" | "rootCause">,
+): string => {
+	if (takesEnumTail(entry)) {
+		return "Next: rename the type in the database, then re-run `hejbro import`.";
+	}
+	return "Next: rename the column in the database, then re-run `hejbro import`.";
 };
 
 /** pull's own consequence, mirroring `undeclarableNameLineForPull`'s own wording for the column itself (712/R5), and 712/R8's own enum-cause branch. */
@@ -1100,7 +1203,29 @@ const omittedForeignKeyColumnReasonForPull = (
 	if (entry.cause === "enum") {
 		return `${foreignKeyColumnReasonClause(entry.end)} "${entry.columnIdentity}", which this reading left out with the enum type "${entry.enumIdentity}" that types it, so the key cannot be carried either. Rename the type in the database, then link the schema repository.`;
 	}
+	if (entry.cause === "generatedExpression") {
+		return `${foreignKeyColumnReasonClause(entry.end)} "${entry.columnIdentity}", ${generatedExpressionRootClause(entry, foreignKeyGeneratedExpressionConsequenceForPull(entry))}. ${foreignKeyGeneratedExpressionTailForPull(entry)}`;
+	}
 	return `${foreignKeyColumnReasonClause(entry.end)} "${entry.columnIdentity}", which this reading left out because no declaration can carry its name, so it cannot be carried in the contract, so the key cannot be carried either. Rename the column in the database, then link the schema repository.`;
+};
+
+/** pull's own FK asymmetry (unchanged, 712/R8): the name branch's own consequence names the contract step too ("so it cannot be carried in the contract, so the key cannot be carried either"), the enum branch's own does not -- the `"generatedExpression"` branch follows whichever its own root cause earns. */
+const foreignKeyGeneratedExpressionConsequenceForPull = (
+	entry: Pick<OmittedForeignKeyColumn, "cause" | "rootCause">,
+): string => {
+	if (takesEnumTail(entry)) {
+		return "so the key cannot be carried either";
+	}
+	return "so it cannot be carried in the contract, so the key cannot be carried either";
+};
+
+const foreignKeyGeneratedExpressionTailForPull = (
+	entry: Pick<OmittedForeignKeyColumn, "cause" | "rootCause">,
+): string => {
+	if (takesEnumTail(entry)) {
+		return "Rename the type in the database, then link the schema repository.";
+	}
+	return "Rename the column in the database, then link the schema repository.";
 };
 
 const omittedForeignKeyColumnLineForImport = (
@@ -1225,6 +1350,11 @@ export const buildLossReport = (
 		facts.omittedUniqueConstraintsAtColumn,
 		facts.command,
 		"unique constraint",
+	),
+	...omittedMemberLines(
+		facts.omittedGeneratedColumnsAtColumn,
+		facts.command,
+		"generated column",
 	),
 	...omittedPrimaryKeyLines(facts.omittedPrimaryKeys, facts.command),
 	...omittedForeignKeyLines(facts.omittedForeignKeys, facts.command),

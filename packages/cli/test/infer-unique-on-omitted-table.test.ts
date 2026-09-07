@@ -81,6 +81,7 @@ const INFER_FIXTURE_ROWS: {
 			position: 1,
 			identityKind: "",
 			generatedKind: "",
+			referencedColumns: [],
 		},
 	],
 	foreignKeyDetails: [],

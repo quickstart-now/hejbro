@@ -91,6 +91,7 @@ const columnDetailRow = (
 	position,
 	identityKind: "",
 	generatedKind: "",
+	referencedColumns: [],
 });
 
 const foreignKeyDetailRow = (fk: ForeignKeyDetailFixture): DriverRow => ({

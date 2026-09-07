@@ -312,4 +312,104 @@ describe("exportPayloadFromCatalog / CI-G4-R1-03", () => {
 		expect(source).not.toContain("createdat");
 		expect(source).toContain("readonly id: string;");
 	});
+
+	/**
+	 * B1, 712/R11: `contract/tables.ts`'s own `isAlwaysGenerated` already
+	 * gates `Insert`/`Update` on `columnGenerated(column) !== null` -- this
+	 * pins that the *inferred* path actually reaches it, through the real
+	 * `inferTable` + `generateMigration` snapshot this adapter renders
+	 * from (never a hand-built one), the same way the unnamed-schema
+	 * relation test above proves the real composition rather than the
+	 * emitter's own tolerance for a hand-shaped payload.
+	 */
+	it("omits a stored generated column from Insert and Update, the same as an always-identity column", () => {
+		const app = schema("app");
+		const uuidFacts = (
+			name: string,
+		): InferredTableFacts["columns"][number]["facts"] => ({
+			schema: "app",
+			table: "widgets",
+			name,
+			sqlType: "uuid",
+			baseTypeName: "uuid",
+			isArray: false,
+			notNull: true,
+			catalogDefault: null,
+			identityKind: "",
+			generatedKind: "",
+			identityOptions: null,
+			isSerialOwned: false,
+			enumDeclaration: null,
+		});
+		const widgetsFacts: InferredTableFacts = {
+			schema: app,
+			tableName: "widgets",
+			columns: [
+				{
+					sqlName: "id",
+					tsKey: "id",
+					facts: uuidFacts("id"),
+					isPrimaryKey: true,
+				},
+				{
+					sqlName: "total",
+					tsKey: "total",
+					facts: {
+						...uuidFacts("total"),
+						sqlType: "integer",
+						baseTypeName: "int4",
+						notNull: false,
+						generatedKind: "s",
+						catalogDefault: "(1 + 1)",
+					},
+					isPrimaryKey: false,
+				},
+			],
+			foreignKeys: [],
+			checks: [],
+			indexes: [],
+		};
+
+		const built = inferTable(widgetsFacts);
+		expect(built.losses).toEqual([]);
+		const migration = generateMigration({
+			declarations: [app, built.table],
+			previousSnapshot: emptySnapshot,
+		});
+		expect(migration.errors).toEqual([]);
+
+		const description = descriptionFor([
+			{
+				schema: "app",
+				table: "widgets",
+				columns: [
+					{ sqlName: "id", tsKey: "id" },
+					{ sqlName: "total", tsKey: "total" },
+				],
+			},
+		]);
+		const payload = exportPayloadFromCatalog(description, migration.snapshot);
+		const source = emitContract(payload, {
+			source: "database",
+			database: "widgets_db",
+			schemas: ["app"],
+		});
+
+		const rowSection = source.slice(
+			source.indexOf("readonly Row: {"),
+			source.indexOf("readonly Insert: {"),
+		);
+		const insertSection = source.slice(
+			source.indexOf("readonly Insert: {"),
+			source.indexOf("readonly Update: {"),
+		);
+		const updateSection = source.slice(
+			source.indexOf("readonly Update: {"),
+			source.indexOf("readonly Relationships:"),
+		);
+
+		expect(rowSection).toContain("readonly total: number | null;");
+		expect(insertSection).not.toContain("total");
+		expect(updateSection).not.toContain("total");
+	});
 });

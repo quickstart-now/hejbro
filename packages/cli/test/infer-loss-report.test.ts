@@ -39,6 +39,7 @@ const emptyFacts = (command: "import" | "pull"): LossReportFacts => ({
 	omittedIndexesAtColumn: [],
 	omittedChecksAtColumn: [],
 	omittedUniqueConstraintsAtColumn: [],
+	omittedGeneratedColumnsAtColumn: [],
 	omittedPrimaryKeys: [],
 });
 
@@ -1001,6 +1002,96 @@ describe("buildLossReport / 712/R8: the reason follows the cause, 712/R9: one li
 			'Omitted: foreign key "app.orders.orders_status_fkey" -- it is declared on column "app.orders.UserId", which this reading left out because no declaration can carry its name, so the key cannot be declared either. Next: rename the column in the database, then re-run `hejbro import`.',
 		]);
 	});
+
+	it("H7: import, generatedExpression cause, root name -- names the root column, not an anonymous one (712/R12 (B))", () => {
+		const report = buildLossReport({
+			...emptyFacts("import"),
+			omittedForeignKeysByColumn: [
+				{
+					schema: "app",
+					table: "ref",
+					name: "ref_total_fkey",
+					columnIdentity: "app.t.total",
+					end: "target",
+					cause: "generatedExpression",
+					rootColumnIdentity: "app.t.Bad Name",
+					rootCause: "name",
+				},
+			],
+		});
+
+		expect(report).toContain(
+			'Omitted: foreign key "app.ref.ref_total_fkey" -- it references column "app.t.total", which this reading left out because its expression names column "app.t.Bad Name", whose own name no declaration can carry, so the key cannot be declared either. Next: rename the column in the database, then re-run `hejbro import`.',
+		);
+	});
+
+	it("H8: pull, generatedExpression cause, root name -- the contract-facing consequence, still naming the root", () => {
+		const report = buildLossReport({
+			...emptyFacts("pull"),
+			omittedForeignKeysByColumn: [
+				{
+					schema: "app",
+					table: "ref",
+					name: "ref_total_fkey",
+					columnIdentity: "app.t.total",
+					end: "target",
+					cause: "generatedExpression",
+					rootColumnIdentity: "app.t.Bad Name",
+					rootCause: "name",
+				},
+			],
+		});
+
+		expect(report).toContain(
+			'Omitted: foreign key "app.ref.ref_total_fkey" -- it references column "app.t.total", which this reading left out because its expression names column "app.t.Bad Name", whose own name no declaration can carry, so it cannot be carried in the contract, so the key cannot be carried either. Rename the column in the database, then link the schema repository.',
+		);
+	});
+
+	it("H9: import, generatedExpression cause, root enum -- the enum clause nested verbatim, and the type tail (never the column tail)", () => {
+		const report = buildLossReport({
+			...emptyFacts("import"),
+			omittedForeignKeysByColumn: [
+				{
+					schema: "app",
+					table: "ref",
+					name: "ref_label_fkey",
+					columnIdentity: "app.t2.label",
+					end: "target",
+					cause: "generatedExpression",
+					rootColumnIdentity: "app.t2.st",
+					rootCause: "enum",
+					rootEnumIdentity: "app.Status",
+				},
+			],
+		});
+
+		expect(report).toContain(
+			'Omitted: foreign key "app.ref.ref_label_fkey" -- it references column "app.t2.label", which this reading left out because its expression names column "app.t2.st", which this reading left out with the enum type "app.Status" that types it, so the key cannot be declared either. Next: rename the type in the database, then re-run `hejbro import`.',
+		);
+	});
+
+	it("H10: pull, generatedExpression cause, root enum -- the single-consequence enum form, and the type tail", () => {
+		const report = buildLossReport({
+			...emptyFacts("pull"),
+			omittedForeignKeysByColumn: [
+				{
+					schema: "app",
+					table: "ref",
+					name: "ref_label_fkey",
+					columnIdentity: "app.t2.label",
+					end: "target",
+					cause: "generatedExpression",
+					rootColumnIdentity: "app.t2.st",
+					rootCause: "enum",
+					rootEnumIdentity: "app.Status",
+				},
+			],
+		});
+
+		expect(report).toContain(
+			'Omitted: foreign key "app.ref.ref_label_fkey" -- it references column "app.t2.label", which this reading left out because its expression names column "app.t2.st", which this reading left out with the enum type "app.Status" that types it, so the key cannot be carried either. Rename the type in the database, then link the schema repository.',
+		);
+	});
 });
 
 /**
@@ -1245,6 +1336,170 @@ describe("buildLossReport / 712/R10 B#1: an index, check or unique constraint at
 		);
 	});
 
+	it("M13: generated column, name cause, import (712/R11/R12)", () => {
+		const report = buildLossReport({
+			...emptyFacts("import"),
+			omittedGeneratedColumnsAtColumn: [
+				{
+					schema: "app",
+					table: "t",
+					sqlName: "total",
+					columnIdentity: "app.t.Bad Name",
+					cause: "name",
+					axis: "key",
+				},
+			],
+		});
+		expect(report).toContain(
+			'Omitted: generated column "app.t.total" -- its expression names column "app.t.Bad Name", which this reading left out because no declaration can carry its name, so the generated column cannot be declared either. `check` keeps listing the generated column as unmanaged until that column and the generated column are both declared. Next: rename the column in the database, then re-run `hejbro import`.',
+		);
+	});
+
+	it("M14: generated column, name cause, pull (712/R11/R12)", () => {
+		const report = buildLossReport({
+			...emptyFacts("pull"),
+			omittedGeneratedColumnsAtColumn: [
+				{
+					schema: "app",
+					table: "t",
+					sqlName: "total",
+					columnIdentity: "app.t.Bad Name",
+					cause: "name",
+					axis: "key",
+				},
+			],
+		});
+		expect(report).toContain(
+			'Omitted: generated column "app.t.total" -- its expression names column "app.t.Bad Name", which this reading left out because no declaration can carry its name, so the generated column cannot be carried in the contract either. Rename the column in the database, then link the schema repository.',
+		);
+	});
+
+	it("M15: generated column, enum cause, import (712/R11/R12)", () => {
+		const report = buildLossReport({
+			...emptyFacts("import"),
+			omittedGeneratedColumnsAtColumn: [
+				{
+					schema: "app",
+					table: "t",
+					sqlName: "derived",
+					columnIdentity: "app.t.status",
+					cause: "enum",
+					enumIdentity: "app.Status",
+					axis: "key",
+				},
+			],
+		});
+		expect(report).toContain(
+			'Omitted: generated column "app.t.derived" -- its expression names column "app.t.status", which this reading left out with the enum type "app.Status" that types it, so the generated column cannot be declared either. `check` keeps listing the generated column as unmanaged until that column and the generated column are both declared. Next: rename the type in the database, then re-run `hejbro import`.',
+		);
+	});
+
+	it("M16: generated column, enum cause, pull (712/R11/R12)", () => {
+		const report = buildLossReport({
+			...emptyFacts("pull"),
+			omittedGeneratedColumnsAtColumn: [
+				{
+					schema: "app",
+					table: "t",
+					sqlName: "derived",
+					columnIdentity: "app.t.status",
+					cause: "enum",
+					enumIdentity: "app.Status",
+					axis: "key",
+				},
+			],
+		});
+		expect(report).toContain(
+			'Omitted: generated column "app.t.derived" -- its expression names column "app.t.status", which this reading left out with the enum type "app.Status" that types it, so the generated column cannot be carried in the contract either. Rename the type in the database, then link the schema repository.',
+		);
+	});
+
+	it("M17: index, generatedExpression cause, root name, import -- names the root, never anonymous (712/R12 (B))", () => {
+		const report = buildLossReport({
+			...emptyFacts("import"),
+			omittedIndexesAtColumn: [
+				{
+					schema: "app",
+					table: "t",
+					sqlName: "t_total_idx",
+					columnIdentity: "app.t.total",
+					cause: "generatedExpression",
+					rootColumnIdentity: "app.t.Bad Name",
+					rootCause: "name",
+					axis: "key",
+				},
+			],
+		});
+		expect(report).toContain(
+			'Omitted: index "app.t.t_total_idx" -- it is declared on column "app.t.total", which this reading left out because its expression names column "app.t.Bad Name", whose own name no declaration can carry, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the column in the database, then re-run `hejbro import`.',
+		);
+	});
+
+	it("M18: check constraint, generatedExpression cause, root enum, import -- the enum clause nested verbatim, and the type tail (712/R12 (B))", () => {
+		const report = buildLossReport({
+			...emptyFacts("import"),
+			omittedChecksAtColumn: [
+				{
+					schema: "app",
+					table: "t2",
+					sqlName: "t2_label_chk",
+					columnIdentity: "app.t2.label",
+					cause: "generatedExpression",
+					rootColumnIdentity: "app.t2.st",
+					rootCause: "enum",
+					rootEnumIdentity: "app.Status",
+					axis: "key",
+				},
+			],
+		});
+		expect(report).toContain(
+			'Omitted: check constraint "app.t2.t2_label_chk" -- its expression names column "app.t2.label", which this reading left out because its expression names column "app.t2.st", which this reading left out with the enum type "app.Status" that types it, so the check constraint cannot be declared either. `check` keeps listing the check constraint as unmanaged until that column and the check constraint are both declared. Next: rename the type in the database, then re-run `hejbro import`.',
+		);
+	});
+
+	it("M19: unique constraint, generatedExpression cause, root name, pull -- the contract-facing tail, never the type tail (712/R12 (B))", () => {
+		const report = buildLossReport({
+			...emptyFacts("pull"),
+			omittedUniqueConstraintsAtColumn: [
+				{
+					schema: "app",
+					table: "t",
+					sqlName: "t_total_uq",
+					columnIdentity: "app.t.total",
+					cause: "generatedExpression",
+					rootColumnIdentity: "app.t.Bad Name",
+					rootCause: "name",
+					axis: "key",
+				},
+			],
+		});
+		expect(report).toContain(
+			'Omitted: unique constraint "app.t.t_total_uq" -- it is declared on column "app.t.total", which this reading left out because its expression names column "app.t.Bad Name", whose own name no declaration can carry, so the unique constraint cannot be carried in the contract either. Rename the column in the database, then link the schema repository.',
+		);
+	});
+
+	it("M20: index, generatedExpression cause, root enum, pull -- the single-clause enum form and the type tail (712/R12 (B))", () => {
+		const report = buildLossReport({
+			...emptyFacts("pull"),
+			omittedIndexesAtColumn: [
+				{
+					schema: "app",
+					table: "t2",
+					sqlName: "t2_label_idx",
+					columnIdentity: "app.t2.label",
+					cause: "generatedExpression",
+					rootColumnIdentity: "app.t2.st",
+					rootCause: "enum",
+					rootEnumIdentity: "app.Status",
+					axis: "key",
+				},
+			],
+		});
+		expect(report).toContain(
+			'Omitted: index "app.t2.t2_label_idx" -- it is declared on column "app.t2.label", which this reading left out because its expression names column "app.t2.st", which this reading left out with the enum type "app.Status" that types it, so the index cannot be carried in the contract either. Rename the type in the database, then link the schema repository.',
+		);
+	});
+
 	it("control: an omitted index at an omitted column never gets an approximation line either", () => {
 		const report = buildLossReport({
 			...emptyFacts("import"),
@@ -1346,6 +1601,88 @@ describe("buildLossReport / 712/R10 N#7: a primary key naming an omitted column"
 		});
 		expect(report).toContain(
 			'Omitted: primary key "app.t2.t2_pkey" -- it names column "app.t2.state2", which this reading left out with the enum type "app.Status" that types it, so the key cannot be carried in the contract either. Rename the type in the database, then link the schema repository.',
+		);
+	});
+
+	it("PK5: primary key, generatedExpression cause, root name, import (712/R12 (B))", () => {
+		const report = buildLossReport({
+			...emptyFacts("import"),
+			omittedPrimaryKeys: [
+				{
+					schema: "app",
+					table: "t",
+					name: "t_pkey",
+					columnIdentity: "app.t.total",
+					cause: "generatedExpression",
+					rootColumnIdentity: "app.t.Bad Name",
+					rootCause: "name",
+				},
+			],
+		});
+		expect(report).toContain(
+			'Omitted: primary key "app.t.t_pkey" -- it names column "app.t.total", which this reading left out because its expression names column "app.t.Bad Name", whose own name no declaration can carry, so the key cannot be declared either; the table is declared without a primary key. `check` keeps listing the index that backs it as unmanaged, naming "app.t.t_pkey", until every column the key names can be declared and the key with them. Next: rename the column in the database, then re-run `hejbro import`.',
+		);
+	});
+
+	it("PK6: primary key, generatedExpression cause, root enum, pull -- the enum tail, never the column tail (712/R12 (B))", () => {
+		const report = buildLossReport({
+			...emptyFacts("pull"),
+			omittedPrimaryKeys: [
+				{
+					schema: "app",
+					table: "t2",
+					name: "t2_pkey",
+					columnIdentity: "app.t2.label",
+					cause: "generatedExpression",
+					rootColumnIdentity: "app.t2.st",
+					rootCause: "enum",
+					rootEnumIdentity: "app.Status",
+				},
+			],
+		});
+		expect(report).toContain(
+			'Omitted: primary key "app.t2.t2_pkey" -- it names column "app.t2.label", which this reading left out because its expression names column "app.t2.st", which this reading left out with the enum type "app.Status" that types it, so the key cannot be carried in the contract either. Rename the type in the database, then link the schema repository.',
+		);
+	});
+
+	it("PK7: primary key, generatedExpression cause, root enum, import -- the enum clause nested verbatim, and the type tail (712/R12 (B))", () => {
+		const report = buildLossReport({
+			...emptyFacts("import"),
+			omittedPrimaryKeys: [
+				{
+					schema: "app",
+					table: "t2",
+					name: "t2_pkey",
+					columnIdentity: "app.t2.label",
+					cause: "generatedExpression",
+					rootColumnIdentity: "app.t2.st",
+					rootCause: "enum",
+					rootEnumIdentity: "app.Status",
+				},
+			],
+		});
+		expect(report).toContain(
+			'Omitted: primary key "app.t2.t2_pkey" -- it names column "app.t2.label", which this reading left out because its expression names column "app.t2.st", which this reading left out with the enum type "app.Status" that types it, so the key cannot be declared either; the table is declared without a primary key. `check` keeps listing the index that backs it as unmanaged, naming "app.t2.t2_pkey", until every column the key names can be declared and the key with them. Next: rename the type in the database, then re-run `hejbro import`.',
+		);
+	});
+
+	it("PK8: primary key, generatedExpression cause, root name, pull (712/R12 (B))", () => {
+		const report = buildLossReport({
+			...emptyFacts("pull"),
+			omittedPrimaryKeys: [
+				{
+					schema: "app",
+					table: "t",
+					name: "t_pkey",
+					columnIdentity: "app.t.total",
+					cause: "generatedExpression",
+					rootColumnIdentity: "app.t.Bad Name",
+					rootCause: "name",
+				},
+			],
+		});
+		expect(report).toContain(
+			'Omitted: primary key "app.t.t_pkey" -- it names column "app.t.total", which this reading left out because its expression names column "app.t.Bad Name", whose own name no declaration can carry, so the key cannot be carried in the contract either. Rename the column in the database, then link the schema repository.',
 		);
 	});
 });

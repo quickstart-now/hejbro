@@ -18,6 +18,7 @@ const FIXTURE_ROWS: {
 			position: 1,
 			identityKind: "a",
 			generatedKind: "",
+			referencedColumns: [],
 		},
 	],
 	foreignKeyDetails: [

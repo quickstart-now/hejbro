@@ -72,6 +72,7 @@ const columnDetailRow = (
 	position,
 	identityKind: "",
 	generatedKind: "",
+	referencedColumns: [],
 });
 
 const enumLabelRows = (enumFixture: EnumFixture): ReadonlyArray<DriverRow> =>

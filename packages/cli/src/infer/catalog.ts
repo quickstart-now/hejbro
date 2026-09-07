@@ -24,6 +24,8 @@ const columnDetailRow = z.object({
 	position: z.number(),
 	identityKind: z.string(),
 	generatedKind: z.string(),
+	/** `pg_depend`'s own normal (`deptype = 'n'`) dependency of a stored generated column's `pg_attrdef` row on the columns its own expression names -- `[]` for any column that is not one (measured, `postgres:17-alpine`: the attrdef's dependency on its own column is `deptype = 'i'`, never `'n'`, so this never includes the generated column itself). 712/R11/R12: the same shape `indexDetails.referencedColumns` already carries for an index, read here because a generated column's expression can name a column this reading went on to omit. */
+	referencedColumns: z.array(z.string()),
 });
 export type ColumnDetailRow = z.infer<typeof columnDetailRow>;
 
@@ -152,7 +154,19 @@ export const INFER_CATALOG_QUERIES = {
 		select n.nspname as schema, c.relname as "table", a.attname as name,
 			a.attnum as position,
 			a.attidentity as "identityKind",
-			a.attgenerated as "generatedKind"
+			a.attgenerated as "generatedKind",
+			coalesce((
+				select json_agg(distinct dep_att.attname order by dep_att.attname)
+				from pg_attrdef ad
+				join pg_depend dep
+					on dep.classid = 'pg_attrdef'::regclass
+					and dep.objid = ad.oid
+					and dep.deptype = 'n'
+				join pg_attribute dep_att
+					on dep_att.attrelid = dep.refobjid
+					and dep_att.attnum = dep.refobjsubid
+				where ad.adrelid = a.attrelid and ad.adnum = a.attnum
+			), '[]'::json) as "referencedColumns"
 		from pg_class c
 		join pg_namespace n on n.oid = c.relnamespace
 		join pg_attribute a on a.attrelid = c.oid

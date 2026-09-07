@@ -73,6 +73,7 @@ describe("describeCatalog / 1.6", () => {
 					position: 1,
 					identityKind: "",
 					generatedKind: "",
+					referencedColumns: [],
 				},
 				{
 					schema: "app",
@@ -81,6 +82,7 @@ describe("describeCatalog / 1.6", () => {
 					position: 2,
 					identityKind: "",
 					generatedKind: "",
+					referencedColumns: [],
 				},
 			],
 		};
@@ -142,6 +144,7 @@ describe("describeCatalog / 1.6", () => {
 					position: 1,
 					identityKind: "",
 					generatedKind: "",
+					referencedColumns: [],
 				},
 				{
 					schema: "app",
@@ -150,6 +153,7 @@ describe("describeCatalog / 1.6", () => {
 					position: 2,
 					identityKind: "",
 					generatedKind: "",
+					referencedColumns: [],
 				},
 			],
 		};
@@ -230,6 +234,7 @@ describe("describeCatalog / 1.6", () => {
 					position: 1,
 					identityKind: "",
 					generatedKind: "",
+					referencedColumns: [],
 				},
 				{
 					schema: "app",
@@ -238,6 +243,7 @@ describe("describeCatalog / 1.6", () => {
 					position: 2,
 					identityKind: "",
 					generatedKind: "",
+					referencedColumns: [],
 				},
 				{
 					schema: "app",
@@ -246,6 +252,7 @@ describe("describeCatalog / 1.6", () => {
 					position: 3,
 					identityKind: "",
 					generatedKind: "",
+					referencedColumns: [],
 				},
 			],
 		};

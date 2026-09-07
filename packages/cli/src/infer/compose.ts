@@ -156,6 +156,7 @@ const filterInferenceCatalogToSchemas = (
 const tablesExcludingUndeclarableNames = (
 	tables: ReadonlyArray<InferredTableFacts>,
 	enumOmittedColumnIdentities: ReadonlySet<string>,
+	generatedExpressionOmittedColumnIdentities: ReadonlySet<string>,
 ): ReadonlyArray<InferredTableFacts> =>
 	tables.map((table) => ({
 		...table,
@@ -163,9 +164,11 @@ const tablesExcludingUndeclarableNames = (
 			if (!isNameDeclarable(column.sqlName, column.tsKey)) {
 				return false;
 			}
-			return !enumOmittedColumnIdentities.has(
-				`${table.schema.schemaName}.${table.tableName}.${column.sqlName}`,
-			);
+			const identity = `${table.schema.schemaName}.${table.tableName}.${column.sqlName}`;
+			if (enumOmittedColumnIdentities.has(identity)) {
+				return false;
+			}
+			return !generatedExpressionOmittedColumnIdentities.has(identity);
 		}),
 	}));
 
@@ -211,19 +214,136 @@ const checkOmittedColumnIdentities = (
 		.filter((identity) => omittedColumnIdentities.has(identity));
 
 /**
+ * A stored generated column's own name, to the columns its expression
+ * names (`infer/catalog.ts`'s `columnDetails.referencedColumns`,
+ * `pg_depend`'s own normal dependency of the column's `pg_attrdef` row)
+ * -- read once here rather than per table, mirroring `indexDetails`'s
+ * own `referencedColumns` this same identity-lookup shape already
+ * serves for an index.
+ */
+const generatedColumnReferencesByIdentity = (
+	inferenceCatalog: InferenceCatalog,
+): ReadonlyMap<string, ReadonlyArray<string>> =>
+	new Map(
+		inferenceCatalog.columnDetails
+			.filter((detail) => detail.generatedKind === "s")
+			.map(
+				(detail) =>
+					[
+						`${detail.schema}.${detail.table}.${detail.name}`,
+						detail.referencedColumns,
+					] as const,
+			),
+	);
+
+/**
+ * 712/R11/R12 (B1's own live review, cross-cutting cell 1): which
+ * columns a stored generated column's own expression names are already
+ * omitted -- the same shape {@link checkOmittedColumnIdentities} already
+ * gives a check constraint, since a generated column's own binding is
+ * its expression too. Applying the fix that makes a generated column's
+ * expression actually reach the starter (712/R11 B1) without this would
+ * leave a declaration whose `GENERATED ALWAYS AS` clause names a column
+ * this reading went on to omit -- Postgres itself refuses that
+ * `CREATE TABLE` (measured, postgres:17-alpine: `column "..." does not
+ * exist`), so the generated column has to be omitted with the column it
+ * depends on, the same "member at an omitted column" B#1 already gives
+ * every other object bound to one.
+ */
+const generatedColumnOmittedColumnIdentities = (
+	schema: string,
+	table: string,
+	sqlName: string,
+	generatedColumnReferences: ReadonlyMap<string, ReadonlyArray<string>>,
+	omittedColumnIdentities: ReadonlySet<string>,
+): ReadonlyArray<string> =>
+	(generatedColumnReferences.get(`${schema}.${table}.${sqlName}`) ?? [])
+		.map((columnName) => `${schema}.${table}.${columnName}`)
+		.filter((identity) => omittedColumnIdentities.has(identity));
+
+/**
+ * 712/R11/R12 (B1's own live review, cross-cutting cell 1): every stored
+ * generated column whose own expression names a column this reading
+ * already omits (for its own name, or for the enum type that types it)
+ * -- run against `mergedTables` (every column still present) and the
+ * name/enum-only causes map, *before* {@link partitionForeignKeys} and
+ * {@link excludePrimaryKeysReferencingOmittedColumns} run, so a foreign
+ * key or a primary key naming the generated column sees the same third
+ * cause an index, a check constraint or a unique constraint would
+ * (cfr1-planner's own measurement 2: without this, `ref_total_fkey`'s
+ * own target survived declared against a column that no longer exists,
+ * `references: { ..., columns: [t2.total] }` evaluating to `undefined`
+ * at load time and failing `baseline` with
+ * `error[foreign-key-empty-references]`, live). `axis` is always
+ * `"key"` (unread: a generated column has no predicate/expression-key
+ * distinction of its own, the same reason a check constraint's own
+ * entry never reads it).
+ */
+const generatedColumnOmissionsFor = (
+	tables: ReadonlyArray<InferredTableFacts>,
+	generatedColumnReferences: ReadonlyMap<string, ReadonlyArray<string>>,
+	nameAndEnumCauses: ReadonlyMap<string, ColumnOmissionCause>,
+): ReadonlyArray<OmittedTableMemberAtColumn> => {
+	const omittedColumnIdentities = new Set(nameAndEnumCauses.keys());
+
+	return tables.flatMap((table) =>
+		table.columns.flatMap((column) => {
+			const referencedIdentities = generatedColumnOmittedColumnIdentities(
+				table.schema.schemaName,
+				table.tableName,
+				column.sqlName,
+				generatedColumnReferences,
+				omittedColumnIdentities,
+			);
+			const offending = firstOffendingColumn(
+				referencedIdentities,
+				nameAndEnumCauses,
+			);
+			if (offending === undefined) {
+				return [];
+			}
+			return [
+				{
+					schema: table.schema.schemaName,
+					table: table.tableName,
+					sqlName: column.sqlName,
+					axis: "key" as const,
+					...offending,
+				},
+			];
+		}),
+	);
+};
+
+/**
  * 712/R10 B#1: which single column a multi-column member's own line
  * names, and that column's own cause -- the first by code point when
  * several were omitted at once (a composite index, J6), the same
  * "pick one, deterministically" shape 712/R9 already settled for a
  * foreign key lost at both ends.
  */
+/** `exactOptionalPropertyTypes` rejects `rootEnumIdentity: undefined` outright -- this is the one place both `firstOffendingColumn` and `omissionEntryFor` (`partitionForeignKeys`) build the optional key instead of always assigning it. */
+const rootEnumIdentityField = (
+	rootEnumIdentity: string | undefined,
+): { readonly rootEnumIdentity: string } | Record<string, never> => {
+	if (rootEnumIdentity === undefined) {
+		return {};
+	}
+	return { rootEnumIdentity };
+};
+
 const firstOffendingColumn = (
 	columnIdentities: ReadonlyArray<string>,
 	columnOmissionCauses: ReadonlyMap<string, ColumnOmissionCause>,
 ):
 	| Pick<
 			OmittedTableMemberAtColumn,
-			"columnIdentity" | "cause" | "enumIdentity"
+			| "columnIdentity"
+			| "cause"
+			| "enumIdentity"
+			| "rootColumnIdentity"
+			| "rootCause"
+			| "rootEnumIdentity"
 	  >
 	| undefined => {
 	const [first] = [...columnIdentities].sort(compareCodeUnits);
@@ -239,6 +359,15 @@ const firstOffendingColumn = (
 			columnIdentity: first,
 			cause: "enum",
 			enumIdentity: cause.enumIdentity,
+		};
+	}
+	if (cause.cause === "generatedExpression") {
+		return {
+			columnIdentity: first,
+			cause: "generatedExpression",
+			rootColumnIdentity: cause.rootColumnIdentity,
+			rootCause: cause.rootCause,
+			...rootEnumIdentityField(cause.rootEnumIdentity),
 		};
 	}
 	return { columnIdentity: first, cause: "name" };
@@ -655,11 +784,37 @@ export type ForeignKeyPartition = {
  * Which rule excluded a column, and (712/R8) the enum's own identity
  * when that rule is D36 on the *enum's* name rather than the column's --
  * the one lookup a foreign key at that column consults for its own
- * omission line's cause.
+ * omission line's cause. 712/R11/R12 cross-cutting cell 1's own second-
+ * order cascade: a stored generated column can itself be excluded
+ * because its own expression names an already-omitted column
+ * ({@link generatedColumnOmissionsFor}) -- its own name is perfectly
+ * fine, so `"name"` would misstate the reason to any index, check,
+ * unique constraint, primary key or foreign key that still names it.
+ * `"generatedExpression"` carries the *root* cause too (cfr1-planner's
+ * own measurement, lead ruling (B)): an anonymous "a column this
+ * reading already left out" names nothing a member's own line's reader
+ * can act on, and when the root cause is itself `"enum"`, "rename the
+ * column" is an outright wrong exit -- the type is what has to be
+ * renamed. `rootColumnIdentity`/`rootCause`/`rootEnumIdentity` are
+ * exactly {@link firstOffendingColumn}'s own return shape for the root,
+ * already computed once when the generated column's own line is built,
+ * carried through rather than re-derived.
  */
 export type ColumnOmissionCause =
 	| { readonly cause: "name" }
-	| { readonly cause: "enum"; readonly enumIdentity: string };
+	| { readonly cause: "enum"; readonly enumIdentity: string }
+	| {
+			readonly cause: "generatedExpression";
+			readonly rootColumnIdentity: string;
+			// Never itself "generatedExpression": Postgres refuses a
+			// generated column's own expression naming another generated
+			// column outright ("cannot use generated column ... in column
+			// generation expression", measured, postgres:17-alpine), so a
+			// root is always an ordinary column and this union closes at
+			// two causes.
+			readonly rootCause: "name" | "enum";
+			readonly rootEnumIdentity?: string;
+	  };
 
 /**
  * D106 R6-B1: a foreign key is omitted for exactly the reason every
@@ -714,6 +869,21 @@ export const partitionForeignKeys = (
 					end,
 					cause: "enum",
 					enumIdentity: cause.enumIdentity,
+				},
+			];
+		}
+		if (cause.cause === "generatedExpression") {
+			return [
+				{
+					schema: facts.schema.schemaName,
+					table: facts.tableName,
+					name: fk.name,
+					columnIdentity: identity,
+					end,
+					cause: "generatedExpression",
+					rootColumnIdentity: cause.rootColumnIdentity,
+					rootCause: cause.rootCause,
+					...rootEnumIdentityField(cause.rootEnumIdentity),
 				},
 			];
 		}
@@ -1046,7 +1216,7 @@ export const inferFromCatalog = async (
 	// cause -- name and enum causes never collide on one column identity
 	// (D2, `enumOmittedColumns`'s own `isNameDeclarable` guard above), so
 	// this spread order never needs to break a tie.
-	const columnOmissionCauses = new Map<string, ColumnOmissionCause>([
+	const nameAndEnumCauses = new Map<string, ColumnOmissionCause>([
 		...undeclarableColumns.map(
 			(column) =>
 				[
@@ -1065,6 +1235,60 @@ export const inferFromCatalog = async (
 				] as const,
 		),
 	]);
+	// 712/R11/R12 (cross-cutting cell 1, cfr1-planner's own measurement 2):
+	// computed against `mergedTables` (every column still present) and
+	// only the name/enum causes above -- *before* `columnOmissionCauses`
+	// is finalized, so the foreign-key and primary-key exclusions below
+	// see this third cause too, the same as the index/check/unique
+	// exclusion already does through the one shared map. Without this
+	// ordering, a foreign key or a primary key naming the now-omitted
+	// generated column would survive declared against a column that no
+	// longer exists (measured live: `baseline` failing
+	// `error[foreign-key-empty-references]` on a foreign key whose own
+	// target column evaluated to `undefined`).
+	const generatedColumnOmissions = generatedColumnOmissionsFor(
+		mergedTables,
+		generatedColumnReferencesByIdentity(inferenceCatalog),
+		nameAndEnumCauses,
+	);
+	// 712/R12 (B, cfr1-planner's own measurement): each entry's own
+	// `cause`/`enumIdentity` here is the *root*'s (computed above against
+	// `nameAndEnumCauses` alone, never "generatedExpression" in practice)
+	// -- carried into the generated column's own `columnOmissionCauses`
+	// entry so a member naming it can name the root, not an anonymous
+	// "a column this reading already left out", and pick the tail the
+	// root's own cause earns (name -> rename the column, enum -> rename
+	// the type), never this column's.
+	const rootCauseFieldsFor = (
+		entry: Pick<OmittedTableMemberAtColumn, "cause" | "enumIdentity">,
+	): Pick<
+		Extract<ColumnOmissionCause, { readonly cause: "generatedExpression" }>,
+		"rootCause" | "rootEnumIdentity"
+	> => {
+		if (entry.cause === "enum" && entry.enumIdentity !== undefined) {
+			return { rootCause: "enum", rootEnumIdentity: entry.enumIdentity };
+		}
+		return { rootCause: "name" };
+	};
+	const columnOmissionCauses = new Map<string, ColumnOmissionCause>([
+		...nameAndEnumCauses,
+		...generatedColumnOmissions.map(
+			(entry) =>
+				[
+					`${entry.schema}.${entry.table}.${entry.sqlName}`,
+					{
+						cause: "generatedExpression" as const,
+						rootColumnIdentity: entry.columnIdentity,
+						...rootCauseFieldsFor(entry),
+					},
+				] as const,
+		),
+	]);
+	const generatedExpressionOmittedColumnIdentities = new Set(
+		generatedColumnOmissions.map(
+			(entry) => `${entry.schema}.${entry.table}.${entry.sqlName}`,
+		),
+	);
 	// B#1 (live review): the same unified set every index/check/unique
 	// exclusion below reads -- never re-derived per caller.
 	const omittedColumnIdentities = new Set(columnOmissionCauses.keys());
@@ -1103,9 +1327,17 @@ export const inferFromCatalog = async (
 		columnOmissionCauses,
 		primaryKeyNamesByTable,
 	);
+	// A generated column left in place after the column its own
+	// expression names is gone would emit a `GENERATED ALWAYS AS` clause
+	// Postgres itself refuses at `CREATE TABLE` (712/R11/R12) -- dropped
+	// in the same pass as the enum-typed exclusion, since
+	// `generatedExpressionOmittedColumnIdentities` was already computed
+	// above, ahead of the foreign-key/primary-key exclusions that also
+	// need it.
 	const snapshotTables = tablesExcludingUndeclarableNames(
 		primaryKeyExclusion.tables,
 		enumOmittedColumnIdentities,
+		generatedExpressionOmittedColumnIdentities,
 	);
 	const memberExclusion = excludeMembersReferencingOmittedColumns(
 		snapshotTables,
@@ -1171,6 +1403,7 @@ export const inferFromCatalog = async (
 		omittedChecksAtColumn: memberExclusion.omittedChecksAtColumn,
 		omittedUniqueConstraintsAtColumn:
 			memberExclusion.omittedUniqueConstraintsAtColumn,
+		omittedGeneratedColumnsAtColumn: generatedColumnOmissions,
 		omittedPrimaryKeys: primaryKeyExclusion.omittedPrimaryKeys,
 	});
 

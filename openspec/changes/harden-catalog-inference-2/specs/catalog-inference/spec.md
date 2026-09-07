@@ -49,10 +49,10 @@ trip and fails the rule — the very case a rule predicting the DSL's
 answer got wrong — and both are omitted and named. A table or schema
 left out for a name no declaration can carry takes the objects it
 holds with it, and the foreign keys that point at it; a column left
-out takes with it every index, check, unique constraint and primary
-key that names it, and every foreign key that references it or is
-referenced through it, so a starter declaration always loads: a
-surviving declaration SHALL never
+out takes with it every index, check, unique constraint, primary key
+and generated column that names it, and every foreign key that
+references it or is referenced through it, so a starter declaration
+always loads: a surviving declaration SHALL never
 reference an object this reading omitted for its name, and the report
 SHALL never announce an approximation for one. A target that lies
 outside the schemas the run named is a different case and SHALL be
