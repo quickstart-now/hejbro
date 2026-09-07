@@ -1,0 +1,12 @@
+{
+  "version": 3,
+  "number": 1027,
+  "ref": "quickstart-now/hejbro#1027",
+  "title": "chore(blackbox): vendor the numbering fix from dd-blackbox (#943)",
+  "head": "a0780d2425b400140dbac4550bd4b0802c6534d7",
+  "headRef": "fix-blackbox-next-id",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-07T13:53Z",
+  "refs": []
+}
