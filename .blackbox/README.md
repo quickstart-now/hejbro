@@ -75,7 +75,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#663](663/) | test: the scoped vendored fn observer never asserts the context SQL | closed | #896 | 0 | 0 (0 pending) |
 | ↳ [#667](667/) | test: the vendored read of an existing table is witnessed only under Docker | closed | #896 | 0 | 0 (0 pending) |
 | ↳ [#668](668/) | generate: warn when adopting an existing table will create sequences, RLS or policies that may already exist | closed | #1019 | 0 | 0 (0 pending) |
-| ↳ [#671](671/) | existing: adoption never creates the adopted table's declared indexes, checks, FKs or primary key | closed | #1019 | 0 | 8 (4 pending) |
+| ↳ [#671](671/) | existing: adoption never creates the adopted table's declared indexes, checks, FKs or primary key | closed | #1019 | 0 | 10 (5 pending) |
 | ↳ [#673](673/) | test: subprocess-spawning suites time out under a full parallel pnpm test and pass in isolation | closed | #773 | 0 | 7 (0 pending) |
 | ↳ [#674](674/) | examples: declare an existing table in the supabase example so the round trip covers the brownfield path | closed | #897 | 0 | 0 (0 pending) |
 | ↳ [#678](678/) | infer: role names from policies, not only from grants | closed | #1026 | 0 | 0 (0 pending) |
@@ -248,7 +248,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 
 ## Totals
 
-Owner decisions 95 · rulings 321 (interpretation 212, extension 107, stop 2) · pending extensions 69 · rejected 2
+Owner decisions 95 · rulings 323 (interpretation 213, extension 108, stop 2) · pending extensions 70 · rejected 2
 
 ## Conventions
 

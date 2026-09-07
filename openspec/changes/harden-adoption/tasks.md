@@ -46,7 +46,7 @@ into the diff.
       Next; handover and a new table print nothing; the migration is
       written either way. Files: `generate.ts`, tests.
 
-- [ ] 1.3a (~8m) The missing-column risk (review round 1, B1/N4).
+- [x] 1.3a (~8m) The missing-column risk (review round 1, B1/N4).
       Red: the generate command tests — an input table over {index,
       check, foreign key} × {the existing declaration carries the
       column; it does not}, both created either way, the notice
@@ -73,3 +73,78 @@ into the diff.
       states the optional `transition` field on `KindChange` (671/R4);
       `pnpm changeset` → `minor`. Files: the two references,
       `.changeset/*.md`.
+
+## 2. D106 round 1 corrections (evaluation.md B1, B2, N4, N8)
+
+One group, one team, sequential; lands on `fix-adoption-d106-r1` as
+its own PR with a `patch` changeset. Task 1.3a above shipped in PR
+#1019 (13b0c9d5) and is ticked here. **Files edited**:
+`packages/core/src/engine/diff-engine.ts`, `packages/core/src/kinds/
+table-kind*.ts` and their tests plus goldens (2.1); `packages/cli/src/
+commands/generate.ts` and its tests, `packages/cli/test/
+*.integration.test.ts` (2.1, 2.2, 2.3); `openspec/changes/
+harden-adoption/specs/{table-declaration,cli-commands}/spec.md` (2.2,
+2.3); `skills/hejbro/references/brownfield-adoption.md` (2.2, 2.3);
+one `.changeset/*.md`, `openspec/task-times.csv` (2.3). Anything else
+goes back to the planner. Commit condition, serial: `TURBO_FORCE=1
+pnpm check` first, then `check-types`, `test`, `check:crap`; report
+exit codes and the SHA.
+
+**Ordering.** 2.1 → 2.2 → 2.3.
+
+- [ ] 2.1 (~10m) B1 — the primary key is created on adoption whatever
+      the existing declaration listed (671/R9). Red: diff-engine /
+      table-kind tests over an input table {the existing declaration
+      listed the PK; it did not} × {the table has other children to
+      create; it has none} × {PK declared column-level
+      `.primaryKey()`; table-level composite}: every cell whose managed
+      declaration carries a PK emits `alter table … add constraint
+      "<t>_pkey" primary key (…)` on the existing → managed transition,
+      including the cell that used to adopt silently (a PK on both
+      sides and nothing else): it now creates the PK and
+      `adoption-creates` names it, which is what the delta's "every …
+      primary key the declaration carries is created" says. The FK
+      cell already behaves this way and is the control. Green: the
+      table kind's adoption branch treats the PK like its other
+      children — the existing side's snapshot never suppresses a
+      create. Live witness: the review's `p2-children` `posts` replay
+      (`/private/tmp/d106-ha/p2-children`, PK listed on both sides,
+      two indexes, a check, two FKs) applies with the PK in the
+      catalog and `check` reports no differences. Mutation: restoring
+      the existing-side suppression reddens exactly the listed-PK
+      cells. Files: core engine/kind, tests, goldens, generate tests.
+
+- [ ] 2.2 (~10m) **[design]** B2 — a `Next:` first branch that runs on
+      the database it describes (671/R10). Measure first, then settle:
+      on the review's `p3b-children-roundtrip` state (managed → handed
+      over → re-adopted, database holding every object), does `hejbro
+      migrate` register the re-adoption migration without running it
+      when that migration carries the baseline marker (migration-apply,
+      *A baseline is registered rather than run*: "A migration carrying
+      the baseline marker … SHALL record it in the ledger with the
+      `registered` origin, without executing its statements")? Report
+      the measured answer to the lead before writing text. Branch (a),
+      it registers: the `Next:` first branch names that path in the
+      words the skill will document, the scenario sentence "`hejbro
+      baseline` records what the database already holds" becomes the
+      measured sentence, and the reference's two contradictory
+      paragraphs are rewritten as one. Branch (b), it does not: the
+      `Next:` first branch says to keep the table handed over (restore
+      the migration and snapshot this run wrote, the same two-file
+      revert the second branch already spells out) or to drop the held
+      objects and apply, the scenario sentence says exactly that, and a
+      follow-up issue under #995 asks for a mid-chain "register what
+      the database already holds" path. Red either way: the generate
+      command tests pin the new `Next:` text; a live witness follows
+      the first branch literally on `p3b` to a `check` with no
+      differences and a ledger row. Files: `generate.ts`, tests, the two
+      delta specs, `brownfield-adoption.md`.
+
+- [ ] 2.3 (~5m) Text, ledger, changeset. N4: the notice's first
+      sentence names only the objects a held copy makes fail (index,
+      check, foreign key, primary key) — a held sequence is reused, RLS
+      enablement and policies are idempotent — pinned by the generate
+      tests. N8: the delta scenario writes `existingTable("app",
+      "widgets", …)`. Tick 1.3a. `pnpm changeset` → `patch`; one ledger
+      row per task; README badges. Files: `generate.ts`, tests, the
+      delta specs, `.changeset/*.md`, `task-times.csv`, `README.md`.

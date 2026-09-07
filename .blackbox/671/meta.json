@@ -108,6 +108,30 @@
       "at": "2026-09-06T04:05Z",
       "title": "review B1: adoption-creates names the missing-column risk and check --url; no generate-time refusal (a partial existing declaration is by design); N4 fixed in the piece; B2 N3 N1 wording",
       "ratified": null
+    },
+    {
+      "id": "R9",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "671/R1",
+        "671/R2"
+      ],
+      "at": "2026-09-07T14:29Z",
+      "title": "the primary key is created on adoption whatever the existing side listed (D106 R1 B1)",
+      "ratified": null
+    },
+    {
+      "id": "R10",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "671/R3",
+        "671/R8"
+      ],
+      "at": "2026-09-07T14:29Z",
+      "title": "the Next: first branch must run on the database it describes; measured fork (D106 R1 B2)",
+      "ratified": null
     }
   ],
   "work": [
