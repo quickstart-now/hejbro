@@ -19,7 +19,12 @@ import {
  * carries children re-adopts as `adoption-creates`, not a clean apply,
  * and the general round trip (a handover snapshot that remembers its
  * children) is #1009, not this piece. C-2 is the piece's other witness:
- * a table that was never hejbro's, made by hand, adopted whole. Docker-
+ * a table that was never hejbro's, made by hand, adopted whole. 671/R10
+ * (D106 R1 B2) adds the two B2 witnesses at the bottom of this file: a
+ * re-adoption whose database already holds every object has exactly two
+ * `Next:` ways through -- handing the table back (three files reverted)
+ * or dropping what a held copy would collide on (never the sequence) --
+ * and both are witnessed live rather than only documented. Docker-
  * gated the same way `live-witness.integration.test.ts`/
  * `check-live.integration.test.ts` are (own container, own database, own
  * cleanup) -- never runs under the default `pnpm test`, only
@@ -39,6 +44,11 @@ const DATABASE_P7 = "app_adoption_witness_p7";
 const DATABASE_P9 = "app_adoption_witness_p9";
 const DATABASE_P6 = "app_adoption_witness_p6";
 const DATABASE_P6R = "app_adoption_witness_p6r";
+// 671/R10, D106 R1 B2: the two ways through a re-adoption whose database
+// already holds every object, on the corpus's own `p3b-children-roundtrip`
+// shape (serial primary key, an index, a check).
+const DATABASE_B2_REVERT = "app_adoption_witness_b2_revert";
+const DATABASE_B2_DROP = "app_adoption_witness_b2_drop";
 
 const dockerAvailable = (): boolean => {
 	try {
@@ -190,6 +200,24 @@ beforeAll(async () => {
 		"postgres",
 		"-c",
 		`create database ${DATABASE_P6R};`,
+	]);
+	execFileSync("docker", [
+		"exec",
+		CONTAINER,
+		"psql",
+		"-U",
+		"postgres",
+		"-c",
+		`create database ${DATABASE_B2_REVERT};`,
+	]);
+	execFileSync("docker", [
+		"exec",
+		CONTAINER,
+		"psql",
+		"-U",
+		"postgres",
+		"-c",
+		`create database ${DATABASE_B2_DROP};`,
 	]);
 	assertBuiltCli();
 }, 120_000);
@@ -948,6 +976,227 @@ describe("brownfield adoption / live witness -- recovering from the missing-colu
 			]);
 			expect(check.exitCode).toBe(0);
 			expect(check.stdout).toContain("check: no differences.");
+		} finally {
+			await driver.client.end();
+			await removeCliFixtureDir(cwd);
+		}
+	}, 60_000);
+});
+
+// 671/R10, D106 R1 B2: the `Next:` line's two ways through, both run on
+// the database this run just adopted (neither `hejbro baseline`, which
+// `error[baseline-not-first]` always refuses by this point). Managed
+// (serial primary key, an index, a check) -> handed over -> re-adopted,
+// database holding every object -- the corpus's own `p3b-children-
+// roundtrip` shape.
+
+const B2_MANAGED_SOURCE = `import { check, index, integer, schema, serial, sql, table, text } from "hejbro";
+
+export const b2 = schema("b2");
+
+export const orders = table(
+	b2,
+	"orders",
+	{ id: serial().primaryKey(), total: integer().notNull(), note: text() },
+	(t) => ({
+		indexes: [index().on(t.total)],
+		checks: [check("orders_total_nonneg", sql\`\${t.total} >= 0\`)],
+	}),
+);
+`;
+
+const B2_EXISTING_SOURCE = `import { existingTable, integer, schema, serial, text } from "hejbro";
+
+export const b2 = schema("b2");
+
+export const orders = existingTable("b2", "orders", {
+	id: serial().primaryKey(), total: integer().notNull(), note: text(),
+});
+`;
+
+describe("brownfield adoption / live witness -- the Next: line's first way, handing the table back (671/task 2.2, B2 revert path)", () => {
+	it("reverting the migration, the snapshot and the declaration leaves verify, status and check clean with no new ledger row", async () => {
+		const cwd = await createCliFixtureDir();
+		const driver = pgDriver(fixtureUrl(DATABASE_B2_REVERT));
+		try {
+			const init = await runCli(cwd, ["init"]);
+			expect(init.exitCode).toBe(0);
+
+			await writeFixtureFile(cwd, SCHEMA_PATH, B2_MANAGED_SOURCE);
+			await runCli(cwd, ["generate"]);
+			const firstMigrate = await runCli(cwd, [
+				"migrate",
+				"--url",
+				fixtureUrl(DATABASE_B2_REVERT),
+			]);
+			expect(firstMigrate.exitCode).toBe(0);
+
+			await writeFixtureFile(cwd, SCHEMA_PATH, B2_EXISTING_SOURCE);
+			await runCli(cwd, ["generate"]);
+			const handoverMigrate = await runCli(cwd, [
+				"migrate",
+				"--url",
+				fixtureUrl(DATABASE_B2_REVERT),
+			]);
+			expect(handoverMigrate.exitCode).toBe(0);
+
+			const migrationsDir = join(cwd, "migrations");
+			const snapshotPath = join(cwd, "hejbro.snapshot.json");
+			const migrationsBeforeAdopt = new Set(await readdir(migrationsDir));
+			const snapshotBeforeAdopt = await readFile(snapshotPath, "utf8");
+			const ledgerBeforeAdopt = await driver.client.query(
+				"select count(*)::int as count from hejbro.migration_ledger",
+			);
+
+			// Re-adopt: the database already holds the sequence, the index,
+			// the check and the primary key.
+			await writeFixtureFile(cwd, SCHEMA_PATH, B2_MANAGED_SOURCE);
+			const adoptGenerate = await runCli(cwd, ["generate"]);
+			expect(adoptGenerate.exitCode).toBe(0);
+			expect(adoptGenerate.stderr).toContain(
+				"warning[adoption-creates]: b2.orders",
+			);
+			expect(adoptGenerate.stderr).toContain('primary key "orders_pkey"');
+			expect(adoptGenerate.stderr).toContain(
+				"either hand the table back — restore the migration and the snapshot this run just wrote and the existingTable() declaration it replaced",
+			);
+
+			const migrationsAfterAdopt = await readdir(migrationsDir);
+			const newMigrationNames = migrationsAfterAdopt.filter(
+				(name) => !migrationsBeforeAdopt.has(name),
+			);
+			expect(newMigrationNames.length).toBe(1);
+			const [newMigrationName] = newMigrationNames;
+			const newMigrationPath = join(migrationsDir, newMigrationName as string);
+
+			// The first way through: hand the table back -- all three files
+			// this run touched, restored.
+			await rm(newMigrationPath);
+			await writeFile(snapshotPath, snapshotBeforeAdopt);
+			await writeFixtureFile(cwd, SCHEMA_PATH, B2_EXISTING_SOURCE);
+
+			const verify = await runCli(cwd, ["verify"]);
+			expect(verify.exitCode).toBe(0);
+
+			const status = await runCli(cwd, [
+				"status",
+				"--url",
+				fixtureUrl(DATABASE_B2_REVERT),
+			]);
+			expect(status.exitCode).toBe(0);
+			expect(status.stdout).toContain("nothing pending");
+
+			const check = await runCli(cwd, [
+				"check",
+				"--url",
+				fixtureUrl(DATABASE_B2_REVERT),
+			]);
+			expect(check.exitCode).toBe(0);
+			expect(check.stdout).toContain("check: no differences.");
+
+			const generateAfterRevert = await runCli(cwd, ["generate"]);
+			expect(generateAfterRevert.exitCode).toBe(0);
+			expect(generateAfterRevert.stdout).toContain("no changes");
+
+			const ledgerAfterRevert = await driver.client.query(
+				"select count(*)::int as count from hejbro.migration_ledger",
+			);
+			expect(ledgerAfterRevert.rows[0]?.count).toBe(
+				ledgerBeforeAdopt.rows[0]?.count,
+			);
+		} finally {
+			await driver.client.end();
+			await removeCliFixtureDir(cwd);
+		}
+	}, 60_000);
+});
+
+describe("brownfield adoption / live witness -- the Next: line's second way, dropping what a held copy would collide on (671/task 2.2, B2 drop path)", () => {
+	it("migrate fails 42P16 with the primary key left in place, and applies cleanly once the index, the check and the primary key are dropped -- the sequence untouched", async () => {
+		const cwd = await createCliFixtureDir();
+		const driver = pgDriver(fixtureUrl(DATABASE_B2_DROP));
+		try {
+			const init = await runCli(cwd, ["init"]);
+			expect(init.exitCode).toBe(0);
+
+			await writeFixtureFile(cwd, SCHEMA_PATH, B2_MANAGED_SOURCE);
+			await runCli(cwd, ["generate"]);
+			const firstMigrate = await runCli(cwd, [
+				"migrate",
+				"--url",
+				fixtureUrl(DATABASE_B2_DROP),
+			]);
+			expect(firstMigrate.exitCode).toBe(0);
+
+			await writeFixtureFile(cwd, SCHEMA_PATH, B2_EXISTING_SOURCE);
+			await runCli(cwd, ["generate"]);
+			const handoverMigrate = await runCli(cwd, [
+				"migrate",
+				"--url",
+				fixtureUrl(DATABASE_B2_DROP),
+			]);
+			expect(handoverMigrate.exitCode).toBe(0);
+
+			await writeFixtureFile(cwd, SCHEMA_PATH, B2_MANAGED_SOURCE);
+			const adoptGenerate = await runCli(cwd, ["generate"]);
+			expect(adoptGenerate.exitCode).toBe(0);
+			expect(adoptGenerate.stderr).toContain(
+				"warning[adoption-creates]: b2.orders",
+			);
+
+			// The primary key sorts before the index and the check in the
+			// emitted alter (671/R9), so the first statement to fail against
+			// a database that already holds all three is the primary key's
+			// own `add constraint` -- `42P16`, not the index's `42P07`.
+			const firstMigrateAttempt = await runCli(cwd, [
+				"migrate",
+				"--url",
+				fixtureUrl(DATABASE_B2_DROP),
+			]);
+			expect(firstMigrateAttempt.exitCode).toBe(1);
+			expect(firstMigrateAttempt.stderr).toContain("42P16");
+
+			// The second way through: drop what a held copy makes fail,
+			// never the sequence.
+			applySql(
+				DATABASE_B2_DROP,
+				`
+				drop index "b2"."orders_total_idx";
+				alter table "b2"."orders" drop constraint "orders_total_nonneg";
+				alter table "b2"."orders" drop constraint "orders_pkey";
+			`,
+			);
+
+			const secondMigrateAttempt = await runCli(cwd, [
+				"migrate",
+				"--url",
+				fixtureUrl(DATABASE_B2_DROP),
+			]);
+			expect(secondMigrateAttempt.exitCode).toBe(0);
+			expect(secondMigrateAttempt.stdout).toContain("migrate: applied");
+
+			const check = await runCli(cwd, [
+				"check",
+				"--url",
+				fixtureUrl(DATABASE_B2_DROP),
+			]);
+			expect(check.exitCode).toBe(0);
+			expect(check.stdout).toContain("check: no differences.");
+
+			const ledgerRows = await driver.client.query(
+				"select filename, origin from hejbro.migration_ledger order by id",
+			);
+			expect(ledgerRows.rows.at(-1)).toMatchObject({ origin: "applied" });
+
+			// The sequence was left alone: the column's `nextval` default
+			// survived, unlike a dropped-and-recreated sequence would.
+			const defaultRows = await driver.client.query(
+				"select column_default from information_schema.columns where table_schema = $1 and table_name = $2 and column_name = $3",
+				["b2", "orders", "id"],
+			);
+			expect(defaultRows.rows[0]?.column_default).toBe(
+				"nextval('b2.orders_id_seq'::regclass)",
+			);
 		} finally {
 			await driver.client.end();
 			await removeCliFixtureDir(cwd);

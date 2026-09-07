@@ -130,14 +130,15 @@ exit codes and the SHA.
       measured sentence, and the reference's two contradictory
       paragraphs are rewritten as one. Branch (b), it does not: the
       `Next:` first branch says to keep the table handed over (restore
-      the migration and snapshot this run wrote, the same two-file
-      revert the second branch already spells out) or to drop the held
+      the migration, the snapshot and the declaration this run wrote —
+      three files, not the second branch's two) or to drop the held
       objects and apply, the scenario sentence says exactly that, and a
       follow-up issue under #995 asks for a mid-chain "register what
       the database already holds" path. Red either way: the generate
       command tests pin the new `Next:` text; a live witness follows
       the first branch literally on `p3b` to a `check` with no
-      differences and a ledger row. Files: `generate.ts`, tests, the two
+      differences and a ledger row for the drop path, pending 0 for the
+      revert path. Files: `generate.ts`, tests, the two
       delta specs, `brownfield-adoption.md`.
 
 - [ ] 2.3 (~5m) Text, ledger, changeset. N4: the notice's first

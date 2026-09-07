@@ -207,24 +207,35 @@ loudly, exactly as any other `create` would.
 literal `warning[adoption-creates]` diagnostic, one block per adopted
 table that the migration creates anything for — a table adopted with
 nothing to create (only a column changed, say) is adopted silently.
-The block also states that apply fails if the database lacks a column
-one of the named objects needs, and that `hejbro check --url <url>`
-names such a column beforehand; its `Next:` line then offers two
-branches — run `hejbro baseline` for a database that already holds
-these objects, or, for one that lacks a column, discard the migration
-and snapshot this run just wrote, adopt with the columns the database
-has, then add the column and its objects in a following edit. `hejbro
-baseline` is the same command `error[baseline-not-first]` (above)
-refuses to run a second time.
+The block states that apply fails if the database already holds one of
+the indexes, checks, foreign keys or the primary key named below it —
+a sequence it already holds is reused, and row-level security and
+policies are re-applied without failing — and that apply also fails if
+the database lacks a column one of the named objects needs, with
+`hejbro check --url <url>` naming such a column beforehand. Its `Next:`
+line then names the two ways that actually run on the database this
+run just adopted: hand the table back — restore the migration and the
+snapshot this run just wrote and the `existingTable()` declaration it
+replaced — or drop the indexes, checks, foreign keys and primary key it
+already holds, never the sequence, and run `hejbro migrate`; for a
+database that lacks a column instead, discard the migration and
+snapshot this run just wrote, adopt with the columns the database has,
+then add the column and its objects in a following edit. `hejbro
+baseline` is not one of them: it is the first migration of an adopted
+database, and `error[baseline-not-first]` refuses it afterwards.
 
-The diagnostic prints *after* `generate` has already written the
-migration file and the new snapshot, so the second branch's first step
-is undoing what this run just wrote — both files, restored together
+For the branch where the database lacks a column, the diagnostic prints
+*after* `generate` has already written the migration file and the new
+snapshot, so that branch's first step is undoing what this run just
+wrote — both files, restored together
 through version control (e.g. `git checkout -- <migration file>
 <snapshot file>`), never just one: reverting only the migration file
 leaves the snapshot still recording the adoption as done, so the next
 `hejbro generate` reports "no changes" instead of writing back the
-migration you just deleted — unless the declaration has already moved
+migration you just deleted — and `hejbro verify` does not read that as
+fine either: it exits 1 with `error[chain-tip-mismatch]`, because the
+restored snapshot's own recorded hash no longer matches any surviving
+migration's tip — unless the declaration has already moved
 on to the recovery's own next step (adopting with the columns the
 database has), in which case `generate` writes a second migration whose
 parent-snapshot is the snapshot the deleted migration had produced —
@@ -262,9 +273,25 @@ objects in the database untouched, and adoption creates each one the
 same plain way a first-time managed table's own creation would, so
 re-adopting such a declaration fails against what the handover already
 left in place. `warning[adoption-creates]` already named what it would
-have tried to create, so the way through is `hejbro baseline` instead
-of `hejbro generate` — it records what the database already holds
-rather than trying to create it again.
+have tried to create, and the two ways through both run on the
+database this run just adopted. Handing the table back reverts three
+files here, not the missing-column branch's two: the migration, the
+snapshot, *and* the declaration this run changed back to
+`existingTable()` — reverting only the first two leaves the declaration
+still `table()`, and `hejbro verify` refuses with
+`error[snapshot-stale]`, exit 1. Dropping instead touches only the
+indexes, checks, foreign keys and the primary key the database already
+holds, never the sequence, which a held copy already reuses cleanly:
+dropping it too loses the `nextval` default a `serial` column carries,
+which no later `generate` re-attaches (the snapshot already records the
+column as serial), so `hejbro check` reports
+`error[check-object-differs]: <table>.<column>` from then on and
+`generate` has nothing left to fix. Dropping a primary key other tables
+reference needs those foreign keys dropped first, and rows inserted
+between the drop and the apply can make the re-creation fail on
+duplicates — hand the table back instead when the table is live. A
+mid-chain path that records what the database already holds without
+reverting or dropping anything does not exist yet (#1037).
 
 **Adoption is a step after `baseline`**: what a database already
 holds — its schemas and its objects — is `baseline`'s to record.

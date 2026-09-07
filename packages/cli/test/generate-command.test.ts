@@ -1526,13 +1526,13 @@ export default defineConfig({
 	});
 });
 
-describe("hejbro generate — adoption-creates (671/task 1.3, 1.3a)", () => {
+describe("hejbro generate — adoption-creates (671/task 1.3, 1.3a, 671/R10 D106 R1 B2)", () => {
 	const adoptionCreatesIntro =
-		"adoption creates objects for a table hejbro did not create; apply fails if the database already holds any of them";
+		"adoption creates objects for a table hejbro did not create; apply fails if the database already holds one of the indexes, checks, foreign keys or the primary key named below — a sequence it already holds is reused, and row-level security and policies are re-applied without failing";
 	const missingColumnRisk =
 		'apply also fails if the database lacks a column one of these objects needs — "hejbro check --url <url>" names such a column before you migrate';
 	const nextLine =
-		'Next: if the database already holds these, run "hejbro baseline" to record them instead of applying this migration; if it lacks a column, discard the migration and snapshot this run just wrote, adopt with the columns the database has, then add the column and its objects in a following edit.';
+		'Next: if the database already holds these, either hand the table back — restore the migration and the snapshot this run just wrote and the existingTable() declaration it replaced — or drop the indexes, checks, foreign keys and primary key it already holds, never the sequence, and run "hejbro migrate"; if it lacks a column, discard the migration and snapshot this run just wrote, adopt with the columns the database has, then add the column and its objects in a following edit.';
 
 	it("names only the sequence for an adoption that fans out into a sequence alone (671/task 1.3, table A: sequence)", async () => {
 		await runCli(cwd, ["init"]);
