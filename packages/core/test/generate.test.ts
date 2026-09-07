@@ -1067,6 +1067,27 @@ describe("an existing declaration emits nothing (add-unmanaged-objects, #605)", 
 		).not.toHaveProperty("existing");
 	});
 
+	// 671/R9, D106 R1 B1, review round 1 F1: `uo6` above narrowed this
+	// cell's own guard when it was rewritten to assert the PK create --
+	// nothing was left pinning "an adoption with zero declared children
+	// (no primary key anywhere) stays silent" now that the empty-diff
+	// check also asks `adoptionCreatesPrimaryKey`.
+	it("an adoption with no declared children at all, and no primary key on either side, stays silent", () => {
+		const app = schema("uo6b");
+		const existing = existingTable("uo6b", "widgets", { id: uuid() });
+		const firstResult = generateMigration({
+			declarations: [app, getTableMeta(existing)],
+			previousSnapshot: emptySnapshot,
+		});
+		const managed = table(app, "widgets", { id: uuid() });
+		const secondResult = generateMigration({
+			declarations: [app, managed],
+			previousSnapshot: firstResult.snapshot,
+		});
+		expect(secondResult.hasChanges).toBe(false);
+		expect(secondResult.sql).toBe("");
+	});
+
 	// D106 R1, B2: the two tests above use a bare table (no RLS, no
 	// policy, no serial column) — exactly the shape the evaluator found
 	// "cannot reach the fan-out" (evaluation.md's own test-gap note).

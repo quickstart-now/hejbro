@@ -627,6 +627,43 @@ export const widgets = table(
 );
 `;
 
+// 671/R9, D106 R1 B1, review round 1 F1: the handover (table B) and
+// brand-new-table (table C) cells above are the only other "prints
+// nothing" cells this describe block pins -- neither is this one. No
+// primary key on either side, no index, no check, no foreign key: the
+// narrowest adoption there is.
+const ADOPT_NOTHING_EXISTING_SOURCE = `import { existingTable, schema, uuid } from "hejbro";
+
+export const j17 = schema("j17");
+
+export const widgets = existingTable("j17", "widgets", { id: uuid() });
+`;
+
+const ADOPT_NOTHING_MANAGED_SOURCE = `import { schema, table, uuid } from "hejbro";
+
+export const j17 = schema("j17");
+
+export const widgets = table(j17, "widgets", { id: uuid() });
+`;
+
+// 671/R9, D106 R1 B1: the CLI-surface control for the same cell "table
+// A: primary key x adoption" pins at the core level (`generate.test.ts`
+// `uo6`) -- a primary key on both sides, nothing else, now prints
+// `adoption-creates` and names it instead of adopting silently.
+const ADOPT_PK_ONLY_EXISTING_SOURCE = `import { existingTable, schema, uuid } from "hejbro";
+
+export const j18 = schema("j18");
+
+export const widgets = existingTable("j18", "widgets", { id: uuid().primaryKey() });
+`;
+
+const ADOPT_PK_ONLY_MANAGED_SOURCE = `import { schema, table, uuid } from "hejbro";
+
+export const j18 = schema("j18");
+
+export const widgets = table(j18, "widgets", { id: uuid().primaryKey() });
+`;
+
 let cwd: string;
 
 beforeEach(async () => {
@@ -1611,6 +1648,38 @@ describe("hejbro generate — adoption-creates (671/task 1.3, 1.3a)", () => {
 		expect(result.exitCode).toBe(0);
 		expect(result.stdout).toContain("wrote migrations/");
 		expect(result.stderr).not.toContain("adoption-creates");
+	});
+
+	it("prints nothing under adoption-creates for an adoption with no declared children at all and no primary key on either side (671/R9, D106 R1 B1, review round 1 F1: table B2, nothing to create)", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(ADOPT_NOTHING_EXISTING_SOURCE);
+		await runCli(cwd, ["generate"]);
+
+		await writeSchema(ADOPT_NOTHING_MANAGED_SOURCE);
+		const result = await runCli(cwd, ["generate"]);
+		expect(result.exitCode).toBe(0);
+		expect(result.stderr).not.toContain("adoption-creates");
+	});
+
+	it("names the primary key when it is the adoption's only child, even though the existing declaration already listed it (671/R9, D106 R1 B1: table B3, primary key only)", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(ADOPT_PK_ONLY_EXISTING_SOURCE);
+		await runCli(cwd, ["generate"]);
+
+		await writeSchema(ADOPT_PK_ONLY_MANAGED_SOURCE);
+		const result = await runCli(cwd, ["generate"]);
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("wrote migrations/");
+		expect(result.stderr).toBe(
+			[
+				"warning[adoption-creates]: j18.widgets",
+				`  ${adoptionCreatesIntro}`,
+				`  ${missingColumnRisk}`,
+				'  primary key "widgets_pkey"',
+				`  ${nextLine}`,
+				"",
+			].join("\n"),
+		);
 	});
 
 	it("prints one block per adopted table, blank-line separated, with the summary counting both (671/task 1.3, table D: two tables)", async () => {
