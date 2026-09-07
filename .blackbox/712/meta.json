@@ -137,6 +137,18 @@
       "at": "2026-09-07T14:29Z",
       "title": "generated columns are read, the unread-target sentence narrows to metadata (D106 R1)",
       "ratified": null
+    },
+    {
+      "id": "R12",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "712/R11",
+        "712/R10"
+      ],
+      "at": "2026-09-07T14:39Z",
+      "title": "a generated column whose expression names an omitted column is omitted and announced, in this round",
+      "ratified": null
     }
   ],
   "work": [
