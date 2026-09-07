@@ -86,6 +86,16 @@ table's own SQL name (matching `db()`'s own table-name keying);
 schema module, never its SQL name. A reader who only sees one of the two
 groups tends to assume both follow the same rule — they don't.
 
+Because `Tables` is keyed by the SQL name alone, two carried tables of
+one name in different schemas (an `existingTable("auth", "users")`
+beside a managed `app.users`) cannot share a contract: `vendor` refuses
+with `vendor-table-name-collision` and `pull` with
+`pull-table-name-collision`, naming every colliding name with its
+qualified tables, and neither writes a file. `vendor` has no schema
+filter (`--schema` is reserved), so the way out is in the declaring
+repository — one table per SQL name in what it exports; `pull`'s way
+out is to drop one of the schemas from its `--schema` list.
+
 ## Existing tables cross the boundary too
 
 An `existingTable()` declaration (D41, amended by add-unmanaged-objects

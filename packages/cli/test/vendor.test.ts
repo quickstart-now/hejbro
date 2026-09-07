@@ -1,7 +1,10 @@
 import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { existingTable, schema, table, uuid } from "@hejbro/core";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { serializeExportDescription } from "../src/export/description";
 import { sha256Hex } from "../src/hash";
 import {
 	assertBuiltCli,
@@ -9,6 +12,7 @@ import {
 	removeCliFixtureDir,
 	runCli,
 } from "./support/cli-runner";
+import { buildFixturePayload } from "./support/contract-fixture";
 import type { GitFixture } from "./support/git-fixture";
 import { createGitFixture } from "./support/git-fixture";
 
@@ -194,5 +198,34 @@ describe("hejbro vendor", () => {
 		expect(result.exitCode).toBe(1);
 		expect(result.stderr).toContain("vendor-git-missing");
 		expect(result.stderr).not.toMatch(/ENOENT|spawn/);
+	});
+	it("refuses two carried tables of one SQL name and writes nothing (#1004)", async () => {
+		// The usual Supabase layout: a platform-owned `auth.users` declared
+		// existing beside the schema's own managed `app.users`.
+		const app = schema("app");
+		const payload = buildFixturePayload([
+			app,
+			existingTable("auth", "users", { id: uuid().primaryKey() }),
+			table(app, "users", { id: uuid().primaryKey() }),
+		]);
+		await writeExport(
+			remote,
+			serializeExportDescription(payload),
+			EXPORT_SQL_V1,
+		);
+		remote.commit("export with a name collision", "2026-01-01T10:00:00Z");
+		await runCli(cwd, ["link", `file://${remote.cwd}`]);
+
+		const result = await runCli(cwd, ["vendor"]);
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain("vendor-table-name-collision");
+		expect(result.stderr).toContain('"auth"."users"');
+		expect(result.stderr).toContain('"app"."users"');
+		expect(result.stderr).toContain("--schema is reserved on vendor");
+		// Emission precedes every write, so a refusal leaves no vendor
+		// layout and no lock behind -- pinned here so a later reordering
+		// cannot start writing partial layouts.
+		expect(existsSync(join(cwd, ".hejbro", "vendor"))).toBe(false);
+		expect(existsSync(join(cwd, "hejbro.lock"))).toBe(false);
 	});
 });

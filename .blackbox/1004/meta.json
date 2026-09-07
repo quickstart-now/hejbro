@@ -4,11 +4,34 @@
   "ref": "quickstart-now/hejbro#1004",
   "title": "vendor: two carried tables with the same name in different schemas collide in the contract's Tables keys",
   "parent": "quickstart-now/hejbro#995",
-  "status": "open",
+  "status": "closed",
   "opened": "2026-09-06",
-  "closed": null,
-  "decisions": [],
-  "work": [],
+  "closed": "2026-09-07",
+  "decisions": [
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "412/D29",
+        "653/R8"
+      ],
+      "at": "2026-09-07T14:10Z",
+      "title": "refusal lives in the shared emitter; one code per command, remedies differ",
+      "ratified": null
+    }
+  ],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-07T14:24Z",
+      "title": "refuse two carried tables of one SQL name at emission",
+      "pr": null,
+      "decisions": [
+        "R1"
+      ]
+    }
+  ],
   "prs": [
     {
       "number": 1011,
@@ -19,6 +42,11 @@
       "number": 1014,
       "role": "refs",
       "pinnedAt": "2026-09-06T03:46Z"
+    },
+    {
+      "number": 1028,
+      "role": "closes",
+      "pinnedAt": "2026-09-07T14:24Z"
     }
   ],
   "origin": null,
