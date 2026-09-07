@@ -226,7 +226,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#1001](1001/) | generate: adoption's banner notes describe column diffs that emit no statements | open | #1019 | 0 | 0 (0 pending) |
 | ↳ [#1002](1002/) | cli-smoke: the vendored-contract tsc check does not exercise .related() on the emitted contract | open | #1011 #1014 | 0 | 0 (0 pending) |
 | ↳ [#1003](1003/) | query: related() on a self-referential foreign key compiles an uncorrelated self-join and returns null / [] | open | #1011 #1014 | 0 | 0 (0 pending) |
-| ↳ [#1004](1004/) | vendor: two carried tables with the same name in different schemas collide in the contract's Tables keys | open | #1011 #1014 | 0 | 0 (0 pending) |
+| ↳ [#1004](1004/) | vendor: two carried tables with the same name in different schemas collide in the contract's Tables keys | open | #1011 #1014 | 0 | 1 (1 pending) |
 | ↳ [#1006](1006/) | check: the database-only inventory does not name an enum type the declarations do not carry | open | #1026 | 0 | 0 (0 pending) |
 | ↳ [#1007](1007/) | raise: an absolute --file path is re-rooted under cwd and fails with a raw ENOENT stack | open | #1010 | 0 | 0 (0 pending) |
 | ↳ [#1008](1008/) | migrations: a file with bare CR line endings is silently skipped by the chain walk | open | #1010 | 0 | 0 (0 pending) |
@@ -245,7 +245,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 
 ## Totals
 
-Owner decisions 95 · rulings 320 (interpretation 212, extension 106, stop 2) · pending extensions 68 · rejected 2
+Owner decisions 95 · rulings 321 (interpretation 212, extension 107, stop 2) · pending extensions 69 · rejected 2
 
 ## Conventions
 

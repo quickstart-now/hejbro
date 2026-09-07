@@ -7,7 +7,20 @@
   "status": "open",
   "opened": "2026-09-06",
   "closed": null,
-  "decisions": [],
+  "decisions": [
+    {
+      "id": "R1",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "412/D29",
+        "653/R8"
+      ],
+      "at": "2026-09-07T14:10Z",
+      "title": "refusal lives in the shared emitter; one code per command, remedies differ",
+      "ratified": null
+    }
+  ],
   "work": [],
   "prs": [
     {
