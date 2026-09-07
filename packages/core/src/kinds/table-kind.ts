@@ -36,6 +36,7 @@ import {
 	tableChecks,
 	tableExisting,
 	tableIdentity,
+	tablePrimaryKeyName,
 } from "./table-snapshot";
 
 /** Derives an index's default name from its owning table and columns — shared with `engine/rename-plan.ts`'s drift guard (Phase 5). */
@@ -577,6 +578,28 @@ const isEmptyTableFieldDiffs = (diffs: TableFieldDiffs): boolean =>
 	isEmptyKeyedDiff(diffs.foreignKeyDiff) &&
 	isEmptyKeyedDiff(diffs.checkDiff);
 
+/**
+ * `true` when this existing→managed transition's own primary key must be
+ * created regardless of `diffs` (671/R9, D106 R1 B1) — unconditional on
+ * `next` alone, the same treatment `existingTable()`'s forced-empty
+ * `indexes`/`foreignKeys`/`checks` arrays already give those three
+ * children (`tableFieldDiffs`' own four keyed diffs see every one of
+ * them as "added" the moment `next` declares any, because `previous`
+ * structurally never carries one). A primary key's membership lives on
+ * the *column* instead (`columnState.primaryKey`, D68), which
+ * `existingTable()` never zeroes out — so when the existing declaration
+ * happened to list the same primary key, `columnDiff` sees no
+ * difference at all and the table's own alter would otherwise never
+ * fire. `false` for every other transition: a real primary key change
+ * between two managed declarations already shows up in `columnDiff`
+ * (the column's own `primaryKey` flag is part of its snapshot), so nothing
+ * else needs to ask this question.
+ */
+const adoptionCreatesPrimaryKey = (
+	isAdoption: boolean,
+	next: TableSnapshot,
+): boolean => isAdoption && tablePrimaryKeyName(next) !== null;
+
 /** `true` when `node` is a table snapshot node marked existing — `null` (the table absent on that side) is never existing (add-unmanaged-objects). */
 const isExistingSide = (node: JsonValue | null): boolean =>
 	node !== null && tableExisting(asTableSnapshot(node));
@@ -730,11 +753,15 @@ export const tableKind: ObjectKind<TableDeclaration> = {
 			return guard.changes;
 		}
 
-		const diffs = tableFieldDiffs(
-			asTableSnapshot(guard.previous),
-			asTableSnapshot(guard.next),
-		);
-		if (isEmptyTableFieldDiffs(diffs)) {
+		const nextTable = asTableSnapshot(guard.next);
+		const diffs = tableFieldDiffs(asTableSnapshot(guard.previous), nextTable);
+		if (
+			isEmptyTableFieldDiffs(diffs) &&
+			!adoptionCreatesPrimaryKey(
+				isAdoptionTransition(previous, next),
+				nextTable,
+			)
+		) {
 			return [];
 		}
 

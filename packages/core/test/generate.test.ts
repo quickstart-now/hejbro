@@ -1035,7 +1035,13 @@ describe("an existing declaration emits nothing (add-unmanaged-objects, #605)", 
 		});
 	});
 
-	it("a table changing hands emits nothing: existing to managed", () => {
+	// 671/R9, D106 R1 B1: this cell used to assert the bug -- adoption
+	// silently skipped the primary key because the existing declaration
+	// already listed it. It now creates it like every other declared
+	// child (`b1a`, below the "table B" section, is the same cell with a
+	// dedicated B1 label; kept here too since this is the pre-existing
+	// add-unmanaged-objects sequence this scenario first appeared in).
+	it("a table changing hands to managed creates the primary key the existing declaration already listed too", () => {
 		const app = schema("uo6");
 		const existing = existingTable("uo6", "widgets", {
 			id: uuid().primaryKey(),
@@ -1049,8 +1055,13 @@ describe("an existing declaration emits nothing (add-unmanaged-objects, #605)", 
 			declarations: [app, managed],
 			previousSnapshot: firstResult.snapshot,
 		});
-		expect(secondResult.hasChanges).toBe(false);
-		expect(secondResult.sql).toBe("");
+		expect(secondResult.hasChanges).toBe(true);
+		expect(secondResult.sql).toBe(
+			[
+				"-- hejbro migration\n-- ~ table uo6.widgets",
+				'alter table "uo6"."widgets" add constraint "widgets_pkey" primary key ("id");',
+			].join("\n\n"),
+		);
 		expect(
 			secondResult.snapshot.objects["table:uo6.widgets"],
 		).not.toHaveProperty("existing");
@@ -1663,6 +1674,130 @@ describe("an existing declaration emits nothing (add-unmanaged-objects, #605)", 
 		const addForeignKey =
 			'alter table "uo25"."widgets" add constraint "widgets_parent_fk" foreign key ("parent_id") references "uo25"."widgets" ("id");';
 		expect(secondResult.sql).toBe([banner, addForeignKey].join("\n\n"));
+	});
+
+	// 671/R9, D106 R1 B1: the primary key is created on adoption whatever
+	// the existing declaration listed -- the four cells above (uo20/uo23)
+	// cover "existing side lacked the primary key"; these four cover
+	// "existing side already listed it" (single-column and composite) x
+	// (no other child to create, another child to create alongside it).
+	// The foreign key cell already creates its object even when the
+	// existing declaration listed it too (table B, self-referencing
+	// foreign key above); this is the primary key's own control.
+
+	it("an adopted table creates its declared primary key even when the existing declaration already listed it (671/R9, D106 R1 B1: primary key x adoption, existing side already listed it, no other child)", () => {
+		const app = schema("b1a");
+		const existingWidgets = existingTable("b1a", "widgets", {
+			id: uuid().primaryKey(),
+		});
+		const managedWidgets = table(app, "widgets", { id: uuid().primaryKey() });
+		const firstResult = generateMigration({
+			declarations: [app, getTableMeta(existingWidgets)],
+			previousSnapshot: emptySnapshot,
+		});
+		const secondResult = generateMigration({
+			declarations: [app, managedWidgets],
+			previousSnapshot: firstResult.snapshot,
+		});
+		const banner = "-- hejbro migration\n-- ~ table b1a.widgets";
+		const addPrimaryKey =
+			'alter table "b1a"."widgets" add constraint "widgets_pkey" primary key ("id");';
+		expect(secondResult.sql).toBe([banner, addPrimaryKey].join("\n\n"));
+	});
+
+	it("an adopted table creates its declared primary key alongside another child, even when the existing declaration already listed the primary key (671/R9, D106 R1 B1: primary key x adoption, existing side already listed it, with another child)", () => {
+		const app = schema("b1b");
+		const existingWidgets = existingTable("b1b", "widgets", {
+			id: uuid().primaryKey(),
+			email: text(),
+		});
+		const managedWidgets = table(
+			app,
+			"widgets",
+			{ id: uuid().primaryKey(), email: text() },
+			(t) => ({
+				indexes: [index("widgets_email_idx").on(t.email)],
+			}),
+		);
+		const firstResult = generateMigration({
+			declarations: [app, getTableMeta(existingWidgets)],
+			previousSnapshot: emptySnapshot,
+		});
+		const secondResult = generateMigration({
+			declarations: [app, managedWidgets],
+			previousSnapshot: firstResult.snapshot,
+		});
+		const banner =
+			'-- hejbro migration\n-- ~ table b1b.widgets [index "widgets_email_idx" added]';
+		const addPrimaryKey =
+			'alter table "b1b"."widgets" add constraint "widgets_pkey" primary key ("id");';
+		const createIndex =
+			'create index "widgets_email_idx" on "b1b"."widgets" ("email");';
+		expect(secondResult.sql).toBe(
+			[banner, addPrimaryKey, createIndex].join("\n\n"),
+		);
+	});
+
+	it("an adopted table creates its declared composite primary key even when the existing declaration already listed both members (671/R9, D106 R1 B1: composite primary key x adoption, existing side already listed it, no other child)", () => {
+		const app = schema("b1c");
+		const existingWidgets = existingTable("b1c", "widgets", {
+			id: uuid().primaryKey(),
+			tenantId: uuid().primaryKey(),
+		});
+		const managedWidgets = table(app, "widgets", {
+			id: uuid().primaryKey(),
+			tenantId: uuid().primaryKey(),
+		});
+		const firstResult = generateMigration({
+			declarations: [app, getTableMeta(existingWidgets)],
+			previousSnapshot: emptySnapshot,
+		});
+		const secondResult = generateMigration({
+			declarations: [app, managedWidgets],
+			previousSnapshot: firstResult.snapshot,
+		});
+		const banner = "-- hejbro migration\n-- ~ table b1c.widgets";
+		const addPrimaryKey =
+			'alter table "b1c"."widgets" add constraint "widgets_pkey" primary key ("id", "tenant_id");';
+		expect(secondResult.sql).toBe([banner, addPrimaryKey].join("\n\n"));
+	});
+
+	it("an adopted table creates its declared composite primary key alongside another child, even when the existing declaration already listed both members (671/R9, D106 R1 B1: composite primary key x adoption, existing side already listed it, with another child)", () => {
+		const app = schema("b1d");
+		const existingWidgets = existingTable("b1d", "widgets", {
+			id: uuid().primaryKey(),
+			tenantId: uuid().primaryKey(),
+			qty: integer(),
+		});
+		const managedWidgets = table(
+			app,
+			"widgets",
+			{
+				id: uuid().primaryKey(),
+				tenantId: uuid().primaryKey(),
+				qty: integer(),
+			},
+			(t) => ({
+				checks: [check("widgets_qty_positive", gt(t.qty, 0))],
+			}),
+		);
+		const firstResult = generateMigration({
+			declarations: [app, getTableMeta(existingWidgets)],
+			previousSnapshot: emptySnapshot,
+		});
+		const secondResult = generateMigration({
+			declarations: [app, managedWidgets],
+			previousSnapshot: firstResult.snapshot,
+		});
+		const banner =
+			'-- hejbro migration\n-- ~ table b1d.widgets [check "widgets_qty_positive" added]';
+		const addPrimaryKey =
+			'alter table "b1d"."widgets" add constraint "widgets_pkey" primary key ("id", "tenant_id");';
+		const addCheck =
+			'alter table "b1d"."widgets" add constraint "widgets_qty_positive" check ("widgets"."qty" > 0);';
+		expect(secondResult.sql).toBe(
+			[banner, addPrimaryKey, addCheck].join("\n\n"),
+		);
 	});
 
 	// 671/R4 (task 1.2): an adopted owner's sequence -- idempotent create,
