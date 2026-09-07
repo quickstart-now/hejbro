@@ -590,6 +590,35 @@ const adoptionCreatesPrimaryKey = (
 	next: TableSnapshot,
 ): boolean => isAdoption && tablePrimaryKeyName(next) !== null;
 
+/**
+ * `["primary key \"<name>\" added"]` only for the one shape none of
+ * `tableFieldDiffNotes`' four keyed diffs can ever surface on their own
+ * (review round 1 F3): an adoption whose declared primary key is its
+ * *only* creation, so `diffs` is otherwise empty and the banner would
+ * print no notes at all despite the migration carrying an `add
+ * constraint … primary key` statement. `[]` everywhere else — a primary
+ * key change alongside another child, or with the existing side lacking
+ * the flag, already shows up as a `column "…" changed`/`index`/`check`/
+ * `foreign key` note; a managed→managed primary key move is exactly
+ * that same `column` note; a new table's primary key is inline in
+ * `create table` and never reaches a note at all.
+ */
+const primaryKeyOnlyAdoptionNote = (
+	isAdoption: boolean,
+	diffs: TableFieldDiffs,
+	next: TableSnapshot,
+): ReadonlyArray<string> => {
+	const primaryKeyName = tablePrimaryKeyName(next);
+	if (
+		!isAdoption ||
+		primaryKeyName === null ||
+		!isEmptyTableFieldDiffs(diffs)
+	) {
+		return [];
+	}
+	return [`primary key "${primaryKeyName}" added`];
+};
+
 /** `true` when `node` is a table snapshot node marked existing — `null` (the table absent on that side) is never existing (add-unmanaged-objects). */
 const isExistingSide = (node: JsonValue | null): boolean =>
 	node !== null && tableExisting(asTableSnapshot(node));
@@ -745,12 +774,10 @@ export const tableKind: ObjectKind<TableDeclaration> = {
 
 		const nextTable = asTableSnapshot(guard.next);
 		const diffs = tableFieldDiffs(asTableSnapshot(guard.previous), nextTable);
+		const isAdoption = isAdoptionTransition(previous, next);
 		if (
 			isEmptyTableFieldDiffs(diffs) &&
-			!adoptionCreatesPrimaryKey(
-				isAdoptionTransition(previous, next),
-				nextTable,
-			)
+			!adoptionCreatesPrimaryKey(isAdoption, nextTable)
 		) {
 			return [];
 		}
@@ -762,7 +789,10 @@ export const tableKind: ObjectKind<TableDeclaration> = {
 				identity,
 				previous: guard.previous,
 				next: guard.next,
-				notes: tableFieldDiffNotes(diffs),
+				notes: [
+					...tableFieldDiffNotes(diffs),
+					...primaryKeyOnlyAdoptionNote(isAdoption, diffs, nextTable),
+				],
 			},
 		];
 	},

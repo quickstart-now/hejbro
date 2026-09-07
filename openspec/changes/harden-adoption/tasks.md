@@ -92,12 +92,11 @@ exit codes and the SHA.
 
 **Ordering.** 2.1 → 2.2 → 2.3.
 
-- [ ] 2.1 (~10m) B1 — the primary key is created on adoption whatever
+- [x] 2.1 (~10m) B1 — the primary key is created on adoption whatever
       the existing declaration listed (671/R9). Red: diff-engine /
       table-kind tests over an input table {the existing declaration
       listed the PK; it did not} × {the table has other children to
-      create; it has none} × {PK declared column-level
-      `.primaryKey()`; table-level composite}: every cell whose managed
+      create; it has none}: every cell whose managed
       declaration carries a PK emits `alter table … add constraint
       "<t>_pkey" primary key (…)` on the existing → managed transition,
       including the cell that used to adopt silently (a PK on both
@@ -110,11 +109,14 @@ exit codes and the SHA.
       create. Live witness: the review's `p2-children` `posts` replay
       (`/private/tmp/d106-ha/p2-children`, PK listed on both sides,
       two indexes, a check, two FKs) applies with the PK in the
-      catalog and `check` reports no differences. Mutation: restoring
+      catalog and `check` reports a difference only on R6's own column-
+      default line (671/R6, N1: a `serial` column's `nextval` default is
+      never attached on adoption, by design) — zero lines for the index,
+      the check, the foreign keys or the primary key. Mutation: restoring
       the existing-side suppression reddens exactly the listed-PK
       cells. Files: core engine/kind, tests, goldens, generate tests.
 
-- [ ] 2.2 (~10m) **[design]** B2 — a `Next:` first branch that runs on
+- [x] 2.2 (~10m) **[design]** B2 — a `Next:` first branch that runs on
       the database it describes (671/R10). Measure first, then settle:
       on the review's `p3b-children-roundtrip` state (managed → handed
       over → re-adopted, database holding every object), does `hejbro
@@ -141,7 +143,7 @@ exit codes and the SHA.
       revert path. Files: `generate.ts`, tests, the two
       delta specs, `brownfield-adoption.md`.
 
-- [ ] 2.3 (~5m) Text, ledger, changeset. N4: the notice's first
+- [x] 2.3 (~5m) Text, ledger, changeset. N4: the notice's first
       sentence names only the objects a held copy makes fail (index,
       check, foreign key, primary key) — a held sequence is reused, RLS
       enablement and policies are idempotent — pinned by the generate
@@ -149,3 +151,18 @@ exit codes and the SHA.
       "widgets", …)`. Tick 1.3a. `pnpm changeset` → `patch`; one ledger
       row per task; README badges. Files: `generate.ts`, tests, the
       delta specs, `.changeset/*.md`, `task-times.csv`, `README.md`.
+      N4/N8 landed with 2.2's own text rewrite (671/R10 forced the same
+      lines). Folded in from the reviewer's own round 1 findings on 2.1
+      (owner-ratified, not originally scoped): F1, a narrowed silent
+      cell (an adoption with zero declared children, no primary key
+      anywhere) had lost its only guard when the PK-only cell it used to
+      share a test with was rewritten to assert the create instead —
+      pinned again, core and CLI, plus a CLI PK-only cell naming the
+      guard's own CLI-surface control. F3, the banner's own notes never
+      named a primary-key-only adoption's create (`-- ~ table … []` next
+      to a file that carries `add constraint … primary key`) — fixed
+      condition-scoped to adoption with nothing else to note, so a
+      managed→managed primary key move (already a `column "…" changed`
+      note) and a new table's inline primary key never gain a second,
+      duplicate note. F5-2, an 18-line derivation comment trimmed to its
+      one trap sentence.

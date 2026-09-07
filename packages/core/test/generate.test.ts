@@ -1058,7 +1058,7 @@ describe("an existing declaration emits nothing (add-unmanaged-objects, #605)", 
 		expect(secondResult.hasChanges).toBe(true);
 		expect(secondResult.sql).toBe(
 			[
-				"-- hejbro migration\n-- ~ table uo6.widgets",
+				'-- hejbro migration\n-- ~ table uo6.widgets [primary key "widgets_pkey" added]',
 				'alter table "uo6"."widgets" add constraint "widgets_pkey" primary key ("id");',
 			].join("\n\n"),
 		);
@@ -1705,6 +1705,13 @@ describe("an existing declaration emits nothing (add-unmanaged-objects, #605)", 
 	// The foreign key cell already creates its object even when the
 	// existing declaration listed it too (table B, self-referencing
 	// foreign key above); this is the primary key's own control.
+	//
+	// Review round 1 F3: `b1a`/`b1c` (no other child) are also the banner
+	// witness -- before F3, both pinned a bracket-less banner even though
+	// the file below carries an `add constraint … primary key` statement.
+	// `b1b`/`b1d` (with another child) already had a non-empty bracket
+	// from the other child's own note and stay exactly as they were --
+	// `primaryKeyOnlyAdoptionNote` only fires when nothing else would.
 
 	it("an adopted table creates its declared primary key even when the existing declaration already listed it (671/R9, D106 R1 B1: primary key x adoption, existing side already listed it, no other child)", () => {
 		const app = schema("b1a");
@@ -1720,7 +1727,8 @@ describe("an existing declaration emits nothing (add-unmanaged-objects, #605)", 
 			declarations: [app, managedWidgets],
 			previousSnapshot: firstResult.snapshot,
 		});
-		const banner = "-- hejbro migration\n-- ~ table b1a.widgets";
+		const banner =
+			'-- hejbro migration\n-- ~ table b1a.widgets [primary key "widgets_pkey" added]';
 		const addPrimaryKey =
 			'alter table "b1a"."widgets" add constraint "widgets_pkey" primary key ("id");';
 		expect(secondResult.sql).toBe([banner, addPrimaryKey].join("\n\n"));
@@ -1777,7 +1785,8 @@ describe("an existing declaration emits nothing (add-unmanaged-objects, #605)", 
 			declarations: [app, managedWidgets],
 			previousSnapshot: firstResult.snapshot,
 		});
-		const banner = "-- hejbro migration\n-- ~ table b1c.widgets";
+		const banner =
+			'-- hejbro migration\n-- ~ table b1c.widgets [primary key "widgets_pkey" added]';
 		const addPrimaryKey =
 			'alter table "b1c"."widgets" add constraint "widgets_pkey" primary key ("id", "tenant_id");';
 		expect(secondResult.sql).toBe([banner, addPrimaryKey].join("\n\n"));
