@@ -4,9 +4,9 @@
   "ref": "quickstart-now/hejbro#1004",
   "title": "vendor: two carried tables with the same name in different schemas collide in the contract's Tables keys",
   "parent": "quickstart-now/hejbro#995",
-  "status": "open",
+  "status": "closed",
   "opened": "2026-09-06",
-  "closed": null,
+  "closed": "2026-09-07",
   "decisions": [
     {
       "id": "R1",
@@ -42,6 +42,11 @@
       "number": 1014,
       "role": "refs",
       "pinnedAt": "2026-09-06T03:46Z"
+    },
+    {
+      "number": 1028,
+      "role": "closes",
+      "pinnedAt": "2026-09-07T14:24Z"
     }
   ],
   "origin": null,

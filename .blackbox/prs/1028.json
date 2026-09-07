@@ -1,0 +1,61 @@
+{
+  "version": 3,
+  "number": 1028,
+  "ref": "quickstart-now/hejbro#1028",
+  "title": "fix(cli): refuse two carried tables of one sql name at emission (#1004)",
+  "head": "fd8a47b67863283a700c8f2bafd5b91cc7fbdc94",
+  "headRef": "harden-vendor-name-collision",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-07T14:24Z",
+  "refs": [
+    {
+      "path": ".changeset/harden-vendor-name-collision.md",
+      "blob": "802c16734c5a96752e688dc35a5a77a641f56cab"
+    },
+    {
+      "path": "README.md",
+      "blob": "3371dca61fb6752d9aefacaf3ab8a4f7c5863bf7"
+    },
+    {
+      "path": "openspec/changes/harden-vendor-name-collision/design.md",
+      "blob": "8350cf84c211fd3fdbd1a3abfbd918ac788bdf40"
+    },
+    {
+      "path": "openspec/changes/harden-vendor-name-collision/proposal.md",
+      "blob": "3df67bb55ec951e5779b3362e31e57d981b24357"
+    },
+    {
+      "path": "openspec/changes/harden-vendor-name-collision/specs/schema-vendoring/spec.md",
+      "blob": "e09f6d4fcf5cea53c1c0d6c9abcea9133357880e"
+    },
+    {
+      "path": "openspec/changes/harden-vendor-name-collision/tasks.md",
+      "blob": "d508eaf840ae42fe998d8f711d563a0a84c07c79"
+    },
+    {
+      "path": "openspec/task-times.csv",
+      "blob": "89820523a5b3961931ce34a341e9a2fd5ae00309"
+    },
+    {
+      "path": "packages/cli/src/contract/emit.ts",
+      "blob": "1ed215da6b0fc1ff60f7906d2495ebece3aed16d"
+    },
+    {
+      "path": "packages/cli/src/contract/name-collision.ts",
+      "blob": "d6885bf538ac514f19ab1889fd22f1eb14f26989"
+    },
+    {
+      "path": "packages/cli/test/contract-name-collision.test.ts",
+      "blob": "98dbb061c72e278d3ae757422b238bc47efd41c0"
+    },
+    {
+      "path": "packages/cli/test/vendor.test.ts",
+      "blob": "626293fc1b424c0fedaaf315397c9ec935d66850"
+    },
+    {
+      "path": "skills/hejbro/references/polyrepo.md",
+      "blob": "ce6ea550a3caaa0266f6bc6946d3c24eb6bd96ce"
+    }
+  ]
+}
