@@ -359,20 +359,24 @@ describe("runPull / 4.1", () => {
 
 	/**
 	 * B2 final (712/R14, new surface, pending lead approval on the exact
-	 * message text): mirrors `import`'s own
+	 * message text), narrowed 712/R17 (extended): mirrors `import`'s own
 	 * `error[import-nothing-declarable]` verbatim, "declare" swapped for
 	 * pull's own "carry into the contract" -- a pull that reads real
 	 * database objects but can carry none of them into the contract
 	 * refuses outright, rather than writing an empty `pulled X ()`
-	 * bundle. The requested schema held something (it is in
-	 * `omittedSchemaNames`), so this is the "declarable" branch, not the
-	 * "nothing to infer" one below.
+	 * bundle. The requested schema lost a table to a name no declaration
+	 * can carry (it is in `omittedSchemaNames`, which `partitionSchemas`
+	 * now populates only for exactly this reason), so this is the
+	 * "declarable" branch, not the "nothing to infer" one below.
 	 */
 	it("refuses with pull-nothing-declarable when a requested schema held something this reading could not carry the name of, and nothing else contributed either", async () => {
 		const outcome = await runPull(
 			cwd,
 			["--db-url", "postgres://fixture", "--schema", "zeta"],
-			depsFor({ ...emptyResult, omittedSchemaNames: ["zeta"] }),
+			depsFor({
+				...emptyResult,
+				omittedSchemaNames: ["zeta"],
+			}),
 		);
 
 		expect(outcome.exitCode).toBe(1);
@@ -693,6 +697,93 @@ describe("runPull / 712 D106 R2 3.1 (R2-B2, R2-N3)", () => {
 			'Not inferred: no table or enum to declare in schema "nope".',
 		);
 		expect(existsSync(vendorContractPath(cwd))).toBe(false);
+	});
+});
+
+/**
+ * 712/R17 (D106 round 2 constructor review, B2, lead ruling, extended):
+ * a schema whose own name fails D36 counts what it held, not that its
+ * own name failed. `partitionSchemas` (`compose.ts`) now puts a
+ * D36-failing schema on `omittedSchemas` only when it held at least one
+ * table or enum -- a schema failing D36 but holding nothing, or holding
+ * only a standalone sequence or a function, earns no `Omitted: schema
+ * …` line at all and never reaches `omittedSchemaNames`; it falls
+ * through to the same `Not inferred: no table or enum to declare in
+ * schema "X".` line a genuinely empty schema gets, and classifies as
+ * `pull-nothing-to-infer`, never `pull-nothing-declarable` on its own
+ * name alone.
+ */
+describe("runPull / 712 D106 R2 B2 (R17): an omitted-for-name schema counts what it held", () => {
+	const badWithContentOmittedLine =
+		'Omitted: schema "BadWithContent" -- its catalog name is not a valid hejbro SQL identifier.';
+	const notInferredLineFor = (schemaName: string): string =>
+		`Not inferred: no table or enum to declare in schema "${schemaName}".`;
+
+	it.each<[string]>([["EmptyBad"], ["SeqOnlyBad"]])(
+		"refuses with pull-nothing-to-infer, never pull-nothing-declarable, and never prints an Omitted line, for %s (its own name fails D36 but it lost no table or enum) -- alone",
+		async (schemaName) => {
+			const outcome = await runPull(
+				cwd,
+				["--db-url", "postgres://fixture", "--schema", schemaName],
+				depsFor(emptyResult),
+			);
+
+			expect(outcome.exitCode).toBe(1);
+			expect(outcome.stderr).toContain("error[pull-nothing-to-infer]");
+			expect(outcome.stderr).not.toContain("pull-nothing-declarable");
+			expect(outcome.stdout).not.toContain("Omitted:");
+			expect(outcome.stdout).toContain(notInferredLineFor(schemaName));
+			expect(existsSync(vendorContractPath(cwd))).toBe(false);
+		},
+	);
+
+	it.each<[string]>([["EmptyBad"], ["SeqOnlyBad"]])(
+		"refuses with pull-nothing-declarable naming only the sibling that lost a table, never %s, beside it -- and still names %s's own Not-inferred line",
+		async (schemaName) => {
+			const outcome = await runPull(
+				cwd,
+				[
+					"--db-url",
+					"postgres://fixture",
+					"--schema",
+					schemaName,
+					"--schema",
+					"BadWithContent",
+				],
+				depsFor({
+					...emptyResult,
+					lossReport: [badWithContentOmittedLine],
+					omittedSchemaNames: ["BadWithContent"],
+				}),
+			);
+
+			expect(outcome.exitCode).toBe(1);
+			expect(outcome.stderr).toContain("error[pull-nothing-declarable]");
+			expect(outcome.stderr).toContain("BadWithContent");
+			expect(outcome.stderr).not.toContain(schemaName);
+			expect(outcome.stdout).toContain(badWithContentOmittedLine);
+			expect(outcome.stdout).toContain(notInferredLineFor(schemaName));
+		},
+	);
+
+	it("pulls the healthy schema, prints the sibling's Not-inferred line, no refusal at all, when an empty badly-named schema sits beside it", async () => {
+		const outcome = await runPull(
+			cwd,
+			[
+				"--db-url",
+				"postgres://fixture",
+				"--schema",
+				"EmptyBad",
+				"--schema",
+				"healthy",
+			],
+			depsFor(resultForSchemas(["healthy"])),
+		);
+
+		expect(outcome.exitCode).toBe(0);
+		expect(outcome.stdout[0]).toBe("pulled widgets_db (healthy)");
+		expect(outcome.stdout).not.toContain("Omitted:");
+		expect(outcome.stdout).toContain(notInferredLineFor("EmptyBad"));
 	});
 });
 

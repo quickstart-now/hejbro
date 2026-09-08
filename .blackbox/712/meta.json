@@ -240,6 +240,15 @@
       "title": "W5 correction: seq_only+healthy keeps both lines in the final (Omitted:-only) state",
       "pr": null,
       "decisions": []
+    },
+    {
+      "id": "W7",
+      "at": "2026-09-08T21:10Z",
+      "title": "cfr2 reviewer rework: B2 content-first classification (712/R17, two revisions), B1 band-mix delta sentence, N4 pull filename",
+      "pr": null,
+      "decisions": [
+        "R17"
+      ]
     }
   ],
   "prs": [

@@ -189,16 +189,19 @@ const QUOTED_IDENTITY = /"([^"]+)"/g;
  * 712/R10 N#4 (D106 round 2 R15: evidence is `Omitted:` lines only --
  * a schema-qualified `Not inferred:` line, e.g. a standalone sequence,
  * is a different root cause, D66, not a name one, so it never widens
- * this check): whether the reading saw something in this schema that it
- * could not carry for its own name -- an object the loss report already
- * named as omitted for its name (an enum with no expressible name, an
- * index at an omitted column, …), schema-qualified.
- * `schemasWithInferredObjects` cannot tell such a schema apart from a
- * genuinely empty one, since neither ever reaches the snapshot; this is
- * checked against the raw `lossReport` the catalog reading yielded,
- * never one already folded with this function's own output, so a
- * schema this check has already classified as empty can never feed
- * back into its own classification.
+ * this check): whether the reading saw an *object* in this schema that
+ * it could not carry for its own name -- an enum with no expressible
+ * name, an index at an omitted column, … -- schema-qualified (a dotted
+ * identity, `"<schema>.<object>"`). Never the schema's own bare name
+ * (712/R17, D106 round 2 constructor review, B2): the schema's own
+ * `Omitted: schema "…"` line names that same identity with no dot, and
+ * matching it here would silently reintroduce "any D36-failing schema
+ * counts as uncarriable" through this function once the schema-level
+ * check itself (`omittedSchemaNamesHoldingATableOrEnum`) was narrowed
+ * to schemas that held a table or enum -- checked against the raw
+ * `lossReport` the catalog reading yielded, never one already folded
+ * with this function's own output, so a schema this check has already
+ * classified as empty can never feed back into its own classification.
  */
 const schemaHeldAnUncarriableName = (
 	lossReport: ReadonlyArray<string>,
@@ -209,21 +212,23 @@ const schemaHeldAnUncarriableName = (
 		.some((line) =>
 			[...line.matchAll(QUOTED_IDENTITY)].some((match) => {
 				const identity = match[1];
-				return (
-					identity !== undefined &&
-					(identity === schemaName || identity.startsWith(`${schemaName}.`))
-				);
+				return identity !== undefined && identity.startsWith(`${schemaName}.`);
 			}),
 		);
 
 /**
- * 712/R15: every requested schema the reading saw something in but
- * could not carry for its own name -- a schema omitted whole for its
- * own name (`result.omittedSchemaNames`) or one holding an object
- * `schemaHeldAnUncarriableName` finds. The classification counts what
- * the reading saw, not what it kept: this is the set the all-empty
- * refusal below names, and it is what decides `nothingDeclarableResult`
- * versus `nothingToInferResult`.
+ * 712/R15, narrowed 712/R17 (D106 round 2 constructor review, B2, lead
+ * ruling): every requested schema the reading saw a table or enum in
+ * but could not carry for its own name -- a schema omitted whole for
+ * its own name (`result.omittedSchemaNames`, itself narrowed at the
+ * source: `partitionSchemas` only ever puts a schema on that list when
+ * it held a table or enum -- a schema whose own name fails D36 but
+ * that held nothing, or held only a standalone sequence or a function,
+ * is a *kind* cause, not a name one, and earns no `Omitted: schema …`
+ * line at all) or one holding an object `schemaHeldAnUncarriableName`
+ * finds. The classification counts what the reading saw, not what it
+ * kept: this is the set the all-empty refusal below names, and it is
+ * what decides `nothingDeclarableResult` versus `nothingToInferResult`.
  */
 const schemasHoldingAnUncarriableName = (
 	result: InferCatalogResult,

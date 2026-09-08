@@ -80,12 +80,13 @@ scope as omission would drop the most ordinary reference such a
 database has. Leaving an object out for its name SHALL never stop the
 reading — everything else in the named schemas is still inferred — and
 the loss report SHALL name each of them. When every named schema would
-leave nothing to write, the run refuses: a schema that held something
-whose name no declaration can carry is refused as `nothing-declarable`,
-naming every such schema; `nothing-to-infer` means no table or enum to
-declare, and a schema holding only a standalone sequence or a function
-earns this refusal too, alongside its own `Not inferred:` line naming
-what was found. A column named there is still described: the
+leave nothing to write, the run refuses: a schema that lost a table or
+enum to a name no declaration can carry — the object's own name or its
+schema's — is refused as `nothing-declarable`, naming every such
+schema; `nothing-to-infer` means no table or enum to declare, and a
+schema holding only a standalone sequence or a function earns this
+refusal too, alongside its own `Not inferred:` line naming what was
+found. A column named there is still described: the
 description records what the database holds, and
 the snapshot records what a declaration can express. Every list the
 reading orders by name when writing the starter declarations SHALL be
@@ -241,9 +242,10 @@ code points, never by a collation — the same comparator `check`'s
 inventory uses, shared, so two locales and an NFC/NFD pair print the
 same order; the report's own bands (what was guessed, what was not
 inferred, each approximation, each omission) keep the order stated
-here. The omission band is itself several ordered lists, one per kind
-of object and cause it names, never one list merged across kinds or
-causes.
+here. The omission band is itself several ordered lists rather than
+one, and no list mixes an object left out for its own name with one
+left out because something it names was left out; within a list the
+lines sort by code points, whatever caused each omission.
 
 #### Scenario: The report names the way out
 - **WHEN** `pull --db-url` completes

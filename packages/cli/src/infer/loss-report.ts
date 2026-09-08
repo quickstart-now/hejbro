@@ -642,9 +642,12 @@ const EXPRESSION_APPROXIMATION_LINE =
  * comment already states the contract carries no `primaryKey` fact at
  * all (only `typeNode`/`mode`/`notNullElements` reach it), so the
  * pulled contract itself names neither the catalog name nor the
- * derived one (the bundle's own migration SQL and `schema.json` do
+ * derived one (the bundle's own `snapshot.sql` and `schema.json` do
  * carry the derived name, since they come from the starter
- * declaration, not from the contract). For the foreign key,
+ * declaration, not from the contract -- `VENDOR_SQL_FILE`/
+ * `VENDOR_SCHEMA_FILE`, `vendor/lock.ts`, live-verified via a real
+ * pull's own `.hejbro/vendor/` directory listing, 712/R17 N4). For the
+ * foreign key,
  * `buildRelationships` (`contract/tables.ts`) reads `fk.name` off that
  * same starter declaration into `ContractForeignKeyMeta.name`, so the
  * contract carries the derived name there, never the catalog name.
@@ -667,7 +670,7 @@ const primaryKeyNameApproximationLineForImport = (
 const primaryKeyNameApproximationLineForPull = (
 	approximation: PrimaryKeyNameApproximation,
 ): string =>
-	`Approximated: the primary key "${approximation.schema}.${approximation.table}.${approximation.catalogName}" is declared under the derived name "${approximation.derivedName}" instead -- the DSL derives every primary-key name; the pulled contract carries neither name, since it names no primary key at all -- the bundle's migration SQL and \`schema.json\` do carry "${approximation.derivedName}". Rename the constraint to "${approximation.derivedName}" in the database${primaryKeyNameCollisionClauseForPull(approximation)}`;
+	`Approximated: the primary key "${approximation.schema}.${approximation.table}.${approximation.catalogName}" is declared under the derived name "${approximation.derivedName}" instead -- the DSL derives every primary-key name; the pulled contract carries neither name, since it names no primary key at all -- the bundle's \`snapshot.sql\` and \`schema.json\` do carry "${approximation.derivedName}". Rename the constraint to "${approximation.derivedName}" in the database${primaryKeyNameCollisionClauseForPull(approximation)}`;
 
 const foreignKeyNameApproximationLineForImport = (
 	approximation: ForeignKeyNameApproximation,

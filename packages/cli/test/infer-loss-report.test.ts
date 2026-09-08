@@ -233,13 +233,13 @@ describe("buildLossReport / 1.7", () => {
 			"pull, derived name free",
 			"pull",
 			orderPkFree,
-			'Approximated: the primary key "app.orders.pk_orders" is declared under the derived name "orders_pkey" instead -- the DSL derives every primary-key name; the pulled contract carries neither name, since it names no primary key at all -- the bundle\'s migration SQL and `schema.json` do carry "orders_pkey". Rename the constraint to "orders_pkey" in the database.',
+			'Approximated: the primary key "app.orders.pk_orders" is declared under the derived name "orders_pkey" instead -- the DSL derives every primary-key name; the pulled contract carries neither name, since it names no primary key at all -- the bundle\'s `snapshot.sql` and `schema.json` do carry "orders_pkey". Rename the constraint to "orders_pkey" in the database.',
 		],
 		[
 			"pull, derived name collides",
 			"pull",
 			orderPkColliding,
-			'Approximated: the primary key "app.orders.pk_orders" is declared under the derived name "orders_pkey" instead -- the DSL derives every primary-key name; the pulled contract carries neither name, since it names no primary key at all -- the bundle\'s migration SQL and `schema.json` do carry "orders_pkey". Rename the constraint to "orders_pkey" in the database -- that name is already taken by another relation in "app", so rename that one first.',
+			'Approximated: the primary key "app.orders.pk_orders" is declared under the derived name "orders_pkey" instead -- the DSL derives every primary-key name; the pulled contract carries neither name, since it names no primary key at all -- the bundle\'s `snapshot.sql` and `schema.json` do carry "orders_pkey". Rename the constraint to "orders_pkey" in the database -- that name is already taken by another relation in "app", so rename that one first.',
 		],
 	])("%s", (_label, command, approximation, expected) => {
 		const report = buildLossReport({

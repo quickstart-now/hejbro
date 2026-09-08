@@ -47,10 +47,11 @@ describe("partitionSchemas / D106 R4-B1", () => {
 		expect(result.omittedSchemas).toEqual([]);
 	});
 
-	it("omits a schema whose catalog name is not a valid hejbro SQL identifier, naming it", () => {
+	it("omits a schema whose catalog name is not a valid hejbro SQL identifier and that lost a table to it, naming it", () => {
 		const catalog: Catalog = {
 			...emptyCatalog(),
 			schemas: [{ schema: "App" }],
+			tables: [{ schema: "App", table: "t", rls: false }],
 		};
 		const result = partitionSchemas(catalog);
 		expect(result.expressibleNames).toEqual([]);
@@ -61,10 +62,72 @@ describe("partitionSchemas / D106 R4-B1", () => {
 		const catalog: Catalog = {
 			...emptyCatalog(),
 			schemas: [{ schema: "app" }, { schema: "App" }],
+			tables: [{ schema: "App", table: "t", rls: false }],
 		};
 		const result = partitionSchemas(catalog);
 		expect(result.expressibleNames).toEqual(["app"]);
 		expect(result.omittedSchemas).toEqual([{ sqlName: "App" }]);
+	});
+});
+
+/**
+ * 712/R17 (D106 round 2 constructor review, B2, lead ruling, extended):
+ * an inexpressibly-named schema's own name failing D36 is never enough
+ * on its own to earn it an `Omitted: schema …` line -- only losing a
+ * table or enum to that name does; a schema that lost nothing (D36
+ * failed but it held no table or enum) belongs to *neither*
+ * `expressibleNames` nor `omittedSchemas` (a third, silent case --
+ * `declareSchema` would still refuse its name, so it is never passed
+ * there either). Input as wide as the claim: an inexpressibly-named
+ * schema holding nothing at all, one holding only a standalone
+ * sequence, one holding only a function, one holding a table, and one
+ * holding an enum -- the first three appear in neither list, the last
+ * two appear in `omittedSchemas` alone.
+ */
+describe("partitionSchemas / 712/R17 (D106 round 2, B2): omittedSchemas only for a lost table or enum", () => {
+	it.each<
+		[string, Partial<Catalog>, ReadonlyArray<{ readonly sqlName: string }>]
+	>([
+		["nothing at all", {}, []],
+		[
+			"only a standalone sequence",
+			{ sequences: [{ schema: "Bad", name: "s" }] },
+			[],
+		],
+		["only a function", { functions: [{ schema: "Bad", name: "f" }] }, []],
+		[
+			"a table",
+			{ tables: [{ schema: "Bad", table: "t", rls: false }] },
+			[{ sqlName: "Bad" }],
+		],
+		[
+			"an enum",
+			{ enums: [{ schema: "Bad", name: "e" }] },
+			[{ sqlName: "Bad" }],
+		],
+	])(
+		"an inexpressibly-named schema holding %s",
+		(_label, catalogOverrides, expected) => {
+			const catalog: Catalog = {
+				...emptyCatalog(),
+				...catalogOverrides,
+				schemas: [{ schema: "Bad" }],
+			};
+			const result = partitionSchemas(catalog);
+			expect(result.expressibleNames).toEqual([]);
+			expect(result.omittedSchemas).toEqual(expected);
+		},
+	);
+
+	it("names only the inexpressibly-named schema holding a table, beside an inexpressibly-named sibling holding nothing -- neither list carries the empty one", () => {
+		const catalog: Catalog = {
+			...emptyCatalog(),
+			schemas: [{ schema: "Bad" }, { schema: "AlsoBad" }],
+			tables: [{ schema: "AlsoBad", table: "t", rls: false }],
+		};
+		const result = partitionSchemas(catalog);
+		expect(result.expressibleNames).toEqual([]);
+		expect(result.omittedSchemas).toEqual([{ sqlName: "AlsoBad" }]);
 	});
 });
 

@@ -322,3 +322,108 @@ state R16 retracted. Final, live-verified state (cfr2-pg, port 55810,
 table or enum to declare in schema "seq_only".` -- once evidence
 narrowed back to `Omitted:` lines only.
 
+<a id="w7"></a>
+## W7 — cfr2 reviewer rework: B2 content-first classification (712/R17, two revisions), B1 band-mix delta sentence, N4 pull filename
+
+_2026-09-08T21:10Z · per R17_
+
+B2 (712/R17, two rule revisions within one review response): a
+constructor reviewer's counter-example, `create schema "EmptyBad"`
+(inexpressibly named, held nothing) alone, still refused as
+`import-nothing-declarable` -- the delta's own "held something" clause
+was false for it. First fix widened the *evidence* for "held
+something" to any table, enum, sequence or function anywhere in the
+schema (a new `omittedSchemaNamesHoldingATableOrEnum` field on
+`InferCatalogResult`, computed in `partitionSchemas`). The lead's
+second ruling narrowed this to table/enum only (sequences and
+functions are a *kind* cause, D66, never a name one) and, separately,
+ruled that a D36-failing schema holding no table or enum should never
+earn an `Omitted: schema …` line at all -- its own rename recovers
+nothing. This collapsed the new field: `partitionSchemas`'s own
+`omittedSchemas` now filters at the source (`.filter((row) =>
+holdingATableOrEnum.has(row.schema))`), so `omittedSchemaNames` itself
+carries the narrowed meaning and `import.ts`/`pull.ts`'s own
+`schemasHoldingAnUncarriableName` reverted to reading it directly --
+the wider field and its own doc comments were removed everywhere they
+had been added (compose.ts, import.ts, pull.ts, three declare-emit
+test fixtures, both command test files). A third schema state exists
+now: D36-failing and holding nothing belongs to neither
+`expressibleNames` nor `omittedSchemas` (`declareSchema` would still
+refuse its name, so it is never added there either) -- silently
+excluded, falling through to the same `Not inferred: no table or enum
+to declare in schema "X".` line a genuinely empty schema earns.
+
+Independent bug caught along the way (not requested, found while
+writing the first version's own red tests): `schemaHeldAnUncarriableName`
+(import.ts/pull.ts) scanned every `Omitted:` line for a quoted
+identity equal to *or* prefixed by the schema name -- the bare-equal
+branch let a schema's own `Omitted: schema "X"` line satisfy the
+object-level check for schema X, reintroducing "any D36-failing schema
+counts as uncarriable" through the back door the moment the
+schema-level check itself was narrowed. Fixed by dropping the bare-equal
+branch (`identity.startsWith(schemaName + "."))` alone remains) in both
+files -- moot again once the schema-level Omitted line stopped
+existing for the empty case, but the function's own contract is
+correct regardless of which cases currently reach it.
+
+Testing: two full revert/reapply cycles per rule version (git diff
+saved to a patch, `git checkout --`, run, `git apply`) to keep
+red-before-green honest across the widen-then-narrow rewrite --
+command-level fixtures (import/pull) confirmed red then green under
+the first rule, then rewritten and reconfirmed under the second;
+`partitionSchemas`'s own structural unit tests (5-cell input table:
+nothing/sequence-only/function-only/table/enum, plus a two-schema
+sibling cell) confirmed red (4 failures) then green against the final
+rule; two pre-existing `partitionSchemas / D106 R4-B1` baseline tests
+needed a table added to their own "App" fixture to keep meaning what
+they always meant (a bad name costs a schema) under the new content
+requirement.
+
+Live (cfr2-pg, port 55810, four round trips, each started/removed):
+the reviewer's own literal repro (`EmptyBad` alone) now refuses
+`import-nothing-to-infer` with no `Omitted:` line and its own
+`Not inferred: no table or enum to declare` line; `SeqOnlyBad` alone
+measured the same shape, and confirmed (as predicted, not forced) that
+no `Not inferred: sequence …` line appears for it -- the schema never
+reaches `expressibleNames`, so `filterCatalogToSchemas` excludes it
+before standalone-sequence detection ever runs; `EmptyBad` beside
+`BadWithContent` (a table) refuses `import-nothing-declarable` naming
+only `BadWithContent`, with `EmptyBad`'s own `Not inferred:` line still
+printed; the rename-then-reimport follow-through
+(`BadWithContent` -> `bad_with_content`) confirmed the table is
+actually declared afterward (`table(badWithContent, "t", ...)`),
+not merely that the refusal changes code; `EmptyBad` beside a healthy
+schema (regression) still writes the healthy file with no refusal.
+`pull` mirrored the alone case.
+
+B1 (lead-approved, no code change): the omission-band delta sentence
+(spec.md ~245) replaced verbatim with the lead's own text -- two
+ordered lists that never mix an object omitted for its own name with
+one omitted because something it names was omitted, each list still
+sorted by code points regardless of cause.
+
+N4: the pull primary-key approximation line (`loss-report.ts`) named
+"the bundle's own migration SQL" -- measured live (`ls
+.hejbro/vendor/` after a real `pull`: `contract.ts`, `schema.json`,
+`snapshot.sql`) that the file is `snapshot.sql` (`VENDOR_SQL_FILE`,
+`vendor/lock.ts`), never "migration SQL" (that noun belongs to
+`import`'s own baseline/generate output, a different file this
+command never writes). Corrected in the line's own text, its doc
+comment, and both pinned `infer-loss-report.test.ts` cases (free and
+colliding).
+
+Reference (brownfield-adoption.md): the `pull`'s-own-`--schema`
+paragraph's `nothing-declarable` clause reworded to the lead's own
+vocabulary ("lost a table or enum to a name no declaration can carry
+-- its own or its schema's"). Found but not changed (reported instead,
+per the "contract text needs approval" rule): the same paragraph's
+preceding sentence ("a named schema whose own catalog name is not a
+valid hejbro SQL identifier ... earns its own `Omitted: schema …` line
+instead ... never the `Not inferred` one") is no longer universally
+true under the extended B2 rule -- a D36-failing schema holding
+nothing now earns the `Not inferred` line, not the `Omitted` one.
+
+Gates (this rework's own commit): `TURBO_FORCE=1 pnpm check` /
+`check-types` / `test` (hejbro package 1681 tests) / `pnpm check:crap`
+/ `pnpm check:modified-titles` -- all exit 0, repo-wide, serial.
+

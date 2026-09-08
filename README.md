@@ -7,7 +7,7 @@
 [![tasks · 838 done](https://img.shields.io/badge/tasks-838%20done-blue)](openspec/task-times.csv)
 [![avg task · 16m](https://img.shields.io/badge/avg%20task-16m-blue)](openspec/task-times.csv)
 [![estimate · 1.75x](https://img.shields.io/badge/estimate-1.75x-blue)](openspec/task-times.csv)
-[![overhead · 22%](https://img.shields.io/badge/overhead-22%25-blue)](openspec/task-times.csv)
+[![overhead · 23%](https://img.shields.io/badge/overhead-23%25-blue)](openspec/task-times.csv)
 <!-- tasktime-badges:end -->
 
 > hej (Swedish: "hello") + bro (Swedish: "bridge") — hello, bridge.

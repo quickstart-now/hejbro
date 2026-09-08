@@ -527,19 +527,19 @@ ends up with nothing to write, `pull` refuses instead of writing an
 empty bundle, and which refusal it is follows what the reading saw,
 not what it kept: `error[pull-nothing-declarable]` (mirroring
 `import`'s own `error[import-nothing-declarable]`) when at least one
-of them held something whose own name kept it out, naming those
-schemas; `error[pull-nothing-to-infer]` (mirroring `import`'s own
-`error[import-nothing-to-infer]`) otherwise — no named schema held a
-table or enum to declare at all, whether it was genuinely empty or
-held only a standalone sequence or a function, neither of which any
-rename could have saved, and such a schema's own `Not inferred:` line
-still prints alongside the refusal. Neither refusal is silent: the
-loss report already gathered still prints to stdout before either one
-exits. The `pulled …` line, the lock's own `schemas`, and the
-contract's own metadata all
-name exactly the schemas that actually contributed something to the
-snapshot — never one the database doesn't hold, and never one this
-reading could not carry the name of.
+of them lost a table or enum to a name no declaration can carry — its
+own or its schema's — naming those schemas; `error[pull-nothing-to-infer]`
+(mirroring `import`'s own `error[import-nothing-to-infer]`) otherwise
+— no named schema held a table or enum to declare at all, whether it
+was genuinely empty or held only a standalone sequence or a function,
+neither of which any rename could have saved, and such a schema's own
+`Not inferred:` line still prints alongside the refusal. Neither
+refusal is silent: the loss report already gathered still prints to
+stdout before either one exits. The `pulled …` line, the lock's own
+`schemas`, and the contract's own metadata all name exactly the
+schemas that actually contributed something to the snapshot — never
+one the database doesn't hold, and never one this reading could not
+carry the name of.
 
 Some catalog facts are not part of either reading at all yet, so
 neither the loss report's own bands nor `check`'s inventory names

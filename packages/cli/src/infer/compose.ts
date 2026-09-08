@@ -676,8 +676,33 @@ const undeclarableNameColumnsFor = (
 export type SchemaPartition = {
 	/** Every schema row whose own name round-trips through the DSL's D36 rule -- safe to pass to `declareSchema`. */
 	readonly expressibleNames: ReadonlyArray<string>;
+	/**
+	 * 712/R17 (D106 round 2 constructor review, B2, lead ruling): every
+	 * schema row whose own name fails D36 *and* that held at least one
+	 * table or enum -- read from this same (unnarrowed) `catalog`, never
+	 * by re-parsing the rendered report. A schema whose own name fails
+	 * D36 but that held no table or enum (empty, or holding only a
+	 * standalone sequence or a function -- a *kind* cause, never a name
+	 * one) is neither here nor in `expressibleNames`: naming it in the
+	 * report would send its own way out (rename) toward a schema that
+	 * has nothing for that rename to recover, so it earns no
+	 * `Omitted: schema …` line at all, and the all-empty refusal
+	 * classifies it the same as a genuinely empty schema. Passing
+	 * `declareSchema` its own name is still refused either way (D36),
+	 * so it is dropped from both lists rather than added to
+	 * `expressibleNames`.
+	 */
 	readonly omittedSchemas: ReadonlyArray<OmittedSchema>;
 };
+
+/** The set of schema names holding at least one table or enum -- the same "table or enum to declare" axis `import`/`pull`'s own all-empty refusal already turns on (712/R16). */
+const schemaNamesHoldingATableOrEnum = (
+	catalog: Catalog,
+): ReadonlySet<string> =>
+	new Set([
+		...catalog.tables.map((table) => table.schema),
+		...catalog.enums.map((row) => row.schema),
+	]);
 
 /**
  * D106 R4-B1: splits the requested schemas into the ones `declareSchema`
@@ -688,16 +713,22 @@ export type SchemaPartition = {
  * excluded downstream by narrowing the catalog to `expressibleNames`
  * a second time, the same `filterCatalogToSchemas`/
  * `filterInferenceCatalogToSchemas` helpers already use for the
- * `--schema` flag itself.
+ * `--schema` flag itself. 712/R17: a third, silent case -- a schema
+ * whose own name fails D36 but that held no table or enum -- belongs
+ * to neither list (see `omittedSchemas`' own doc).
  */
-export const partitionSchemas = (catalog: Catalog): SchemaPartition => ({
-	expressibleNames: catalog.schemas
-		.filter((row) => isExpressibleName(row.schema))
-		.map((row) => row.schema),
-	omittedSchemas: catalog.schemas
-		.filter((row) => !isExpressibleName(row.schema))
-		.map((row) => ({ sqlName: row.schema })),
-});
+export const partitionSchemas = (catalog: Catalog): SchemaPartition => {
+	const holdingATableOrEnum = schemaNamesHoldingATableOrEnum(catalog);
+	return {
+		expressibleNames: catalog.schemas
+			.filter((row) => isExpressibleName(row.schema))
+			.map((row) => row.schema),
+		omittedSchemas: catalog.schemas
+			.filter((row) => !isExpressibleName(row.schema))
+			.filter((row) => holdingATableOrEnum.has(row.schema))
+			.map((row) => ({ sqlName: row.schema })),
+	};
+};
 
 export type EnumPartition = {
 	/** Every enum row whose own catalog name is a valid hejbro SQL identifier -- safe to pass to `inferEnums`/`pgEnum`. */
