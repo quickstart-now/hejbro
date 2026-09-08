@@ -149,6 +149,30 @@
       "at": "2026-09-07T14:39Z",
       "title": "a generated column whose expression names an omitted column is omitted and announced, in this round",
       "ratified": null
+    },
+    {
+      "id": "R13",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "712/R11",
+        "712/R12"
+      ],
+      "at": "2026-09-08T16:40Z",
+      "title": "not inferred is a third root cause; one rule for every expression-bearing member, no way out today",
+      "ratified": null
+    },
+    {
+      "id": "R14",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "712/R11",
+        "412/D23"
+      ],
+      "at": "2026-09-08T16:40Z",
+      "title": "pull mirrors import: the schema list is what was read, absent schemas are announced, an empty pull fails",
+      "ratified": null
     }
   ],
   "work": [
