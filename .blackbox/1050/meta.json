@@ -50,6 +50,20 @@
       "title": "group 1: set-op branches carried and folded",
       "pr": null,
       "decisions": []
+    },
+    {
+      "id": "W7",
+      "at": "2026-09-08T20:03Z",
+      "title": "1.5a: w.as folds a set operation's two branches, flat shapes -- path B, invariants pinned, gates",
+      "pr": null,
+      "decisions": []
+    },
+    {
+      "id": "W8",
+      "at": "2026-09-08T20:22Z",
+      "title": "1.5a: final cell design (spec-derived axes) and mutation self-check -- vacuous cells found and fixed",
+      "pr": null,
+      "decisions": []
     }
   ],
   "prs": [],

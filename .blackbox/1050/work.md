@@ -382,3 +382,194 @@ spans by each task's last commit) plus a retrospective hands-on/waited
 split, both explicitly marked in the CSV's own `notes` column as
 derived from commit timestamps, not a stopwatch measurement.
 
+<a id="w7"></a>
+## W7 — 1.5a: w.as folds a set operation's two branches, flat shapes -- path B, invariants pinned, gates
+
+_2026-09-08T20:03Z_
+
+Task 1.5a (`w.as` folds a core-built set operation's two branches, flat
+shapes) implementation measured before commit, on top of e459c400
+(`widen-set-op-execute` worktree), diff: `packages/core/src/query/with.ts`
+(new types: `MergedCteRowEnvironment`, `CteSetOpBranchProjection`,
+`IsUnfilledCteBranch`, `CteSetOpEnvironment`, `CteSetOpReference`,
+`CteAsResult`; `CteBuilder.as`'s own signature widened to dispatch on
+the actual query value's type) + new
+`packages/core/test/query/cte-set-op-fold.types.test.ts` (17 cases).
+
+**Design decision (path B, lead-ratified via the planner's P1-P4
+spikes, all measured before this implementation)**: build each
+branch's own `CteRowEnvironment` SEPARATELY (single-source, the
+existing whole-table `infer TColumns` branch unmodified and never
+re-entered against a synthetic shape), then merge key by key into
+`CteFieldRef<L | R>` (one `CteFieldRef` per key, union of both
+branches' raw values) -- not by feeding a pre-folded `SetOpResult<
+TableA, TableB>` through `CteRowEnvironment` again (measured broken:
+collapses to `CteFieldRef<unknown>`, since `infer TColumns` cannot
+reverse-solve a homomorphic mapped type from a union-valued synthetic
+object). The merge key range comes from the two environments'
+`keyof` (not the raw projections' `keyof`), avoiding `Table`'s own
+hidden `tableMeta` brand key, which would otherwise violate
+`CteFieldRef`'s `extends Expr` constraint (also measured).
+
+**Runtime diff: zero.** `buildCteRowEnvironment` already reads
+`query.projectionInput` -- the left branch's own raw projection --
+which matches "left branch's keys" (SQL's own naming rule) exactly;
+only the DECLARED return type is richer now. The `w.as` runtime
+implementation is unchanged, cast once at the boundary to the new
+`CteAsResult<TQuery>` (the same cast-at-boundary pattern `leftJoin`/
+`makeChainThen`/`Db["execute"]` already use elsewhere in this
+codebase). This sets the review's own scope: the runtime object
+`buildCteRowEnvironment` produces was never touched, only its
+consumers' declared type.
+
+**Two measured detours, both found and fixed before commit:**
+- `expectTypeOf(...).toEqualTypeOf(...)` reported a false mismatch
+  comparing two UNIONS of intersected, origin-branded object types
+  (both the actual and expected side of the "invariant c" assertions)
+  -- confirmed false via a direct bidirectional-`extends` check, then
+  the test was redesigned around the actually-reliable comparison
+  shape (compare a single, non-union `CteFieldRef<...>` via
+  `expectTypeOf(value)`, never a bare union via `toEqualTypeOf<...>`
+  on both sides) rather than trusted or worked around blindly.
+- A first attempt at the "invariant c" (single-folding-implementation)
+  proof tried `T extends CteFieldRef<infer TValue> ? TValue : never`
+  to unwrap the reference's own field back to its raw value for
+  comparison -- measured broken (silently collapsed to `CteFieldRef`'s
+  own default, `Expr`, no error to signal it): `infer` against
+  `CteFieldRef`'s own key-REMAPPED mapped type cannot reliably
+  reverse-solve from an already-computed concrete shape, the same
+  class of failure as the whole-table `Table<infer TColumns>` bug
+  (task 1.5's own P1 spike) applied one level up. Redesigned to wrap
+  the EXPECTED value in `CteFieldRef<...>` once (forward direction
+  only) and compare against the real expression's own inferred type,
+  never reverse-inferring through `CteFieldRef` again.
+- A `declare const` value was briefly referenced inside an actually-
+  executing `withCte((w) => { ... w.as("x", handWritten) ... })`
+  callback for the "hand-annotated SetOpStage<P> fallback" test --
+  `declare const` is erased entirely at compile time, so this failed
+  at RUNTIME (`vitest run`, not `check-types`, which stayed green
+  throughout) once the test suite actually executed the callback.
+  Redesigned to a pure type-only instantiation
+  (`ReturnType<typeof cteBuilderAs<SetOpStage<P>>>`, the same
+  `Db["execute"]`-style technique this package's own type tests
+  already use elsewhere) that never constructs or calls a real value.
+
+**Invariants pinned by test, not argument (lead's own explicit
+instruction after P1(c) was flagged as unproven):**
+(a) A non-set-op `w.as()` entry's own row environment is unchanged --
+    two dedicated tests (whole-table and object-projection `select()`
+    entries) assert the exact pre-1.5a `CteFieldRef<...>` shape.
+(b) The recursive term path is untouched -- `with-recursive.ts`/
+    `asRecursive` were never edited; `git diff --stat` against
+    `packages/core/test/query/with.test.ts` and
+    `.../with-recursive.test.ts` shows zero changes, and both suites
+    (unmodified) pass unchanged alongside the new file.
+(c) One folding implementation only -- two tests assert the
+    reference's field type equals `CteFieldRef<SetOpResult<...>
+    ["key"]>` exactly (the same formula `@hejbro/query`'s own
+    `SetOpBranchRow`/`SetOpExecuteRow`, db.ts tasks 1.2/1.3, and
+    `select.ts`'s own combinator compatibility gate all reuse, never a
+    re-derived one), and the object-projection case additionally
+    asserts the key set matches `SetOpResult`'s own key set exactly,
+    both directions.
+
+**Red, verified via `git diff > patch && git checkout -- with.ts` then
+`git apply patch`** (never `git stash`, 412/R35): 14 `tsc` errors
+against the pre-1.5a `with.ts`, all in the new test file, all showing
+the old (left-only) `CteFieldRef<A>` shape instead of the expected
+folded `CteFieldRef<A | B>`. Restored, re-verified green (exit 0).
+
+**Serial gates (brief order):**
+- `TURBO_FORCE=1 pnpm check` -- exit 0 (one formatting fix applied via
+  `biome format --write` before this run; 3 pre-existing warnings,
+  unrelated)
+- `TURBO_FORCE=1 pnpm check-types` -- exit 0 (turbo: 19/19 tasks)
+- `TURBO_FORCE=1 pnpm test` -- exit 0 (turbo `test`: 19/19 --
+  `@hejbro/core` 109 files / 2329 tests + 1 todo, up from 108/2312;
+  turbo `test:types`: 2/2)
+- `pnpm check:crap` -- exit 0 (0 violations, 53 at exactly CRAP 5)
+- `pnpm check:modified-titles` -- exit 0 ("2 active change(s)")
+
+<a id="w8"></a>
+## W8 — 1.5a: final cell design (spec-derived axes) and mutation self-check -- vacuous cells found and fixed
+
+_2026-09-08T20:22Z_
+
+Task 1.5a (`w.as` folds a core-built set operation's two branches, flat
+shapes) -- final cell design and mutation self-check, superseding the
+earlier W7 entry's own cell table (kept for the implementation/
+invariant record; this entry covers the cell-design correction and the
+mutation-driven verification that followed it).
+
+**Cell design, final** (lead-ratified, derived from the query-type-
+inference spec's own untracked-widening rule, lines 101-125/130-141):
+- Whole-table branches: the `from` table's own declared nullability is
+  kept (the statement's `from` position is tracked), so the
+  nullability axis (`#944`'s own shape: LEFT notNull x RIGHT nullable,
+  and the reverse) is the one this observation point (`CteFieldRef<T>`'s
+  own `T`, `@hejbro/query`'s OP7) can detect.
+- Object-projection branches: the declared-READ-TYPE axis (not
+  nullability) is what this observation point cleanly detects --
+  `integer` vs `bigint({mode:"bigint"})`, both notNull, same family
+  ("numeric"), different resolved TS mode.
+- Do not assume either axis is empty without measuring: the rule
+  above is a starting hypothesis from the spec text, not a substitute
+  for the mutation self-check below, which is what actually settles
+  emptiness per cell.
+
+**Mutation self-check** (`packages/core/src/query/with.ts`, one-line
+mutation: `CteSetOpEnvironment`'s own conditional forced to
+`true extends true ? CteRowEnvironment<TProjection> : ...` -- folding
+disabled, always the left-only fallback; restored via
+`git diff > patch && git checkout -- with.ts` then `git apply patch`,
+never `git stash`, 412/R35):
+
+First pass (17 cells, before the fix below) -- 12 of 17 assertions
+went red, 5 stayed green. Of the 5: 3 were EXPECTED to stay green
+(the hand-written-fallback test, and both invariant-(a) non-set-op
+tests -- none of these exercise the mutated code path at all). The
+other 2 were a genuine finding: "both branches notNull, DIFFERENT
+tables, otherwise identically-shaped columns" (one whole-table cell,
+one object-projection cell) did NOT detect the mutation --
+`toEqualTypeOf` reported the folded union (`CteFieldRef<A | B>`) equal
+to the unfolded left-only fallback (`CteFieldRef<A>`) under the
+mutation, because two tables with STRUCTURALLY IDENTICAL column
+declarations produce STRUCTURALLY IDENTICAL column-ref types in
+TypeScript's own structural system -- table identity (which `table(...)`
+call produced the object) carries no type-level distinction, so `A | B`
+collapsed to `A` before the mutation even mattered. A vacuous cell,
+exactly the failure pattern the reviewer's own mutation pass separately
+found in a different file (task 1.3's own flat cells, #738) -- this is
+the SAME class of trap recurring in a THIRD independent place, this
+change's own "positive control" cells.
+
+Fix: replaced both vacuous cells with a genuinely divergent pair
+(`integer` vs `bigint({mode:"bigint"})`, both notNull, same family,
+different resolved TS mode -- the axis the approved 1.6 contract text
+names directly, "the union of both branches' declared read types").
+
+Second pass (17 cells, after the fix) -- 14 of 17 assertions went red
+(the same 3 expected-unaffected tests stayed green, confirmed by exact
+line-number mapping against the file's own `it()` block boundaries).
+Every cell intended to be non-empty was confirmed non-empty by direct
+measurement, not by argument.
+
+**Serial gates (brief order), on the restored (non-mutated) diff:**
+- `TURBO_FORCE=1 pnpm check` -- exit 0 (one formatting fix applied
+  earlier; 3 pre-existing warnings, unrelated)
+- `TURBO_FORCE=1 pnpm check-types` -- exit 0 (turbo: 19/19 tasks;
+  a background diagnostic tool repeatedly surfaced stale errors from
+  already-deleted spike files and a dist-rebuild timing window during
+  this session -- re-verified clean via a direct, explicit `tsc
+  --noEmit` invocation each time before trusting the result)
+- `TURBO_FORCE=1 pnpm test` -- exit 0 (turbo `test`: 19/19 --
+  `@hejbro/core` 109 files / 2329 tests + 1 todo; turbo `test:types`: 2/2)
+- `pnpm check:crap` -- exit 0 (0 violations, 53 at exactly CRAP 5)
+- `pnpm check:modified-titles` -- exit 0 ("2 active change(s)")
+
+No runtime cells exist in this task (packages/core is a pure package,
+no driver/execution layer) -- the "JS-shape-diverging runtime
+declaration" rule (int vs bigint at the value level) does not apply
+here; noted per the lead's own instruction to report this fact rather
+than silently skip the rule.
+

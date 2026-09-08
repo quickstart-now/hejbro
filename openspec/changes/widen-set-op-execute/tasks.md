@@ -7,13 +7,26 @@ minimal green, then refactor. Every source rule of this repository
 applies (`any`/`let`/`var`/`for`/`while`/ternary banned; comments state
 the constraint only).
 
+**No vacuous cell** (measured on this change, review round 1): a set-op
+cell whose LEFT branch is already the widest reads the same type whether
+the fold runs or not, so it passes a fold that was never wired. Every
+surface therefore carries at least one cell whose RIGHT branch is
+strictly wider — `#944`'s own case is that shape — and a mutation that
+drops the fold has to redden it. Per surface, not per combinator: a
+`SetOpStage` carries no operator, so a fold cannot branch on which
+combinator built it (measured in review). Two independent input tables
+(the implementer's and the reviewer's) both fell into this on the first
+pass and only the mutation found it.
+
 **Files edited**: `packages/core/src/query/select.ts` and its type tests
 (1.1); `packages/query/src/db/db.ts` and `packages/query/test/` type
 tests (1.2, 1.3); `skills/hejbro/references/query-layer.md`, one
-`.changeset/*.md` (1.4). If a task appears to need any other file, that
-goes back to the planner, not into the diff.
+`.changeset/*.md` (1.4); `packages/core/src/query/with.ts` and its type
+tests (1.5a, 1.5b); the delta spec and the reference again (1.6). If a
+task appears to need any other file — `CteReference`'s own shape
+included — that goes back to the planner, not into the diff.
 
-**Ordering.** 1.1 → 1.2 → 1.3 → 1.4.
+**Ordering.** 1.1 → 1.2 → 1.3 → 1.4 → 1.5a → 1.5b → 1.6.
 
 ## 1. The core-built set operation types its union
 
@@ -56,3 +69,45 @@ goes back to the planner, not into the diff.
       that section's `(#944)` citation goes or stays follows 1.2/1.3's
       measurement, not this task's judgement. `pnpm changeset` →
       `minor`. Files: the reference, `.changeset/*.md`.
+
+- [x] 1.5a (~6m) A set operation used as a CTE body reads as the union
+      too, flat. Measured after 1.4: `w.as("x", select(a).union(
+      select(b)))` reads the CTE reference off the left branch's raw
+      projection, so a column nullable only in the right branch reads
+      non-null — #944's own defect on a value-level path the
+      requirement's "on every surface" covers. Folding the composed
+      projection is not the way: a merged object's field is a union of
+      values from two different origin brands, which breaks the
+      single-source `TableColumns` inference `CteRowEnvironment`'s
+      whole-table arm does and collapses the field to `unknown`
+      (measured). Instead each branch's environment is computed on its
+      own — every branch is a single-source projection, the arm's own
+      premise — and the two are merged per key, keyed off the
+      environments (keying off the raw tables drags the `tableMeta`
+      symbol into a position `CteFieldRef` refuses; measured). Red:
+      `packages/core/test/query/` — a table over {right branch nullable
+      (the #944 case); both notNull; left branch nullable; the six
+      combinators} × {whole-table branches; object-projection branches}.
+      Invariants, each pinned by a test rather than argued: the
+      whole-table arm itself is not edited and non-set-op CTE entries
+      read exactly as before; the merge agrees with `execute()`'s own
+      fold for every key and on the key set itself (two-way `extends`
+      against the `ExecuteResult` row — one folding rule, never a
+      second); the runtime is untouched, since
+      `buildCteRowEnvironment` already reads the left branch's
+      `projectionInput` alone and that is the left-keys rule. Files:
+      `with.ts`, tests.
+
+- [ ] 1.5b (~6m) The CTE fold recurses, and the recursive entry does not
+      move. Red: the same test file — a table over {nested left; nested
+      right; three levels} × {whole-table; object projection}. The
+      recursive anchor/term path keeps its own rule (always widened,
+      #942); its existing tests are the no-regression pin and must not
+      be edited. Files: `with.ts`, tests.
+
+- [ ] 1.6 (~4m) The contract says the third surface. The delta's ADDED
+      requirement gains the CTE-body scenario and names that surface in
+      its own sentence; `query-layer.md` drops the `(#944)` citation and
+      its `withCte` paragraph states the folded read. Every word of both
+      is lead-approved before the commit. Files: the delta spec, the
+      reference.
