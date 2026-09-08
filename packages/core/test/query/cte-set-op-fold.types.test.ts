@@ -1,4 +1,4 @@
-import { describe, expectTypeOf, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 import type {
 	CteBuilder,
 	CteFieldRef,
@@ -347,5 +347,192 @@ describe("the CTE fold reuses SetOpResult's own formula, not a second implementa
 		type ActualKeys = keyof typeof stage.projectionInput;
 		type FoldedKeys = keyof Folded;
 		expectTypeOf<ActualKeys>().toEqualTypeOf<FoldedKeys>();
+	});
+});
+
+/**
+ * Nesting (widen-set-op-execute, task 1.5b, OP7 throughout -- see this
+ * file's own top-of-file note): a branch that is itself a nested
+ * `SetOpStage` used to fall through `CteSetOpBranchProjection`'s
+ * `never` arm entirely (task 1.5a's own scope boundary), collapsing
+ * the outer fold to `SetOpResult<never, X> = never` -- the same
+ * `never`-collapse shape `@hejbro/query`'s own task 1.2/1.3 split hit
+ * for `execute()`'s own fold, now measured on the CTE surface. Each
+ * cell reuses task 1.5a's own two axes (whole-table: nullability,
+ * `flagTableNotNull`/`flagTableNullable`; object projection: declared-
+ * read-type, `numericLeft`/`numericRight`) so the expected value can be
+ * built directly from {@link SetOpResult}, nested exactly as many
+ * levels as the cell's own shape, rather than hand-guessed. The flat
+ * cells above (task 1.5a) are this task's own topic-external control:
+ * they already prove the base fold works without nesting in the
+ * picture, so a nested cell's own red is attributable to nesting
+ * specifically, not to the fold itself being broken.
+ */
+describe("the CTE fold recurses through a nested branch (widen-set-op-execute, task 1.5b)", () => {
+	it("left-nested, whole-table: (a union b) except c -- OP7, nullability axis", () => {
+		const stage = withCte((w) => {
+			const inner = select(flagTableNotNull).union(select(flagTableNullable));
+			const x = w.as("x", inner.except(select(flagTableNotNull)));
+			return select({ flag: x.flag }, x);
+		});
+		type Inner = SetOpResult<
+			{ readonly flag: (typeof flagTableNotNull)["flag"] },
+			{ readonly flag: (typeof flagTableNullable)["flag"] }
+		>;
+		type Outer = SetOpResult<
+			Inner,
+			{ readonly flag: (typeof flagTableNotNull)["flag"] }
+		>;
+		expectTypeOf(stage.projectionInput.flag).toEqualTypeOf<
+			CteFieldRef<Outer["flag"]>
+		>();
+	});
+
+	it("right-nested, whole-table: a except (b union c) -- OP7, nullability axis", () => {
+		const stage = withCte((w) => {
+			const inner = select(flagTableNotNull).union(select(flagTableNullable));
+			const x = w.as("x", select(flagTableNotNull).except(inner));
+			return select({ flag: x.flag }, x);
+		});
+		type Inner = SetOpResult<
+			{ readonly flag: (typeof flagTableNotNull)["flag"] },
+			{ readonly flag: (typeof flagTableNullable)["flag"] }
+		>;
+		type Outer = SetOpResult<
+			{ readonly flag: (typeof flagTableNotNull)["flag"] },
+			Inner
+		>;
+		expectTypeOf(stage.projectionInput.flag).toEqualTypeOf<
+			CteFieldRef<Outer["flag"]>
+		>();
+	});
+
+	it("three levels, whole-table: ((a union b) except c) intersect d -- OP7, nullability axis, depth is bounded by the statement, not a type budget", () => {
+		const stage = withCte((w) => {
+			const level1 = select(flagTableNotNull).union(select(flagTableNullable));
+			const level2 = level1.except(select(flagTableNotNull));
+			const x = w.as("x", level2.intersect(select(flagTableNullable)));
+			return select({ flag: x.flag }, x);
+		});
+		type Level1 = SetOpResult<
+			{ readonly flag: (typeof flagTableNotNull)["flag"] },
+			{ readonly flag: (typeof flagTableNullable)["flag"] }
+		>;
+		type Level2 = SetOpResult<
+			Level1,
+			{ readonly flag: (typeof flagTableNotNull)["flag"] }
+		>;
+		type Level3 = SetOpResult<
+			Level2,
+			{ readonly flag: (typeof flagTableNullable)["flag"] }
+		>;
+		expectTypeOf(stage.projectionInput.flag).toEqualTypeOf<
+			CteFieldRef<Level3["flag"]>
+		>();
+	});
+
+	it("left-nested, object projection: (a union b) except c -- OP7, declared-read-type axis", () => {
+		const stage = withCte((w) => {
+			const inner = select({ num: numericLeft.num }, numericLeft).union(
+				select({ num: numericRight.num }, numericRight),
+			);
+			const x = w.as(
+				"x",
+				inner.except(select({ num: numericLeft.num }, numericLeft)),
+			);
+			return select({ num: x.num }, x);
+		});
+		type Inner = SetOpResult<
+			{ readonly num: (typeof numericLeft)["num"] },
+			{ readonly num: (typeof numericRight)["num"] }
+		>;
+		type Outer = SetOpResult<
+			Inner,
+			{ readonly num: (typeof numericLeft)["num"] }
+		>;
+		expectTypeOf(stage.projectionInput.num).toEqualTypeOf<
+			CteFieldRef<Outer["num"]>
+		>();
+	});
+
+	it("right-nested, object projection: a except (b union c) -- OP7, declared-read-type axis", () => {
+		const stage = withCte((w) => {
+			const inner = select({ num: numericLeft.num }, numericLeft).union(
+				select({ num: numericRight.num }, numericRight),
+			);
+			const x = w.as(
+				"x",
+				select({ num: numericLeft.num }, numericLeft).except(inner),
+			);
+			return select({ num: x.num }, x);
+		});
+		type Inner = SetOpResult<
+			{ readonly num: (typeof numericLeft)["num"] },
+			{ readonly num: (typeof numericRight)["num"] }
+		>;
+		type Outer = SetOpResult<
+			{ readonly num: (typeof numericLeft)["num"] },
+			Inner
+		>;
+		expectTypeOf(stage.projectionInput.num).toEqualTypeOf<
+			CteFieldRef<Outer["num"]>
+		>();
+	});
+
+	it("three levels, object projection: ((a union b) except c) intersect d -- OP7, declared-read-type axis", () => {
+		const stage = withCte((w) => {
+			const level1 = select({ num: numericLeft.num }, numericLeft).union(
+				select({ num: numericRight.num }, numericRight),
+			);
+			const level2 = level1.except(
+				select({ num: numericLeft.num }, numericLeft),
+			);
+			const x = w.as(
+				"x",
+				level2.intersect(select({ num: numericRight.num }, numericRight)),
+			);
+			return select({ num: x.num }, x);
+		});
+		type Level1 = SetOpResult<
+			{ readonly num: (typeof numericLeft)["num"] },
+			{ readonly num: (typeof numericRight)["num"] }
+		>;
+		type Level2 = SetOpResult<
+			Level1,
+			{ readonly num: (typeof numericLeft)["num"] }
+		>;
+		type Level3 = SetOpResult<
+			Level2,
+			{ readonly num: (typeof numericRight)["num"] }
+		>;
+		expectTypeOf(stage.projectionInput.num).toEqualTypeOf<
+			CteFieldRef<Level3["num"]>
+		>();
+	});
+});
+
+describe("a recursive CTE entry is untouched by any of this (invariant b, task 1.5b — pinned by absence, not a positive left-join assertion)", () => {
+	it("asRecursive's own anchor/term compatibility gate is unaffected -- a recursive term that is itself a set operation still type-checks, exactly as before this task (no claim about what nullability it reads back as -- #1053's own boundary, out of this change's scope)", () => {
+		const stage = withCte((w) => {
+			const r = w.asRecursive(
+				"r",
+				select(
+					{ id: flagTableNotNull.id, flag: flagTableNotNull.flag },
+					flagTableNotNull,
+				),
+				(self) =>
+					select(
+						{ id: self.id, flag: flagTableNotNull.flag },
+						flagTableNotNull,
+					).union(
+						select(
+							{ id: flagTableNullable.id, flag: flagTableNullable.flag },
+							flagTableNullable,
+						),
+					),
+			);
+			return select({ id: r.id, flag: r.flag }, r);
+		});
+		expect(stage.withQuery.recursive).toBe(true);
 	});
 });

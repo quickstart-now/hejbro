@@ -10,10 +10,12 @@ import type {
 } from "../expr/ast";
 import type { UntrackedJoins } from "./left-joined";
 import type {
+	IsUnfilledBranch,
 	SelectLimited,
 	SelectProjection,
 	SetOpResult,
 	SetOpStage,
+	SetOpStageBranches,
 } from "./select";
 import type { RecursiveCteEntryOptions } from "./with-recursive";
 import { buildRecursiveEntryQuery } from "./with-recursive";
@@ -85,7 +87,7 @@ export type CteRowEnvironment<TProjection extends SelectProjection> =
 
 /**
  * Merges two branches' own row environments key by key (widen-set-op-
- * execute, task 1.5a) — built from each branch's OWN single-source
+ * execute, task 1.5a/1.5b) — built from each branch's OWN single-source
  * projection through {@link CteRowEnvironment} unmodified, never by
  * re-entering that type against an already-folded synthetic shape
  * (measured: a whole-table branch's own `TColumns` inference cannot
@@ -93,28 +95,56 @@ export type CteRowEnvironment<TProjection extends SelectProjection> =
  * The key range comes from the two environments themselves (`keyof
  * CteRowEnvironment<...>`), not the raw projections — a `Table`'s own
  * hidden `tableMeta` brand key would otherwise reach {@link
- * CteFieldRef}'s `extends Expr` constraint and fail it (measured). One
- * `CteFieldRef` per key, wrapping the union of both branches' own raw
- * projected values — the same shape a plain union of two same-keyed
- * object projections already produces successfully through this exact
- * type today.
+ * CteFieldRef}'s `extends Expr` constraint and fail it (measured).
+ *
+ * Per-key value: {@link SetOpResult}'s own fold, CONSUMED here, never
+ * re-derived — task 1.5b's own strengthening of invariant (c): a
+ * hand-written `TLeft[K] | TRight[K]` in this file would be a second,
+ * independently-maintained copy of the exact question `SetOpResult`
+ * already answers (the same key-by-key union `@hejbro/query`'s own
+ * `db.ts` folds an executed row through), and the two copies could
+ * silently diverge the moment only one of them is ever touched again.
+ * Verified this stays the SAME fold as the flat case (task 1.5a's own
+ * P1 spike): indexing `SetOpResult<TLeftProjection, TRightProjection>`
+ * by a key already proven safe (present in both environments) never
+ * re-enters {@link CteRowEnvironment}'s own `Table<infer TColumns>`
+ * branch — the failure mode that branch has is against a synthetic,
+ * already-folded INPUT, not against reading a plain OUTPUT key.
  */
 type MergedCteRowEnvironment<
 	TLeftProjection extends SelectProjection,
 	TRightProjection extends SelectProjection,
 > = {
 	readonly [K in keyof CteRowEnvironment<TLeftProjection> &
-		keyof CteRowEnvironment<TRightProjection>]: CteFieldRef<
-		| TLeftProjection[K & keyof TLeftProjection]
-		| TRightProjection[K & keyof TRightProjection]
+		keyof CteRowEnvironment<TRightProjection> &
+		keyof SetOpResult<TLeftProjection, TRightProjection>]: CteFieldRef<
+		SetOpResult<TLeftProjection, TRightProjection>[K]
 	>;
 };
 
 /**
- * A set-op branch's own declared projection (widen-set-op-execute, task
- * 1.5a) — flat only: a branch that is itself a nested `SetOpStage` is
- * task 1.5b's own arm, deliberately absent here so its own red stays
- * red until that task adds it.
+ * A set-op branch's own declared projection (widen-set-op-execute, tasks
+ * 1.5a/1.5b) — a select branch's own `projectionInput`, unchanged; a
+ * branch that is itself a nested `SetOpStage` (`(a union b) except c`,
+ * either side, any depth) recurses through {@link SetOpResult} directly
+ * (never re-deriving the fold, task 1.5b's own invariant-c
+ * strengthening) — the nested fold's own OUTPUT is a plain, non-nominal
+ * object, which routes {@link CteRowEnvironment}'s object-projection
+ * branch (never its whole-table `infer TColumns` branch, the one this
+ * package's own P1 spike measured broken against a synthetic input) at
+ * whatever level {@link MergedCteRowEnvironment} eventually reads it.
+ * Either branch parameter unfilled (a hand-written nested
+ * `SetOpStage<P>`) keeps that nested level's own declared projection
+ * alone, the same fallback the outermost level takes.
+ *
+ * The nested branch's own three parameters come from {@link
+ * SetOpStageBranches} (core's own shared "extract a `SetOpStage`'s
+ * branches" convention, task 1.5b's own invariant-c strengthening) —
+ * checked via `[SetOpStageBranches<TStage>] extends [never]`, the
+ * tuple-wrapped form: `SetOpStageBranches`'s own `never` (not a
+ * `SetOpStage` at all) is itself assignable to any object shape, so an
+ * un-wrapped `SetOpStageBranches<TStage> extends {...}` check would
+ * wrongly match a `SelectLimited` branch here too.
  */
 type CteSetOpBranchProjection<TStage> =
 	TStage extends SelectLimited<
@@ -122,17 +152,16 @@ type CteSetOpBranchProjection<TStage> =
 		infer _TLeftJoined
 	>
 		? TProjection
-		: never;
-
-/**
- * `true` when `TStage` is the unfilled default (`unknown`) a hand-
- * written `SetOpStage<TProjection>` leaves both branch parameters at
- * (widen-set-op-execute, task 1.5a) — the same `[unknown] extends [X]`
- * membership test `@hejbro/query`'s own `IsUnfilledBranch` (`db.ts`,
- * task 1.2) uses for the identical question on the query-layer's own
- * resolved-row fold.
- */
-type IsUnfilledCteBranch<TStage> = [unknown] extends [TStage] ? true : false;
+		: [SetOpStageBranches<TStage>] extends [never]
+			? never
+			: IsUnfilledBranch<SetOpStageBranches<TStage>["left"]> extends true
+				? SetOpStageBranches<TStage>["projection"]
+				: IsUnfilledBranch<SetOpStageBranches<TStage>["right"]> extends true
+					? SetOpStageBranches<TStage>["projection"]
+					: SetOpResult<
+							CteSetOpBranchProjection<SetOpStageBranches<TStage>["left"]>,
+							CteSetOpBranchProjection<SetOpStageBranches<TStage>["right"]>
+						>;
 
 /**
  * The row environment `w.as(...)` builds for a core-built set-operation
@@ -148,9 +177,9 @@ type CteSetOpEnvironment<
 	TLeftStage,
 	TRightStage,
 > =
-	IsUnfilledCteBranch<TLeftStage> extends true
+	IsUnfilledBranch<TLeftStage> extends true
 		? CteRowEnvironment<TProjection>
-		: IsUnfilledCteBranch<TRightStage> extends true
+		: IsUnfilledBranch<TRightStage> extends true
 			? CteRowEnvironment<TProjection>
 			: MergedCteRowEnvironment<
 					CteSetOpBranchProjection<TLeftStage>,
@@ -342,16 +371,15 @@ type CompatibleRecursiveTerm<TProjection, TRecursiveProjection> = [
  * already carries — a hand-written, bare `SetOpStage<TProjection>`
  * argument therefore keeps its exact pre-1.5 meaning.
  */
-type CteAsResult<TQuery> =
-	TQuery extends SetOpStage<
-		infer TProjection extends SelectProjection,
-		infer TLeftStage,
-		infer TRightStage
-	>
-		? CteSetOpReference<TProjection, TLeftStage, TRightStage>
-		: TQuery extends SelectLimited<infer TProjection extends SelectProjection>
-			? CteReference<TProjection>
-			: never;
+type CteAsResult<TQuery> = [SetOpStageBranches<TQuery>] extends [never]
+	? TQuery extends SelectLimited<infer TProjection extends SelectProjection>
+		? CteReference<TProjection>
+		: never
+	: CteSetOpReference<
+			SetOpStageBranches<TQuery>["projection"],
+			SetOpStageBranches<TQuery>["left"],
+			SetOpStageBranches<TQuery>["right"]
+		>;
 
 /**
  * Passed into a `withCte(...)` callback (add-ctes, task 3.1) — the only way
