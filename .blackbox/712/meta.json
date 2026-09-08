@@ -263,6 +263,13 @@
       "title": "B2 rework, iteration 4: restore e90bd7e7's content-first Omitted rule",
       "pr": null,
       "decisions": []
+    },
+    {
+      "id": "W10",
+      "at": "2026-09-08T22:29Z",
+      "title": "cfr2 constructor review round: PASS, NB1 fixed here, NB2 filed #1058, NB3 won't-fix",
+      "pr": null,
+      "decisions": []
     }
   ],
   "prs": [

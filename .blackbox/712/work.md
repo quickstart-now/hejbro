@@ -584,3 +584,47 @@ clean ("no violations, 53 at the threshold"). Recorded as measured
 flakiness under load, not a regression from this rework.
 `check:modified-titles` exits 0.
 
+<a id="w10"></a>
+## W10 — cfr2 constructor review round: PASS, NB1 fixed here, NB2 filed #1058, NB3 won't-fix
+
+_2026-09-08T22:29Z_
+
+712/R17 (D106 round 2 constructor review): the reviewer's second pass,
+constructed independently against SHA 79302049, closed B1, B2 and N4
+-- no new blocking finding. Three non-blocking findings (NB1-NB3)
+followed.
+
+NB1 (this rework's own regression, fixed in 51ad8a36): the B2 rework's
+own `schemaHeldAnUncarriableName` (import.ts/pull.ts) reintroduced an
+`identity !== undefined && identity.startsWith(...)` guard Biome flags
+as `lint/complexity/useOptionalChain`. `pnpm check` warning count rose
+3 -> 5 against 5e9f9b6d's own baseline (all 3 of that baseline's
+warnings are `scripts/check-modified-titles.mjs`, unrelated to this
+change). Fixed by rewriting both call sites as
+`identity?.startsWith(...)` -- no behavior change (`.some()` treats
+`undefined` the same as `false`); confirmed live: `pnpm check` warning
+count back to 3, all `scripts/`. Gates (`check`/`check-types`/`test`/
+`check:crap`/`check:modified-titles`) all exit 0 after the fix.
+
+NB2 (lead-triaged, filed #1058, out of this change's scope): an index,
+check or unique constraint whose own name fails D36 *and* whose only
+carried column was itself already omitted currently gets one chain
+line with a `Next:` naming only the column's own rename -- following
+that rename alone re-imports into the same member being omitted again,
+this time for its own name. Requirement 2's "a line that names the way
+out SHALL name the whole of it" reads strictly (the lead's ruling, and
+the reviewer's own repro follows the stated way out and finds it
+false) -- a genuine gap, but this change's own scope is schema-level
+classification, not member-level `Next:` composition, so it is a
+follow-up rather than a fold-in.
+
+NB3 (won't-fix, lead-triaged): a schema whose own name fails D36 and
+holds only a standalone sequence has no line anywhere naming the
+sequence itself (only the schema's generic `Not inferred:` line, this
+rework's own W9 finding). Not a gap under the content-first rule: the
+schema is named on its own `Not inferred:` line as this change's delta
+requires: a standalone sequence is a *kind* cause (D66, no DSL
+builder) with no rename that would ever recover it, so a further,
+sequence-specific line would give the reader no action to take --
+recorded as an intentional asymmetry, not fixed.
+
