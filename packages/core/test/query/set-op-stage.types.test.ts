@@ -130,6 +130,34 @@ describe("the branch-stage carrier recurses through nested combinations (task 1.
 	});
 });
 
+describe("orderBy()/limit() forward both branch parameters unchanged (rework R2: task 1.1 and the proposal both state whole-set orderBy/limit forward both branches -- no cell anywhere pinned it before this; the reviewer's own such cell was measured vacuous, so this one is written fresh, not ported)", () => {
+	const left = select(posts);
+	const right = select(archivedPosts);
+	const combined = left.union(right);
+
+	it("orderBy() keeps the exact same LeftStageOf/RightStageOf", () => {
+		const ordered = combined.orderBy(posts.title);
+		expectTypeOf<LeftStageOf<typeof ordered>>().toEqualTypeOf<typeof left>();
+		expectTypeOf<RightStageOf<typeof ordered>>().toEqualTypeOf<
+			typeof right
+		>();
+	});
+
+	it("limit() keeps the exact same LeftStageOf/RightStageOf", () => {
+		const limited = combined.limit(10);
+		expectTypeOf<LeftStageOf<typeof limited>>().toEqualTypeOf<typeof left>();
+		expectTypeOf<RightStageOf<typeof limited>>().toEqualTypeOf<
+			typeof right
+		>();
+	});
+
+	it("orderBy() then limit(), chained: both still carried", () => {
+		const both = combined.orderBy(posts.title).limit(10);
+		expectTypeOf<LeftStageOf<typeof both>>().toEqualTypeOf<typeof left>();
+		expectTypeOf<RightStageOf<typeof both>>().toEqualTypeOf<typeof right>();
+	});
+});
+
 describe("compatibility (task 1.1, design.md Q2)", () => {
 	it("a one-argument SetOpStage<P> still assigns from a fully-branched combination", () => {
 		const combined = select(posts).union(select(archivedPosts));

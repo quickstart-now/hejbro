@@ -355,49 +355,66 @@ describe("ExecuteResult folds both branches for a core-built set operation, flat
  * at the inner level alone.
  */
 describe("ExecuteResult folds nested branches and every combinator (widen-set-op-execute, task 1.3)", () => {
-	type FlatLeft = SelectLimited<Posts, never>;
-	type FlatRight = SelectLimited<Posts, never>;
+	// Rework R2 (review round 1, M1/M6 -- source: reviewer's own "reviewer:
+	// each combinator with the notNull branch on the LEFT (branch-drop
+	// detectable)" cell in FINAL-zz-reviewer-query.test.ts): the six cells
+	// below used to build `SetOpStage<Posts, FlatLeft, FlatRight>` with
+	// BOTH branches the exact same `SelectLimited<Posts, never>` -- a fold
+	// reads the same answer whether it runs or not when the two branches
+	// are identical, so five of the six passed a fold that was never wired
+	// (`union` alone was independently pinned by 1.2's own row 1).
+	// `FlagLeft`/`FlagRight` cross the nullability axis instead: the LEFT
+	// branch alone is notNull, so only reading the RIGHT branch can widen
+	// `flag` to nullable.
+	type FlagLeft = SelectLimited<FlagTableNotNull, never>;
+	type FlagRight = SelectLimited<FlagTableNullable, never>;
 
-	it("union: flat resolves through SelectResult, not never", () => {
-		type Stage = SetOpStage<Posts, FlatLeft, FlatRight>;
-		expectTypeOf<ExecuteRows<Stage>>().toEqualTypeOf<
-			ReadonlyArray<SelectResult<Posts>>
-		>();
+	it("union: reads the right branch, not just the left's own notNull declaration", () => {
+		type Stage = SetOpStage<FlagTableNotNull, FlagLeft, FlagRight>;
+		expectTypeOf<ExecuteRows<Stage>[number]>().toEqualTypeOf<{
+			readonly id: string;
+			readonly flag: string | null;
+		}>();
 	});
 
-	it("unionAll: flat resolves through SelectResult, not never", () => {
-		type Stage = SetOpStage<Posts, FlatLeft, FlatRight>;
-		expectTypeOf<ExecuteRows<Stage>>().toEqualTypeOf<
-			ReadonlyArray<SelectResult<Posts>>
-		>();
+	it("unionAll: reads the right branch, not just the left's own notNull declaration", () => {
+		type Stage = SetOpStage<FlagTableNotNull, FlagLeft, FlagRight>;
+		expectTypeOf<ExecuteRows<Stage>[number]>().toEqualTypeOf<{
+			readonly id: string;
+			readonly flag: string | null;
+		}>();
 	});
 
-	it("intersect: flat resolves through SelectResult, not never", () => {
-		type Stage = SetOpStage<Posts, FlatLeft, FlatRight>;
-		expectTypeOf<ExecuteRows<Stage>>().toEqualTypeOf<
-			ReadonlyArray<SelectResult<Posts>>
-		>();
+	it("intersect: reads the right branch, not just the left's own notNull declaration", () => {
+		type Stage = SetOpStage<FlagTableNotNull, FlagLeft, FlagRight>;
+		expectTypeOf<ExecuteRows<Stage>[number]>().toEqualTypeOf<{
+			readonly id: string;
+			readonly flag: string | null;
+		}>();
 	});
 
-	it("intersectAll: flat resolves through SelectResult, not never", () => {
-		type Stage = SetOpStage<Posts, FlatLeft, FlatRight>;
-		expectTypeOf<ExecuteRows<Stage>>().toEqualTypeOf<
-			ReadonlyArray<SelectResult<Posts>>
-		>();
+	it("intersectAll: reads the right branch, not just the left's own notNull declaration", () => {
+		type Stage = SetOpStage<FlagTableNotNull, FlagLeft, FlagRight>;
+		expectTypeOf<ExecuteRows<Stage>[number]>().toEqualTypeOf<{
+			readonly id: string;
+			readonly flag: string | null;
+		}>();
 	});
 
-	it("except: flat resolves through SelectResult, not never", () => {
-		type Stage = SetOpStage<Posts, FlatLeft, FlatRight>;
-		expectTypeOf<ExecuteRows<Stage>>().toEqualTypeOf<
-			ReadonlyArray<SelectResult<Posts>>
-		>();
+	it("except: reads the right branch, not just the left's own notNull declaration", () => {
+		type Stage = SetOpStage<FlagTableNotNull, FlagLeft, FlagRight>;
+		expectTypeOf<ExecuteRows<Stage>[number]>().toEqualTypeOf<{
+			readonly id: string;
+			readonly flag: string | null;
+		}>();
 	});
 
-	it("exceptAll: flat resolves through SelectResult, not never", () => {
-		type Stage = SetOpStage<Posts, FlatLeft, FlatRight>;
-		expectTypeOf<ExecuteRows<Stage>>().toEqualTypeOf<
-			ReadonlyArray<SelectResult<Posts>>
-		>();
+	it("exceptAll: reads the right branch, not just the left's own notNull declaration", () => {
+		type Stage = SetOpStage<FlagTableNotNull, FlagLeft, FlagRight>;
+		expectTypeOf<ExecuteRows<Stage>[number]>().toEqualTypeOf<{
+			readonly id: string;
+			readonly flag: string | null;
+		}>();
 	});
 
 	it("left-nested, pair 1 (union then except), crossed with the join axis: the inner stage's own left-joined nullability survives into the outer fold", () => {

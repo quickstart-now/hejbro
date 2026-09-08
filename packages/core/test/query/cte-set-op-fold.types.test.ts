@@ -369,19 +369,19 @@ describe("the CTE fold reuses SetOpResult's own formula, not a second implementa
  * specifically, not to the fold itself being broken.
  */
 describe("the CTE fold recurses through a nested branch (widen-set-op-execute, task 1.5b)", () => {
-	it("left-nested, whole-table: (a union b) except c -- OP7, nullability axis", () => {
+	it("left-nested, whole-table: (a union b) except c -- OP7, nullability axis (rework R2: the inner pair stays notNull so the nested branch carries no null of its own, and the OUTER combinator's own RIGHT operand is the one declared nullable -- a fold that reads only the outer LEFT (the nested branch) reads the same answer as this test's own control, `flagTableNotNull` alone; the earlier fixture put the nullable table inside the nested LEFT, so an outer-left-only bug went undetected, source: reviewer's own vacuous-cell finding)", () => {
 		const stage = withCte((w) => {
-			const inner = select(flagTableNotNull).union(select(flagTableNullable));
-			const x = w.as("x", inner.except(select(flagTableNotNull)));
+			const inner = select(flagTableNotNull).union(select(flagTableNotNull));
+			const x = w.as("x", inner.except(select(flagTableNullable)));
 			return select({ flag: x.flag }, x);
 		});
 		type Inner = SetOpResult<
 			{ readonly flag: (typeof flagTableNotNull)["flag"] },
-			{ readonly flag: (typeof flagTableNullable)["flag"] }
+			{ readonly flag: (typeof flagTableNotNull)["flag"] }
 		>;
 		type Outer = SetOpResult<
 			Inner,
-			{ readonly flag: (typeof flagTableNotNull)["flag"] }
+			{ readonly flag: (typeof flagTableNullable)["flag"] }
 		>;
 		expectTypeOf(stage.projectionInput.flag).toEqualTypeOf<
 			CteFieldRef<Outer["flag"]>
@@ -407,16 +407,16 @@ describe("the CTE fold recurses through a nested branch (widen-set-op-execute, t
 		>();
 	});
 
-	it("three levels, whole-table: ((a union b) except c) intersect d -- OP7, nullability axis, depth is bounded by the statement, not a type budget", () => {
+	it("three levels, whole-table: ((a union b) except c) intersect d -- OP7, nullability axis, depth is bounded by the statement, not a type budget (rework R2: levels 1 and 2 stay notNull throughout, so the outermost combinator's own RIGHT operand is the only nullable declaration in the whole chain -- the earlier fixture introduced null at level 1, already nullable by the time the outermost step ran, source: reviewer's own vacuous-cell finding)", () => {
 		const stage = withCte((w) => {
-			const level1 = select(flagTableNotNull).union(select(flagTableNullable));
+			const level1 = select(flagTableNotNull).union(select(flagTableNotNull));
 			const level2 = level1.except(select(flagTableNotNull));
 			const x = w.as("x", level2.intersect(select(flagTableNullable)));
 			return select({ flag: x.flag }, x);
 		});
 		type Level1 = SetOpResult<
 			{ readonly flag: (typeof flagTableNotNull)["flag"] },
-			{ readonly flag: (typeof flagTableNullable)["flag"] }
+			{ readonly flag: (typeof flagTableNotNull)["flag"] }
 		>;
 		type Level2 = SetOpResult<
 			Level1,
@@ -431,24 +431,24 @@ describe("the CTE fold recurses through a nested branch (widen-set-op-execute, t
 		>();
 	});
 
-	it("left-nested, object projection: (a union b) except c -- OP7, declared-read-type axis", () => {
+	it("left-nested, object projection: (a union b) except c -- OP7, declared-read-type axis (rework R2: the inner pair stays single-typed (`numericLeft` both sides), so the nested branch carries no bigint declaration of its own, and the OUTER combinator's own RIGHT operand (`numericRight`) is the only bigint-declaring branch in the chain -- the earlier fixture put both declared types inside the nested LEFT already, so an outer-left-only bug went undetected, source: reviewer's own vacuous-cell finding)", () => {
 		const stage = withCte((w) => {
 			const inner = select({ num: numericLeft.num }, numericLeft).union(
-				select({ num: numericRight.num }, numericRight),
+				select({ num: numericLeft.num }, numericLeft),
 			);
 			const x = w.as(
 				"x",
-				inner.except(select({ num: numericLeft.num }, numericLeft)),
+				inner.except(select({ num: numericRight.num }, numericRight)),
 			);
 			return select({ num: x.num }, x);
 		});
 		type Inner = SetOpResult<
 			{ readonly num: (typeof numericLeft)["num"] },
-			{ readonly num: (typeof numericRight)["num"] }
+			{ readonly num: (typeof numericLeft)["num"] }
 		>;
 		type Outer = SetOpResult<
 			Inner,
-			{ readonly num: (typeof numericLeft)["num"] }
+			{ readonly num: (typeof numericRight)["num"] }
 		>;
 		expectTypeOf(stage.projectionInput.num).toEqualTypeOf<
 			CteFieldRef<Outer["num"]>
@@ -479,10 +479,10 @@ describe("the CTE fold recurses through a nested branch (widen-set-op-execute, t
 		>();
 	});
 
-	it("three levels, object projection: ((a union b) except c) intersect d -- OP7, declared-read-type axis", () => {
+	it("three levels, object projection: ((a union b) except c) intersect d -- OP7, declared-read-type axis (rework R2: levels 1 and 2 stay single-typed (`numericLeft` throughout), so the outermost combinator's own RIGHT operand (`numericRight`) is the only bigint-declaring branch in the whole chain -- the earlier fixture introduced bigint at level 1, already present by the time the outermost step ran, source: reviewer's own vacuous-cell finding)", () => {
 		const stage = withCte((w) => {
 			const level1 = select({ num: numericLeft.num }, numericLeft).union(
-				select({ num: numericRight.num }, numericRight),
+				select({ num: numericLeft.num }, numericLeft),
 			);
 			const level2 = level1.except(
 				select({ num: numericLeft.num }, numericLeft),
@@ -495,7 +495,7 @@ describe("the CTE fold recurses through a nested branch (widen-set-op-execute, t
 		});
 		type Level1 = SetOpResult<
 			{ readonly num: (typeof numericLeft)["num"] },
-			{ readonly num: (typeof numericRight)["num"] }
+			{ readonly num: (typeof numericLeft)["num"] }
 		>;
 		type Level2 = SetOpResult<
 			Level1,
