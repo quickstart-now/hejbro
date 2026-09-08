@@ -1,20 +1,15 @@
 {
   "version": 3,
   "kind": "issue",
-  "ref": "quickstart-now/hejbro#1016",
-  "title": "import: a cross-schema handle's columns are emitted with arbitrary types (text() for an int column)",
+  "ref": "quickstart-now/hejbro#1048",
+  "title": "import/pull: a column unreadable for both its name and its type gets the rename remedy, which cannot resolve it",
   "parent": "quickstart-now/hejbro#995",
   "status": "open",
-  "opened": "2026-09-06",
+  "opened": "2026-09-08",
   "closed": null,
   "decisions": [],
   "work": [],
   "prs": [
-    {
-      "number": 1026,
-      "role": "refs",
-      "pinnedAt": "2026-09-06T11:29Z"
-    },
     {
       "number": 1049,
       "role": "refs",
