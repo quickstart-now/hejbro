@@ -22,9 +22,12 @@ pass and only the mutation found it.
 (1.1); `packages/query/src/db/db.ts` and `packages/query/test/` type
 tests (1.2, 1.3); `skills/hejbro/references/query-layer.md`, one
 `.changeset/*.md` (1.4); `packages/core/src/query/with.ts` and its type
-tests (1.5a, 1.5b); the delta spec and the reference again (1.6). If a
-task appears to need any other file — `CteReference`'s own shape
-included — that goes back to the planner, not into the diff.
+tests (1.5a, 1.5b), plus `packages/core/src/query/select.ts` and
+`packages/query/src/db/db.ts` where 1.5b lifts the branch-carrying
+convention into core for both consumers; the delta spec and the
+reference again (1.6). If a task appears to need any other file —
+`CteReference`'s own shape included — that goes back to the planner, not
+into the diff.
 
 **Ordering.** 1.1 → 1.2 → 1.3 → 1.4 → 1.5a → 1.5b → 1.6.
 
@@ -98,12 +101,20 @@ included — that goes back to the planner, not into the diff.
       `projectionInput` alone and that is the left-keys rule. Files:
       `with.ts`, tests.
 
-- [ ] 1.5b (~6m) The CTE fold recurses, and the recursive entry does not
+- [x] 1.5b (~6m) The CTE fold recurses, and the recursive entry does not
       move. Red: the same test file — a table over {nested left; nested
       right; three levels} × {whole-table; object projection}. The
       recursive anchor/term path keeps its own rule (always widened,
       #942); its existing tests are the no-regression pin and must not
-      be edited. Files: `with.ts`, tests.
+      be edited. The fold itself has one source — core's `SetOpResult`,
+      which `@hejbro/query` re-exports and `db.ts` already folds through
+      — so `with.ts` consumes that same type rather than restating a
+      per-key union of its own; and the branch-carrying convention 1.1
+      introduced (reading `SetOpStage`'s two branch parameters, and what
+      an unfilled `unknown` branch means) is lifted into core so both
+      consumers read one definition, since a convention kept in two
+      places is repaired in one. Files: `with.ts`, `select.ts`, `db.ts`,
+      tests.
 
 - [ ] 1.6 (~4m) The contract says the third surface. The delta's ADDED
       requirement gains the CTE-body scenario and names that surface in

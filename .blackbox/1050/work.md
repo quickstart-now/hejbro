@@ -573,3 +573,275 @@ declaration" rule (int vs bigint at the value level) does not apply
 here; noted per the lead's own instruction to report this fact rather
 than silently skip the rule.
 
+<a id="w9"></a>
+## W9 — 1.5b: nested cte fold, invariant-c strengthened (shared SetOpResult), bidirectional mutation asymmetry
+
+_2026-09-08T20:40Z_
+
+Task 1.5b (CTE fold recurses, invariant-c strengthened, recursive entry
+untouched) implementation measured before commit, on top of `5bd430aa`
+(`widen-set-op-execute` worktree), diff: `packages/core/src/query/with.ts`
+(refactor + nested arm) + `packages/core/test/query/cte-set-op-fold.types.test.ts`
+(+7 cases: 6 nested, 1 recursive-invariant).
+
+**Invariant (c) strengthened: shared type-level function, not a second
+implementation.**
+- `MergedCteRowEnvironment` no longer writes `TLeft[K] | TRight[K]` by
+  hand -- it now indexes `SetOpResult<TLeftProjection, TRightProjection>`
+  directly (the fold is CONSUMED, not re-derived). Value equality with
+  `SetOpResult`'s own output was already proven in W7/task 1.5a; this
+  closes the gap the lead flagged (value equality alone would still
+  pass for two independently-correct implementations that could later
+  diverge).
+- `CteSetOpBranchProjection`/`IsUnfilledCteBranch` (core, `with.ts`)
+  CANNOT be the literal same symbol as db.ts's `SetOpBranchRow`/
+  `IsUnfilledBranch` (`@hejbro/query`) -- core purity forbids
+  `packages/core` importing `packages/query` (dependency runs query
+  core, never the reverse). Reported this constraint to the planner
+  before proceeding; no objection raised. The one symbol that CAN be
+  (and now is) physically shared is `SetOpResult` itself, defined once
+  in `packages/core/src/query/select.ts`, imported unchanged by both
+  `db.ts` and `with.ts`. The per-package "is this branch filled"
+  dispatch wrappers are necessarily parallel (different input/output
+  tiers -- query-layer resolved rows vs. core-layer projections), not
+  a re-derivation of the fold rule itself.
+- Nested branches route through {@link SetOpResult} recursively too
+  (`CteSetOpBranchProjection`'s own nested arm) -- the nested fold's
+  OUTPUT is a plain, non-nominal record, which routes
+  `CteRowEnvironment`'s object-projection branch (never its whole-table
+  `infer TColumns` branch, the one task 1.5a's own P1 spike measured
+  broken against a synthetic input) at whichever level
+  `MergedCteRowEnvironment` eventually reads it -- verified by the red-
+  then-green cycle below, not by argument.
+
+**Mutation self-check, two stages per the lead's own order requirement
+(non-emptiness before asymmetry -- an asymmetry claim with no non-
+emptiness evidence is not accepted):**
+
+Stage 1 -- non-emptiness (nesting axis specifically): reverted
+`with.ts` to its 1.5a-committed state (nesting arm absent,
+`git diff > patch && git checkout -- with.ts`, restored via
+`git apply patch`, never `git stash`) and confirmed via `tsc`: all 6
+new nested cells red (exactly, by line number), the pre-existing 17
+flat/invariant cells from 1.5a unaffected. Nesting is independently
+non-empty, not inferred from the flat case.
+
+Stage 2 -- bidirectional asymmetry, only run after stage 1 passed:
+- Mutated `SetOpResult` itself (`select.ts`, the one physically shared
+  symbol) to fold left-only, rebuilt `@hejbro/core`'s dist, and checked
+  BOTH packages: `@hejbro/core` (this file) -- 20/20 set-op cells (14
+  flat + 6 nested) red; `@hejbro/query` -- `execute-result-type.test.ts`
+  5 assertions red AND `chain-types.test.ts` 1 assertion red. All three
+  surfaces (execute, chain, CTE) broke together from the ONE shared
+  mutation -- direct evidence of one shared fold, not three
+  independently-maintained copies that happen to agree.
+- Reverse direction: mutated ONLY `with.ts`'s own `CteSetOpEnvironment`
+  (CTE-specific dispatch, left-only fallback forced, `SetOpResult`
+  itself untouched) and confirmed `@hejbro/query check-types` stayed
+  clean (exit 0) -- `execute-result-type.test.ts`/`chain-types.test.ts`
+  unaffected, confirming the CTE-only wiring carries no leak into the
+  shared surfaces. `@hejbro/core`'s own 20 set-op cells went red
+  (expected, the mutation is CTE-specific but core has no execute/
+  chain cells of its own to distinguish from).
+- Both mutations restored via `git diff > patch && git checkout --
+  <file>` then `git apply patch`; `git diff --stat` confirmed clean
+  before proceeding each time.
+
+**Invariant (b), recursive entry untouched:** `with-recursive.ts`
+never edited; `git diff --stat` against `packages/core/test/query/
+with.test.ts` and `.../with-recursive.test.ts` shows zero changes,
+both suites pass unmodified. One new test pins ABSENCE of a positive
+claim, per the lead's own instruction not to freeze a behavior a
+follow-up issue may still change: a recursive term that is itself a
+set operation still type-checks (the compatibility gate is
+unaffected), with NO assertion about what nullability it reads back
+as (that boundary is #1053's own, closed won't-fix, out of this
+change's scope either way).
+
+**Cell design, unchanged from 1.5a's own axes** (spec-derived,
+lead-ratified): whole-table nested cells cross the nullability axis
+(`flagTableNotNull`/`flagTableNullable`); object-projection nested
+cells cross the declared-read-type axis (`numericLeft`/`numericRight`,
+integer vs bigint mode). The flat cells (task 1.5a) serve as this
+task's own topic-external control -- they already prove the base fold
+works without nesting, so a nested cell's own red is attributable to
+nesting specifically.
+
+**Serial gates (brief order):**
+- `TURBO_FORCE=1 pnpm check` -- exit 0 (one formatting fix applied via
+  `biome format --write` before this run; 3 pre-existing warnings,
+  unrelated)
+- `TURBO_FORCE=1 pnpm check-types` -- exit 0 (turbo: 19/19 tasks)
+- `TURBO_FORCE=1 pnpm test` -- exit 0 (turbo `test`: 19/19 --
+  `@hejbro/core` 109 files / 2336 tests + 1 todo (up from 2329);
+  `@hejbro/query` 68 files / 1161 tests, unaffected; turbo `test:types`: 2/2)
+- `pnpm check:crap` -- exit 0 (0 violations, 53 at exactly CRAP 5)
+- `pnpm check:modified-titles` -- exit 0 ("2 active change(s)")
+
+**Team-brief constants (lead's own promotion), recorded here as
+directed:**
+1. Rule 3 strengthened: in a structurally-typed language, "a different
+   table" is not a control by itself -- a control must be a
+   declaration that actually diverges. This change's own fifth vacuous-
+   cell instance (task 1.5a's own two "both notNull, different table,
+   identical column shape" cells) was the FIRST case where the control
+   itself, not the test subject, was the vacuous one -- found only by
+   mutation, not by reading the test.
+2. "Diagnostic tool output is not truth, a gate's own exit code is" --
+   a background tsserver-style watcher repeatedly surfaced stale
+   errors from already-deleted spike files and mid-rebuild timing
+   windows throughout this whole change (recorded previously, W2);
+   every one of those was resolved by re-running the actual gate
+   command explicitly and trusting its exit code instead.
+
+<a id="w10"></a>
+## W10 — 1.5b (final): the branch-carrying convention lives once in core -- 4-mutation protocol re-run, decisive drift-closure evidence
+
+_2026-09-08T21:11Z_
+
+Task 1.5b's own convention-promotion refactor (lead's "🛑 정정" ruling:
+the branch-extraction/unfilled-sentinel judgment moves to core, not
+just the row-vs-projection layer interpretation) implemented and
+verified, on top of `5bd430aa` (`widen-set-op-execute` worktree). Diff:
+`packages/core/src/query/select.ts` (+`IsUnfilledBranch`,
++`SetOpStageBranches`, both exported), `packages/core/src/index.ts`
+(barrel), `packages/core/src/query/with.ts` (consumes the two shared
+symbols, drops its own local duplicates), `packages/query/src/db/db.ts`
+(same).
+
+**Why beyond W9:** W9's own bidirectional mutation already proved
+`SetOpResult` is the one physically shared fold. It could not yet prove
+the *dispatch convention itself* (is this branch unfilled, extract a
+`SetOpStage`'s own triple) was shared -- at that point `with.ts` and
+`db.ts` each still carried an independently-typed copy of
+`IsUnfilledBranch`/the `infer`-triple extraction. Two independently
+maintained copies of the SAME formula can still silently drift the
+moment only one is ever touched again -- exactly the risk invariant (c)
+exists to rule out. Promoting both to `packages/core/src/query/
+select.ts` (core purity holds: only core -> nothing, query still only
+imports FROM core) and having both consumers import them removes that
+residual drift risk. Full 4-mutation protocol re-run against this
+final state before commit.
+
+**Mutation protocol (lead's own numbering), each restored via
+`git diff > patch && git checkout -- <file>` then `git apply patch`
+before the next, `git diff --stat` confirmed clean each time -- never
+`git stash`:**
+
+- **① `SetOpResult` itself (`select.ts`) folded left-only.** Core: 12
+  of 24 `it()` blocks red -- exactly the 6 flat + 6 combinator-guard
+  cells (task 1.5a), which hand-write their expected union literally.
+  The 2 invariant-c cells and all 6 nested cells stayed green -- NOT a
+  gap: both build their own "expected" value by calling `SetOpResult`
+  directly (documented in the test file's own header), so under a
+  `SetOpResult`-internal mutation the actual pipeline value and the
+  test's own expected value move together and stay tautologically
+  equal. Confirmed by reading both cell forms side by side (flat cells
+  hand-write `A["k"] | B["k"]`; nested/invariant-c cells compute
+  `SetOpResult<...>["k"]`). These cells test consumption fidelity, not
+  formula correctness -- the flat cells are what already prove the
+  formula itself. Query: `execute-result-type.test.ts` 5 assertions
+  red, `chain-types.test.ts` 1 assertion red (chain's own compatibility
+  gate imports `SetOpResult` directly).
+- **② `db.ts`'s own layer interpretation** (`SetOpExecuteRow`'s fold
+  forced left-only, `SetOpResult`/`with.ts` untouched): `execute-
+  result-type.test.ts` 5 assertions red, `chain-types.test.ts`
+  unaffected (0). `@hejbro/core check-types` stayed clean (exit 0) --
+  expected on structural grounds alone (core cannot see `@hejbro/
+  query`'s own source), confirmed anyway.
+- **③ `with.ts`'s own layer interpretation** (`MergedCteRowEnvironment`
+  forced left-only, `SetOpResult`/`db.ts` untouched): core 16 of 24
+  cells red -- the same 12 flat/combinator + both invariant-c cells
+  (this mutation is NOT the tautological `SetOpResult`-internal kind:
+  the actual pipeline value now diverges from the test's own
+  `SetOpResult`-computed expected value) + 2 of 6 nested cells
+  (`right-nested` whole-table and object-projection). The remaining 4
+  nested cells (`left-nested` x2, `three-level` x2) stayed green under
+  THIS SPECIFIC mutation -- traced to a fixture-asymmetry artifact, not
+  a real gap: `CteSetOpBranchProjection`'s own recursive arm still
+  calls `SetOpResult` directly and correctly (untouched by this
+  mutation, since it only touched the outermost `MergedCteRowEnvironment`
+  merge step) -- so the inner nested projection is still computed
+  correctly; the outermost merge corruption (left-only) only surfaces
+  as a visible mismatch when the RIGHT side of the OUTERMOST fold
+  carries strictly more information than the left. In those 4 cells
+  the wider/nested side happens to sit on the LEFT of the outermost
+  combinator (by the cell's own chosen shape, e.g. `(a union b) except
+  c` puts the union on the left), so an outermost-left-only bug is
+  invisible there by construction, not by design -- flagged to the
+  planner as a fixture-coverage note for a possible future strengthening
+  (not blocking this task; the SAME bug is caught by 2 of the 6 nested
+  cells plus all 12 flat/combinator cells, so it is not silently
+  unguarded overall). `@hejbro/query check-types` stayed clean (exit 0)
+  under this mutation -- confirmed isolation: a with.ts-only bug never
+  leaks into `@hejbro/query`.
+- **④ the shared convention symbol itself** (`select.ts`,
+  `SetOpStageBranches` -- mutated so a real `SetOpStage`'s own `right`
+  branch is silently replaced by its `left`, `SetOpResult`/db.ts's/
+  with.ts's own dispatch code untouched): core 20 of 24 cells red --
+  ALL 12 flat/combinator + BOTH invariant-c + ALL 6 nested cells (the
+  4 that stayed green under ③ now correctly react here, since this
+  mutation corrupts the branch triple BEFORE either package's own
+  fold runs, not just the outermost step). The 4 cells that stayed
+  green here are exactly the ones that never fold two branches at all
+  (the unfilled-branch fallback cell, the two "select() entry
+  unchanged" cells, and the recursive-CTE cell) -- correct exemptions.
+  Query: `execute-result-type.test.ts` 5 assertions red,
+  `chain-types.test.ts` unaffected (0, chain never consumed this
+  dispatch convention -- its own branch typing is fully carried by
+  task 1.1's `interface`+`this` design, independent of this pipeline).
+  This is the decisive new evidence beyond W9: all three surfaces
+  (execute, chain except by design, CTE) move together from ONE
+  mutation to the shared dispatch convention -- the drift risk
+  invariant (c) exists to rule out is now demonstrably closed, not
+  merely value-equal.
+  - First attempt at ④ (`SetOpStageBranches<TStage> = TStage extends
+    never ? {...} : never`, intending "always resolves to the never
+    branch") crashed `tsc` itself (`RangeError: Maximum call stack size
+    exceeded` inside `instantiateTypeWorker`) -- a naked `extends
+    never` check on a type parameter defers/re-enters TS's own
+    conditional-type resolution indefinitely once `CteSetOpBranchProjection`'s
+    recursive arm calls it. Diagnosed and abandoned in favor of the
+    branch-substitution mutation above, which keeps the same `extends
+    SetOpStage<infer P, infer L, infer R>` structural check (so
+    recursion still terminates) and only corrupts the extracted
+    triple's OUTPUT. A prior attempt swapping `left`/`right` outright
+    was also tried and found VACUOUS (exit 0 both packages) --
+    `SetOpResult`'s own fold is commutative (plain union), so swapping
+    which side is "left" changes nothing observable at the type level;
+    only substituting one branch's own value for the other (dropping
+    real information) is a detectable mutation. Recorded as a fixture-
+    design note, not a re-litigation of ③'s or ④'s own protocol scope.
+
+**Serial gates (final, post-restore state):**
+- `TURBO_FORCE=1 pnpm --filter @hejbro/core check-types` -- exit 0
+- `TURBO_FORCE=1 pnpm --filter @hejbro/query check-types` -- exit 0
+- `TURBO_FORCE=1 pnpm --filter @hejbro/core test` -- exit 0 (109 files
+  / 2336 tests + 1 todo)
+- `TURBO_FORCE=1 pnpm --filter @hejbro/query test` -- exit 0 (68 files
+  / 1161 tests)
+- `TURBO_FORCE=1 pnpm check` -- exit 0 (one `pnpm format` pass applied
+  first; formatting drift from the repeated `git checkout --`/`git
+  apply` mutation-restore cycles, 3 files, content unaffected; 3
+  pre-existing warnings, unrelated file)
+- `TURBO_FORCE=1 pnpm check-types` (repo-wide) -- exit 0, turbo 19/19
+- `TURBO_FORCE=1 pnpm test` (repo-wide) -- exit 0, turbo `test` 19/19 +
+  `test:types` 2/2 (the two subprocess-spawning `tsc`-in-suite files,
+  isolated phase, per AGENTS.md's own count)
+- `pnpm check:crap` -- exit 0 (no violations, 53 at the threshold, none
+  from this task's own changed functions)
+- `pnpm check:modified-titles` -- exit 0 ("2 active change(s), every
+  delta title matches its base spec")
+
+**Team-brief constant, recorded as directed:** sample-mutation-passing
+is not coverage evidence, restated concretely -- ③'s own 4 quiet
+nested cells would have read as "6/6 nested cells pass, nesting is
+covered" from the green suite alone; only re-running the SAME kind of
+mutation against the FINAL refactored code (not trusting an earlier
+run against a since-changed file) surfaced that 4 of those 6 only
+pass because their own fixture puts the wider side on the left of the
+outermost fold, not because the recursion itself is exercised at that
+step. Every mutation in this protocol was individually re-run against
+the current, fully-refactored tree -- none reused a result carried
+over from before the convention-promotion refactor.
+

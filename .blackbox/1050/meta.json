@@ -64,6 +64,20 @@
       "title": "1.5a: final cell design (spec-derived axes) and mutation self-check -- vacuous cells found and fixed",
       "pr": null,
       "decisions": []
+    },
+    {
+      "id": "W9",
+      "at": "2026-09-08T20:40Z",
+      "title": "1.5b: nested cte fold, invariant-c strengthened (shared SetOpResult), bidirectional mutation asymmetry",
+      "pr": null,
+      "decisions": []
+    },
+    {
+      "id": "W10",
+      "at": "2026-09-08T21:11Z",
+      "title": "1.5b (final): the branch-carrying convention lives once in core -- 4-mutation protocol re-run, decisive drift-closure evidence",
+      "pr": null,
+      "decisions": []
     }
   ],
   "prs": [],
