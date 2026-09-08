@@ -3,11 +3,11 @@
   "number": 1049,
   "ref": "quickstart-now/hejbro#1049",
   "title": "fix(cli): generated columns are read, omissions cascade, pull mirrors import (#712 d106 r1)",
-  "head": "135049fdd7c7f84049f660c531f421c1137633a7",
+  "head": "c0dcd4bafccba02851c5f8fe286af55509919b14",
   "headRef": "fix-catalog-inference-2-d106-r1",
   "base": "dev",
   "merged": null,
-  "pinnedAt": "2026-09-08T16:58Z",
+  "pinnedAt": "2026-09-08T17:12Z",
   "refs": [
     {
       "path": ".changeset/harden-catalog-inference-2-review.md",
@@ -15,7 +15,7 @@
     },
     {
       "path": "README.md",
-      "blob": "d19dfe8658eb359dfca94e81366ab7c6829f6c17"
+      "blob": "90ca990ca26e03b051c5993110b5cfb9bb9d43e7"
     },
     {
       "path": "openspec/changes/harden-catalog-inference-2/evaluation.md",
