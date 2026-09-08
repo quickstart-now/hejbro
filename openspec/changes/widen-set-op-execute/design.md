@@ -36,8 +36,14 @@ not an `ExecuteResult` one).
 ## Q3 — Nesting
 
 `(a union b) except c`: the outer stage's left is the inner stage; the
-resolver recurses. Depth is bounded by the statement, not by a type
-budget; the type test carries a three-level case.
+resolver recurses. Either side nests, and the resolver recurses on
+whichever one does — `a except (b union c)` is the same case with the
+inner stage in the right parameter, and the requirement's "each branch
+resolves to its own row" is what makes that not a corollary but a case:
+this paragraph's own left-only example was read as the whole rule twice
+(here and in `tasks.md`'s first input table) before it was widened.
+Depth is bounded by the statement, not by a type budget; the type test
+carries a three-level case.
 
 ## Q4 — Spec delta form
 

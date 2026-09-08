@@ -96,7 +96,8 @@ missing. No key resolves to an untyped driver row's value.
   widened to include null
 
 #### Scenario: A nested core-built set operation resolves through its inner stage
-- **WHEN** `(a union b) except c` is built with the core combinators and
-  executed through a db handle
-- **THEN** the result is the union of the inner stage's resolved row and
-  `c`'s, by the same rule
+- **WHEN** a core-built set operation nests another on either side —
+  `(a union b) except c`, and `a except (b union c)` — and is executed
+  through a db handle
+- **THEN** each side resolves first, a nested side through its own inner
+  stage, and the two combine by the same rule
