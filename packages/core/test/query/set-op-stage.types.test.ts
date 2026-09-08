@@ -138,17 +138,13 @@ describe("orderBy()/limit() forward both branch parameters unchanged (rework R2:
 	it("orderBy() keeps the exact same LeftStageOf/RightStageOf", () => {
 		const ordered = combined.orderBy(posts.title);
 		expectTypeOf<LeftStageOf<typeof ordered>>().toEqualTypeOf<typeof left>();
-		expectTypeOf<RightStageOf<typeof ordered>>().toEqualTypeOf<
-			typeof right
-		>();
+		expectTypeOf<RightStageOf<typeof ordered>>().toEqualTypeOf<typeof right>();
 	});
 
 	it("limit() keeps the exact same LeftStageOf/RightStageOf", () => {
 		const limited = combined.limit(10);
 		expectTypeOf<LeftStageOf<typeof limited>>().toEqualTypeOf<typeof left>();
-		expectTypeOf<RightStageOf<typeof limited>>().toEqualTypeOf<
-			typeof right
-		>();
+		expectTypeOf<RightStageOf<typeof limited>>().toEqualTypeOf<typeof right>();
 	});
 
 	it("orderBy() then limit(), chained: both still carried", () => {
