@@ -141,7 +141,7 @@ codes and the SHA.
       tests pin each sentence. Files: `loss-report.ts`, `pull.ts`,
       `import.ts`, their tests, the delta spec.
 
-- [ ] 2.3 (~5m) Docs, changeset, ledger. The brownfield reference
+- [x] 2.3 (~5m) Docs, changeset, ledger. The brownfield reference
       states: the grants the reading models are schema-usage and
       table-level (column- and sequence-level grants contribute no role
       name, N1); partitioning, inheritance, UNLOGGED, comments and RLS
@@ -209,7 +209,7 @@ exit codes and the SHA. No hand edits under `.blackbox/`.
       mirroring `firstOffendingColumn`'s own symmetric field), tests, the
       delta.
 
-- [ ] 3.3 (~5m) Reference, changeset, ledger. The brownfield reference
+- [x] 3.3 (~5m) Reference, changeset, ledger. The brownfield reference
       names that a domain and a composite type have no line of their
       own (they appear through the column line's type name, R2-N6) and
       that the re-import way out ends with a stale snapshot (`verify`

@@ -415,8 +415,13 @@ one of three reasons: its own name (above, an **Omitted** line), the
 enum type that types it (an **Omitted** line, below), or (712/R13) its
 own type — no column builder expresses it at all, the **Not inferred**
 column line already named above, not an **Omitted** one (the column's
-own name is fine, so the report never claims otherwise). Whichever of
-the three it is, a member naming that column — an index, a check
+own name is fine, so the report never claims otherwise). A domain or a
+composite type earns no line of its own, in either band — it never
+appears as its own `Omitted` or `Not inferred` entry, only through the
+column's own type name inside that column's own `Not inferred` line
+(`column "g.gen_type.em" (type "g.dom") -- no column builder expresses
+it`). Whichever of the three it is, a member naming that column — an
+index, a check
 constraint, a UNIQUE constraint, a generated column, a primary key or a
 foreign key — is still omitted on its own line (below). The third
 reason has no exit today: it is not a renaming problem (nothing about
@@ -463,7 +468,13 @@ object named in one of these lines is never the end of the remedy by
 itself: the report's own `Next:` line also says to either re-run
 `hejbro import` into a fresh `--out` and merge the new file's
 declaration into the one already checked in, or add the declaration by
-hand. When the cause is instead the column's own type (above), no
+hand. The re-import way out above ends with a stale snapshot: once the
+merge is done and `check` reports no differences, `hejbro verify`
+still exits with `error[snapshot-stale]` until the next `hejbro
+generate` writes a fresh one — and the migration `generate` emits
+alongside it describes objects the database already holds;
+registering that migration instead of running it is #1037. When the
+cause is instead the column's own type (above), no
 `Next:` line exists at all — there is nothing to rename and no way to
 hand-declare it, so the line states only the reason. A foreign key into a schema `import`/`pull` simply never
 named is a different case, not an omission: its target's own name may
@@ -504,21 +515,28 @@ renaming the column in the database ends that one, the same remedy
 `import` needs. See that reference for the full shape.
 
 `pull`'s own `--schema` handling mirrors `import`'s (712/R14). A named
-schema the database does not hold at all earns a `Not inferred:
-nothing to infer in schema "X".` line, the same as `import` prints,
-rather than stopping the run — as long as at least one other named
-schema contributed something. A named schema whose own catalog name is
-not a valid hejbro SQL identifier is a different case: it earns its
-own `Omitted: schema …` line instead (above), never the `Not inferred`
-one — the two causes stay in the bands they already belong to, exactly
-as they do for `import`. When every named schema produces nothing,
-`pull` refuses instead of writing an empty bundle:
-`error[pull-nothing-to-infer]` when none of them held anything at all,
-`error[pull-nothing-declarable]` when at least one held something this
-reading could not carry the name of — the same two-code split
-`import`'s own `import-nothing-to-infer`/`import-nothing-declarable`
-already makes, mirrored rather than collapsed into one. The `pulled …`
-line, the lock's own `schemas`, and the contract's own metadata all
+schema the database does not hold at all earns a `Not inferred: no
+table or enum to declare in schema "X".` line, the same as `import`
+prints, rather than stopping the run — as long as at least one other
+named schema contributed something. A named schema whose own catalog
+name is not a valid hejbro SQL identifier is a different case: it
+earns its own `Omitted: schema …` line instead (above), never the
+`Not inferred` one — the two causes stay in the bands they already
+belong to, exactly as they do for `import`. When every named schema
+ends up with nothing to write, `pull` refuses instead of writing an
+empty bundle, and which refusal it is follows what the reading saw,
+not what it kept: `error[pull-nothing-declarable]` (mirroring
+`import`'s own `error[import-nothing-declarable]`) when at least one
+of them held something whose own name kept it out, naming those
+schemas; `error[pull-nothing-to-infer]` (mirroring `import`'s own
+`error[import-nothing-to-infer]`) otherwise — no named schema held a
+table or enum to declare at all, whether it was genuinely empty or
+held only a standalone sequence or a function, neither of which any
+rename could have saved, and such a schema's own `Not inferred:` line
+still prints alongside the refusal. Neither refusal is silent: the
+loss report already gathered still prints to stdout before either one
+exits. The `pulled …` line, the lock's own `schemas`, and the
+contract's own metadata all
 name exactly the schemas that actually contributed something to the
 snapshot — never one the database doesn't hold, and never one this
 reading could not carry the name of.
