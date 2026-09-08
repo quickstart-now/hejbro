@@ -427,3 +427,83 @@ Gates (this rework's own commit): `TURBO_FORCE=1 pnpm check` /
 `check-types` / `test` (hejbro package 1681 tests) / `pnpm check:crap`
 / `pnpm check:modified-titles` -- all exit 0, repo-wide, serial.
 
+<a id="w8"></a>
+## W8 — B2 rework, iteration 3: revert the withdrawn Omitted-line-removal extension
+
+_2026-09-08T21:39Z_
+
+712/R17 (D106 round 2 constructor review, B2) went through three
+design iterations in this one review response before the lead's final
+ruling. Iteration 1 (this session's original build): `omittedSchemas`
+stays wide -- every D36-failing schema keeps its own `Omitted: schema
+...` line (D106 R4-B4) -- while a new `omittedSchemaNamesHoldingATableOrEnum`
+field carries the narrow table/enum-only subset that
+`import.ts`/`pull.ts`'s own `nothing-declarable` classification reads.
+Iteration 2 (committed e90bd7e7): the lead extended the rule to drop
+the `Omitted:` line entirely for a content-less bad-name schema,
+narrowing `partitionSchemas`'s own `omittedSchemas` at the source and
+adding a third, silent branch. Iteration 3 (this entry): the lead
+withdrew that extension outright ("정보 삭제만 있고 얻는 것이 없음") and
+adopted the original Iteration 1 shape verbatim -- reverted here.
+
+Reverted in compose.ts: `SchemaPartition`/`InferCatalogResult` both
+carry `omittedSchemas`/`omittedSchemaNames` (wide, every D36-failing
+schema) again, alongside the still-new `omittedSchemaNamesHoldingATableOrEnum`
+(narrow). import.ts/pull.ts's own `schemasHoldingAnUncarriableName`
+reads the narrow field; `emptySchemaLines` (both commands) is
+unchanged, since it always read the wide field.
+
+Rewrote three test files to match: import-command.test.ts and
+pull-command.test.ts's own B2 describe blocks now assert that
+EmptyBad/SeqOnlyBad print their own `Omitted:` line and refuse
+`nothing-to-infer`, never `nothing-declarable`, alone; that a sibling
+holding a table (`BadWithContent`) refuses `nothing-declarable` naming
+only itself while both schemas' own `Omitted:` lines still print; and
+that the regression-beside-healthy case writes the healthy file with
+no refusal, the bad schema's own `Omitted:` line intact. infer-
+compose.test.ts's own `partitionSchemas` structural block now asserts
+`omittedSchemas` unconditionally (all five held-what cells) plus
+`omittedSchemaNamesHoldingATableOrEnum` as a second, narrower
+assertion (table/enum only); the two pre-existing `D106 R4-B1`
+baseline tests reverted their own fixture back to content-less (the
+table was only needed under Iteration 2's narrower `omittedSchemas`
+rule, confirmed against a3c3d802's own original fixture). Three
+declare-emit-*.test.ts fixture builders got the field back to satisfy
+TypeScript (removed during Iteration 2's own cleanup, now needed
+again).
+
+Not re-claimed here, only carried forward: `schemaHeldAnUncarriableName`'s
+bare-identity false-positive fix (`identity === schemaName` removed,
+both import.ts/pull.ts) was found and recorded once already (W7,
+Iteration 2) and needed no further change in this iteration -- still
+in place, unaffected by the Iteration 2->3 revert.
+
+Applied the lead's exact final text to spec.md's Requirement 1 delta
+last clause ("a schema holding only a standalone sequence or a
+function earns it too; the report still names that schema, on its own
+`Not inferred:` line or, where the schema's own name kept the reading
+out, on its `Omitted: schema` line.") and realigned brownfield-
+adoption.md's own `pull --schema` paragraph to the same wording.
+Checked, not changed: that paragraph's preceding sentence ("a named
+schema whose own catalog name is not a valid hejbro SQL identifier ...
+earns its own `Omitted: schema …` line instead ... never the `Not
+inferred` one") was flagged during Iteration 2 as no longer
+universally true; confirmed true again now that Iteration 2 is
+withdrawn, so it needed no correction.
+
+Live (cfr2-pg, port 55810, one round trip, five cells against the same
+container, started/removed): `EmptyBad` alone and `SeqOnlyBad` alone
+each refuse `import-nothing-to-infer`, printing only their own
+`Omitted: schema "..."` line -- no `Not inferred: sequence ...` line
+for `SeqOnlyBad`, confirming the exclusion-from-`expressibleNames`
+finding (W7) still holds under the restored design; `BadWithContent`
+alone refuses `import-nothing-declarable`; `EmptyBad` beside
+`BadWithContent` refuses `import-nothing-declarable` naming only
+`BadWithContent`, with both schemas' own `Omitted:` lines printed;
+`EmptyBad` beside `healthy` writes the healthy file with no refusal,
+`EmptyBad`'s own `Omitted:` line still printed.
+
+Gates (this rework's own commit): `TURBO_FORCE=1 pnpm check` /
+`check-types` / `test` (19+2 turbo tasks) / `pnpm check:crap` /
+`pnpm check:modified-titles` -- all exit 0, repo-wide.
+

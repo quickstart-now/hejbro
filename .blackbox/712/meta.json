@@ -249,6 +249,13 @@
       "decisions": [
         "R17"
       ]
+    },
+    {
+      "id": "W8",
+      "at": "2026-09-08T21:39Z",
+      "title": "B2 rework, iteration 3: revert the withdrawn Omitted-line-removal extension",
+      "pr": null,
+      "decisions": []
     }
   ],
   "prs": [

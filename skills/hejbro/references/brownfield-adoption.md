@@ -532,10 +532,12 @@ own or its schema's — naming those schemas; `error[pull-nothing-to-infer]`
 (mirroring `import`'s own `error[import-nothing-to-infer]`) otherwise
 — no named schema held a table or enum to declare at all, whether it
 was genuinely empty or held only a standalone sequence or a function,
-neither of which any rename could have saved, and such a schema's own
-`Not inferred:` line still prints alongside the refusal. Neither
-refusal is silent: the loss report already gathered still prints to
-stdout before either one exits. The `pulled …` line, the lock's own
+neither of which any rename could have saved. The report still names
+each such schema either way: on its own `Not inferred:` line, or, where
+the schema's own name is what kept the reading out, on its `Omitted:
+schema` line instead (above). Neither refusal is silent: the loss
+report already gathered still prints to stdout before either one
+exits. The `pulled …` line, the lock's own
 `schemas`, and the contract's own metadata all name exactly the
 schemas that actually contributed something to the snapshot — never
 one the database doesn't hold, and never one this reading could not

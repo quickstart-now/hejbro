@@ -60,6 +60,7 @@ const resultFor = (
 	lossReport: [],
 	sql: "",
 	omittedSchemaNames: [],
+	omittedSchemaNamesHoldingATableOrEnum: [],
 });
 
 let dir = "";
