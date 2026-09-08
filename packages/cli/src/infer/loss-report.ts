@@ -1474,25 +1474,40 @@ const wayOutLine = (command: LossReportFacts["command"]): string => {
 };
 
 /**
- * D106 R6-N3: a caller that must add lines to an already-built report
- * (`commands/import.ts`'s own empty-schema lines, known only once
- * `emitDeclarationFiles` has run, after `buildLossReport` already
- * closed with the way-out line) needs them placed *before* the way-out
- * line, which SHALL stay the report's own last line -- located here by
- * identity (`wayOutLine(command)`), never by an assumed index, so
- * there is no throw path in a command and no assumption that some
- * index is the last one. The way-out line appears exactly once, as
- * `buildLossReport`'s own final element, so removing every line equal
- * to it and re-appending it is exact, not approximate.
+ * D106 R6-N3, corrected NB1 (#1047, review round 2): a caller that must
+ * add lines to an already-built report (`commands/import.ts`'s and
+ * `commands/pull.ts`'s own empty-schema lines, known only once the
+ * schema list is filtered against the snapshot, after `buildLossReport`
+ * already closed) needs them landing inside the **Not inferred** band
+ * they belong to, never after Omitted -- the requirement's own band
+ * order ("Guessed, Not inferred, each approximation, each omission")
+ * is a report-wide contract, not just each band's own internal order.
+ * Located by identity, never an assumed index: the insertion point is
+ * right after the last existing `Guessed:`/`Not inferred:` line (or at
+ * the very front, if `buildLossReport` printed neither for this run),
+ * so band order stays correct regardless of which other bands are
+ * present or empty. This function used to insert right before the
+ * way-out line instead (`wayOutLine`, still the report's own required
+ * last line, but never where lines belonging to an earlier band land).
  */
-export const withReportLinesBeforeWayOut = (
+export const withReportLinesInNotInferredBand = (
 	report: ReadonlyArray<string>,
-	command: LossReportFacts["command"],
 	extraLines: ReadonlyArray<string>,
 ): ReadonlyArray<string> => {
-	const wayOut = wayOutLine(command);
-	const withoutWayOut = report.filter((line) => line !== wayOut);
-	return [...withoutWayOut, ...extraLines, wayOut];
+	const isGuessedOrNotInferred = (line: string): boolean =>
+		line.startsWith("Guessed:") || line.startsWith("Not inferred:");
+	const lastBandLineIndex = report.reduce((lastIndex, line, index) => {
+		if (isGuessedOrNotInferred(line)) {
+			return index;
+		}
+		return lastIndex;
+	}, -1);
+	const insertAt = lastBandLineIndex + 1;
+	return [
+		...report.slice(0, insertAt),
+		...extraLines,
+		...report.slice(insertAt),
+	];
 };
 
 /**

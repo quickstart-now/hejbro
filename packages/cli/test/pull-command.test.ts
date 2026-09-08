@@ -288,8 +288,15 @@ describe("runPull / 4.1", () => {
 	 * …` line (from `result.lossReport`, shared with `import`), and
 	 * never also earns the `Not inferred: nothing to infer …` line
 	 * above (`schemaHasNamedOmission`'s own guard).
+	 *
+	 * NB1 (#1047, review round 2): also pins the report's own band
+	 * order with all three cases present at once (a genuinely absent
+	 * schema, an invalid-name schema, and content carrying its own
+	 * Guessed/Not-inferred/Approximated/Omitted line) -- the absent-
+	 * schema line used to land after every Omitted line; it now lands
+	 * inside the Not-inferred band.
 	 */
-	it("names an omitted-whole schema with its own Omitted line, never the Not-inferred nothing-to-infer line", async () => {
+	it("names an omitted-whole schema with its own Omitted line, never the Not-inferred nothing-to-infer line, in band order", async () => {
 		const outcome = await runPull(
 			cwd,
 			[
@@ -299,11 +306,16 @@ describe("runPull / 4.1", () => {
 				"app",
 				"--schema",
 				"BadSchema",
+				"--schema",
+				"nope",
 			],
 			depsFor({
 				...resultForSchemas(["app"]),
 				omittedSchemaNames: ["BadSchema"],
 				lossReport: [
+					"Guessed: TypeScript keys from SQL names.",
+					"Not inferred: grants beyond their role name.",
+					"Approximated: every default, check, generated, and index-predicate expression is carried as raw SQL text, not the typed builders a hand-written declaration would use.",
 					'Omitted: schema "BadSchema" -- its catalog name is not a valid hejbro SQL identifier, so nothing it holds (tables, enums, sequences) can be carried in the contract. Rename the schema in the database, then link the schema repository.',
 				],
 			}),
@@ -318,6 +330,20 @@ describe("runPull / 4.1", () => {
 		expect(outcome.stdout).not.toContain(
 			'Not inferred: nothing to infer in schema "BadSchema".',
 		);
+		expect(outcome.stdout).toContain(
+			'Not inferred: nothing to infer in schema "nope".',
+		);
+		const bandPrefixes = outcome.stdout
+			.map((line) => /^(Guessed|Not inferred|Approximated|Omitted):/.exec(line))
+			.filter((match) => match !== null)
+			.map((match) => match[1]);
+		expect(bandPrefixes).toEqual([
+			"Guessed",
+			"Not inferred",
+			"Not inferred",
+			"Approximated",
+			"Omitted",
+		]);
 	});
 
 	/**

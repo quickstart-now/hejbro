@@ -20,7 +20,7 @@ import { collectFlagValues, normalizeEqualsFlags } from "../flags";
 import { sha256Hex } from "../hash";
 import type { InferCatalogOptions, InferCatalogResult } from "../infer/compose";
 import { inferFromCatalog } from "../infer/compose";
-import { withReportLinesBeforeWayOut } from "../infer/loss-report";
+import { withReportLinesInNotInferredBand } from "../infer/loss-report";
 import { loadConfigIfPresent } from "../loader";
 import {
 	assertLockWritable,
@@ -319,11 +319,13 @@ export const runPull = async (
 				// mirroring `import.ts`'s own `withEmptySchemaLines` -- folded
 				// in once, ahead of both the refusal branch below and the
 				// success path's own stdout, so both read the same report.
+				// Corrected NB1 (#1047, review round 2):
+				// `withReportLinesInNotInferredBand` places these lines
+				// inside the Not-inferred band, never after Omitted.
 				const resultWithFullReport: InferCatalogResult = {
 					...result,
-					lossReport: withReportLinesBeforeWayOut(
+					lossReport: withReportLinesInNotInferredBand(
 						result.lossReport,
-						"pull",
 						emptySchemaLines(result, schemas),
 					),
 				};

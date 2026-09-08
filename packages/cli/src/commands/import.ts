@@ -16,7 +16,7 @@ import { asHejbroError } from "../errors";
 import { collectFlagValues, normalizeEqualsFlags } from "../flags";
 import type { InferCatalogOptions, InferCatalogResult } from "../infer/compose";
 import { inferFromCatalog } from "../infer/compose";
-import { withReportLinesBeforeWayOut } from "../infer/loss-report";
+import { withReportLinesInNotInferredBand } from "../infer/loss-report";
 import { loadConfigIfPresent } from "../loader";
 
 const IMPORT_DESCRIPTION =
@@ -232,19 +232,18 @@ const emptySchemaLines = (
  * `--schema` list (both known before `emitDeclarationFiles` runs), so
  * folding them into `result.lossReport` here -- before emission -- makes
  * every written file's header carry the same full report the terminal
- * does, with the same one array feeding both. D106 R6-N3:
- * `withReportLinesBeforeWayOut` (`infer/loss-report.ts`) places them
- * before the way-out line rather than simply appending them, so that
- * line stays the report's own last one here too.
+ * does, with the same one array feeding both. Corrected NB1 (#1047,
+ * review round 2): `withReportLinesInNotInferredBand`
+ * (`infer/loss-report.ts`) places them inside the Not-inferred band,
+ * never after Omitted.
  */
 const withEmptySchemaLines = (
 	result: InferCatalogResult,
 	schemas: ReadonlyArray<string>,
 ): InferCatalogResult => ({
 	...result,
-	lossReport: withReportLinesBeforeWayOut(
+	lossReport: withReportLinesInNotInferredBand(
 		result.lossReport,
-		"import",
 		emptySchemaLines(result, schemas),
 	),
 });

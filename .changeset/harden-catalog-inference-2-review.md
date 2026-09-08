@@ -24,4 +24,7 @@ contributed something to the snapshot — never a schema the database
 doesn't hold or one this reading could not carry the name of — and a
 pull that ends up with nothing to carry into the contract now refuses
 (`pull-nothing-to-infer`/`pull-nothing-declarable`) instead of writing
-an empty bundle.
+an empty bundle. A schema that produced nothing to infer now prints
+its own line where it belongs, inside the "Not inferred" band, for
+both `import` and `pull` — it used to print after every "Omitted"
+line instead.

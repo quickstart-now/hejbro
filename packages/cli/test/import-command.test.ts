@@ -448,8 +448,16 @@ describe("runImport / 3.1", () => {
 	 * empty schema (named, holds nothing, not omitted for its name) keeps
 	 * getting the N7 line exactly as before -- each schema in this fixture
 	 * gets exactly its own line, never the other's.
+	 *
+	 * NB1 (#1047, review round 2): also pins the report's own band order
+	 * with all three cases present at once (a genuinely empty schema, an
+	 * invalid-name schema, and content that itself carries a Guessed/
+	 * Not-inferred/Approximated/Omitted line each) -- the empty-schema
+	 * line used to land after every Omitted line (appended right before
+	 * the way-out line); it now lands inside the Not-inferred band, so
+	 * the four bands never interleave.
 	 */
-	it("suppresses the empty-schema line for a schema the loss report already reports as omitted for its name, while a genuinely empty schema still gets its own line", async () => {
+	it("suppresses the empty-schema line for a schema the loss report already reports as omitted for its name, while a genuinely empty schema still gets its own line, in band order", async () => {
 		const outcome = await runImport(
 			cwd,
 			[
@@ -468,6 +476,9 @@ describe("runImport / 3.1", () => {
 				resultFor(
 					[table("app", "widgets", [idColumn])],
 					[
+						"Guessed: TypeScript keys from SQL names.",
+						"Not inferred: grants beyond their role name.",
+						"Approximated: every default, check, generated, and index-predicate expression is carried as raw SQL text, not the typed builders a hand-written declaration would use.",
 						'Omitted: schema "App" -- its catalog name is not a valid hejbro SQL identifier.',
 					],
 					["App"],
@@ -485,6 +496,60 @@ describe("runImport / 3.1", () => {
 			),
 		).toBe(false);
 		expect(outcome.stdout).toContain(
+			'Not inferred: nothing to infer in schema "billing".',
+		);
+		const bandPrefixes = outcome.stdout
+			.map((line) => /^(Guessed|Not inferred|Approximated|Omitted):/.exec(line))
+			.filter((match) => match !== null)
+			.map((match) => match[1]);
+		expect(bandPrefixes).toEqual([
+			"Guessed",
+			"Not inferred",
+			"Not inferred",
+			"Approximated",
+			"Omitted",
+		]);
+	});
+
+	/**
+	 * NB1 (#1047, review round 2): the insertion point's own fallback,
+	 * pinned rather than left undefined -- `withReportLinesInNotInferredBand`
+	 * finds the *last* existing `Guessed:`/`Not inferred:` line and
+	 * inserts right after it; when a report carries neither (never true
+	 * for `buildLossReport`'s own real output, which always opens with
+	 * a `Guessed:` line, but reachable through this suite's own
+	 * synthetic `lossReport: []`), the insertion point is the very
+	 * front of the report -- still ahead of any Approximated/Omitted
+	 * line, the position the band order requires.
+	 */
+	it("NB1 fallback: inserts the empty-schema line at the very front when the report carries no Guessed/Not-inferred line at all", async () => {
+		const outcome = await runImport(
+			cwd,
+			[
+				"--url",
+				"postgres://fixture",
+				"--schema",
+				"app",
+				"--schema",
+				"billing",
+				"--out",
+				"src/schema",
+			],
+			depsFor(
+				resultFor(
+					[table("app", "widgets", [idColumn])],
+					[
+						"Approximated: every default, check, generated, and index-predicate expression is carried as raw SQL text, not the typed builders a hand-written declaration would use.",
+					],
+				),
+			),
+		);
+
+		expect(outcome.exitCode).toBe(0);
+		const bandLines = outcome.stdout.filter((line) =>
+			/^(Guessed|Not inferred|Approximated|Omitted):/.test(line),
+		);
+		expect(bandLines[0]).toBe(
 			'Not inferred: nothing to infer in schema "billing".',
 		);
 	});
