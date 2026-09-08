@@ -107,54 +107,57 @@ const schemasWithInferredObjects = (
 		...sequencesInSnapshot(result.snapshot).map((s) => s.schema),
 	]);
 
-const throwNothingToInfer = (schemas: ReadonlyArray<string>): never =>
-	throwHejbroError(
-		"import-nothing-to-infer",
-		`hejbro import found no table, enum, or sequence to infer in schema(s) ${schemas.join(", ")}. Next: confirm the schema name(s) are correct and that the database holds objects in them, then rerun \`hejbro import\`.`,
-	);
-
 /**
- * D106 R5-N3: which of the named schemas produced zero snapshot objects
- * *and* are the reason `result.omittedSchemaNames` gives one -- a schema
- * on this list did hold something; hejbro just could not carry its name,
- * and the loss report's own `Omitted: schema …` line already says so.
- * The all-empty refusal (`throwNothingToInfer`) must never fire for one
- * of these (that would discard the real reason and tell the user
- * "nothing here" about a schema that in fact held a table), and neither
- * can the reading simply proceed as if nothing were wrong -- see
- * `nothingDeclarableResult` below for the team lead's ruling on what
- * happens instead (D106 R5-N3(b)).
+ * 712/R16 (D106 round 2, R2-B2/R2-N3, lead ruling): `nothing-declarable`
+ * is a name-cause-only code (`schemasHoldingAnUncarriableName` below) --
+ * a schema this refusal names held nothing a name could have saved
+ * (genuinely nothing, or only a standalone sequence/function, D66, a
+ * *kind* cause with no DSL builder, never a name one). It still prints
+ * the full report first (a refusal never suppresses the report that
+ * precedes it): the schema's own `Not inferred:` line (a sequence, a
+ * function count) or this function's own generic line names what was
+ * actually seen, so "no table or enum to declare" stays true of every
+ * schema it names.
  */
-const omittedNamedSchemas = (
-	result: InferCatalogResult,
+const nothingToInferResult = (
+	fullReport: ReadonlyArray<string>,
 	schemas: ReadonlyArray<string>,
-): ReadonlyArray<string> => {
-	const omitted = new Set(result.omittedSchemaNames);
-	return schemas.filter((schemaName) => omitted.has(schemaName));
+): ImportResult => {
+	const error = hejbroError(
+		"import-nothing-to-infer",
+		`hejbro import found no table or enum to declare in schema(s) ${schemas.join(", ")}. Next: confirm the schema name(s) are correct and that they hold a table or enum type to declare, then rerun \`hejbro import\`.`,
+	);
+	const diagnostic = fromHejbroError(error, FALLBACK_IDENTITY);
+	return {
+		exitCode: 1,
+		stdout: fullReport,
+		stderr: renderDiagnostics([diagnostic], null),
+	};
 };
 
 /**
- * D106 R5-N3(b): the team lead's ruling on the all-named-schemas-hold-
- * nothing-to-write case, once at least one of them is empty only because
- * it was omitted for its own name (not genuinely empty) -- this round's
- * own first pass let the run succeed and write zero files, which
- * still left an empty `--out` directory behind (`mkdirSync` runs before
- * any file does, so a zero-file success still creates it -- measured
- * live). Refusing is the right call, but under a *different* code than
- * `import-nothing-to-infer`: that code means "genuinely empty", and this
- * one means "held something, couldn't name it". The loss report's own
- * `Omitted: schema …` line(s) must still reach stdout before the
- * refusal, since they are the only place the real reason is stated --
- * `runImport` calls this only after folding `emptySchemaLines` in, and
- * before `mkdirSync` (inside `writeFiles`) ever runs.
+ * D106 R5-N3(b) / 712/R15: the team lead's ruling on the all-named-
+ * schemas-hold-nothing-declarable case, once at least one of them held
+ * something whose own name kept it out (not genuinely empty, and not a
+ * standalone sequence/function -- `nothing-to-infer` above covers both
+ * of those) -- this round's own first pass let the run succeed and
+ * write zero files, which still left an empty `--out` directory behind
+ * (`mkdirSync` runs before any file does, so a zero-file success still
+ * creates it -- measured live). Refusing is the right call, but under a
+ * *different* code than `import-nothing-to-infer`: that code covers
+ * "nothing" and "not a name cause", this one covers "a name cause". The
+ * loss report's own line(s) must still reach stdout before the refusal,
+ * since they are the only place the real reason is stated -- `runImport`
+ * calls this only after folding `emptySchemaLines` in, and before
+ * `mkdirSync` (inside `writeFiles`) ever runs.
  */
 const nothingDeclarableResult = (
 	fullReport: ReadonlyArray<string>,
-	omittedSchemas: ReadonlyArray<string>,
+	uncarriableSchemas: ReadonlyArray<string>,
 ): ImportResult => {
 	const error = hejbroError(
 		"import-nothing-declarable",
-		`hejbro import found nothing it could declare in schema(s) ${omittedSchemas.join(", ")}: each one held something, but its own catalog name is not a valid hejbro SQL identifier (see the "Omitted" line(s) above). Next: rename the schema(s) named above in the database, then rerun \`hejbro import\`.`,
+		`hejbro import found nothing it could declare in schema(s) ${uncarriableSchemas.join(", ")}: each one held something this reading could not carry the name of (see the "Omitted" line(s) above). Next: follow the way out those lines name, then rerun \`hejbro import\`.`,
 	);
 	const diagnostic = fromHejbroError(error, FALLBACK_IDENTITY);
 	return {
@@ -169,8 +172,8 @@ const nothingDeclarableResult = (
  * used to write files for the ones that do and say nothing at all about
  * the ones that don't -- neither a file nor a diagnostic named the
  * gap. One line per empty schema; the all-empty case is unchanged
- * (`throwNothingToInfer` above still refuses outright, before any file
- * is written).
+ * (`nothingToInferResult`/`nothingDeclarableResult` above still refuse,
+ * after printing the report -- never silently).
  *
  * D106 R4-B4/#707: this line is suppressed for a schema
  * `result.omittedSchemaNames` already names -- "nothing to infer" is
@@ -183,15 +186,21 @@ const nothingDeclarableResult = (
 const QUOTED_IDENTITY = /"([^"]+)"/g;
 
 /**
- * 712/R10 N#4: a schema that held only objects the loss report already
- * named as omitted (an enum with no expressible name, an index at an
- * omitted column, …) produces zero snapshot objects the same way a
- * genuinely empty schema does -- `schemasWithInferredObjects` cannot
- * tell the two apart, since neither ever reaches the snapshot. Checked
- * against the rendered report itself, the one place that already knows
- * every "Omitted: …" line and the identity each one names.
+ * 712/R10 N#4 (D106 round 2 R15: evidence is `Omitted:` lines only --
+ * a schema-qualified `Not inferred:` line, e.g. a standalone sequence,
+ * is a different root cause, D66, not a name one, so it never widens
+ * this check): whether the reading saw something in this schema that it
+ * could not carry for its own name -- an object the loss report already
+ * named as omitted for its name (an enum with no expressible name, an
+ * index at an omitted column, …), schema-qualified.
+ * `schemasWithInferredObjects` cannot tell such a schema apart from a
+ * genuinely empty one, since neither ever reaches the snapshot; this is
+ * checked against the raw `lossReport` the catalog reading yielded,
+ * never one already folded with this function's own output, so a
+ * schema this check has already classified as empty can never feed
+ * back into its own classification.
  */
-const schemaHasNamedOmission = (
+const schemaHeldAnUncarriableName = (
 	lossReport: ReadonlyArray<string>,
 	schemaName: string,
 ): boolean =>
@@ -207,6 +216,27 @@ const schemaHasNamedOmission = (
 			}),
 		);
 
+/**
+ * 712/R15: every requested schema the reading saw something in but
+ * could not carry for its own name -- a schema omitted whole for its
+ * own name (`result.omittedSchemaNames`) or one holding an object
+ * `schemaHeldAnUncarriableName` finds. The classification counts what
+ * the reading saw, not what it kept: this is the set the all-empty
+ * refusal below names, and it is what decides `nothingDeclarableResult`
+ * versus `nothingToInferResult`.
+ */
+const schemasHoldingAnUncarriableName = (
+	result: InferCatalogResult,
+	schemas: ReadonlyArray<string>,
+): ReadonlyArray<string> => {
+	const omittedWhole = new Set(result.omittedSchemaNames);
+	return schemas.filter(
+		(schemaName) =>
+			omittedWhole.has(schemaName) ||
+			schemaHeldAnUncarriableName(result.lossReport, schemaName),
+	);
+};
+
 const emptySchemaLines = (
 	result: InferCatalogResult,
 	schemas: ReadonlyArray<string>,
@@ -217,11 +247,12 @@ const emptySchemaLines = (
 		.filter((schemaName) => !withObjects.has(schemaName))
 		.filter((schemaName) => !omitted.has(schemaName))
 		.filter(
-			(schemaName) => !schemaHasNamedOmission(result.lossReport, schemaName),
+			(schemaName) =>
+				!schemaHeldAnUncarriableName(result.lossReport, schemaName),
 		)
 		.map(
 			(schemaName) =>
-				`Not inferred: nothing to infer in schema "${schemaName}".`,
+				`Not inferred: no table or enum to declare in schema "${schemaName}".`,
 		);
 };
 
@@ -406,13 +437,19 @@ export const runImport = async (
 				});
 				const resultWithFullReport = withEmptySchemaLines(result, schemas);
 				if (schemasWithInferredObjects(result).size === 0) {
-					const namedOmissions = omittedNamedSchemas(result, schemas);
-					if (namedOmissions.length === 0) {
-						throwNothingToInfer(schemas);
+					const uncarriableSchemas = schemasHoldingAnUncarriableName(
+						result,
+						schemas,
+					);
+					if (uncarriableSchemas.length === 0) {
+						return nothingToInferResult(
+							resultWithFullReport.lossReport,
+							schemas,
+						);
 					}
 					return nothingDeclarableResult(
 						resultWithFullReport.lossReport,
-						namedOmissions,
+						uncarriableSchemas,
 					);
 				}
 				const files = emitDeclarationFiles(resultWithFullReport);

@@ -171,7 +171,7 @@ exit codes and the SHA. No hand edits under `.blackbox/`.
 
 **Ordering.** 3.1 → 3.2 → 3.3.
 
-- [ ] 3.1 (~8m) R2-B2 — a schema whose only objects are omitted for
+- [x] 3.1 (~8m) R2-B2 — a schema whose only objects are omitted for
       their names prints its report and is refused as
       `nothing-declarable` (712/R15). Red: the import and pull command
       tests over an input table {a schema holding one table with an

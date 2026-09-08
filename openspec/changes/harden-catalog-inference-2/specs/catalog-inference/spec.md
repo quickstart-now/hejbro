@@ -79,8 +79,14 @@ platform schemas are exactly the ones a run leaves unnamed, so reading
 scope as omission would drop the most ordinary reference such a
 database has. Leaving an object out for its name SHALL never stop the
 reading — everything else in the named schemas is still inferred — and
-the loss report SHALL name each of them. A column named there is
-still described: the description records what the database holds, and
+the loss report SHALL name each of them. When every named schema would
+leave nothing to write, the run refuses: a schema that held something
+whose name no declaration can carry is refused as `nothing-declarable`,
+naming every such schema; `nothing-to-infer` means no table or enum to
+declare, and a schema holding only a standalone sequence or a function
+earns this refusal too, alongside its own `Not inferred:` line naming
+what was found. A column named there is still described: the
+description records what the database holds, and
 the snapshot records what a declaration can express. Every list the
 reading orders by name when writing the starter declarations SHALL be
 ordered by code points as the loss report is, so the file `import`
@@ -210,7 +216,11 @@ check, generated, and index-predicate expression is carried as raw SQL
 text rather than as the typed builders a hand-written declaration
 would use — and the command that removes the loss:
 linking the schema repository for `pull`, hand-editing the starter
-declarations for `import`.
+declarations for `import`. Refusing SHALL NOT suppress the report: when
+a reading completes and the run then refuses because nothing could be
+written — `nothing-to-infer` or `nothing-declarable` — the loss report
+still prints to stdout before the run exits with its diagnostic on
+stderr.
 
 Where a line names an object the reading left out of the declarations,
 the consequence it states SHALL be what hejbro will actually do about
