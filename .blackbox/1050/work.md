@@ -1044,3 +1044,67 @@ caught by the `check` gate, not silently carried forward; fixed via
 `pnpm format` and landed as its own commit rather than folded into an
 already-made one.
 
+<a id="w13"></a>
+## W13 — task-times recorded: wso group -- transplant-cell table and time-accounting notes restated
+
+_2026-09-08T21:58Z_
+
+`openspec/task-times.csv` gained four rows (1.5a, 1.5b, 1.6,
+rework-round-1) on top of `0a9743bf` (`widen-set-op-execute`
+worktree); `pnpm check:tasktime` rewrote the README's own task-time
+badges to match. This entry restates, for the group's own permanent
+record, what W10-W12 already carry piecewise — the hooked gate asks for
+it on any `task-times.csv` change, not a new finding.
+
+**Transplant-cell mutation-red table (rework round 1, restated from
+W12):**
+
+| cell | source / claim | mutation that killed it here | result |
+|---|---|---|---|
+| R1: 2 titles (description + comment only) | `query-layer.md` 1.4's own live sentence | n/a -- title/comment only, test bodies byte-identical (`git diff` confirmed 0 body lines changed) | `check-types`/`test` stayed green throughout |
+| R2-1: execute-layer six combinators (union..exceptAll, existing `it()`s, fixtures/assertions replaced in place -- test COUNT unchanged) | reviewer's "notNull branch on the LEFT" cell, killed by M1/M6 there | `db.ts`'s own `SetOpExecuteRow` forced left-only (1.5b protocol ②) | all 6 red (execute-result-type.test.ts:374,382,390,398,406,414) |
+| R2-2: orderBy/limit, 3 new cells (not a port -- reviewer's own cell was vacuous) | tasks 1.1 / proposal's own branch-forwarding claim, previously unpinned | `SetOpStage`'s own orderBy/limit return type dropped both branches | all 6 assertions red (set-op-stage.types.test.ts:140,142,148,150,156,157) |
+| R2-3: CTE nested 4-cell fixture strengthening | 1.5b's own mutation ③, 4/6 nested cells quiet (fixture coincidence: wider branch sat on the outer LEFT) | with.ts's own `MergedCteRowEnvironment` forced left-only (protocol ③, re-run) | 6/6 nested cells red (previously 2/6) -- cte-set-op-fold.types.test.ts:387,406,430,454,478,509 |
+| R3: 4 refusal positions, ported verbatim (fixture names only changed to this file's own) | reviewer's "compatibility gate survives the signature rewrite" block | `CompatibleSetOpBranch` forced to always resolve `unknown` (gate disabled) | 4 new + 1 pre-existing first-position cell = 5 red (set-op-stage.types.test.ts:181,194,200,206,212) |
+
+**R3's own mutation misfire, restated for the permanent record:** a
+first attempt reused 1.5b's own left/right-swap shape against
+`CompatibleSetOpBranch` -- zero reaction, because `SetOpResult`'s fold
+is a plain union (commutative): swapping which side is "left" changes
+nothing observable. Fixed by forcing the gate to `unknown`
+unconditionally instead. Recorded as a standing trap for this
+codebase's own set-op mutations: a left/right-swap mutation is only
+meaningful against something ASYMMETRIC (a fold's own OUTPUT depends on
+position, e.g. which branch supplies the key set at the SQL level, not
+its TYPE-level union), never against `SetOpResult` itself or anything
+built purely from it.
+
+**Test-count reconciliation (planner's own check, confirmed):** core
+109 files / 2343 tests (+7 from 2336 = R2-2's 3 cells + R3's 4 cells,
+both genuinely new `it()`s); query 68 files / 1161 tests, unchanged
+count -- R2-1 replaced the SIX existing `it()`s' own bodies (fixtures +
+assertions) in place, adding no new test entries. The six affected
+titles, unchanged in count but changed in content and title text:
+`union: reads the right branch, not just the left's own notNull
+declaration` (and the same phrasing for unionAll/intersect/
+intersectAll/except/exceptAll).
+
+**Time accounting, restated:** every row's minutes are a commit-window
+derivation (`git log --format='%h %ad %s' --date=iso`), not a
+stopwatch. 1.5a (63m/0) is the row with the least direct evidence: its
+own commit window (`cdfb9621` -> `5bd430aa`) predates this session's
+own visible record, so the hands-on/waiting split could not be
+observed directly and is reported as all hands-on only because no idle
+gap is visible in the surrounding record -- flagged as an estimate, not
+a measurement, in the CSV's own notes column. 1.5b (48m/0) and 1.6
+(13m/0) are both observed in-session end to end, no reply-wait: 1.5b's
+own 8x overrun against its original estimate is the four-mutation
+protocol (each of ①②③④ needs its own core rebuild plus a two-package
+check-types cycle) and the branch-convention lift into core the same
+task absorbed mid-flight (replanned +4m). rework-round-1 (~30m/0) has
+one real concurrency note: an R1 clarifying question was sent to the
+planner and R2/R3 proceeded without waiting for it; the planner's own
+two-message answer (hold, then the final A/B/C ruling) had already
+arrived by the time R1's own work was reached, so no distinct idle-wait
+segment is separable from the rest of the window.
+
