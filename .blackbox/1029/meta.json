@@ -1,8 +1,8 @@
 {
   "version": 3,
   "kind": "issue",
-  "ref": "quickstart-now/hejbro#1042",
-  "title": "check: a primary key whose derived name another constraint already holds is reported as missing, not as a name collision",
+  "ref": "quickstart-now/hejbro#1029",
+  "title": "generate: adopting a table in a schema the snapshot never recorded emits create schema, which the notice does not name and which fails first",
   "parent": "quickstart-now/hejbro#995",
   "status": "open",
   "opened": "2026-09-08",
@@ -10,11 +10,6 @@
   "decisions": [],
   "work": [],
   "prs": [
-    {
-      "number": 1043,
-      "role": "refs",
-      "pinnedAt": "2026-09-08T15:07Z"
-    },
     {
       "number": 1046,
       "role": "refs",

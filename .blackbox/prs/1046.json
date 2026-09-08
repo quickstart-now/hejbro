@@ -1,0 +1,73 @@
+{
+  "version": 3,
+  "number": 1046,
+  "ref": "quickstart-now/hejbro#1046",
+  "title": "chore(openspec): archive harden-adoption after d106 round 2 (#671)",
+  "head": "5dceeced260dc9d03f9bb91a91b76b12e675db0e",
+  "headRef": "archive-harden-adoption",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-08T15:46Z",
+  "refs": [
+    {
+      "path": "openspec/changes/archive/2026-09-09-harden-adoption/design.md",
+      "blob": "bfeb35cee15a192ef9f08a0a319b681b43080260"
+    },
+    {
+      "path": "openspec/changes/harden-adoption/design.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-09-harden-adoption/evaluation.md",
+      "blob": "a4f452671d12da900111b0ccd41432639e8c9e79"
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-09-harden-adoption/proposal.md",
+      "blob": "2d542d06488e142c2efbd7648b3bcb5bf1aa0cc4"
+    },
+    {
+      "path": "openspec/changes/harden-adoption/proposal.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-09-harden-adoption/specs/cli-commands/spec.md",
+      "blob": "57204180ec0914cb9775e724d0e08ab3c11e0d4d"
+    },
+    {
+      "path": "openspec/changes/harden-adoption/specs/cli-commands/spec.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-09-harden-adoption/specs/table-declaration/spec.md",
+      "blob": "fa735ca21f197576e26e73c8beaf6c3a1a622bfa"
+    },
+    {
+      "path": "openspec/changes/harden-adoption/specs/table-declaration/spec.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-09-harden-adoption/tasks.md",
+      "blob": "8c792a748a6ba451f4319ad58e9c7d512180f49b"
+    },
+    {
+      "path": "openspec/changes/harden-adoption/tasks.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/harden-adoption/evaluation.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/specs/cli-commands/spec.md",
+      "blob": "f945ef5fcf5fa37cc9bdeecb97c7a5c8af6f7533"
+    },
+    {
+      "path": "openspec/specs/table-declaration/spec.md",
+      "blob": "4523188052da3766c865b0aa312cb9a7727642b2"
+    },
+    {
+      "path": "skills/hejbro/references/brownfield-adoption.md",
+      "blob": "0adb071ddbf93ecd598ffd160627e2a09108731a"
+    }
+  ]
+}
