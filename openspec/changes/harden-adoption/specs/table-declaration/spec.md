@@ -70,10 +70,13 @@ DDL has it to look at.
   only managed object is that sequence, handed back to `existingTable()`
   and adopted again, applies cleanly on a database that kept the
   sequence; a declaration with more (indexes, checks, foreign keys, a
-  primary key) is named by `adoption-creates` on re-adoption, and
-  `hejbro baseline` records what the database already holds; a child on
-  a column the database lacks fails at apply time, and `check --url`
-  names the column beforehand
+  primary key) is named by `adoption-creates` on re-adoption, and the two
+  ways through are handing the table back — restoring the migration, the
+  snapshot and the declaration this run changed — or dropping the
+  indexes, checks, foreign keys and primary key the database holds,
+  never the sequence, before applying; a child on a column the database
+  lacks fails at apply time, and `check --url` names the column
+  beforehand
 
 #### Scenario: A reserved-schema validator exempts an existing table
 - **WHEN** a schema declares a table with `existingTable()` in a schema

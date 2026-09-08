@@ -581,6 +581,14 @@ const statementOrEmpty = (
  * longer exists). `addStatement` sorts with the other adds, after
  * `columnDiff.added`'s `add column` statements (a new member column must
  * exist before the constraint can name it).
+ *
+ * On adoption (`isAdoption`), none of the above runs: `previous` is the
+ * existing declaration's own snapshot, never a real prior migration, so
+ * its primary key membership never suppresses or drops anything (671/R9,
+ * D106 R1 B1) — the same treatment `columnRemovedStatements`/
+ * `columnAddedStatements`/`columnChangedStatements` above already give
+ * the rest of a column's shape. `next` alone decides: a declared primary
+ * key is always added, whatever `previous` claimed.
  */
 /** `planPrimaryKeyChange`'s drop half — `null` unless `previous` had a named constraint that Postgres won't already have cascaded away on its own (`everyPreviousMemberWasDropped`). */
 const primaryKeyDropStatement = (
@@ -620,7 +628,15 @@ const planPrimaryKeyChange = (
 	previous: TableSnapshot,
 	next: TableSnapshot,
 	columnDiff: KeyedDiff<ColumnSnapshot>,
+	isAdoption: boolean,
 ): PrimaryKeyChange => {
+	if (isAdoption) {
+		return {
+			dropStatement: null,
+			addStatement: primaryKeyAddStatement(next, primaryKeyColumnNames(next)),
+		};
+	}
+
 	const previousPkColumns = primaryKeyColumnNames(previous);
 	const nextPkColumns = primaryKeyColumnNames(next);
 	const columnSetChanged = !sameJson(
@@ -731,7 +747,12 @@ const emitAlter = (
 		tableChecks(next).map((check) => ({ key: check.name, value: check })),
 	);
 
-	const primaryKeyChange = planPrimaryKeyChange(previous, next, columnDiff);
+	const primaryKeyChange = planPrimaryKeyChange(
+		previous,
+		next,
+		columnDiff,
+		isAdoption,
+	);
 
 	const foreignKeysToDrop = [
 		...foreignKeyDiff.removed.map((entry) => entry.key),

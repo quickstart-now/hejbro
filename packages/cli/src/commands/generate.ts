@@ -395,13 +395,36 @@ const warningStderr = (
 	return renderDiagnostics(allDiagnostics, null);
 };
 
-/** 671/R5's fixed body opener and closer for `adoption-creates` — the text between them names each object this run's adoption fans out into, one line per object, in the delta's own enumeration order. 671/R8 adds the second line: a generate-time refusal can't tell "the database lacks this column" from "the database has it, `existingTable()` just didn't list it" (both read identically offline), so the risk is named instead — `hejbro check --url` is the command that can tell the two apart. */
+/**
+ * 671/R5's fixed body opener and closer for `adoption-creates` — the
+ * text between them names each object this run's adoption fans out
+ * into, one line per object, in the delta's own enumeration order.
+ * 671/R8 adds the missing-column-risk line: a generate-time refusal
+ * can't tell "the database lacks this column" from "the database has
+ * it, `existingTable()` just didn't list it" (both read identically
+ * offline), so the risk is named instead — `hejbro check --url` is the
+ * command that can tell the two apart.
+ *
+ * 671/R10 (D106 R1 B2) rewrote the intro and the `Next:` line: measured
+ * against a real database (evaluation.md B2), the sequence a held copy
+ * fails to reuse; only an index, a check, a foreign key or the primary
+ * key does (N4) — the intro now names exactly that set, never "any of
+ * them." And the `Next:` line's own first branch, `hejbro baseline`,
+ * can never run after any adoption (`baseline-not-first` refuses the
+ * moment `migrations/` is non-empty, which an adoption's own previous
+ * snapshot guarantees) — no mid-chain path registers already-held
+ * objects yet (#1037), so the two ways that actually run on the
+ * database this run just adopted are named instead: hand the table
+ * back (restore the three files this run touched — migration, snapshot,
+ * declaration), or drop what a held copy would collide on (never the
+ * sequence, which is reused) and apply.
+ */
 const ADOPTION_CREATES_INTRO =
-	"adoption creates objects for a table hejbro did not create; apply fails if the database already holds any of them";
+	"adoption creates objects for a table hejbro did not create; apply fails if the database already holds one of the indexes, checks, foreign keys or the primary key named below — a sequence it already holds is reused, and row-level security and policies are re-applied without failing";
 const ADOPTION_CREATES_MISSING_COLUMN_RISK =
 	'apply also fails if the database lacks a column one of these objects needs — "hejbro check --url <url>" names such a column before you migrate';
 const ADOPTION_CREATES_NEXT =
-	'Next: if the database already holds these, run "hejbro baseline" to record them instead of applying this migration; if it lacks a column, discard the migration and snapshot this run just wrote, adopt with the columns the database has, then add the column and its objects in a following edit.';
+	'Next: if the database already holds these, either hand the table back — restore the migration and the snapshot this run just wrote and the existingTable() declaration it replaced — or drop the indexes, checks, foreign keys and primary key it already holds, never the sequence, and run "hejbro migrate"; if it lacks a column, discard the migration and snapshot this run just wrote, adopt with the columns the database has, then add the column and its objects in a following edit.';
 
 /** The owning table's identity string for one adopted change (671/R5, D-3-A) — `table`/`rls` already carry it as their own identity; `policy`'s own identity is `<schema>.<table>.<name>`, so its first two segments are the table's; `sequence`'s own identity never names its owning table at all, so its owning table comes from its own snapshot's `schema`/`table` fields instead (`SequenceSnapshot`, a public export). No other kind ever carries `transition: "adopted"` (D-3-A: only kinds implementing `ownerTableIdentity`, plus `table` itself, do). */
 const owningTableIdentity = (change: KindChange): string => {

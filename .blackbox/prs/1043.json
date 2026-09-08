@@ -1,0 +1,69 @@
+{
+  "version": 3,
+  "number": 1043,
+  "ref": "quickstart-now/hejbro#1043",
+  "title": "fix(core,cli): adoption creates the primary key and names a Next: that runs (#671 d106 r1)",
+  "head": "5af8bea204340ab3bc98382376fba641081a6f53",
+  "headRef": "fix-adoption-d106-r1",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-08T15:07Z",
+  "refs": [
+    {
+      "path": ".changeset/fix-adoption-primary-key-and-next.md",
+      "blob": "d95a84e74147e483b10fb4d6446e07d3c7e48f87"
+    },
+    {
+      "path": "README.md",
+      "blob": "b7df3b28c35036684183c726c1f8d492ce3ad3f9"
+    },
+    {
+      "path": "openspec/changes/harden-adoption/evaluation.md",
+      "blob": "9efa9a6fed2cabcd10d2f3b23f2e483eb8315d77"
+    },
+    {
+      "path": "openspec/changes/harden-adoption/specs/cli-commands/spec.md",
+      "blob": "57204180ec0914cb9775e724d0e08ab3c11e0d4d"
+    },
+    {
+      "path": "openspec/changes/harden-adoption/specs/table-declaration/spec.md",
+      "blob": "fa735ca21f197576e26e73c8beaf6c3a1a622bfa"
+    },
+    {
+      "path": "openspec/changes/harden-adoption/tasks.md",
+      "blob": "8c792a748a6ba451f4319ad58e9c7d512180f49b"
+    },
+    {
+      "path": "openspec/task-times.csv",
+      "blob": "d5574567bd22200042125761015e7a5db4596431"
+    },
+    {
+      "path": "packages/cli/src/commands/generate.ts",
+      "blob": "117f95d5eb0fd0de80b5779648ced5242e7e21cb"
+    },
+    {
+      "path": "packages/cli/test/adoption-handover.integration.test.ts",
+      "blob": "c81fa3c480b1d4fc071f1ad1c886554dc418704c"
+    },
+    {
+      "path": "packages/cli/test/generate-command.test.ts",
+      "blob": "521755b215e832697b9d9fe4bc4da27e963a6f14"
+    },
+    {
+      "path": "packages/core/src/kinds/table-kind-emit.ts",
+      "blob": "1d8102ec95dd12c03a9b83187572d88eace44199"
+    },
+    {
+      "path": "packages/core/src/kinds/table-kind.ts",
+      "blob": "1201756b39bb02a50179b8a395a23e20743043c1"
+    },
+    {
+      "path": "packages/core/test/generate.test.ts",
+      "blob": "a9b92508adc137c182209528ef8ef1bd604ec9fd"
+    },
+    {
+      "path": "skills/hejbro/references/brownfield-adoption.md",
+      "blob": "7db0049513b142baad9f5a541250ffc794130946"
+    }
+  ]
+}

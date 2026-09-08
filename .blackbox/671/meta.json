@@ -108,6 +108,52 @@
       "at": "2026-09-06T04:05Z",
       "title": "review B1: adoption-creates names the missing-column risk and check --url; no generate-time refusal (a partial existing declaration is by design); N4 fixed in the piece; B2 N3 N1 wording",
       "ratified": null
+    },
+    {
+      "id": "R9",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "671/R1",
+        "671/R2"
+      ],
+      "at": "2026-09-07T14:29Z",
+      "title": "the primary key is created on adoption whatever the existing side listed (D106 R1 B1)",
+      "ratified": null
+    },
+    {
+      "id": "R10",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "671/R3",
+        "671/R8"
+      ],
+      "at": "2026-09-07T14:29Z",
+      "title": "the Next: first branch must run on the database it describes; measured fork (D106 R1 B2)",
+      "ratified": null
+    },
+    {
+      "id": "R11",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "671/R10"
+      ],
+      "at": "2026-09-08T14:54Z",
+      "title": "branch (b) of R10 confirmed on measurement: the Next: names the two paths that run today",
+      "ratified": null
+    },
+    {
+      "id": "R12",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "671/R9"
+      ],
+      "at": "2026-09-08T14:54Z",
+      "title": "the banner names the primary key on every adoption that creates one (D106 R1 F3, NB-3)",
+      "ratified": null
     }
   ],
   "work": [
@@ -124,6 +170,32 @@
       "title": "review rounds one to three: the missing-column risk, the withdrawn refusal, and the four-branch measurement",
       "pr": null,
       "decisions": []
+    },
+    {
+      "id": "W3",
+      "at": "2026-09-07T16:15Z",
+      "title": "D106 round 1 corrections: B1 (671/R9) and B2 (671/R10) fixed",
+      "pr": null,
+      "decisions": [
+        "R9",
+        "R10"
+      ]
+    },
+    {
+      "id": "W4",
+      "at": "2026-09-08T13:43Z",
+      "title": "W3 correction: the f1-f6 drop-order claim measured a hand-edited pre-671/R9 file, not the real build",
+      "pr": null,
+      "decisions": []
+    },
+    {
+      "id": "W5",
+      "at": "2026-09-08T14:35Z",
+      "title": "NB-3: the banner names the primary key on every adoption that creates one",
+      "pr": null,
+      "decisions": [
+        "R9"
+      ]
     }
   ],
   "prs": [
@@ -131,6 +203,11 @@
       "number": 1019,
       "role": "closes",
       "pinnedAt": "2026-09-06T06:17Z"
+    },
+    {
+      "number": 1043,
+      "role": "refs",
+      "pinnedAt": "2026-09-08T15:07Z"
     }
   ],
   "origin": null,

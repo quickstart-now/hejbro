@@ -36,6 +36,7 @@ import {
 	tableChecks,
 	tableExisting,
 	tableIdentity,
+	tablePrimaryKeyName,
 } from "./table-snapshot";
 
 /** Derives an index's default name from its owning table and columns — shared with `engine/rename-plan.ts`'s drift guard (Phase 5). */
@@ -577,6 +578,47 @@ const isEmptyTableFieldDiffs = (diffs: TableFieldDiffs): boolean =>
 	isEmptyKeyedDiff(diffs.foreignKeyDiff) &&
 	isEmptyKeyedDiff(diffs.checkDiff);
 
+/**
+ * `next`'s own primary key name, only when `isAdoption` and it declares
+ * one, else `null` — a primary key's membership lives on the column
+ * itself (`columnState.primaryKey`, D68), which `existingTable()` never
+ * zeroes out the way it zeroes `indexes`/`foreignKeys`/`checks`, so an
+ * existing declaration that lists the same primary key leaves
+ * `columnDiff` unchanged and the table's own alter would otherwise never
+ * fire (671/R9, D106 R1 B1). `null` for every other transition: a
+ * managed→managed primary key move already shows up in `columnDiff`
+ * (the column's own `primaryKey` flag is part of its snapshot), and a
+ * new table's primary key is inline in `create table`.
+ */
+const adoptionPrimaryKeyName = (
+	isAdoption: boolean,
+	next: TableSnapshot,
+): string | null => {
+	if (!isAdoption) {
+		return null;
+	}
+	return tablePrimaryKeyName(next);
+};
+
+/**
+ * `["primary key \"<name>\" added"]` whenever adoption declares one
+ * (review round 1 F3/NB-3) — named on every adoption that creates a
+ * primary key, `isAdoption` the only guard, even alongside another
+ * child's own note or a `column "…" changed` note the existing side's
+ * lack of the flag already produced: the banner states what the file
+ * does, and the file always carries the `add constraint … primary key`
+ * statement whenever this fires. `[]` when `adoptionPrimaryKeyName`
+ * returns `null`.
+ */
+const adoptionPrimaryKeyNote = (
+	primaryKeyName: string | null,
+): ReadonlyArray<string> => {
+	if (primaryKeyName === null) {
+		return [];
+	}
+	return [`primary key "${primaryKeyName}" added`];
+};
+
 /** `true` when `node` is a table snapshot node marked existing — `null` (the table absent on that side) is never existing (add-unmanaged-objects). */
 const isExistingSide = (node: JsonValue | null): boolean =>
 	node !== null && tableExisting(asTableSnapshot(node));
@@ -730,11 +772,11 @@ export const tableKind: ObjectKind<TableDeclaration> = {
 			return guard.changes;
 		}
 
-		const diffs = tableFieldDiffs(
-			asTableSnapshot(guard.previous),
-			asTableSnapshot(guard.next),
-		);
-		if (isEmptyTableFieldDiffs(diffs)) {
+		const nextTable = asTableSnapshot(guard.next);
+		const diffs = tableFieldDiffs(asTableSnapshot(guard.previous), nextTable);
+		const isAdoption = isAdoptionTransition(previous, next);
+		const primaryKeyName = adoptionPrimaryKeyName(isAdoption, nextTable);
+		if (isEmptyTableFieldDiffs(diffs) && primaryKeyName === null) {
 			return [];
 		}
 
@@ -745,7 +787,10 @@ export const tableKind: ObjectKind<TableDeclaration> = {
 				identity,
 				previous: guard.previous,
 				next: guard.next,
-				notes: tableFieldDiffNotes(diffs),
+				notes: [
+					...tableFieldDiffNotes(diffs),
+					...adoptionPrimaryKeyNote(primaryKeyName),
+				],
 			},
 		];
 	},

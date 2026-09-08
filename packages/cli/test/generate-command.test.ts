@@ -627,6 +627,43 @@ export const widgets = table(
 );
 `;
 
+// 671/R9, D106 R1 B1, review round 1 F1: the handover (table B) and
+// brand-new-table (table C) cells above are the only other "prints
+// nothing" cells this describe block pins -- neither is this one. No
+// primary key on either side, no index, no check, no foreign key: the
+// narrowest adoption there is.
+const ADOPT_NOTHING_EXISTING_SOURCE = `import { existingTable, schema, uuid } from "hejbro";
+
+export const j17 = schema("j17");
+
+export const widgets = existingTable("j17", "widgets", { id: uuid() });
+`;
+
+const ADOPT_NOTHING_MANAGED_SOURCE = `import { schema, table, uuid } from "hejbro";
+
+export const j17 = schema("j17");
+
+export const widgets = table(j17, "widgets", { id: uuid() });
+`;
+
+// 671/R9, D106 R1 B1: the CLI-surface control for the same cell "table
+// A: primary key x adoption" pins at the core level (`generate.test.ts`
+// `uo6`) -- a primary key on both sides, nothing else, now prints
+// `adoption-creates` and names it instead of adopting silently.
+const ADOPT_PK_ONLY_EXISTING_SOURCE = `import { existingTable, schema, uuid } from "hejbro";
+
+export const j18 = schema("j18");
+
+export const widgets = existingTable("j18", "widgets", { id: uuid().primaryKey() });
+`;
+
+const ADOPT_PK_ONLY_MANAGED_SOURCE = `import { schema, table, uuid } from "hejbro";
+
+export const j18 = schema("j18");
+
+export const widgets = table(j18, "widgets", { id: uuid().primaryKey() });
+`;
+
 let cwd: string;
 
 beforeEach(async () => {
@@ -1489,13 +1526,13 @@ export default defineConfig({
 	});
 });
 
-describe("hejbro generate — adoption-creates (671/task 1.3, 1.3a)", () => {
+describe("hejbro generate — adoption-creates (671/task 1.3, 1.3a, 671/R10 D106 R1 B2)", () => {
 	const adoptionCreatesIntro =
-		"adoption creates objects for a table hejbro did not create; apply fails if the database already holds any of them";
+		"adoption creates objects for a table hejbro did not create; apply fails if the database already holds one of the indexes, checks, foreign keys or the primary key named below — a sequence it already holds is reused, and row-level security and policies are re-applied without failing";
 	const missingColumnRisk =
 		'apply also fails if the database lacks a column one of these objects needs — "hejbro check --url <url>" names such a column before you migrate';
 	const nextLine =
-		'Next: if the database already holds these, run "hejbro baseline" to record them instead of applying this migration; if it lacks a column, discard the migration and snapshot this run just wrote, adopt with the columns the database has, then add the column and its objects in a following edit.';
+		'Next: if the database already holds these, either hand the table back — restore the migration and the snapshot this run just wrote and the existingTable() declaration it replaced — or drop the indexes, checks, foreign keys and primary key it already holds, never the sequence, and run "hejbro migrate"; if it lacks a column, discard the migration and snapshot this run just wrote, adopt with the columns the database has, then add the column and its objects in a following edit.';
 
 	it("names only the sequence for an adoption that fans out into a sequence alone (671/task 1.3, table A: sequence)", async () => {
 		await runCli(cwd, ["init"]);
@@ -1611,6 +1648,55 @@ describe("hejbro generate — adoption-creates (671/task 1.3, 1.3a)", () => {
 		expect(result.exitCode).toBe(0);
 		expect(result.stdout).toContain("wrote migrations/");
 		expect(result.stderr).not.toContain("adoption-creates");
+	});
+
+	it("prints nothing under adoption-creates for an adoption with no declared children at all and no primary key on either side (671/R9, D106 R1 B1, review round 1 F1: table B2, nothing to create)", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(ADOPT_NOTHING_EXISTING_SOURCE);
+		await runCli(cwd, ["generate"]);
+
+		await writeSchema(ADOPT_NOTHING_MANAGED_SOURCE);
+		const result = await runCli(cwd, ["generate"]);
+		expect(result.exitCode).toBe(0);
+		expect(result.stderr).not.toContain("adoption-creates");
+	});
+
+	it("names the primary key when it is the adoption's only child, even though the existing declaration already listed it (671/R9, D106 R1 B1: table B3, primary key only)", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(ADOPT_PK_ONLY_EXISTING_SOURCE);
+		await runCli(cwd, ["generate"]);
+
+		await writeSchema(ADOPT_PK_ONLY_MANAGED_SOURCE);
+		const result = await runCli(cwd, ["generate"]);
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("wrote migrations/");
+		expect(result.stderr).toBe(
+			[
+				"warning[adoption-creates]: j18.widgets",
+				`  ${adoptionCreatesIntro}`,
+				`  ${missingColumnRisk}`,
+				'  primary key "widgets_pkey"',
+				`  ${nextLine}`,
+				"",
+			].join("\n"),
+		);
+		// 671/R9, D106 R1 B1, review round 1 F1 re-review: the notice above
+		// is read structurally off the snapshot (`generate.ts`'s
+		// `tableChildLines` reads `next.primaryKeyName`, never the
+		// migration's own emitted SQL), so it names the primary key whether
+		// or not the migration actually creates it -- exactly B1's original
+		// shape. This is the one CLI-surface assertion that also reads the
+		// migration body, so a regression back to B1 (notice names it,
+		// migration skips it) reddens here even though the notice text
+		// above would stay unchanged.
+		const fileName = (await sqlFileNames()).at(-1);
+		const migrationSql = await readFile(
+			join(cwd, "migrations", fileName as string),
+			"utf8",
+		);
+		expect(migrationSql).toContain(
+			'alter table "j18"."widgets" add constraint "widgets_pkey" primary key ("id");',
+		);
 	});
 
 	it("prints one block per adopted table, blank-line separated, with the summary counting both (671/task 1.3, table D: two tables)", async () => {
