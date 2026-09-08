@@ -66,8 +66,8 @@ but does not declare, so that neither consumer of one reading loses the
 reference: the starter declarations name it through a reference-only
 handle they do not export, and the contract names it through the
 foreign-key metadata and `Relationships`, carrying no relation for it
-— a relation needs a `Tables` key for its own target, which schema-
-vendoring's own rule already withholds from a table this run never
+— the contract gives a relation only where the target has a `Tables`
+key, which schema-vendoring withholds from a table this run never
 read. The contract SHALL NOT give that
 target an entry of its own among its tables — a table this run never
 read has no column set and no types the contract could state without
@@ -229,7 +229,8 @@ code points, never by a collation — the same comparator `check`'s
 inventory uses, shared, so two locales and an NFC/NFD pair print the
 same order; the report's own bands (what was guessed, what was not
 inferred, each approximation, each omission) keep the order stated
-here.
+here. The omission band is itself several ordered lists, one per kind
+of object it names, never one list merged across kinds.
 
 #### Scenario: The report names the way out
 - **WHEN** `pull --db-url` completes

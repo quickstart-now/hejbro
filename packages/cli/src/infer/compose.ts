@@ -12,6 +12,7 @@ import { tablesInSnapshot } from "../contract/read-snapshot";
 import { mergeTableFacts } from "./adapter";
 import type { InferenceCatalog } from "./catalog";
 import { readInferenceCatalog } from "./catalog";
+import { inferColumnDeclaration } from "./columns";
 import type { CatalogDescription } from "./description";
 import { describeCatalog } from "./description";
 import type {
@@ -282,9 +283,9 @@ const generatedColumnOmittedColumnIdentities = (
 const generatedColumnOmissionsFor = (
 	tables: ReadonlyArray<InferredTableFacts>,
 	generatedColumnReferences: ReadonlyMap<string, ReadonlyArray<string>>,
-	nameAndEnumCauses: ReadonlyMap<string, ColumnOmissionCause>,
+	rootEligibleCauses: ReadonlyMap<string, ColumnOmissionCause>,
 ): ReadonlyArray<OmittedTableMemberAtColumn> => {
-	const omittedColumnIdentities = new Set(nameAndEnumCauses.keys());
+	const omittedColumnIdentities = new Set(rootEligibleCauses.keys());
 
 	return tables.flatMap((table) =>
 		table.columns.flatMap((column) => {
@@ -297,7 +298,7 @@ const generatedColumnOmissionsFor = (
 			);
 			const offending = firstOffendingColumn(
 				referencedIdentities,
-				nameAndEnumCauses,
+				rootEligibleCauses,
 			);
 			if (offending === undefined) {
 				return [];
@@ -332,6 +333,16 @@ const rootEnumIdentityField = (
 	return { rootEnumIdentity };
 };
 
+/** 712/R13: the same `exactOptionalPropertyTypes` shape as {@link rootEnumIdentityField}, for the notInferred root's own `sqlType`. */
+const rootNotInferredSqlTypeField = (
+	rootNotInferredSqlType: string | undefined,
+): { readonly rootNotInferredSqlType: string } | Record<string, never> => {
+	if (rootNotInferredSqlType === undefined) {
+		return {};
+	}
+	return { rootNotInferredSqlType };
+};
+
 const firstOffendingColumn = (
 	columnIdentities: ReadonlyArray<string>,
 	columnOmissionCauses: ReadonlyMap<string, ColumnOmissionCause>,
@@ -341,9 +352,11 @@ const firstOffendingColumn = (
 			| "columnIdentity"
 			| "cause"
 			| "enumIdentity"
+			| "notInferredSqlType"
 			| "rootColumnIdentity"
 			| "rootCause"
 			| "rootEnumIdentity"
+			| "rootNotInferredSqlType"
 	  >
 	| undefined => {
 	const [first] = [...columnIdentities].sort(compareCodeUnits);
@@ -368,6 +381,14 @@ const firstOffendingColumn = (
 			rootColumnIdentity: cause.rootColumnIdentity,
 			rootCause: cause.rootCause,
 			...rootEnumIdentityField(cause.rootEnumIdentity),
+			...rootNotInferredSqlTypeField(cause.rootNotInferredSqlType),
+		};
+	}
+	if (cause.cause === "notInferred") {
+		return {
+			columnIdentity: first,
+			cause: "notInferred",
+			notInferredSqlType: cause.sqlType,
 		};
 	}
 	return { columnIdentity: first, cause: "name" };
@@ -803,17 +824,32 @@ export type ForeignKeyPartition = {
 export type ColumnOmissionCause =
 	| { readonly cause: "name" }
 	| { readonly cause: "enum"; readonly enumIdentity: string }
+	// 712/R13 (D106 round-1 correction, B1's own general rule): a column
+	// whose type no column builder expresses -- `columns.ts`'s
+	// `inferColumnDeclaration` returning `"loss"`, the same axis the
+	// "Not inferred: column ..." line already names, and `sqlType` is
+	// that same line's own text (`facts.sqlType`, `format_type`).
+	// Distinct from "name"/"enum": nothing about this column's own name
+	// or an enum type is wrong, and there is no rename that fixes it --
+	// R13's own ruling: this cause has no exit today (no general-purpose
+	// column builder exists).
+	| { readonly cause: "notInferred"; readonly sqlType: string }
 	| {
 			readonly cause: "generatedExpression";
 			readonly rootColumnIdentity: string;
 			// Never itself "generatedExpression": Postgres refuses a
 			// generated column's own expression naming another generated
 			// column outright ("cannot use generated column ... in column
-			// generation expression", measured, postgres:17-alpine), so a
-			// root is always an ordinary column and this union closes at
-			// two causes.
-			readonly rootCause: "name" | "enum";
+			// generation expression", measured, postgres:17-alpine) -- that
+			// is the one root cause this union can never carry, regardless
+			// of how many *other* root causes exist. 712/R13 added a third,
+			// "notInferred" (R12's own "closes at two causes" was scoped to
+			// ruling out generated-column recursion specifically, never a
+			// claim that only two non-recursive causes could ever exist).
+			readonly rootCause: "name" | "enum" | "notInferred";
 			readonly rootEnumIdentity?: string;
+			/** Present only when `rootCause` is `"notInferred"` -- mirrors the direct cause's own `sqlType`. */
+			readonly rootNotInferredSqlType?: string;
 	  };
 
 /**
@@ -884,6 +920,19 @@ export const partitionForeignKeys = (
 					rootColumnIdentity: cause.rootColumnIdentity,
 					rootCause: cause.rootCause,
 					...rootEnumIdentityField(cause.rootEnumIdentity),
+				},
+			];
+		}
+		if (cause.cause === "notInferred") {
+			return [
+				{
+					schema: facts.schema.schemaName,
+					table: facts.tableName,
+					name: fk.name,
+					columnIdentity: identity,
+					end,
+					cause: "notInferred",
+					notInferredSqlType: cause.sqlType,
 				},
 			];
 		}
@@ -1235,43 +1284,93 @@ export const inferFromCatalog = async (
 				] as const,
 		),
 	]);
-	// 712/R11/R12 (cross-cutting cell 1, cfr1-planner's own measurement 2):
-	// computed against `mergedTables` (every column still present) and
-	// only the name/enum causes above -- *before* `columnOmissionCauses`
-	// is finalized, so the foreign-key and primary-key exclusions below
-	// see this third cause too, the same as the index/check/unique
-	// exclusion already does through the one shared map. Without this
-	// ordering, a foreign key or a primary key naming the now-omitted
-	// generated column would survive declared against a column that no
-	// longer exists (measured live: `baseline` failing
-	// `error[foreign-key-empty-references]` on a foreign key whose own
-	// target column evaluated to `undefined`).
+	// 712/R13 (D106 round-1 correction, B1's own general rule): a column
+	// whose type no column builder expresses -- the same axis
+	// `columns.ts`'s own `inferColumnDeclaration` returning `"loss"`
+	// already names on the "Not inferred: column ..." line. Computed
+	// against `mergedTables` directly (never against `built`'s own later
+	// `losses`, which only exists after `inferTable` already ran on the
+	// member-excluded tables -- too late to feed the exclusion this cause
+	// itself has to drive) and only for a column `nameAndEnumCauses`
+	// doesn't already cover, so a column both un-name-declarable and
+	// untyped still states its name cause, never a second, weaker one
+	// (D2's own precedent).
+	const notInferredCauses = new Map<string, ColumnOmissionCause>(
+		mergedTables.flatMap((table) =>
+			table.columns.flatMap((column) => {
+				const identity = `${table.schema.schemaName}.${table.tableName}.${column.sqlName}`;
+				if (nameAndEnumCauses.has(identity)) {
+					return [];
+				}
+				if (inferColumnDeclaration(column.facts).kind !== "loss") {
+					return [];
+				}
+				return [
+					[
+						identity,
+						{
+							cause: "notInferred" as const,
+							sqlType: column.facts.sqlType,
+						},
+					] as const,
+				];
+			}),
+		),
+	);
+	const rootEligibleCauses = new Map<string, ColumnOmissionCause>([
+		...nameAndEnumCauses,
+		...notInferredCauses,
+	]);
+	// 712/R11/R12/R13 (cross-cutting cell 1, cfr1-planner's own
+	// measurement 2): computed against `mergedTables` (every column still
+	// present) and every non-cascading cause above (name, enum,
+	// notInferred) -- *before* `columnOmissionCauses` is finalized, so
+	// the foreign-key and primary-key exclusions below see this cascade
+	// too, the same as the index/check/unique exclusion already does
+	// through the one shared map. Without this ordering, a foreign key
+	// or a primary key naming the now-omitted generated column would
+	// survive declared against a column that no longer exists (measured
+	// live: `baseline` failing `error[foreign-key-empty-references]` on
+	// a foreign key whose own target column evaluated to `undefined`).
 	const generatedColumnOmissions = generatedColumnOmissionsFor(
 		mergedTables,
 		generatedColumnReferencesByIdentity(inferenceCatalog),
-		nameAndEnumCauses,
+		rootEligibleCauses,
 	);
-	// 712/R12 (B, cfr1-planner's own measurement): each entry's own
+	// 712/R12/R13 (B, cfr1-planner's own measurement): each entry's own
 	// `cause`/`enumIdentity` here is the *root*'s (computed above against
-	// `nameAndEnumCauses` alone, never "generatedExpression" in practice)
-	// -- carried into the generated column's own `columnOmissionCauses`
-	// entry so a member naming it can name the root, not an anonymous
-	// "a column this reading already left out", and pick the tail the
-	// root's own cause earns (name -> rename the column, enum -> rename
-	// the type), never this column's.
+	// `rootEligibleCauses` -- name, enum or notInferred, never
+	// "generatedExpression" in practice) -- carried into the generated
+	// column's own `columnOmissionCauses` entry so a member naming it can
+	// name the root, not an anonymous "a column this reading already
+	// left out", and pick the tail the root's own cause earns (name ->
+	// rename the column, enum -> rename the type, notInferred -> neither
+	// rename is a real remedy), never this column's.
 	const rootCauseFieldsFor = (
-		entry: Pick<OmittedTableMemberAtColumn, "cause" | "enumIdentity">,
+		entry: Pick<
+			OmittedTableMemberAtColumn,
+			"cause" | "enumIdentity" | "notInferredSqlType"
+		>,
 	): Pick<
 		Extract<ColumnOmissionCause, { readonly cause: "generatedExpression" }>,
-		"rootCause" | "rootEnumIdentity"
+		"rootCause" | "rootEnumIdentity" | "rootNotInferredSqlType"
 	> => {
 		if (entry.cause === "enum" && entry.enumIdentity !== undefined) {
 			return { rootCause: "enum", rootEnumIdentity: entry.enumIdentity };
 		}
+		if (
+			entry.cause === "notInferred" &&
+			entry.notInferredSqlType !== undefined
+		) {
+			return {
+				rootCause: "notInferred",
+				rootNotInferredSqlType: entry.notInferredSqlType,
+			};
+		}
 		return { rootCause: "name" };
 	};
 	const columnOmissionCauses = new Map<string, ColumnOmissionCause>([
-		...nameAndEnumCauses,
+		...rootEligibleCauses,
 		...generatedColumnOmissions.map(
 			(entry) =>
 				[

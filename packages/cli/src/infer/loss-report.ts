@@ -412,13 +412,17 @@ export type OmittedForeignKeyColumn = {
 	/** `"<schema>.<table>.<sqlName>"` of the omitted column that cost this foreign key. */
 	readonly columnIdentity: string;
 	readonly end: "source" | "target";
-	readonly cause: "name" | "enum" | "generatedExpression";
+	readonly cause: "name" | "enum" | "generatedExpression" | "notInferred";
 	/** The enum type's own `"<schema>.<name>"` identity -- present only when `cause` is `"enum"` (712/R8). */
 	readonly enumIdentity?: string;
+	/** 712/R13: the format-type text (`facts.sqlType`) -- present only when `cause` is `"notInferred"`, mirroring the "Not inferred: column ..." line's own text. */
+	readonly notInferredSqlType?: string;
 	/** 712/R12 (B), cfr1-planner's own measurement: the column a generated column's own expression names, and *that* column's own cause -- present only when `cause` is `"generatedExpression"`, so the line can name the root rather than an anonymous "a column this reading already left out" and pick the tail its own root cause (not this column's) actually earns. */
 	readonly rootColumnIdentity?: string;
-	readonly rootCause?: "name" | "enum";
+	readonly rootCause?: "name" | "enum" | "notInferred";
 	readonly rootEnumIdentity?: string;
+	/** 712/R13: mirrors `notInferredSqlType`, for the root's own cause. */
+	readonly rootNotInferredSqlType?: string;
 };
 
 /**
@@ -463,12 +467,16 @@ export type OmittedTableMemberAtColumn = {
 	readonly table: string;
 	readonly sqlName: string;
 	readonly columnIdentity: string;
-	readonly cause: "name" | "enum" | "generatedExpression";
+	readonly cause: "name" | "enum" | "generatedExpression" | "notInferred";
 	readonly enumIdentity?: string;
+	/** 712/R13: mirrors {@link OmittedForeignKeyColumn}'s own `notInferredSqlType`. */
+	readonly notInferredSqlType?: string;
 	/** 712/R12 (B): mirrors {@link OmittedForeignKeyColumn}'s own root fields -- present only when `cause` is `"generatedExpression"`. */
 	readonly rootColumnIdentity?: string;
-	readonly rootCause?: "name" | "enum";
+	readonly rootCause?: "name" | "enum" | "notInferred";
 	readonly rootEnumIdentity?: string;
+	/** 712/R13: mirrors {@link OmittedForeignKeyColumn}'s own `rootNotInferredSqlType`. */
+	readonly rootNotInferredSqlType?: string;
 	readonly axis: MemberAxis;
 };
 
@@ -492,12 +500,16 @@ export type OmittedPrimaryKey = {
 	readonly table: string;
 	readonly name: string;
 	readonly columnIdentity: string;
-	readonly cause: "name" | "enum" | "generatedExpression";
+	readonly cause: "name" | "enum" | "generatedExpression" | "notInferred";
 	readonly enumIdentity?: string;
+	/** 712/R13: mirrors {@link OmittedForeignKeyColumn}'s own `notInferredSqlType`. */
+	readonly notInferredSqlType?: string;
 	/** 712/R12 (B): mirrors {@link OmittedForeignKeyColumn}'s own root fields -- present only when `cause` is `"generatedExpression"`. */
 	readonly rootColumnIdentity?: string;
-	readonly rootCause?: "name" | "enum";
+	readonly rootCause?: "name" | "enum" | "notInferred";
 	readonly rootEnumIdentity?: string;
+	/** 712/R13: mirrors {@link OmittedForeignKeyColumn}'s own `rootNotInferredSqlType`. */
+	readonly rootNotInferredSqlType?: string;
 };
 
 export type LossReportFacts = {
@@ -1000,10 +1012,28 @@ const memberReasonClause = (
  * out ...", doubled; swapping to the verbatim form (if ever needed)
  * touches only this one branch.
  */
+/**
+ * 712/R13 (D106 round-1 correction, lead-approved wording): a column
+ * whose type no column builder expresses earns neither the name branch
+ * ("rename the column") nor the enum branch ("rename the type") --
+ * nothing about this column's own name or an enum type is the problem.
+ * "did not infer" (not "left out") deliberately echoes the "Not
+ * inferred: column …" line's own verb, since this is the same axis, not
+ * a fresh one. No `Next:`/`Rename …` tail follows it anywhere it
+ * appears (R13: this cause has no exit today -- no general-purpose
+ * column builder exists, measured against `column-builder-factories.ts`
+ * and `dsl-cheatsheet.md` alike).
+ */
+const notInferredReasonClause = (sqlType: string): string =>
+	`which this reading did not infer, because no column builder expresses its type "${sqlType}"`;
+
 const generatedExpressionRootClause = (
 	entry: Pick<
 		OmittedTableMemberAtColumn,
-		"rootColumnIdentity" | "rootCause" | "rootEnumIdentity"
+		| "rootColumnIdentity"
+		| "rootCause"
+		| "rootEnumIdentity"
+		| "rootNotInferredSqlType"
 	>,
 	consequenceClause: string,
 ): string => {
@@ -1011,17 +1041,34 @@ const generatedExpressionRootClause = (
 	if (entry.rootCause === "enum") {
 		return `${opening}, which this reading left out with the enum type "${entry.rootEnumIdentity}" that types it, ${consequenceClause}`;
 	}
+	if (
+		entry.rootCause === "notInferred" &&
+		entry.rootNotInferredSqlType !== undefined
+	) {
+		return `${opening}, ${notInferredReasonClause(entry.rootNotInferredSqlType)}, ${consequenceClause}`;
+	}
 	return `${opening}, whose own name no declaration can carry, ${consequenceClause}`;
 };
 
-/** Whether the tail this entry earns is the enum branch ("rename the type") -- true for a direct enum cause, or a `"generatedExpression"` cause whose own root cause is `"enum"`; false (the name/default branch, "rename the column") otherwise, including a `"generatedExpression"` cause whose root is `"name"`. */
-const takesEnumTail = (
+/** Which tail branch this entry earns -- `"enum"` ("rename the type"), `"notInferred"` (no tail at all, R13: no exit exists), or `"name"` ("rename the column", the default) -- for a direct cause of that kind, or a `"generatedExpression"` cause whose own root cause is that kind. */
+const causeTailKind = (
 	entry: Pick<OmittedTableMemberAtColumn, "cause" | "rootCause">,
-): boolean => {
+): "enum" | "notInferred" | "name" => {
 	if (entry.cause === "enum") {
-		return true;
+		return "enum";
 	}
-	return entry.cause === "generatedExpression" && entry.rootCause === "enum";
+	if (entry.cause === "notInferred") {
+		return "notInferred";
+	}
+	if (entry.cause === "generatedExpression") {
+		if (entry.rootCause === "enum") {
+			return "enum";
+		}
+		if (entry.rootCause === "notInferred") {
+			return "notInferred";
+		}
+	}
+	return "name";
 };
 
 /** 712/R8's own cause-specific clause, reused verbatim for every member kind -- only the noun (`kind`) changes. */
@@ -1031,6 +1078,9 @@ const memberCauseClauseForImport = (
 ): string => {
 	if (entry.cause === "enum") {
 		return `which this reading left out with the enum type "${entry.enumIdentity}" that types it, so the ${kind} cannot be declared either`;
+	}
+	if (entry.cause === "notInferred" && entry.notInferredSqlType !== undefined) {
+		return `${notInferredReasonClause(entry.notInferredSqlType)}, so the ${kind} cannot be declared either`;
 	}
 	if (entry.cause === "generatedExpression") {
 		return generatedExpressionRootClause(
@@ -1048,6 +1098,9 @@ const memberCauseClauseForPull = (
 	if (entry.cause === "enum") {
 		return `which this reading left out with the enum type "${entry.enumIdentity}" that types it, so the ${kind} cannot be carried in the contract either`;
 	}
+	if (entry.cause === "notInferred" && entry.notInferredSqlType !== undefined) {
+		return `${notInferredReasonClause(entry.notInferredSqlType)}, so the ${kind} cannot be carried in the contract either`;
+	}
 	if (entry.cause === "generatedExpression") {
 		return generatedExpressionRootClause(
 			entry,
@@ -1057,31 +1110,54 @@ const memberCauseClauseForPull = (
 	return `which this reading left out because no declaration can carry its name, so the ${kind} cannot be carried in the contract either`;
 };
 
+/** R13: `""` for the `"notInferred"` tail kind (no exit exists, so no tail follows) -- every caller that appends a tail after a full stop goes through {@link appendTail} instead of interpolating directly, so an empty tail never leaves a trailing space. */
 const memberTailForImport = (entry: OmittedTableMemberAtColumn): string => {
-	if (takesEnumTail(entry)) {
+	const tailKind = causeTailKind(entry);
+	if (tailKind === "enum") {
 		return `Next: rename the type in the database, then ${REIMPORT_REMEDY}.`;
+	}
+	if (tailKind === "notInferred") {
+		return "";
 	}
 	return `Next: rename the column in the database, then ${REIMPORT_REMEDY}.`;
 };
 
 const memberTailForPull = (entry: OmittedTableMemberAtColumn): string => {
-	if (takesEnumTail(entry)) {
+	const tailKind = causeTailKind(entry);
+	if (tailKind === "enum") {
 		return "Rename the type in the database, then link the schema repository.";
 	}
+	if (tailKind === "notInferred") {
+		return "";
+	}
 	return "Rename the column in the database, then link the schema repository.";
+};
+
+/** R13: joins a sentence that already ends in its own full stop to an optional following tail sentence -- `""` (the `"notInferred"` cause's own tail, which does not exist) never leaves a trailing space. */
+const appendTail = (sentenceEndingInFullStop: string, tail: string): string => {
+	if (tail === "") {
+		return sentenceEndingInFullStop;
+	}
+	return `${sentenceEndingInFullStop} ${tail}`;
 };
 
 const omittedMemberLineForImport = (
 	entry: OmittedTableMemberAtColumn,
 	kind: MemberKind,
 ): string =>
-	`Omitted: ${kind} "${entry.schema}.${entry.table}.${entry.sqlName}" -- ${memberReasonClause(kind, entry.columnIdentity, entry.axis)}, ${memberCauseClauseForImport(entry, kind)}. \`check\` keeps listing the ${kind} as unmanaged until that column and the ${kind} are both declared. ${memberTailForImport(entry)}`;
+	appendTail(
+		`Omitted: ${kind} "${entry.schema}.${entry.table}.${entry.sqlName}" -- ${memberReasonClause(kind, entry.columnIdentity, entry.axis)}, ${memberCauseClauseForImport(entry, kind)}. \`check\` keeps listing the ${kind} as unmanaged until that column and the ${kind} are both declared.`,
+		memberTailForImport(entry),
+	);
 
 const omittedMemberLineForPull = (
 	entry: OmittedTableMemberAtColumn,
 	kind: MemberKind,
 ): string =>
-	`Omitted: ${kind} "${entry.schema}.${entry.table}.${entry.sqlName}" -- ${memberReasonClause(kind, entry.columnIdentity, entry.axis)}, ${memberCauseClauseForPull(entry, kind)}. ${memberTailForPull(entry)}`;
+	appendTail(
+		`Omitted: ${kind} "${entry.schema}.${entry.table}.${entry.sqlName}" -- ${memberReasonClause(kind, entry.columnIdentity, entry.axis)}, ${memberCauseClauseForPull(entry, kind)}.`,
+		memberTailForPull(entry),
+	);
 
 const omittedMemberLines = (
 	entries: ReadonlyArray<OmittedTableMemberAtColumn>,
@@ -1105,6 +1181,9 @@ const primaryKeyOmissionCauseClauseForImport = (
 	if (entry.cause === "enum") {
 		return `which this reading left out with the enum type "${entry.enumIdentity}" that types it, so the key cannot be declared either`;
 	}
+	if (entry.cause === "notInferred" && entry.notInferredSqlType !== undefined) {
+		return `${notInferredReasonClause(entry.notInferredSqlType)}, so the key cannot be declared either`;
+	}
 	if (entry.cause === "generatedExpression") {
 		return generatedExpressionRootClause(
 			entry,
@@ -1120,6 +1199,9 @@ const primaryKeyOmissionCauseClauseForPull = (
 	if (entry.cause === "enum") {
 		return `which this reading left out with the enum type "${entry.enumIdentity}" that types it, so the key cannot be carried in the contract either`;
 	}
+	if (entry.cause === "notInferred" && entry.notInferredSqlType !== undefined) {
+		return `${notInferredReasonClause(entry.notInferredSqlType)}, so the key cannot be carried in the contract either`;
+	}
 	if (entry.cause === "generatedExpression") {
 		return generatedExpressionRootClause(
 			entry,
@@ -1130,15 +1212,23 @@ const primaryKeyOmissionCauseClauseForPull = (
 };
 
 const primaryKeyOmissionTailForImport = (entry: OmittedPrimaryKey): string => {
-	if (takesEnumTail(entry)) {
+	const tailKind = causeTailKind(entry);
+	if (tailKind === "enum") {
 		return `Next: rename the type in the database, then ${REIMPORT_REMEDY}.`;
+	}
+	if (tailKind === "notInferred") {
+		return "";
 	}
 	return `Next: rename the column in the database, then ${REIMPORT_REMEDY}.`;
 };
 
 const primaryKeyOmissionTailForPull = (entry: OmittedPrimaryKey): string => {
-	if (takesEnumTail(entry)) {
+	const tailKind = causeTailKind(entry);
+	if (tailKind === "enum") {
 		return "Rename the type in the database, then link the schema repository.";
+	}
+	if (tailKind === "notInferred") {
+		return "";
 	}
 	return "Rename the column in the database, then link the schema repository.";
 };
@@ -1161,12 +1251,18 @@ const primaryKeyOmissionTailForPull = (entry: OmittedPrimaryKey): string => {
  */
 const omittedPrimaryKeyLineForImport = (entry: OmittedPrimaryKey): string => {
 	const identity = `${entry.schema}.${entry.table}.${entry.name}`;
-	return `Omitted: primary key "${identity}" -- it names column "${entry.columnIdentity}", ${primaryKeyOmissionCauseClauseForImport(entry)}; the table is declared without a primary key. \`check\` keeps listing the index that backs it as unmanaged, naming "${identity}", until every column the key names can be declared and the key with them. ${primaryKeyOmissionTailForImport(entry)}`;
+	return appendTail(
+		`Omitted: primary key "${identity}" -- it names column "${entry.columnIdentity}", ${primaryKeyOmissionCauseClauseForImport(entry)}; the table is declared without a primary key. \`check\` keeps listing the index that backs it as unmanaged, naming "${identity}", until every column the key names can be declared and the key with them.`,
+		primaryKeyOmissionTailForImport(entry),
+	);
 };
 
 const omittedPrimaryKeyLineForPull = (entry: OmittedPrimaryKey): string => {
 	const identity = `${entry.schema}.${entry.table}.${entry.name}`;
-	return `Omitted: primary key "${identity}" -- it names column "${entry.columnIdentity}", ${primaryKeyOmissionCauseClauseForPull(entry)}. ${primaryKeyOmissionTailForPull(entry)}`;
+	return appendTail(
+		`Omitted: primary key "${identity}" -- it names column "${entry.columnIdentity}", ${primaryKeyOmissionCauseClauseForPull(entry)}.`,
+		primaryKeyOmissionTailForPull(entry),
+	);
 };
 
 const omittedPrimaryKeyLines = (
@@ -1255,18 +1351,28 @@ const omittedForeignKeyColumnReasonForImport = (
 	if (entry.cause === "enum") {
 		return `${foreignKeyColumnReasonClause(entry.end)} "${entry.columnIdentity}", which this reading left out with the enum type "${entry.enumIdentity}" that types it, so the key cannot be declared either. Next: rename the type in the database, then ${REIMPORT_REMEDY}.`;
 	}
+	if (entry.cause === "notInferred" && entry.notInferredSqlType !== undefined) {
+		return `${foreignKeyColumnReasonClause(entry.end)} "${entry.columnIdentity}", ${notInferredReasonClause(entry.notInferredSqlType)}, so the key cannot be declared either.`;
+	}
 	if (entry.cause === "generatedExpression") {
-		return `${foreignKeyColumnReasonClause(entry.end)} "${entry.columnIdentity}", ${generatedExpressionRootClause(entry, "so the key cannot be declared either")}. ${foreignKeyGeneratedExpressionTailForImport(entry)}`;
+		return appendTail(
+			`${foreignKeyColumnReasonClause(entry.end)} "${entry.columnIdentity}", ${generatedExpressionRootClause(entry, "so the key cannot be declared either")}.`,
+			foreignKeyGeneratedExpressionTailForImport(entry),
+		);
 	}
 	return `${foreignKeyColumnReasonClause(entry.end)} "${entry.columnIdentity}", which this reading left out because no declaration can carry its name, so the key cannot be declared either. Next: rename the column in the database, then ${REIMPORT_REMEDY}.`;
 };
 
-/** The tail {@link omittedForeignKeyColumnReasonForImport}'s own `"generatedExpression"` branch earns -- the enum branch (root cause `"enum"`) points at the type, never the column. */
+/** The tail {@link omittedForeignKeyColumnReasonForImport}'s own `"generatedExpression"` branch earns -- the enum branch (root cause `"enum"`) points at the type, never the column; the notInferred branch (R13) has no tail at all. */
 const foreignKeyGeneratedExpressionTailForImport = (
 	entry: Pick<OmittedForeignKeyColumn, "cause" | "rootCause">,
 ): string => {
-	if (takesEnumTail(entry)) {
+	const tailKind = causeTailKind(entry);
+	if (tailKind === "enum") {
 		return `Next: rename the type in the database, then ${REIMPORT_REMEDY}.`;
+	}
+	if (tailKind === "notInferred") {
+		return "";
 	}
 	return `Next: rename the column in the database, then ${REIMPORT_REMEDY}.`;
 };
@@ -1278,8 +1384,14 @@ const omittedForeignKeyColumnReasonForPull = (
 	if (entry.cause === "enum") {
 		return `${foreignKeyColumnReasonClause(entry.end)} "${entry.columnIdentity}", which this reading left out with the enum type "${entry.enumIdentity}" that types it, so the key cannot be carried either. Rename the type in the database, then link the schema repository.`;
 	}
+	if (entry.cause === "notInferred" && entry.notInferredSqlType !== undefined) {
+		return `${foreignKeyColumnReasonClause(entry.end)} "${entry.columnIdentity}", ${notInferredReasonClause(entry.notInferredSqlType)}, so the key cannot be carried either.`;
+	}
 	if (entry.cause === "generatedExpression") {
-		return `${foreignKeyColumnReasonClause(entry.end)} "${entry.columnIdentity}", ${generatedExpressionRootClause(entry, "so the key cannot be carried either")}. ${foreignKeyGeneratedExpressionTailForPull(entry)}`;
+		return appendTail(
+			`${foreignKeyColumnReasonClause(entry.end)} "${entry.columnIdentity}", ${generatedExpressionRootClause(entry, "so the key cannot be carried either")}.`,
+			foreignKeyGeneratedExpressionTailForPull(entry),
+		);
 	}
 	return `${foreignKeyColumnReasonClause(entry.end)} "${entry.columnIdentity}", which this reading left out because no declaration can carry its name, so the key cannot be carried either. Rename the column in the database, then link the schema repository.`;
 };
@@ -1287,8 +1399,12 @@ const omittedForeignKeyColumnReasonForPull = (
 const foreignKeyGeneratedExpressionTailForPull = (
 	entry: Pick<OmittedForeignKeyColumn, "cause" | "rootCause">,
 ): string => {
-	if (takesEnumTail(entry)) {
+	const tailKind = causeTailKind(entry);
+	if (tailKind === "enum") {
 		return "Rename the type in the database, then link the schema repository.";
+	}
+	if (tailKind === "notInferred") {
+		return "";
 	}
 	return "Rename the column in the database, then link the schema repository.";
 };

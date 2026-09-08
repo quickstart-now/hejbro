@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createJiti } from "jiti";
@@ -182,6 +182,30 @@ create table cascade_test.ref (
 );
 `;
 
+/**
+ * B1-2 (D106 round-1 correction round, cfr1-planner's own measurement):
+ * `point` is a real, immutable-safe base type no `SIMPLE_TYPE_BUILDERS`
+ * entry expresses -- a sibling of `xcell.type_cause`'s own `int4range`,
+ * but named here (never imported by the shared `--schema` list above)
+ * so this section's own isolated import/baseline/replay cycle can fail
+ * without aborting the shared `beforeAll`'s own `psqlFile` replay call
+ * that every other describe block in this file depends on.
+ */
+const B1_TWO_SQL = `
+create schema b1two;
+create table b1two.gen_over_untyped (
+	id integer primary key,
+	pt point,
+	px boolean generated always as ((pt is null)) stored
+);
+create table b1two.chk_over_untyped (
+	id integer primary key,
+	pt point,
+	n integer,
+	constraint chk_pt_chk check ((pt is not null) or (n is null))
+);
+`;
+
 let cwd = "";
 let importRun: CliRun;
 let baselineRun: CliRun;
@@ -228,6 +252,7 @@ beforeAll(async () => {
 		`create database ${DATABASE};`,
 	]);
 	psqlFile(DATABASE, SCHEMA_SQL);
+	psqlFile(DATABASE, B1_TWO_SQL);
 	assertBuiltCli();
 
 	cwd = await createCliFixtureDir();
@@ -584,5 +609,123 @@ describe("712/R11/R12 cross-cutting cell 1, second-order cascade: an index, chec
 			"unmanaged check constraint (not covered by any declaration): cascade_test.t.t_total_chk",
 		);
 		expect(checkRun.stdout).toContain("check: no differences.");
+	});
+});
+
+/**
+ * B1-2 (D106 round-1 correction round, cfr1-planner's own measurement,
+ * lead ruling on scope pending): a member naming a column of a type no
+ * builder expresses is now folded into `columnOmissionCauses` as a
+ * third root cause ("notInferred", 712/R13, lead-approved general
+ * rule) -- the same shared member-exclusion path every other cause
+ * already drives, so a member calling this column is itself excluded,
+ * naming the root and stating no `Next:`/`Rename …` tail (R13: no
+ * general-purpose column builder exists today). Runs its own
+ * import/baseline/replay cycle, isolated from the shared fixture above
+ * (`b1two` is never in that fixture's own `--schema` list) so this
+ * describe block's own live measurement never touches the tests that
+ * depend on the shared `beforeAll`.
+ */
+describe("712/R11/R12/R13 B1-2 (D106 round-1 correction, R13 general rule): a generated column and a check constraint over a no-builder-type column", () => {
+	let b1TwoCwd = "";
+	let b1TwoImportRun: CliRun;
+	let genOverUntypedStarter = "";
+	let replayResult: { readonly status: number | null; readonly stderr: string };
+
+	beforeAll(async () => {
+		b1TwoCwd = await createCliFixtureDir();
+		const init = await runCli(b1TwoCwd, ["init"]);
+		expectExitCode("b1two init", init, 0);
+
+		b1TwoImportRun = await runCli(b1TwoCwd, [
+			"import",
+			"--url",
+			fixtureUrl(),
+			"--schema",
+			"b1two",
+			"--out",
+			"src/schema",
+		]);
+		expectExitCode("b1two import", b1TwoImportRun, 0);
+		genOverUntypedStarter = readFileSync(
+			resolve(b1TwoCwd, "src/schema/b1two.schema.ts"),
+			"utf8",
+		);
+
+		const b1TwoBaselineRun = await runCli(b1TwoCwd, ["baseline"]);
+		expectExitCode("b1two baseline", b1TwoBaselineRun, 0);
+		const migrationDir = resolve(b1TwoCwd, "migrations");
+		const migrationFileNames = readdirSync(migrationDir).filter((name) =>
+			name.endsWith(".sql"),
+		);
+		if (migrationFileNames.length !== 1) {
+			throw new Error(
+				`expected exactly one b1two baseline migration file, found: ${migrationFileNames.join(", ")}`,
+			);
+		}
+		const [migrationFileName] = migrationFileNames;
+		const b1TwoMigrationSql = readFileSync(
+			resolve(migrationDir, migrationFileName as string),
+			"utf8",
+		);
+
+		execFileSync("docker", [
+			"exec",
+			CONTAINER,
+			"psql",
+			"-U",
+			"postgres",
+			"-c",
+			"create database b1two_replay;",
+		]);
+		// Never `psqlFile` here (it throws on ON_ERROR_STOP) -- this
+		// replay is expected to fail today; `spawnSync` captures the
+		// exit code and stderr instead of aborting the suite.
+		replayResult = spawnSync(
+			"docker",
+			[
+				"exec",
+				"-i",
+				CONTAINER,
+				"psql",
+				"-U",
+				"postgres",
+				"-v",
+				"ON_ERROR_STOP=1",
+				"-q",
+				"-d",
+				"b1two_replay",
+			],
+			{ input: b1TwoMigrationSql, encoding: "utf-8" },
+		);
+	}, 120_000);
+
+	afterAll(async () => {
+		await removeCliFixtureDir(b1TwoCwd);
+	});
+
+	it("import: the generated column never reaches the starter calling the untyped column, and the loss report names it under the R13 general rule", () => {
+		expect(b1TwoImportRun.stdout).toContain(
+			'Not inferred: column "b1two.gen_over_untyped.pt" (type "point") -- no column builder expresses it.',
+		);
+		expect(genOverUntypedStarter).not.toContain(
+			'.generatedAlwaysAs(sql.raw("(pt IS NULL)"))',
+		);
+		expect(b1TwoImportRun.stdout).toContain(
+			'Omitted: generated column "b1two.gen_over_untyped.px" -- its expression names column "b1two.gen_over_untyped.pt", which this reading did not infer, because no column builder expresses its type "point", so the generated column cannot be declared either. `check` keeps listing the generated column as unmanaged until that column and the generated column are both declared.',
+		);
+	});
+
+	it("import: the check constraint never reaches the starter calling the untyped column, and the loss report names it under the R13 general rule", () => {
+		expect(genOverUntypedStarter).not.toContain(
+			'check("chk_pt_chk", sql.raw("((pt IS NOT NULL) OR (n IS NULL))"))',
+		);
+		expect(b1TwoImportRun.stdout).toContain(
+			'Omitted: check constraint "b1two.chk_over_untyped.chk_pt_chk" -- its expression names column "b1two.chk_over_untyped.pt", which this reading did not infer, because no column builder expresses its type "point", so the check constraint cannot be declared either. `check` keeps listing the check constraint as unmanaged until that column and the check constraint are both declared.',
+		);
+	});
+
+	it('baseline\'s own migration SQL applies clean to an empty database -- exit 3, `ERROR: column "pt" does not exist` before this fix (712/R13 correction round)', () => {
+		expect(replayResult.status).toBe(0);
 	});
 });
