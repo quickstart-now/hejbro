@@ -507,3 +507,80 @@ Gates (this rework's own commit): `TURBO_FORCE=1 pnpm check` /
 `check-types` / `test` (19+2 turbo tasks) / `pnpm check:crap` /
 `pnpm check:modified-titles` -- all exit 0, repo-wide.
 
+<a id="w9"></a>
+## W9 — B2 rework, iteration 4: restore e90bd7e7's content-first Omitted rule
+
+_2026-09-08T22:06Z_
+
+712/R17 (D106 round 2 constructor review, B2): iteration 3 (`d224c4e6`)
+reverted iteration 2's extension (`e90bd7e7`) on a cross-message ruling
+that was itself superseded before it reached this worktree -- the
+lead's actual final ruling keeps the extension. Iteration 4 (this
+entry) reverts `d224c4e6` back to `e90bd7e7`'s design: a D36-failing
+schema earns its own `Omitted: schema …` line only when it lost a
+table or enum to that name; one that is genuinely empty or holds only
+a standalone sequence or a function earns no `Omitted:` line at all
+and falls through to the same generic `Not inferred: no table or enum
+to declare in schema "X".` line a truly empty schema gets.
+
+Deciding measurement (this worktree, live, cfr2-pg 55810/55811-taken-
+by-another-agent/55812/55813, each container started/removed):
+iteration 3's own `Omitted: schema "EmptyBad" ...` line, printed for a
+schema holding nothing at all, carries a `Next:` clause promising
+"re-run `hejbro import` ... and merge the declaration" -- a genuinely
+empty schema produces no declaration to merge even after the rename,
+so that `Next:` is an unkeepable promise, and requirement 2's "a line
+that names the way out SHALL name the whole of it" is not met.
+Iteration 2/4's rule closes this by never printing that line for a
+schema with nothing to name a way out *of*.
+
+compose.ts/import.ts/pull.ts/the six test files this touches
+(import-command.test.ts, pull-command.test.ts, infer-compose.test.ts,
+declare-emit-emit.test.ts, declare-emit-enum-cycle-load.test.ts,
+declare-emit-callback-shadow.types.test.ts) are now byte-identical to
+their own `e90bd7e7` blobs (diffed, confirmed). `omittedSchemaNamesHoldingATableOrEnum`
+(iteration 3's own field) is gone; `schemaHeldAnUncarriableName`'s
+bare-identity fix stays, since it was already part of `e90bd7e7`.
+
+Two contract-text spots needed correcting, not just reverting to
+`e90bd7e7`'s own original wording -- that original text ("alongside
+its own `Not inferred:` line naming what was found") is itself false
+under this rule: `SeqOnlyBad` alone measures no `Not inferred: sequence
+...` line (the schema never reaches `expressibleNames`, so standalone-
+sequence detection never runs for it), only the generic no-table-or-
+enum line. spec.md's Requirement 1 delta and brownfield-adoption.md's
+`pull --schema` paragraph both settled on: "the report still names
+that schema on its own `Not inferred:` line" -- no claim about *what*
+that line names, since it varies (a specific sequence/function count
+when the schema's own name is fine, the generic line when it is not).
+An intermediate draft of both sentences (this session) added an
+Omitted-line branch gated on "where the schema's own name kept the
+reading out"; live-measured false under this rule (see below) and
+dropped before commit. The reference's own preceding sentence (the
+`Omitted` vs `Not inferred` split, "wherever that name costs it
+something" / "where it costs nothing") absorbs that distinction
+instead, so the later sentence does not need to repeat it.
+
+Live (cfr2-pg, one round trip, five cells against the same container,
+started/removed): `EmptyBad` alone and `SeqOnlyBad` alone each print
+only the generic `Not inferred: no table or enum to declare in schema
+"X".` line (no `Omitted:` line at all) and refuse `import-nothing-to-
+infer`; `BadWithContent` alone refuses `import-nothing-declarable`
+with its own `Omitted:` line; `EmptyBad` beside `BadWithContent`
+refuses `import-nothing-declarable` naming only `BadWithContent`,
+`EmptyBad`'s own line stays the generic `Not inferred:` one (never
+`Omitted:`, never a false merge promise); `EmptyBad` beside `healthy`
+writes the healthy file with no refusal, `EmptyBad`'s own line stays
+generic `Not inferred:`.
+
+Gates: `TURBO_FORCE=1 pnpm check` / `check-types` / `test` all exit 0.
+`pnpm check:crap` (turbo coverage across every package) failed twice
+under measured system load (`uptime` load average 98, multiple other
+agents' own Docker containers visible) with a different, unrelated
+failing test file each time (`@hejbro/core` cross-instance-symbols
+once, `generate-command.test.ts`/`verify.test.ts` once) -- neither run
+touched this rework's own files; a third run, unchanged code, passed
+clean ("no violations, 53 at the threshold"). Recorded as measured
+flakiness under load, not a regression from this rework.
+`check:modified-titles` exits 0.
+

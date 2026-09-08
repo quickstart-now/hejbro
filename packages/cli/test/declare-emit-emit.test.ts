@@ -60,7 +60,6 @@ const resultFor = (
 	// unused by this suite -- emitDeclarationFiles never reads it.
 	sql: "",
 	omittedSchemaNames: [],
-	omittedSchemaNamesHoldingATableOrEnum: [],
 });
 
 describe("emitDeclarationFiles / 2.1", () => {

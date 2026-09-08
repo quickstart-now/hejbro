@@ -256,6 +256,13 @@
       "title": "B2 rework, iteration 3: revert the withdrawn Omitted-line-removal extension",
       "pr": null,
       "decisions": []
+    },
+    {
+      "id": "W9",
+      "at": "2026-09-08T22:06Z",
+      "title": "B2 rework, iteration 4: restore e90bd7e7's content-first Omitted rule",
+      "pr": null,
+      "decisions": []
     }
   ],
   "prs": [

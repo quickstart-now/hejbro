@@ -93,17 +93,6 @@ export type InferCatalogResult = {
 	 * of `lossReport`'s own text.
 	 */
 	readonly omittedSchemaNames: ReadonlyArray<string>;
-	/**
-	 * 712/R17 (D106 round 2, B2): the subset of `omittedSchemaNames` that
-	 * held at least one table or enum -- `import`/`pull`'s own all-empty
-	 * refusal classifies a schema as a name cause (`nothing-declarable`)
-	 * only when it is in this narrower set; an omitted-for-name schema
-	 * absent from it (empty, or holding only a standalone sequence or a
-	 * function) classifies as `nothing-to-infer` instead, alongside a
-	 * genuinely empty schema -- its own `Omitted: schema …` line still
-	 * prints either way.
-	 */
-	readonly omittedSchemaNamesHoldingATableOrEnum: ReadonlyArray<string>;
 };
 
 const bySchema = <T extends { readonly schema: string }>(
@@ -687,21 +676,23 @@ const undeclarableNameColumnsFor = (
 export type SchemaPartition = {
 	/** Every schema row whose own name round-trips through the DSL's D36 rule -- safe to pass to `declareSchema`. */
 	readonly expressibleNames: ReadonlyArray<string>;
-	/** Every schema row whose own name fails D36 -- every one still earns its own `Omitted: schema …` line (D106 R4-B4), whatever it held. */
-	readonly omittedSchemas: ReadonlyArray<OmittedSchema>;
 	/**
-	 * 712/R17 (D106 round 2 constructor review, B2, lead ruling): the
-	 * subset of `omittedSchemas`' own names that held at least one table
-	 * or enum -- read from this same (unnarrowed) `catalog`, never by
-	 * re-parsing the rendered report. `import`/`pull`'s own all-empty
-	 * refusal turns on this narrower set, not `omittedSchemas` whole: a
-	 * schema whose own name fails D36 but that held no table or enum
-	 * (empty, or holding only a standalone sequence or a function -- a
-	 * *kind* cause, never a name one) still earns its `Omitted: schema
-	 * …` line, but never earns `nothing-declarable` on its own name
-	 * alone -- classified the same as a genuinely empty schema instead.
+	 * 712/R17 (D106 round 2 constructor review, B2, lead ruling): every
+	 * schema row whose own name fails D36 *and* that held at least one
+	 * table or enum -- read from this same (unnarrowed) `catalog`, never
+	 * by re-parsing the rendered report. A schema whose own name fails
+	 * D36 but that held no table or enum (empty, or holding only a
+	 * standalone sequence or a function -- a *kind* cause, never a name
+	 * one) is neither here nor in `expressibleNames`: naming it in the
+	 * report would send its own way out (rename) toward a schema that
+	 * has nothing for that rename to recover, so it earns no
+	 * `Omitted: schema …` line at all, and the all-empty refusal
+	 * classifies it the same as a genuinely empty schema. Passing
+	 * `declareSchema` its own name is still refused either way (D36),
+	 * so it is dropped from both lists rather than added to
+	 * `expressibleNames`.
 	 */
-	readonly omittedSchemaNamesHoldingATableOrEnum: ReadonlyArray<string>;
+	readonly omittedSchemas: ReadonlyArray<OmittedSchema>;
 };
 
 /** The set of schema names holding at least one table or enum -- the same "table or enum to declare" axis `import`/`pull`'s own all-empty refusal already turns on (712/R16). */
@@ -722,21 +713,20 @@ const schemaNamesHoldingATableOrEnum = (
  * excluded downstream by narrowing the catalog to `expressibleNames`
  * a second time, the same `filterCatalogToSchemas`/
  * `filterInferenceCatalogToSchemas` helpers already use for the
- * `--schema` flag itself.
+ * `--schema` flag itself. 712/R17: a third, silent case -- a schema
+ * whose own name fails D36 but that held no table or enum -- belongs
+ * to neither list (see `omittedSchemas`' own doc).
  */
 export const partitionSchemas = (catalog: Catalog): SchemaPartition => {
 	const holdingATableOrEnum = schemaNamesHoldingATableOrEnum(catalog);
-	const omittedNames = catalog.schemas
-		.filter((row) => !isExpressibleName(row.schema))
-		.map((row) => row.schema);
 	return {
 		expressibleNames: catalog.schemas
 			.filter((row) => isExpressibleName(row.schema))
 			.map((row) => row.schema),
-		omittedSchemas: omittedNames.map((sqlName) => ({ sqlName })),
-		omittedSchemaNamesHoldingATableOrEnum: omittedNames.filter((name) =>
-			holdingATableOrEnum.has(name),
-		),
+		omittedSchemas: catalog.schemas
+			.filter((row) => !isExpressibleName(row.schema))
+			.filter((row) => holdingATableOrEnum.has(row.schema))
+			.map((row) => ({ sqlName: row.schema })),
 	};
 };
 
@@ -1569,7 +1559,5 @@ export const inferFromCatalog = async (
 		omittedSchemaNames: schemaPartition.omittedSchemas.map(
 			(schema) => schema.sqlName,
 		),
-		omittedSchemaNamesHoldingATableOrEnum:
-			schemaPartition.omittedSchemaNamesHoldingATableOrEnum,
 	};
 };

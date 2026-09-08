@@ -47,10 +47,11 @@ describe("partitionSchemas / D106 R4-B1", () => {
 		expect(result.omittedSchemas).toEqual([]);
 	});
 
-	it("omits a schema whose catalog name is not a valid hejbro SQL identifier, naming it", () => {
+	it("omits a schema whose catalog name is not a valid hejbro SQL identifier and that lost a table to it, naming it", () => {
 		const catalog: Catalog = {
 			...emptyCatalog(),
 			schemas: [{ schema: "App" }],
+			tables: [{ schema: "App", table: "t", rls: false }],
 		};
 		const result = partitionSchemas(catalog);
 		expect(result.expressibleNames).toEqual([]);
@@ -61,6 +62,7 @@ describe("partitionSchemas / D106 R4-B1", () => {
 		const catalog: Catalog = {
 			...emptyCatalog(),
 			schemas: [{ schema: "app" }, { schema: "App" }],
+			tables: [{ schema: "App", table: "t", rls: false }],
 		};
 		const result = partitionSchemas(catalog);
 		expect(result.expressibleNames).toEqual(["app"]);
@@ -69,23 +71,23 @@ describe("partitionSchemas / D106 R4-B1", () => {
 });
 
 /**
- * 712/R17 (D106 round 2 constructor review, B2, lead ruling): every
- * inexpressibly-named schema keeps its own `Omitted: schema …` line
- * (`omittedSchemas`, D106 R4-B4) regardless of what it held -- an
- * earlier extension that dropped that line for a content-less bad-name
- * schema was withdrawn (it deleted information for no gain). What
- * narrows is a *separate* field, `omittedSchemaNamesHoldingATableOrEnum`
- * -- the subset of those same names that lost at least one table or
- * enum, which is what the refusal-code classification
- * (`nothing-declarable` vs `nothing-to-infer`, `import.ts`/`pull.ts`)
- * actually reads. Input as wide as the claim: an inexpressibly-named
+ * 712/R17 (D106 round 2 constructor review, B2, lead ruling, extended):
+ * an inexpressibly-named schema's own name failing D36 is never enough
+ * on its own to earn it an `Omitted: schema …` line -- only losing a
+ * table or enum to that name does; a schema that lost nothing (D36
+ * failed but it held no table or enum) belongs to *neither*
+ * `expressibleNames` nor `omittedSchemas` (a third, silent case --
+ * `declareSchema` would still refuse its name, so it is never passed
+ * there either). Input as wide as the claim: an inexpressibly-named
  * schema holding nothing at all, one holding only a standalone
  * sequence, one holding only a function, one holding a table, and one
- * holding an enum -- all five appear in `omittedSchemas`, only the last
- * two appear in `omittedSchemaNamesHoldingATableOrEnum`.
+ * holding an enum -- the first three appear in neither list, the last
+ * two appear in `omittedSchemas` alone.
  */
-describe("partitionSchemas / 712/R17 (D106 round 2, B2): the table-or-enum subset that drives refusal classification", () => {
-	it.each<[string, Partial<Catalog>, ReadonlyArray<string>]>([
+describe("partitionSchemas / 712/R17 (D106 round 2, B2): omittedSchemas only for a lost table or enum", () => {
+	it.each<
+		[string, Partial<Catalog>, ReadonlyArray<{ readonly sqlName: string }>]
+	>([
 		["nothing at all", {}, []],
 		[
 			"only a standalone sequence",
@@ -96,12 +98,16 @@ describe("partitionSchemas / 712/R17 (D106 round 2, B2): the table-or-enum subse
 		[
 			"a table",
 			{ tables: [{ schema: "Bad", table: "t", rls: false }] },
-			["Bad"],
+			[{ sqlName: "Bad" }],
 		],
-		["an enum", { enums: [{ schema: "Bad", name: "e" }] }, ["Bad"]],
+		[
+			"an enum",
+			{ enums: [{ schema: "Bad", name: "e" }] },
+			[{ sqlName: "Bad" }],
+		],
 	])(
 		"an inexpressibly-named schema holding %s",
-		(_label, catalogOverrides, expectedHoldingATableOrEnum) => {
+		(_label, catalogOverrides, expected) => {
 			const catalog: Catalog = {
 				...emptyCatalog(),
 				...catalogOverrides,
@@ -109,14 +115,11 @@ describe("partitionSchemas / 712/R17 (D106 round 2, B2): the table-or-enum subse
 			};
 			const result = partitionSchemas(catalog);
 			expect(result.expressibleNames).toEqual([]);
-			expect(result.omittedSchemas).toEqual([{ sqlName: "Bad" }]);
-			expect(result.omittedSchemaNamesHoldingATableOrEnum).toEqual(
-				expectedHoldingATableOrEnum,
-			);
+			expect(result.omittedSchemas).toEqual(expected);
 		},
 	);
 
-	it("names both inexpressibly-named schemas in omittedSchemas, but only the one that held a table in the narrow subset", () => {
+	it("names only the inexpressibly-named schema holding a table, beside an inexpressibly-named sibling holding nothing -- neither list carries the empty one", () => {
 		const catalog: Catalog = {
 			...emptyCatalog(),
 			schemas: [{ schema: "Bad" }, { schema: "AlsoBad" }],
@@ -124,11 +127,7 @@ describe("partitionSchemas / 712/R17 (D106 round 2, B2): the table-or-enum subse
 		};
 		const result = partitionSchemas(catalog);
 		expect(result.expressibleNames).toEqual([]);
-		expect(result.omittedSchemas).toEqual([
-			{ sqlName: "Bad" },
-			{ sqlName: "AlsoBad" },
-		]);
-		expect(result.omittedSchemaNamesHoldingATableOrEnum).toEqual(["AlsoBad"]);
+		expect(result.omittedSchemas).toEqual([{ sqlName: "AlsoBad" }]);
 	});
 });
 

@@ -519,10 +519,12 @@ schema the database does not hold at all earns a `Not inferred: no
 table or enum to declare in schema "X".` line, the same as `import`
 prints, rather than stopping the run — as long as at least one other
 named schema contributed something. A named schema whose own catalog
-name is not a valid hejbro SQL identifier is a different case: it
-earns its own `Omitted: schema …` line instead (above), never the
-`Not inferred` one — the two causes stay in the bands they already
-belong to, exactly as they do for `import`. When every named schema
+name is not a valid hejbro SQL identifier is a different case wherever
+that name costs it something: it earns its own `Omitted: schema …`
+line instead (above), never the `Not inferred` one. Where it costs
+nothing — the schema holds no table or enum to declare — nothing was
+omitted for a name, and the schema earns the `Not inferred` line like
+any other with nothing to declare. When every named schema
 ends up with nothing to write, `pull` refuses instead of writing an
 empty bundle, and which refusal it is follows what the reading saw,
 not what it kept: `error[pull-nothing-declarable]` (mirroring
@@ -533,15 +535,12 @@ own or its schema's — naming those schemas; `error[pull-nothing-to-infer]`
 — no named schema held a table or enum to declare at all, whether it
 was genuinely empty or held only a standalone sequence or a function,
 neither of which any rename could have saved. The report still names
-each such schema either way: on its own `Not inferred:` line, or, where
-the schema's own name is what kept the reading out, on its `Omitted:
-schema` line instead (above). Neither refusal is silent: the loss
-report already gathered still prints to stdout before either one
-exits. The `pulled …` line, the lock's own
-`schemas`, and the contract's own metadata all name exactly the
-schemas that actually contributed something to the snapshot — never
-one the database doesn't hold, and never one this reading could not
-carry the name of.
+each such schema on its own `Not inferred:` line. Neither refusal is
+silent: the loss report already gathered still prints to stdout before
+either one exits. The `pulled …` line, the lock's own `schemas`, and
+the contract's own metadata all name exactly the schemas that actually
+contributed something to the snapshot — never one the database doesn't
+hold, and never one this reading could not carry the name of.
 
 Some catalog facts are not part of either reading at all yet, so
 neither the loss report's own bands nor `check`'s inventory names

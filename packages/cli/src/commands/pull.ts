@@ -151,24 +151,23 @@ const schemaHeldAnUncarriableName = (
 /**
  * B2 final, mirroring `import.ts`'s own
  * `schemasHoldingAnUncarriableName` (712/R15, narrowed 712/R17, D106
- * round 2 constructor review, B2, lead ruling; the "drop the
- * `Omitted:` line too" extension was withdrawn -- every D36-failing
- * schema keeps its own line, only the refusal code narrows): every
- * requested schema the reading saw a table or enum in but could not
- * carry for its own name -- a schema omitted whole for its own name
- * that held at least one table or enum
- * (`result.omittedSchemaNamesHoldingATableOrEnum`, never the wider
- * `omittedSchemaNames`: a schema whose own name fails D36 but held
+ * round 2 constructor review, B2, lead ruling): every requested schema
+ * the reading saw a table or enum in but could not carry for its own
+ * name -- a schema omitted whole for its own name
+ * (`result.omittedSchemaNames`, itself narrowed at the source:
+ * `partitionSchemas` only ever puts a schema on that list when it held
+ * a table or enum -- a schema whose own name fails D36 but held
  * nothing, or held only a standalone sequence or a function, is a
- * *kind* cause, not a name one) or one holding an object
- * `schemaHeldAnUncarriableName` finds. The classification counts what
- * the reading saw, not what it kept.
+ * *kind* cause, not a name one, and earns no `Omitted: schema …` line
+ * at all) or one holding an object `schemaHeldAnUncarriableName`
+ * finds. The classification counts what the reading saw, not what it
+ * kept.
  */
 const schemasHoldingAnUncarriableName = (
 	result: InferCatalogResult,
 	schemas: ReadonlyArray<string>,
 ): ReadonlyArray<string> => {
-	const omittedWhole = new Set(result.omittedSchemaNamesHoldingATableOrEnum);
+	const omittedWhole = new Set(result.omittedSchemaNames);
 	return schemas.filter(
 		(schemaName) =>
 			omittedWhole.has(schemaName) ||

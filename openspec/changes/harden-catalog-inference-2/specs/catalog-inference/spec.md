@@ -85,9 +85,8 @@ enum to a name no declaration can carry — the object's own name or its
 schema's — is refused as `nothing-declarable`, naming every such
 schema; `nothing-to-infer` means no table or enum to declare, and a
 schema holding only a standalone sequence or a function earns it too;
-the report still names that schema, on its own `Not inferred:` line or,
-where the schema's own name kept the reading out, on its `Omitted:
-schema` line. A column named there is still described: the
+the report still names that schema on its own `Not inferred:` line. A
+column named there is still described: the
 description records what the database holds, and
 the snapshot records what a declaration can express. Every list the
 reading orders by name when writing the starter declarations SHALL be
