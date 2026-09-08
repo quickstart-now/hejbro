@@ -212,7 +212,7 @@ const schemaHeldAnUncarriableName = (
 		.some((line) =>
 			[...line.matchAll(QUOTED_IDENTITY)].some((match) => {
 				const identity = match[1];
-				return identity !== undefined && identity.startsWith(`${schemaName}.`);
+				return identity?.startsWith(`${schemaName}.`);
 			}),
 		);
 
