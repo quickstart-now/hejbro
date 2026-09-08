@@ -92,7 +92,7 @@ codes and the SHA.
 
 **Ordering.** 2.1 → 2.2 → 2.3.
 
-- [ ] 2.1 (~10m) B1 / #1022 — a generated column is read as generated
+- [x] 2.1 (~10m) B1 / #1022 — a generated column is read as generated
       (712/R11). Red: the infer tests over a fake catalog and the live
       witness over an input table {stored generated column whose
       expression names one column; one naming two columns with a cast;
@@ -113,7 +113,7 @@ codes and the SHA.
       … STORED` on both sides. Files: infer sources and tests,
       `from-catalog.ts` if needed, live witness.
 
-- [ ] 2.2 (~8m) Text that the review measured false or unstated. B2:
+- [x] 2.2 (~8m) Text that the review measured false or unstated. B2:
       the delta's scenario *A reference into a schema the run did not
       name is kept* and requirement 1's sentence say the reference is
       carried in the foreign-key metadata and `Relationships` and that
@@ -122,9 +122,16 @@ codes and the SHA.
       `proj-gen1` and corpus contracts are the pins. N2: every loss
       line whose `Next:` says "then re-run `hejbro import`" says "re-run
       `hejbro import` into a fresh `--out` and merge the declarations,
-      or declare it by hand" (import never overwrites). N5: the
-      requirement says the four outer bands keep the stated order and
-      the Approximated band's inner order is by object identity. N8:
+      or declare it by hand" (import never overwrites). N5 (corrected
+      after 2.2's own measurement, D106 R1 correction round): the
+      requirement says the four outer bands keep the stated order, and
+      the Approximated band's own inner order is a fixed sequence —
+      UNIQUE, nextval, foreign-key-derived-name, primary-key-derived-
+      name, then the blanket expressions line last. The code's own
+      order (`approximationLines`, `infer/loss-report.ts`) was already
+      this and did not change; the delta sentence was corrected to
+      match. Within each band, its own lines still sort by code points.
+      N8:
       (a) one "cannot be carried" clause per pull FK line, (b) pull's PK
       line speaks to the consumer (no `generate`/`check` promise), (c)
       one noun per constraint kind (a UNIQUE constraint is announced as
