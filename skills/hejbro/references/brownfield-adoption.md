@@ -291,7 +291,7 @@ reference needs those foreign keys dropped first, and rows inserted
 between the drop and the apply can make the re-creation fail on
 duplicates — hand the table back instead when the table is live. A
 mid-chain path that records what the database already holds without
-reverting or dropping anything does not exist yet (#1037).
+reverting or dropping anything does not exist yet (#1037). A table whose `existingTable()` declaration lists its primary key and whose database holds it -- the shape `hejbro import` writes -- therefore fails at apply on every adoption (`42P16`, multiple primary keys) until that path exists; the two ways the notice names are the only ways through, and dropping the key on a live table rebuilds its index and, where a managed foreign key references it, drops that key too (#1045).
 
 **Adoption is a step after `baseline`**: what a database already
 holds — its schemas and its objects — is `baseline`'s to record.
