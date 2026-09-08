@@ -336,12 +336,16 @@ combinators refuse exactly the family pairs core's do.
 
 A set operation built with the core builder's own combinators
 (`select(a).union(select(b))` from `hejbro`, not through a handle) and
-executed with `handle.execute(...)` reads back as the LEFT branch's
-declared row only — the core combinators carry no type for the right
-branch, so the per-column union above is not computed there; an object
-projection widens with `null` the way a select that never called
-`leftJoin` does. Build the set operation on the handle when the union
-of both branches' types is what you want.
+executed with `handle.execute(...)` reads back by the same rule the
+chain uses: the left branch's keys, each column the union of both
+branches' declared read types, and a column nullable when either branch
+declares it nullable or left-joins the table it reads from. The stage
+carries both branches, so each one resolves on its own before the two
+combine — a nested set operation, on either side, resolves through its
+inner stage first. A `SetOpStage<...>` written by hand as a type
+annotation carries no branches to resolve: it still reads as the left
+branch's declared row with joins untracked, so an object projection
+there widens with `null`.
 
 ## Common table expressions (CTEs)
 
@@ -425,16 +429,20 @@ the recursive term projects it nullable, the recursive term's own
 nested reads (`jsonArrayFrom`/`jsonObjectFrom`) included. **Exception:**
 when the recursive term is itself a set operation (`.union()` and
 friends), a key it projects from a column, or from an expression that
-is not a nested read, reads nullable regardless — a set-op stage
-carries no left-joined set of its own to check, so a real left join
-inside one of its branches would otherwise go unseen. A key it projects
+is not a nested read, reads nullable regardless — the recursive
+anchor/term rule does not resolve a set-op stage's branches, so a real
+left join inside one of them would otherwise go unseen. (`execute()` of
+a plain set operation does resolve them — see the set-operation
+section; the recursive path is a separate boundary, #942.) A key it projects
 *through* a nested read does not follow that rule: the nested read's
 own rule answers instead, as it does everywhere else — an array read
 (`jsonArrayFrom`) is never null, an object read (`jsonObjectFrom`) is
 nullable by its own rule. None of this is the same rule a plain
 `union()`/`intersect()`/`except()` result already has: a plain set
-operation keeps the left branch's own projection unchanged, nullability
-included (#944). `handle.with(...)` currently reads every CTE key as
+operation's *stage* keeps the left branch's own projection unchanged,
+nullability included (#944) — what `execute()` resolves from that
+stage is the two branches' union, above; the projection and the
+resolved row are different things. `handle.with(...)` currently reads every CTE key as
 nullable regardless of any of this (a separate, existing boundary,
 #942), so the rule becomes visible on the chain once that boundary
 narrows.

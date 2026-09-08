@@ -48,7 +48,7 @@ goes back to the planner, not into the diff.
       least the nested cells. Files: `db.ts` if 1.2's minimal green does
       not already cover it, tests.
 
-- [ ] 1.4 (~5m) Reference and changeset. `query-layer.md`'s set-operation
+- [x] 1.4 (~5m) Reference and changeset. `query-layer.md`'s set-operation
       section replaces the core-built caveat with the approved
       paragraph; the recursive-CTE paragraph's rationale clause is
       corrected with its behavior sentence unchanged; the
