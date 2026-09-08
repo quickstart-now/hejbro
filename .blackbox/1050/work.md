@@ -220,3 +220,100 @@ resolving to `never`, worse than the pre-1.1 left-only fallback) is
 closed as of this diff — every nested-shape assertion in the new
 describe block resolves the expected row, not `never`.
 
+<a id="w5"></a>
+## W5 — 1.4: reference + changeset -- verbatim edits, #944 surface measurement, gates
+
+_2026-09-08T19:04Z_
+
+Task 1.4 (reference + changeset, the group's last task) measured before
+commit, on top of 8f24a6b2 (`widen-set-op-execute` worktree),
+uncommitted diff: `skills/hejbro/references/query-layer.md` (three
+verbatim edits, lead-approved text, not one letter changed) +
+`.changeset/widen-set-op-execute.md` (new, `minor`).
+
+**Text edits applied verbatim, as directed** (measured against the
+current file before editing, to confirm the exact old text existed
+before replacing it):
+(a) lines 337-344 (the core-built set-operation carve-out paragraph) --
+    full replacement with the lead-approved paragraph.
+(b) the recursive-CTE exception clause's own rationale half only
+    ("reads nullable regardless -- ...") -- replaced with the lead-
+    approved rationale text; the sentence's own behavior half (what
+    happens) is unchanged, matching the instruction "the behavior
+    sentence unchanged".
+(c) one clause added after "a plain set operation keeps the left
+    branch's own projection unchanged, nullability included (#944)"
+    stating the projection/resolved-row distinction, `(#944)` citation
+    left in place as directed (its fate follows the measurement below,
+    decided by the lead, not this task).
+
+**Changeset**: `.changeset/widen-set-op-execute.md`, `"@hejbro/core":
+minor` (the fixed group means naming one package versions all seven --
+`pnpm changeset status` confirms all 7 published packages bump minor).
+Written directly rather than through the interactive `pnpm changeset`
+prompt (non-interactive shell), matching the existing sibling
+changesets' own format exactly (`harden-set-op-families.md` used as the
+template). `pnpm check:fixed-group` -- ok, 7 published packages, fixed
+group matches exactly.
+
+**#944 surface measurement (facts only, no verdict), lead's own three
+questions** -- via a throwaway type probe
+(`packages/query/test/types/zz-spike-944.ts`, deleted immediately after
+each reading, `git status --short` confirmed clean afterward):
+
+1. Recursive term itself a set operation -- does the outward reference
+   read nullable (conservative, per the reference's own claim) or
+   non-null? **Not a new probe**: two EXISTING, already-passing tests in
+   `packages/query/test/types/select-result.test.ts` already measure
+   this directly and are untouched by widen-set-op-execute's own diff
+   (a separate mechanism, `with.ts`'s `WidenedBy`) -- "R32 a set-op
+   recursive term with both branches non-null still reads nullable
+   outward (#500/R6 exception)" (line 614) and "F1 a left join inside a
+   set-op recursive term reads nullable outward even though the joined
+   column is notNull (#500/R6 exception, #944)" (line 644): both assert
+   `| null`, confirming the conservative (always-nullable) reading the
+   reference text claims.
+2. `withCte((w) => { const x = w.as("x", select(a).union(select(b))));
+   return select({ flag: x.flag }, x); })`, `a` notNull, `b` nullable --
+   what does reading `x.flag` (a NON-recursive CTE entry) later resolve
+   to? Measured: `string` (not `string | null`) -- `w.as`'s own
+   `buildCteRowEnvironment` reads `query.projectionInput` directly (the
+   raw LEFT-branch projection a `SetOpStage` carries, unresolved, never
+   folded through `SetOpResult`), so the right branch's own nullable
+   declaration is invisible here. Widen-set-op-execute's own diff never
+   touches `with.ts`'s `w.as`/`buildCteRowEnvironment` -- this reading
+   is unaffected by tasks 1.1-1.3.
+3. Does a VALUE-LEVEL (real builder) statement ever land on the bare,
+   one-argument `SetOpStage<TProjection>` fallback (both branch
+   parameters at their literal `unknown` default)? Measured via the
+   correct extraction technique (`infer` against the alias directly,
+   the same `LeftStageOf`/`RightStageOf` pattern task 1.1's own type
+   test uses) on `select(flagNotNull).union(select(flagNullable))`'s
+   own real type: both extracted branch parameters are concrete,
+   filled types (`SelectDistinctable<typeof flagNotNull, never>` and
+   the structurally equivalent shape for the right branch), never
+   `unknown`. A first attempt at this measurement used a whole-stage
+   mutual-`extends` comparison instead and reported a false "equal to
+   the bare form" -- a known pitfall for this specific self-referential
+   alias, already documented by `select-join-types.test.ts`'s own
+   `LeftJoinedOf` comment (comparing two fully-applied recursive stage
+   types can't tell a filled carrier from a dropped one); re-measured
+   with the correct technique before trusting the result.
+
+**Serial gates (brief order), on top of the diff described above:**
+- `TURBO_FORCE=1 pnpm check` -- exit 0 (3 pre-existing warnings,
+  unrelated)
+- `TURBO_FORCE=1 pnpm check-types` -- exit 0 (turbo: 19/19 tasks)
+- `TURBO_FORCE=1 pnpm test` -- exit 0 (turbo `test`: 19/19; turbo
+  `test:types`: 2/2)
+- `pnpm check:crap` -- exit 0 (0 violations, 53 at exactly CRAP 5)
+- `pnpm check:modified-titles` -- exit 0 ("2 active change(s)")
+- `pnpm check:fixed-group` -- exit 0 (own initiative, changeset-
+  adjacent; `check:pr-changeset` needs a real PR number to diff
+  against and was not run -- CI's own job, not reachable pre-PR)
+
+**Task-time note**: no stopwatch was kept per task -- the durations
+below are retrospective impressions from this session's own message
+timeline, not measured, reported as estimates per the lead's own
+instruction to mark them as such if uncertain.
+
