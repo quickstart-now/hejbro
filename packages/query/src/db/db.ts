@@ -2,10 +2,12 @@ import type {
 	DeleteFinal,
 	FunctionDeclaration,
 	InsertFinal,
+	IsUnfilledBranch,
 	Role,
 	SelectLimited,
 	SelectProjection,
 	SetOpStage,
+	SetOpStageBranches,
 	Table,
 	UpdateFinal,
 } from "@hejbro/core";
@@ -236,16 +238,6 @@ const rolesOf = (
  */
 
 /**
- * `true` when `TStage` is the unfilled default (`unknown`) a hand-written
- * `SetOpStage<TProjection>` leaves both branch parameters at
- * (widen-set-op-execute, task 1.2) — the same `[unknown] extends [X]`
- * membership test `select-result.ts`'s `IsTrackedLeftJoinedSet` already
- * uses for the identical "is this the untracked default" question on a
- * different phantom.
- */
-type IsUnfilledBranch<TStage> = [unknown] extends [TStage] ? true : false;
-
-/**
  * One core-built set-operation branch's own resolved row — a select
  * stage through {@link SelectResult}, its own left-joined tracking
  * included (`Exclude<TLeftJoined, undefined>`, the same optional-property
@@ -263,13 +255,13 @@ type SetOpBranchRow<TStage> =
 		infer TLeftJoined
 	>
 		? SelectResult<TProjection, Exclude<TLeftJoined, undefined>>
-		: TStage extends SetOpStage<
-					infer TNestedProjection extends SelectProjection,
-					infer TNestedLeftStage,
-					infer TNestedRightStage
-				>
-			? SetOpExecuteRow<TNestedProjection, TNestedLeftStage, TNestedRightStage>
-			: never;
+		: [SetOpStageBranches<TStage>] extends [never]
+			? never
+			: SetOpExecuteRow<
+					SetOpStageBranches<TStage>["projection"],
+					SetOpStageBranches<TStage>["left"],
+					SetOpStageBranches<TStage>["right"]
+				>;
 
 /**
  * A core-built set operation's own resolved row (widen-set-op-execute,
@@ -299,16 +291,11 @@ export type ExecuteResult<TStatement> =
 		infer TLeftJoined
 	>
 		? ReadonlyArray<SelectResult<TProjection, Exclude<TLeftJoined, undefined>>>
-		: TStatement extends SetOpStage<
-					infer TProjection extends SelectProjection,
-					infer TLeftStage,
-					infer TRightStage
+		: [SetOpStageBranches<TStatement>] extends [never]
+			? TStatement extends InsertFinal<
+					infer TTable extends Table,
+					infer TReturning
 				>
-			? ReadonlyArray<SetOpExecuteRow<TProjection, TLeftStage, TRightStage>>
-			: TStatement extends InsertFinal<
-						infer TTable extends Table,
-						infer TReturning
-					>
 				? ReadonlyArray<ReturningRow<TTable, TReturning>>
 				: TStatement extends UpdateFinal<
 							infer TTable extends Table,
@@ -320,7 +307,14 @@ export type ExecuteResult<TStatement> =
 								infer TReturning
 							>
 						? ReadonlyArray<ReturningRow<TTable, TReturning>>
-						: ReadonlyArray<DriverRow>;
+						: ReadonlyArray<DriverRow>
+			: ReadonlyArray<
+					SetOpExecuteRow<
+						SetOpStageBranches<TStatement>["projection"],
+						SetOpStageBranches<TStatement>["left"],
+						SetOpStageBranches<TStatement>["right"]
+					>
+				>;
 
 /**
  * A `db()` handle. `execute` is every other db operation's foundation —

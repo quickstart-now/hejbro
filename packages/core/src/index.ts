@@ -349,6 +349,7 @@ export type {
 export { deleteFrom, insert, update } from "./query/mutate";
 export type {
 	FromSource,
+	IsUnfilledBranch,
 	NestedReadMarker,
 	OrderTermInput,
 	SelectDistinctable,
@@ -365,6 +366,7 @@ export type {
 	SetOpFamiliesRefused,
 	SetOpResult,
 	SetOpStage,
+	SetOpStageBranches,
 } from "./query/select";
 export {
 	exists,

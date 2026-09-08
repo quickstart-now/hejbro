@@ -283,6 +283,39 @@ export type SetOpResult<TLeft, TRight> =
 		: never;
 
 /**
+ * `true` when `TStage` is still {@link SetOpStage}'s own bare default
+ * (`unknown`, both branch parameters omitted) — the tuple wrap keeps the
+ * check from distributing over a union and misfiring on `never` (a naked
+ * `TStage extends unknown` is trivially always true otherwise). Shared by
+ * `@hejbro/query`'s `ExecuteResult` and this file's own CTE fold
+ * (widen-set-op-execute, task 1.5b) so "no real branch was carried" is one
+ * judgment, not two independently maintained copies of it.
+ */
+export type IsUnfilledBranch<TStage> = [unknown] extends [TStage]
+	? true
+	: false;
+
+/**
+ * Extracts a {@link SetOpStage}'s own three type parameters back out —
+ * `never` when `TStage` is not one. Shared by `@hejbro/query`'s
+ * `ExecuteResult` and this file's own CTE fold (widen-set-op-execute, task
+ * 1.5b): both need the same branch-projection/branch-stage triple, and
+ * re-deriving the `infer` pattern twice risks the two copies drifting.
+ */
+export type SetOpStageBranches<TStage> =
+	TStage extends SetOpStage<
+		infer TProjection extends SelectProjection,
+		infer TLeftStage,
+		infer TRightStage
+	>
+		? {
+				readonly projection: TProjection;
+				readonly left: TLeftStage;
+				readonly right: TRightStage;
+			}
+		: never;
+
+/**
  * Every select stage below takes `TLeftJoined` as its second parameter
  * (narrow-join-nullability) — defaulted to {@link UntrackedJoins} so every
  * existing one-argument use (`SelectLimited<Posts>`, a bare core type
