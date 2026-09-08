@@ -165,6 +165,18 @@
       "title": "three constructor-mode review rounds: the omission family widened to indexes, checks and unique constraints, and the record corrected on what a catalog can tell",
       "pr": null,
       "decisions": []
+    },
+    {
+      "id": "W3",
+      "at": "2026-09-08T15:49Z",
+      "title": "R13/R14 rework: no-builder-type member exclusion, pull mirrors import's schema handling",
+      "pr": null,
+      "decisions": [
+        "R11",
+        "R12",
+        "R13",
+        "R14"
+      ]
     }
   ],
   "prs": [

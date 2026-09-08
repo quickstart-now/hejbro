@@ -36,3 +36,113 @@ Round 4 also found a key with several omitted members stating a way out that doe
 
 One stop is worth recording. The implementer declined the planner's relaxation of a stop condition and measured instead, finding that the contract carries no primary key, index or check at all, by design -- so "cannot be carried in the contract" mislocates the loss, which lives in the schema `pull` vendors. The family keeps its wording here and #1024 carries the correction for all of those lines together.
 
+<a id="w3"></a>
+## W3 — R13/R14 rework: no-builder-type member exclusion, pull mirrors import's schema handling
+
+_2026-09-08T15:49Z · per R11, R12, R13, R14_
+
+Rework of the D106 round-1 correction after re-review. Lead rulings: R13
+(a column whose type no builder expresses is a third root cause, general
+rule across every member kind, no rename remedy exists for it) and R14
+(pull mirrors import's own schema handling exactly, two new refusal
+codes).
+
+1. B1 root-cause reproduction, before the fix (live, postgres:17-alpine,
+cfr1-pg, port 55770). Generated column input:
+```sql
+create table ex.gen_over_untyped (
+  id integer primary key,
+  pt point,
+  px boolean generated always as ((pt is null)) stored
+);
+```
+`hejbro import` -> exit 0, starter carries
+`px: boolean().generatedAlwaysAs(sql.raw("(pt IS NULL)"))`. `hejbro
+baseline`'s own migration SQL applied to an empty database via
+`psql -v ON_ERROR_STOP=1 -1`: exit 3, `ERROR: column "pt" does not
+exist`. The CHECK-constraint sibling (`constraint t_pt_chk check (pt is
+not null or n is null)`) failed identically, same error, same exit
+code.
+
+2. B1, after the fix. Same live witness
+(`infer-generated-column.integration.test.ts`'s own isolated `b1two`
+describe block), 18/18 tests green, including:
+`baseline`'s own migration SQL now applies clean to an empty database,
+exit 0. Rendered lines (fake-session witness, `point`-typed column,
+five member kinds, both commands):
+import: 'Omitted: index "app.t.t_pt_idx" -- it is declared on column
+"app.t.pt", which this reading did not infer, because no column
+builder expresses its type "point", so the index cannot be declared
+either. `check` keeps listing the index as unmanaged until that column
+and the index are both declared.' (no `Next:`/`Rename …` tail); the
+same shape for unique constraint, generated column, primary key
+(adds "; the table is declared without a primary key. `check` keeps
+listing the index that backs it as unmanaged..." per the pre-existing
+PK sentence, still no tail), and foreign key (ends after "...cannot be
+declared either.", no `check` sentence, no tail). pull: the same lines
+with "cannot be carried in the contract either"/"cannot be carried
+either" in place of "cannot be declared either", no tail either.
+
+3. Structural fact backing R13's "no exit" ruling: full scan of
+`packages/core/src/types/column-builder-factories.ts` (all 26+ exported
+builders, none named `custom`/`raw`/generic) and
+`skills/hejbro/references/dsl-cheatsheet.md` (the one "raw type node"
+mechanism it documents is `defineFunction`/`defineTrigger`'s own
+`returns`/`args`, never a table column) -- no general-purpose column
+builder exists anywhere in the public DSL surface for a type like
+`point`/`int4range`/`money`.
+
+4. import's own schema handling, live (three real outputs, postgres
+db holding schema `app` with one table, schema `Bad-Schema` (invalid
+name) with one table, and no schema named `nope`):
+- `--schema app --schema nope`: `Not inferred: nothing to infer in
+  schema "nope".`, exit 0.
+- `--schema nope --schema alsonope` (all absent): `error[import-nothing-to-infer]: hejbro import found no table, enum, or sequence to infer in schema(s) nope, alsonope. Next: confirm the schema name(s) are correct and that the database holds objects in them, then rerun `hejbro import`.`, exit 1.
+- `--schema Bad-Schema` (invalid name, alone): `Omitted: schema "Bad-Schema" -- its catalog name is not a valid hejbro SQL identifier, ...` on stdout, then `error[import-nothing-declarable]: hejbro import found nothing it could declare in schema(s) Bad-Schema: each one held something, but its own catalog name is not a valid hejbro SQL identifier (see the "Omitted" line(s) above). Next: rename the schema(s) named above in the database, then rerun `hejbro import`.`, exit 1.
+
+5. Gap found by measuring pull against the same three inputs before
+the fix: `--schema app --schema Bad-Schema` correctly kept
+`Bad-Schema`'s own `Omitted: schema …` line (pull already shared
+`result.lossReport` with import). But `--schema app --schema nope`
+silently dropped `nope` with no line at all -- pull had no equivalent
+of import's own `emptySchemaLines`/`schemaHasNamedOmission`
+mechanism.
+
+6. Fix: `schemaHasNamedOmission`/`emptySchemaLines` mirrored into
+pull.ts from import.ts (same logic, `withReportLinesBeforeWayOut`
+reused directly, already exported). Live re-measurement after the fix,
+one pull run, `--schema app --schema "Bad-Schema" --schema nope`:
+```
+pulled n4test2 (app)
+...
+Omitted: schema "Bad-Schema" -- its catalog name is not a valid hejbro SQL identifier, so nothing it holds (tables, enums, sequences) can be carried in the contract. Rename the schema in the database, then link the schema repository.
+Not inferred: nothing to infer in schema "nope".
+The loss ends when you link the schema repository.
+```
+exit 0. The two causes land in their own bands, matching import.
+
+7. pull's two new refusal codes, live: all-absent schemas ->
+`error[pull-nothing-to-infer]` (`hejbro pull found no table, enum, or
+sequence to infer in schema(s) …`, command name swapped from import's
+own text, otherwise identical); all-invalid-name schemas ->
+`error[pull-nothing-declarable]` ("declare" swapped for "carry into
+the contract", command name swapped, otherwise identical structure).
+Both pinned in `pull-command.test.ts`.
+
+8. Doc correction (band confusion, caught by review before landing):
+the reference's own first draft called all three column-omission
+causes "Omitted", which is false for the third -- that column's own
+line is `Not inferred: column "…" (type "…") -- no column builder
+expresses it.`, a different band; only a *member naming* that column
+(index/check/UNIQUE/generated column/PK/FK) gets an `Omitted:` line.
+Corrected before commit; `packages/skills`'s own link/snippet-compile
+tests re-verified green after each correction pass.
+
+9. Gates, this round's own commit (75144a80): `TURBO_FORCE=1 pnpm
+check` / `check-types` / `test` (1620 hejbro package tests + every
+other package, all green) / `pnpm check:crap` ("no violations, 52 at
+the threshold") / `pnpm check:modified-titles` ("2 active change(s),
+every delta title matches its base spec") / `openspec validate
+--strict harden-catalog-inference-2` ("valid") -- all exit 0, repo-wide,
+serial, no `--filter`.
+
