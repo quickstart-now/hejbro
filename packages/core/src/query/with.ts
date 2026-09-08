@@ -84,6 +84,80 @@ export type CteRowEnvironment<TProjection extends SelectProjection> =
 			: never;
 
 /**
+ * Merges two branches' own row environments key by key (widen-set-op-
+ * execute, task 1.5a) — built from each branch's OWN single-source
+ * projection through {@link CteRowEnvironment} unmodified, never by
+ * re-entering that type against an already-folded synthetic shape
+ * (measured: a whole-table branch's own `TColumns` inference cannot
+ * reverse through a union-valued field there, collapsing to `unknown`).
+ * The key range comes from the two environments themselves (`keyof
+ * CteRowEnvironment<...>`), not the raw projections — a `Table`'s own
+ * hidden `tableMeta` brand key would otherwise reach {@link
+ * CteFieldRef}'s `extends Expr` constraint and fail it (measured). One
+ * `CteFieldRef` per key, wrapping the union of both branches' own raw
+ * projected values — the same shape a plain union of two same-keyed
+ * object projections already produces successfully through this exact
+ * type today.
+ */
+type MergedCteRowEnvironment<
+	TLeftProjection extends SelectProjection,
+	TRightProjection extends SelectProjection,
+> = {
+	readonly [K in keyof CteRowEnvironment<TLeftProjection> &
+		keyof CteRowEnvironment<TRightProjection>]: CteFieldRef<
+		| TLeftProjection[K & keyof TLeftProjection]
+		| TRightProjection[K & keyof TRightProjection]
+	>;
+};
+
+/**
+ * A set-op branch's own declared projection (widen-set-op-execute, task
+ * 1.5a) — flat only: a branch that is itself a nested `SetOpStage` is
+ * task 1.5b's own arm, deliberately absent here so its own red stays
+ * red until that task adds it.
+ */
+type CteSetOpBranchProjection<TStage> =
+	TStage extends SelectLimited<
+		infer TProjection extends SelectProjection,
+		infer _TLeftJoined
+	>
+		? TProjection
+		: never;
+
+/**
+ * `true` when `TStage` is the unfilled default (`unknown`) a hand-
+ * written `SetOpStage<TProjection>` leaves both branch parameters at
+ * (widen-set-op-execute, task 1.5a) — the same `[unknown] extends [X]`
+ * membership test `@hejbro/query`'s own `IsUnfilledBranch` (`db.ts`,
+ * task 1.2) uses for the identical question on the query-layer's own
+ * resolved-row fold.
+ */
+type IsUnfilledCteBranch<TStage> = [unknown] extends [TStage] ? true : false;
+
+/**
+ * The row environment `w.as(...)` builds for a core-built set-operation
+ * query (widen-set-op-execute, task 1.5a) — either branch parameter
+ * unfilled (a hand-written `SetOpStage<TProjection>`, both at its own
+ * `unknown` default) keeps today's exact fallback, {@link
+ * CteRowEnvironment}<TProjection> alone (the left branch's own declared
+ * row, joins untracked); both filled merges each branch's own
+ * environment through {@link MergedCteRowEnvironment}.
+ */
+type CteSetOpEnvironment<
+	TProjection extends SelectProjection,
+	TLeftStage,
+	TRightStage,
+> =
+	IsUnfilledCteBranch<TLeftStage> extends true
+		? CteRowEnvironment<TProjection>
+		: IsUnfilledCteBranch<TRightStage> extends true
+			? CteRowEnvironment<TProjection>
+			: MergedCteRowEnvironment<
+					CteSetOpBranchProjection<TLeftStage>,
+					CteSetOpBranchProjection<TRightStage>
+				>;
+
+/**
  * Identifies a {@link CteReference} at runtime and carries the CTE's own
  * name — the same hidden-symbol shape `dsl/table.ts`'s `tableMeta` uses for
  * a `Table`, for the same reason: `Object.entries`/`Object.fromEntries`
@@ -115,6 +189,19 @@ export type CteRowMeta = { readonly cteName: string };
 export type CteReference<
 	TProjection extends SelectProjection = SelectProjection,
 > = CteRowEnvironment<TProjection> & { readonly [cteRowMeta]: CteRowMeta };
+
+/**
+ * What `w.as(...)` hands back for a core-built set-operation query
+ * (widen-set-op-execute, task 1.5a) — {@link CteSetOpEnvironment} plus
+ * the same hidden `cteRowMeta` brand every {@link CteReference} carries.
+ */
+type CteSetOpReference<
+	TProjection extends SelectProjection,
+	TLeftStage,
+	TRightStage,
+> = CteSetOpEnvironment<TProjection, TLeftStage, TRightStage> & {
+	readonly [cteRowMeta]: CteRowMeta;
+};
 
 /**
  * Phantom marker (the `columnOriginBrand`/`readAsBrand` precedent), never
@@ -246,6 +333,27 @@ type CompatibleRecursiveTerm<TProjection, TRecursiveProjection> = [
 	: unknown;
 
 /**
+ * `w.as(...)`'s own return type, dispatched on the actual `query` value
+ * passed (widen-set-op-execute, task 1.5a) — a `SelectLimited` keeps
+ * today's plain {@link CteReference}; a `SetOpStage` (its own two branch
+ * parameters carried since task 1.1) resolves through {@link
+ * CteSetOpReference}, whose own fallback for an unfilled branch is the
+ * same {@link CteRowEnvironment}<TProjection> a plain `CteReference`
+ * already carries — a hand-written, bare `SetOpStage<TProjection>`
+ * argument therefore keeps its exact pre-1.5 meaning.
+ */
+type CteAsResult<TQuery> =
+	TQuery extends SetOpStage<
+		infer TProjection extends SelectProjection,
+		infer TLeftStage,
+		infer TRightStage
+	>
+		? CteSetOpReference<TProjection, TLeftStage, TRightStage>
+		: TQuery extends SelectLimited<infer TProjection extends SelectProjection>
+			? CteReference<TProjection>
+			: never;
+
+/**
  * Passed into a `withCte(...)` callback (add-ctes, task 3.1) — the only way
  * to declare an entry.
  *
@@ -255,11 +363,15 @@ type CompatibleRecursiveTerm<TProjection, TRecursiveProjection> = [
  * own naming for the same role elsewhere in this package.
  */
 export type CteBuilder = {
-	readonly as: <TProjection extends SelectProjection>(
+	readonly as: <
+		TQuery extends
+			| SelectLimited<SelectProjection>
+			| SetOpStage<SelectProjection>,
+	>(
 		name: string,
-		query: SelectLimited<TProjection> | SetOpStage<TProjection>,
+		query: TQuery,
 		options?: CteEntryOptions,
-	) => CteReference<TProjection>;
+	) => CteAsResult<TQuery>;
 	/**
 	 * Declares a recursive entry (add-ctes, task 6.1): `anchor` fixes the
 	 * CTE's own row *type* (Postgres takes a recursive CTE's column names/
@@ -459,7 +571,19 @@ export const withCte = <TProjection extends SelectProjection>(
 	// `entries` itself.
 	const recursiveCalls: true[] = [];
 	const w: CteBuilder = {
-		as: (name, query, options) => {
+		// The runtime object never varies by TQuery -- only the DECLARED
+		// return type does (widen-set-op-execute, task 1.5a: the folded
+		// environment for a filled SetOpStage's two branches, the same
+		// left-branch-keyed object either way). `buildCteRowEnvironment`
+		// already reads `query.projectionInput` -- the left branch's own
+		// keys, SQL's own naming rule -- so the runtime is unaffected; this
+		// is the one spot that widens the declared type at the boundary
+		// (the `leftJoin`/`makeChainThen` cast-at-boundary precedent).
+		as: ((
+			name: string,
+			query: WithBody<SelectProjection>,
+			options?: CteEntryOptions,
+		) => {
 			assertNoDuplicateCteName(entries, name);
 			entries.push({
 				name,
@@ -467,7 +591,7 @@ export const withCte = <TProjection extends SelectProjection>(
 				materialized: options?.materialized ?? null,
 			});
 			return buildCteRowEnvironment(name, query.projectionInput);
-		},
+		}) as CteBuilder["as"],
 		asRecursive: (name, anchor, recursiveTerm, options) => {
 			assertNoDuplicateCteName(entries, name);
 			const anchorRef = buildCteRowEnvironment(name, anchor.projectionInput);
