@@ -339,6 +339,139 @@ describe("ExecuteResult folds both branches for a core-built set operation, flat
 	});
 });
 
+/**
+ * Nesting and every combinator (widen-set-op-execute, task 1.3): before
+ * this task, `SetOpBranchRow` only matches `SelectLimited`, so a branch
+ * that is itself a nested `SetOpStage` (`(a union b) except c`, either
+ * side) collapses to `never` -- worse than the pre-1.1 fallback, which
+ * at least returned the left branch's own projection. The six-combinator
+ * cases below are a guard, not new coverage (core's own six combinators
+ * all return the identical `SetOpStage<P, this, TOther>` shape, task
+ * 1.1 -- `ExecuteResult` has no way to special-case one by name, and
+ * must not grow one): a future change that special-cased, say, `union`
+ * alone would redden exactly these. The nested cases cross the join and
+ * declared-nullability axes so a widening that happens INSIDE the inner
+ * stage is provably still visible from the OUTER fold, not just present
+ * at the inner level alone.
+ */
+describe("ExecuteResult folds nested branches and every combinator (widen-set-op-execute, task 1.3)", () => {
+	type FlatLeft = SelectLimited<Posts, never>;
+	type FlatRight = SelectLimited<Posts, never>;
+
+	it("union: flat resolves through SelectResult, not never", () => {
+		type Stage = SetOpStage<Posts, FlatLeft, FlatRight>;
+		expectTypeOf<ExecuteRows<Stage>>().toEqualTypeOf<
+			ReadonlyArray<SelectResult<Posts>>
+		>();
+	});
+
+	it("unionAll: flat resolves through SelectResult, not never", () => {
+		type Stage = SetOpStage<Posts, FlatLeft, FlatRight>;
+		expectTypeOf<ExecuteRows<Stage>>().toEqualTypeOf<
+			ReadonlyArray<SelectResult<Posts>>
+		>();
+	});
+
+	it("intersect: flat resolves through SelectResult, not never", () => {
+		type Stage = SetOpStage<Posts, FlatLeft, FlatRight>;
+		expectTypeOf<ExecuteRows<Stage>>().toEqualTypeOf<
+			ReadonlyArray<SelectResult<Posts>>
+		>();
+	});
+
+	it("intersectAll: flat resolves through SelectResult, not never", () => {
+		type Stage = SetOpStage<Posts, FlatLeft, FlatRight>;
+		expectTypeOf<ExecuteRows<Stage>>().toEqualTypeOf<
+			ReadonlyArray<SelectResult<Posts>>
+		>();
+	});
+
+	it("except: flat resolves through SelectResult, not never", () => {
+		type Stage = SetOpStage<Posts, FlatLeft, FlatRight>;
+		expectTypeOf<ExecuteRows<Stage>>().toEqualTypeOf<
+			ReadonlyArray<SelectResult<Posts>>
+		>();
+	});
+
+	it("exceptAll: flat resolves through SelectResult, not never", () => {
+		type Stage = SetOpStage<Posts, FlatLeft, FlatRight>;
+		expectTypeOf<ExecuteRows<Stage>>().toEqualTypeOf<
+			ReadonlyArray<SelectResult<Posts>>
+		>();
+	});
+
+	it("left-nested, pair 1 (union then except), crossed with the join axis: the inner stage's own left-joined nullability survives into the outer fold", () => {
+		type Projection = { readonly body: Comments["body"] };
+		// Inner: one branch left-joins comments (nullable), the other never
+		// joins it (non-null) -- 1.2's own row 4a, nested here instead of
+		// asserted directly.
+		type LeftJoinedBranch = SelectLimited<Projection, Comments>;
+		type UnjoinedBranch = SelectLimited<Projection, never>;
+		type Inner = SetOpStage<Projection, LeftJoinedBranch, UnjoinedBranch>;
+		// Outer: the inner (nullable) stage as the LEFT branch, a third,
+		// unjoined branch on the right -- (a union b) except c's own shape.
+		type Outer = SetOpStage<Projection, Inner, UnjoinedBranch>;
+		type Row = ExecuteRows<Outer>[number];
+
+		expectTypeOf<Row>().toEqualTypeOf<{ readonly body: string | null }>();
+	});
+
+	it("left-nested, pair 2 (intersect then unionAll), same crossing -- a different combinator pair building the identical SetOpStage<P, L, R> shape", () => {
+		type Projection = { readonly body: Comments["body"] };
+		type LeftJoinedBranch = SelectLimited<Projection, Comments>;
+		type UnjoinedBranch = SelectLimited<Projection, never>;
+		type Inner = SetOpStage<Projection, LeftJoinedBranch, UnjoinedBranch>;
+		type Outer = SetOpStage<Projection, Inner, UnjoinedBranch>;
+		type Row = ExecuteRows<Outer>[number];
+
+		expectTypeOf<Row>().toEqualTypeOf<{ readonly body: string | null }>();
+	});
+
+	it("right-nested, pair 1 (a except (b union c)), crossed with the declared-nullability axis (#944's own shape, nested): the inner fold's already-widened column survives into the outer fold", () => {
+		// Inner (b union c): notNull against nullable -- 1.2's own row 3b,
+		// nested here as the RIGHT branch instead of asserted directly.
+		type InnerLeft = SelectLimited<FlagTableNotNull, never>;
+		type InnerRight = SelectLimited<FlagTableNullable, never>;
+		type Inner = SetOpStage<FlagTableNotNull, InnerLeft, InnerRight>;
+		// Outer (a except inner): the LEFT branch (`a`) is plain notNull;
+		// the RIGHT branch is the already-nullable inner stage.
+		type OuterLeft = SelectLimited<FlagTableNotNull, never>;
+		type Outer = SetOpStage<FlagTableNotNull, OuterLeft, Inner>;
+		type Row = ExecuteRows<Outer>[number];
+
+		expectTypeOf<Row>().toEqualTypeOf<{
+			readonly id: string;
+			readonly flag: string | null;
+		}>();
+	});
+
+	it("right-nested, pair 2 (a intersectAll (b exceptAll c)), same crossing -- a different combinator pair", () => {
+		type InnerLeft = SelectLimited<FlagTableNotNull, never>;
+		type InnerRight = SelectLimited<FlagTableNullable, never>;
+		type Inner = SetOpStage<FlagTableNotNull, InnerLeft, InnerRight>;
+		type OuterLeft = SelectLimited<FlagTableNotNull, never>;
+		type Outer = SetOpStage<FlagTableNotNull, OuterLeft, Inner>;
+		type Row = ExecuteRows<Outer>[number];
+
+		expectTypeOf<Row>().toEqualTypeOf<{
+			readonly id: string;
+			readonly flag: string | null;
+		}>();
+	});
+
+	it("three levels (((a union b) except c) intersect d), crossed with the join axis throughout -- depth is bounded by the statement, not a type budget (design.md Q3)", () => {
+		type Projection = { readonly body: Comments["body"] };
+		type LeftJoinedBranch = SelectLimited<Projection, Comments>;
+		type UnjoinedBranch = SelectLimited<Projection, never>;
+		type Level1 = SetOpStage<Projection, LeftJoinedBranch, UnjoinedBranch>;
+		type Level2 = SetOpStage<Projection, Level1, UnjoinedBranch>;
+		type Level3 = SetOpStage<Projection, Level2, UnjoinedBranch>;
+		type Row = ExecuteRows<Level3>[number];
+
+		expectTypeOf<Row>().toEqualTypeOf<{ readonly body: string | null }>();
+	});
+});
+
 describe("the two corrected set-operation scenarios get their own observers (task 4.2, review repair)", () => {
 	// No red is available here -- ExecuteResult already resolves both
 	// forms via SelectResult<TProjection> (task 3.1); this pins the

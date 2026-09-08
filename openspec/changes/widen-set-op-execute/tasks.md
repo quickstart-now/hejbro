@@ -40,7 +40,7 @@ goes back to the planner, not into the diff.
       longer widened to null); a hand-annotated `SetOpStage<P>` (today's
       fallback, which the branch defaults keep)}. Files: `db.ts`, tests.
 
-- [ ] 1.3 (~7m) The fold holds for every combinator and either nesting
+- [x] 1.3 (~7m) The fold holds for every combinator and either nesting
       side. Red: the same query type test — a table over the six
       combinators (a fold wired for `union` alone passes 1.2's table
       unchanged) × {flat; `(a union b) except c`; `a except (b union

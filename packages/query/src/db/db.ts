@@ -200,13 +200,15 @@ const rolesOf = (
  * - A core-built set-operation stage (`select(a).union(select(b))` and
  *   its sibling combinators, core's `query/select.ts`) structurally
  *   extends {@link SetOpStage}, which now carries both branches' own
- *   stage types (widen-set-op-execute, task 1.1/1.2) — {@link
+ *   stage types (widen-set-op-execute, tasks 1.1-1.3) — {@link
  *   SetOpBranchRow} resolves each branch to its own row through {@link
- *   SelectResult}, its own left-joined tracking included, and {@link
- *   SetOpExecuteRow} folds the two through {@link SetOpResult}, the same
- *   union-of-both-declared-types-nullable-in-either fold the chain
- *   surface already applies to its own two RESOLVED row types. A branch
- *   left unfilled (a hand-written `SetOpStage<TProjection>`, both
+ *   SelectResult}, its own left-joined tracking included, recursing
+ *   through {@link SetOpExecuteRow} when a branch is itself a nested
+ *   `SetOpStage` (`(a union b) except c`, either side, any depth), and
+ *   {@link SetOpExecuteRow} folds the two through {@link SetOpResult},
+ *   the same union-of-both-declared-types-nullable-in-either fold the
+ *   chain surface already applies to its own two RESOLVED row types. A
+ *   branch left unfilled (a hand-written `SetOpStage<TProjection>`, both
  *   parameters at their `unknown` default) keeps today's exact fallback,
  *   {@link SelectResult}<TProjection> alone — {@link UntrackedJoins}
  *   implicit, since such a stage carries no left-joined tracking of its
@@ -247,10 +249,13 @@ type IsUnfilledBranch<TStage> = [unknown] extends [TStage] ? true : false;
  * One core-built set-operation branch's own resolved row — a select
  * stage through {@link SelectResult}, its own left-joined tracking
  * included (`Exclude<TLeftJoined, undefined>`, the same optional-property
- * strip {@link ExecuteResult}'s own `SelectLimited` arm uses); `never`
- * for anything else. Flat only (widen-set-op-execute, task 1.2): a
- * branch that is itself a nested `SetOpStage` is task 1.3's own arm,
- * deliberately absent here.
+ * strip {@link ExecuteResult}'s own `SelectLimited` arm uses); a nested
+ * branch (`(a union b) except c`, either side, widen-set-op-execute task
+ * 1.3) recurses through {@link SetOpExecuteRow}, so a widened column
+ * INSIDE the inner stage (a left join, a declared-nullability or
+ * numeric-mode divergence) is still visible once the outer fold reads
+ * it — depth is bounded by the statement, never by a fixed type budget.
+ * `never` for anything else.
  */
 type SetOpBranchRow<TStage> =
 	TStage extends SelectLimited<
@@ -258,15 +263,24 @@ type SetOpBranchRow<TStage> =
 		infer TLeftJoined
 	>
 		? SelectResult<TProjection, Exclude<TLeftJoined, undefined>>
-		: never;
+		: TStage extends SetOpStage<
+					infer TNestedProjection extends SelectProjection,
+					infer TNestedLeftStage,
+					infer TNestedRightStage
+				>
+			? SetOpExecuteRow<TNestedProjection, TNestedLeftStage, TNestedRightStage>
+			: never;
 
 /**
  * A core-built set operation's own resolved row (widen-set-op-execute,
- * task 1.2). Either branch parameter unfilled (a hand-written
+ * tasks 1.2/1.3). Either branch parameter unfilled (a hand-written
  * `SetOpStage<TProjection>`, both at `SetOpStage`'s own `unknown`
  * default) keeps today's exact fallback, {@link SelectResult}<TProjection>
  * alone; both filled folds each branch's own {@link SetOpBranchRow}
- * through {@link SetOpResult}.
+ * through {@link SetOpResult} — mutually recursive with {@link
+ * SetOpBranchRow}'s own nested-`SetOpStage` arm, so a chain of nested
+ * combinations resolves the same way at every depth, whichever of the
+ * six combinators built each level.
  */
 type SetOpExecuteRow<
 	TProjection extends SelectProjection,
