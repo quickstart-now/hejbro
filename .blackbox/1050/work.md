@@ -911,3 +911,136 @@ fixed before running any gate.
   confirmed by re-reading the diff against this gate's own claim
   before trusting it.
 
+<a id="w12"></a>
+## W12 — review rework round 1: R1/R2/R3 -- transplant-cell mutation-red table
+
+_2026-09-08T21:55Z_
+
+Review round 1's rework pass (R1/R2/R3, `tasks.md`'s own "Review-born
+rework, round 1" section) implemented and verified, on top of `2533d459`
+(`widen-set-op-execute` worktree). Test text only, no production file
+changed (confirmed via `git diff --stat` against every commit below).
+Reviewer source: `/private/tmp/.../94642abb-.../scratchpad/
+FINAL-zz-reviewer-query.test.ts` (read-only, per instruction).
+
+**R1 (F2) -- two stale titles, `execute-result-type.test.ts`.** Raised a
+clarifying question before touching anything: the block's two titles
+quoted "A core-built set operation executed on a handle reads back as
+its left branch" and "An object projection widens where the join record
+is missing" -- both REMOVED (design.md Q4) and, on inspection, describing
+behavior no current ADDED scenario names at all (the block pins a
+hand-written, both-branches-unfilled `SetOpStage<Posts>`'s own
+compatibility fallback, design.md Q2 -- not a live execution surface).
+The lead ruled (A): quote `query-layer.md`'s own still-live 1.4 sentence
+instead of a spec scenario, since a design-log citation goes untrackable
+after archive and promoting the fallback itself to a spec scenario would
+turn an implementation detail into a contract it was never meant to be.
+Applied verbatim per the lead's own title pattern; the reference
+sentence itself is quoted in a code comment so a future reader can find
+the title's own basis inside the file. No mutation applies here (title
+and comment only, test bodies byte-for-byte unchanged) -- verified by
+`git diff` showing zero body-line changes, and both `check-types`/`test`
+staying green throughout.
+
+**R2 (F3) -- three parts, one commit.**
+
+1. *Six execute-layer combinator cells, `execute-result-type.test.ts`.*
+   Source: reviewer's "each combinator with the notNull branch on the
+   LEFT (branch-drop detectable)" cell. The six cells here used to build
+   `SetOpStage<Posts, FlatLeft, FlatRight>` with BOTH branches the exact
+   same `SelectLimited<Posts, never>` -- vacuous, since a fold reads the
+   same answer whether it runs or not against two identical branches.
+   Replaced with `FlagLeft` (notNull) / `FlagRight` (nullable) -- the
+   LEFT branch alone is notNull, so only reading the RIGHT branch can
+   widen `flag` to nullable. Transplant gate: mutated `db.ts`'s own
+   `SetOpExecuteRow` to fold left-only (the layer-isolation mutation, ②
+   in 1.5b's own protocol) -- all six cells went red (lines 374, 382,
+   390, 398, 406, 414), matching what M1/M6 killed in the reviewer's own
+   table. Restored via `git diff > patch && git checkout -- db.ts` then
+   `git apply patch` (never `git stash`); `check-types` clean again
+   after.
+2. *`orderBy()`/`limit()` branch-forwarding, `set-op-stage.types.test.ts`
+   (new describe block, 3 cells).* NOT a port -- the reviewer's own such
+   cell was measured vacuous (tasks.md's own note), so this one is
+   written fresh against `LeftStageOf`/`RightStageOf` (the file's own
+   existing extraction helpers). Tasks 1.1 and the proposal both state
+   whole-set `orderBy`/`limit` forward both branch parameters unchanged;
+   no cell anywhere pinned this claim before now. Transplant-equivalent
+   gate (no original to reproduce, so a fresh mutation stands in):
+   mutated `SetOpStage`'s own `orderBy`/`limit` return type to drop both
+   branch parameters (`SetOpStage<TProjection>` alone, defaults). All
+   three cells' six assertions went red (lines 140, 142, 148, 150, 156,
+   157). Restored the same way.
+3. *Four nested CTE cells, fixture-strengthened,
+   `cte-set-op-fold.types.test.ts`.* The four cells 1.5b's own mutation
+   ③ (with.ts-only, outermost-merge forced left-only) left quiet
+   (left-nested x2, three-level x2, whole-table and object-projection)
+   are traced to a genuine fixture-coincidence, not invented: each put
+   the WIDER/divergent branch on the nested (inner) side, which sits on
+   the OUTER combinator's own LEFT -- so an outermost-left-only bug
+   never surfaces there, regardless of whether the recursion itself is
+   correct. Re-declared so the inner chain stays single-valued
+   throughout (no declared divergence introduced until the very last,
+   outermost step, whose own RIGHT operand now carries it) --
+   preserves the "left-nested"/"three-level" SHAPE (the nested stage is
+   still the outer left operand), only the fixture's own value
+   assignment moved. Re-ran mutation ③: all 6 nested cells now red
+   (previously 2/6) -- lines 387, 406, 430, 454, 478, 509. Restored via
+   the same diff/checkout/apply cycle; `check-types` clean.
+
+**R3 (F4) -- four positions, one commit, `set-op-stage.types.test.ts`.**
+Source: reviewer's "the compatibility gate survives the signature
+rewrite (#487's own gap)" describe block, its four refusal cells (FIRST,
+CHAINED, right-NESTED, reverse/LEFT-odd-one-out) ported verbatim -- only
+the local fixture names changed (`posts`/`archivedPosts`/
+`mismatchedRows` for the reviewer's `la`/`rb`/`mm`), matching this
+file's own existing fixtures rather than importing the reviewer's. The
+existing "a mismatched key set still fails" cell only pinned the FIRST
+position; #487 is on record as the bug where the CHAINED position kept
+the gap after the first was fixed, so a regression there specifically
+needed its own pin, not an inference from the first cell. Transplant
+gate: mutated `CompatibleSetOpBranch` (`select.ts`) to always resolve
+`unknown` (the compatibility gate never refuses) -- all four new cells
+went red (`@ts-expect-error` directives became "unused", TS2578: lines
+194, 200, 206, 212), alongside the pre-existing first-position cell
+(line 181) -- five total, matching the reviewer's own five-cell block
+one-for-one. Restored the same way; `check-types` clean.
+
+**A vacuous-mutation false start, R3 (recorded per the team-brief
+constant on sample-mutation-passing not being coverage evidence).** The
+first attempt at R3's own transplant gate swapped `SetOpStageBranches`'s
+`left`/`right` fields outright (reusing 1.5b's own protocol ④ shape) --
+zero reaction in either package, `check-types` clean under the
+"mutation". Traced to `SetOpResult`'s own fold being commutative (a
+plain union): swapping which side is "left" changes nothing observable
+at the type level. Replaced with dropping one branch's own value
+entirely (`right: TLeftStage`) for 1.5b's own W10 case, and with
+`CompatibleSetOpBranch = unknown` for this task's own gate -- both
+detectable. Not R3's own topic (R3 needed a compatibility-GATE mutation,
+not a fold mutation), kept separate rather than reused.
+
+**Serial gates (final state, after every mutation restored):**
+- `TURBO_FORCE=1 pnpm check` -- exit 0 (one `pnpm format` pass applied;
+  formatting drift from a manual patch-split -- see below -- landed as
+  its own `style(core): ...` commit, since amending was not an option;
+  3 pre-existing warnings, unrelated file)
+- `TURBO_FORCE=1 pnpm check-types` -- exit 0, turbo 19/19
+- `TURBO_FORCE=1 pnpm test` -- exit 0, turbo `test` 19/19 + `test:types`
+  2/2 (`@hejbro/core` 109 files / 2343 tests + 1 todo, up from 2336;
+  `@hejbro/query` 68 files / 1161 tests, unchanged count -- R2's own
+  six-combinator fix replaced cells in place rather than adding new
+  ones)
+- `pnpm check:crap` -- exit 0 (no violations, 53 at the threshold)
+- `pnpm check:modified-titles` -- exit 0 ("2 active change(s)")
+
+**Mechanics note.** R2 and R3 both touch `set-op-stage.types.test.ts` in
+non-overlapping hunks; split into two commits via `git diff` → two
+hand-verified patch files → `git checkout --` + sequential `git apply`,
+confirming the two patches together reconstruct the pre-split file
+byte-for-byte before committing either half separately. One formatting
+drift surfaced from this split (biome's own line-wrap preference
+differs slightly depending on surrounding context at apply time) --
+caught by the `check` gate, not silently carried forward; fixed via
+`pnpm format` and landed as its own commit rather than folded into an
+already-made one.
+

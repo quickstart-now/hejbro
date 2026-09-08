@@ -122,3 +122,42 @@ into the diff.
       its `withCte` paragraph states the folded read. Every word of both
       is lead-approved before the commit. Files: the delta spec, the
       reference.
+
+## Review-born rework, round 1
+
+Overhead, not newly estimated work (the ledger rows carry a blank
+estimate). Test text only — no production file changes. Every cell moved
+here from the reviewer's own table carries its origin in a comment, and
+lands only if **the mutation that reddened it there reddens it here**: a
+cell's non-vacuity rides on its fixtures' divergence, so re-expressing it
+against fixtures that do not diverge transplants the sentence and leaves
+the guard behind.
+
+- [x] R1 **F2 — two test titles quote a scenario this delta removes.**
+      `packages/query/test/db/execute-result-type.test.ts` (the
+      hand-annotated fallback block) names "A core-built set operation
+      executed on a handle reads back as its left branch" and "An object
+      projection widens where the join record is missing". The tests
+      themselves are right; after the archive those names exist nowhere,
+      so a reader takes them for live promises. Retitle to quote the
+      ADDED scenario the block actually pins. Own commit.
+
+- [x] R2 **F3 — the six-combinator cells are vacuous at the execute
+      layer.** Measured: a fold wired for one operator survives them,
+      because each cell puts the widest branch on the left. Reversed
+      cells (notNull left) exist in the reviewer's table and redden under
+      M1/M6. Same pass: the four nested CTE cells 1.5b left with the
+      wider branch on the outer left (`(a∪b) except c`), and the
+      `orderBy`/`limit` claim — tasks 1.1 and the proposal both state
+      that whole-set `orderBy`/`limit` forward both branch parameters and
+      **no cell anywhere pins it** (the reviewer's own such cell was
+      measured vacuous).
+
+- [x] R3 **F4 — the refusal is pinned at one position out of four.** The
+      combinator signature was rewritten in 1.1 (`TOther`: projection →
+      stage), and the mismatched-key-set refusal has a cell only at the
+      first position. The comment beside it cites #487 — the bug where
+      the chained position kept the gap after the first was fixed. The
+      reviewer measured the guard holding at first, chained,
+      right-nested and reverse; the three missing cells are regression
+      pins, not fixes.
