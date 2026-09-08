@@ -8,7 +8,22 @@
   "opened": "2026-09-08",
   "closed": null,
   "decisions": [],
-  "work": [],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-08T18:10Z",
+      "title": "1.1: SetOpStage branch-stage carrier — gates and barrel measurement",
+      "pr": null,
+      "decisions": []
+    },
+    {
+      "id": "W2",
+      "at": "2026-09-08T18:10Z",
+      "title": "1.1: git stash usage during red verification (predates 412/R35)",
+      "pr": null,
+      "decisions": []
+    }
+  ],
   "prs": [],
   "origin": null,
   "followUps": []
