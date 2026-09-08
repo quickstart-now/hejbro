@@ -51,13 +51,15 @@ in EITHER branch SHALL be nullable in the result.
 
 That union SHALL hold on every surface that executes a set operation:
 the chain, where both branches' row types are resolved before they are
-combined, and a set operation built from the core builder's own
-combinators executed through a db handle. A core-built stage carries
-both branch stages, so each branch resolves to its own row — with its
-own left-joined tracking — before the two are combined; a column is
-nullable in the result because a branch declared it nullable or
-left-joined its table, never because the record of what was joined is
-missing. No key resolves to an untyped driver row's value.
+combined, a set operation built from the core builder's own combinators
+executed through a db handle, and one declared as a CTE body, whose own
+reference reads the same folded row.
+A core-built stage carries both branch stages, so each branch resolves
+to its own row — with its own left-joined tracking — before the two
+are combined; a column is nullable in the result because a branch
+declared it nullable or left-joined its table, never because the
+record of what was joined is missing. No key resolves to an untyped
+driver row's value.
 
 #### Scenario: Identical branch shapes pass through unchanged
 - **WHEN** two whole-table selects over identically-declared tables
@@ -84,8 +86,12 @@ missing. No key resolves to an untyped driver row's value.
   by each branch — is executed through a db handle
 - **THEN** the rows read back with the left branch's keys, that column
   typed as the union of both branches' declared read types, and no key
-  resolves to an untyped driver row's value — the same row the chain
-  surface reads back for the same two branches
+  types as an untyped driver row's value — the same row the chain
+  surface reads back for the same two branches. The residue: values
+  still arrive converted per the left branch's declarations, so a
+  column the branches declare at different widths, which Postgres
+  promotes (`integer` ∪ `bigint` → `bigint`), arrives in the driver's
+  raw shape from either branch (measured)
 
 #### Scenario: A left-joined branch widens the core-built result, an inner-joined one does not
 - **WHEN** one branch of a core-built set operation projects a column
@@ -101,3 +107,15 @@ missing. No key resolves to an untyped driver row's value.
   through a db handle
 - **THEN** each side resolves first, a nested side through its own inner
   stage, and the two combine by the same rule
+
+#### Scenario: A set operation declared as a CTE body reads back as the union of its branches
+- **WHEN** a set operation built with the core combinators is declared as
+  a CTE body — `withCte((w) => w.as("x", select(a).union(select(b))))` —
+  and the CTE's own reference is read
+- **THEN** the reference's columns type as the union of both branches'
+  read-back types — a column declared nullable in either branch reading
+  nullable, a column whose branches declare different read types reading
+  their union — each field still reading back as the CTE reference
+  requirement states (an object-projected column widened, a whole-table
+  column at its declared nullability), and a recursive entry's own
+  anchor/term pair keeps its separate rule

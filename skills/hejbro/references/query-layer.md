@@ -300,9 +300,15 @@ differently (it matches them by position), so hejbro's rule is stricter
 than the database's on purpose. The chain surface types the result as
 the LEFT branch's keys with per-column unions (a column nullable in
 either branch is nullable in the result), and rows arrive converted
-per the left branch's declarations. A set-operation query is also a
-valid view body (`defineView` accepts it; the view's columns come from
-the left branch).
+per the left branch's declarations — except where the two branches
+declare one key differently: Postgres promotes that column across the
+branches (int4 ∪ int8 → int8), so the left branch's codec is the wrong
+one for the value that actually arrives and the value is handed back
+unconverted. Measured on all three surfaces — the chain, a core-built
+statement executed on a handle, and a CTE body; tracked as #1054, and
+hejbro states the gap rather than closing it. A set-operation query is
+also a valid view body (`defineView` accepts it; the view's columns
+come from the left branch).
 
 Branches must also agree in type family, key by key: a pair Postgres
 cannot unify fails to type-check at the combinator's parameter. The
@@ -356,6 +362,14 @@ as a join *target*: `.innerJoin()`/`.leftJoin()` still only accept a real
 declared `Table`, so a CTE reference always goes on the FROM side of a join,
 never the joined-in side. The callback's own return value is the
 statement's body — the query actually run and returned.
+
+When the entry's query is a set operation, its reference reads the two
+branches folded the same way `execute()` folds them — the left branch's
+keys, each column the union of both branches' read-back types, nullable
+when either branch declares it nullable. How a field reads back through
+a CTE reference is unchanged: an object-projected column stays widened
+(a CTE body carries no left-joined set outward), a whole-table column
+keeps its declared nullability.
 
 On a `db()` handle, the identical builder is `handle.with((w) => { ... })`
 — the same `w.as`/`w.asRecursive` callback, not a second API. `with` is a
@@ -440,7 +454,7 @@ own rule answers instead, as it does everywhere else — an array read
 nullable by its own rule. None of this is the same rule a plain
 `union()`/`intersect()`/`except()` result already has: a plain set
 operation's *stage* keeps the left branch's own projection unchanged,
-nullability included (#944) — what `execute()` resolves from that
+nullability included — what `execute()` resolves from that
 stage is the two branches' union, above; the projection and the
 resolved row are different things. `handle.with(...)` currently reads every CTE key as
 nullable regardless of any of this (a separate, existing boundary,
