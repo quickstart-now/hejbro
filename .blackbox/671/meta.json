@@ -132,6 +132,28 @@
       "at": "2026-09-07T14:29Z",
       "title": "the Next: first branch must run on the database it describes; measured fork (D106 R1 B2)",
       "ratified": null
+    },
+    {
+      "id": "R11",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "671/R10"
+      ],
+      "at": "2026-09-08T14:54Z",
+      "title": "branch (b) of R10 confirmed on measurement: the Next: names the two paths that run today",
+      "ratified": null
+    },
+    {
+      "id": "R12",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "671/R9"
+      ],
+      "at": "2026-09-08T14:54Z",
+      "title": "the banner names the primary key on every adoption that creates one (D106 R1 F3, NB-3)",
+      "ratified": null
     }
   ],
   "work": [

@@ -117,7 +117,7 @@ exit codes and the SHA.
       cells. Files: core engine/kind, tests, goldens, generate tests.
 
 - [x] 2.2 (~10m) **[design]** B2 — a `Next:` first branch that runs on
-      the database it describes (671/R10). Measure first, then settle:
+      the database it describes (671/R10; branch (b) confirmed on the measurement, 671/R11). Measure first, then settle:
       on the review's `p3b-children-roundtrip` state (managed → handed
       over → re-adopted, database holding every object), does `hejbro
       migrate` register the re-adoption migration without running it
