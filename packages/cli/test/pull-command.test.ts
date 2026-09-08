@@ -98,11 +98,22 @@ const widgetsResult: InferCatalogResult = {
 };
 
 /** One table per schema, minimal shape (mirrors `widgetsResult`) -- a schema fixture must actually contribute a snapshot object under B2's final rule (a schema mentioned only in `--schema` contributes nothing and is excluded), so any test exercising two or more surviving schemas needs one of these per schema, not `emptyResult`. */
+/** One table per schema; a multi-schema fixture names them apart, since
+ * the contract keys `Tables` by SQL name alone and refuses two carried
+ * tables of one name across schemas (#1004). */
+const tableNameFor = (schema: string, schemaCount: number): string => {
+	if (schemaCount > 1) {
+		return `widgets_${schema}`;
+	}
+	return "widgets";
+};
+
 const tableFixture = (
 	schema: string,
+	name = "widgets",
 ): InferCatalogResult["snapshot"]["objects"][string] => ({
 	schema,
-	name: "widgets",
+	name,
 	columns: [
 		{
 			name: "id",
@@ -113,7 +124,7 @@ const tableFixture = (
 	],
 	indexes: [],
 	foreignKeys: [],
-	primaryKeyName: "widgets_pkey",
+	primaryKeyName: `${name}_pkey`,
 });
 
 const resultForSchemas = (
@@ -124,15 +135,15 @@ const resultForSchemas = (
 		dialect: "postgres",
 		objects: Object.fromEntries(
 			schemas.map((schema) => [
-				`table:${schema}.widgets`,
-				tableFixture(schema),
+				`table:${schema}.${tableNameFor(schema, schemas.length)}`,
+				tableFixture(schema, tableNameFor(schema, schemas.length)),
 			]),
 		),
 	},
 	description: {
 		tables: schemas.map((schema) => ({
 			schema,
-			table: "widgets",
+			table: tableNameFor(schema, schemas.length),
 			columns: [{ sqlName: "id", tsKey: "id" }],
 		})),
 		roleNames: [],
@@ -141,7 +152,7 @@ const resultForSchemas = (
 	sql: schemas
 		.map(
 			(schema) =>
-				`create table "${schema}"."widgets" (\n\t"id" uuid not null primary key\n);\n`,
+				`create table "${schema}"."${tableNameFor(schema, schemas.length)}" (\n\t"id" uuid not null primary key\n);\n`,
 		)
 		.join(""),
 	omittedSchemaNames: [],
