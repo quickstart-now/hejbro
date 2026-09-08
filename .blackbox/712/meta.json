@@ -173,6 +173,18 @@
       "at": "2026-09-08T16:40Z",
       "title": "pull mirrors import: the schema list is what was read, absent schemas are announced, an empty pull fails",
       "ratified": null
+    },
+    {
+      "id": "R15",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "712/R11",
+        "712/R14"
+      ],
+      "at": "2026-09-08T17:44Z",
+      "title": "an all-omitted schema is announced and refused as nothing-declarable; every line names the way out it has (D106 R2)",
+      "ratified": null
     }
   ],
   "work": [
