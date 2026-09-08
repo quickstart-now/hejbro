@@ -1,0 +1,15 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#1050",
+  "title": "widen-set-op-execute: group 1 — the core-built set operation types its union",
+  "parent": "quickstart-now/hejbro#738",
+  "status": "open",
+  "opened": "2026-09-08",
+  "closed": null,
+  "decisions": [],
+  "work": [],
+  "prs": [],
+  "origin": null,
+  "followUps": []
+}
