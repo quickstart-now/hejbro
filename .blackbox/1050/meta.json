@@ -43,6 +43,13 @@
       "title": "1.4: reference + changeset -- verbatim edits, #944 surface measurement, gates",
       "pr": null,
       "decisions": []
+    },
+    {
+      "id": "W6",
+      "at": "2026-09-08T19:09Z",
+      "title": "group 1: set-op branches carried and folded",
+      "pr": null,
+      "decisions": []
     }
   ],
   "prs": [],

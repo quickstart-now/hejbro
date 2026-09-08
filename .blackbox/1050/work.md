@@ -317,3 +317,68 @@ below are retrospective impressions from this session's own message
 timeline, not measured, reported as estimates per the lead's own
 instruction to mark them as such if uncertain.
 
+<a id="w6"></a>
+## W6 — group 1: set-op branches carried and folded
+
+_2026-09-08T19:09Z_
+
+Group 1 (widen-set-op-execute, #738 tracking issue #1050) closed out.
+Measurements only, summarizing the four tasks already recorded in
+W1-W5.
+
+**Tasks**: 1.1 (`SetOpStage` carries both branch stage types, core),
+1.2 (`ExecuteResult` folds both branches, flat shapes, query), 1.3
+(recurses through nested branches, every combinator, query), 1.4
+(reference + changeset, skills + changeset).
+
+**Commits**: 8, in three feat/docs+chore-blackbox pairs plus the
+group-open commit:
+- d2267133 chore(openspec): nest either side, split tasks 1.2/1.3/1.4
+- 23908d70 feat(core): set-op stages carry both branch stage types
+- 1e6b78c4 chore(blackbox): record 1.1 gates, barrel and stash measurements
+- a8179a79 feat(query): execute folds a set operation's two branches
+- 7069c40f chore(blackbox): record 1.2 gates and #944 measurement
+- 7690aec1 feat(query): execute recurses through a nested set-op branch
+- 8f24a6b2 chore(blackbox): record 1.3 nesting evidence and gates
+- 1d7697b2 docs(skills): set operations read as the union on both surfaces
+- e459c400 chore(blackbox): record 1.4 changeset and #944 surfaces
+
+**Gates**: all five (`check`, `check-types`, `test`, `check:crap`,
+`check:modified-titles`) ran serially before each of the four tasks'
+own implementation commits and returned exit 0 every time (individual
+runs already itemized in W1-W5).
+
+**M5 (assignment regression, task 1.1's own scope-widening question)**:
+turbo `check-types` across the whole monorepo (19/19 tasks —
+`@hejbro/core`, `@hejbro/query` including `chain.ts:913`'s branch-node
+accessor, `hejbro` (cli), `@hejbro/supabase`, `@hejbro/pg`,
+`@hejbro/neon`, `@hejbro/nile`, and all four example packages) came
+back clean both before and after `SetOpStage` gained its two new
+parameters — no one-argument/bare consumer position broke. The new
+parameters appear only in covariant (return-type) positions throughout;
+none was found in a contravariant (parameter) position.
+
+**#944 remaining surface (facts, no verdict — the citation in
+`query-layer.md` was left in place per this measurement)**: a
+value-level path exists where a nullable right branch still reads
+non-null — `withCte((w) => { const x = w.as("x",
+select(a).union(select(b))); ... })` where `a` is notNull and `b` is
+nullable at the same key: reading `x`'s own field later resolves
+non-null, because `w.as`'s `buildCteRowEnvironment` reads
+`query.projectionInput` (the raw left-branch projection a `SetOpStage`
+carries) directly, never through `SetOpResult`'s fold. Task group 1's
+own diff never touches `with.ts`'s `w.as`, so this reading is
+unaffected by any of 1.1-1.4. Two other surfaces measured separately
+(W5, task 1.4): a recursive CTE whose recursive term is itself a set
+operation already reads conservatively nullable (existing tests
+R32/F1, unaffected by this diff); a real value-level combinator call
+never lands on the bare one-argument `SetOpStage<P>` fallback (only a
+hand-written type annotation does).
+
+**Task-time derivation**: no stopwatch was kept during the session;
+`openspec/task-times.csv`'s `actual_min`/`waited_user_min` for 1.1-1.4
+were derived from the eight commits' own timestamps (grouped into four
+spans by each task's last commit) plus a retrospective hands-on/waited
+split, both explicitly marked in the CSV's own `notes` column as
+derived from commit timestamps, not a stopwatch measurement.
+
