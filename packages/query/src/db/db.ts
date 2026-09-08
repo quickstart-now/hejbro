@@ -14,6 +14,7 @@ import type { CompileInput } from "../compile/compile";
 import type { Driver, DriverRow } from "../driver/contract";
 import type { ReturningRow } from "../types/returning";
 import type { SelectResult } from "../types/select-result";
+import type { SetOpResult } from "../types/set-op";
 import type { ChainApi, ChainRunFactory } from "./chain";
 import { createChainApi } from "./chain";
 import type {
@@ -197,18 +198,21 @@ const rolesOf = (
  *   single `Table`, and a `Table | Table` union (each with and without
  *   `| undefined`), it returns every one of them unchanged.
  * - A core-built set-operation stage (`select(a).union(select(b))` and
- *   its sibling combinators, core's `query/select.ts`, task 3.1/#551)
- *   structurally extends {@link SetOpStage}, which carries
- *   `projectionInput` for the LEFT branch only — core's own combinators
- *   return the left branch's projection and carry no type for the right
- *   one, so the per-key widening {@link SelectResult}'s chain path can do
- *   (both branches resolved) isn't expressible here. This resolves
- *   {@link SelectResult}<TProjection> — {@link UntrackedJoins} implicit
- *   via its default, since a set-op stage carries no left-joined
- *   tracking of its own to pass through, the same fail-safe widening a
- *   select that never called `leftJoin` takes. `SetOpStage`'s own
- *   `orderBy()`/`limit()` return `SetOpStage<TProjection>` again, so a
- *   further-chained stage resolves identically.
+ *   its sibling combinators, core's `query/select.ts`) structurally
+ *   extends {@link SetOpStage}, which now carries both branches' own
+ *   stage types (widen-set-op-execute, task 1.1/1.2) — {@link
+ *   SetOpBranchRow} resolves each branch to its own row through {@link
+ *   SelectResult}, its own left-joined tracking included, and {@link
+ *   SetOpExecuteRow} folds the two through {@link SetOpResult}, the same
+ *   union-of-both-declared-types-nullable-in-either fold the chain
+ *   surface already applies to its own two RESOLVED row types. A branch
+ *   left unfilled (a hand-written `SetOpStage<TProjection>`, both
+ *   parameters at their `unknown` default) keeps today's exact fallback,
+ *   {@link SelectResult}<TProjection> alone — {@link UntrackedJoins}
+ *   implicit, since such a stage carries no left-joined tracking of its
+ *   own to pass through. `SetOpStage`'s own `orderBy()`/`limit()` forward
+ *   both branch parameters unchanged, so a further-chained stage resolves
+ *   identically.
  * - An `insert()`/`update()`/`deleteFrom()` chain (any stage —
  *   `InsertConflictable`/`InsertReturnable`/`InsertFinal` and their
  *   update/delete equivalents all structurally carry `TTable`/
@@ -228,14 +232,65 @@ const rolesOf = (
  *   hatch — resolves to the plain {@link DriverRow} shape, exactly as it
  *   always has.
  */
+
+/**
+ * `true` when `TStage` is the unfilled default (`unknown`) a hand-written
+ * `SetOpStage<TProjection>` leaves both branch parameters at
+ * (widen-set-op-execute, task 1.2) — the same `[unknown] extends [X]`
+ * membership test `select-result.ts`'s `IsTrackedLeftJoinedSet` already
+ * uses for the identical "is this the untracked default" question on a
+ * different phantom.
+ */
+type IsUnfilledBranch<TStage> = [unknown] extends [TStage] ? true : false;
+
+/**
+ * One core-built set-operation branch's own resolved row — a select
+ * stage through {@link SelectResult}, its own left-joined tracking
+ * included (`Exclude<TLeftJoined, undefined>`, the same optional-property
+ * strip {@link ExecuteResult}'s own `SelectLimited` arm uses); `never`
+ * for anything else. Flat only (widen-set-op-execute, task 1.2): a
+ * branch that is itself a nested `SetOpStage` is task 1.3's own arm,
+ * deliberately absent here.
+ */
+type SetOpBranchRow<TStage> =
+	TStage extends SelectLimited<
+		infer TProjection extends SelectProjection,
+		infer TLeftJoined
+	>
+		? SelectResult<TProjection, Exclude<TLeftJoined, undefined>>
+		: never;
+
+/**
+ * A core-built set operation's own resolved row (widen-set-op-execute,
+ * task 1.2). Either branch parameter unfilled (a hand-written
+ * `SetOpStage<TProjection>`, both at `SetOpStage`'s own `unknown`
+ * default) keeps today's exact fallback, {@link SelectResult}<TProjection>
+ * alone; both filled folds each branch's own {@link SetOpBranchRow}
+ * through {@link SetOpResult}.
+ */
+type SetOpExecuteRow<
+	TProjection extends SelectProjection,
+	TLeftStage,
+	TRightStage,
+> =
+	IsUnfilledBranch<TLeftStage> extends true
+		? SelectResult<TProjection>
+		: IsUnfilledBranch<TRightStage> extends true
+			? SelectResult<TProjection>
+			: SetOpResult<SetOpBranchRow<TLeftStage>, SetOpBranchRow<TRightStage>>;
+
 export type ExecuteResult<TStatement> =
 	TStatement extends SelectLimited<
 		infer TProjection extends SelectProjection,
 		infer TLeftJoined
 	>
 		? ReadonlyArray<SelectResult<TProjection, Exclude<TLeftJoined, undefined>>>
-		: TStatement extends SetOpStage<infer TProjection extends SelectProjection>
-			? ReadonlyArray<SelectResult<TProjection>>
+		: TStatement extends SetOpStage<
+					infer TProjection extends SelectProjection,
+					infer TLeftStage,
+					infer TRightStage
+				>
+			? ReadonlyArray<SetOpExecuteRow<TProjection, TLeftStage, TRightStage>>
 			: TStatement extends InsertFinal<
 						infer TTable extends Table,
 						infer TReturning

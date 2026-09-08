@@ -13,6 +13,7 @@ import type {
 // biome-ignore lint/style/useImportType: jsonArrayFrom is used only in a type position below via `typeof jsonArrayFrom<T>` (a real instantiation expression), which requires an actual value import -- `import type` has no runtime binding to reference.
 import {
 	bigint,
+	integer,
 	interval,
 	jsonArrayFrom,
 	schema,
@@ -43,6 +44,40 @@ const comments = table(app, "comments", {
 
 type Comments = typeof comments;
 
+// Fixtures for the flat-shape branch-fold table (widen-set-op-execute,
+// task 1.2) -- a declared numeric-mode difference (row 2), a declared
+// nullability difference in each direction (rows 3a/3b, #944), and the
+// join/no-join pairing over `comments.body` rows 4a/4b/5 reuse.
+const numericLeft = table(app, "wso_numeric_left", {
+	id: uuid().primaryKey(),
+	num: integer().notNull(),
+});
+type NumericLeft = typeof numericLeft;
+const numericRight = table(app, "wso_numeric_right", {
+	id: uuid().primaryKey(),
+	num: bigint({ mode: "bigint" }).notNull(),
+});
+type NumericRight = typeof numericRight;
+
+// Whole-table (not object-projection) on purpose, rows 3a/3b: the old
+// fallback's blanket object-projection null-widening would otherwise
+// make 3b's own row coincidentally match the new fold's answer for the
+// wrong reason (always-null, not "read the right branch") -- a
+// whole-table branch's `SelectResult` reads its OWN table's declared
+// `notNull` regardless of tracking, so only the real fold reads the
+// RIGHT branch's own declared nullability, making 3b genuinely red
+// against the old, left-only fallback (#944).
+const flagTableNotNull = table(app, "wso_flag_table_not_null", {
+	id: uuid().primaryKey(),
+	flag: text().notNull(),
+});
+type FlagTableNotNull = typeof flagTableNotNull;
+const flagTableNullable = table(app, "wso_flag_table_nullable", {
+	id: uuid().primaryKey(),
+	flag: text(),
+});
+type FlagTableNullable = typeof flagTableNullable;
+
 /**
  * A type-only handle on `Db["execute"]`'s own generic signature -- never
  * assigned, never called at runtime (only ever used inside `typeof
@@ -61,6 +96,19 @@ declare const dbExecute: Db["execute"];
 type ExecuteRows<TStatement extends CompileInput> = Awaited<
 	ReturnType<typeof dbExecute<TStatement>>
 >;
+
+/**
+ * A type-only handle on `Db["select"]`'s own chain member (widen-set-
+ * op-execute, task 1.2, row 7) -- the same instantiation-expression
+ * technique as {@link dbExecute}, chained: `typeof dbSelect<P>` fixes the
+ * projection, `.union<TOther, TOtherProjection>` on the resulting type
+ * fixes the other branch's own resolved row without ever constructing a
+ * real value (nothing here is called at runtime; `declare` only works at
+ * module scope, not inside a test body, hence hoisted here).
+ */
+declare const dbSelect: Db["select"];
+declare const chainLeftPosts: ReturnType<typeof dbSelect<Posts>>;
+declare const chainRightPosts: ReturnType<typeof dbSelect<Posts>>;
 
 describe("Db.execute's resolved row type (task 4.11)", () => {
 	it("a whole-table select resolves the declared column types exactly (bigint mode, IntervalValue, notNull) -- exact match, not loose", () => {
@@ -169,6 +217,124 @@ describe("Db.execute's resolved row type for a core-built set operation (task 3.
 		type Stage = InsertFinal<Posts>;
 		expectTypeOf<ExecuteRows<Stage>>().toEqualTypeOf<
 			ReadonlyArray<SelectResult<Posts>>
+		>();
+	});
+});
+
+/**
+ * The flat-shape branch-fold table (widen-set-op-execute, task 1.2):
+ * `ExecuteResult`'s `SetOpStage` arm now carries both branches' own stage
+ * types (task 1.1), so a core-built set operation resolves each branch's
+ * OWN row through {@link SelectResult} -- its own left-joined tracking
+ * included -- before folding the two through `SetOpResult`, the same
+ * fold `@hejbro/query`'s chain surface already applies to its own two
+ * RESOLVED row types. Nested branches and the six combinators are task
+ * 1.3's own table (every cell below builds a `SetOpStage<P, L, R>`
+ * directly, by hand -- which of the six runtime combinators would have
+ * produced that exact type is not this table's own question, task 1.1's
+ * type test already covers it).
+ */
+describe("ExecuteResult folds both branches for a core-built set operation, flat shapes (widen-set-op-execute, task 1.2)", () => {
+	it("1: whole-table both sides, identically declared -- the row is unchanged", () => {
+		type LeftBranch = SelectLimited<Posts, never>;
+		type RightBranch = SelectLimited<Posts, never>;
+		type Stage = SetOpStage<Posts, LeftBranch, RightBranch>;
+
+		expectTypeOf<ExecuteRows<Stage>>().toEqualTypeOf<
+			ReadonlyArray<SelectResult<Posts>>
+		>();
+		expectTypeOf<ExecuteRows<Stage>[number]>().toEqualTypeOf<{
+			readonly id: string;
+			readonly status: string;
+			readonly amount: bigint | null;
+			readonly duration: IntervalValue | null;
+		}>();
+	});
+
+	it("2: an object projection with one column declared differently per side (numeric mode) -- the union of both declared read types", () => {
+		type LeftProjection = { readonly num: NumericLeft["num"] };
+		type RightProjection = { readonly num: NumericRight["num"] };
+		type LeftBranch = SelectLimited<LeftProjection, never>;
+		type RightBranch = SelectLimited<RightProjection, never>;
+		type Stage = SetOpStage<LeftProjection, LeftBranch, RightBranch>;
+		type Row = ExecuteRows<Stage>[number];
+
+		expectTypeOf<Row>().toEqualTypeOf<{ readonly num: number | bigint }>();
+	});
+
+	it("3a: a nullable LEFT column against a notNull RIGHT one -- nullable", () => {
+		type LeftBranch = SelectLimited<FlagTableNullable, never>;
+		type RightBranch = SelectLimited<FlagTableNotNull, never>;
+		type Stage = SetOpStage<FlagTableNullable, LeftBranch, RightBranch>;
+		type Row = ExecuteRows<Stage>[number];
+
+		expectTypeOf<Row>().toEqualTypeOf<{
+			readonly id: string;
+			readonly flag: string | null;
+		}>();
+	});
+
+	it("3b: a notNull LEFT column against a nullable RIGHT one -- nullable too (#944: the fold must read the right branch's own declared type, not only the left's -- whole-table on purpose, see the fixture's own comment)", () => {
+		type LeftBranch = SelectLimited<FlagTableNotNull, never>;
+		type RightBranch = SelectLimited<FlagTableNullable, never>;
+		type Stage = SetOpStage<FlagTableNotNull, LeftBranch, RightBranch>;
+		type Row = ExecuteRows<Stage>[number];
+
+		expectTypeOf<Row>().toEqualTypeOf<{
+			readonly id: string;
+			readonly flag: string | null;
+		}>();
+	});
+
+	it("4a: LEFT left-joins the projected table, RIGHT inner-joins it -- nullable", () => {
+		type Projection = { readonly body: Comments["body"] };
+		type LeftBranch = SelectLimited<Projection, Comments>;
+		type RightBranch = SelectLimited<Projection, never>;
+		type Stage = SetOpStage<Projection, LeftBranch, RightBranch>;
+		type Row = ExecuteRows<Stage>[number];
+
+		expectTypeOf<Row>().toEqualTypeOf<{ readonly body: string | null }>();
+	});
+
+	it("4b: LEFT inner-joins the projected table, RIGHT left-joins it -- nullable too, never the reverse", () => {
+		type Projection = { readonly body: Comments["body"] };
+		type LeftBranch = SelectLimited<Projection, never>;
+		type RightBranch = SelectLimited<Projection, Comments>;
+		type Stage = SetOpStage<Projection, LeftBranch, RightBranch>;
+		type Row = ExecuteRows<Stage>[number];
+
+		expectTypeOf<Row>().toEqualTypeOf<{ readonly body: string | null }>();
+	});
+
+	it("5: neither branch joins anything -- a notNull object-projection column is NOT widened to null (the core-built carve-out's exact defect)", () => {
+		type Projection = { readonly body: Comments["body"] };
+		type LeftBranch = SelectLimited<Projection, never>;
+		type RightBranch = SelectLimited<Projection, never>;
+		type Stage = SetOpStage<Projection, LeftBranch, RightBranch>;
+		type Row = ExecuteRows<Stage>[number];
+
+		expectTypeOf<Row>().toEqualTypeOf<{ readonly body: string }>();
+	});
+
+	// 6: a hand-annotated SetOpStage<P> (today's fallback) is already
+	// covered above ("task 3.1, #551" and "task 4.2, review repair") and
+	// below ("db.execute infers the left-joined set…") -- unchanged, not
+	// re-asserted here.
+
+	it("7: the same two branches combined through the chain surface resolve the identical row type (delta scenario: 'the same row the chain surface reads back for the same two branches')", () => {
+		type CoreStage = SetOpStage<
+			Posts,
+			SelectLimited<Posts, never>,
+			SelectLimited<Posts, never>
+		>;
+
+		type ChainOtherRow = Awaited<typeof chainRightPosts>[number];
+		type ChainCombined = ReturnType<
+			typeof chainLeftPosts.union<ChainOtherRow, Posts>
+		>;
+
+		expectTypeOf<ExecuteRows<CoreStage>>().toEqualTypeOf<
+			Awaited<ChainCombined>
 		>();
 	});
 });

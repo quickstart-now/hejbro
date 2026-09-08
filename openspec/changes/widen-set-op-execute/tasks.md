@@ -17,7 +17,7 @@ goes back to the planner, not into the diff.
 
 ## 1. The core-built set operation types its union
 
-- [ ] 1.1 (~9m) **[design]** `SetOpStage` carries its branches. Settles
+- [x] 1.1 (~9m) **[design]** `SetOpStage` carries its branches. Settles
       the parameter order and defaults (`SetOpStage<TProjection,
       TLeftStage = unknown, TRightStage = unknown>`) and that
       `orderBy`/`limit` forward both. Red: `packages/core/test/query/
@@ -28,7 +28,7 @@ goes back to the planner, not into the diff.
       `SetOpStage<P>` still assigns, and that a mismatched key set still
       fails (`@ts-expect-error`, unchanged). Files: `select.ts`, tests.
 
-- [ ] 1.2 (~8m) `ExecuteResult` folds the branches, flat shapes. Red: the
+- [x] 1.2 (~8m) `ExecuteResult` folds the branches, flat shapes. Red: the
       query type test — a table over {whole-table both sides (unchanged
       row); object projections with one column declared differently per
       side (union); a `notNull` column against a nullable one, in BOTH
