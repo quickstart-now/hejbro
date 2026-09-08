@@ -157,3 +157,66 @@ per 412/R35 — then `git apply patch` to restore):
       branches' own resolved rows through `SetOpResult`, predating
       widen-set-op-execute).
 
+<a id="w4"></a>
+## W4 — 1.3: nested branches and every combinator -- gates, red evidence, closes W3's never-regression
+
+_2026-09-08T18:51Z_
+
+Task 1.3 (`ExecuteResult` folds nested branches, every combinator)
+implementation measured before commit, on top of 7069c40f
+(`widen-set-op-execute` worktree), uncommitted diff:
+`packages/query/src/db/db.ts` + `packages/query/test/db/execute-result-type.test.ts`
+(new describe block, 11 cases: 6 flat combinator guards + 5 nested/
+crossed cases).
+
+**Red, already present before this task's own diff** (the W3 measurement
+already reported it: a nested branch collapsed to `never` under 1.2's
+flat-only `SetOpBranchRow`, worse than the pre-1.1 fallback). Confirmed
+directly by adding the 5 nested-shape assertions and running
+`check-types` before touching `db.ts` further:
+```
+error TS2344: Type '{ readonly body: string | null; }' does not satisfy the constraint '"Expected: ..., Actual: never"'.
+  (left-nested pair 1, left-nested pair 2, three levels)
+error TS2344: Type '{ readonly id: string; readonly flag: string | null; }' does not satisfy the constraint '"Expected: ..., Actual: never"'.
+  (right-nested pair 1, right-nested pair 2)
+```
+The 6 flat combinator-guard cases did not go red (flat shapes already
+resolve correctly since task 1.2 — they exist to catch a FUTURE
+regression that special-cases one combinator by name, per the task's
+own mutation-testing framing, not to prove anything new here).
+
+**Implementation**: `SetOpBranchRow` gained a second arm —
+`TStage extends SetOpStage<infer P, infer L, infer R> ? SetOpExecuteRow<P, L, R> : never`
+— mutually recursive with `SetOpExecuteRow` (which already called
+`SetOpBranchRow` on both sides since task 1.2). No combinator-specific
+branching anywhere; the fold is purely structural over `SetOpStage<P,
+L, R>`'s own shape, which is why all six combinators and every nesting
+depth resolve through the one recursive pair.
+
+**Green**: `check-types` exit 0 after the arm was added; `vitest run`
+for `@hejbro/query`: 68 files / 1161 tests (was 1150 before this task's
++11 new cases), all passing.
+
+**Serial gates (brief order), on top of the diff described above:**
+- `TURBO_FORCE=1 pnpm check` — exit 0 (biome: 0 errors; 3 pre-existing
+  warnings in `scripts/check-modified-titles.mjs`, unrelated)
+- `TURBO_FORCE=1 pnpm check-types` — exit 0 (turbo: 19/19 tasks). A
+  background diagnostic tool briefly reported "Cannot find module
+  '@hejbro/core'" and several unrelated `any`/`never[]` errors on
+  `db.ts`/the test file during the `pnpm test` run (turbo's own
+  `test:types` phase rebuilds `dist`, and the watcher polled mid-
+  rebuild) — a targeted re-run immediately after
+  (`pnpm --filter @hejbro/query --filter @hejbro/core check-types`)
+  came back clean, exit 0, confirming the transient read.
+- `TURBO_FORCE=1 pnpm test` — exit 0 (turbo `test`: 19/19 — `@hejbro/query`
+  68/1161, `@hejbro/core` 108/2312+1 todo, `hejbro` 102/1635, all
+  green; turbo `test:types`: 2/2)
+- `pnpm check:crap` — exit 0 (0 violations, 53 at exactly CRAP 5,
+  README byte-identical)
+- `pnpm check:modified-titles` — exit 0 ("2 active change(s)")
+
+**Status**: the W3-flagged intermediate regression (a nested branch
+resolving to `never`, worse than the pre-1.1 left-only fallback) is
+closed as of this diff — every nested-shape assertion in the new
+describe block resolves the expected row, not `never`.
+
