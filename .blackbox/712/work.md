@@ -306,3 +306,19 @@ verbatim, exit 1, "verify: 1 of 5 checks failed"; #1037 confirmed open
 via `gh issue view` and its title matches the registration-gap
 framing.
 
+<a id="w6"></a>
+## W6 — W5 correction: seq_only+healthy keeps both lines in the final (Omitted:-only) state
+
+_2026-09-08T20:01Z_
+
+W5's boundary-cell sentence stated both that the redundant "nothing to
+infer" line for `seq_only` "now disappears" and that the dual-line
+case "keeps both lines" -- self-contradictory. Correction: the
+disappearance was measured under R15's own briefly-widened evidence
+(schema-qualified `Not inferred:` lines counted too), an intermediate
+state R16 retracted. Final, live-verified state (cfr2-pg, port 55810,
+`import --schema seq_only --schema healthy`): both lines print --
+`Not inferred: sequence "seq_only.s" -- ...` and `Not inferred: no
+table or enum to declare in schema "seq_only".` -- once evidence
+narrowed back to `Omitted:` lines only.
+

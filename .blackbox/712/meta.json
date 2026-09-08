@@ -233,6 +233,13 @@
         "R15",
         "R16"
       ]
+    },
+    {
+      "id": "W6",
+      "at": "2026-09-08T20:01Z",
+      "title": "W5 correction: seq_only+healthy keeps both lines in the final (Omitted:-only) state",
+      "pr": null,
+      "decisions": []
     }
   ],
   "prs": [
