@@ -157,7 +157,7 @@ const nothingDeclarableResult = (
 ): ImportResult => {
 	const error = hejbroError(
 		"import-nothing-declarable",
-		`hejbro import found nothing it could declare in schema(s) ${uncarriableSchemas.join(", ")}: each one held something this reading could not carry the name of (see the "Omitted" line(s) above). Next: follow the way out those lines name, then rerun \`hejbro import\`.`,
+		`hejbro import found nothing it could declare in schema(s) ${uncarriableSchemas.join(", ")}: each one held something whose name no declaration can carry (see the "Omitted" line(s) above). Next: follow the way out that line names (a rename in the database), then rerun \`hejbro import\`.`,
 	);
 	const diagnostic = fromHejbroError(error, FALLBACK_IDENTITY);
 	return {

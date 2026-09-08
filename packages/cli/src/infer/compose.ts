@@ -920,6 +920,7 @@ export const partitionForeignKeys = (
 					rootColumnIdentity: cause.rootColumnIdentity,
 					rootCause: cause.rootCause,
 					...rootEnumIdentityField(cause.rootEnumIdentity),
+					...rootNotInferredSqlTypeField(cause.rootNotInferredSqlType),
 				},
 			];
 		}

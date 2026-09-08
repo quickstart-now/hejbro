@@ -304,3 +304,172 @@ describe("partitionForeignKeys / D106 R6-B1", () => {
 		expect(result.tables[0]?.foreignKeys).toHaveLength(1);
 	});
 });
+
+/** A foreign key naming a specific column at either end, target column facts minimal (identity only matters to `partitionForeignKeys`). */
+const foreignKeyToColumn = (
+	name: string,
+	sourceColumns: ReadonlyArray<string>,
+	targetSchema: string,
+	targetTable: string,
+	targetColumnName: string,
+): InferredForeignKey => ({
+	name,
+	sourceColumns,
+	targetSchema,
+	targetTable,
+	targetColumns: [
+		{
+			sqlName: targetColumnName,
+			facts: {
+				schema: targetSchema,
+				table: targetTable,
+				name: targetColumnName,
+				sqlType: "uuid",
+				baseTypeName: "uuid",
+				isArray: false,
+				notNull: true,
+				catalogDefault: null,
+				identityKind: "",
+				generatedKind: "",
+				identityOptions: null,
+				isSerialOwned: false,
+				enumDeclaration: null,
+			},
+		},
+	],
+	onDelete: "a",
+	onUpdate: "a",
+});
+
+/**
+ * 712/R16 (D106 round 2, R2-N1): `omissionEntryFor`'s own
+ * `"generatedExpression"` branch mirrors `firstOffendingColumn`'s own
+ * symmetric field (`rootNotInferredSqlTypeField`) -- before this, a
+ * foreign-key end bound to a generated column whose own root cause was
+ * `"notInferred"` lost `rootNotInferredSqlType` in transit, so
+ * `loss-report.ts`'s `generatedExpressionRootClause` fell through to
+ * its default (name-cause) branch. Input as wide as the claim: both
+ * ends a foreign key can bind through a generated column, plus the
+ * direct (no generated column) case as a regression control.
+ */
+describe("partitionForeignKeys / 712/R16 (D106 round 2, R2-N1): a generated-column end's own not-inferred root", () => {
+	it("target end: a foreign key referencing a generated column whose root is a not-inferred type carries the root's own sqlType", () => {
+		const genType = tableFacts("gen_type");
+		const ref = tableFacts("gen_type_ref", [
+			foreignKeyToColumn(
+				"gen_type_ref_ref_fkey",
+				["ref"],
+				"app",
+				"gen_type",
+				"pt_txt",
+			),
+		]);
+		const tables = [genType, ref];
+		const causes: ReadonlyMap<string, ColumnOmissionCause> = new Map([
+			[
+				"app.gen_type.pt_txt",
+				{
+					cause: "generatedExpression",
+					rootColumnIdentity: "app.gen_type.pt",
+					rootCause: "notInferred",
+					rootNotInferredSqlType: "point",
+				},
+			],
+		]);
+
+		const result = partitionForeignKeys(
+			tables,
+			survivingTableIdentitiesFor(tables),
+			causes,
+		);
+
+		expect(result.omittedForeignKeysByColumn).toEqual([
+			{
+				schema: "app",
+				table: "gen_type_ref",
+				name: "gen_type_ref_ref_fkey",
+				columnIdentity: "app.gen_type.pt_txt",
+				end: "target",
+				cause: "generatedExpression",
+				rootColumnIdentity: "app.gen_type.pt",
+				rootCause: "notInferred",
+				rootNotInferredSqlType: "point",
+			},
+		]);
+	});
+
+	it("source end: a foreign key whose own source column is a generated column with a not-inferred root carries the root's own sqlType too", () => {
+		const gen = tableFacts("t", [
+			foreignKeyToColumn("t_pt_txt_fkey", ["pt_txt"], "app", "other", "id"),
+		]);
+		const other = tableFacts("other");
+		const tables = [gen, other];
+		const causes: ReadonlyMap<string, ColumnOmissionCause> = new Map([
+			[
+				"app.t.pt_txt",
+				{
+					cause: "generatedExpression",
+					rootColumnIdentity: "app.t.pt",
+					rootCause: "notInferred",
+					rootNotInferredSqlType: "point",
+				},
+			],
+		]);
+
+		const result = partitionForeignKeys(
+			tables,
+			survivingTableIdentitiesFor(tables),
+			causes,
+		);
+
+		expect(result.omittedForeignKeysByColumn).toEqual([
+			{
+				schema: "app",
+				table: "t",
+				name: "t_pt_txt_fkey",
+				columnIdentity: "app.t.pt_txt",
+				end: "source",
+				cause: "generatedExpression",
+				rootColumnIdentity: "app.t.pt",
+				rootCause: "notInferred",
+				rootNotInferredSqlType: "point",
+			},
+		]);
+	});
+
+	/** Regression control: a first-order type cause (no generated column involved) already carried its own `sqlType` before this fix, and must go on doing so. */
+	it("regression: a foreign key directly into a not-inferred-type column (no generated column involved) already carries its own sqlType", () => {
+		const moneyTable = tableFacts("money_table");
+		const ref = tableFacts("money_ref", [
+			foreignKeyToColumn(
+				"money_ref_m_fkey",
+				["m"],
+				"app",
+				"money_table",
+				"mny",
+			),
+		]);
+		const tables = [moneyTable, ref];
+		const causes: ReadonlyMap<string, ColumnOmissionCause> = new Map([
+			["app.money_table.mny", { cause: "notInferred", sqlType: "money" }],
+		]);
+
+		const result = partitionForeignKeys(
+			tables,
+			survivingTableIdentitiesFor(tables),
+			causes,
+		);
+
+		expect(result.omittedForeignKeysByColumn).toEqual([
+			{
+				schema: "app",
+				table: "money_ref",
+				name: "money_ref_m_fkey",
+				columnIdentity: "app.money_table.mny",
+				end: "target",
+				cause: "notInferred",
+				notInferredSqlType: "money",
+			},
+		]);
+	});
+});

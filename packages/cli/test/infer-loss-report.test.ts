@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { Catalog } from "../src/check/catalog";
 import type {
 	LossReportFacts,
+	OmittedForeignKeyColumn,
+	PrimaryKeyNameApproximation,
 	UndeclarableNameColumn,
 } from "../src/infer/loss-report";
 import {
@@ -193,35 +195,66 @@ describe("buildLossReport / 1.7", () => {
 	});
 
 	/**
-	 * N8(b) (D106 review, cfr1-planner's own measurement): the pulled
-	 * contract itself carries neither the catalog nor the derived
-	 * primary-key name (`contract/tables.ts` reads no `primaryKey` fact
-	 * at all) -- but the bundle's other outputs (migration SQL,
-	 * `schema.json`) come from the starter declaration and do carry the
-	 * derived name, so the line names that too rather than leaving
-	 * "carries neither name" to be misread as the whole bundle.
+	 * 712/R16 (D106 round 2, R2-B1, lead ruling): a primary-key
+	 * approximation line names the way out it has -- `import`'s own line
+	 * keeps its whole parenthetical (`check` will report the declared
+	 * name as missing until the rename), unchanged (regression pins);
+	 * `pull` runs no `check`, so its own line stops at the rename, never
+	 * promising a `check` consequence pull's own consumer will never
+	 * see. Input as wide as the claim: {derived name free, derived name
+	 * collides} x {import, pull}.
 	 */
-	it("pull: the primary-key-derived-name approximation names the contract's own gap and what the bundle still carries", () => {
+	const orderPkFree: PrimaryKeyNameApproximation = {
+		schema: "app",
+		table: "orders",
+		catalogName: "pk_orders",
+		derivedName: "orders_pkey",
+		derivedNameCollides: false,
+	};
+	const orderPkColliding: PrimaryKeyNameApproximation = {
+		...orderPkFree,
+		derivedNameCollides: true,
+	};
+
+	it.each<[string, "import" | "pull", PrimaryKeyNameApproximation, string]>([
+		[
+			"import, derived name free (regression)",
+			"import",
+			orderPkFree,
+			'Approximated: the primary key "app.orders.pk_orders" is declared under the derived name "orders_pkey" instead -- the DSL derives every primary-key name, so `generate`/`check` will name this constraint differently from the database. Rename the constraint to "orders_pkey" in the database; until you do, `check` reports the declared "orders_pkey" as missing on every run and lists "pk_orders" in its unmanaged-index inventory.',
+		],
+		[
+			"import, derived name collides (regression)",
+			"import",
+			orderPkColliding,
+			'Approximated: the primary key "app.orders.pk_orders" is declared under the derived name "orders_pkey" instead -- the DSL derives every primary-key name, so `generate`/`check` will name this constraint differently from the database. Rename the constraint to "orders_pkey" in the database; that name is already taken by another relation in "app", so rename that one first. Until you do, `check` reports the declared "orders_pkey" as missing on every run and lists "pk_orders" in its unmanaged-index inventory.',
+		],
+		[
+			"pull, derived name free",
+			"pull",
+			orderPkFree,
+			'Approximated: the primary key "app.orders.pk_orders" is declared under the derived name "orders_pkey" instead -- the DSL derives every primary-key name; the pulled contract carries neither name, since it names no primary key at all -- the bundle\'s migration SQL and `schema.json` do carry "orders_pkey". Rename the constraint to "orders_pkey" in the database.',
+		],
+		[
+			"pull, derived name collides",
+			"pull",
+			orderPkColliding,
+			'Approximated: the primary key "app.orders.pk_orders" is declared under the derived name "orders_pkey" instead -- the DSL derives every primary-key name; the pulled contract carries neither name, since it names no primary key at all -- the bundle\'s migration SQL and `schema.json` do carry "orders_pkey". Rename the constraint to "orders_pkey" in the database -- that name is already taken by another relation in "app", so rename that one first.',
+		],
+	])("%s", (_label, command, approximation, expected) => {
 		const report = buildLossReport({
-			...emptyFacts("pull"),
-			primaryKeyNameApproximations: [
-				{
-					schema: "app",
-					table: "orders",
-					catalogName: "pk_orders",
-					derivedName: "orders_pkey",
-					derivedNameCollides: false,
-				},
-			],
+			...emptyFacts(command),
+			primaryKeyNameApproximations: [approximation],
 		});
 
 		const line = report.find(
 			(entry) =>
 				entry.startsWith("Approximated:") && entry.includes("pk_orders"),
 		);
-		expect(line).toBe(
-			'Approximated: the primary key "app.orders.pk_orders" is declared under the derived name "orders_pkey" instead -- the DSL derives every primary-key name; the pulled contract carries neither name, since it names no primary key at all -- the bundle\'s migration SQL and `schema.json` do carry "orders_pkey".',
-		);
+		expect(line).toBe(expected);
+		if (command !== "pull") {
+			return;
+		}
 		expect(line).not.toContain("generate");
 		expect(line).not.toContain("check");
 	});
@@ -782,6 +815,80 @@ describe("buildLossReport / 1.7", () => {
 });
 
 /**
+ * 712/R16 (D106 round 2, R2-N2): the omission band is several ordered
+ * lists, one per kind of object *and cause* -- witnessed here rather
+ * than assumed. A kind whose own name is inexpressible (the whole-
+ * object list) and the same kind bound to an omitted column elsewhere
+ * (the cascade list) are two separate lists in fixed order, never one
+ * list merged and re-sorted across both: an entry named to sort first
+ * by code point (`a_…`) in the cascade list still prints *after* an
+ * entry named to sort last (`z_…`) in the whole-object list, for both
+ * the index kind and the foreign-key kind. `approximationLines`/the
+ * omission band's own concatenation order (`buildLossReport`) is
+ * unchanged by this round -- only the requirement's own sentence was
+ * undercounting what the code already does.
+ */
+describe("buildLossReport / 712/R16 (D106 round 2, R2-N2): the omission band is ordered by kind and cause, not merged", () => {
+	it("the foreign-key kind's own whole-object list prints entirely before its cascade list, regardless of name", () => {
+		const report = buildLossReport({
+			...emptyFacts("import"),
+			omittedForeignKeys: [
+				{
+					schema: "app",
+					table: "orders",
+					name: "z_fkey",
+					targetKind: "table",
+					target: "app.Widgets",
+				},
+			],
+			omittedForeignKeysByColumn: [
+				{
+					schema: "app",
+					table: "orders",
+					name: "a_fkey",
+					columnIdentity: "app.orders.UserId",
+					end: "source",
+					cause: "name",
+				},
+			],
+		});
+
+		const fkLines = report.filter((line) =>
+			line.startsWith("Omitted: foreign key"),
+		);
+		expect(fkLines).toHaveLength(2);
+		expect(fkLines[0]).toContain("z_fkey");
+		expect(fkLines[1]).toContain("a_fkey");
+	});
+
+	it("the index kind's own whole-object list prints entirely before its cascade list, regardless of name", () => {
+		const report = buildLossReport({
+			...emptyFacts("import"),
+			omittedIndexes: [
+				{ schema: "app", table: "widgets", sqlName: "z_idx", kind: "index" },
+			],
+			omittedIndexesAtColumn: [
+				{
+					schema: "app",
+					table: "widgets",
+					sqlName: "a_idx",
+					columnIdentity: "app.widgets.UserId",
+					cause: "name",
+					axis: "key",
+				},
+			],
+		});
+
+		const indexLines = report.filter((line) =>
+			line.startsWith("Omitted: index"),
+		);
+		expect(indexLines).toHaveLength(2);
+		expect(indexLines[0]).toContain("z_idx");
+		expect(indexLines[1]).toContain("a_idx");
+	});
+});
+
+/**
  * #874: `buildLossReport`'s per-instance lines must order by code point,
  * never by the running process's own collation -- a normalization pair
  * (NFC/NFD, canonically equivalent) is two different code-point
@@ -1232,6 +1339,64 @@ describe("buildLossReport / 712/R8: the reason follows the cause, 712/R9: one li
 			'Omitted: foreign key "app.ref.ref_label_fkey" -- it references column "app.t2.label", which this reading left out because its expression names column "app.t2.st", which this reading left out with the enum type "app.Status" that types it, so the key cannot be carried either. Rename the type in the database, then link the schema repository.',
 		);
 	});
+
+	/**
+	 * 712/R16 (D106 round 2, R2-N1): a generated-column end whose own root
+	 * cause is `"notInferred"` (a type no column builder expresses) earns
+	 * the type-cause wording -- `generatedExpressionRootClause`'s own
+	 * `notInferred` branch, never the name-cause fallback the missing
+	 * `rootNotInferredSqlType` field used to force it into. No `Next:`
+	 * tail follows (R13: this cause has no exit today), for either end or
+	 * command.
+	 */
+	it.each<[string, "import" | "pull", OmittedForeignKeyColumn["end"], string]>([
+		[
+			"H11: import, target end",
+			"import",
+			"target",
+			'Omitted: foreign key "app.gen_type_ref.gen_type_ref_ref_fkey" -- it references column "app.gen_type.pt_txt", which this reading left out because its expression names column "app.gen_type.pt", which this reading did not infer, because no column builder expresses its type "point", so the key cannot be declared either.',
+		],
+		[
+			"H12: pull, target end",
+			"pull",
+			"target",
+			'Omitted: foreign key "app.gen_type_ref.gen_type_ref_ref_fkey" -- it references column "app.gen_type.pt_txt", which this reading left out because its expression names column "app.gen_type.pt", which this reading did not infer, because no column builder expresses its type "point", so the key cannot be carried either.',
+		],
+		[
+			"H13: import, source end",
+			"import",
+			"source",
+			'Omitted: foreign key "app.gen_type_ref.gen_type_ref_ref_fkey" -- it is declared on column "app.gen_type.pt_txt", which this reading left out because its expression names column "app.gen_type.pt", which this reading did not infer, because no column builder expresses its type "point", so the key cannot be declared either.',
+		],
+		[
+			"H14: pull, source end",
+			"pull",
+			"source",
+			'Omitted: foreign key "app.gen_type_ref.gen_type_ref_ref_fkey" -- it is declared on column "app.gen_type.pt_txt", which this reading left out because its expression names column "app.gen_type.pt", which this reading did not infer, because no column builder expresses its type "point", so the key cannot be carried either.',
+		],
+	])(
+		"%s: generatedExpression cause, root notInferred -- the type-cause wording, no Next: tail",
+		(_label, command, end, expected) => {
+			const report = buildLossReport({
+				...emptyFacts(command),
+				omittedForeignKeysByColumn: [
+					{
+						schema: "app",
+						table: "gen_type_ref",
+						name: "gen_type_ref_ref_fkey",
+						columnIdentity: "app.gen_type.pt_txt",
+						end,
+						cause: "generatedExpression",
+						rootColumnIdentity: "app.gen_type.pt",
+						rootCause: "notInferred",
+						rootNotInferredSqlType: "point",
+					},
+				],
+			});
+
+			expect(report).toContain(expected);
+		},
+	);
 });
 
 /**

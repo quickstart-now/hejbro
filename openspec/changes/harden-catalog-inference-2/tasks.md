@@ -192,7 +192,7 @@ exit codes and the SHA. No hand edits under `.blackbox/`.
       which refusal each case gets, under requirement 1's "never stop
       the reading").
 
-- [ ] 3.2 (~7m) R2-B1 and R2-N1 — lines say the way out they have.
+- [x] 3.2 (~7m) R2-B1 and R2-N1 — lines say the way out they have.
       Red: `pull`'s primary-key approximation line names the way out
       (rename the constraint in the database to the derived name)
       without the `check` clause, and the delta's parenthetical scopes
@@ -203,7 +203,11 @@ exit codes and the SHA. No hand edits under `.blackbox/`.
       states Y's own cause — the type cause wording, not the name
       cause — for both commands. R2-N2: the delta sentence says the
       omission band is several ordered lists, one per kind of object
-      **and cause**. Files: `loss-report.ts`, tests, the delta.
+      **and cause**. Files: `loss-report.ts`, `compose.ts` (lead-approved,
+      one field only: `omissionEntryFor`'s `"generatedExpression"` branch
+      gains `...rootNotInferredSqlTypeField(cause.rootNotInferredSqlType)`,
+      mirroring `firstOffendingColumn`'s own symmetric field), tests, the
+      delta.
 
 - [ ] 3.3 (~5m) Reference, changeset, ledger. The brownfield reference
       names that a domain and a composite type have no line of their

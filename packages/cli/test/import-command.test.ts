@@ -694,7 +694,7 @@ describe("runImport / 712 D106 R2 3.1 (R2-B2, R2-N3)", () => {
 	const fnOnlyNotInferredLine = "Not inferred: 1 function(s) not inferred.";
 
 	const nothingDeclarableMessage = (schemas: string): string =>
-		`hejbro import found nothing it could declare in schema(s) ${schemas}: each one held something this reading could not carry the name of (see the "Omitted" line(s) above). Next: follow the way out those lines name, then rerun \`hejbro import\`.`;
+		`hejbro import found nothing it could declare in schema(s) ${schemas}: each one held something whose name no declaration can carry (see the "Omitted" line(s) above). Next: follow the way out that line names (a rename in the database), then rerun \`hejbro import\`.`;
 
 	const nothingToInferMessage = (schemas: string): string =>
 		`hejbro import found no table or enum to declare in schema(s) ${schemas}. Next: confirm the schema name(s) are correct and that they hold a table or enum type to declare, then rerun \`hejbro import\`.`;

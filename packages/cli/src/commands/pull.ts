@@ -232,7 +232,7 @@ const nothingDeclarableResult = (
 ): PullResult => {
 	const error = hejbroError(
 		"pull-nothing-declarable",
-		`hejbro pull found nothing it could carry into the contract in schema(s) ${uncarriableSchemas.join(", ")}: each one held something this reading could not carry the name of (see the "Omitted" line(s) above). Next: follow the way out those lines name, then rerun \`hejbro pull\`.`,
+		`hejbro pull found nothing it could carry into the contract in schema(s) ${uncarriableSchemas.join(", ")}: each one held something whose name no declaration can carry (see the "Omitted" line(s) above). Next: follow the way out that line names (a rename in the database), then rerun \`hejbro pull\`.`,
 	);
 	const diagnostic = fromHejbroError(error, FALLBACK_IDENTITY);
 	return {

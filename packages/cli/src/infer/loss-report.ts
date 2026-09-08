@@ -619,6 +619,16 @@ const primaryKeyNameCollisionClause = (
 	return "; until you do,";
 };
 
+/** 712/R16 (D106 round 2, R2-B1): `pull`'s own sentence-ending mirror of {@link primaryKeyNameCollisionClause} -- no `check` consequence follows here (a pull consumer runs no `check`), so the collision fact ends its own sentence instead of continuing into one. */
+const primaryKeyNameCollisionClauseForPull = (
+	approximation: PrimaryKeyNameApproximation,
+): string => {
+	if (approximation.derivedNameCollides) {
+		return ` -- that name is already taken by another relation in "${approximation.schema}", so rename that one first.`;
+	}
+	return ".";
+};
+
 /** Unconditional (CI-G2-R1-06 Q4 follow-up, lead-approved): every reading carries default/check/generated/index-predicate expressions as raw SQL text, never the typed builders (`inArray`, `gte`, ...) a hand-written declaration would use -- there is no per-instance list to derive this from, the same shape as the "grants beyond their role name" line below it. */
 const EXPRESSION_APPROXIMATION_LINE =
 	"Approximated: every default, check, generated, and index-predicate expression is carried as raw SQL text, not the typed builders a hand-written declaration would use.";
@@ -641,6 +651,13 @@ const EXPRESSION_APPROXIMATION_LINE =
  * Both pull lines state only what the contract carries -- never a
  * promise about `generate`/`check`, commands a pull consumer never
  * runs.
+ *
+ * 712/R16 (D106 round 2, R2-B1, lead ruling): requirement 2's own
+ * sentence is universal over commands ("naming the name it dropped and
+ * the way out whole") -- `pull`'s line now names the way out it has
+ * (rename the constraint to the derived name), scoped short of the
+ * `check` parenthetical `import`'s own consumer runs `check`/`generate`
+ * to earn; the delta states this scoping explicitly.
  */
 const primaryKeyNameApproximationLineForImport = (
 	approximation: PrimaryKeyNameApproximation,
@@ -650,7 +667,7 @@ const primaryKeyNameApproximationLineForImport = (
 const primaryKeyNameApproximationLineForPull = (
 	approximation: PrimaryKeyNameApproximation,
 ): string =>
-	`Approximated: the primary key "${approximation.schema}.${approximation.table}.${approximation.catalogName}" is declared under the derived name "${approximation.derivedName}" instead -- the DSL derives every primary-key name; the pulled contract carries neither name, since it names no primary key at all -- the bundle's migration SQL and \`schema.json\` do carry "${approximation.derivedName}".`;
+	`Approximated: the primary key "${approximation.schema}.${approximation.table}.${approximation.catalogName}" is declared under the derived name "${approximation.derivedName}" instead -- the DSL derives every primary-key name; the pulled contract carries neither name, since it names no primary key at all -- the bundle's migration SQL and \`schema.json\` do carry "${approximation.derivedName}". Rename the constraint to "${approximation.derivedName}" in the database${primaryKeyNameCollisionClauseForPull(approximation)}`;
 
 const foreignKeyNameApproximationLineForImport = (
 	approximation: ForeignKeyNameApproximation,

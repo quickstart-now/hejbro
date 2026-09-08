@@ -208,10 +208,12 @@ sequence the column does not own is kept as a raw default, naming that
 sequence; a foreign key whose own catalog name D36 cannot carry is
 declared under the derived name, naming both; a primary key whose
 catalog name is not the derived one is declared under the derived
-name, naming the name it dropped and the way out whole (rename the
-constraint in the database to the derived name; keeping it leaves
-`check` reporting the declared name as missing on every run, beside
-its inventory line for the catalog's own name); and every default,
+name, naming the name it dropped and the way out: `import`'s line
+states it whole (rename the constraint in the database to the derived
+name; keeping it leaves `check` reporting the declared name as missing
+on every run, beside its inventory line for the catalog's own name),
+and `pull`'s line states the rename alone, since a pull consumer runs
+no `check` for the parenthetical to describe; and every default,
 check, generated, and index-predicate expression is carried as raw SQL
 text rather than as the typed builders a hand-written declaration
 would use — and the command that removes the loss:
@@ -240,7 +242,8 @@ inventory uses, shared, so two locales and an NFC/NFD pair print the
 same order; the report's own bands (what was guessed, what was not
 inferred, each approximation, each omission) keep the order stated
 here. The omission band is itself several ordered lists, one per kind
-of object it names, never one list merged across kinds.
+of object and cause it names, never one list merged across kinds or
+causes.
 
 #### Scenario: The report names the way out
 - **WHEN** `pull --db-url` completes
