@@ -489,7 +489,7 @@ describe("ExecuteResult folds nested branches and every combinator (widen-set-op
 	});
 });
 
-describe("the two corrected set-operation scenarios get their own observers (task 4.2, review repair)", () => {
+describe("a hand-written SetOpStage<...> annotation carries no branches (query-layer.md, 1.4)", () => {
 	// No red is available here -- ExecuteResult already resolves both
 	// forms via SelectResult<TProjection> (task 3.1); this pins the
 	// corrected delta sentences directly, spelled out concretely rather
@@ -504,7 +504,22 @@ describe("the two corrected set-operation scenarios get their own observers (tas
 	// the object-projection branch does (NestedOrExprResult widens with
 	// null only for the untracked/UntrackedJoins default, never for
 	// `never`, the fully-tracked-empty reading).
-	it("the whole-table form reads back identical to the same branch read alone (Scenario: A core-built set operation executed on a handle reads back as its left branch)", () => {
+	//
+	// Rework R1 (review round 1, F2): these two titles used to quote
+	// "A core-built set operation executed on a handle reads back as its
+	// left branch" and "An object projection widens where the join
+	// record is missing" -- both REMOVED from the delta spec (design.md
+	// Q4), so after archive those names exist nowhere and a reader takes
+	// them for live promises. What this describe block actually pins is
+	// query-layer.md's own still-live sentence (1.4): "A `SetOpStage<...>`
+	// written by hand as a type annotation carries no branches to
+	// resolve: it still reads as the left branch's declared row with
+	// joins untracked, so an object projection there widens with
+	// `null`." -- not a spec scenario (the ADDED requirement's own seven
+	// scenarios all describe a REAL two-branch fold; this fallback is
+	// deliberately outside that surface, design.md Q2's own compatibility
+	// promise, never promoted to a scenario per the lead's own R1 ruling).
+	it("whole-table: reads as the left branch's declared row, joins untracked", () => {
 		type Stage = SetOpStage<Posts>;
 		type BranchAlone = SelectLimited<Posts>;
 
@@ -519,7 +534,7 @@ describe("the two corrected set-operation scenarios get their own observers (tas
 		}>();
 	});
 
-	it("the object-projection form widens the left branch's declared-notNull key with null, where the join record is missing (Scenario: An object projection widens where the join record is missing)", () => {
+	it("object projection: widens with null, where the join record is missing", () => {
 		// posts.status is declared notNull -- chosen deliberately (unlike
 		// this file's other object-projection fixtures, which use the
 		// already-nullable posts.amount) so the widening this scenario
