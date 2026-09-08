@@ -65,7 +65,10 @@ SHALL carry such a target in the snapshot it yields as a table it names
 but does not declare, so that neither consumer of one reading loses the
 reference: the starter declarations name it through a reference-only
 handle they do not export, and the contract names it through the
-relation and the foreign-key metadata. The contract SHALL NOT give that
+foreign-key metadata and `Relationships`, carrying no relation for it
+— a relation needs a `Tables` key for its own target, which schema-
+vendoring's own rule already withholds from a table this run never
+read. The contract SHALL NOT give that
 target an entry of its own among its tables — a table this run never
 read has no column set and no types the contract could state without
 guessing at them, and a contract that guesses is worse than one that
@@ -125,10 +128,11 @@ declared before the table that references it) keeps that order.
   declaration can carry
 - **THEN** the reading keeps that foreign key: the starter declaration
   references its target through a reference-only handle it does not
-  export, the pulled contract carries the reference both as a relation
-  and in its foreign-key metadata while giving that target no entry of
-  its own among its tables, the loss report says nothing about it, and a
-  following `baseline` emits the constraint with the rest — while no
+  export, the pulled contract carries the reference in its foreign-key
+  metadata and in `Relationships`, carrying no relation for it and
+  giving that target no entry of its own among its tables, the loss
+  report says nothing about it, and a following `baseline` emits the
+  constraint with the rest — while no
   starter file is written for the schema the run never named
 
 #### Scenario: No approximation is announced for an object omitted for its name
@@ -190,20 +194,21 @@ declared before the table that references it) keeps that order.
 ### Requirement: The loss is announced, with the way out
 Every command that uses a catalog reading SHALL print a loss report
 naming what was guessed (keys, modes, element nullability), what was
-not inferred, every approximation the reading made — a UNIQUE
-constraint is inferred as a unique index carrying the constraint's own
-name, so re-creating it emits `create unique index` rather than
-`add constraint … unique`; a `nextval` default on a sequence the column
-does not own is kept as a raw default, naming that sequence;
-expressions are carried as raw SQL text rather than as the typed
-builders a hand-written declaration would use; a foreign key whose own
-catalog name D36 cannot carry is declared under the derived name,
-naming both; a primary key whose catalog name is not the derived one is
-declared under the derived name, naming the name it dropped and the way
-out whole (rename the constraint in the database to the derived name;
-keeping it leaves `check` reporting the declared name as missing on
-every run, beside its inventory line for the catalog's own name) — and
-the command that removes the loss:
+not inferred, every approximation the reading made, in the order
+printed — a UNIQUE constraint is inferred as a unique index carrying
+the constraint's own name, so re-creating it emits `create unique
+index` rather than `add constraint … unique`; a `nextval` default on a
+sequence the column does not own is kept as a raw default, naming that
+sequence; a foreign key whose own catalog name D36 cannot carry is
+declared under the derived name, naming both; a primary key whose
+catalog name is not the derived one is declared under the derived
+name, naming the name it dropped and the way out whole (rename the
+constraint in the database to the derived name; keeping it leaves
+`check` reporting the declared name as missing on every run, beside
+its inventory line for the catalog's own name); and every default,
+check, generated, and index-predicate expression is carried as raw SQL
+text rather than as the typed builders a hand-written declaration
+would use — and the command that removes the loss:
 linking the schema repository for `pull`, hand-editing the starter
 declarations for `import`.
 

@@ -162,6 +162,121 @@ describe("buildLossReport / 1.7", () => {
 	});
 
 	/**
+	 * N8(b)-FK (D106 review, lead ruling on cfr1-planner's own
+	 * follow-up measurement): `generate`/`check` are import-only
+	 * commands, so a pull consumer gets the consumer-relevant fact
+	 * instead -- what the contract's own foreign-key metadata carries.
+	 */
+	it("pull: the foreign-key-derived-name approximation names what the contract carries, never a generate/check promise", () => {
+		const report = buildLossReport({
+			...emptyFacts("pull"),
+			foreignKeyNameApproximations: [
+				{
+					schema: "app",
+					table: "comments",
+					catalogName: "Comments_PostId_FK",
+					derivedName: "comments_post_id_fk",
+				},
+			],
+		});
+
+		const line = report.find(
+			(entry) =>
+				entry.startsWith("Approximated:") &&
+				entry.includes("Comments_PostId_FK"),
+		);
+		expect(line).toBe(
+			'Approximated: the foreign key "app.comments.Comments_PostId_FK" is declared under the derived name "comments_post_id_fk" instead -- its own catalog name is not a valid hejbro SQL identifier; the pulled contract carries "comments_post_id_fk" in its foreign-key metadata, never "Comments_PostId_FK".',
+		);
+		expect(line).not.toContain("generate");
+		expect(line).not.toContain("check");
+	});
+
+	/**
+	 * N8(b) (D106 review, cfr1-planner's own measurement): the pulled
+	 * contract itself carries neither the catalog nor the derived
+	 * primary-key name (`contract/tables.ts` reads no `primaryKey` fact
+	 * at all) -- but the bundle's other outputs (migration SQL,
+	 * `schema.json`) come from the starter declaration and do carry the
+	 * derived name, so the line names that too rather than leaving
+	 * "carries neither name" to be misread as the whole bundle.
+	 */
+	it("pull: the primary-key-derived-name approximation names the contract's own gap and what the bundle still carries", () => {
+		const report = buildLossReport({
+			...emptyFacts("pull"),
+			primaryKeyNameApproximations: [
+				{
+					schema: "app",
+					table: "orders",
+					catalogName: "pk_orders",
+					derivedName: "orders_pkey",
+					derivedNameCollides: false,
+				},
+			],
+		});
+
+		const line = report.find(
+			(entry) =>
+				entry.startsWith("Approximated:") && entry.includes("pk_orders"),
+		);
+		expect(line).toBe(
+			'Approximated: the primary key "app.orders.pk_orders" is declared under the derived name "orders_pkey" instead -- the DSL derives every primary-key name; the pulled contract carries neither name, since it names no primary key at all -- the bundle\'s migration SQL and `schema.json` do carry "orders_pkey".',
+		);
+		expect(line).not.toContain("generate");
+		expect(line).not.toContain("check");
+	});
+
+	/**
+	 * N5 (D106 review, cfr1-planner's own measurement): the Approximated
+	 * band's own inner order, all five kinds present at once so nothing
+	 * short of the real order could pass by omission. Measured, not
+	 * assumed: `approximationLines` (`infer/loss-report.ts`) builds
+	 * UNIQUE, then nextval, then foreign-key-derived-name, then
+	 * primary-key-derived-name, then the unconditional blanket
+	 * expressions line last -- the requirement's own prose used to list
+	 * "expressions" third (between nextval and foreign key), which this
+	 * pins as false; the spec's own enumeration order now matches this.
+	 */
+	it("N5: the Approximated band's own inner order is UNIQUE, nextval, foreign key, primary key, then the blanket expressions line", () => {
+		const report = buildLossReport({
+			...emptyFacts("import"),
+			uniqueIndexApproximations: [{ schema: "app", table: "t", name: "t_uq" }],
+			nextvalDefaults: [
+				{ schema: "app", table: "t", column: "n", sequence: "s" },
+			],
+			foreignKeyNameApproximations: [
+				{
+					schema: "app",
+					table: "t",
+					catalogName: "FK_Bad",
+					derivedName: "t_x_fkey",
+				},
+			],
+			primaryKeyNameApproximations: [
+				{
+					schema: "app",
+					table: "t",
+					catalogName: "pk_orders",
+					derivedName: "t_pkey",
+					derivedNameCollides: false,
+				},
+			],
+		});
+
+		const approximated = report.filter((line) =>
+			line.startsWith("Approximated:"),
+		);
+		expect(approximated).toHaveLength(5);
+		expect(approximated[0]).toContain('UNIQUE constraint "app.t.t_uq"');
+		expect(approximated[1]).toContain("nextval");
+		expect(approximated[2]).toContain('foreign key "app.t.FK_Bad"');
+		expect(approximated[3]).toContain('primary key "app.t.pk_orders"');
+		expect(approximated[4]).toBe(
+			"Approximated: every default, check, generated, and index-predicate expression is carried as raw SQL text, not the typed builders a hand-written declaration would use.",
+		);
+	});
+
+	/**
 	 * D106 R6-N1: the report's own measured table (evaluation.md, Round 6)
 	 * -- `_id`/`_created_at`/`_9lives` each round-trip through their own
 	 * key but fail D36 itself (`identifierRuleRejects`); `createdAt`/`a_`
@@ -381,7 +496,12 @@ describe("buildLossReport / 1.7", () => {
 			kind: "index",
 			facts: {
 				omittedIndexes: [
-					{ schema: "m", table: "kept", sqlName: "idx\nnewline" },
+					{
+						schema: "m",
+						table: "kept",
+						sqlName: "idx\nnewline",
+						kind: "index" as const,
+					},
 				],
 			},
 		},
@@ -548,7 +668,12 @@ describe("buildLossReport / 1.7", () => {
 		const importLine = buildLossReport({
 			...emptyFacts("import"),
 			omittedIndexes: [
-				{ schema: "app", table: "widgets", sqlName: "IX_Widgets" },
+				{
+					schema: "app",
+					table: "widgets",
+					sqlName: "IX_Widgets",
+					kind: "index",
+				},
 			],
 		}).find((entry) => entry.includes("IX_Widgets"));
 		expect(importLine).toBeDefined();
@@ -586,7 +711,12 @@ describe("buildLossReport / 1.7", () => {
 		const report = buildLossReport({
 			...emptyFacts("import"),
 			omittedIndexes: [
-				{ schema: "app", table: "widgets", sqlName: "IX_Widgets" },
+				{
+					schema: "app",
+					table: "widgets",
+					sqlName: "IX_Widgets",
+					kind: "index",
+				},
 			],
 			omittedChecks: [
 				{ schema: "app", table: "widgets", sqlName: "CK_Widgets" },
@@ -625,7 +755,12 @@ describe("buildLossReport / 1.7", () => {
 		const indexLine = buildLossReport({
 			...emptyFacts("import"),
 			omittedIndexes: [
-				{ schema: "app", table: "widgets", sqlName: "IX_Widgets" },
+				{
+					schema: "app",
+					table: "widgets",
+					sqlName: "IX_Widgets",
+					kind: "index",
+				},
 			],
 		}).find((entry) => entry.includes("IX_Widgets"));
 
@@ -668,12 +803,17 @@ describe("buildLossReport / #874: order by code point, not the locale", () => {
 		const report = buildLossReport({
 			...emptyFacts("import"),
 			omittedIndexes: [
-				{ schema: "app", table: "widgets", sqlName: "zeta_idx" },
-				{ schema: "app", table: "widgets", sqlName: nfcCafeIdx },
-				{ schema: "app", table: "widgets", sqlName: "ä_idx" },
-				{ schema: "app", table: "widgets", sqlName: "alpha_idx" },
-				{ schema: "app", table: "widgets", sqlName: "z_idx" },
-				{ schema: "app", table: "widgets", sqlName: nfdCafeIdx },
+				{ schema: "app", table: "widgets", sqlName: "zeta_idx", kind: "index" },
+				{ schema: "app", table: "widgets", sqlName: nfcCafeIdx, kind: "index" },
+				{ schema: "app", table: "widgets", sqlName: "ä_idx", kind: "index" },
+				{
+					schema: "app",
+					table: "widgets",
+					sqlName: "alpha_idx",
+					kind: "index",
+				},
+				{ schema: "app", table: "widgets", sqlName: "z_idx", kind: "index" },
+				{ schema: "app", table: "widgets", sqlName: nfdCafeIdx, kind: "index" },
 			],
 		});
 		return report
@@ -743,7 +883,7 @@ describe("buildLossReport / 712/R5: a foreign key at an omitted column names the
 		});
 
 		expect(report).toContain(
-			'Omitted: foreign key "app.orders.orders_userid_fkey" -- it is declared on column "app.orders.UserId", which this reading left out because no declaration can carry its name, so the key cannot be declared either. Next: rename the column in the database, then re-run `hejbro import`.',
+			'Omitted: foreign key "app.orders.orders_userid_fkey" -- it is declared on column "app.orders.UserId", which this reading left out because no declaration can carry its name, so the key cannot be declared either. Next: rename the column in the database, then re-run `hejbro import` into a fresh `--out` and merge the declaration, or declare it by hand.',
 		);
 	});
 
@@ -763,7 +903,7 @@ describe("buildLossReport / 712/R5: a foreign key at an omitted column names the
 		});
 
 		expect(report).toContain(
-			'Omitted: foreign key "app.audits.audits_user_ref_fkey" -- it references column "app.users.UserId", which this reading left out because no declaration can carry its name, so the key cannot be declared either. Next: rename the column in the database, then re-run `hejbro import`.',
+			'Omitted: foreign key "app.audits.audits_user_ref_fkey" -- it references column "app.users.UserId", which this reading left out because no declaration can carry its name, so the key cannot be declared either. Next: rename the column in the database, then re-run `hejbro import` into a fresh `--out` and merge the declaration, or declare it by hand.',
 		);
 	});
 
@@ -783,7 +923,7 @@ describe("buildLossReport / 712/R5: a foreign key at an omitted column names the
 		});
 
 		expect(report).toContain(
-			'Omitted: foreign key "app.orders.orders_userid_fkey" -- it is declared on column "app.orders.UserId", which this reading left out because no declaration can carry its name, so it cannot be carried in the contract, so the key cannot be carried either. Rename the column in the database, then link the schema repository.',
+			'Omitted: foreign key "app.orders.orders_userid_fkey" -- it is declared on column "app.orders.UserId", which this reading left out because no declaration can carry its name, so the key cannot be carried either. Rename the column in the database, then link the schema repository.',
 		);
 	});
 
@@ -803,7 +943,7 @@ describe("buildLossReport / 712/R5: a foreign key at an omitted column names the
 		});
 
 		expect(report).toContain(
-			'Omitted: foreign key "app.audits.audits_user_ref_fkey" -- it references column "app.users.UserId", which this reading left out because no declaration can carry its name, so it cannot be carried in the contract, so the key cannot be carried either. Rename the column in the database, then link the schema repository.',
+			'Omitted: foreign key "app.audits.audits_user_ref_fkey" -- it references column "app.users.UserId", which this reading left out because no declaration can carry its name, so the key cannot be carried either. Rename the column in the database, then link the schema repository.',
 		);
 	});
 
@@ -835,7 +975,7 @@ describe("buildLossReport / 712/R5: a foreign key at an omitted column names the
 		});
 
 		expect(report).toContain(
-			'Omitted: foreign key "app.orders.fk_widget" -- references table "app.Widgets", whose catalog name is not a valid hejbro SQL identifier, so no declaration can carry it. Next: rename the table in the database, then re-run `hejbro import`.',
+			'Omitted: foreign key "app.orders.fk_widget" -- references table "app.Widgets", whose catalog name is not a valid hejbro SQL identifier, so no declaration can carry it. Next: rename the table in the database, then re-run `hejbro import` into a fresh `--out` and merge the declaration, or declare it by hand.',
 		);
 	});
 });
@@ -864,7 +1004,7 @@ describe("buildLossReport / 712/R8: the reason follows the cause, 712/R9: one li
 		});
 
 		expect(report).toContain(
-			'Omitted: foreign key "app.orders.orders_status_fkey" -- it is declared on column "app.orders.status", which this reading left out with the enum type "app.Status" that types it, so the key cannot be declared either. Next: rename the type in the database, then re-run `hejbro import`.',
+			'Omitted: foreign key "app.orders.orders_status_fkey" -- it is declared on column "app.orders.status", which this reading left out with the enum type "app.Status" that types it, so the key cannot be declared either. Next: rename the type in the database, then re-run `hejbro import` into a fresh `--out` and merge the declaration, or declare it by hand.',
 		);
 	});
 
@@ -885,7 +1025,7 @@ describe("buildLossReport / 712/R8: the reason follows the cause, 712/R9: one li
 		});
 
 		expect(report).toContain(
-			'Omitted: foreign key "app.orders.orders_status_fkey" -- it references column "app.status_catalog.value", which this reading left out with the enum type "app.Status" that types it, so the key cannot be declared either. Next: rename the type in the database, then re-run `hejbro import`.',
+			'Omitted: foreign key "app.orders.orders_status_fkey" -- it references column "app.status_catalog.value", which this reading left out with the enum type "app.Status" that types it, so the key cannot be declared either. Next: rename the type in the database, then re-run `hejbro import` into a fresh `--out` and merge the declaration, or declare it by hand.',
 		);
 	});
 
@@ -939,7 +1079,7 @@ describe("buildLossReport / 712/R8: the reason follows the cause, 712/R9: one li
 		});
 
 		expect(report).toContain(
-			'Omitted: foreign key "app.orders.orders_userid_fkey" -- it is declared on column "app.orders.UserId", which this reading left out because no declaration can carry its name, so the key cannot be declared either. Next: rename the column in the database, then re-run `hejbro import`.',
+			'Omitted: foreign key "app.orders.orders_userid_fkey" -- it is declared on column "app.orders.UserId", which this reading left out because no declaration can carry its name, so the key cannot be declared either. Next: rename the column in the database, then re-run `hejbro import` into a fresh `--out` and merge the declaration, or declare it by hand.',
 		);
 	});
 
@@ -999,7 +1139,7 @@ describe("buildLossReport / 712/R8: the reason follows the cause, 712/R9: one li
 			line.includes('foreign key "app.orders.orders_status_fkey"'),
 		);
 		expect(fkLines).toEqual([
-			'Omitted: foreign key "app.orders.orders_status_fkey" -- it is declared on column "app.orders.UserId", which this reading left out because no declaration can carry its name, so the key cannot be declared either. Next: rename the column in the database, then re-run `hejbro import`.',
+			'Omitted: foreign key "app.orders.orders_status_fkey" -- it is declared on column "app.orders.UserId", which this reading left out because no declaration can carry its name, so the key cannot be declared either. Next: rename the column in the database, then re-run `hejbro import` into a fresh `--out` and merge the declaration, or declare it by hand.',
 		]);
 	});
 
@@ -1021,7 +1161,7 @@ describe("buildLossReport / 712/R8: the reason follows the cause, 712/R9: one li
 		});
 
 		expect(report).toContain(
-			'Omitted: foreign key "app.ref.ref_total_fkey" -- it references column "app.t.total", which this reading left out because its expression names column "app.t.Bad Name", whose own name no declaration can carry, so the key cannot be declared either. Next: rename the column in the database, then re-run `hejbro import`.',
+			'Omitted: foreign key "app.ref.ref_total_fkey" -- it references column "app.t.total", which this reading left out because its expression names column "app.t.Bad Name", whose own name no declaration can carry, so the key cannot be declared either. Next: rename the column in the database, then re-run `hejbro import` into a fresh `--out` and merge the declaration, or declare it by hand.',
 		);
 	});
 
@@ -1043,7 +1183,7 @@ describe("buildLossReport / 712/R8: the reason follows the cause, 712/R9: one li
 		});
 
 		expect(report).toContain(
-			'Omitted: foreign key "app.ref.ref_total_fkey" -- it references column "app.t.total", which this reading left out because its expression names column "app.t.Bad Name", whose own name no declaration can carry, so it cannot be carried in the contract, so the key cannot be carried either. Rename the column in the database, then link the schema repository.',
+			'Omitted: foreign key "app.ref.ref_total_fkey" -- it references column "app.t.total", which this reading left out because its expression names column "app.t.Bad Name", whose own name no declaration can carry, so the key cannot be carried either. Rename the column in the database, then link the schema repository.',
 		);
 	});
 
@@ -1066,7 +1206,7 @@ describe("buildLossReport / 712/R8: the reason follows the cause, 712/R9: one li
 		});
 
 		expect(report).toContain(
-			'Omitted: foreign key "app.ref.ref_label_fkey" -- it references column "app.t2.label", which this reading left out because its expression names column "app.t2.st", which this reading left out with the enum type "app.Status" that types it, so the key cannot be declared either. Next: rename the type in the database, then re-run `hejbro import`.',
+			'Omitted: foreign key "app.ref.ref_label_fkey" -- it references column "app.t2.label", which this reading left out because its expression names column "app.t2.st", which this reading left out with the enum type "app.Status" that types it, so the key cannot be declared either. Next: rename the type in the database, then re-run `hejbro import` into a fresh `--out` and merge the declaration, or declare it by hand.',
 		);
 	});
 
@@ -1117,7 +1257,7 @@ describe("buildLossReport / 712/R10 B#1: an index, check or unique constraint at
 			],
 		});
 		expect(report).toContain(
-			'Omitted: index "app.orders.orders_userid_idx" -- it is declared on column "app.orders.UserId", which this reading left out because no declaration can carry its name, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the column in the database, then re-run `hejbro import`.',
+			'Omitted: index "app.orders.orders_userid_idx" -- it is declared on column "app.orders.UserId", which this reading left out because no declaration can carry its name, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the column in the database, then re-run `hejbro import` into a fresh `--out` and merge the declaration, or declare it by hand.',
 		);
 	});
 
@@ -1156,7 +1296,7 @@ describe("buildLossReport / 712/R10 B#1: an index, check or unique constraint at
 			],
 		});
 		expect(report).toContain(
-			'Omitted: index "app.t2.t2_state2_idx" -- it is declared on column "app.t2.state2", which this reading left out with the enum type "app.Status" that types it, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the type in the database, then re-run `hejbro import`.',
+			'Omitted: index "app.t2.t2_state2_idx" -- it is declared on column "app.t2.state2", which this reading left out with the enum type "app.Status" that types it, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the type in the database, then re-run `hejbro import` into a fresh `--out` and merge the declaration, or declare it by hand.',
 		);
 	});
 
@@ -1195,7 +1335,7 @@ describe("buildLossReport / 712/R10 B#1: an index, check or unique constraint at
 			],
 		});
 		expect(report).toContain(
-			'Omitted: check constraint "app.orders.orders_userid_chk" -- its expression names column "app.orders.UserId", which this reading left out because no declaration can carry its name, so the check constraint cannot be declared either. `check` keeps listing the check constraint as unmanaged until that column and the check constraint are both declared. Next: rename the column in the database, then re-run `hejbro import`.',
+			'Omitted: check constraint "app.orders.orders_userid_chk" -- its expression names column "app.orders.UserId", which this reading left out because no declaration can carry its name, so the check constraint cannot be declared either. `check` keeps listing the check constraint as unmanaged until that column and the check constraint are both declared. Next: rename the column in the database, then re-run `hejbro import` into a fresh `--out` and merge the declaration, or declare it by hand.',
 		);
 	});
 
@@ -1234,7 +1374,7 @@ describe("buildLossReport / 712/R10 B#1: an index, check or unique constraint at
 			],
 		});
 		expect(report).toContain(
-			'Omitted: check constraint "app.t2.t2_state_chk" -- its expression names column "app.t2.state2", which this reading left out with the enum type "app.Status" that types it, so the check constraint cannot be declared either. `check` keeps listing the check constraint as unmanaged until that column and the check constraint are both declared. Next: rename the type in the database, then re-run `hejbro import`.',
+			'Omitted: check constraint "app.t2.t2_state_chk" -- its expression names column "app.t2.state2", which this reading left out with the enum type "app.Status" that types it, so the check constraint cannot be declared either. `check` keeps listing the check constraint as unmanaged until that column and the check constraint are both declared. Next: rename the type in the database, then re-run `hejbro import` into a fresh `--out` and merge the declaration, or declare it by hand.',
 		);
 	});
 
@@ -1273,7 +1413,7 @@ describe("buildLossReport / 712/R10 B#1: an index, check or unique constraint at
 			],
 		});
 		expect(report).toContain(
-			'Omitted: unique constraint "app.orders.orders_userid_key" -- it is declared on column "app.orders.UserId", which this reading left out because no declaration can carry its name, so the unique constraint cannot be declared either. `check` keeps listing the unique constraint as unmanaged until that column and the unique constraint are both declared. Next: rename the column in the database, then re-run `hejbro import`.',
+			'Omitted: unique constraint "app.orders.orders_userid_key" -- it is declared on column "app.orders.UserId", which this reading left out because no declaration can carry its name, so the unique constraint cannot be declared either. `check` keeps listing the unique constraint as unmanaged until that column and the unique constraint are both declared. Next: rename the column in the database, then re-run `hejbro import` into a fresh `--out` and merge the declaration, or declare it by hand.',
 		);
 	});
 
@@ -1312,7 +1452,7 @@ describe("buildLossReport / 712/R10 B#1: an index, check or unique constraint at
 			],
 		});
 		expect(report).toContain(
-			'Omitted: unique constraint "app.t3.t3_st_key" -- it is declared on column "app.t3.st", which this reading left out with the enum type "app.Status" that types it, so the unique constraint cannot be declared either. `check` keeps listing the unique constraint as unmanaged until that column and the unique constraint are both declared. Next: rename the type in the database, then re-run `hejbro import`.',
+			'Omitted: unique constraint "app.t3.t3_st_key" -- it is declared on column "app.t3.st", which this reading left out with the enum type "app.Status" that types it, so the unique constraint cannot be declared either. `check` keeps listing the unique constraint as unmanaged until that column and the unique constraint are both declared. Next: rename the type in the database, then re-run `hejbro import` into a fresh `--out` and merge the declaration, or declare it by hand.',
 		);
 	});
 
@@ -1351,7 +1491,7 @@ describe("buildLossReport / 712/R10 B#1: an index, check or unique constraint at
 			],
 		});
 		expect(report).toContain(
-			'Omitted: generated column "app.t.total" -- its expression names column "app.t.Bad Name", which this reading left out because no declaration can carry its name, so the generated column cannot be declared either. `check` keeps listing the generated column as unmanaged until that column and the generated column are both declared. Next: rename the column in the database, then re-run `hejbro import`.',
+			'Omitted: generated column "app.t.total" -- its expression names column "app.t.Bad Name", which this reading left out because no declaration can carry its name, so the generated column cannot be declared either. `check` keeps listing the generated column as unmanaged until that column and the generated column are both declared. Next: rename the column in the database, then re-run `hejbro import` into a fresh `--out` and merge the declaration, or declare it by hand.',
 		);
 	});
 
@@ -1390,7 +1530,7 @@ describe("buildLossReport / 712/R10 B#1: an index, check or unique constraint at
 			],
 		});
 		expect(report).toContain(
-			'Omitted: generated column "app.t.derived" -- its expression names column "app.t.status", which this reading left out with the enum type "app.Status" that types it, so the generated column cannot be declared either. `check` keeps listing the generated column as unmanaged until that column and the generated column are both declared. Next: rename the type in the database, then re-run `hejbro import`.',
+			'Omitted: generated column "app.t.derived" -- its expression names column "app.t.status", which this reading left out with the enum type "app.Status" that types it, so the generated column cannot be declared either. `check` keeps listing the generated column as unmanaged until that column and the generated column are both declared. Next: rename the type in the database, then re-run `hejbro import` into a fresh `--out` and merge the declaration, or declare it by hand.',
 		);
 	});
 
@@ -1431,7 +1571,7 @@ describe("buildLossReport / 712/R10 B#1: an index, check or unique constraint at
 			],
 		});
 		expect(report).toContain(
-			'Omitted: index "app.t.t_total_idx" -- it is declared on column "app.t.total", which this reading left out because its expression names column "app.t.Bad Name", whose own name no declaration can carry, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the column in the database, then re-run `hejbro import`.',
+			'Omitted: index "app.t.t_total_idx" -- it is declared on column "app.t.total", which this reading left out because its expression names column "app.t.Bad Name", whose own name no declaration can carry, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the column in the database, then re-run `hejbro import` into a fresh `--out` and merge the declaration, or declare it by hand.',
 		);
 	});
 
@@ -1453,7 +1593,7 @@ describe("buildLossReport / 712/R10 B#1: an index, check or unique constraint at
 			],
 		});
 		expect(report).toContain(
-			'Omitted: check constraint "app.t2.t2_label_chk" -- its expression names column "app.t2.label", which this reading left out because its expression names column "app.t2.st", which this reading left out with the enum type "app.Status" that types it, so the check constraint cannot be declared either. `check` keeps listing the check constraint as unmanaged until that column and the check constraint are both declared. Next: rename the type in the database, then re-run `hejbro import`.',
+			'Omitted: check constraint "app.t2.t2_label_chk" -- its expression names column "app.t2.label", which this reading left out because its expression names column "app.t2.st", which this reading left out with the enum type "app.Status" that types it, so the check constraint cannot be declared either. `check` keeps listing the check constraint as unmanaged until that column and the check constraint are both declared. Next: rename the type in the database, then re-run `hejbro import` into a fresh `--out` and merge the declaration, or declare it by hand.',
 		);
 	});
 
@@ -1544,7 +1684,7 @@ describe("buildLossReport / 712/R10 N#7: a primary key naming an omitted column"
 			],
 		});
 		expect(report).toContain(
-			'Omitted: primary key "app.orders.orders_pkey" -- it names column "app.orders.UserId", which this reading left out because no declaration can carry its name, so the key cannot be declared either; the table is declared without a primary key. `check` keeps listing the index that backs it as unmanaged, naming "app.orders.orders_pkey", until every column the key names can be declared and the key with them. Next: rename the column in the database, then re-run `hejbro import`.',
+			'Omitted: primary key "app.orders.orders_pkey" -- it names column "app.orders.UserId", which this reading left out because no declaration can carry its name, so the key cannot be declared either; the table is declared without a primary key. `check` keeps listing the index that backs it as unmanaged, naming "app.orders.orders_pkey", until every column the key names can be declared and the key with them. Next: rename the column in the database, then re-run `hejbro import` into a fresh `--out` and merge the declaration, or declare it by hand.',
 		);
 	});
 
@@ -1581,7 +1721,7 @@ describe("buildLossReport / 712/R10 N#7: a primary key naming an omitted column"
 			],
 		});
 		expect(report).toContain(
-			'Omitted: primary key "app.t2.t2_pkey" -- it names column "app.t2.state2", which this reading left out with the enum type "app.Status" that types it, so the key cannot be declared either; the table is declared without a primary key. `check` keeps listing the index that backs it as unmanaged, naming "app.t2.t2_pkey", until every column the key names can be declared and the key with them. Next: rename the type in the database, then re-run `hejbro import`.',
+			'Omitted: primary key "app.t2.t2_pkey" -- it names column "app.t2.state2", which this reading left out with the enum type "app.Status" that types it, so the key cannot be declared either; the table is declared without a primary key. `check` keeps listing the index that backs it as unmanaged, naming "app.t2.t2_pkey", until every column the key names can be declared and the key with them. Next: rename the type in the database, then re-run `hejbro import` into a fresh `--out` and merge the declaration, or declare it by hand.',
 		);
 	});
 
@@ -1620,7 +1760,7 @@ describe("buildLossReport / 712/R10 N#7: a primary key naming an omitted column"
 			],
 		});
 		expect(report).toContain(
-			'Omitted: primary key "app.t.t_pkey" -- it names column "app.t.total", which this reading left out because its expression names column "app.t.Bad Name", whose own name no declaration can carry, so the key cannot be declared either; the table is declared without a primary key. `check` keeps listing the index that backs it as unmanaged, naming "app.t.t_pkey", until every column the key names can be declared and the key with them. Next: rename the column in the database, then re-run `hejbro import`.',
+			'Omitted: primary key "app.t.t_pkey" -- it names column "app.t.total", which this reading left out because its expression names column "app.t.Bad Name", whose own name no declaration can carry, so the key cannot be declared either; the table is declared without a primary key. `check` keeps listing the index that backs it as unmanaged, naming "app.t.t_pkey", until every column the key names can be declared and the key with them. Next: rename the column in the database, then re-run `hejbro import` into a fresh `--out` and merge the declaration, or declare it by hand.',
 		);
 	});
 
@@ -1662,7 +1802,7 @@ describe("buildLossReport / 712/R10 N#7: a primary key naming an omitted column"
 			],
 		});
 		expect(report).toContain(
-			'Omitted: primary key "app.t2.t2_pkey" -- it names column "app.t2.label", which this reading left out because its expression names column "app.t2.st", which this reading left out with the enum type "app.Status" that types it, so the key cannot be declared either; the table is declared without a primary key. `check` keeps listing the index that backs it as unmanaged, naming "app.t2.t2_pkey", until every column the key names can be declared and the key with them. Next: rename the type in the database, then re-run `hejbro import`.',
+			'Omitted: primary key "app.t2.t2_pkey" -- it names column "app.t2.label", which this reading left out because its expression names column "app.t2.st", which this reading left out with the enum type "app.Status" that types it, so the key cannot be declared either; the table is declared without a primary key. `check` keeps listing the index that backs it as unmanaged, naming "app.t2.t2_pkey", until every column the key names can be declared and the key with them. Next: rename the type in the database, then re-run `hejbro import` into a fresh `--out` and merge the declaration, or declare it by hand.',
 		);
 	});
 
@@ -1767,7 +1907,7 @@ describe("buildLossReport / 712/R3: an enum type held to D36", () => {
 		});
 
 		expect(report).toContain(
-			'Omitted: enum type "app.Status" -- its catalog name is not a valid hejbro SQL identifier, so no declaration can carry it, and every column typed by it is left out with it: "app.orders.status". `check` keeps naming each of them as unmanaged until it is declared, and never names the type itself -- its inventory has no enum axis. Next: rename the type in the database, re-run `hejbro import`, and declare both.',
+			'Omitted: enum type "app.Status" -- its catalog name is not a valid hejbro SQL identifier, so no declaration can carry it, and every column typed by it is left out with it: "app.orders.status". `check` keeps naming each of them as unmanaged until it is declared, and never names the type itself -- its inventory has no enum axis. Next: rename the type in the database, then re-run `hejbro import` into a fresh `--out` and merge the declarations, or declare them by hand.',
 		);
 	});
 
@@ -1778,7 +1918,7 @@ describe("buildLossReport / 712/R3: an enum type held to D36", () => {
 		});
 
 		expect(report).toContain(
-			'Omitted: enum type "app.2nd" -- its catalog name is not a valid hejbro SQL identifier, so no declaration can carry it. No column is typed by it, so nothing else is left out, and `check` never names the type -- its inventory has no enum axis. Next: rename the type in the database and re-run `hejbro import`.',
+			'Omitted: enum type "app.2nd" -- its catalog name is not a valid hejbro SQL identifier, so no declaration can carry it. No column is typed by it, so nothing else is left out, and `check` never names the type -- its inventory has no enum axis. Next: rename the type in the database, then re-run `hejbro import` into a fresh `--out` and merge the declaration, or declare it by hand.',
 		);
 	});
 

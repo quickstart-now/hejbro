@@ -168,7 +168,18 @@ export const runPull = async (
 					inferCatalog({ session: driver, schemas, command: "pull" }),
 					readCurrentDatabaseName(driver),
 				]);
-				const sortedSchemas = [...schemas].sort();
+				// N11 (D106 review, cfr1-planner's own measurement): `schemas`
+				// is what `--schema` asked for, not what the reading actually
+				// read -- a requested schema whose own catalog name D36 cannot
+				// carry (`partitionSchemas`, `infer/compose.ts`) is omitted
+				// whole, and the loss report already names it. The "pulled …"
+				// line and the lock's own `schemas` share this one filtered
+				// list, so neither claims a schema the loss report says it
+				// dropped.
+				const omittedSchemaNames = new Set(result.omittedSchemaNames);
+				const sortedSchemas = schemas
+					.filter((schemaName) => !omittedSchemaNames.has(schemaName))
+					.sort();
 				const payload = exportPayloadFromCatalog(
 					result.description,
 					result.snapshot,

@@ -454,6 +454,87 @@ describe("inferFromCatalog / B#1: an index, check or UNIQUE at an omitted column
 		);
 	});
 
+	it("N8(c) (D106 review): a UNIQUE constraint omitted for its own catalog name is announced as a unique constraint, never as a plain index", async () => {
+		const session = buildSession(
+			[{ schema: "app", table: "t9" }],
+			[
+				{ schema: "app", table: "t9", name: "id" },
+				{ schema: "app", table: "t9", name: "code" },
+			],
+			[],
+			{
+				uniqueConstraints: [
+					{ schema: "app", table: "t9", name: "UQ_Bad", columns: ["code"] },
+				],
+				indexes: [
+					{
+						schema: "app",
+						table: "t9",
+						name: "UQ_Bad",
+						columns: ["code"],
+						isUnique: true,
+					},
+				],
+			},
+		);
+
+		const result = await inferFromCatalog({
+			session,
+			schemas: ["app"],
+			command: "import",
+		});
+
+		expect(indexNamesIn(result, "app.t9").has("UQ_Bad")).toBe(false);
+		const line = result.lossReport.find(
+			(entry) => entry.includes("UQ_Bad") && entry.startsWith("Omitted:"),
+		);
+		if (line === undefined) {
+			throw new Error(
+				`expected an omitted-object line naming "UQ_Bad":\n${result.lossReport.join("\n")}`,
+			);
+		}
+		expect(line).toContain('Omitted: unique constraint "app.t9.UQ_Bad"');
+		expect(line.startsWith("Omitted: index ")).toBe(false);
+	});
+
+	it("N8(c) control: a plain index (never a UNIQUE constraint's own backing index) omitted for its own catalog name still announces as an index", async () => {
+		const session = buildSession(
+			[{ schema: "app", table: "t10" }],
+			[
+				{ schema: "app", table: "t10", name: "id" },
+				{ schema: "app", table: "t10", name: "code" },
+			],
+			[],
+			{
+				indexes: [
+					{
+						schema: "app",
+						table: "t10",
+						name: "IDX_Bad",
+						columns: ["code"],
+						isUnique: false,
+					},
+				],
+			},
+		);
+
+		const result = await inferFromCatalog({
+			session,
+			schemas: ["app"],
+			command: "import",
+		});
+
+		const line = result.lossReport.find(
+			(entry) => entry.includes("IDX_Bad") && entry.startsWith("Omitted:"),
+		);
+		if (line === undefined) {
+			throw new Error(
+				`expected an omitted-object line naming "IDX_Bad":\n${result.lossReport.join("\n")}`,
+			);
+		}
+		expect(line).toContain('Omitted: index "app.t10.IDX_Bad"');
+	});
+
 	it("J4: an index and a check on a name-omitted column are both left out of the declaration", async () => {
 		const session = buildSession(
 			[{ schema: "app", table: "orders" }],
@@ -731,7 +812,7 @@ describe("inferFromCatalog / B#1: an index, check or UNIQUE at an omitted column
 		// MM3 (lead-approved wording): a column found only through the
 		// predicate is not "declared on" the index the way a key column is.
 		expect(result.lossReport).toContain(
-			'Omitted: index "app.orders.orders_amount_partial_idx" -- its predicate names column "app.orders.UserId", which this reading left out because no declaration can carry its name, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the column in the database, then re-run `hejbro import`.',
+			'Omitted: index "app.orders.orders_amount_partial_idx" -- its predicate names column "app.orders.UserId", which this reading left out because no declaration can carry its name, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the column in the database, then re-run `hejbro import` into a fresh `--out` and merge the declaration, or declare it by hand.',
 		);
 
 		const paths = writeFiles(result);
@@ -774,7 +855,7 @@ describe("inferFromCatalog / B#1: an index, check or UNIQUE at an omitted column
 		// MM3: a column found only through an expression key -- the same
 		// wording a check constraint's own expression already uses.
 		expect(result.lossReport).toContain(
-			'Omitted: index "app.orders.orders_lower_userid_idx" -- its expression names column "app.orders.UserId", which this reading left out because no declaration can carry its name, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the column in the database, then re-run `hejbro import`.',
+			'Omitted: index "app.orders.orders_lower_userid_idx" -- its expression names column "app.orders.UserId", which this reading left out because no declaration can carry its name, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the column in the database, then re-run `hejbro import` into a fresh `--out` and merge the declaration, or declare it by hand.',
 		);
 
 		const paths = writeFiles(result);
@@ -820,7 +901,7 @@ describe("inferFromCatalog / B#1: an index, check or UNIQUE at an omitted column
 			false,
 		);
 		expect(result.lossReport).toContain(
-			'Omitted: index "app.t2.t2_id_partial_state2_idx" -- its predicate names column "app.t2.state2", which this reading left out with the enum type "app.Status" that types it, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the type in the database, then re-run `hejbro import`.',
+			'Omitted: index "app.t2.t2_id_partial_state2_idx" -- its predicate names column "app.t2.state2", which this reading left out with the enum type "app.Status" that types it, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the type in the database, then re-run `hejbro import` into a fresh `--out` and merge the declaration, or declare it by hand.',
 		);
 
 		const paths = writeFiles(result);
@@ -867,7 +948,7 @@ describe("inferFromCatalog / B#1: an index, check or UNIQUE at an omitted column
 			indexNamesIn(result, "app.t4").has("t4_id_partial_useridcol_idx"),
 		).toBe(false);
 		expect(result.lossReport).toContain(
-			'Omitted: index "app.t4.t4_id_partial_useridcol_idx" -- its predicate names column "app.t4.USER_ID", which this reading left out because no declaration can carry its name, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the column in the database, then re-run `hejbro import`.',
+			'Omitted: index "app.t4.t4_id_partial_useridcol_idx" -- its predicate names column "app.t4.USER_ID", which this reading left out because no declaration can carry its name, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the column in the database, then re-run `hejbro import` into a fresh `--out` and merge the declaration, or declare it by hand.',
 		);
 
 		const paths = writeFiles(result);
@@ -985,7 +1066,7 @@ describe("inferFromCatalog / B#1: an index, check or UNIQUE at an omitted column
 
 		expect(indexNamesIn(result, "app.t5").has("t5_expr_pred_idx")).toBe(false);
 		expect(result.lossReport).toContain(
-			'Omitted: index "app.t5.t5_expr_pred_idx" -- its expression or predicate names column "app.t5.A", which this reading left out because no declaration can carry its name, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the column in the database, then re-run `hejbro import`.',
+			'Omitted: index "app.t5.t5_expr_pred_idx" -- its expression or predicate names column "app.t5.A", which this reading left out because no declaration can carry its name, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the column in the database, then re-run `hejbro import` into a fresh `--out` and merge the declaration, or declare it by hand.',
 		);
 	});
 
@@ -1021,7 +1102,7 @@ describe("inferFromCatalog / B#1: an index, check or UNIQUE at an omitted column
 
 		expect(indexNamesIn(result, "app.t5").has("t5_expr_pred2_idx")).toBe(false);
 		expect(result.lossReport).toContain(
-			'Omitted: index "app.t5.t5_expr_pred2_idx" -- its expression or predicate names column "app.t5.B", which this reading left out because no declaration can carry its name, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the column in the database, then re-run `hejbro import`.',
+			'Omitted: index "app.t5.t5_expr_pred2_idx" -- its expression or predicate names column "app.t5.B", which this reading left out because no declaration can carry its name, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the column in the database, then re-run `hejbro import` into a fresh `--out` and merge the declaration, or declare it by hand.',
 		);
 	});
 
@@ -1054,7 +1135,7 @@ describe("inferFromCatalog / B#1: an index, check or UNIQUE at an omitted column
 		});
 
 		expect(result.lossReport).toContain(
-			'Omitted: index "app.t5.t5_expr_only_idx" -- its expression names column "app.t5.A", which this reading left out because no declaration can carry its name, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the column in the database, then re-run `hejbro import`.',
+			'Omitted: index "app.t5.t5_expr_only_idx" -- its expression names column "app.t5.A", which this reading left out because no declaration can carry its name, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the column in the database, then re-run `hejbro import` into a fresh `--out` and merge the declaration, or declare it by hand.',
 		);
 	});
 
@@ -1088,7 +1169,7 @@ describe("inferFromCatalog / B#1: an index, check or UNIQUE at an omitted column
 		});
 
 		expect(result.lossReport).toContain(
-			'Omitted: index "app.t5.t5_pred_only_idx" -- its predicate names column "app.t5.B", which this reading left out because no declaration can carry its name, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the column in the database, then re-run `hejbro import`.',
+			'Omitted: index "app.t5.t5_pred_only_idx" -- its predicate names column "app.t5.B", which this reading left out because no declaration can carry its name, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the column in the database, then re-run `hejbro import` into a fresh `--out` and merge the declaration, or declare it by hand.',
 		);
 	});
 
@@ -1120,7 +1201,7 @@ describe("inferFromCatalog / B#1: an index, check or UNIQUE at an omitted column
 		});
 
 		expect(result.lossReport).toContain(
-			'Omitted: index "app.t5.t5_key_idx" -- it is declared on column "app.t5.A", which this reading left out because no declaration can carry its name, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the column in the database, then re-run `hejbro import`.',
+			'Omitted: index "app.t5.t5_key_idx" -- it is declared on column "app.t5.A", which this reading left out because no declaration can carry its name, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the column in the database, then re-run `hejbro import` into a fresh `--out` and merge the declaration, or declare it by hand.',
 		);
 	});
 });

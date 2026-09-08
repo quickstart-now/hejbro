@@ -170,6 +170,38 @@ describe("runPull / 4.1", () => {
 	});
 
 	/**
+	 * N11 (D106 review, cfr1-planner's own measurement): a requested
+	 * `--schema` the reading omitted whole (its own catalog name is not
+	 * a valid hejbro SQL identifier, `partitionSchemas`) is not one this
+	 * command actually read -- the "pulled …" line and the lock's own
+	 * `schemas` must never claim it, matching what the loss report
+	 * already says was dropped. `omittedSchemaNames` is
+	 * `InferCatalogResult`'s own name for exactly this set.
+	 */
+	it("excludes a requested schema the reading omitted whole from the 'pulled' line and the lock's own schemas", async () => {
+		const outcome = await runPull(
+			cwd,
+			[
+				"--db-url",
+				"postgres://fixture",
+				"--schema",
+				"zeta",
+				"--schema",
+				"BadSchema",
+			],
+			depsFor({ ...emptyResult, omittedSchemaNames: ["BadSchema"] }),
+		);
+
+		expect(outcome.exitCode).toBe(0);
+		expect(outcome.stdout[0]).toBe("pulled widgets_db (zeta)");
+		const contractText = readFileSync(vendorContractPath(cwd), "utf8");
+		expect(contractText).toContain('schemas: ["zeta"]');
+		expect(contractText).not.toContain("BadSchema");
+		const lock = JSON.parse(readFileSync(lockPath(cwd), "utf8"));
+		expect(lock.schemas).toEqual(["zeta"]);
+	});
+
+	/**
 	 * Schema-vendoring spec, "pull writes where vendor writes": an
 	 * already-vendored (git-sourced) repository's outputs are replaced
 	 * outright, and the lock left behind is marked as `pull`'s own -- the

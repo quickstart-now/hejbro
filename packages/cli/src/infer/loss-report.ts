@@ -337,11 +337,25 @@ export type OmittedEnum = {
 	}>;
 };
 
-/** An index whose catalog name is not a valid hejbro SQL identifier (D106 R4-B1) -- costs that index alone; the table and its other objects are still declared. */
+/**
+ * An index whose catalog name is not a valid hejbro SQL identifier
+ * (D106 R4-B1) -- costs that index alone; the table and its other
+ * objects are still declared. N8(c) (D106 review): a UNIQUE
+ * constraint's own backing index reaches this same path (`table.ts`'s
+ * own `omittedIndexes` never asks `pg_constraint` what an index
+ * backs), and one noun per constraint kind is the rule the member
+ * family (`OmittedTableMemberAtColumn`) already keeps for the exact
+ * same object omitted at a *column* instead of for its own name --
+ * `kind` is the same distinction, carried here so a UNIQUE constraint
+ * omitted for its own name is announced as one, never as a plain
+ * "index" only because the *other* cause (a column) happens to say
+ * "unique constraint".
+ */
 export type OmittedIndex = {
 	readonly schema: string;
 	readonly table: string;
 	readonly sqlName: string;
+	readonly kind: "index" | "unique constraint";
 };
 
 /** A check constraint whose catalog name is not a valid hejbro SQL identifier (D106 R4-B1) -- costs that check alone; the table and its other objects are still declared. */
@@ -597,11 +611,51 @@ const primaryKeyNameCollisionClause = (
 const EXPRESSION_APPROXIMATION_LINE =
 	"Approximated: every default, check, generated, and index-predicate expression is carried as raw SQL text, not the typed builders a hand-written declaration would use.";
 
+/**
+ * N8(b)/N8(b)-FK (D106 review, cfr1-planner's own measurement, lead
+ * ruling on the FK line's own follow-up): import's own consumer runs
+ * `generate`/`check`, so naming what those commands will report is the
+ * relevant consequence there, unchanged for both keys. A pull consumer
+ * runs neither -- for the primary key, `contract/tables.ts`'s own
+ * comment already states the contract carries no `primaryKey` fact at
+ * all (only `typeNode`/`mode`/`notNullElements` reach it), so the
+ * pulled contract itself names neither the catalog name nor the
+ * derived one (the bundle's own migration SQL and `schema.json` do
+ * carry the derived name, since they come from the starter
+ * declaration, not from the contract). For the foreign key,
+ * `buildRelationships` (`contract/tables.ts`) reads `fk.name` off that
+ * same starter declaration into `ContractForeignKeyMeta.name`, so the
+ * contract carries the derived name there, never the catalog name.
+ * Both pull lines state only what the contract carries -- never a
+ * promise about `generate`/`check`, commands a pull consumer never
+ * runs.
+ */
+const primaryKeyNameApproximationLineForImport = (
+	approximation: PrimaryKeyNameApproximation,
+): string =>
+	`Approximated: the primary key "${approximation.schema}.${approximation.table}.${approximation.catalogName}" is declared under the derived name "${approximation.derivedName}" instead -- the DSL derives every primary-key name, so \`generate\`/\`check\` will name this constraint differently from the database. Rename the constraint to "${approximation.derivedName}" in the database${primaryKeyNameCollisionClause(approximation)} \`check\` reports the declared "${approximation.derivedName}" as missing on every run and lists "${approximation.catalogName}" in its unmanaged-index inventory.`;
+
+const primaryKeyNameApproximationLineForPull = (
+	approximation: PrimaryKeyNameApproximation,
+): string =>
+	`Approximated: the primary key "${approximation.schema}.${approximation.table}.${approximation.catalogName}" is declared under the derived name "${approximation.derivedName}" instead -- the DSL derives every primary-key name; the pulled contract carries neither name, since it names no primary key at all -- the bundle's migration SQL and \`schema.json\` do carry "${approximation.derivedName}".`;
+
+const foreignKeyNameApproximationLineForImport = (
+	approximation: ForeignKeyNameApproximation,
+): string =>
+	`Approximated: the foreign key "${approximation.schema}.${approximation.table}.${approximation.catalogName}" is declared under the derived name "${approximation.derivedName}" instead -- its own catalog name is not a valid hejbro SQL identifier, so \`generate\`/\`check\` will name this constraint differently from the database.`;
+
+const foreignKeyNameApproximationLineForPull = (
+	approximation: ForeignKeyNameApproximation,
+): string =>
+	`Approximated: the foreign key "${approximation.schema}.${approximation.table}.${approximation.catalogName}" is declared under the derived name "${approximation.derivedName}" instead -- its own catalog name is not a valid hejbro SQL identifier; the pulled contract carries "${approximation.derivedName}" in its foreign-key metadata, never "${approximation.catalogName}".`;
+
 const approximationLines = (
 	uniqueIndexApproximations: ReadonlyArray<UniqueIndexApproximation>,
 	nextvalDefaults: ReadonlyArray<NextvalDefaultApproximation>,
 	foreignKeyNameApproximations: ReadonlyArray<ForeignKeyNameApproximation>,
 	primaryKeyNameApproximations: ReadonlyArray<PrimaryKeyNameApproximation>,
+	command: LossReportFacts["command"],
 ): ReadonlyArray<string> => [
 	...sortedBy(
 		uniqueIndexApproximations,
@@ -622,18 +676,22 @@ const approximationLines = (
 		foreignKeyNameApproximations,
 		(approximation) =>
 			`${approximation.schema}.${approximation.table}.${approximation.catalogName}`,
-	).map(
-		(approximation) =>
-			`Approximated: the foreign key "${approximation.schema}.${approximation.table}.${approximation.catalogName}" is declared under the derived name "${approximation.derivedName}" instead -- its own catalog name is not a valid hejbro SQL identifier, so \`generate\`/\`check\` will name this constraint differently from the database.`,
-	),
+	).map((approximation) => {
+		if (command === "pull") {
+			return foreignKeyNameApproximationLineForPull(approximation);
+		}
+		return foreignKeyNameApproximationLineForImport(approximation);
+	}),
 	...sortedBy(
 		primaryKeyNameApproximations,
 		(approximation) =>
 			`${approximation.schema}.${approximation.table}.${approximation.catalogName}`,
-	).map(
-		(approximation) =>
-			`Approximated: the primary key "${approximation.schema}.${approximation.table}.${approximation.catalogName}" is declared under the derived name "${approximation.derivedName}" instead -- the DSL derives every primary-key name, so \`generate\`/\`check\` will name this constraint differently from the database. Rename the constraint to "${approximation.derivedName}" in the database${primaryKeyNameCollisionClause(approximation)} \`check\` reports the declared "${approximation.derivedName}" as missing on every run and lists "${approximation.catalogName}" in its unmanaged-index inventory.`,
-	),
+	).map((approximation) => {
+		if (command === "pull") {
+			return primaryKeyNameApproximationLineForPull(approximation);
+		}
+		return primaryKeyNameApproximationLineForImport(approximation);
+	}),
 	EXPRESSION_APPROXIMATION_LINE,
 ];
 
@@ -683,6 +741,23 @@ const undeclarableNameLines = (
 };
 
 /**
+ * N2 (D106 review, cfr1-planner's own measurement): "then re-run
+ * `hejbro import`" alone is a false remedy -- `import` never
+ * overwrites, so a second run at the same `--out` after the rename
+ * exits `import-destination-exists` (measured live, #712
+ * evaluation.md's own `proj-omit/import2.stderr`). The whole remedy is
+ * a second import into a fresh `--out`, merged into the existing
+ * declarations by hand, or a hand-written declaration outright -- one
+ * shared phrase every import-side "Next:" tail below ends with
+ * (singular or the two-thing plural the enum-with-columns line needs),
+ * so the wording never drifts between the sites that repeat it.
+ */
+const REIMPORT_REMEDY =
+	"re-run `hejbro import` into a fresh `--out` and merge the declaration, or declare it by hand";
+const REIMPORT_REMEDY_PLURAL =
+	"re-run `hejbro import` into a fresh `--out` and merge the declarations, or declare them by hand";
+
+/**
  * import's own consequence: no declaration file can name a schema
  * whose own identifier hejbro cannot express, so every table, enum and
  * sequence it holds goes with it -- and unlike an omitted table under
@@ -692,7 +767,7 @@ const undeclarableNameLines = (
  * (#707): nothing in it is declared, so `check` never lists it either.
  */
 const omittedSchemaLineForImport = (schema: OmittedSchema): string =>
-	`Omitted: schema "${schema.sqlName}" -- its catalog name is not a valid hejbro SQL identifier, so no declaration can carry it. Its tables, enums and sequences are not inferred either, and \`check\` will not list them, since nothing in that schema is declared. Next: rename the schema in the database, then re-run \`hejbro import\`.`;
+	`Omitted: schema "${schema.sqlName}" -- its catalog name is not a valid hejbro SQL identifier, so no declaration can carry it. Its tables, enums and sequences are not inferred either, and \`check\` will not list them, since nothing in that schema is declared. Next: rename the schema in the database, then ${REIMPORT_REMEDY}.`;
 
 /** pull's own consequence: a table under an unexpressible schema can reach neither the snapshot nor the contract. */
 const omittedSchemaLineForPull = (schema: OmittedSchema): string =>
@@ -766,13 +841,13 @@ const omittedEnumColumnList = (columns: OmittedEnum["columns"]): string =>
 const omittedEnumLineForImportWithColumns = (
 	enumOmission: OmittedEnum,
 ): string =>
-	`Omitted: enum type "${enumOmission.schema}.${enumOmission.sqlName}" -- its catalog name is not a valid hejbro SQL identifier, so no declaration can carry it, and every column typed by it is left out with it: ${omittedEnumColumnList(enumOmission.columns)}. \`check\` keeps naming each of them as unmanaged until it is declared, and never names the type itself -- its inventory has no enum axis. Next: rename the type in the database, re-run \`hejbro import\`, and declare both.`;
+	`Omitted: enum type "${enumOmission.schema}.${enumOmission.sqlName}" -- its catalog name is not a valid hejbro SQL identifier, so no declaration can carry it, and every column typed by it is left out with it: ${omittedEnumColumnList(enumOmission.columns)}. \`check\` keeps naming each of them as unmanaged until it is declared, and never names the type itself -- its inventory has no enum axis. Next: rename the type in the database, then ${REIMPORT_REMEDY_PLURAL}.`;
 
 /** import's own consequence, no column typed by it: nothing else is left out. */
 const omittedEnumLineForImportWithoutColumns = (
 	enumOmission: OmittedEnum,
 ): string =>
-	`Omitted: enum type "${enumOmission.schema}.${enumOmission.sqlName}" -- its catalog name is not a valid hejbro SQL identifier, so no declaration can carry it. No column is typed by it, so nothing else is left out, and \`check\` never names the type -- its inventory has no enum axis. Next: rename the type in the database and re-run \`hejbro import\`.`;
+	`Omitted: enum type "${enumOmission.schema}.${enumOmission.sqlName}" -- its catalog name is not a valid hejbro SQL identifier, so no declaration can carry it. No column is typed by it, so nothing else is left out, and \`check\` never names the type -- its inventory has no enum axis. Next: rename the type in the database, then ${REIMPORT_REMEDY}.`;
 
 const omittedEnumLineForImport = (enumOmission: OmittedEnum): string => {
 	if (enumOmission.columns.length === 0) {
@@ -829,11 +904,11 @@ const omittedEnumLines = (
  * names the whole exit condition, not just its first half.
  */
 const omittedIndexLine = (index: OmittedIndex): string =>
-	`Omitted: index "${index.schema}.${index.table}.${index.sqlName}" -- its catalog name is not a valid hejbro SQL identifier, so no declaration can carry it under the same name \`check\` would compare it by. \`check\` keeps listing it as unmanaged until it is renamed in the database and declared; a hand-written declaration under a different name only adds a second one.`;
+	`Omitted: ${index.kind} "${index.schema}.${index.table}.${index.sqlName}" -- its catalog name is not a valid hejbro SQL identifier, so no declaration can carry it under the same name \`check\` would compare it by. \`check\` keeps listing it as unmanaged until it is renamed in the database and declared; a hand-written declaration under a different name only adds a second one.`;
 
 /** pull's own consequence (D106 round 1 B1 of harden-check-inventory): a pull consumer holds no declarations of the producer's schema, so no `check` listing follows -- the index cannot be carried in the contract, and linking the schema repository is the way out, as for every other pull line. */
 const omittedIndexLineForPull = (index: OmittedIndex): string =>
-	`Omitted: index "${index.schema}.${index.table}.${index.sqlName}" -- its catalog name is not a valid hejbro SQL identifier, so it cannot be carried in the contract. Rename the index in the database, then link the schema repository.`;
+	`Omitted: ${index.kind} "${index.schema}.${index.table}.${index.sqlName}" -- its catalog name is not a valid hejbro SQL identifier, so it cannot be carried in the contract. Rename the ${index.kind} in the database, then link the schema repository.`;
 
 const omittedIndexLines = (
 	indexes: ReadonlyArray<OmittedIndex>,
@@ -984,9 +1059,9 @@ const memberCauseClauseForPull = (
 
 const memberTailForImport = (entry: OmittedTableMemberAtColumn): string => {
 	if (takesEnumTail(entry)) {
-		return "Next: rename the type in the database, then re-run `hejbro import`.";
+		return `Next: rename the type in the database, then ${REIMPORT_REMEDY}.`;
 	}
-	return "Next: rename the column in the database, then re-run `hejbro import`.";
+	return `Next: rename the column in the database, then ${REIMPORT_REMEDY}.`;
 };
 
 const memberTailForPull = (entry: OmittedTableMemberAtColumn): string => {
@@ -1056,9 +1131,9 @@ const primaryKeyOmissionCauseClauseForPull = (
 
 const primaryKeyOmissionTailForImport = (entry: OmittedPrimaryKey): string => {
 	if (takesEnumTail(entry)) {
-		return "Next: rename the type in the database, then re-run `hejbro import`.";
+		return `Next: rename the type in the database, then ${REIMPORT_REMEDY}.`;
 	}
-	return "Next: rename the column in the database, then re-run `hejbro import`.";
+	return `Next: rename the column in the database, then ${REIMPORT_REMEDY}.`;
 };
 
 const primaryKeyOmissionTailForPull = (entry: OmittedPrimaryKey): string => {
@@ -1113,9 +1188,9 @@ const omittedForeignKeyRemedyForImport = (
 	targetKind: OmittedForeignKey["targetKind"],
 ): string => {
 	if (targetKind === "schema") {
-		return "rename the schema in the database, then re-run `hejbro import`.";
+		return `rename the schema in the database, then ${REIMPORT_REMEDY}.`;
 	}
-	return "rename the table in the database, then re-run `hejbro import`.";
+	return `rename the table in the database, then ${REIMPORT_REMEDY}.`;
 };
 
 /** pull's own remedy, mirroring the schema/table omission lines' own pull wording -- no "re-run", since `pull` names the same live database on every run by construction. */
@@ -1178,12 +1253,12 @@ const omittedForeignKeyColumnReasonForImport = (
 	entry: OmittedForeignKeyColumn,
 ): string => {
 	if (entry.cause === "enum") {
-		return `${foreignKeyColumnReasonClause(entry.end)} "${entry.columnIdentity}", which this reading left out with the enum type "${entry.enumIdentity}" that types it, so the key cannot be declared either. Next: rename the type in the database, then re-run \`hejbro import\`.`;
+		return `${foreignKeyColumnReasonClause(entry.end)} "${entry.columnIdentity}", which this reading left out with the enum type "${entry.enumIdentity}" that types it, so the key cannot be declared either. Next: rename the type in the database, then ${REIMPORT_REMEDY}.`;
 	}
 	if (entry.cause === "generatedExpression") {
 		return `${foreignKeyColumnReasonClause(entry.end)} "${entry.columnIdentity}", ${generatedExpressionRootClause(entry, "so the key cannot be declared either")}. ${foreignKeyGeneratedExpressionTailForImport(entry)}`;
 	}
-	return `${foreignKeyColumnReasonClause(entry.end)} "${entry.columnIdentity}", which this reading left out because no declaration can carry its name, so the key cannot be declared either. Next: rename the column in the database, then re-run \`hejbro import\`.`;
+	return `${foreignKeyColumnReasonClause(entry.end)} "${entry.columnIdentity}", which this reading left out because no declaration can carry its name, so the key cannot be declared either. Next: rename the column in the database, then ${REIMPORT_REMEDY}.`;
 };
 
 /** The tail {@link omittedForeignKeyColumnReasonForImport}'s own `"generatedExpression"` branch earns -- the enum branch (root cause `"enum"`) points at the type, never the column. */
@@ -1191,9 +1266,9 @@ const foreignKeyGeneratedExpressionTailForImport = (
 	entry: Pick<OmittedForeignKeyColumn, "cause" | "rootCause">,
 ): string => {
 	if (takesEnumTail(entry)) {
-		return "Next: rename the type in the database, then re-run `hejbro import`.";
+		return `Next: rename the type in the database, then ${REIMPORT_REMEDY}.`;
 	}
-	return "Next: rename the column in the database, then re-run `hejbro import`.";
+	return `Next: rename the column in the database, then ${REIMPORT_REMEDY}.`;
 };
 
 /** pull's own consequence, mirroring `undeclarableNameLineForPull`'s own wording for the column itself (712/R5), and 712/R8's own enum-cause branch. */
@@ -1204,19 +1279,9 @@ const omittedForeignKeyColumnReasonForPull = (
 		return `${foreignKeyColumnReasonClause(entry.end)} "${entry.columnIdentity}", which this reading left out with the enum type "${entry.enumIdentity}" that types it, so the key cannot be carried either. Rename the type in the database, then link the schema repository.`;
 	}
 	if (entry.cause === "generatedExpression") {
-		return `${foreignKeyColumnReasonClause(entry.end)} "${entry.columnIdentity}", ${generatedExpressionRootClause(entry, foreignKeyGeneratedExpressionConsequenceForPull(entry))}. ${foreignKeyGeneratedExpressionTailForPull(entry)}`;
+		return `${foreignKeyColumnReasonClause(entry.end)} "${entry.columnIdentity}", ${generatedExpressionRootClause(entry, "so the key cannot be carried either")}. ${foreignKeyGeneratedExpressionTailForPull(entry)}`;
 	}
-	return `${foreignKeyColumnReasonClause(entry.end)} "${entry.columnIdentity}", which this reading left out because no declaration can carry its name, so it cannot be carried in the contract, so the key cannot be carried either. Rename the column in the database, then link the schema repository.`;
-};
-
-/** pull's own FK asymmetry (unchanged, 712/R8): the name branch's own consequence names the contract step too ("so it cannot be carried in the contract, so the key cannot be carried either"), the enum branch's own does not -- the `"generatedExpression"` branch follows whichever its own root cause earns. */
-const foreignKeyGeneratedExpressionConsequenceForPull = (
-	entry: Pick<OmittedForeignKeyColumn, "cause" | "rootCause">,
-): string => {
-	if (takesEnumTail(entry)) {
-		return "so the key cannot be carried either";
-	}
-	return "so it cannot be carried in the contract, so the key cannot be carried either";
+	return `${foreignKeyColumnReasonClause(entry.end)} "${entry.columnIdentity}", which this reading left out because no declaration can carry its name, so the key cannot be carried either. Rename the column in the database, then link the schema repository.`;
 };
 
 const foreignKeyGeneratedExpressionTailForPull = (
@@ -1334,6 +1399,7 @@ export const buildLossReport = (
 		facts.nextvalDefaults,
 		facts.foreignKeyNameApproximations,
 		facts.primaryKeyNameApproximations,
+		facts.command,
 	),
 	...omittedSchemaLines(facts.omittedSchemas, facts.command),
 	...omittedTableLines(facts.omittedTables, facts.command),

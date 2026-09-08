@@ -651,7 +651,7 @@ describe("inferFromCatalog / 712/R10 N#7: a primary key naming an omitted column
 		);
 		expect(table?.primaryKeyName).toBeUndefined();
 		expect(result.lossReport).toContain(
-			'Omitted: primary key "app.t1.t1_pkey" -- it names column "app.t1.Weird", which this reading left out because no declaration can carry its name, so the key cannot be declared either; the table is declared without a primary key. `check` keeps listing the index that backs it as unmanaged, naming "app.t1.t1_pkey", until every column the key names can be declared and the key with them. Next: rename the column in the database, then re-run `hejbro import`.',
+			'Omitted: primary key "app.t1.t1_pkey" -- it names column "app.t1.Weird", which this reading left out because no declaration can carry its name, so the key cannot be declared either; the table is declared without a primary key. `check` keeps listing the index that backs it as unmanaged, naming "app.t1.t1_pkey", until every column the key names can be declared and the key with them. Next: rename the column in the database, then re-run `hejbro import` into a fresh `--out` and merge the declaration, or declare it by hand.',
 		);
 	});
 
@@ -692,7 +692,7 @@ describe("inferFromCatalog / 712/R10 N#7: a primary key naming an omitted column
 		);
 		expect(table?.primaryKeyName).toBeUndefined();
 		expect(result.lossReport).toContain(
-			'Omitted: primary key "app.t2.t2_pkey" -- it names column "app.t2.st", which this reading left out with the enum type "app.Status" that types it, so the key cannot be declared either; the table is declared without a primary key. `check` keeps listing the index that backs it as unmanaged, naming "app.t2.t2_pkey", until every column the key names can be declared and the key with them. Next: rename the type in the database, then re-run `hejbro import`.',
+			'Omitted: primary key "app.t2.t2_pkey" -- it names column "app.t2.st", which this reading left out with the enum type "app.Status" that types it, so the key cannot be declared either; the table is declared without a primary key. `check` keeps listing the index that backs it as unmanaged, naming "app.t2.t2_pkey", until every column the key names can be declared and the key with them. Next: rename the type in the database, then re-run `hejbro import` into a fresh `--out` and merge the declaration, or declare it by hand.',
 		);
 	});
 
@@ -727,7 +727,7 @@ describe("inferFromCatalog / 712/R10 N#7: a primary key naming an omitted column
 		expect(table?.primaryKeyName).toBeUndefined();
 		expect(table?.columns.some((column) => column.name === "id")).toBe(true);
 		expect(result.lossReport).toContain(
-			'Omitted: primary key "app.comp.pk_comp" -- it names column "app.comp.Weird", which this reading left out because no declaration can carry its name, so the key cannot be declared either; the table is declared without a primary key. `check` keeps listing the index that backs it as unmanaged, naming "app.comp.pk_comp", until every column the key names can be declared and the key with them. Next: rename the column in the database, then re-run `hejbro import`.',
+			'Omitted: primary key "app.comp.pk_comp" -- it names column "app.comp.Weird", which this reading left out because no declaration can carry its name, so the key cannot be declared either; the table is declared without a primary key. `check` keeps listing the index that backs it as unmanaged, naming "app.comp.pk_comp", until every column the key names can be declared and the key with them. Next: rename the column in the database, then re-run `hejbro import` into a fresh `--out` and merge the declaration, or declare it by hand.',
 		);
 	});
 
@@ -770,7 +770,7 @@ describe("inferFromCatalog / 712/R10 N#7: a primary key naming an omitted column
 		expect(table?.primaryKeyName).toBeUndefined();
 		expect(table?.columns.some((column) => column.name === "id")).toBe(true);
 		expect(result.lossReport).toContain(
-			'Omitted: primary key "app.comp2.pk_comp2" -- it names column "app.comp2.st", which this reading left out with the enum type "app.Status" that types it, so the key cannot be declared either; the table is declared without a primary key. `check` keeps listing the index that backs it as unmanaged, naming "app.comp2.pk_comp2", until every column the key names can be declared and the key with them. Next: rename the type in the database, then re-run `hejbro import`.',
+			'Omitted: primary key "app.comp2.pk_comp2" -- it names column "app.comp2.st", which this reading left out with the enum type "app.Status" that types it, so the key cannot be declared either; the table is declared without a primary key. `check` keeps listing the index that backs it as unmanaged, naming "app.comp2.pk_comp2", until every column the key names can be declared and the key with them. Next: rename the type in the database, then re-run `hejbro import` into a fresh `--out` and merge the declaration, or declare it by hand.',
 		);
 	});
 
@@ -894,7 +894,7 @@ describe("inferFromCatalog / 712/R10 N#7: a primary key naming an omitted column
 		// that renaming "B" alone is enough (712/R9 D2's own family, "k"
 		// still needs its own enum type renamed and declared).
 		expect(result.lossReport).toContain(
-			'Omitted: primary key "app.t6.t6_pkey" -- it names column "app.t6.B", which this reading left out because no declaration can carry its name, so the key cannot be declared either; the table is declared without a primary key. `check` keeps listing the index that backs it as unmanaged, naming "app.t6.t6_pkey", until every column the key names can be declared and the key with them. Next: rename the column in the database, then re-run `hejbro import`.',
+			'Omitted: primary key "app.t6.t6_pkey" -- it names column "app.t6.B", which this reading left out because no declaration can carry its name, so the key cannot be declared either; the table is declared without a primary key. `check` keeps listing the index that backs it as unmanaged, naming "app.t6.t6_pkey", until every column the key names can be declared and the key with them. Next: rename the column in the database, then re-run `hejbro import` into a fresh `--out` and merge the declaration, or declare it by hand.',
 		);
 	});
 
@@ -929,7 +929,7 @@ describe("inferFromCatalog / 712/R10 N#7: a primary key naming an omitted column
 		expect(table?.primaryKeyName).toBeUndefined();
 		// "A" (0x41) sorts before "B" (0x42) by code unit.
 		expect(result.lossReport).toContain(
-			'Omitted: primary key "app.t7.t7_pkey" -- it names column "app.t7.A", which this reading left out because no declaration can carry its name, so the key cannot be declared either; the table is declared without a primary key. `check` keeps listing the index that backs it as unmanaged, naming "app.t7.t7_pkey", until every column the key names can be declared and the key with them. Next: rename the column in the database, then re-run `hejbro import`.',
+			'Omitted: primary key "app.t7.t7_pkey" -- it names column "app.t7.A", which this reading left out because no declaration can carry its name, so the key cannot be declared either; the table is declared without a primary key. `check` keeps listing the index that backs it as unmanaged, naming "app.t7.t7_pkey", until every column the key names can be declared and the key with them. Next: rename the column in the database, then re-run `hejbro import` into a fresh `--out` and merge the declaration, or declare it by hand.',
 		);
 	});
 });

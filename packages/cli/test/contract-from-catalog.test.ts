@@ -265,10 +265,16 @@ describe("exportPayloadFromCatalog / CI-G4-R1-03", () => {
 		// is never in there, so it never gets its own `Tables`/
 		// `contractMetadata.tables` entry, unlike a hand-declared
 		// `existingTable()` export in a vendored repository (a real
-		// export `buildExportDescription` does see). This is the gap
-		// reported to the lead as outside this commit's own scope
-		// (compose.ts only) -- not fixed here.
+		// export `buildExportDescription` does see).
 		expect(source).not.toContain('"users": {');
+		// B2 (D106 review, 712/R11 (B) ruling): the delta's own sentence
+		// now says the reference is carried in the foreign-key metadata
+		// and `Relationships`, with no relation for it -- `buildRelations`
+		// (contract/tables.ts) only ever emits one for a target that has
+		// its own `Tables` key, which schema-vendoring's own rule already
+		// withholds here. Pinned as its own assertion, not left implicit
+		// in the two above.
+		expect(source).toContain("readonly Relations: {};");
 	});
 
 	it("never emits a column present in the description but absent from the snapshot (undeclarable name)", () => {

@@ -378,7 +378,7 @@ describe("inferFromCatalog / 712/R11/R12 cross-cutting cell 1: a generated colum
 		// naming an omitted one is exactly what B#1 forbids.
 		expect(source).not.toMatch(/total:/);
 		expect(result.lossReport).toContain(
-			'Omitted: generated column "app.t.total" -- its expression names column "app.t.Bad Name", which this reading left out because no declaration can carry its name, so the generated column cannot be declared either. `check` keeps listing the generated column as unmanaged until that column and the generated column are both declared. Next: rename the column in the database, then re-run `hejbro import`.',
+			'Omitted: generated column "app.t.total" -- its expression names column "app.t.Bad Name", which this reading left out because no declaration can carry its name, so the generated column cannot be declared either. `check` keeps listing the generated column as unmanaged until that column and the generated column are both declared. Next: rename the column in the database, then re-run `hejbro import` into a fresh `--out` and merge the declaration, or declare it by hand.',
 		);
 
 		const paths = writeFiles(result);
@@ -429,7 +429,7 @@ describe("inferFromCatalog / 712/R11/R12 cross-cutting cell 1: a generated colum
 		const source = sourceOf(result);
 		expect(source).not.toMatch(/derived:/);
 		expect(result.lossReport).toContain(
-			'Omitted: generated column "app.t.derived" -- its expression names column "app.t.status", which this reading left out with the enum type "app.Status" that types it, so the generated column cannot be declared either. `check` keeps listing the generated column as unmanaged until that column and the generated column are both declared. Next: rename the type in the database, then re-run `hejbro import`.',
+			'Omitted: generated column "app.t.derived" -- its expression names column "app.t.status", which this reading left out with the enum type "app.Status" that types it, so the generated column cannot be declared either. `check` keeps listing the generated column as unmanaged until that column and the generated column are both declared. Next: rename the type in the database, then re-run `hejbro import` into a fresh `--out` and merge the declaration, or declare it by hand.',
 		);
 
 		const paths = writeFiles(result);

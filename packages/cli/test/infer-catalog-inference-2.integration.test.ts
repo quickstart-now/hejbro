@@ -379,7 +379,7 @@ describe("catalog-inference-2 / live witness: 1.1's roles-from-policies, 1.2's e
 
 	it("712/R5: the name-caused foreign key's omission line is exact", () => {
 		expect(importRun.stdout).toContain(
-			'Omitted: foreign key "app.orders.orders_userid_fkey" -- it is declared on column "app.orders.UserId", which this reading left out because no declaration can carry its name, so the key cannot be declared either. Next: rename the column in the database, then re-run `hejbro import`.',
+			'Omitted: foreign key "app.orders.orders_userid_fkey" -- it is declared on column "app.orders.UserId", which this reading left out because no declaration can carry its name, so the key cannot be declared either. Next: rename the column in the database, then re-run `hejbro import` into a fresh `--out` and merge the declaration, or declare it by hand.',
 		);
 	});
 
@@ -402,7 +402,7 @@ describe("catalog-inference-2 / live witness: 1.1's roles-from-policies, 1.2's e
 
 	it("712/R8: the enum-caused foreign key's own line matches the enum-cause wording exactly", () => {
 		expect(importRun.stdout).toContain(
-			'Omitted: foreign key "app.orders.orders_status_fkey" -- it is declared on column "app.orders.status", which this reading left out with the enum type "app.Status" that types it, so the key cannot be declared either. Next: rename the type in the database, then re-run `hejbro import`.',
+			'Omitted: foreign key "app.orders.orders_status_fkey" -- it is declared on column "app.orders.status", which this reading left out with the enum type "app.Status" that types it, so the key cannot be declared either. Next: rename the type in the database, then re-run `hejbro import` into a fresh `--out` and merge the declaration, or declare it by hand.',
 		);
 	});
 
@@ -419,10 +419,10 @@ describe("catalog-inference-2 / live witness: 1.1's roles-from-policies, 1.2's e
 
 	it("KK5 (712/R10 B#1): the omitted index and check constraint each match the approved wording exactly, and neither gets an approximation line", () => {
 		expect(importRun.stdout).toContain(
-			'Omitted: index "app.orders.orders_status_idx" -- it is declared on column "app.orders.status", which this reading left out with the enum type "app.Status" that types it, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the type in the database, then re-run `hejbro import`.',
+			'Omitted: index "app.orders.orders_status_idx" -- it is declared on column "app.orders.status", which this reading left out with the enum type "app.Status" that types it, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the type in the database, then re-run `hejbro import` into a fresh `--out` and merge the declaration, or declare it by hand.',
 		);
 		expect(importRun.stdout).toContain(
-			'Omitted: check constraint "app.orders.orders_userid_chk" -- its expression names column "app.orders.UserId", which this reading left out because no declaration can carry its name, so the check constraint cannot be declared either. `check` keeps listing the check constraint as unmanaged until that column and the check constraint are both declared. Next: rename the column in the database, then re-run `hejbro import`.',
+			'Omitted: check constraint "app.orders.orders_userid_chk" -- its expression names column "app.orders.UserId", which this reading left out because no declaration can carry its name, so the check constraint cannot be declared either. `check` keeps listing the check constraint as unmanaged until that column and the check constraint are both declared. Next: rename the column in the database, then re-run `hejbro import` into a fresh `--out` and merge the declaration, or declare it by hand.',
 		);
 		const approximationLines = importRun.stdout
 			.split("\n")
@@ -444,7 +444,7 @@ describe("catalog-inference-2 / live witness: 1.1's roles-from-policies, 1.2's e
 	it("MM3: a partial index caught only through its own predicate never reaches the starter declaration, and its own line says so", () => {
 		expect(declarationCode).not.toContain("orders_id_partial_status_idx");
 		expect(importRun.stdout).toContain(
-			'Omitted: index "app.orders.orders_id_partial_status_idx" -- its predicate names column "app.orders.status", which this reading left out with the enum type "app.Status" that types it, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the type in the database, then re-run `hejbro import`.',
+			'Omitted: index "app.orders.orders_id_partial_status_idx" -- its predicate names column "app.orders.status", which this reading left out with the enum type "app.Status" that types it, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the type in the database, then re-run `hejbro import` into a fresh `--out` and merge the declaration, or declare it by hand.',
 		);
 	});
 
@@ -455,7 +455,7 @@ describe("catalog-inference-2 / live witness: 1.1's roles-from-policies, 1.2's e
 	it("OO2: an index with both an expression and a predicate never reaches the starter declaration, and its own line names both clauses", () => {
 		expect(declarationCode).not.toContain("orders_lower_userid_active_idx");
 		expect(importRun.stdout).toContain(
-			'Omitted: index "app.orders.orders_lower_userid_active_idx" -- its expression or predicate names column "app.orders.UserId", which this reading left out because no declaration can carry its name, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the column in the database, then re-run `hejbro import`.',
+			'Omitted: index "app.orders.orders_lower_userid_active_idx" -- its expression or predicate names column "app.orders.UserId", which this reading left out because no declaration can carry its name, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the column in the database, then re-run `hejbro import` into a fresh `--out` and merge the declaration, or declare it by hand.',
 		);
 	});
 
@@ -466,7 +466,7 @@ describe("catalog-inference-2 / live witness: 1.1's roles-from-policies, 1.2's e
 		expect(declarationCode).toContain("lineNo");
 		expect(declarationCode).not.toContain("pk_line_items");
 		expect(importRun.stdout).toContain(
-			'Omitted: primary key "app.line_items.pk_line_items" -- it names column "app.line_items.Weird", which this reading left out because no declaration can carry its name, so the key cannot be declared either; the table is declared without a primary key. `check` keeps listing the index that backs it as unmanaged, naming "app.line_items.pk_line_items", until every column the key names can be declared and the key with them. Next: rename the column in the database, then re-run `hejbro import`.',
+			'Omitted: primary key "app.line_items.pk_line_items" -- it names column "app.line_items.Weird", which this reading left out because no declaration can carry its name, so the key cannot be declared either; the table is declared without a primary key. `check` keeps listing the index that backs it as unmanaged, naming "app.line_items.pk_line_items", until every column the key names can be declared and the key with them. Next: rename the column in the database, then re-run `hejbro import` into a fresh `--out` and merge the declaration, or declare it by hand.',
 		);
 	});
 

@@ -1395,7 +1395,20 @@ export const inferFromCatalog = async (
 		omittedSchemas: schemaPartition.omittedSchemas,
 		omittedTables,
 		omittedEnums,
-		omittedIndexes: built.flatMap((result) => result.omittedIndexes),
+		// N8(c) (D106 review): a UNIQUE constraint's own backing index is
+		// still an `InferredIndex` at `table.ts`'s own level (it never asks
+		// `pg_constraint` what an index backs), so the distinction is made
+		// here, against the same `uniqueConstraintIdentities` set the
+		// column-cause member exclusion above already reads.
+		omittedIndexes: built.flatMap((result) =>
+			result.omittedIndexes.map((index) => {
+				const identity = `${index.schema}.${index.table}.${index.sqlName}`;
+				if (uniqueConstraintIdentities.has(identity)) {
+					return { ...index, kind: "unique constraint" as const };
+				}
+				return { ...index, kind: "index" as const };
+			}),
+		),
 		omittedChecks: built.flatMap((result) => result.omittedChecks),
 		omittedForeignKeys: foreignKeyPartition.omittedForeignKeys,
 		omittedForeignKeysByColumn: foreignKeyPartition.omittedForeignKeysByColumn,
