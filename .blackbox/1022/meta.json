@@ -4,9 +4,9 @@
   "ref": "quickstart-now/hejbro#1022",
   "title": "import: a generated stored column loses its expression, so the starter fails the next check",
   "parent": "quickstart-now/hejbro#995",
-  "status": "open",
+  "status": "closed",
   "opened": "2026-09-06",
-  "closed": null,
+  "closed": "2026-09-08",
   "decisions": [],
   "work": [],
   "prs": [
@@ -14,6 +14,11 @@
       "number": 1026,
       "role": "refs",
       "pinnedAt": "2026-09-06T11:29Z"
+    },
+    {
+      "number": 1049,
+      "role": "closes",
+      "pinnedAt": "2026-09-08T16:58Z"
     }
   ],
   "origin": null,

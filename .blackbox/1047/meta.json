@@ -1,0 +1,21 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#1047",
+  "title": "import/pull: the 'nothing to infer in schema' line prints after the Omitted band, against the stated band order",
+  "parent": "quickstart-now/hejbro#995",
+  "status": "closed",
+  "opened": "2026-09-08",
+  "closed": "2026-09-08",
+  "decisions": [],
+  "work": [],
+  "prs": [
+    {
+      "number": 1049,
+      "role": "closes",
+      "pinnedAt": "2026-09-08T16:58Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

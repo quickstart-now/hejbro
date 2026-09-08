@@ -97,6 +97,67 @@ const widgetsResult: InferCatalogResult = {
 	omittedSchemaNames: [],
 };
 
+/** One table per schema, minimal shape (mirrors `widgetsResult`) -- a schema fixture must actually contribute a snapshot object under B2's final rule (a schema mentioned only in `--schema` contributes nothing and is excluded), so any test exercising two or more surviving schemas needs one of these per schema, not `emptyResult`. */
+/** One table per schema; a multi-schema fixture names them apart, since
+ * the contract keys `Tables` by SQL name alone and refuses two carried
+ * tables of one name across schemas (#1004). */
+const tableNameFor = (schema: string, schemaCount: number): string => {
+	if (schemaCount > 1) {
+		return `widgets_${schema}`;
+	}
+	return "widgets";
+};
+
+const tableFixture = (
+	schema: string,
+	name = "widgets",
+): InferCatalogResult["snapshot"]["objects"][string] => ({
+	schema,
+	name,
+	columns: [
+		{
+			name: "id",
+			typeNode: { typeName: "uuid" },
+			notNull: true,
+			primaryKey: true,
+		},
+	],
+	indexes: [],
+	foreignKeys: [],
+	primaryKeyName: `${name}_pkey`,
+});
+
+const resultForSchemas = (
+	schemas: ReadonlyArray<string>,
+): InferCatalogResult => ({
+	snapshot: {
+		formatVersion: 8,
+		dialect: "postgres",
+		objects: Object.fromEntries(
+			schemas.map((schema) => [
+				`table:${schema}.${tableNameFor(schema, schemas.length)}`,
+				tableFixture(schema, tableNameFor(schema, schemas.length)),
+			]),
+		),
+	},
+	description: {
+		tables: schemas.map((schema) => ({
+			schema,
+			table: tableNameFor(schema, schemas.length),
+			columns: [{ sqlName: "id", tsKey: "id" }],
+		})),
+		roleNames: [],
+	},
+	lossReport: [],
+	sql: schemas
+		.map(
+			(schema) =>
+				`create table "${schema}"."${tableNameFor(schema, schemas.length)}" (\n\t"id" uuid not null primary key\n);\n`,
+		)
+		.join(""),
+	omittedSchemaNames: [],
+});
+
 const depsFor = (
 	result: InferCatalogResult,
 	database = "widgets_db",
@@ -159,7 +220,7 @@ describe("runPull / 4.1", () => {
 				"--schema",
 				"alpha",
 			],
-			depsFor(emptyResult),
+			depsFor(resultForSchemas(["zeta", "alpha"])),
 		);
 
 		expect(outcome.exitCode).toBe(0);
@@ -167,6 +228,181 @@ describe("runPull / 4.1", () => {
 		expect(contractText).toContain('schemas: ["alpha", "zeta"]');
 		const lock = JSON.parse(readFileSync(lockPath(cwd), "utf8"));
 		expect(lock.schemas).toEqual(["alpha", "zeta"]);
+	});
+
+	/**
+	 * N11 (D106 review, cfr1-planner's own measurement): a requested
+	 * `--schema` the reading omitted whole (its own catalog name is not
+	 * a valid hejbro SQL identifier, `partitionSchemas`) is not one this
+	 * command actually read -- the "pulled …" line and the lock's own
+	 * `schemas` must never claim it, matching what the loss report
+	 * already says was dropped. `omittedSchemaNames` is
+	 * `InferCatalogResult`'s own name for exactly this set.
+	 */
+	it("excludes a requested schema the reading omitted whole from the 'pulled' line and the lock's own schemas", async () => {
+		const outcome = await runPull(
+			cwd,
+			[
+				"--db-url",
+				"postgres://fixture",
+				"--schema",
+				"zeta",
+				"--schema",
+				"BadSchema",
+			],
+			depsFor({
+				...resultForSchemas(["zeta"]),
+				omittedSchemaNames: ["BadSchema"],
+			}),
+		);
+
+		expect(outcome.exitCode).toBe(0);
+		expect(outcome.stdout[0]).toBe("pulled widgets_db (zeta)");
+		const contractText = readFileSync(vendorContractPath(cwd), "utf8");
+		expect(contractText).toContain('schemas: ["zeta"]');
+		expect(contractText).not.toContain("BadSchema");
+		const lock = JSON.parse(readFileSync(lockPath(cwd), "utf8"));
+		expect(lock.schemas).toEqual(["zeta"]);
+	});
+
+	/**
+	 * B2 final (D106 round-1 correction, lead ruling, "pull mirrors
+	 * import"): the list/lock is exactly the schemas that actually
+	 * contributed something to the snapshot -- a `--schema` that never
+	 * existed in the database contributed nothing, the same way an
+	 * omitted-whole schema did (above), so it is excluded too. Live-
+	 * measured (cfr1-pg): a genuinely absent schema earns its own
+	 * `Not inferred: nothing to infer in schema "X".` line (mirroring
+	 * `import`'s own `emptySchemaLines`), never the `Omitted: schema …`
+	 * line an invalid-name schema earns instead (below) -- the two
+	 * causes are announced in different bands, on purpose.
+	 */
+	it("excludes a requested schema that produced nothing (never existed) from the 'pulled' line and the lock's own schemas, naming it in the Not-inferred band", async () => {
+		const outcome = await runPull(
+			cwd,
+			["--db-url", "postgres://fixture", "--schema", "app", "--schema", "nope"],
+			depsFor(widgetsResult),
+		);
+
+		expect(outcome.exitCode).toBe(0);
+		expect(outcome.stdout[0]).toBe("pulled widgets_db (app)");
+		expect(outcome.stdout).toContain(
+			'Not inferred: nothing to infer in schema "nope".',
+		);
+		const lock = JSON.parse(readFileSync(lockPath(cwd), "utf8"));
+		expect(lock.schemas).toEqual(["app"]);
+	});
+
+	/**
+	 * B2 final: mirrors `import`'s own already-correct behaviour
+	 * verbatim -- an invalid-name schema keeps its own `Omitted: schema
+	 * …` line (from `result.lossReport`, shared with `import`), and
+	 * never also earns the `Not inferred: nothing to infer …` line
+	 * above (`schemaHasNamedOmission`'s own guard).
+	 *
+	 * NB1 (#1047, review round 2): also pins the report's own band
+	 * order with all three cases present at once (a genuinely absent
+	 * schema, an invalid-name schema, and content carrying its own
+	 * Guessed/Not-inferred/Approximated/Omitted line) -- the absent-
+	 * schema line used to land after every Omitted line; it now lands
+	 * inside the Not-inferred band.
+	 */
+	it("names an omitted-whole schema with its own Omitted line, never the Not-inferred nothing-to-infer line, in band order", async () => {
+		const outcome = await runPull(
+			cwd,
+			[
+				"--db-url",
+				"postgres://fixture",
+				"--schema",
+				"app",
+				"--schema",
+				"BadSchema",
+				"--schema",
+				"nope",
+			],
+			depsFor({
+				...resultForSchemas(["app"]),
+				omittedSchemaNames: ["BadSchema"],
+				lossReport: [
+					"Guessed: TypeScript keys from SQL names.",
+					"Not inferred: grants beyond their role name.",
+					"Approximated: every default, check, generated, and index-predicate expression is carried as raw SQL text, not the typed builders a hand-written declaration would use.",
+					'Omitted: schema "BadSchema" -- its catalog name is not a valid hejbro SQL identifier, so nothing it holds (tables, enums, sequences) can be carried in the contract. Rename the schema in the database, then link the schema repository.',
+				],
+			}),
+		);
+
+		expect(outcome.exitCode).toBe(0);
+		expect(
+			outcome.stdout.some((line) =>
+				line.startsWith('Omitted: schema "BadSchema"'),
+			),
+		).toBe(true);
+		expect(outcome.stdout).not.toContain(
+			'Not inferred: nothing to infer in schema "BadSchema".',
+		);
+		expect(outcome.stdout).toContain(
+			'Not inferred: nothing to infer in schema "nope".',
+		);
+		const bandPrefixes = outcome.stdout
+			.map((line) => /^(Guessed|Not inferred|Approximated|Omitted):/.exec(line))
+			.filter((match) => match !== null)
+			.map((match) => match[1]);
+		expect(bandPrefixes).toEqual([
+			"Guessed",
+			"Not inferred",
+			"Not inferred",
+			"Approximated",
+			"Omitted",
+		]);
+	});
+
+	/**
+	 * B2 final (712/R14, new surface, pending lead approval on the exact
+	 * message text): mirrors `import`'s own
+	 * `error[import-nothing-declarable]` verbatim, "declare" swapped for
+	 * pull's own "carry into the contract" -- a pull that reads real
+	 * database objects but can carry none of them into the contract
+	 * refuses outright, rather than writing an empty `pulled X ()`
+	 * bundle. The requested schema held something (it is in
+	 * `omittedSchemaNames`), so this is the "declarable" branch, not the
+	 * "nothing to infer" one below.
+	 */
+	it("refuses with pull-nothing-declarable when a requested schema held something this reading could not carry the name of, and nothing else contributed either", async () => {
+		const outcome = await runPull(
+			cwd,
+			["--db-url", "postgres://fixture", "--schema", "zeta"],
+			depsFor({ ...emptyResult, omittedSchemaNames: ["zeta"] }),
+		);
+
+		expect(outcome.exitCode).toBe(1);
+		expect(outcome.stderr).toContain("pull-nothing-declarable");
+		expect(outcome.stderr).toContain(
+			'hejbro pull found nothing it could carry into the contract in schema(s) zeta: each one held something, but its own catalog name is not a valid hejbro SQL identifier (see the "Omitted" line(s) above). Next: rename the schema(s) named above in the database, then rerun `hejbro pull`.',
+		);
+	});
+
+	/**
+	 * B2 final (712/R14, new surface, lead-approved): mirrors `import`'s
+	 * own `error[import-nothing-to-infer]` verbatim, only the command
+	 * name swapped -- every requested schema produced nothing at all,
+	 * and none of them for a nameable-but-omitted reason
+	 * (`omittedSchemaNames` is empty), so this is the "genuinely nothing
+	 * here" branch, a different code than the "held something, couldn't
+	 * carry it" one above.
+	 */
+	it("refuses with pull-nothing-to-infer when every requested schema produced nothing, and none of them for an omitted-name reason", async () => {
+		const outcome = await runPull(
+			cwd,
+			["--db-url", "postgres://fixture", "--schema", "nope"],
+			depsFor(emptyResult),
+		);
+
+		expect(outcome.exitCode).toBe(1);
+		expect(outcome.stderr).toContain("pull-nothing-to-infer");
+		expect(outcome.stderr).toContain(
+			"hejbro pull found no table, enum, or sequence to infer in schema(s) nope. Next: confirm the schema name(s) are correct and that the database holds objects in them, then rerun `hejbro pull`.",
+		);
 	});
 
 	/**
@@ -384,7 +620,7 @@ describe("hejbro pull / the configured driver factory threads through (#458 task
 			["--db-url", "postgres://factory-test", "--schema", "app"],
 			{
 				importer,
-				inferCatalog: async () => emptyResult,
+				inferCatalog: async () => resultForSchemas(["app"]),
 				currentDatabaseName: async () => "widgets_db",
 			},
 		);

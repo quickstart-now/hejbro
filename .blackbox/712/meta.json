@@ -125,6 +125,54 @@
       "at": "2026-09-06T06:40Z",
       "title": "review round 1: an omitted column takes its indexes, checks and unique constraints too; two-cause columns name both ways out; the primary-key line states a name collision; ordering sentences narrowed",
       "ratified": null
+    },
+    {
+      "id": "R11",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "712/R1",
+        "412/D29"
+      ],
+      "at": "2026-09-07T14:29Z",
+      "title": "generated columns are read, the unread-target sentence narrows to metadata (D106 R1)",
+      "ratified": null
+    },
+    {
+      "id": "R12",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "712/R11",
+        "712/R10"
+      ],
+      "at": "2026-09-07T14:39Z",
+      "title": "a generated column whose expression names an omitted column is omitted and announced, in this round",
+      "ratified": null
+    },
+    {
+      "id": "R13",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "712/R11",
+        "712/R12"
+      ],
+      "at": "2026-09-08T16:40Z",
+      "title": "not inferred is a third root cause; one rule for every expression-bearing member, no way out today",
+      "ratified": null
+    },
+    {
+      "id": "R14",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "712/R11",
+        "412/D23"
+      ],
+      "at": "2026-09-08T16:40Z",
+      "title": "pull mirrors import: the schema list is what was read, absent schemas are announced, an empty pull fails",
+      "ratified": null
     }
   ],
   "work": [
@@ -141,6 +189,28 @@
       "title": "three constructor-mode review rounds: the omission family widened to indexes, checks and unique constraints, and the record corrected on what a catalog can tell",
       "pr": null,
       "decisions": []
+    },
+    {
+      "id": "W3",
+      "at": "2026-09-08T15:49Z",
+      "title": "R13/R14 rework: no-builder-type member exclusion, pull mirrors import's schema handling",
+      "pr": null,
+      "decisions": [
+        "R11",
+        "R12",
+        "R13",
+        "R14"
+      ]
+    },
+    {
+      "id": "W4",
+      "at": "2026-09-08T16:28Z",
+      "title": "NB1/#1047: move the empty-schema line into the Not-inferred band",
+      "pr": null,
+      "decisions": [
+        "R13",
+        "R14"
+      ]
     }
   ],
   "prs": [
@@ -148,6 +218,11 @@
       "number": 1026,
       "role": "closes",
       "pinnedAt": "2026-09-06T11:29Z"
+    },
+    {
+      "number": 1049,
+      "role": "refs",
+      "pinnedAt": "2026-09-08T16:58Z"
     }
   ],
   "origin": null,

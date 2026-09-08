@@ -19,6 +19,11 @@
       "number": 1026,
       "role": "closes",
       "pinnedAt": "2026-09-06T11:29Z"
+    },
+    {
+      "number": 1049,
+      "role": "refs",
+      "pinnedAt": "2026-09-08T16:58Z"
     }
   ],
   "origin": null,

@@ -1,0 +1,21 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#1032",
+  "title": "import/pull: column-level and sequence-level grants contribute no role name to the reading",
+  "parent": "quickstart-now/hejbro#995",
+  "status": "open",
+  "opened": "2026-09-08",
+  "closed": null,
+  "decisions": [],
+  "work": [],
+  "prs": [
+    {
+      "number": 1049,
+      "role": "refs",
+      "pinnedAt": "2026-09-08T16:58Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

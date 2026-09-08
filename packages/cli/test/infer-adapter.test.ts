@@ -157,6 +157,7 @@ describe("mergeTableFacts / 1.4b adapter", () => {
 					position: 1,
 					identityKind: "",
 					generatedKind: "",
+					referencedColumns: [],
 				},
 				{
 					schema: "app",
@@ -165,6 +166,7 @@ describe("mergeTableFacts / 1.4b adapter", () => {
 					position: 1,
 					identityKind: "",
 					generatedKind: "",
+					referencedColumns: [],
 				},
 				{
 					schema: "app",
@@ -173,6 +175,7 @@ describe("mergeTableFacts / 1.4b adapter", () => {
 					position: 2,
 					identityKind: "",
 					generatedKind: "",
+					referencedColumns: [],
 				},
 				{
 					schema: "app",
@@ -181,6 +184,7 @@ describe("mergeTableFacts / 1.4b adapter", () => {
 					position: 3,
 					identityKind: "",
 					generatedKind: "",
+					referencedColumns: [],
 				},
 			],
 			foreignKeyDetails: [
@@ -460,6 +464,7 @@ describe("mergeTableFacts / 1.4b adapter", () => {
 					position: 1,
 					identityKind: "",
 					generatedKind: "",
+					referencedColumns: [],
 				},
 				{
 					schema: "app",
@@ -468,6 +473,7 @@ describe("mergeTableFacts / 1.4b adapter", () => {
 					position: 1,
 					identityKind: "",
 					generatedKind: "",
+					referencedColumns: [],
 				},
 				{
 					schema: "app",
@@ -476,6 +482,7 @@ describe("mergeTableFacts / 1.4b adapter", () => {
 					position: 2,
 					identityKind: "",
 					generatedKind: "",
+					referencedColumns: [],
 				},
 				{
 					schema: "app",
@@ -484,6 +491,7 @@ describe("mergeTableFacts / 1.4b adapter", () => {
 					position: 3,
 					identityKind: "",
 					generatedKind: "",
+					referencedColumns: [],
 				},
 				{
 					schema: "app",
@@ -492,6 +500,7 @@ describe("mergeTableFacts / 1.4b adapter", () => {
 					position: 4,
 					identityKind: "",
 					generatedKind: "",
+					referencedColumns: [],
 				},
 			],
 			foreignKeyDetails: [

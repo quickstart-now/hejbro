@@ -364,12 +364,28 @@ something by hand) never silently discards that edit.
 What it infers is necessarily an approximation of a hand-written
 declaration, and every reading prints a loss report saying exactly
 which kind of approximation it made, in four bands: **Guessed** — a
-column's TypeScript key from its SQL name, the default numeric mode,
-and unknown array-element nullability (read as nullable), plus any
-role name grants and policies name; **Not inferred** — functions,
-triggers, view bodies, policy expressions, grants beyond a role's bare
-name (a blanket line — never a per-instance list), a column whose type
-no builder expresses, and a standalone sequence no column owns (the
+column's TypeScript key from its SQL name (two columns whose names
+would otherwise share a key keep it split: whichever one's own name
+the key round-trips back to keeps the bare key, every other one is
+suffixed `2`, `3`, … in physical column order; when none of the
+colliding names round-trips at all, physical order alone decides —
+`foo__bar` keeps the bare `fooBar`, a later `foo_bar_` in the same
+table becomes `fooBar2`), the default numeric mode, and unknown
+array-element nullability (read as nullable), plus any role name a
+schema `USAGE` grant, a table-level grant (including a default
+privilege for future tables), or a policy's own `roles` names — a
+column-level or a sequence-level grant is never read and contributes
+no role name at all, and a policy declared `to current_user`/`to
+session_user` names whichever role Postgres already resolved that
+keyword to when the policy was created, not the literal keyword: on a
+hosted platform this can surface the platform's own owner role,
+indistinguishable here from any other guessed name; **Not inferred** —
+functions, triggers, view bodies, policy expressions, grants beyond a
+role's bare name (a blanket line — never a per-instance list), a
+column whose type no builder expresses (this line says nothing about
+`check`: such a column still shows up in `check`'s own inventory as
+unmanaged, the same as any other undeclared column, neither promised
+nor denied by this line), and a standalone sequence no column owns (the
 DSL has no `defineSequence()` yet); **Approximated** — a named UNIQUE
 constraint as a same-named unique index, when its own column survives
 (one omitted for its own name, or for the enum type that typed it,
@@ -394,7 +410,20 @@ keeps reporting that column as undeclared until it's renamed in the
 database *and declared* (renaming alone only makes the name one a
 declaration can carry): the DSL derives every column's SQL name from its TypeScript
 key and accepts no override, so no declaration, hand-written or not,
-can carry either kind of name. Beyond a column, six further kinds of
+can carry either kind of name. A column drops out of a declaration for
+one of three reasons: its own name (above, an **Omitted** line), the
+enum type that types it (an **Omitted** line, below), or (712/R13) its
+own type — no column builder expresses it at all, the **Not inferred**
+column line already named above, not an **Omitted** one (the column's
+own name is fine, so the report never claims otherwise). Whichever of
+the three it is, a member naming that column — an index, a check
+constraint, a UNIQUE constraint, a generated column, a primary key or a
+foreign key — is still omitted on its own line (below). The third
+reason has no exit today: it is not a renaming problem (nothing about
+the column's own name is wrong) and hand-declaring it is not possible
+either (no general-purpose column builder exists in the DSL) — a line
+naming a member that fell to this reason carries no `Next:`/`Rename …`
+remedy at all, only the reason. Beyond a column, seven further kinds of
 catalog name cost hejbro the object that carries it: a **schema**
 whose own name is not a valid hejbro SQL identifier (everything it
 holds — tables, enums, sequences — is omitted with it, unreported by
@@ -404,7 +433,7 @@ keys — is left undeclared with it); an **enum type** whose own name
 is not (every column typed by it is left out with it, and `check`
 keeps naming each of those columns as unmanaged until it is declared,
 but never names the type itself — its inventory has no enum axis,
-712/R3); an **index** or a **check
+712/R3); an **index**, a **check constraint** or a **UNIQUE
 constraint** whose own name is not (`check` keeps listing each as
 unmanaged until it is renamed in the database and declared); and a **foreign key**
 whose own *target*'s name — its schema, or its table — is not one
@@ -417,10 +446,26 @@ naming the column that cost it and following that column's own cause
 (#873, 712/R8); when an omitted enum type took both of a key's columns
 at once (an enum-to-enum relationship losing its shared type), only
 one line ever announces it, its reason on the declared side (712/R9).
-An omitted column takes its own index, check constraint and UNIQUE
-constraint with it the same way — each named on its own line, with the
-column that cost it and that column's own cause, and none of them ever
-gets an approximation line either (712/R10). A foreign key into a schema `import`/`pull` simply never
+A column left out of the declaration — for any of its three reasons —
+takes its own index,
+check constraint, UNIQUE constraint and every stored **generated
+column whose own expression names it** with it the same way — a
+generated column can never name another generated column in its own
+expression (Postgres itself forbids it), so this cascade runs exactly
+one level deep. A generated column omitted this way — or omitted for
+its own cause, above — then takes *its own* index, check constraint,
+UNIQUE constraint, primary key and foreign key with it in turn, a
+second-order cascade (712/R11, 712/R12, 712/R13); every one of these
+lines names the column that cost it and that column's own cause, and
+none of them ever gets an approximation line either (712/R10). When
+that cause is the column's own name or its enum type, renaming the
+object named in one of these lines is never the end of the remedy by
+itself: the report's own `Next:` line also says to either re-run
+`hejbro import` into a fresh `--out` and merge the new file's
+declaration into the one already checked in, or add the declaration by
+hand. When the cause is instead the column's own type (above), no
+`Next:` line exists at all — there is nothing to rename and no way to
+hand-declare it, so the line states only the reason. A foreign key into a schema `import`/`pull` simply never
 named is a different case, not an omission: its target's own name may
 be perfectly ordinary, so the relationship is kept, declared against an
 unexported handle to a table this repository does not declare, and the
@@ -457,6 +502,37 @@ SQL name no declaration key can produce (above): no repository's own
 declaration, linked or not, can carry that name either, so only
 renaming the column in the database ends that one, the same remedy
 `import` needs. See that reference for the full shape.
+
+`pull`'s own `--schema` handling mirrors `import`'s (712/R14). A named
+schema the database does not hold at all earns a `Not inferred:
+nothing to infer in schema "X".` line, the same as `import` prints,
+rather than stopping the run — as long as at least one other named
+schema contributed something. A named schema whose own catalog name is
+not a valid hejbro SQL identifier is a different case: it earns its
+own `Omitted: schema …` line instead (above), never the `Not inferred`
+one — the two causes stay in the bands they already belong to, exactly
+as they do for `import`. When every named schema produces nothing,
+`pull` refuses instead of writing an empty bundle:
+`error[pull-nothing-to-infer]` when none of them held anything at all,
+`error[pull-nothing-declarable]` when at least one held something this
+reading could not carry the name of — the same two-code split
+`import`'s own `import-nothing-to-infer`/`import-nothing-declarable`
+already makes, mirrored rather than collapsed into one. The `pulled …`
+line, the lock's own `schemas`, and the contract's own metadata all
+name exactly the schemas that actually contributed something to the
+snapshot — never one the database doesn't hold, and never one this
+reading could not carry the name of.
+
+Some catalog facts are not part of either reading at all yet, so
+neither the loss report's own bands nor `check`'s inventory names
+them: a table's own partitioning and inheritance (`INHERITS`), a table
+declared `UNLOGGED`, SQL comments (`COMMENT ON ...`), and row-level
+security's own enabled/forced flag. Neither `import` nor `pull` infers
+any of these — a declaration adopting such a table starts from its
+column shape only, same as any other, and enabling row-level security
+itself stays a declaration you write ("Deciding what to manage",
+above); this gap has no report line yet (tracked as #1034), so stating
+it here is the only place a reader learns it at all.
 
 ## Where this is enforced
 

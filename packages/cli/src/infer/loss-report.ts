@@ -337,11 +337,25 @@ export type OmittedEnum = {
 	}>;
 };
 
-/** An index whose catalog name is not a valid hejbro SQL identifier (D106 R4-B1) -- costs that index alone; the table and its other objects are still declared. */
+/**
+ * An index whose catalog name is not a valid hejbro SQL identifier
+ * (D106 R4-B1) -- costs that index alone; the table and its other
+ * objects are still declared. N8(c) (D106 review): a UNIQUE
+ * constraint's own backing index reaches this same path (`table.ts`'s
+ * own `omittedIndexes` never asks `pg_constraint` what an index
+ * backs), and one noun per constraint kind is the rule the member
+ * family (`OmittedTableMemberAtColumn`) already keeps for the exact
+ * same object omitted at a *column* instead of for its own name --
+ * `kind` is the same distinction, carried here so a UNIQUE constraint
+ * omitted for its own name is announced as one, never as a plain
+ * "index" only because the *other* cause (a column) happens to say
+ * "unique constraint".
+ */
 export type OmittedIndex = {
 	readonly schema: string;
 	readonly table: string;
 	readonly sqlName: string;
+	readonly kind: "index" | "unique constraint";
 };
 
 /** A check constraint whose catalog name is not a valid hejbro SQL identifier (D106 R4-B1) -- costs that check alone; the table and its other objects are still declared. */
@@ -398,9 +412,17 @@ export type OmittedForeignKeyColumn = {
 	/** `"<schema>.<table>.<sqlName>"` of the omitted column that cost this foreign key. */
 	readonly columnIdentity: string;
 	readonly end: "source" | "target";
-	readonly cause: "name" | "enum";
+	readonly cause: "name" | "enum" | "generatedExpression" | "notInferred";
 	/** The enum type's own `"<schema>.<name>"` identity -- present only when `cause` is `"enum"` (712/R8). */
 	readonly enumIdentity?: string;
+	/** 712/R13: the format-type text (`facts.sqlType`) -- present only when `cause` is `"notInferred"`, mirroring the "Not inferred: column ..." line's own text. */
+	readonly notInferredSqlType?: string;
+	/** 712/R12 (B), cfr1-planner's own measurement: the column a generated column's own expression names, and *that* column's own cause -- present only when `cause` is `"generatedExpression"`, so the line can name the root rather than an anonymous "a column this reading already left out" and pick the tail its own root cause (not this column's) actually earns. */
+	readonly rootColumnIdentity?: string;
+	readonly rootCause?: "name" | "enum" | "notInferred";
+	readonly rootEnumIdentity?: string;
+	/** 712/R13: mirrors `notInferredSqlType`, for the root's own cause. */
+	readonly rootNotInferredSqlType?: string;
 };
 
 /**
@@ -445,8 +467,16 @@ export type OmittedTableMemberAtColumn = {
 	readonly table: string;
 	readonly sqlName: string;
 	readonly columnIdentity: string;
-	readonly cause: "name" | "enum";
+	readonly cause: "name" | "enum" | "generatedExpression" | "notInferred";
 	readonly enumIdentity?: string;
+	/** 712/R13: mirrors {@link OmittedForeignKeyColumn}'s own `notInferredSqlType`. */
+	readonly notInferredSqlType?: string;
+	/** 712/R12 (B): mirrors {@link OmittedForeignKeyColumn}'s own root fields -- present only when `cause` is `"generatedExpression"`. */
+	readonly rootColumnIdentity?: string;
+	readonly rootCause?: "name" | "enum" | "notInferred";
+	readonly rootEnumIdentity?: string;
+	/** 712/R13: mirrors {@link OmittedForeignKeyColumn}'s own `rootNotInferredSqlType`. */
+	readonly rootNotInferredSqlType?: string;
 	readonly axis: MemberAxis;
 };
 
@@ -470,8 +500,16 @@ export type OmittedPrimaryKey = {
 	readonly table: string;
 	readonly name: string;
 	readonly columnIdentity: string;
-	readonly cause: "name" | "enum";
+	readonly cause: "name" | "enum" | "generatedExpression" | "notInferred";
 	readonly enumIdentity?: string;
+	/** 712/R13: mirrors {@link OmittedForeignKeyColumn}'s own `notInferredSqlType`. */
+	readonly notInferredSqlType?: string;
+	/** 712/R12 (B): mirrors {@link OmittedForeignKeyColumn}'s own root fields -- present only when `cause` is `"generatedExpression"`. */
+	readonly rootColumnIdentity?: string;
+	readonly rootCause?: "name" | "enum" | "notInferred";
+	readonly rootEnumIdentity?: string;
+	/** 712/R13: mirrors {@link OmittedForeignKeyColumn}'s own `rootNotInferredSqlType`. */
+	readonly rootNotInferredSqlType?: string;
 };
 
 export type LossReportFacts = {
@@ -498,6 +536,8 @@ export type LossReportFacts = {
 	readonly omittedIndexesAtColumn: ReadonlyArray<OmittedTableMemberAtColumn>;
 	readonly omittedChecksAtColumn: ReadonlyArray<OmittedTableMemberAtColumn>;
 	readonly omittedUniqueConstraintsAtColumn: ReadonlyArray<OmittedTableMemberAtColumn>;
+	/** 712/R11/R12: a stored generated column whose own expression names a column this reading already omitted (for its own name, or for the enum type that typed it) -- the generated column itself is left out with it, the same "member at an omitted column" shape B#1 already gives an index or a check constraint. */
+	readonly omittedGeneratedColumnsAtColumn: ReadonlyArray<OmittedTableMemberAtColumn>;
 	readonly omittedPrimaryKeys: ReadonlyArray<OmittedPrimaryKey>;
 };
 
@@ -583,11 +623,51 @@ const primaryKeyNameCollisionClause = (
 const EXPRESSION_APPROXIMATION_LINE =
 	"Approximated: every default, check, generated, and index-predicate expression is carried as raw SQL text, not the typed builders a hand-written declaration would use.";
 
+/**
+ * N8(b)/N8(b)-FK (D106 review, cfr1-planner's own measurement, lead
+ * ruling on the FK line's own follow-up): import's own consumer runs
+ * `generate`/`check`, so naming what those commands will report is the
+ * relevant consequence there, unchanged for both keys. A pull consumer
+ * runs neither -- for the primary key, `contract/tables.ts`'s own
+ * comment already states the contract carries no `primaryKey` fact at
+ * all (only `typeNode`/`mode`/`notNullElements` reach it), so the
+ * pulled contract itself names neither the catalog name nor the
+ * derived one (the bundle's own migration SQL and `schema.json` do
+ * carry the derived name, since they come from the starter
+ * declaration, not from the contract). For the foreign key,
+ * `buildRelationships` (`contract/tables.ts`) reads `fk.name` off that
+ * same starter declaration into `ContractForeignKeyMeta.name`, so the
+ * contract carries the derived name there, never the catalog name.
+ * Both pull lines state only what the contract carries -- never a
+ * promise about `generate`/`check`, commands a pull consumer never
+ * runs.
+ */
+const primaryKeyNameApproximationLineForImport = (
+	approximation: PrimaryKeyNameApproximation,
+): string =>
+	`Approximated: the primary key "${approximation.schema}.${approximation.table}.${approximation.catalogName}" is declared under the derived name "${approximation.derivedName}" instead -- the DSL derives every primary-key name, so \`generate\`/\`check\` will name this constraint differently from the database. Rename the constraint to "${approximation.derivedName}" in the database${primaryKeyNameCollisionClause(approximation)} \`check\` reports the declared "${approximation.derivedName}" as missing on every run and lists "${approximation.catalogName}" in its unmanaged-index inventory.`;
+
+const primaryKeyNameApproximationLineForPull = (
+	approximation: PrimaryKeyNameApproximation,
+): string =>
+	`Approximated: the primary key "${approximation.schema}.${approximation.table}.${approximation.catalogName}" is declared under the derived name "${approximation.derivedName}" instead -- the DSL derives every primary-key name; the pulled contract carries neither name, since it names no primary key at all -- the bundle's migration SQL and \`schema.json\` do carry "${approximation.derivedName}".`;
+
+const foreignKeyNameApproximationLineForImport = (
+	approximation: ForeignKeyNameApproximation,
+): string =>
+	`Approximated: the foreign key "${approximation.schema}.${approximation.table}.${approximation.catalogName}" is declared under the derived name "${approximation.derivedName}" instead -- its own catalog name is not a valid hejbro SQL identifier, so \`generate\`/\`check\` will name this constraint differently from the database.`;
+
+const foreignKeyNameApproximationLineForPull = (
+	approximation: ForeignKeyNameApproximation,
+): string =>
+	`Approximated: the foreign key "${approximation.schema}.${approximation.table}.${approximation.catalogName}" is declared under the derived name "${approximation.derivedName}" instead -- its own catalog name is not a valid hejbro SQL identifier; the pulled contract carries "${approximation.derivedName}" in its foreign-key metadata, never "${approximation.catalogName}".`;
+
 const approximationLines = (
 	uniqueIndexApproximations: ReadonlyArray<UniqueIndexApproximation>,
 	nextvalDefaults: ReadonlyArray<NextvalDefaultApproximation>,
 	foreignKeyNameApproximations: ReadonlyArray<ForeignKeyNameApproximation>,
 	primaryKeyNameApproximations: ReadonlyArray<PrimaryKeyNameApproximation>,
+	command: LossReportFacts["command"],
 ): ReadonlyArray<string> => [
 	...sortedBy(
 		uniqueIndexApproximations,
@@ -608,18 +688,22 @@ const approximationLines = (
 		foreignKeyNameApproximations,
 		(approximation) =>
 			`${approximation.schema}.${approximation.table}.${approximation.catalogName}`,
-	).map(
-		(approximation) =>
-			`Approximated: the foreign key "${approximation.schema}.${approximation.table}.${approximation.catalogName}" is declared under the derived name "${approximation.derivedName}" instead -- its own catalog name is not a valid hejbro SQL identifier, so \`generate\`/\`check\` will name this constraint differently from the database.`,
-	),
+	).map((approximation) => {
+		if (command === "pull") {
+			return foreignKeyNameApproximationLineForPull(approximation);
+		}
+		return foreignKeyNameApproximationLineForImport(approximation);
+	}),
 	...sortedBy(
 		primaryKeyNameApproximations,
 		(approximation) =>
 			`${approximation.schema}.${approximation.table}.${approximation.catalogName}`,
-	).map(
-		(approximation) =>
-			`Approximated: the primary key "${approximation.schema}.${approximation.table}.${approximation.catalogName}" is declared under the derived name "${approximation.derivedName}" instead -- the DSL derives every primary-key name, so \`generate\`/\`check\` will name this constraint differently from the database. Rename the constraint to "${approximation.derivedName}" in the database${primaryKeyNameCollisionClause(approximation)} \`check\` reports the declared "${approximation.derivedName}" as missing on every run and lists "${approximation.catalogName}" in its unmanaged-index inventory.`,
-	),
+	).map((approximation) => {
+		if (command === "pull") {
+			return primaryKeyNameApproximationLineForPull(approximation);
+		}
+		return primaryKeyNameApproximationLineForImport(approximation);
+	}),
 	EXPRESSION_APPROXIMATION_LINE,
 ];
 
@@ -669,6 +753,23 @@ const undeclarableNameLines = (
 };
 
 /**
+ * N2 (D106 review, cfr1-planner's own measurement): "then re-run
+ * `hejbro import`" alone is a false remedy -- `import` never
+ * overwrites, so a second run at the same `--out` after the rename
+ * exits `import-destination-exists` (measured live, #712
+ * evaluation.md's own `proj-omit/import2.stderr`). The whole remedy is
+ * a second import into a fresh `--out`, merged into the existing
+ * declarations by hand, or a hand-written declaration outright -- one
+ * shared phrase every import-side "Next:" tail below ends with
+ * (singular or the two-thing plural the enum-with-columns line needs),
+ * so the wording never drifts between the sites that repeat it.
+ */
+const REIMPORT_REMEDY =
+	"re-run `hejbro import` into a fresh `--out` and merge the declaration, or declare it by hand";
+const REIMPORT_REMEDY_PLURAL =
+	"re-run `hejbro import` into a fresh `--out` and merge the declarations, or declare them by hand";
+
+/**
  * import's own consequence: no declaration file can name a schema
  * whose own identifier hejbro cannot express, so every table, enum and
  * sequence it holds goes with it -- and unlike an omitted table under
@@ -678,7 +779,7 @@ const undeclarableNameLines = (
  * (#707): nothing in it is declared, so `check` never lists it either.
  */
 const omittedSchemaLineForImport = (schema: OmittedSchema): string =>
-	`Omitted: schema "${schema.sqlName}" -- its catalog name is not a valid hejbro SQL identifier, so no declaration can carry it. Its tables, enums and sequences are not inferred either, and \`check\` will not list them, since nothing in that schema is declared. Next: rename the schema in the database, then re-run \`hejbro import\`.`;
+	`Omitted: schema "${schema.sqlName}" -- its catalog name is not a valid hejbro SQL identifier, so no declaration can carry it. Its tables, enums and sequences are not inferred either, and \`check\` will not list them, since nothing in that schema is declared. Next: rename the schema in the database, then ${REIMPORT_REMEDY}.`;
 
 /** pull's own consequence: a table under an unexpressible schema can reach neither the snapshot nor the contract. */
 const omittedSchemaLineForPull = (schema: OmittedSchema): string =>
@@ -752,13 +853,13 @@ const omittedEnumColumnList = (columns: OmittedEnum["columns"]): string =>
 const omittedEnumLineForImportWithColumns = (
 	enumOmission: OmittedEnum,
 ): string =>
-	`Omitted: enum type "${enumOmission.schema}.${enumOmission.sqlName}" -- its catalog name is not a valid hejbro SQL identifier, so no declaration can carry it, and every column typed by it is left out with it: ${omittedEnumColumnList(enumOmission.columns)}. \`check\` keeps naming each of them as unmanaged until it is declared, and never names the type itself -- its inventory has no enum axis. Next: rename the type in the database, re-run \`hejbro import\`, and declare both.`;
+	`Omitted: enum type "${enumOmission.schema}.${enumOmission.sqlName}" -- its catalog name is not a valid hejbro SQL identifier, so no declaration can carry it, and every column typed by it is left out with it: ${omittedEnumColumnList(enumOmission.columns)}. \`check\` keeps naming each of them as unmanaged until it is declared, and never names the type itself -- its inventory has no enum axis. Next: rename the type in the database, then ${REIMPORT_REMEDY_PLURAL}.`;
 
 /** import's own consequence, no column typed by it: nothing else is left out. */
 const omittedEnumLineForImportWithoutColumns = (
 	enumOmission: OmittedEnum,
 ): string =>
-	`Omitted: enum type "${enumOmission.schema}.${enumOmission.sqlName}" -- its catalog name is not a valid hejbro SQL identifier, so no declaration can carry it. No column is typed by it, so nothing else is left out, and \`check\` never names the type -- its inventory has no enum axis. Next: rename the type in the database and re-run \`hejbro import\`.`;
+	`Omitted: enum type "${enumOmission.schema}.${enumOmission.sqlName}" -- its catalog name is not a valid hejbro SQL identifier, so no declaration can carry it. No column is typed by it, so nothing else is left out, and \`check\` never names the type -- its inventory has no enum axis. Next: rename the type in the database, then ${REIMPORT_REMEDY}.`;
 
 const omittedEnumLineForImport = (enumOmission: OmittedEnum): string => {
 	if (enumOmission.columns.length === 0) {
@@ -815,11 +916,11 @@ const omittedEnumLines = (
  * names the whole exit condition, not just its first half.
  */
 const omittedIndexLine = (index: OmittedIndex): string =>
-	`Omitted: index "${index.schema}.${index.table}.${index.sqlName}" -- its catalog name is not a valid hejbro SQL identifier, so no declaration can carry it under the same name \`check\` would compare it by. \`check\` keeps listing it as unmanaged until it is renamed in the database and declared; a hand-written declaration under a different name only adds a second one.`;
+	`Omitted: ${index.kind} "${index.schema}.${index.table}.${index.sqlName}" -- its catalog name is not a valid hejbro SQL identifier, so no declaration can carry it under the same name \`check\` would compare it by. \`check\` keeps listing it as unmanaged until it is renamed in the database and declared; a hand-written declaration under a different name only adds a second one.`;
 
 /** pull's own consequence (D106 round 1 B1 of harden-check-inventory): a pull consumer holds no declarations of the producer's schema, so no `check` listing follows -- the index cannot be carried in the contract, and linking the schema repository is the way out, as for every other pull line. */
 const omittedIndexLineForPull = (index: OmittedIndex): string =>
-	`Omitted: index "${index.schema}.${index.table}.${index.sqlName}" -- its catalog name is not a valid hejbro SQL identifier, so it cannot be carried in the contract. Rename the index in the database, then link the schema repository.`;
+	`Omitted: ${index.kind} "${index.schema}.${index.table}.${index.sqlName}" -- its catalog name is not a valid hejbro SQL identifier, so it cannot be carried in the contract. Rename the ${index.kind} in the database, then link the schema repository.`;
 
 const omittedIndexLines = (
 	indexes: ReadonlyArray<OmittedIndex>,
@@ -858,17 +959,26 @@ const omittedCheckLines = (
 
 /**
  * 712/R10 B#1: the one skeleton every "omitted at a column" member line
- * shares -- an index or unique constraint is *declared on* its column,
- * a check constraint's own binding is its expression naming one.
+ * shares -- an index or unique constraint is *declared on* its column, a
+ * check constraint's own binding is its expression naming one. 712/R11/
+ * R12: a stored generated column's own binding is its expression too --
+ * the same reason clause a check constraint gets, reused rather than
+ * invented (a generated column left in place after the column its own
+ * expression names is gone is the same "references what this reading
+ * omitted" shape B#1 already covers, never a new one).
  */
-type MemberKind = "index" | "check constraint" | "unique constraint";
+type MemberKind =
+	| "index"
+	| "check constraint"
+	| "unique constraint"
+	| "generated column";
 
 const memberReasonClause = (
 	kind: MemberKind,
 	columnIdentity: string,
 	axis: MemberAxis,
 ): string => {
-	if (kind === "check constraint") {
+	if (kind === "check constraint" || kind === "generated column") {
 		return `its expression names column "${columnIdentity}"`;
 	}
 	if (kind === "index" && axis === "expressionOrPredicate") {
@@ -883,6 +993,84 @@ const memberReasonClause = (
 	return `it is declared on column "${columnIdentity}"`;
 };
 
+/**
+ * 712/R12 (B, cfr1-planner's own measurement 2, lead ruling): the root
+ * cause's own clause, nested inside a `"generatedExpression"` cause's
+ * "its expression names column "<root>", …" opening -- naming the root
+ * is load-bearing (an anonymous "a column this reading already left
+ * out" sent the reader hunting a different line for it), and the enum
+ * branch is the *existing* enum clause repeated verbatim, since a
+ * root cause of `"enum"` means "rename the column" would be an outright
+ * wrong exit (the type is what has to be renamed, not the column).
+ * `consequenceClause` is the caller's own "so the … cannot be …
+ * either" tail -- import and pull, member/PK/FK, all share this one
+ * function rather than each re-deriving the root branch. The name
+ * branch below is the *compressed* form the lead chose over nesting
+ * the sibling name-cause clause verbatim ("which this reading left
+ * out because no declaration can carry its name") -- doing that would
+ * read as "which this reading left out ... which this reading left
+ * out ...", doubled; swapping to the verbatim form (if ever needed)
+ * touches only this one branch.
+ */
+/**
+ * 712/R13 (D106 round-1 correction, lead-approved wording): a column
+ * whose type no column builder expresses earns neither the name branch
+ * ("rename the column") nor the enum branch ("rename the type") --
+ * nothing about this column's own name or an enum type is the problem.
+ * "did not infer" (not "left out") deliberately echoes the "Not
+ * inferred: column …" line's own verb, since this is the same axis, not
+ * a fresh one. No `Next:`/`Rename …` tail follows it anywhere it
+ * appears (R13: this cause has no exit today -- no general-purpose
+ * column builder exists, measured against `column-builder-factories.ts`
+ * and `dsl-cheatsheet.md` alike).
+ */
+const notInferredReasonClause = (sqlType: string): string =>
+	`which this reading did not infer, because no column builder expresses its type "${sqlType}"`;
+
+const generatedExpressionRootClause = (
+	entry: Pick<
+		OmittedTableMemberAtColumn,
+		| "rootColumnIdentity"
+		| "rootCause"
+		| "rootEnumIdentity"
+		| "rootNotInferredSqlType"
+	>,
+	consequenceClause: string,
+): string => {
+	const opening = `which this reading left out because its expression names column "${entry.rootColumnIdentity}"`;
+	if (entry.rootCause === "enum") {
+		return `${opening}, which this reading left out with the enum type "${entry.rootEnumIdentity}" that types it, ${consequenceClause}`;
+	}
+	if (
+		entry.rootCause === "notInferred" &&
+		entry.rootNotInferredSqlType !== undefined
+	) {
+		return `${opening}, ${notInferredReasonClause(entry.rootNotInferredSqlType)}, ${consequenceClause}`;
+	}
+	return `${opening}, whose own name no declaration can carry, ${consequenceClause}`;
+};
+
+/** Which tail branch this entry earns -- `"enum"` ("rename the type"), `"notInferred"` (no tail at all, R13: no exit exists), or `"name"` ("rename the column", the default) -- for a direct cause of that kind, or a `"generatedExpression"` cause whose own root cause is that kind. */
+const causeTailKind = (
+	entry: Pick<OmittedTableMemberAtColumn, "cause" | "rootCause">,
+): "enum" | "notInferred" | "name" => {
+	if (entry.cause === "enum") {
+		return "enum";
+	}
+	if (entry.cause === "notInferred") {
+		return "notInferred";
+	}
+	if (entry.cause === "generatedExpression") {
+		if (entry.rootCause === "enum") {
+			return "enum";
+		}
+		if (entry.rootCause === "notInferred") {
+			return "notInferred";
+		}
+	}
+	return "name";
+};
+
 /** 712/R8's own cause-specific clause, reused verbatim for every member kind -- only the noun (`kind`) changes. */
 const memberCauseClauseForImport = (
 	entry: OmittedTableMemberAtColumn,
@@ -890,6 +1078,15 @@ const memberCauseClauseForImport = (
 ): string => {
 	if (entry.cause === "enum") {
 		return `which this reading left out with the enum type "${entry.enumIdentity}" that types it, so the ${kind} cannot be declared either`;
+	}
+	if (entry.cause === "notInferred" && entry.notInferredSqlType !== undefined) {
+		return `${notInferredReasonClause(entry.notInferredSqlType)}, so the ${kind} cannot be declared either`;
+	}
+	if (entry.cause === "generatedExpression") {
+		return generatedExpressionRootClause(
+			entry,
+			`so the ${kind} cannot be declared either`,
+		);
 	}
 	return `which this reading left out because no declaration can carry its name, so the ${kind} cannot be declared either`;
 };
@@ -901,34 +1098,66 @@ const memberCauseClauseForPull = (
 	if (entry.cause === "enum") {
 		return `which this reading left out with the enum type "${entry.enumIdentity}" that types it, so the ${kind} cannot be carried in the contract either`;
 	}
+	if (entry.cause === "notInferred" && entry.notInferredSqlType !== undefined) {
+		return `${notInferredReasonClause(entry.notInferredSqlType)}, so the ${kind} cannot be carried in the contract either`;
+	}
+	if (entry.cause === "generatedExpression") {
+		return generatedExpressionRootClause(
+			entry,
+			`so the ${kind} cannot be carried in the contract either`,
+		);
+	}
 	return `which this reading left out because no declaration can carry its name, so the ${kind} cannot be carried in the contract either`;
 };
 
+/** R13: `""` for the `"notInferred"` tail kind (no exit exists, so no tail follows) -- every caller that appends a tail after a full stop goes through {@link appendTail} instead of interpolating directly, so an empty tail never leaves a trailing space. */
 const memberTailForImport = (entry: OmittedTableMemberAtColumn): string => {
-	if (entry.cause === "enum") {
-		return "Next: rename the type in the database, then re-run `hejbro import`.";
+	const tailKind = causeTailKind(entry);
+	if (tailKind === "enum") {
+		return `Next: rename the type in the database, then ${REIMPORT_REMEDY}.`;
 	}
-	return "Next: rename the column in the database, then re-run `hejbro import`.";
+	if (tailKind === "notInferred") {
+		return "";
+	}
+	return `Next: rename the column in the database, then ${REIMPORT_REMEDY}.`;
 };
 
 const memberTailForPull = (entry: OmittedTableMemberAtColumn): string => {
-	if (entry.cause === "enum") {
+	const tailKind = causeTailKind(entry);
+	if (tailKind === "enum") {
 		return "Rename the type in the database, then link the schema repository.";
 	}
+	if (tailKind === "notInferred") {
+		return "";
+	}
 	return "Rename the column in the database, then link the schema repository.";
+};
+
+/** R13: joins a sentence that already ends in its own full stop to an optional following tail sentence -- `""` (the `"notInferred"` cause's own tail, which does not exist) never leaves a trailing space. */
+const appendTail = (sentenceEndingInFullStop: string, tail: string): string => {
+	if (tail === "") {
+		return sentenceEndingInFullStop;
+	}
+	return `${sentenceEndingInFullStop} ${tail}`;
 };
 
 const omittedMemberLineForImport = (
 	entry: OmittedTableMemberAtColumn,
 	kind: MemberKind,
 ): string =>
-	`Omitted: ${kind} "${entry.schema}.${entry.table}.${entry.sqlName}" -- ${memberReasonClause(kind, entry.columnIdentity, entry.axis)}, ${memberCauseClauseForImport(entry, kind)}. \`check\` keeps listing the ${kind} as unmanaged until that column and the ${kind} are both declared. ${memberTailForImport(entry)}`;
+	appendTail(
+		`Omitted: ${kind} "${entry.schema}.${entry.table}.${entry.sqlName}" -- ${memberReasonClause(kind, entry.columnIdentity, entry.axis)}, ${memberCauseClauseForImport(entry, kind)}. \`check\` keeps listing the ${kind} as unmanaged until that column and the ${kind} are both declared.`,
+		memberTailForImport(entry),
+	);
 
 const omittedMemberLineForPull = (
 	entry: OmittedTableMemberAtColumn,
 	kind: MemberKind,
 ): string =>
-	`Omitted: ${kind} "${entry.schema}.${entry.table}.${entry.sqlName}" -- ${memberReasonClause(kind, entry.columnIdentity, entry.axis)}, ${memberCauseClauseForPull(entry, kind)}. ${memberTailForPull(entry)}`;
+	appendTail(
+		`Omitted: ${kind} "${entry.schema}.${entry.table}.${entry.sqlName}" -- ${memberReasonClause(kind, entry.columnIdentity, entry.axis)}, ${memberCauseClauseForPull(entry, kind)}.`,
+		memberTailForPull(entry),
+	);
 
 const omittedMemberLines = (
 	entries: ReadonlyArray<OmittedTableMemberAtColumn>,
@@ -945,12 +1174,21 @@ const omittedMemberLines = (
 	return ordered.map((entry) => omittedMemberLineForImport(entry, kind));
 };
 
-/** 712/R8's own cause-specific clause, PP2's own PK wording (review round 2 N#7). */
+/** 712/R8's own cause-specific clause, PP2's own PK wording (review round 2 N#7); 712/R12 (B) shares {@link generatedExpressionRootClause} with the member family, `OmittedPrimaryKey` carrying the same `rootColumnIdentity`/`rootCause`/`rootEnumIdentity` fields. */
 const primaryKeyOmissionCauseClauseForImport = (
 	entry: OmittedPrimaryKey,
 ): string => {
 	if (entry.cause === "enum") {
 		return `which this reading left out with the enum type "${entry.enumIdentity}" that types it, so the key cannot be declared either`;
+	}
+	if (entry.cause === "notInferred" && entry.notInferredSqlType !== undefined) {
+		return `${notInferredReasonClause(entry.notInferredSqlType)}, so the key cannot be declared either`;
+	}
+	if (entry.cause === "generatedExpression") {
+		return generatedExpressionRootClause(
+			entry,
+			"so the key cannot be declared either",
+		);
 	}
 	return `which this reading left out because no declaration can carry its name, so the key cannot be declared either`;
 };
@@ -961,19 +1199,36 @@ const primaryKeyOmissionCauseClauseForPull = (
 	if (entry.cause === "enum") {
 		return `which this reading left out with the enum type "${entry.enumIdentity}" that types it, so the key cannot be carried in the contract either`;
 	}
+	if (entry.cause === "notInferred" && entry.notInferredSqlType !== undefined) {
+		return `${notInferredReasonClause(entry.notInferredSqlType)}, so the key cannot be carried in the contract either`;
+	}
+	if (entry.cause === "generatedExpression") {
+		return generatedExpressionRootClause(
+			entry,
+			"so the key cannot be carried in the contract either",
+		);
+	}
 	return `which this reading left out because no declaration can carry its name, so the key cannot be carried in the contract either`;
 };
 
 const primaryKeyOmissionTailForImport = (entry: OmittedPrimaryKey): string => {
-	if (entry.cause === "enum") {
-		return "Next: rename the type in the database, then re-run `hejbro import`.";
+	const tailKind = causeTailKind(entry);
+	if (tailKind === "enum") {
+		return `Next: rename the type in the database, then ${REIMPORT_REMEDY}.`;
 	}
-	return "Next: rename the column in the database, then re-run `hejbro import`.";
+	if (tailKind === "notInferred") {
+		return "";
+	}
+	return `Next: rename the column in the database, then ${REIMPORT_REMEDY}.`;
 };
 
 const primaryKeyOmissionTailForPull = (entry: OmittedPrimaryKey): string => {
-	if (entry.cause === "enum") {
+	const tailKind = causeTailKind(entry);
+	if (tailKind === "enum") {
 		return "Rename the type in the database, then link the schema repository.";
+	}
+	if (tailKind === "notInferred") {
+		return "";
 	}
 	return "Rename the column in the database, then link the schema repository.";
 };
@@ -996,12 +1251,18 @@ const primaryKeyOmissionTailForPull = (entry: OmittedPrimaryKey): string => {
  */
 const omittedPrimaryKeyLineForImport = (entry: OmittedPrimaryKey): string => {
 	const identity = `${entry.schema}.${entry.table}.${entry.name}`;
-	return `Omitted: primary key "${identity}" -- it names column "${entry.columnIdentity}", ${primaryKeyOmissionCauseClauseForImport(entry)}; the table is declared without a primary key. \`check\` keeps listing the index that backs it as unmanaged, naming "${identity}", until every column the key names can be declared and the key with them. ${primaryKeyOmissionTailForImport(entry)}`;
+	return appendTail(
+		`Omitted: primary key "${identity}" -- it names column "${entry.columnIdentity}", ${primaryKeyOmissionCauseClauseForImport(entry)}; the table is declared without a primary key. \`check\` keeps listing the index that backs it as unmanaged, naming "${identity}", until every column the key names can be declared and the key with them.`,
+		primaryKeyOmissionTailForImport(entry),
+	);
 };
 
 const omittedPrimaryKeyLineForPull = (entry: OmittedPrimaryKey): string => {
 	const identity = `${entry.schema}.${entry.table}.${entry.name}`;
-	return `Omitted: primary key "${identity}" -- it names column "${entry.columnIdentity}", ${primaryKeyOmissionCauseClauseForPull(entry)}. ${primaryKeyOmissionTailForPull(entry)}`;
+	return appendTail(
+		`Omitted: primary key "${identity}" -- it names column "${entry.columnIdentity}", ${primaryKeyOmissionCauseClauseForPull(entry)}.`,
+		primaryKeyOmissionTailForPull(entry),
+	);
 };
 
 const omittedPrimaryKeyLines = (
@@ -1023,9 +1284,9 @@ const omittedForeignKeyRemedyForImport = (
 	targetKind: OmittedForeignKey["targetKind"],
 ): string => {
 	if (targetKind === "schema") {
-		return "rename the schema in the database, then re-run `hejbro import`.";
+		return `rename the schema in the database, then ${REIMPORT_REMEDY}.`;
 	}
-	return "rename the table in the database, then re-run `hejbro import`.";
+	return `rename the table in the database, then ${REIMPORT_REMEDY}.`;
 };
 
 /** pull's own remedy, mirroring the schema/table omission lines' own pull wording -- no "re-run", since `pull` names the same live database on every run by construction. */
@@ -1088,9 +1349,32 @@ const omittedForeignKeyColumnReasonForImport = (
 	entry: OmittedForeignKeyColumn,
 ): string => {
 	if (entry.cause === "enum") {
-		return `${foreignKeyColumnReasonClause(entry.end)} "${entry.columnIdentity}", which this reading left out with the enum type "${entry.enumIdentity}" that types it, so the key cannot be declared either. Next: rename the type in the database, then re-run \`hejbro import\`.`;
+		return `${foreignKeyColumnReasonClause(entry.end)} "${entry.columnIdentity}", which this reading left out with the enum type "${entry.enumIdentity}" that types it, so the key cannot be declared either. Next: rename the type in the database, then ${REIMPORT_REMEDY}.`;
 	}
-	return `${foreignKeyColumnReasonClause(entry.end)} "${entry.columnIdentity}", which this reading left out because no declaration can carry its name, so the key cannot be declared either. Next: rename the column in the database, then re-run \`hejbro import\`.`;
+	if (entry.cause === "notInferred" && entry.notInferredSqlType !== undefined) {
+		return `${foreignKeyColumnReasonClause(entry.end)} "${entry.columnIdentity}", ${notInferredReasonClause(entry.notInferredSqlType)}, so the key cannot be declared either.`;
+	}
+	if (entry.cause === "generatedExpression") {
+		return appendTail(
+			`${foreignKeyColumnReasonClause(entry.end)} "${entry.columnIdentity}", ${generatedExpressionRootClause(entry, "so the key cannot be declared either")}.`,
+			foreignKeyGeneratedExpressionTailForImport(entry),
+		);
+	}
+	return `${foreignKeyColumnReasonClause(entry.end)} "${entry.columnIdentity}", which this reading left out because no declaration can carry its name, so the key cannot be declared either. Next: rename the column in the database, then ${REIMPORT_REMEDY}.`;
+};
+
+/** The tail {@link omittedForeignKeyColumnReasonForImport}'s own `"generatedExpression"` branch earns -- the enum branch (root cause `"enum"`) points at the type, never the column; the notInferred branch (R13) has no tail at all. */
+const foreignKeyGeneratedExpressionTailForImport = (
+	entry: Pick<OmittedForeignKeyColumn, "cause" | "rootCause">,
+): string => {
+	const tailKind = causeTailKind(entry);
+	if (tailKind === "enum") {
+		return `Next: rename the type in the database, then ${REIMPORT_REMEDY}.`;
+	}
+	if (tailKind === "notInferred") {
+		return "";
+	}
+	return `Next: rename the column in the database, then ${REIMPORT_REMEDY}.`;
 };
 
 /** pull's own consequence, mirroring `undeclarableNameLineForPull`'s own wording for the column itself (712/R5), and 712/R8's own enum-cause branch. */
@@ -1100,7 +1384,29 @@ const omittedForeignKeyColumnReasonForPull = (
 	if (entry.cause === "enum") {
 		return `${foreignKeyColumnReasonClause(entry.end)} "${entry.columnIdentity}", which this reading left out with the enum type "${entry.enumIdentity}" that types it, so the key cannot be carried either. Rename the type in the database, then link the schema repository.`;
 	}
-	return `${foreignKeyColumnReasonClause(entry.end)} "${entry.columnIdentity}", which this reading left out because no declaration can carry its name, so it cannot be carried in the contract, so the key cannot be carried either. Rename the column in the database, then link the schema repository.`;
+	if (entry.cause === "notInferred" && entry.notInferredSqlType !== undefined) {
+		return `${foreignKeyColumnReasonClause(entry.end)} "${entry.columnIdentity}", ${notInferredReasonClause(entry.notInferredSqlType)}, so the key cannot be carried either.`;
+	}
+	if (entry.cause === "generatedExpression") {
+		return appendTail(
+			`${foreignKeyColumnReasonClause(entry.end)} "${entry.columnIdentity}", ${generatedExpressionRootClause(entry, "so the key cannot be carried either")}.`,
+			foreignKeyGeneratedExpressionTailForPull(entry),
+		);
+	}
+	return `${foreignKeyColumnReasonClause(entry.end)} "${entry.columnIdentity}", which this reading left out because no declaration can carry its name, so the key cannot be carried either. Rename the column in the database, then link the schema repository.`;
+};
+
+const foreignKeyGeneratedExpressionTailForPull = (
+	entry: Pick<OmittedForeignKeyColumn, "cause" | "rootCause">,
+): string => {
+	const tailKind = causeTailKind(entry);
+	if (tailKind === "enum") {
+		return "Rename the type in the database, then link the schema repository.";
+	}
+	if (tailKind === "notInferred") {
+		return "";
+	}
+	return "Rename the column in the database, then link the schema repository.";
 };
 
 const omittedForeignKeyColumnLineForImport = (
@@ -1168,25 +1474,40 @@ const wayOutLine = (command: LossReportFacts["command"]): string => {
 };
 
 /**
- * D106 R6-N3: a caller that must add lines to an already-built report
- * (`commands/import.ts`'s own empty-schema lines, known only once
- * `emitDeclarationFiles` has run, after `buildLossReport` already
- * closed with the way-out line) needs them placed *before* the way-out
- * line, which SHALL stay the report's own last line -- located here by
- * identity (`wayOutLine(command)`), never by an assumed index, so
- * there is no throw path in a command and no assumption that some
- * index is the last one. The way-out line appears exactly once, as
- * `buildLossReport`'s own final element, so removing every line equal
- * to it and re-appending it is exact, not approximate.
+ * D106 R6-N3, corrected NB1 (#1047, review round 2): a caller that must
+ * add lines to an already-built report (`commands/import.ts`'s and
+ * `commands/pull.ts`'s own empty-schema lines, known only once the
+ * schema list is filtered against the snapshot, after `buildLossReport`
+ * already closed) needs them landing inside the **Not inferred** band
+ * they belong to, never after Omitted -- the requirement's own band
+ * order ("Guessed, Not inferred, each approximation, each omission")
+ * is a report-wide contract, not just each band's own internal order.
+ * Located by identity, never an assumed index: the insertion point is
+ * right after the last existing `Guessed:`/`Not inferred:` line (or at
+ * the very front, if `buildLossReport` printed neither for this run),
+ * so band order stays correct regardless of which other bands are
+ * present or empty. This function used to insert right before the
+ * way-out line instead (`wayOutLine`, still the report's own required
+ * last line, but never where lines belonging to an earlier band land).
  */
-export const withReportLinesBeforeWayOut = (
+export const withReportLinesInNotInferredBand = (
 	report: ReadonlyArray<string>,
-	command: LossReportFacts["command"],
 	extraLines: ReadonlyArray<string>,
 ): ReadonlyArray<string> => {
-	const wayOut = wayOutLine(command);
-	const withoutWayOut = report.filter((line) => line !== wayOut);
-	return [...withoutWayOut, ...extraLines, wayOut];
+	const isGuessedOrNotInferred = (line: string): boolean =>
+		line.startsWith("Guessed:") || line.startsWith("Not inferred:");
+	const lastBandLineIndex = report.reduce((lastIndex, line, index) => {
+		if (isGuessedOrNotInferred(line)) {
+			return index;
+		}
+		return lastIndex;
+	}, -1);
+	const insertAt = lastBandLineIndex + 1;
+	return [
+		...report.slice(0, insertAt),
+		...extraLines,
+		...report.slice(insertAt),
+	];
 };
 
 /**
@@ -1209,6 +1530,7 @@ export const buildLossReport = (
 		facts.nextvalDefaults,
 		facts.foreignKeyNameApproximations,
 		facts.primaryKeyNameApproximations,
+		facts.command,
 	),
 	...omittedSchemaLines(facts.omittedSchemas, facts.command),
 	...omittedTableLines(facts.omittedTables, facts.command),
@@ -1225,6 +1547,11 @@ export const buildLossReport = (
 		facts.omittedUniqueConstraintsAtColumn,
 		facts.command,
 		"unique constraint",
+	),
+	...omittedMemberLines(
+		facts.omittedGeneratedColumnsAtColumn,
+		facts.command,
+		"generated column",
 	),
 	...omittedPrimaryKeyLines(facts.omittedPrimaryKeys, facts.command),
 	...omittedForeignKeyLines(facts.omittedForeignKeys, facts.command),

@@ -1,0 +1,21 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#1048",
+  "title": "import/pull: a column unreadable for both its name and its type gets the rename remedy, which cannot resolve it",
+  "parent": "quickstart-now/hejbro#995",
+  "status": "open",
+  "opened": "2026-09-08",
+  "closed": null,
+  "decisions": [],
+  "work": [],
+  "prs": [
+    {
+      "number": 1049,
+      "role": "refs",
+      "pinnedAt": "2026-09-08T16:58Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

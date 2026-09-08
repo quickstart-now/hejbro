@@ -1,5 +1,5 @@
 import { mkdirSync, writeFileSync } from "node:fs";
-import { throwHejbroError } from "@hejbro/core";
+import { hejbroError, throwHejbroError } from "@hejbro/core";
 import type { Driver } from "@hejbro/query";
 import { defineCommand } from "citty";
 import { currentDatabaseName } from "../apply/reset";
@@ -8,6 +8,11 @@ import { withCheckConnection } from "../check/driver";
 import type { ContractOrigin } from "../contract/emit";
 import { emitContract } from "../contract/emit";
 import { exportPayloadFromCatalog } from "../contract/from-catalog";
+import {
+	enumsInSnapshot,
+	sequencesInSnapshot,
+	tablesInSnapshot,
+} from "../contract/read-snapshot";
 import { fromHejbroError, renderDiagnostics } from "../diagnostics";
 import { asHejbroError } from "../errors";
 import { serializeExportDescription } from "../export/description";
@@ -15,6 +20,7 @@ import { collectFlagValues, normalizeEqualsFlags } from "../flags";
 import { sha256Hex } from "../hash";
 import type { InferCatalogOptions, InferCatalogResult } from "../infer/compose";
 import { inferFromCatalog } from "../infer/compose";
+import { withReportLinesInNotInferredBand } from "../infer/loss-report";
 import { loadConfigIfPresent } from "../loader";
 import {
 	assertLockWritable,
@@ -85,6 +91,132 @@ const throwMissingSchema = (): never =>
 		"pull-schema-missing",
 		"hejbro pull needs at least one \"--schema\" to read, and none was given: a database's schemas include its platform's own (auth, storage, and their neighbours on a hosted Postgres), so there is no default this command can guess. Next: pass one or more --schema <name> flags, most commonly --schema public, then rerun `hejbro pull`.",
 	);
+
+/**
+ * B2 final (D106 round-1 correction, lead ruling, "pull mirrors
+ * import"): which of the requested schemas actually contributed
+ * something to the snapshot this reading yields -- read from each
+ * object's own `.schema` field (`tablesInSnapshot`/`enumsInSnapshot`/
+ * `sequencesInSnapshot`, `contract/read-snapshot.ts`), mirroring
+ * `import.ts`'s own `schemasWithInferredObjects` (not shared, since
+ * this command's own dependency seam and result shape differ). A
+ * schema omitted whole (D36) or one the database never held both
+ * produce zero snapshot objects, so this one check subsumes both --
+ * the old `omittedSchemaNames`-only filter never caught the second.
+ */
+const schemasWithInferredObjects = (
+	result: InferCatalogResult,
+): ReadonlySet<string> =>
+	new Set([
+		...tablesInSnapshot(result.snapshot).map((t) => t.schema),
+		...enumsInSnapshot(result.snapshot).map((e) => e.schema),
+		...sequencesInSnapshot(result.snapshot).map((s) => s.schema),
+	]);
+
+/**
+ * B2 final, mirroring `import.ts`'s own `omittedNamedSchemas`: which of
+ * the requested, nothing-contributing schemas held something the
+ * reading just could not carry the name of -- distinct from one the
+ * database never held at all, since the two earn different refusal
+ * codes (`pull-nothing-declarable` vs `pull-nothing-to-infer`, 712/R14).
+ */
+const omittedNamedSchemas = (
+	result: InferCatalogResult,
+	schemas: ReadonlyArray<string>,
+): ReadonlyArray<string> => {
+	const omitted = new Set(result.omittedSchemaNames);
+	return schemas.filter((schemaName) => omitted.has(schemaName));
+};
+
+/** Mirrors `import.ts`'s own `QUOTED_IDENTITY` -- a quoted identity's own leading segment, up to its first `.`. */
+const QUOTED_IDENTITY = /"([^"]+)"/g;
+
+/**
+ * B2 final, mirroring `import.ts`'s own `schemaHasNamedOmission` (712/R10
+ * N#4): a schema that held only objects the loss report already named
+ * as omitted (an enum with no expressible name, an index at an omitted
+ * column, …) produces zero snapshot objects the same way a genuinely
+ * empty schema does -- `schemasWithInferredObjects` cannot tell the two
+ * apart, since neither ever reaches the snapshot. Checked against the
+ * rendered report itself, the one place that already knows every
+ * "Omitted: …" line and the identity each one names.
+ */
+const schemaHasNamedOmission = (
+	lossReport: ReadonlyArray<string>,
+	schemaName: string,
+): boolean =>
+	lossReport
+		.filter((line) => line.startsWith("Omitted:"))
+		.some((line) =>
+			[...line.matchAll(QUOTED_IDENTITY)].some((match) => {
+				const identity = match[1];
+				return (
+					identity !== undefined &&
+					(identity === schemaName || identity.startsWith(`${schemaName}.`))
+				);
+			}),
+		);
+
+/**
+ * B2 final, mirroring `import.ts`'s own `emptySchemaLines`: a requested
+ * schema that produced nothing at all, and is not itself the reason
+ * (never omitted whole, and no line already names it), earns a
+ * `Not inferred: nothing to infer in schema "X".` line rather than
+ * silent exclusion. A schema omitted whole (D36) already carries its
+ * own `Omitted: schema …` line (`result.lossReport`, unchanged, shared
+ * with `import`) and must never also earn this one.
+ */
+const emptySchemaLines = (
+	result: InferCatalogResult,
+	schemas: ReadonlyArray<string>,
+): ReadonlyArray<string> => {
+	const withObjects = schemasWithInferredObjects(result);
+	const omitted = new Set(result.omittedSchemaNames);
+	return schemas
+		.filter((schemaName) => !withObjects.has(schemaName))
+		.filter((schemaName) => !omitted.has(schemaName))
+		.filter(
+			(schemaName) => !schemaHasNamedOmission(result.lossReport, schemaName),
+		)
+		.map(
+			(schemaName) =>
+				`Not inferred: nothing to infer in schema "${schemaName}".`,
+		);
+};
+
+// 712/R14 (new surface, lead-approved: mirrors `import.ts`'s own
+// `import-nothing-to-infer` verbatim, only the command name swapped) --
+// every named schema produced nothing at all, none of them for a
+// nameable-but-omitted reason.
+const throwNothingToInfer = (schemas: ReadonlyArray<string>): never =>
+	throwHejbroError(
+		"pull-nothing-to-infer",
+		`hejbro pull found no table, enum, or sequence to infer in schema(s) ${schemas.join(", ")}. Next: confirm the schema name(s) are correct and that the database holds objects in them, then rerun \`hejbro pull\`.`,
+	);
+
+/**
+ * 712/R14 (new surface, lead-approved: mirrors `import.ts`'s own
+ * `nothingDeclarableResult`, "declare" swapped for pull's own "carry
+ * into the contract" vocabulary): at least one named schema held
+ * something this reading could not carry the name of, and nothing else
+ * contributed either, so the pull bundle would otherwise be empty
+ * (`pulled X ()`).
+ */
+const nothingDeclarableResult = (
+	lossReport: ReadonlyArray<string>,
+	omittedSchemas: ReadonlyArray<string>,
+): PullResult => {
+	const error = hejbroError(
+		"pull-nothing-declarable",
+		`hejbro pull found nothing it could carry into the contract in schema(s) ${omittedSchemas.join(", ")}: each one held something, but its own catalog name is not a valid hejbro SQL identifier (see the "Omitted" line(s) above). Next: rename the schema(s) named above in the database, then rerun \`hejbro pull\`.`,
+	);
+	const diagnostic = fromHejbroError(error, FALLBACK_IDENTITY);
+	return {
+		exitCode: 1,
+		stdout: lossReport,
+		stderr: renderDiagnostics([diagnostic], null),
+	};
+};
 
 /**
  * `pull`'s own dependency seam (mirrors `import.ts`'s `ImportDeps`):
@@ -168,7 +300,50 @@ export const runPull = async (
 					inferCatalog({ session: driver, schemas, command: "pull" }),
 					readCurrentDatabaseName(driver),
 				]);
-				const sortedSchemas = [...schemas].sort();
+				// B2 final (D106 round-1 correction, N11 superseded, lead
+				// ruling "pull mirrors import"): the list/lock is exactly the
+				// schemas that actually contributed something to the snapshot
+				// this reading yields -- a schema omitted whole (D36) and one
+				// the database never held both contributed nothing, and
+				// neither is one this command actually read. The "pulled …"
+				// line and the lock's own `schemas` share this one filtered
+				// list, so neither claims a schema that carries nothing.
+				const withObjects = schemasWithInferredObjects(result);
+				const sortedSchemas = schemas
+					.filter((schemaName) => withObjects.has(schemaName))
+					.sort();
+				// B2 final (712/R14): a requested schema that produced
+				// nothing, and is not itself the reason (never omitted whole,
+				// no line already names it), earns the same
+				// "Not inferred: nothing to infer …" line `import` prints,
+				// mirroring `import.ts`'s own `withEmptySchemaLines` -- folded
+				// in once, ahead of both the refusal branch below and the
+				// success path's own stdout, so both read the same report.
+				// Corrected NB1 (#1047, review round 2):
+				// `withReportLinesInNotInferredBand` places these lines
+				// inside the Not-inferred band, never after Omitted.
+				const resultWithFullReport: InferCatalogResult = {
+					...result,
+					lossReport: withReportLinesInNotInferredBand(
+						result.lossReport,
+						emptySchemaLines(result, schemas),
+					),
+				};
+				// 712/R14 (new surface, lead-approved): a pull that reads real
+				// database objects but can carry none of them into the
+				// contract refuses outright, mirroring `import`'s own
+				// `import-nothing-to-infer`/`import-nothing-declarable` split
+				// rather than writing an empty `pulled X ()` bundle.
+				if (withObjects.size === 0) {
+					const namedOmissions = omittedNamedSchemas(result, schemas);
+					if (namedOmissions.length === 0) {
+						throwNothingToInfer(schemas);
+					}
+					return nothingDeclarableResult(
+						resultWithFullReport.lossReport,
+						namedOmissions,
+					);
+				}
 				const payload = exportPayloadFromCatalog(
 					result.description,
 					result.snapshot,
@@ -197,7 +372,7 @@ export const runPull = async (
 					exitCode: 0,
 					stdout: [
 						`pulled ${database} (${sortedSchemas.join(", ")})`,
-						...result.lossReport,
+						...resultWithFullReport.lossReport,
 					],
 					stderr: null,
 				};

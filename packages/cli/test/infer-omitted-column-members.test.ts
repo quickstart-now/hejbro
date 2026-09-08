@@ -19,6 +19,12 @@ type ColumnFixture = {
 	readonly table: string;
 	readonly name: string;
 	readonly enumType?: { readonly schema: string; readonly name: string };
+	/** B1-2 (D106 round-1 correction, cfr1-planner's own measurement): a base type no `SIMPLE_TYPE_BUILDERS` entry expresses (e.g. `point`) -- mutually exclusive with `enumType`. */
+	readonly unsupportedType?: string;
+	/** `pg_get_expr` text over `pg_attrdef` when this column is `attgenerated = 's'` -- mirrors `infer-generated-column.test.ts`'s own fixture shape. */
+	readonly generated?: string;
+	/** `pg_depend`'s own normal dependency of a generated column's `pg_attrdef` row on the columns its expression names. */
+	readonly generatedReferences?: ReadonlyArray<string>;
 };
 
 type EnumFixture = {
@@ -28,6 +34,9 @@ type EnumFixture = {
 };
 
 const catalogTypeFor = (column: ColumnFixture): string => {
+	if (column.unsupportedType !== undefined) {
+		return column.unsupportedType;
+	}
 	if (column.enumType === undefined) {
 		return "uuid";
 	}
@@ -41,8 +50,11 @@ const baseTypeKindFor = (column: ColumnFixture): string | null => {
 	return "e";
 };
 
-/** `pg_type.typname` -- the key `SIMPLE_TYPE_BUILDERS` looks a plain column's builder up by; an enum column's own base type is the enum's own name. */
+/** `pg_type.typname` -- the key `SIMPLE_TYPE_BUILDERS` looks a plain column's builder up by; an enum column's own base type is the enum's own name; an unsupported type's own base name is never in that table by construction. */
 const baseTypeNameFor = (column: ColumnFixture): string => {
+	if (column.unsupportedType !== undefined) {
+		return column.unsupportedType;
+	}
 	if (column.enumType === undefined) {
 		return "uuid";
 	}
@@ -59,8 +71,15 @@ const columnRow = (column: ColumnFixture): DriverRow => ({
 	baseTypeSchema: column.enumType?.schema ?? null,
 	baseTypeName: baseTypeNameFor(column),
 	catalogDefault: null,
-	catalogGenerated: null,
+	catalogGenerated: column.generated ?? null,
 });
+
+const generatedKindFor = (column: ColumnFixture): string => {
+	if (column.generated === undefined) {
+		return "";
+	}
+	return "s";
+};
 
 const columnDetailRow = (
 	column: ColumnFixture,
@@ -71,7 +90,8 @@ const columnDetailRow = (
 	name: column.name,
 	position,
 	identityKind: "",
-	generatedKind: "",
+	generatedKind: generatedKindFor(column),
+	referencedColumns: column.generatedReferences ?? [],
 });
 
 const enumLabelRows = (enumFixture: EnumFixture): ReadonlyArray<DriverRow> =>
@@ -453,6 +473,87 @@ describe("inferFromCatalog / B#1: an index, check or UNIQUE at an omitted column
 		);
 	});
 
+	it("N8(c) (D106 review): a UNIQUE constraint omitted for its own catalog name is announced as a unique constraint, never as a plain index", async () => {
+		const session = buildSession(
+			[{ schema: "app", table: "t9" }],
+			[
+				{ schema: "app", table: "t9", name: "id" },
+				{ schema: "app", table: "t9", name: "code" },
+			],
+			[],
+			{
+				uniqueConstraints: [
+					{ schema: "app", table: "t9", name: "UQ_Bad", columns: ["code"] },
+				],
+				indexes: [
+					{
+						schema: "app",
+						table: "t9",
+						name: "UQ_Bad",
+						columns: ["code"],
+						isUnique: true,
+					},
+				],
+			},
+		);
+
+		const result = await inferFromCatalog({
+			session,
+			schemas: ["app"],
+			command: "import",
+		});
+
+		expect(indexNamesIn(result, "app.t9").has("UQ_Bad")).toBe(false);
+		const line = result.lossReport.find(
+			(entry) => entry.includes("UQ_Bad") && entry.startsWith("Omitted:"),
+		);
+		if (line === undefined) {
+			throw new Error(
+				`expected an omitted-object line naming "UQ_Bad":\n${result.lossReport.join("\n")}`,
+			);
+		}
+		expect(line).toContain('Omitted: unique constraint "app.t9.UQ_Bad"');
+		expect(line.startsWith("Omitted: index ")).toBe(false);
+	});
+
+	it("N8(c) control: a plain index (never a UNIQUE constraint's own backing index) omitted for its own catalog name still announces as an index", async () => {
+		const session = buildSession(
+			[{ schema: "app", table: "t10" }],
+			[
+				{ schema: "app", table: "t10", name: "id" },
+				{ schema: "app", table: "t10", name: "code" },
+			],
+			[],
+			{
+				indexes: [
+					{
+						schema: "app",
+						table: "t10",
+						name: "IDX_Bad",
+						columns: ["code"],
+						isUnique: false,
+					},
+				],
+			},
+		);
+
+		const result = await inferFromCatalog({
+			session,
+			schemas: ["app"],
+			command: "import",
+		});
+
+		const line = result.lossReport.find(
+			(entry) => entry.includes("IDX_Bad") && entry.startsWith("Omitted:"),
+		);
+		if (line === undefined) {
+			throw new Error(
+				`expected an omitted-object line naming "IDX_Bad":\n${result.lossReport.join("\n")}`,
+			);
+		}
+		expect(line).toContain('Omitted: index "app.t10.IDX_Bad"');
+	});
+
 	it("J4: an index and a check on a name-omitted column are both left out of the declaration", async () => {
 		const session = buildSession(
 			[{ schema: "app", table: "orders" }],
@@ -730,7 +831,7 @@ describe("inferFromCatalog / B#1: an index, check or UNIQUE at an omitted column
 		// MM3 (lead-approved wording): a column found only through the
 		// predicate is not "declared on" the index the way a key column is.
 		expect(result.lossReport).toContain(
-			'Omitted: index "app.orders.orders_amount_partial_idx" -- its predicate names column "app.orders.UserId", which this reading left out because no declaration can carry its name, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the column in the database, then re-run `hejbro import`.',
+			'Omitted: index "app.orders.orders_amount_partial_idx" -- its predicate names column "app.orders.UserId", which this reading left out because no declaration can carry its name, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the column in the database, then re-run `hejbro import` into a fresh `--out` and merge the declaration, or declare it by hand.',
 		);
 
 		const paths = writeFiles(result);
@@ -773,7 +874,7 @@ describe("inferFromCatalog / B#1: an index, check or UNIQUE at an omitted column
 		// MM3: a column found only through an expression key -- the same
 		// wording a check constraint's own expression already uses.
 		expect(result.lossReport).toContain(
-			'Omitted: index "app.orders.orders_lower_userid_idx" -- its expression names column "app.orders.UserId", which this reading left out because no declaration can carry its name, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the column in the database, then re-run `hejbro import`.',
+			'Omitted: index "app.orders.orders_lower_userid_idx" -- its expression names column "app.orders.UserId", which this reading left out because no declaration can carry its name, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the column in the database, then re-run `hejbro import` into a fresh `--out` and merge the declaration, or declare it by hand.',
 		);
 
 		const paths = writeFiles(result);
@@ -819,7 +920,7 @@ describe("inferFromCatalog / B#1: an index, check or UNIQUE at an omitted column
 			false,
 		);
 		expect(result.lossReport).toContain(
-			'Omitted: index "app.t2.t2_id_partial_state2_idx" -- its predicate names column "app.t2.state2", which this reading left out with the enum type "app.Status" that types it, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the type in the database, then re-run `hejbro import`.',
+			'Omitted: index "app.t2.t2_id_partial_state2_idx" -- its predicate names column "app.t2.state2", which this reading left out with the enum type "app.Status" that types it, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the type in the database, then re-run `hejbro import` into a fresh `--out` and merge the declaration, or declare it by hand.',
 		);
 
 		const paths = writeFiles(result);
@@ -866,7 +967,7 @@ describe("inferFromCatalog / B#1: an index, check or UNIQUE at an omitted column
 			indexNamesIn(result, "app.t4").has("t4_id_partial_useridcol_idx"),
 		).toBe(false);
 		expect(result.lossReport).toContain(
-			'Omitted: index "app.t4.t4_id_partial_useridcol_idx" -- its predicate names column "app.t4.USER_ID", which this reading left out because no declaration can carry its name, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the column in the database, then re-run `hejbro import`.',
+			'Omitted: index "app.t4.t4_id_partial_useridcol_idx" -- its predicate names column "app.t4.USER_ID", which this reading left out because no declaration can carry its name, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the column in the database, then re-run `hejbro import` into a fresh `--out` and merge the declaration, or declare it by hand.',
 		);
 
 		const paths = writeFiles(result);
@@ -984,7 +1085,7 @@ describe("inferFromCatalog / B#1: an index, check or UNIQUE at an omitted column
 
 		expect(indexNamesIn(result, "app.t5").has("t5_expr_pred_idx")).toBe(false);
 		expect(result.lossReport).toContain(
-			'Omitted: index "app.t5.t5_expr_pred_idx" -- its expression or predicate names column "app.t5.A", which this reading left out because no declaration can carry its name, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the column in the database, then re-run `hejbro import`.',
+			'Omitted: index "app.t5.t5_expr_pred_idx" -- its expression or predicate names column "app.t5.A", which this reading left out because no declaration can carry its name, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the column in the database, then re-run `hejbro import` into a fresh `--out` and merge the declaration, or declare it by hand.',
 		);
 	});
 
@@ -1020,7 +1121,7 @@ describe("inferFromCatalog / B#1: an index, check or UNIQUE at an omitted column
 
 		expect(indexNamesIn(result, "app.t5").has("t5_expr_pred2_idx")).toBe(false);
 		expect(result.lossReport).toContain(
-			'Omitted: index "app.t5.t5_expr_pred2_idx" -- its expression or predicate names column "app.t5.B", which this reading left out because no declaration can carry its name, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the column in the database, then re-run `hejbro import`.',
+			'Omitted: index "app.t5.t5_expr_pred2_idx" -- its expression or predicate names column "app.t5.B", which this reading left out because no declaration can carry its name, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the column in the database, then re-run `hejbro import` into a fresh `--out` and merge the declaration, or declare it by hand.',
 		);
 	});
 
@@ -1053,7 +1154,7 @@ describe("inferFromCatalog / B#1: an index, check or UNIQUE at an omitted column
 		});
 
 		expect(result.lossReport).toContain(
-			'Omitted: index "app.t5.t5_expr_only_idx" -- its expression names column "app.t5.A", which this reading left out because no declaration can carry its name, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the column in the database, then re-run `hejbro import`.',
+			'Omitted: index "app.t5.t5_expr_only_idx" -- its expression names column "app.t5.A", which this reading left out because no declaration can carry its name, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the column in the database, then re-run `hejbro import` into a fresh `--out` and merge the declaration, or declare it by hand.',
 		);
 	});
 
@@ -1087,7 +1188,7 @@ describe("inferFromCatalog / B#1: an index, check or UNIQUE at an omitted column
 		});
 
 		expect(result.lossReport).toContain(
-			'Omitted: index "app.t5.t5_pred_only_idx" -- its predicate names column "app.t5.B", which this reading left out because no declaration can carry its name, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the column in the database, then re-run `hejbro import`.',
+			'Omitted: index "app.t5.t5_pred_only_idx" -- its predicate names column "app.t5.B", which this reading left out because no declaration can carry its name, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the column in the database, then re-run `hejbro import` into a fresh `--out` and merge the declaration, or declare it by hand.',
 		);
 	});
 
@@ -1119,7 +1220,165 @@ describe("inferFromCatalog / B#1: an index, check or UNIQUE at an omitted column
 		});
 
 		expect(result.lossReport).toContain(
-			'Omitted: index "app.t5.t5_key_idx" -- it is declared on column "app.t5.A", which this reading left out because no declaration can carry its name, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the column in the database, then re-run `hejbro import`.',
+			'Omitted: index "app.t5.t5_key_idx" -- it is declared on column "app.t5.A", which this reading left out because no declaration can carry its name, so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared. Next: rename the column in the database, then re-run `hejbro import` into a fresh `--out` and merge the declaration, or declare it by hand.',
+		);
+	});
+});
+
+/**
+ * B1-2 (D106 round-1 correction round, 712/R13, lead-approved general
+ * rule): a member naming a column whose type no `SIMPLE_TYPE_BUILDERS`
+ * entry expresses (`columns.ts`'s own `ColumnLoss` axis) is now folded
+ * into `columnOmissionCauses` as a third root cause ("notInferred"),
+ * so every existing member-exclusion path
+ * (`excludeMembersReferencingOmittedColumns`/
+ * `excludePrimaryKeysReferencingOmittedColumns`/`partitionForeignKeys`/
+ * the generated-column cascade) picks it up the same way it already
+ * does for name/enum, with no new per-member-kind code. R13's own
+ * wording: no `Next:`/`Rename …` tail follows this cause anywhere (no
+ * general-purpose column builder exists today, measured against
+ * `column-builder-factories.ts` and `dsl-cheatsheet.md`), and the
+ * reason clause says "did not infer" (not "left out"), echoing the
+ * "Not inferred: column …" line's own verb. Live, measured this
+ * session (postgres:17-alpine, `cfr1-pg`): before this fix, the
+ * generated-column input applied with `psql -v ON_ERROR_STOP=1` to an
+ * empty database as `ERROR: column "pt" does not exist` (exit 3); the
+ * check-constraint sibling failed identically. After the fix, both
+ * apply clean (`infer-generated-column.integration.test.ts`'s own live
+ * witness).
+ */
+describe("inferFromCatalog / B1-2 (D106 round-1 correction, R13 general rule): a member naming a column whose type no builder expresses is itself omitted", () => {
+	it("a generated column naming a no-builder-type column is itself omitted, and calls the root column nowhere in the starter", async () => {
+		const session = buildSession(
+			[{ schema: "app", table: "t20" }],
+			[
+				{ schema: "app", table: "t20", name: "id" },
+				{ schema: "app", table: "t20", name: "pt", unsupportedType: "point" },
+				{
+					schema: "app",
+					table: "t20",
+					name: "px",
+					generated: "(pt IS NULL)",
+					generatedReferences: ["pt"],
+				},
+			],
+			[],
+		);
+
+		const result = await inferFromCatalog({
+			session,
+			schemas: ["app"],
+			command: "import",
+		});
+
+		const source = emitDeclarationFiles(result)
+			.map((file) => file.source)
+			.join("\n");
+		expect(source).not.toMatch(/\bpx:/);
+		expect(result.lossReport).toContain(
+			'Omitted: generated column "app.t20.px" -- its expression names column "app.t20.pt", which this reading did not infer, because no column builder expresses its type "point", so the generated column cannot be declared either. `check` keeps listing the generated column as unmanaged until that column and the generated column are both declared.',
+		);
+	});
+
+	it("a check constraint naming a no-builder-type column is itself omitted", async () => {
+		const session = buildSession(
+			[{ schema: "app", table: "t21" }],
+			[
+				{ schema: "app", table: "t21", name: "id" },
+				{ schema: "app", table: "t21", name: "pt", unsupportedType: "point" },
+				{ schema: "app", table: "t21", name: "n" },
+			],
+			[],
+			{
+				checks: [
+					{
+						schema: "app",
+						table: "t21",
+						name: "t21_pt_chk",
+						expression: "(pt IS NOT NULL) OR (n IS NULL)",
+						columns: ["pt", "n"],
+					},
+				],
+			},
+		);
+
+		const result = await inferFromCatalog({
+			session,
+			schemas: ["app"],
+			command: "import",
+		});
+
+		expect(checkNamesIn(result, "app.t21").has("t21_pt_chk")).toBe(false);
+		expect(result.lossReport).toContain(
+			'Omitted: check constraint "app.t21.t21_pt_chk" -- its expression names column "app.t21.pt", which this reading did not infer, because no column builder expresses its type "point", so the check constraint cannot be declared either. `check` keeps listing the check constraint as unmanaged until that column and the check constraint are both declared.',
+		);
+	});
+
+	it("an index on a no-builder-type column is itself omitted", async () => {
+		const session = buildSession(
+			[{ schema: "app", table: "t22" }],
+			[
+				{ schema: "app", table: "t22", name: "id" },
+				{ schema: "app", table: "t22", name: "pt", unsupportedType: "point" },
+			],
+			[],
+			{
+				indexes: [
+					{
+						schema: "app",
+						table: "t22",
+						name: "t22_pt_idx",
+						columns: ["pt"],
+					},
+				],
+			},
+		);
+
+		const result = await inferFromCatalog({
+			session,
+			schemas: ["app"],
+			command: "import",
+		});
+
+		expect(indexNamesIn(result, "app.t22").has("t22_pt_idx")).toBe(false);
+		expect(result.lossReport).toContain(
+			'Omitted: index "app.t22.t22_pt_idx" -- it is declared on column "app.t22.pt", which this reading did not infer, because no column builder expresses its type "point", so the index cannot be declared either. `check` keeps listing the index as unmanaged until that column and the index are both declared.',
+		);
+	});
+
+	it("a UNIQUE constraint on a no-builder-type column is itself omitted", async () => {
+		const session = buildSession(
+			[{ schema: "app", table: "t23" }],
+			[
+				{ schema: "app", table: "t23", name: "id" },
+				{ schema: "app", table: "t23", name: "pt", unsupportedType: "point" },
+			],
+			[],
+			{
+				uniqueConstraints: [
+					{ schema: "app", table: "t23", name: "t23_pt_key", columns: ["pt"] },
+				],
+				indexes: [
+					{
+						schema: "app",
+						table: "t23",
+						name: "t23_pt_key",
+						columns: ["pt"],
+						isUnique: true,
+					},
+				],
+			},
+		);
+
+		const result = await inferFromCatalog({
+			session,
+			schemas: ["app"],
+			command: "import",
+		});
+
+		expect(indexNamesIn(result, "app.t23").has("t23_pt_key")).toBe(false);
+		expect(result.lossReport).toContain(
+			'Omitted: unique constraint "app.t23.t23_pt_key" -- it is declared on column "app.t23.pt", which this reading did not infer, because no column builder expresses its type "point", so the unique constraint cannot be declared either. `check` keeps listing the unique constraint as unmanaged until that column and the unique constraint are both declared.',
 		);
 	});
 });

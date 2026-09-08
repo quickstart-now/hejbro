@@ -99,7 +99,14 @@ const columnFacts = (
 		baseTypeName: row.baseTypeName,
 		isArray: isArrayType(row.catalogType),
 		notNull: row.notNull,
-		catalogDefault: row.catalogDefault,
+		// `check/catalog.ts`'s own `ColumnRow` splits a plain default and a
+		// stored generated expression into two columns (exactly one
+		// non-null, #778/#781) -- `InferredColumnFacts.catalogDefault` is
+		// the one field `withGeneratedIdentityOrDefault` (`columns.ts`)
+		// reads for both, so the generated text has to land there too (B1,
+		// 712/R11): dropping `row.catalogGenerated` here is what made every
+		// stored generated column read as a plain column, silently.
+		catalogDefault: row.catalogGenerated ?? row.catalogDefault,
 		identityKind: detail?.identityKind ?? "",
 		generatedKind: detail?.generatedKind ?? "",
 		identityOptions: findIdentityOptions(inferenceCatalog, row),
