@@ -300,8 +300,15 @@ managed.
 
 A table changing hands SHALL emit nothing for the table itself; on
 adoption the objects hejbro manages on that table — its sequences, its
-row-level security, its policies — are created as for any managed
-table, and on handover nothing of theirs is dropped.
+row-level security, its policies — and the table's own declared
+children — its indexes, its checks, its foreign keys and its primary
+key — are created, and on handover nothing of theirs is dropped.
+Adoption never drops: what the database holds beyond the declaration
+is `check`'s inventory. A sequence an adoption creates SHALL be created
+idempotently and then altered to its declared type and ownership, so a
+sequence a handover left behind is reused and normalized rather than
+refused; a table that is new outright keeps the plain create, so a
+genuine collision there still fails at apply time.
 
 A validator that judges managed DDL SHALL skip an existing table. An
 existing declaration SHALL still reach the validator pipeline exactly as
@@ -335,9 +342,21 @@ DDL has it to look at.
 - **WHEN** a table declared with `existingTable()` is replaced by a
   managed `table()` declaring row-level security, a policy and a
   `serial` column, and `hejbro generate` runs
-- **THEN** no `create table` is written, and the sequence, the
+- **THEN** no `create table` is written; the sequence is created with
+  `if not exists` and altered to its declared type and ownership, the
   row-level-security enablement and the policy are created as they are
-  for any managed table
+  for any managed table, and every index, check, foreign key and primary
+  key the declaration carries is created — while a declaration whose
+  only managed object is that sequence, handed back to `existingTable()`
+  and adopted again, applies cleanly on a database that kept the
+  sequence; a declaration with more (indexes, checks, foreign keys, a
+  primary key) is named by `adoption-creates` on re-adoption, and the two
+  ways through are handing the table back — restoring the migration, the
+  snapshot and the declaration this run changed — or dropping the
+  indexes, checks, foreign keys and primary key the database holds,
+  never the sequence, before applying; a child on a column the database
+  lacks fails at apply time, and `check --url` names the column
+  beforehand
 
 #### Scenario: A reserved-schema validator exempts an existing table
 - **WHEN** a schema declares a table with `existingTable()` in a schema
