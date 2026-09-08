@@ -116,7 +116,7 @@ into the diff.
       places is repaired in one. Files: `with.ts`, `select.ts`, `db.ts`,
       tests.
 
-- [ ] 1.6 (~4m) The contract says the third surface. The delta's ADDED
+- [x] 1.6 (~4m) The contract says the third surface. The delta's ADDED
       requirement gains the CTE-body scenario and names that surface in
       its own sentence; `query-layer.md` drops the `(#944)` citation and
       its `withCte` paragraph states the folded read. Every word of both

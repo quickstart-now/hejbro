@@ -78,6 +78,13 @@
       "title": "1.5b (final): the branch-carrying convention lives once in core -- 4-mutation protocol re-run, decisive drift-closure evidence",
       "pr": null,
       "decisions": []
+    },
+    {
+      "id": "W11",
+      "at": "2026-09-08T21:25Z",
+      "title": "1.6: the delta names the cte-body surface -- verbatim text, gates",
+      "pr": null,
+      "decisions": []
     }
   ],
   "prs": [],

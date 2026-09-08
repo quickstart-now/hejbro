@@ -845,3 +845,69 @@ step. Every mutation in this protocol was individually re-run against
 the current, fully-refactored tree -- none reused a result carried
 over from before the convention-promotion refactor.
 
+<a id="w11"></a>
+## W11 — 1.6: the delta names the cte-body surface -- verbatim text, gates
+
+_2026-09-08T21:25Z_
+
+Task 1.6 (the contract names the third surface) implemented verbatim
+against the lead's own final consolidated text (planner: "확정 통합
+본… 한 글자도 바꾸지 마세요"), on top of `2336e74d` (`widen-set-op-execute`
+worktree). Diff: `openspec/changes/widen-set-op-execute/specs/
+query-type-inference/spec.md`, `skills/hejbro/references/query-layer.md`.
+No other file touched, per the task's own scope line.
+
+**Six edits applied, each checked against the exact find/replace text
+given (no paraphrase):**
+1. ADDED requirement's own surface sentence gains the CTE-body clause
+   (`spec.md`, the paragraph right before "A core-built stage carries
+   both branch stages…").
+2. New scenario appended at the end of the same ADDED requirement: "A
+   set operation declared as a CTE body reads back as the union of its
+   branches".
+3. Scenario 4's own THEN ("A core-built set operation executed on a
+   handle reads back as the union of its branches") gains the #1054
+   residue sentence — verbatim, `#1053`/`#1055` cited nowhere.
+4. `query-layer.md`: the stray `(#944)` citation removed from the
+   recursive-CTE section's own set-op-stage aside (the requirement this
+   change replaces already carried that citation away; this was the
+   one place it survived in prose).
+5. `query-layer.md`: a new paragraph after the `w.as` general
+   description (before the code example) states the CTE-fold rule for
+   a set-op entry.
+6. `query-layer.md`: the chain's own set-operation section gains the
+   #1054 residue sentence (int4/int8 promotion, values arrive
+   unconverted) — the same text as edit 3's scenario, restated in
+   prose for the reference doc's own readers.
+
+**Line-number drift, not a content deviation.** The planner's own
+"302–303행" pointer for edit 6 was computed against the file's
+pre-edit-5 state; edit 5 inserts 8 lines earlier in the same file, so
+by the time edit 6 ran the target text had moved. Located it by its
+own content (`grep -n "rows arrive converted per the left branch"`)
+instead of trusting the stale line numbers — the text itself, not its
+position, is what the planner's instruction actually pins.
+
+**One self-correction during edit 1.** A first pass left a spurious
+blank-line paragraph break between the new sentence and the following,
+already-existing sentence ("A core-built stage carries both branch
+stages…") that the find/replace text was never meant to detach from —
+the planner's replacement text is one sentence inserted into an
+existing paragraph, not a new paragraph of its own. Caught by re-reading
+the file immediately after the edit (not trusting the diff alone) and
+fixed before running any gate.
+
+**Serial gates (final state):**
+- `TURBO_FORCE=1 pnpm check` -- exit 0 (3 pre-existing warnings,
+  unrelated file, unchanged from every prior task's own run)
+- `TURBO_FORCE=1 pnpm check-types` -- exit 0 (turbo 19/19)
+- `TURBO_FORCE=1 pnpm test` -- exit 0 (turbo `test` 19/19 + `test:types`
+  2/2)
+- `pnpm check:crap` -- exit 0 (no violations, 53 at the threshold)
+- `pnpm check:modified-titles` -- exit 0 ("2 active change(s), every
+  delta title matches its base spec") -- the requirement's own title
+  and the REMOVED block are byte-identical to before this task; only
+  the ADDED requirement's own body and its scenario list changed,
+  confirmed by re-reading the diff against this gate's own claim
+  before trusting it.
+
