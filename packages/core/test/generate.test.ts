@@ -1071,7 +1071,7 @@ describe("an existing declaration emits nothing (add-unmanaged-objects, #605)", 
 	// cell's own guard when it was rewritten to assert the PK create --
 	// nothing was left pinning "an adoption with zero declared children
 	// (no primary key anywhere) stays silent" now that the empty-diff
-	// check also asks `adoptionCreatesPrimaryKey`.
+	// check also asks `adoptionPrimaryKeyName`.
 	it("an adoption with no declared children at all, and no primary key on either side, stays silent", () => {
 		const app = schema("uo6b");
 		const existing = existingTable("uo6b", "widgets", { id: uuid() });
@@ -1556,7 +1556,13 @@ describe("an existing declaration emits nothing (add-unmanaged-objects, #605)", 
 	// `column "id" changed` banner note from `tableFieldDiffs`' own
 	// columnDiff -- 671/R2's column-touch ban is about statements
 	// (`alter table … alter column …`), never about this kind's existing
-	// notes convention, which stays unchanged.
+	// notes convention. Review round 1 NB-3 widened that convention: the
+	// primary key is now also named directly (`adoptionPrimaryKeyNote`,
+	// `isAdoption` its only guard), alongside the `column` note the
+	// existing side's own lack of the flag already produced -- the same
+	// fact surfaces at both layers (the column's own snapshot, and the
+	// constraint statement the file carries), which is the file's own
+	// design (671/R10 lead ruling): the banner states what the file does.
 	it("an adopted table creates its declared single-column primary key (671/task 1.1, table A: primary key x adoption)", () => {
 		const app = schema("uo20");
 		const existingWidgets = existingTable("uo20", "widgets", { id: uuid() });
@@ -1570,7 +1576,7 @@ describe("an existing declaration emits nothing (add-unmanaged-objects, #605)", 
 			previousSnapshot: firstResult.snapshot,
 		});
 		const banner =
-			'-- hejbro migration\n-- ~ table uo20.widgets [column "id" changed]';
+			'-- hejbro migration\n-- ~ table uo20.widgets [column "id" changed, primary key "widgets_pkey" added]';
 		const addPrimaryKey =
 			'alter table "uo20"."widgets" add constraint "widgets_pkey" primary key ("id");';
 		expect(secondResult.sql).toBe([banner, addPrimaryKey].join("\n\n"));
@@ -1631,7 +1637,7 @@ describe("an existing declaration emits nothing (add-unmanaged-objects, #605)", 
 			previousSnapshot: firstResult.snapshot,
 		});
 		const banner =
-			'-- hejbro migration\n-- ~ table uo23.widgets [column "id" changed, column "tenant_id" changed]';
+			'-- hejbro migration\n-- ~ table uo23.widgets [column "id" changed, column "tenant_id" changed, primary key "widgets_pkey" added]';
 		const addPrimaryKey =
 			'alter table "uo23"."widgets" add constraint "widgets_pkey" primary key ("id", "tenant_id");';
 		expect(secondResult.sql).toBe([banner, addPrimaryKey].join("\n\n"));
@@ -1706,12 +1712,14 @@ describe("an existing declaration emits nothing (add-unmanaged-objects, #605)", 
 	// existing declaration listed it too (table B, self-referencing
 	// foreign key above); this is the primary key's own control.
 	//
-	// Review round 1 F3: `b1a`/`b1c` (no other child) are also the banner
-	// witness -- before F3, both pinned a bracket-less banner even though
-	// the file below carries an `add constraint … primary key` statement.
-	// `b1b`/`b1d` (with another child) already had a non-empty bracket
-	// from the other child's own note and stay exactly as they were --
-	// `primaryKeyOnlyAdoptionNote` only fires when nothing else would.
+	// Review round 1 F3/NB-3: all four are also the banner witness -- before
+	// F3, every one of them printed no primary-key note at all, even
+	// though the file below always carries an `add constraint … primary
+	// key` statement; `b1a`/`b1c` (no other child) had no bracket at all,
+	// `b1b`/`b1d` (with another child) had a bracket naming only the other
+	// child. `adoptionPrimaryKeyNote` now names the primary key on every
+	// adoption that creates one, `isAdoption` its only guard -- so `b1b`/
+	// `b1d` now name both.
 
 	it("an adopted table creates its declared primary key even when the existing declaration already listed it (671/R9, D106 R1 B1: primary key x adoption, existing side already listed it, no other child)", () => {
 		const app = schema("b1a");
@@ -1757,7 +1765,7 @@ describe("an existing declaration emits nothing (add-unmanaged-objects, #605)", 
 			previousSnapshot: firstResult.snapshot,
 		});
 		const banner =
-			'-- hejbro migration\n-- ~ table b1b.widgets [index "widgets_email_idx" added]';
+			'-- hejbro migration\n-- ~ table b1b.widgets [index "widgets_email_idx" added, primary key "widgets_pkey" added]';
 		const addPrimaryKey =
 			'alter table "b1b"."widgets" add constraint "widgets_pkey" primary key ("id");';
 		const createIndex =
@@ -1820,7 +1828,7 @@ describe("an existing declaration emits nothing (add-unmanaged-objects, #605)", 
 			previousSnapshot: firstResult.snapshot,
 		});
 		const banner =
-			'-- hejbro migration\n-- ~ table b1d.widgets [check "widgets_qty_positive" added]';
+			'-- hejbro migration\n-- ~ table b1d.widgets [check "widgets_qty_positive" added, primary key "widgets_pkey" added]';
 		const addPrimaryKey =
 			'alter table "b1d"."widgets" add constraint "widgets_pkey" primary key ("id", "tenant_id");';
 		const addCheck =

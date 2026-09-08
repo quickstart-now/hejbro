@@ -158,6 +158,13 @@
         "R9",
         "R10"
       ]
+    },
+    {
+      "id": "W4",
+      "at": "2026-09-08T13:43Z",
+      "title": "W3 correction: the f1-f6 drop-order claim measured a hand-edited pre-671/R9 file, not the real build",
+      "pr": null,
+      "decisions": []
     }
   ],
   "prs": [

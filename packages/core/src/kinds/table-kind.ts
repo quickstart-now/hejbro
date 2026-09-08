@@ -579,41 +579,41 @@ const isEmptyTableFieldDiffs = (diffs: TableFieldDiffs): boolean =>
 	isEmptyKeyedDiff(diffs.checkDiff);
 
 /**
- * A primary key's membership lives on the column itself
- * (`columnState.primaryKey`, D68) — unlike indexes/foreignKeys/checks,
- * `existingTable()` never zeroes it out, so an existing declaration that
- * lists the same primary key leaves `columnDiff` unchanged and the
- * table's own alter would otherwise never fire (671/R9, D106 R1 B1).
+ * `next`'s own primary key name, only when `isAdoption` and it declares
+ * one, else `null` — a primary key's membership lives on the column
+ * itself (`columnState.primaryKey`, D68), which `existingTable()` never
+ * zeroes out the way it zeroes `indexes`/`foreignKeys`/`checks`, so an
+ * existing declaration that lists the same primary key leaves
+ * `columnDiff` unchanged and the table's own alter would otherwise never
+ * fire (671/R9, D106 R1 B1). `null` for every other transition: a
+ * managed→managed primary key move already shows up in `columnDiff`
+ * (the column's own `primaryKey` flag is part of its snapshot), and a
+ * new table's primary key is inline in `create table`.
  */
-const adoptionCreatesPrimaryKey = (
+const adoptionPrimaryKeyName = (
 	isAdoption: boolean,
 	next: TableSnapshot,
-): boolean => isAdoption && tablePrimaryKeyName(next) !== null;
+): string | null => {
+	if (!isAdoption) {
+		return null;
+	}
+	return tablePrimaryKeyName(next);
+};
 
 /**
- * `["primary key \"<name>\" added"]` only for the one shape none of
- * `tableFieldDiffNotes`' four keyed diffs can ever surface on their own
- * (review round 1 F3): an adoption whose declared primary key is its
- * *only* creation, so `diffs` is otherwise empty and the banner would
- * print no notes at all despite the migration carrying an `add
- * constraint … primary key` statement. `[]` everywhere else — a primary
- * key change alongside another child, or with the existing side lacking
- * the flag, already shows up as a `column "…" changed`/`index`/`check`/
- * `foreign key` note; a managed→managed primary key move is exactly
- * that same `column` note; a new table's primary key is inline in
- * `create table` and never reaches a note at all.
+ * `["primary key \"<name>\" added"]` whenever adoption declares one
+ * (review round 1 F3/NB-3) — named on every adoption that creates a
+ * primary key, `isAdoption` the only guard, even alongside another
+ * child's own note or a `column "…" changed` note the existing side's
+ * lack of the flag already produced: the banner states what the file
+ * does, and the file always carries the `add constraint … primary key`
+ * statement whenever this fires. `[]` when `adoptionPrimaryKeyName`
+ * returns `null`.
  */
-const primaryKeyOnlyAdoptionNote = (
-	isAdoption: boolean,
-	diffs: TableFieldDiffs,
-	next: TableSnapshot,
+const adoptionPrimaryKeyNote = (
+	primaryKeyName: string | null,
 ): ReadonlyArray<string> => {
-	const primaryKeyName = tablePrimaryKeyName(next);
-	if (
-		!isAdoption ||
-		primaryKeyName === null ||
-		!isEmptyTableFieldDiffs(diffs)
-	) {
+	if (primaryKeyName === null) {
 		return [];
 	}
 	return [`primary key "${primaryKeyName}" added`];
@@ -775,10 +775,8 @@ export const tableKind: ObjectKind<TableDeclaration> = {
 		const nextTable = asTableSnapshot(guard.next);
 		const diffs = tableFieldDiffs(asTableSnapshot(guard.previous), nextTable);
 		const isAdoption = isAdoptionTransition(previous, next);
-		if (
-			isEmptyTableFieldDiffs(diffs) &&
-			!adoptionCreatesPrimaryKey(isAdoption, nextTable)
-		) {
+		const primaryKeyName = adoptionPrimaryKeyName(isAdoption, nextTable);
+		if (isEmptyTableFieldDiffs(diffs) && primaryKeyName === null) {
 			return [];
 		}
 
@@ -791,7 +789,7 @@ export const tableKind: ObjectKind<TableDeclaration> = {
 				next: guard.next,
 				notes: [
 					...tableFieldDiffNotes(diffs),
-					...primaryKeyOnlyAdoptionNote(isAdoption, diffs, nextTable),
+					...adoptionPrimaryKeyNote(primaryKeyName),
 				],
 			},
 		];

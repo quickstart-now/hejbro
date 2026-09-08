@@ -159,11 +159,13 @@ exit codes and the SHA.
       share a test with was rewritten to assert the create instead —
       pinned again, core and CLI, plus a CLI PK-only cell naming the
       guard's own CLI-surface control. F3, the banner's own notes never
-      named a primary-key-only adoption's create (`-- ~ table …`, no
-      bracket at all, next to a file that carries `add constraint …
-      primary key`) — fixed condition-scoped to adoption with nothing
-      else to note, so a
-      managed→managed primary key move (already a `column "…" changed`
-      note) and a new table's inline primary key never gain a second,
-      duplicate note. F5-2, an 18-line derivation comment trimmed to its
-      one trap sentence.
+      named a primary-key-only adoption's create (`-- ~ table …`,
+      instead of no note list at all, next to a file that carries `add
+      constraint … primary key`) — first fixed condition-scoped to
+      adoption with nothing else to note, then widened (NB-3, lead
+      ruling) to name the primary key on every adoption that creates
+      one, `isAdoption` its only guard, since the banner states what the
+      file does; a managed→managed primary key move (already a `column
+      "…" changed` note) and a new table's inline primary key never
+      gain a second, duplicate note. F5-2, an 18-line derivation comment
+      trimmed to its one trap sentence.

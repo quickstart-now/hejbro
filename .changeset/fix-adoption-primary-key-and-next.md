@@ -8,8 +8,8 @@ Adoption now creates a table's declared primary key even when the
 primary key — previously the migration silently skipped it while
 `adoption-creates` still named it, leaving a drift `hejbro check` could
 report but no later `generate` could repair. The migration's own
-banner also names a primary-key-only adoption's create, instead of an
-empty `[]`.
+banner also names the primary key on every adoption that creates one,
+instead of no note list at all.
 
 `hejbro generate`'s `adoption-creates` notice is rewritten: its first
 sentence now names exactly the objects a database already holding them
