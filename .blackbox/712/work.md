@@ -146,3 +146,52 @@ every delta title matches its base spec") / `openspec validate
 --strict harden-catalog-inference-2` ("valid") -- all exit 0, repo-wide,
 serial, no `--filter`.
 
+<a id="w4"></a>
+## W4 — NB1/#1047: move the empty-schema line into the Not-inferred band
+
+_2026-09-08T16:28Z · per R13, R14_
+
+NB1 (#1047) correction after the narrow re-review: the empty-schema
+"Not inferred: nothing to infer in schema ..." line landed after every
+"Omitted" line (appended right before the way-out line), not inside the
+Not-inferred band it belongs to.
+
+Fix: `withReportLinesBeforeWayOut` replaced by
+`withReportLinesInNotInferredBand` -- inserts right after the last
+existing `Guessed:`/`Not inferred:` line (identity-based, not an
+assumed index), used by both `import.ts` and `pull.ts`.
+
+Live re-measurement, one combined input (a schema with real content
+carrying its own generated-column "Not inferred"/"Omitted" lines, an
+invalid-name schema, and a genuinely absent schema, `--schema app
+--schema "Bad-Schema" --schema nope`), both commands, success and
+refusal paths:
+- import success: Guessed, Guessed role names, Not inferred (grants),
+  Not inferred (column pt), Not inferred (nothing to infer "nope"),
+  Approximated, Omitted (schema), Omitted (generated column) -- exit 0.
+- pull success: same order -- exit 0.
+- import refusal (`--schema "Bad-Schema" --schema nope`, nothing
+  contributed): Guessed, Not inferred (grants), Not inferred (nothing
+  to infer "nope"), Approximated, Omitted (schema), then
+  `error[import-nothing-declarable]` -- exit 1.
+- pull refusal, same input: same order, then
+  `error[pull-nothing-declarable]` -- exit 1.
+
+Existing Not-inferred lines keep their own relative order; the new
+line only ever lands after the last of them. Fallback pinned by test
+(not left undefined): when a report carries no Guessed/Not-inferred
+line at all (a synthetic-only case, `buildLossReport` itself always
+opens with a Guessed line), the insertion point is the very front of
+the report -- still ahead of Approximated/Omitted.
+
+Regression tests: `import-command.test.ts`/`pull-command.test.ts`,
+existing tests extended with a four-band order array assertion over
+the same three-case combined input; one new test pins the no-Guessed
+fallback, confirmed red via a one-line sabotage (`insertAt` off by one)
+before restoring.
+
+Gates (this correction's own commit): `TURBO_FORCE=1 pnpm check` /
+`check-types` / `test` (hejbro package 1621 tests) / `pnpm check:crap`
+/ `pnpm check:modified-titles` / `openspec validate --strict` -- all
+exit 0, repo-wide, serial.
+

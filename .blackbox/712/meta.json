@@ -177,6 +177,16 @@
         "R13",
         "R14"
       ]
+    },
+    {
+      "id": "W4",
+      "at": "2026-09-08T16:28Z",
+      "title": "NB1/#1047: move the empty-schema line into the Not-inferred band",
+      "pr": null,
+      "decisions": [
+        "R13",
+        "R14"
+      ]
     }
   ],
   "prs": [
