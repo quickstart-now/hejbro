@@ -70,3 +70,90 @@ neither touched. The stash used for this task's own red verification
 was already popped (restored) before this check, so nothing of mine
 remained on the shared stack. No entries were dropped.
 
+<a id="w3"></a>
+## W3 — 1.2: ExecuteResult folds both branches, flat shapes -- gates, red evidence, #944 measurement
+
+_2026-09-08T18:33Z_
+
+Task 1.2 (`ExecuteResult` folds both branches, flat shapes) implementation
+measured before commit, on top of 1e6b78c4 (`widen-set-op-execute`
+worktree), uncommitted diff: `packages/query/src/db/db.ts` +
+`packages/query/test/db/execute-result-type.test.ts` (new describe
+block, 7 rows, added to the file's own existing core-built-set-op
+describe block area).
+
+**Red, per row, against the pre-1.2 `db.ts`** (verified via
+`git diff > patch && git checkout -- db.ts` — never `git stash`,
+per 412/R35 — then `git apply patch` to restore):
+- Row 2 (numeric-mode type union): `error TS2344` — old fallback gives
+  `{ num: number | null }` (left-only, blanket-nulled); new expects
+  `{ num: number | bigint }` (no null, both branches notNull).
+- Row 3b (#944 repro — notNull LEFT × nullable RIGHT, whole-table
+  fixtures chosen specifically so the old fallback can't coincidentally
+  match, unlike an object projection's blanket null-widening): old
+  fallback resolves `{ id: string; flag: string }` (left-only,
+  ignores the right branch's own nullable declaration entirely); new
+  expects `{ id: string; flag: string | null }`. Printed via a
+  temporary probe (`const _p: "PRINT_ME" = null as unknown as Row`,
+  deleted before commit) to confirm the exact old-resolved shape before
+  trusting the mismatch.
+- Row 5 (neither branch joins, notNull object projection): `error
+  TS2344` — old fallback always widens an object-projection field to
+  `| null` for the untracked-joins default; new expects `{ body: string
+  }` (not widened) — this is the core-built carve-out's own defect,
+  closed here.
+- Rows 1, 3a, 4a, 4b, 7 did not themselves diverge from the old
+  fallback's answer (row 1: whole-table `SelectResult` never reads
+  `TLeftJoined` at all, so tracked-vs-untracked is moot; rows 3a/4a/4b:
+  the old fallback's blanket object-projection null-widening
+  coincidentally produces the same nullable answer the new fold also
+  produces, for an unrelated reason; row 7 has no "old" comparison, it
+  pins parity with the already-correct chain surface) — asserted anyway
+  per the task's own input table (breadth of the table, not "does every
+  cell differ from the old code", is the D110 requirement), and every
+  row's own literal shape is pinned regardless.
+
+**Serial gates (brief order), on top of the diff described above:**
+- `TURBO_FORCE=1 pnpm check` — exit 0 (biome: 0 errors; 3 pre-existing
+  warnings in `scripts/check-modified-titles.mjs`, unrelated; one
+  formatting fix applied via `biome format --write` to `db.ts` and the
+  test file before this run, from a first pass that had exit 1)
+- `TURBO_FORCE=1 pnpm check-types` — exit 0 (turbo: 19/19 tasks)
+- `TURBO_FORCE=1 pnpm test` — exit 0 (turbo `test`: 19/19 — `@hejbro/query`
+  68 files / 1150 tests, `@hejbro/core` 108 files / 2312 tests + 1 todo,
+  `hejbro` 102 files / 1635 tests, all green; turbo `test:types`: 2/2)
+- `pnpm check:crap` — exit 0 (0 violations, 53 at exactly CRAP 5, README
+  byte-identical)
+- `pnpm check:modified-titles` — exit 0 ("2 active change(s)")
+
+**#944 measurement (facts only, no verdict):**
+(a) A nullable RIGHT branch now reads as nullable through the core-built
+    + `db.execute` path, for any statement actually built with the real
+    combinators (`.union()` et al. — both branch parameters filled, per
+    task 1.1): confirmed directly by row 3b's own red-then-green
+    (old: `flag: string`; new: `flag: string | null`).
+(b) Surfaces still reading a nullable-right-branch column as non-null:
+    - A hand-annotated, one-argument `SetOpStage<TProjection>` (both
+      branch parameters left at their `unknown` default) — deliberately
+      unchanged (design.md Q2, "today's exact fallback"): resolves
+      `SelectResult<TProjection>` from the LEFT branch's own declaration
+      alone, blind to the right branch's nullability, same as before
+      this whole change.
+    - A nested branch (one side of the combinator is itself a
+      `SetOpStage`, e.g. `(a union b) except c`) is not yet folded at
+      all here — `SetOpBranchRow` only matches `SelectLimited`, so a
+      nested branch resolves to `never`, making the WHOLE result
+      `SetOpResult<never, X> = never` (task 1.3's own arm, deliberately
+      absent so 1.3's own red stays red — a different failure mode from
+      #944's "silently reads non-null", not measured further here).
+    - A recursive CTE's own nullability does not go through
+      `ExecuteResult`'s `SetOpStage` arm at all — it uses a separate
+      mechanism (`with.ts`'s `WidenedBy`/`RecursiveCteReference`, read
+      by `SelectResult`'s own `NestedOrExprResult`), untouched by this
+      task's diff. Whether recursive CTEs have their own analogous gap
+      was not measured — out of task 1.2's scope.
+    - The chain surface was not non-null-blind before this change and
+      is unaffected by it (`chainSetOpCombinators` already folds both
+      branches' own resolved rows through `SetOpResult`, predating
+      widen-set-op-execute).
+

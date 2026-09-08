@@ -22,6 +22,13 @@
       "title": "1.1: git stash usage during red verification (predates 412/R35)",
       "pr": null,
       "decisions": []
+    },
+    {
+      "id": "W3",
+      "at": "2026-09-08T18:33Z",
+      "title": "1.2: ExecuteResult folds both branches, flat shapes -- gates, red evidence, #944 measurement",
+      "pr": null,
+      "decisions": []
     }
   ],
   "prs": [],
