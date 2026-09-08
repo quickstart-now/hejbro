@@ -165,6 +165,15 @@
       "title": "W3 correction: the f1-f6 drop-order claim measured a hand-edited pre-671/R9 file, not the real build",
       "pr": null,
       "decisions": []
+    },
+    {
+      "id": "W5",
+      "at": "2026-09-08T14:35Z",
+      "title": "NB-3: the banner names the primary key on every adoption that creates one",
+      "pr": null,
+      "decisions": [
+        "R9"
+      ]
     }
   ],
   "prs": [

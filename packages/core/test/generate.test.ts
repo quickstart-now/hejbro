@@ -1562,7 +1562,7 @@ describe("an existing declaration emits nothing (add-unmanaged-objects, #605)", 
 	// existing side's own lack of the flag already produced -- the same
 	// fact surfaces at both layers (the column's own snapshot, and the
 	// constraint statement the file carries), which is the file's own
-	// design (671/R10 lead ruling): the banner states what the file does.
+	// design (671/R12 lead ruling): the banner states what the file does.
 	it("an adopted table creates its declared single-column primary key (671/task 1.1, table A: primary key x adoption)", () => {
 		const app = schema("uo20");
 		const existingWidgets = existingTable("uo20", "widgets", { id: uuid() });
