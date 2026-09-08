@@ -21,7 +21,15 @@
       "ratified": null
     }
   ],
-  "work": [],
+  "work": [
+    {
+      "id": "W1",
+      "at": "2026-09-08T20:22Z",
+      "title": "1.5 P1-P4: CTE merge-shape spikes, observation-point correction, #1054 residue",
+      "pr": null,
+      "decisions": []
+    }
+  ],
   "prs": [],
   "origin": null,
   "followUps": []
