@@ -1,20 +1,15 @@
 {
   "version": 3,
   "kind": "issue",
-  "ref": "quickstart-now/hejbro#1015",
-  "title": "adoption: a column-level unique() is neither created nor named by adoption-creates",
+  "ref": "quickstart-now/hejbro#1037",
+  "title": "migrate: an adoption migration whose objects the database already holds has no official path to be registered instead of run",
   "parent": "quickstart-now/hejbro#995",
   "status": "open",
-  "opened": "2026-09-06",
+  "opened": "2026-09-08",
   "closed": null,
   "decisions": [],
   "work": [],
   "prs": [
-    {
-      "number": 1019,
-      "role": "refs",
-      "pinnedAt": "2026-09-06T06:17Z"
-    },
     {
       "number": 1043,
       "role": "refs",
