@@ -187,3 +187,30 @@ describe("a mismatched key set still fails (task 1.1, unchanged from #487)", () 
 		).toThrow(expect.objectContaining({ code: "set-op-key-set-mismatch" }));
 	});
 });
+
+describe("the compatibility gate survives the signature rewrite, all four positions (rework R3, source: reviewer's FINAL-zz-reviewer-query.test.ts, describe 'reviewer: the compatibility gate survives the signature rewrite (#487's own gap)' -- ported verbatim, only the local fixture names changed (posts/archivedPosts/mismatchedRows for the reviewer's la/rb/mm): task 1.1 rewrote the combinator signature so TOther is the OTHER branch's whole stage, not its bare projection, and #487 is on record as the bug where the CHAINED position kept the gap after the first was fixed -- so all four positions are pinned, not just the first. None of these run: the runtime guard would throw first, unreached, matching the block above.", () => {
+	it("refuses a mismatched branch in the FIRST position", () => {
+		const unreached = () =>
+			// @ts-expect-error posts projects {id, title}; mismatchedRows projects {id, name}
+			select(posts).union(select(mismatchedRows));
+		expectTypeOf(unreached).not.toBeNever();
+	});
+	it("refuses a mismatched branch in the CHAINED position", () => {
+		const unreached = () =>
+			// @ts-expect-error the third branch is checked exactly like the second
+			select(posts).union(select(archivedPosts)).except(select(mismatchedRows));
+		expectTypeOf(unreached).not.toBeNever();
+	});
+	it("refuses a mismatched branch nested on the RIGHT", () => {
+		const unreached = () =>
+			// @ts-expect-error the inner combination itself is incompatible
+			select(posts).except(select(archivedPosts).union(select(mismatchedRows)));
+		expectTypeOf(unreached).not.toBeNever();
+	});
+	it("refuses when the LEFT side is the odd one out", () => {
+		const unreached = () =>
+			// @ts-expect-error reversed direction, same refusal
+			select(mismatchedRows).union(select(posts));
+		expectTypeOf(unreached).not.toBeNever();
+	});
+});
