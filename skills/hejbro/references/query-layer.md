@@ -302,11 +302,14 @@ the LEFT branch's keys with per-column unions (a column nullable in
 either branch is nullable in the result), and rows arrive converted
 per the left branch's declarations — except where the two branches
 declare one key differently: Postgres promotes that column across the
-branches (int4 ∪ int8 → int8), so the left branch's codec is the wrong
-one for the value that actually arrives and the value is handed back
-unconverted. Measured on all three surfaces — the chain, a core-built
-statement executed on a handle, and a CTE body; tracked as #1054, and
-hejbro states the gap rather than closing it. A set-operation query is
+branches (int4 ∪ int8 → int8). When the left branch is the narrower
+declaration its codec is the wrong one for the value that actually
+arrives and the value is handed back unconverted (`"10"`, not `10`);
+when the left branch is the wider one the value arrives converted by
+that codec, inside the declared union (`10n`). Measured on all three
+surfaces in both orders — the chain, a core-built statement executed on
+a handle, and a CTE body; tracked as #1054, and hejbro states the gap
+rather than closing it. A set-operation query is
 also a valid view body (`defineView` accepts it; the view's columns
 come from the left branch).
 
@@ -369,7 +372,16 @@ keys, each column the union of both branches' read-back types, nullable
 when either branch declares it nullable. How a field reads back through
 a CTE reference is unchanged: an object-projected column stays widened
 (a CTE body carries no left-joined set outward), a whole-table column
-keeps its declared nullability.
+keeps its declared nullability. Through `handle.with`, though, every
+column read from a CTE reference arrives nullable — the same #942
+boundary the recursive section states, which applies to the whole with
+statement's reads of its entries, not only to the recursive term — so
+the union of read types is what that surface shows, and the declared
+nullability half is visible only at the type layer. A set operation
+returned as the with statement's own body folds too: each branch is
+read the way that position reads a plain body (an object-projected
+column widened, a whole-table column at its declared nullability) and
+the two fold per key.
 
 On a `db()` handle, the identical builder is `handle.with((w) => { ... })`
 — the same `w.as`/`w.asRecursive` callback, not a second API. `with` is a
@@ -435,7 +447,11 @@ recursive-term`, so this is the same union-compatibility rule
 second one. The keys must also agree in family: an anchor's `text`
 column against a recursive term's `integer` column for the same key now
 fails to type-check, where the server used to be the one to refuse it
-(`42804`).
+(`42804`). The check is by family only, the same granularity the
+set-operation section documents: a same-family width divergence (an
+`integer` anchor against a `bigint` term for one key) still
+type-checks, and the server refuses it (`recursive query "r" column N
+has type integer in non-recursive term but type bigint overall`).
 
 The outward row's *type* per key is always the anchor's; its
 *nullability* is not — a key reads nullable when either the anchor or
@@ -494,11 +510,16 @@ widely recalled restriction list ("no aggregates, no window functions, no
 wrong on four counts. What a recursive term itself refuses: an aggregate at
 its own select level, `order by`/`limit`/`offset` (unimplemented for a
 recursive query), a second self-reference, a self-reference inside a
-subquery or in the anchor, and `intersect`/`except` as the combinator — the
-last two and the three whole-set clauses can't even be spelled here:
-`w.asRecursive`'s own recursive branch offers only `union`/`unionAll`, no
-further chain of combinators, so those five shapes are unrepresentable
-through this builder rather than merely rejected.
+subquery or in the anchor, and `intersect`/`except` as the combinator
+joining anchor and term — `w.asRecursive`'s own recursive branch joins
+the two by `union`/`unionAll` only. The term itself, though, is an
+ordinary select stage, so a set operation or a whole-set clause *inside*
+it can be spelled (`(self) => select(…, self).innerJoin(…).intersect(select(…, t))`,
+`… .union(select(…, t)).limit(3)`) and compiles to `union all (… intersect …)`
+/ `union all (… union … limit 3)`; Postgres 17 accepts both, and a
+constant branch under `union all` re-yields every iteration and never
+terminates (measured). hejbro does not refuse these shapes today; the
+depth guard below applies to them as it does to the `LEFT JOIN` shape.
 
 **Caveat: a self-reference on the non-nullable side of a `LEFT JOIN` is
 accepted by Postgres and does not terminate on its own.** Written as

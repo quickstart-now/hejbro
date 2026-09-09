@@ -161,3 +161,30 @@ the guard behind.
       reviewer measured the guard holding at first, chained,
       right-nested and reverse; the three missing cells are regression
       pins, not fixes.
+
+## 2. D106 round-1 correction (#1067)
+
+- [x] 2.1 (~10m) `db.with(...)`'s body position folds a set-op body (B1).
+      `WithBodyRow`/`WithSetOpRow` in `packages/query/src/db/chain.ts`
+      fold each branch's own untracked read through the shared
+      `SetOpResult` with core's branch convention; a hand-written
+      `SetOpStage<P>` keeps the fallback. Red: the round-1 witness
+      (`select(nn).union(select(nul))` as the with body typing
+      `note: string` while `null` arrives). Cells:
+      `with-body-set-op.types.test.ts` (guards with the narrower branch
+      on the left, a swapped control, anchors). Mutation asymmetry:
+      shared fold off (core rebuilt) reddens with 4 / execute 11 /
+      chain 1 together; the with fold alone off reddens with 4 / 0 / 0.
+      Also strips the `[cteRowMeta]` symbol key from a row read over a
+      CTE reference (N7). Files: `chain.ts`, `select-result.ts`, the two
+      tests.
+- [x] 2.2 (~6m) Text. The requirement names the `handle.with` body and
+      its untracked rule and the `handle.execute(withCte)` boundary
+      (N2, #1055); the residue sentence states both branch orders (N1);
+      the REMOVED block's migration names the consumer that narrowed
+      (N4); the CTE scenario's snippet returns a body select (N8); the
+      reference carries the #942 caveat on the CTE section (N3), the
+      spellable term shapes and their non-termination (N5), and the
+      family-only check (N6). Files: the delta, `query-layer.md`,
+      `evaluation.md`, the changeset.
+
