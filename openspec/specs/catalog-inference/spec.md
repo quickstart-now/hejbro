@@ -15,9 +15,11 @@ markers, primary keys, foreign keys, checks and indexes; enum types;
 and the sequences an identity or serial column owns, carried as that
 column rather than as sequences of their own — through read-only
 catalog queries: `check`'s own inventory
-queries plus the column-, constraint-, index- and enum-detail queries
-inference needs on top of them, all read-only, none writing to the
-database. It SHALL also yield a schema description whose
+queries plus the column-, constraint-, index-, index-dependency- and
+enum-detail queries inference needs on top of them — the dependency
+rows are what name the columns an index reads through an expression
+or a predicate, which its key list alone does not — all read-only,
+none writing to the database. It SHALL also yield a schema description whose
 declaration-time facts are guessed by the rules stated here, and whose
 guessing the loss report announces: a column's TypeScript key from its
 SQL name by lower-casing
@@ -29,7 +31,10 @@ back — the column a declaration can still name — and appending to each
 other colliding key the smallest integer from 2 upwards that leaves it
 free, so an exotic sibling never costs an ordinary column its own key;
 the default numeric mode; unknown element nullability read as
-nullable; and role names from the grants present. The
+nullable; and role names from the grants and the policies present —
+a role a policy names in its `to` clause is a role the database uses,
+and `public`, the catalog's spelling of "everyone", is not a role and is
+never reported. The
 description SHALL be built from the catalog reading directly, so every
 column the reading found is carried with a guessed key; a declaration
 round trip is not its source, and a column that no declaration can
@@ -39,9 +44,9 @@ cannot name never reaches the snapshot. The snapshot SHALL hold no
 function, trigger, policy expression, view body, grant beyond its role
 name, column whose type no column builder expresses, standalone
 sequence that no column owns — the DSL has no `defineSequence()` (D66)
-— or column, table, schema, index or check whose catalog name no
-declaration can carry, since a declaration's identifiers are lower
-snake_case (D36) while a database hejbro did not create names its
+— or column, table, schema, index, check or enum type whose catalog
+name no declaration can carry, since a declaration's identifiers are
+lower snake_case (D36) while a database hejbro did not create names its
 objects its own way. A name is one a declaration can carry exactly
 when core's own identifier rule accepts it and the key inferred for it
 produces that name back — the DSL's own rule, consulted, never a second
@@ -49,9 +54,13 @@ rule predicting it, since two rules that disagree is precisely how a
 reading stops where it should have omitted: a quoted `"createdAt"`
 fails both halves, while a leading-underscore `_id` passes the round
 trip and fails the rule — the very case a rule predicting the DSL's
-answer got wrong — and both are omitted and named. A table or schema left out for a name
-no declaration can carry takes the objects it holds with it, and the
-foreign keys that point at it: a surviving declaration SHALL never
+answer got wrong — and both are omitted and named. A table or schema
+left out for a name no declaration can carry takes the objects it
+holds with it, and the foreign keys that point at it; a column left
+out takes with it every index, check, unique constraint, primary key
+and generated column that names it, and every foreign key that
+references it or is referenced through it, so a starter declaration
+always loads: a surviving declaration SHALL never
 reference an object this reading omitted for its name, and the report
 SHALL never announce an approximation for one. A target that lies
 outside the schemas the run named is a different case and SHALL be
@@ -64,7 +73,10 @@ SHALL carry such a target in the snapshot it yields as a table it names
 but does not declare, so that neither consumer of one reading loses the
 reference: the starter declarations name it through a reference-only
 handle they do not export, and the contract names it through the
-relation and the foreign-key metadata. The contract SHALL NOT give that
+foreign-key metadata and `Relationships`, carrying no relation for it
+— the contract gives a relation only where the target has a `Tables`
+key, which schema-vendoring withholds from a table this run never
+read. The contract SHALL NOT give that
 target an entry of its own among its tables — a table this run never
 read has no column set and no types the contract could state without
 guessing at them, and a contract that guesses is worse than one that
@@ -75,9 +87,21 @@ platform schemas are exactly the ones a run leaves unnamed, so reading
 scope as omission would drop the most ordinary reference such a
 database has. Leaving an object out for its name SHALL never stop the
 reading — everything else in the named schemas is still inferred — and
-the loss report SHALL name each of them. A column named there is
-still described: the description records what the database holds, and
-the snapshot records what a declaration can express.
+the loss report SHALL name each of them. When every named schema would
+leave nothing to write, the run refuses: a schema that lost a table or
+enum to a name no declaration can carry — the object's own name or its
+schema's — is refused as `nothing-declarable`, naming every such
+schema; `nothing-to-infer` means no table or enum to declare, and a
+schema holding only a standalone sequence or a function earns it too;
+the report still names that schema on its own `Not inferred:` line. A
+column named there is still described: the
+description records what the database holds, and
+the snapshot records what a declaration can express. Every list the
+reading orders by name when writing the starter declarations SHALL be
+ordered by code points as the loss report is, so the file `import`
+writes does not depend on the process locale; a list whose order is
+the catalog's own (an enum's values) or a dependency's (a table
+declared before the table that references it) keeps that order.
 
 #### Scenario: Tables and enums are inferred
 - **WHEN** a database holding two schemas with tables, foreign keys
@@ -119,10 +143,11 @@ the snapshot records what a declaration can express.
   declaration can carry
 - **THEN** the reading keeps that foreign key: the starter declaration
   references its target through a reference-only handle it does not
-  export, the pulled contract carries the reference both as a relation
-  and in its foreign-key metadata while giving that target no entry of
-  its own among its tables, the loss report says nothing about it, and a
-  following `baseline` emits the constraint with the rest — while no
+  export, the pulled contract carries the reference in its foreign-key
+  metadata and in `Relationships`, carrying no relation for it and
+  giving that target no entry of its own among its tables, the loss
+  report says nothing about it, and a following `baseline` emits the
+  constraint with the rest — while no
   starter file is written for the schema the run never named
 
 #### Scenario: No approximation is announced for an object omitted for its name
@@ -150,21 +175,63 @@ the snapshot records what a declaration can express.
   as not inferred, and it names that column with its type and that
   sequence by name
 
+#### Scenario: A foreign key at an omitted column is omitted with it
+- **WHEN** a table holds a column `"UserId"` no declaration can carry,
+  a foreign key from that column to another table, and a foreign key
+  from a third table into that column
+- **THEN** neither foreign key reaches the starter declarations or the
+  contract, the starter loads, and the loss report names both foreign
+  keys and the column that took them out
+
+#### Scenario: An index and a check at an omitted column are omitted with it
+- **WHEN** a table holds a column no declaration can carry and a column
+  typed by an enum this reading omitted, with an index on each, a
+  check constraint naming one of them and a primary key naming one of
+  them
+- **THEN** none of them reaches the starter declarations or the
+  contract, the SQL a following `baseline` writes applies to an empty
+  database, and the loss report names each of them with the column that
+  took it out and announces no approximation for any of them
+
+#### Scenario: A role named only by a policy is inferred
+- **WHEN** a database holds a policy `to app_reader` on a table no grant
+  names that role on, a policy `to public`, and grants naming `app_writer`
+- **THEN** the description's roles and the pulled contract's roles are
+  `app_reader` and `app_writer`, and `public` appears in neither
+
+#### Scenario: An enum type whose name a declaration cannot carry is omitted with its columns
+- **WHEN** a schema holds an enum type `"Status"` and a table with a
+  column of that type beside an enum `status` and a column of that type
+- **THEN** the snapshot and the starter declarations carry `status` and
+  its column and neither `"Status"` nor the column typed by it, and no
+  declaration references the omitted enum
+
 ### Requirement: The loss is announced, with the way out
 Every command that uses a catalog reading SHALL print a loss report
 naming what was guessed (keys, modes, element nullability), what was
-not inferred, every approximation the reading made — a UNIQUE
-constraint is inferred as a unique index carrying the constraint's own
-name, so re-creating it emits `create unique index` rather than
-`add constraint … unique`; a `nextval` default on a sequence the column
-does not own is kept as a raw default, naming that sequence;
-expressions are carried as raw SQL text rather than as the typed
-builders a hand-written declaration would use; a foreign key whose own
-catalog name D36 cannot carry is declared under the derived name,
-naming both — and the command that
-removes the loss:
+not inferred, every approximation the reading made, in the order
+printed — a UNIQUE constraint is inferred as a unique index carrying
+the constraint's own name, so re-creating it emits `create unique
+index` rather than `add constraint … unique`; a `nextval` default on a
+sequence the column does not own is kept as a raw default, naming that
+sequence; a foreign key whose own catalog name D36 cannot carry is
+declared under the derived name, naming both; a primary key whose
+catalog name is not the derived one is declared under the derived
+name, naming the name it dropped and the way out: `import`'s line
+states it whole (rename the constraint in the database to the derived
+name; keeping it leaves `check` reporting the declared name as missing
+on every run, beside its inventory line for the catalog's own name),
+and `pull`'s line states the rename alone, since a pull consumer runs
+no `check` for the parenthetical to describe; and every default,
+check, generated, and index-predicate expression is carried as raw SQL
+text rather than as the typed builders a hand-written declaration
+would use — and the command that removes the loss:
 linking the schema repository for `pull`, hand-editing the starter
-declarations for `import`.
+declarations for `import`. Refusing SHALL NOT suppress the report: when
+a reading completes and the run then refuses because nothing could be
+written — `nothing-to-infer` or `nothing-declarable` — the loss report
+still prints to stdout before the run exits with its diagnostic on
+stderr.
 
 Where a line names an object the reading left out of the declarations,
 the consequence it states SHALL be what hejbro will actually do about
@@ -177,12 +244,42 @@ announces. A line that names the way out SHALL name the whole of it: a
 remedy stated short — renaming an object whose name a declaration could
 not carry, without declaring it afterwards — reads as a promise that the
 reporting stops there, and it does not. Which objects `check` keeps naming is `check`'s own
-inventory rule (`cli-commands`), not a second rule stated here.
+inventory rule (`cli-commands`), not a second rule stated here. Within
+each list of lines the report prints, its lines SHALL be ordered by
+code points, never by a collation — the same comparator `check`'s
+inventory uses, shared, so two locales and an NFC/NFD pair print the
+same order; the report's own bands (what was guessed, what was not
+inferred, each approximation, each omission) keep the order stated
+here. The omission band is itself several ordered lists rather than
+one, and no list mixes an object left out for its own name with one
+left out because something it names was left out; within a list the
+lines sort by code points, whatever caused each omission.
 
 #### Scenario: The report names the way out
 - **WHEN** `pull --db-url` completes
 - **THEN** its output names the guessed facts and says the loss ends
   when the consumer links the schema repository
+
+#### Scenario: A dropped primary-key name is announced with the way out
+- **WHEN** a table's primary key is named `pk_orders` in the catalog and
+  the reading infers it under the derived `orders_pkey`
+- **THEN** the loss report names `pk_orders` as dropped and states the
+  way out whole, and `check` after `baseline` both lists `pk_orders` in
+  its unmanaged-index inventory and reports the declared `orders_pkey`
+  as missing, exactly as the report said it would
+
+#### Scenario: The report's order does not depend on the locale
+- **WHEN** the same database is imported under two locales, holding two
+  omitted objects whose names a collation treats as equal
+- **THEN** both runs print the loss report's lines in the same order
+
+#### Scenario: An omitted enum's line names its columns and what check will do
+- **WHEN** a reading omits an enum type for its name, and with it the
+  column typed by it, and the loss report is printed
+- **THEN** one line names the enum and the column, states that `check`
+  keeps naming the column as unmanaged until it is declared and does
+  not name the type — `check`'s inventory has no enum axis — and never
+  promises that renaming the enum alone ends the column's listing
 
 #### Scenario: An omitted object's line says what check will do about it
 - **WHEN** a reading omits an index and a check constraint whose catalog

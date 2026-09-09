@@ -538,7 +538,11 @@ A contract's metadata SHALL name where the contract came from, and the
 two sources are told apart there rather than guessed at: one names the
 commit it was vendored from, the other names the database it was
 inferred from — its name and the schemas that were read, never the
-connection string, which carries a secret. A contract written by
+connection string, which carries a secret. "Read" here names a schema
+that contributed at least one object to the snapshot the contract
+renders; a schema named on `--schema` that the database does not hold,
+and one whose own catalog name no declaration can carry, contribute
+nothing and are not among the schemas read. A contract written by
 `pull --db-url` SHALL carry the second, with no commit, and SHALL say
 in its header that it was inferred from a database rather than vendored
 from a schema repository. `vendor --check` and `outdated` SHALL refuse
