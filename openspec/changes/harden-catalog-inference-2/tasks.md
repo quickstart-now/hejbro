@@ -217,3 +217,18 @@ exit codes and the SHA. No hand edits under `.blackbox/`.
       gap is #1037, R2-N7); `pnpm changeset` → `patch`; one ledger row
       per task; README badges. Files: the reference, `.changeset/*.md`,
       `task-times.csv`, `README.md`.
+
+## 4. D106 round-3 correction (#1063)
+
+- [x] 4.1 (~8m) The empty-schema lines (`Not inferred: no table or enum
+      to declare in schema "X".`) and the two refusal diagnostics' schema
+      lists sort by code units, each name once, whatever the `--schema`
+      order (R3-B1, R3-N5) -- the requirement's "within each list ...
+      ordered by code points" sentence is universal. Red: the round-3
+      report's input (`--schema nope --schema fn_only --schema empty_s
+      --schema "Bad Empty" --schema dom_only` printing in flag order);
+      cells in `import-command.test.ts` / `pull-command.test.ts` with the
+      flags out of code-unit order and one repeated, asserting stdout,
+      the starter header and the refusal. Files: `compare-code-units.ts`,
+      `commands/import.ts`, `commands/pull.ts`, the two tests.
+
