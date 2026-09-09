@@ -1,0 +1,69 @@
+{
+  "version": 3,
+  "number": 1068,
+  "ref": "quickstart-now/hejbro#1068",
+  "title": "chore(openspec): archive harden-catalog-inference-2 after d106 round 4 (#712)",
+  "head": "50380f2de58552630147da41c810174527adb152",
+  "headRef": "archive-catalog-inference-2",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-09T02:33Z",
+  "refs": [
+    {
+      "path": "openspec/changes/archive/2026-09-09-harden-catalog-inference-2/design.md",
+      "blob": "9463c0aaaae5fb133f3e78dbb52f14ffb72a272b"
+    },
+    {
+      "path": "openspec/changes/harden-catalog-inference-2/design.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-09-harden-catalog-inference-2/evaluation.md",
+      "blob": "172db94e6886d27bdb22c686215c33587f10f652"
+    },
+    {
+      "path": "openspec/changes/harden-catalog-inference-2/evaluation.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-09-harden-catalog-inference-2/proposal.md",
+      "blob": "645b0dd109533b2a5dd63db02edc7f5da6776331"
+    },
+    {
+      "path": "openspec/changes/harden-catalog-inference-2/proposal.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-09-harden-catalog-inference-2/specs/catalog-inference/spec.md",
+      "blob": "98f73acd179880e3d3233ba8fb82ade6aca487a7"
+    },
+    {
+      "path": "openspec/changes/harden-catalog-inference-2/specs/catalog-inference/spec.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-09-harden-catalog-inference-2/specs/schema-vendoring/spec.md",
+      "blob": "37b1df17aafdb1022ba854545df0a98bf1bf2301"
+    },
+    {
+      "path": "openspec/changes/harden-catalog-inference-2/specs/schema-vendoring/spec.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-09-harden-catalog-inference-2/tasks.md",
+      "blob": "5b6fe2f55bcbd60c2e8bf85ec8d3e1bd5a509669"
+    },
+    {
+      "path": "openspec/changes/harden-catalog-inference-2/tasks.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/specs/catalog-inference/spec.md",
+      "blob": "c4537d1de626265cc246202c92676b0025ca9006"
+    },
+    {
+      "path": "openspec/specs/schema-vendoring/spec.md",
+      "blob": "fb7246e5e25b241f91c39f67bc3a55b73f0de8db"
+    }
+  ]
+}
