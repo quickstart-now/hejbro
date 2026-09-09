@@ -1,0 +1,53 @@
+{
+  "version": 3,
+  "number": 1066,
+  "ref": "quickstart-now/hejbro#1066",
+  "title": "fix(cli): the empty-schema lines and refusal lists sort by code units (#712 d106 r3)",
+  "head": "98a96084330cf4fa7d23616c821ca8df1b4d5ec8",
+  "headRef": "fix-catalog-inference-2-d106-r3",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-09T02:01Z",
+  "refs": [
+    {
+      "path": ".changeset/harden-catalog-inference-2-round-3.md",
+      "blob": "6bc01bc958a4cfa48fc97a1682c3f767ecd6914b"
+    },
+    {
+      "path": "README.md",
+      "blob": "4a258a7ed2bcd9126b0bc116e7c950c514bf3218"
+    },
+    {
+      "path": "openspec/changes/harden-catalog-inference-2/evaluation.md",
+      "blob": "2a388ee8c1740083ddf26f8adb31542d39808f37"
+    },
+    {
+      "path": "openspec/changes/harden-catalog-inference-2/tasks.md",
+      "blob": "5b6fe2f55bcbd60c2e8bf85ec8d3e1bd5a509669"
+    },
+    {
+      "path": "openspec/task-times.csv",
+      "blob": "62c9fcf504045538f11e18c85c1a906adc1184b0"
+    },
+    {
+      "path": "packages/cli/src/commands/import.ts",
+      "blob": "9b78ff797601863233acc2019507ec72f1efc660"
+    },
+    {
+      "path": "packages/cli/src/commands/pull.ts",
+      "blob": "ed139c9fdb6802b27caa29b967c66a5ce6aa9520"
+    },
+    {
+      "path": "packages/cli/src/compare-code-units.ts",
+      "blob": "1d8afee296be57e6d99430d8cefa511c26fda36d"
+    },
+    {
+      "path": "packages/cli/test/import-command.test.ts",
+      "blob": "fe07f368b8e00a7c2316ade00d5911564447de19"
+    },
+    {
+      "path": "packages/cli/test/pull-command.test.ts",
+      "blob": "be61df3b332d1e118f574930afe6e8d727d0cd4c"
+    }
+  ]
+}

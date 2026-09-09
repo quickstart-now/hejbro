@@ -628,3 +628,10 @@ builder) with no rename that would ever recover it, so a further,
 sequence-specific line would give the reader no action to take --
 recorded as an intentional asymmetry, not fixed.
 
+<a id="w11"></a>
+## W11 — D106 round 3: the empty-schema lines sort by code units (R3-B1), triage of R3-N1..N7
+
+_2026-09-09T01:49Z · per R16, R17_
+
+D106 round 3 (dev 9ebeef84) returned BLOCKED on one finding, R3-B1: the schema-level `Not inferred: no table or enum to declare in schema "X".` lines printed in `--schema` flag order in `import`, `pull` and the starter header, against the delta's universal code-point sentence; every other list already sorted. Lead-direct correction (#1063): `emptySchemaLines` in both commands dedupes the flag list and sorts the survivors with the shared `compareCodeUnits`; the two refusal diagnostics (`*-nothing-to-infer`, `*-nothing-declarable`) list schemas through a new `listSchemaNames` (each once, same order — R3-N5 folded in). Cells added to `import-command.test.ts` and `pull-command.test.ts` with flags `zeta`, `app`, `Alpha`, `beta` (a capital sorts first by code unit, so a collation would disagree) and one repeated flag, asserting stdout, the file header and the refusal; 60/60 in the two files. Honest note on the red: the fix landed before the cells were written, so the red evidence is the round-3 report's measured input, not a local failing run. Round-3 triage: R3-N1 won't-fix (a badly named schema that lost nothing is named on its own `Not inferred:` line; a standalone sequence or function has no way out anywhere), R3-N2 → #1064 (a kept foreign key onto uniqueness omitted for its name; the baseline cannot apply), R3-N3 → #1065 (docs: the owner lands in the guessed roles), R3-N4 text noted, R3-N6 by design (requirement 2's own foreign-key split), R3-N7 carried (#1033, #1016). Round-3 corpus: /private/tmp/d106-cf-r3.
+

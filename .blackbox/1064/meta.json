@@ -1,0 +1,21 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#1064",
+  "title": "import: a foreign key onto a column whose only uniqueness was omitted for its name is kept, and the baseline cannot apply",
+  "parent": "quickstart-now/hejbro#995",
+  "status": "open",
+  "opened": "2026-09-09",
+  "closed": null,
+  "decisions": [],
+  "work": [],
+  "prs": [
+    {
+      "number": 1066,
+      "role": "refs",
+      "pinnedAt": "2026-09-09T02:01Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}
