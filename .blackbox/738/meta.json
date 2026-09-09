@@ -19,6 +19,54 @@
       "at": "2026-09-05T08:14Z",
       "title": "A core-built SetOpStage carries both branch stage types; ExecuteResult folds them with SetOpResult",
       "ratified": null
+    },
+    {
+      "id": "R2",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "R1",
+        "412/D24"
+      ],
+      "at": "2026-09-09T00:26Z",
+      "title": "the nesting scenario reads direction-neutral, the recursive term stays a #942 boundary, and 1.2-1.4 split per D88",
+      "ratified": null
+    },
+    {
+      "id": "R3",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "R1"
+      ],
+      "at": "2026-09-09T00:26Z",
+      "title": "SetOpCombinators is an interface so the combinators can return this as the left branch stage",
+      "ratified": null
+    },
+    {
+      "id": "R4",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "R1",
+        "412/D29"
+      ],
+      "at": "2026-09-09T00:26Z",
+      "title": "the CTE reference is the fourth surface and closes in this piece as task 1.5, so #944 closes whole",
+      "ratified": null
+    },
+    {
+      "id": "R5",
+      "by": "lead",
+      "kind": "extension",
+      "basis": [
+        "R3",
+        "R4",
+        "412/D29"
+      ],
+      "at": "2026-09-09T00:26Z",
+      "title": "task 1.5 is declared nullability only, folds per branch through SetOpResult with the branch convention defined once in core, and proves one fold by mutation asymmetry",
+      "ratified": null
     }
   ],
   "work": [
