@@ -4,9 +4,9 @@
   "ref": "quickstart-now/hejbro#738",
   "title": "execute() of a core-built set operation cannot widen a column to the union of both branches",
   "parent": "quickstart-now/hejbro#412",
-  "status": "open",
+  "status": "closed",
   "opened": "2026-09-05",
-  "closed": null,
+  "closed": "2026-09-09",
   "decisions": [
     {
       "id": "R1",
@@ -67,6 +67,17 @@
       "at": "2026-09-09T00:26Z",
       "title": "task 1.5 is declared nullability only, folds per branch through SetOpResult with the branch convention defined once in core, and proves one fold by mutation asymmetry",
       "ratified": null
+    },
+    {
+      "id": "R6",
+      "by": "lead",
+      "kind": "interpretation",
+      "basis": [
+        "D106 round-2 report N1 and N2 (dev 35af6b16); 738/W2 with-body rule"
+      ],
+      "at": "2026-09-09T05:06Z",
+      "title": "Two delta sentences qualified after D106 round 2 (N1 scenario surface, N2 migration note)",
+      "ratified": null
     }
   ],
   "work": [
@@ -85,6 +96,15 @@
       "decisions": [
         "R5"
       ]
+    },
+    {
+      "id": "W3",
+      "at": "2026-09-09T05:06Z",
+      "title": "D106 round 2: ARCHIVE; triage (#1070, #1071), wording under R6, archive",
+      "pr": null,
+      "decisions": [
+        "R6"
+      ]
     }
   ],
   "prs": [
@@ -97,6 +117,11 @@
       "number": 1069,
       "role": "refs",
       "pinnedAt": "2026-09-09T02:58Z"
+    },
+    {
+      "number": 1072,
+      "role": "closes",
+      "pinnedAt": "2026-09-09T05:08Z"
     }
   ],
   "origin": null,

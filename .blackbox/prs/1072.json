@@ -1,0 +1,61 @@
+{
+  "version": 3,
+  "number": 1072,
+  "ref": "quickstart-now/hejbro#1072",
+  "title": "chore(openspec): archive widen-set-op-execute after d106 round 2 (#738)",
+  "head": "356c710f4eae820177401c797bdf4842967fd11d",
+  "headRef": "archive-widen-set-op-execute",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-09T05:08Z",
+  "refs": [
+    {
+      "path": "openspec/changes/archive/2026-09-09-widen-set-op-execute/design.md",
+      "blob": "47f66589007812ec5a79c6b644bffffc5e256463"
+    },
+    {
+      "path": "openspec/changes/widen-set-op-execute/design.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-09-widen-set-op-execute/evaluation.md",
+      "blob": "0537132ef17ab4c6b2b90da992c32b3557b35af8"
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-09-widen-set-op-execute/proposal.md",
+      "blob": "51daa2711cda03bcb303b87be1b5c7b58cdf571a"
+    },
+    {
+      "path": "openspec/changes/widen-set-op-execute/proposal.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-09-widen-set-op-execute/specs/query-type-inference/spec.md",
+      "blob": "6cc70ea2454dd31b810c00f69468c6cf71abf7c6"
+    },
+    {
+      "path": "openspec/changes/widen-set-op-execute/specs/query-type-inference/spec.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/archive/2026-09-09-widen-set-op-execute/tasks.md",
+      "blob": "ea24f7e5e6d3c4d28c22367b5e02732cdda7b407"
+    },
+    {
+      "path": "openspec/changes/widen-set-op-execute/tasks.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/changes/widen-set-op-execute/evaluation.md",
+      "blob": null
+    },
+    {
+      "path": "openspec/specs/query-type-inference/spec.md",
+      "blob": "6b49f340fe55e35c94d4b8936430bf9f722b81ca"
+    },
+    {
+      "path": "skills/hejbro/references/query-layer.md",
+      "blob": "a456041aa84e6850e3a5189da36d11835cbb2174"
+    }
+  ]
+}

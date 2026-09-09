@@ -9,11 +9,13 @@ handle resolves the same union the chain does. The measured Postgres
 facts and every other scenario move unchanged into the requirement
 below.
 **Migration**: a core-built set operation's awaited row type widens
-from the left branch's row to the branch union; a consumer that assigned
-that row to the left branch's narrower type (`const n: number = …` over
-`integer` ∪ `bigint`, `const note: string = …` over a right branch that
-declares the column nullable) must widen its own annotation, and every
-other caller is unaffected.
+from the left branch's row to the branch union, and so does a column
+read through a CTE reference to that set operation; a consumer that
+assigned either to the left branch's narrower type (`const n: number =
+…` over `integer` ∪ `bigint`, `const note: string = …` over a right
+branch that declares the column nullable, `const n: number | null = …`
+over a CTE reference to the first) must widen its own annotation, and
+every other caller is unaffected.
 
 ## ADDED Requirements
 
@@ -105,12 +107,14 @@ driver row's value.
   the union — when it is the wider one (measured in both orders)
 
 #### Scenario: A left-joined branch widens the core-built result, an inner-joined one does not
-- **WHEN** one branch of a core-built set operation projects a column
-  from a table it left-joined and the other branch inner-joins the same
-  table, or neither branch joins at all
+- **WHEN** one branch of a core-built set operation executed with
+  `handle.execute` projects a column from a table it left-joined and the
+  other branch inner-joins the same table, or neither branch joins at
+  all
 - **THEN** the column is nullable in the result exactly when a branch
   left-joined its table; a projection no branch left-joined is not
-  widened to include null
+  widened to include null (returned as the body of `handle.with`, the
+  same statement reads by that position's untracked rule instead)
 
 #### Scenario: A nested core-built set operation resolves through its inner stage
 - **WHEN** a core-built set operation nests another on either side —

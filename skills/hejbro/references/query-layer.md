@@ -354,7 +354,9 @@ combine — a nested set operation, on either side, resolves through its
 inner stage first. A `SetOpStage<...>` written by hand as a type
 annotation carries no branches to resolve: it still reads as the left
 branch's declared row with joins untracked, so an object projection
-there widens with `null`.
+there widens with `null`. Prefer the inferred type: the annotation can
+hide a `null`, or a raw string from a wider right branch, that the
+inferred row would show.
 
 ## Common table expressions (CTEs)
 

@@ -1,8 +1,8 @@
 {
   "version": 3,
   "kind": "pr",
-  "ref": "quickstart-now/hejbro#737",
-  "title": "fix(query,core): harden conformance kit, join projection, set-op types",
+  "ref": "quickstart-now/hejbro#1069",
+  "title": "fix(query): a set-op body of db.with folds its branches (#738 d106 r1)",
   "parent": null,
   "status": "open",
   "opened": "2026-09-09",
@@ -10,11 +10,6 @@
   "decisions": [],
   "work": [],
   "prs": [
-    {
-      "number": 1062,
-      "role": "refs",
-      "pinnedAt": "2026-09-09T01:38Z"
-    },
     {
       "number": 1072,
       "role": "refs",
