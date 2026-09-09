@@ -1,0 +1,21 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#1065",
+  "title": "docs: a table's owner lands in Guessed role names and the vendored roles with no grant present",
+  "parent": "quickstart-now/hejbro#995",
+  "status": "open",
+  "opened": "2026-09-09",
+  "closed": null,
+  "decisions": [],
+  "work": [],
+  "prs": [
+    {
+      "number": 1066,
+      "role": "refs",
+      "pinnedAt": "2026-09-09T02:01Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

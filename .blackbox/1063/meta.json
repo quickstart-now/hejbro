@@ -1,0 +1,21 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#1063",
+  "title": "harden-catalog-inference-2: D106 round-3 correction (schema-level lines sort by code points)",
+  "parent": "quickstart-now/hejbro#712",
+  "status": "closed",
+  "opened": "2026-09-09",
+  "closed": "2026-09-09",
+  "decisions": [],
+  "work": [],
+  "prs": [
+    {
+      "number": 1066,
+      "role": "closes",
+      "pinnedAt": "2026-09-09T02:01Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}
