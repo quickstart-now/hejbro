@@ -261,6 +261,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#1056](1056/) | import: a materialized view is named in no band of the loss report | open | #1060 | 0 | 0 (0 pending) |
 | ↳ [#1057](1057/) | import: a table whose every column is not inferred is declared empty and reported as partly declared | open | #1060 | 0 | 0 (0 pending) |
 | ↳ [#1058](1058/) | import: a member left out for two causes gets a Next: that names only one rename | open | #1060 | 0 | 0 (0 pending) |
+| ↳ [#1061](1061/) | test: check:crap fails under machine load through vendor-check's 10s hooks, and reads as red tests | open | #1060 | 0 | 0 (0 pending) |
 
 ## Totals
 
