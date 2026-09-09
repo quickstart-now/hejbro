@@ -45,7 +45,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | [#374](374/) | adversarial spec-only review stage in the opsx cycle | closed | #539 | 1 | 0 (0 pending) |
 | [#377](377/) | snapshot format stability policy for 1.0 | closed | #383 | 1 | 0 (0 pending) |
 | [#378](378/) | defect-leakage metric over escaped defects | closed | #384 | 1 | 0 (0 pending) |
-| [#412](412/) | 0.2.x: post-release commitments | open | #715 #808 #824 #835 #840 #849 #851 #858 #867 #868 #871 #878 #880 #895 #910 #923 #955 #956 #963 #968 #976 #979 #980 #988 #991 #992 #999 #1005 #1010 #1011 #1014 #1019 #1026 #1027 #1028 #1041 #1043 #1046 #1049 #894 (via #303) #903 (via #303) #881 (via #375) #941 (via #413) #850 (via #449) #882 (via #450) #901 (via #452) #906 (via #452) #909 (via #458) #911 (via #458) #962 (via #486) #883 (via #491) #885 (via #497) #884 (via #510) #737 (via #528) #760 (via #528) #773 (via #533) #886 (via #652) #896 (via #663) #897 (via #674) #733 (via #679) #758 (via #679) #739 (via #687) #759 (via #687) #770 (via #687) #861 (via #701) #879 (via #707) #847 (via #741) #900 (via #742) #889 (via #745) #833 (via #748) #784 (via #750) #802 (via #750) #775 (via #752) #799 (via #752) #780 (via #754) #795 (via #754) #887 (via #765) #855 (via #778) #838 (via #783) #786 (via #785) #789 (via #787) #790 (via #788) #792 (via #791) #794 (via #793) #890 (via #798) #898 (via #798) #822 (via #800) #806 (via #804) #813 (via #807) #811 (via #810) | 30 | 36 (5 pending) |
+| [#412](412/) | 0.2.x: post-release commitments | open | #715 #808 #824 #835 #840 #849 #851 #858 #867 #868 #871 #878 #880 #895 #910 #923 #955 #956 #963 #968 #976 #979 #980 #988 #991 #992 #999 #1005 #1010 #1011 #1014 #1019 #1026 #1027 #1028 #1041 #1043 #1046 #1049 #1060 #894 (via #303) #903 (via #303) #881 (via #375) #941 (via #413) #850 (via #449) #882 (via #450) #901 (via #452) #906 (via #452) #909 (via #458) #911 (via #458) #962 (via #486) #883 (via #491) #885 (via #497) #884 (via #510) #737 (via #528) #760 (via #528) #773 (via #533) #886 (via #652) #896 (via #663) #897 (via #674) #733 (via #679) #758 (via #679) #739 (via #687) #759 (via #687) #770 (via #687) #861 (via #701) #879 (via #707) #847 (via #741) #900 (via #742) #889 (via #745) #833 (via #748) #784 (via #750) #802 (via #750) #775 (via #752) #799 (via #752) #780 (via #754) #795 (via #754) #887 (via #765) #855 (via #778) #838 (via #783) #786 (via #785) #789 (via #787) #790 (via #788) #792 (via #791) #794 (via #793) #890 (via #798) #898 (via #798) #822 (via #800) #806 (via #804) #813 (via #807) #811 (via #810) | 30 | 36 (5 pending) |
 | ↳ [#303](303/) | Prepared-statement caching behind the driver capability contract | closed | #894 #903 | 0 | 3 (2 pending) |
 | ↳ [#375](375/) | run the d49 round-trip witness in ci | closed | #881 | 0 | 1 (1 pending) |
 | ↳ [#413](413/) | snapshot format upgrade path across released versions | closed | #923 #941 | 0 | 6 (2 pending) |
@@ -78,7 +78,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#671](671/) | existing: adoption never creates the adopted table's declared indexes, checks, FKs or primary key | closed | #1019 #1043 #1046 | 0 | 12 (5 pending) |
 | ↳ [#673](673/) | test: subprocess-spawning suites time out under a full parallel pnpm test and pass in isolation | closed | #773 | 0 | 7 (0 pending) |
 | ↳ [#674](674/) | examples: declare an existing table in the supabase example so the round trip covers the brownfield path | closed | #897 | 0 | 0 (0 pending) |
-| ↳ [#678](678/) | infer: role names from policies, not only from grants | closed | #1026 #1049 | 0 | 0 (0 pending) |
+| ↳ [#678](678/) | infer: role names from policies, not only from grants | closed | #1026 #1049 #1060 | 0 | 0 (0 pending) |
 | ↳ [#679](679/) | core: function argument names bypass D36 and are emitted unquoted in DDL | closed | #733 #758 | 0 | 3 (0 pending) |
 | ↳ [#686](686/) | ctx.return accepts a mutation with no returning() and renders invalid plpgsql | closed | #733 | 0 | 3 (0 pending) |
 | ↳ [#687](687/) | init ignores the configured migrationsDir and snapshotPath | closed | #739 #759 #770 | 0 | 8 (0 pending) |
@@ -87,7 +87,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#697](697/) | vendored fn guard is count-only and a __proto__ column key loses its column | closed | #739 | 0 | 4 (0 pending) |
 | ↳ [#701](701/) | array order in kind snapshots can produce a semantically empty alter | closed | #858 #861 | 0 | 5 (0 pending) |
 | ↳ [#707](707/) | check is silent about undeclared indexes and check constraints on managed tables | closed | #878 #879 | 0 | 5 (0 pending) |
-| ↳ [#712](712/) | decide whether an enum type's catalog name is held to D36 by the catalog reading | closed | #1026 #1049 | 0 | 14 (4 pending) |
+| ↳ [#712](712/) | decide whether an enum type's catalog name is held to D36 by the catalog reading | closed | #1026 #1049 #1060 | 0 | 17 (4 pending) |
 | ↳ [#726](726/) | loss report promises check will report an omitted column, but check has no column-level inventory | closed | #878 | 0 | 1 (0 pending) |
 | ↳ [#740](740/) | Vendored contract column order follows JS key order, not the snapshot's physical order | closed | #858 #861 | 0 | 2 (0 pending) |
 | ↳ [#741](741/) | `hejbro init --config <path>` is ignored and scaffolds a competing project | closed | #840 #847 | 0 | 4 (0 pending) |
@@ -149,7 +149,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | [#573](573/) | nile preset: measure identity columns and keyless tables on tenant-aware tables (D106 F9) | closed | #578 | 1 | 0 (0 pending) |
 | [#603](603/) | Apply engine (D12 revised): hejbro owns migrate and reset, production included | closed | #628 | 0 | 0 (0 pending) |
 | [#714](714/) | add a brownfield corpus: a database hejbro did not create, with a standing import→baseline→check witness | open | #851 #858 #868 #871 #878 #910 | 0 | 0 (0 pending) |
-| [#815](815/) | 0.2.x: post-release commitments (2) | open | #867 #868 #871 #878 #968 #976 #979 #980 #988 #991 #992 #999 #1005 #1010 #1011 #1014 #1019 #1026 #1027 #1028 #1041 #1043 #1046 #1049 #893 (via #814) #910 (via #816) #924 (via #816) #840 (via #819) #876 (via #820) #835 (via #823) #877 (via #823) #833 (via #832) #838 (via #836) #851 (via #841) #855 (via #841) #849 (via #845) #850 (via #845) #847 (via #846) #858 (via #856) #861 (via #856) #955 (via #891) #962 (via #891) #900 (via #899) #963 (via #931) #956 (via #932) | 0 | 1 (1 pending) |
+| [#815](815/) | 0.2.x: post-release commitments (2) | open | #867 #868 #871 #878 #968 #976 #979 #980 #988 #991 #992 #999 #1005 #1010 #1011 #1014 #1019 #1026 #1027 #1028 #1041 #1043 #1046 #1049 #1060 #893 (via #814) #910 (via #816) #924 (via #816) #840 (via #819) #876 (via #820) #835 (via #823) #877 (via #823) #833 (via #832) #838 (via #836) #851 (via #841) #855 (via #841) #849 (via #845) #850 (via #845) #847 (via #846) #858 (via #856) #861 (via #856) #955 (via #891) #962 (via #891) #900 (via #899) #963 (via #931) #956 (via #932) | 0 | 1 (1 pending) |
 | ↳ [#814](814/) | release: changesets leaves the pre dist-tag stale on packages without a stable version | open | #893 | 0 | 1 (0 pending) |
 | ↳ [#816](816/) | core: an argument name is not checked against the body's own row and loop names | closed | #910 #924 | 0 | 0 (0 pending) |
 | ↳ [#817](817/) | core: loop and row names in a function body bypass the D36 SQL-name check | closed | #910 #924 | 0 | 0 (0 pending) |
@@ -184,9 +184,9 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#866](866/) | chore: vendor dd-blackbox meta v3 and migrate the record (pins once per PR) | closed | #867 | 0 | 0 (0 pending) |
 | ↳ [#869](869/) | cli integration suites are excluded from pnpm test, so the done-gates never run the live witnesses | open | #878 | 0 | 0 (0 pending) |
 | ↳ [#870](870/) | cli integration suite: 14 concurrent postgres containers contend and a failed run leaves orphans | open | #871 | 0 | 0 (0 pending) |
-| ↳ [#872](872/) | import: a non-default primary-key constraint name is dropped with no loss-report line | closed | #878 #1026 #1049 | 0 | 1 (1 pending) |
-| ↳ [#873](873/) | import: a foreign key referencing an omitted column makes the starter declaration fail to load | closed | #878 #1026 #1049 | 0 | 0 (0 pending) |
-| ↳ [#874](874/) | loss report: sortedBy uses localeCompare, so import/pull output order depends on the locale | closed | #878 #1026 #1049 | 0 | 0 (0 pending) |
+| ↳ [#872](872/) | import: a non-default primary-key constraint name is dropped with no loss-report line | closed | #878 #1026 #1049 #1060 | 0 | 1 (1 pending) |
+| ↳ [#873](873/) | import: a foreign key referencing an omitted column makes the starter declaration fail to load | closed | #878 #1026 #1049 #1060 | 0 | 0 (0 pending) |
+| ↳ [#874](874/) | loss report: sortedBy uses localeCompare, so import/pull output order depends on the locale | closed | #878 #1026 #1049 #1060 | 0 | 0 (0 pending) |
 | ↳ [#875](875/) | config: an unreadable configuration file is reported as config-load-failed with import advice | open | #876 | 0 | 0 (0 pending) |
 | ↳ [#891](891/) | query: one exported statement-name helper for every driver that prepares | closed | #955 #962 | 0 | 0 (0 pending) |
 | ↳ [#892](892/) | pg driver: a multi-command sql text resolves to undefined rows | closed | #955 #962 | 0 | 0 (0 pending) |
@@ -216,7 +216,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | [#986](986/) | core: replaceExprChildren accepts a children array of the wrong length and returns a silently damaged node | open | #991 | 0 | 0 (0 pending) |
 | [#989](989/) | core: exprChildren/replaceExprChildren throw a raw TypeError on an unregistered node or a DSL wrapper | open | #991 | 0 | 0 (0 pending) |
 | [#990](990/) | core: literal(7) builds a boolean literal that renders true | open | #991 | 0 | 0 (0 pending) |
-| [#995](995/) | 0.2.x: post-release commitments (3) | open | #999 #1005 #1010 #1011 #1014 #1019 #1026 #1027 #1028 #1041 #1043 #1046 #1049 | 0 | 0 (0 pending) |
+| [#995](995/) | 0.2.x: post-release commitments (3) | open | #999 #1005 #1010 #1011 #1014 #1019 #1026 #1027 #1028 #1041 #1043 #1046 #1049 #1060 | 0 | 0 (0 pending) |
 | ↳ [#993](993/) | check:next-marker: candidate grep skips files whose diagnostics come only from the diagnostic() factory | open | #1019 #1046 | 0 | 0 (0 pending) |
 | ↳ [#994](994/) | check:diagnostic-xref: a defined code that no document cites passes without a coverage check | open | #1019 #1046 | 0 | 0 (0 pending) |
 | ↳ [#996](996/) | query: a nested set operation with an unknown left head hides the right branch's family from the outer combinator | open | #999 | 0 | 0 (0 pending) |
@@ -234,7 +234,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#1012](1012/) | query: related() accepts a string spec at the type level and fails at run time with unknown-relation "0" | open | #1014 | 0 | 0 (0 pending) |
 | ↳ [#1013](1013/) | vendor: a relative path given to hejbro link is resolved against the fetch's temp dir, so vendor fails with vendor-remote-unreachable | open | #1014 | 0 | 0 (0 pending) |
 | ↳ [#1015](1015/) | adoption: a column-level unique() is neither created nor named by adoption-creates | open | #1019 #1043 #1046 | 0 | 0 (0 pending) |
-| ↳ [#1016](1016/) | import: a cross-schema handle's columns are emitted with arbitrary types (text() for an int column) | open | #1026 #1049 | 0 | 0 (0 pending) |
+| ↳ [#1016](1016/) | import: a cross-schema handle's columns are emitted with arbitrary types (text() for an int column) | open | #1026 #1049 #1060 | 0 | 0 (0 pending) |
 | ↳ [#1017](1017/) | baseline: a primary key whose derived name is already taken by an index on the same table emits the name twice | open | #1026 | 0 | 0 (0 pending) |
 | ↳ [#1018](1018/) | loss report ordering: no server-collation axis and no unit test for compareCodeUnits | open | #1026 | 0 | 0 (0 pending) |
 | ↳ [#1020](1020/) | import: the primary-key name collision check does not see composite types or foreign tables holding the derived name | open | #1026 | 0 | 0 (0 pending) |
@@ -246,21 +246,26 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#1030](1030/) | generate: a column drop+add in the same edit as an adoption is not refused as an ambiguous rename | open | #1046 | 0 | 0 (0 pending) |
 | ↳ [#1031](1031/) | generate: warning[adoption-creates] carries no at <file>:<line> location, unlike every other warning | open | #1046 | 0 | 0 (0 pending) |
 | ↳ [#1032](1032/) | import/pull: column-level and sequence-level grants contribute no role name to the reading | open | #1049 | 0 | 0 (0 pending) |
-| ↳ [#1033](1033/) | import: an index's INCLUDE columns are dropped silently, and the omitted-index line calls an INCLUDE list an expression | open | #1049 | 0 | 0 (0 pending) |
-| ↳ [#1034](1034/) | import: partitioning, inheritance, UNLOGGED, comments and RLS enablement are dropped without a Not inferred line | open | #1049 | 0 | 0 (0 pending) |
-| ↳ [#1037](1037/) | migrate: an adoption migration whose objects the database already holds has no official path to be registered instead of run | open | #1043 #1046 | 0 | 0 (0 pending) |
+| ↳ [#1033](1033/) | import: an index's INCLUDE columns are dropped silently, and the omitted-index line calls an INCLUDE list an expression | open | #1049 #1060 | 0 | 0 (0 pending) |
+| ↳ [#1034](1034/) | import: partitioning, inheritance, UNLOGGED, comments and RLS enablement are dropped without a Not inferred line | open | #1049 #1060 | 0 | 0 (0 pending) |
+| ↳ [#1037](1037/) | migrate: an adoption migration whose objects the database already holds has no official path to be registered instead of run | open | #1043 #1046 #1060 | 0 | 0 (0 pending) |
 | ↳ [#1038](1038/) | vendor/pull: the table-name-collision diagnostic heads with one table (vendor) or "Tables" (pull) and lists every collision on one unwrapped line | open | #1041 | 0 | 0 (0 pending) |
-| ↳ [#1039](1039/) | pull: --schema repeated with the same name is accepted and recorded twice in the lock and the contract metadata | open | #1041 | 0 | 0 (0 pending) |
+| ↳ [#1039](1039/) | pull: --schema repeated with the same name is accepted and recorded twice in the lock and the contract metadata | open | #1041 #1060 | 0 | 0 (0 pending) |
 | ↳ [#1040](1040/) | vendor: --ref <commit sha> does not resolve on a local-path source, while a tag on the same commit does | open | #1041 | 0 | 0 (0 pending) |
 | ↳ [#1042](1042/) | check: a primary key whose derived name another constraint already holds is reported as missing, not as a name collision | open | #1043 #1046 | 0 | 0 (0 pending) |
 | ↳ [#1044](1044/) | generate: two runs in the same second write the same timestamp version, so verify refuses the chain (cli-smoke e2e flake on fast runners) | open | #1046 | 0 | 0 (0 pending) |
 | ↳ [#1045](1045/) | adoption: dropping a held primary key with cascade removes a managed foreign key that generate never re-creates | open | #1046 | 0 | 0 (0 pending) |
 | ↳ [#1047](1047/) | import/pull: the 'nothing to infer in schema' line prints after the Omitted band, against the stated band order | closed | #1049 | 0 | 0 (0 pending) |
-| ↳ [#1048](1048/) | import/pull: a column unreadable for both its name and its type gets the rename remedy, which cannot resolve it | open | #1049 | 0 | 0 (0 pending) |
+| ↳ [#1048](1048/) | import/pull: a column unreadable for both its name and its type gets the rename remedy, which cannot resolve it | open | #1049 #1060 | 0 | 0 (0 pending) |
+| ↳ [#1052](1052/) | import: a destination refusal after a completed catalog reading throws without printing the loss report | open | #1060 | 0 | 0 (0 pending) |
+| ↳ [#1056](1056/) | import: a materialized view is named in no band of the loss report | open | #1060 | 0 | 0 (0 pending) |
+| ↳ [#1057](1057/) | import: a table whose every column is not inferred is declared empty and reported as partly declared | open | #1060 | 0 | 0 (0 pending) |
+| ↳ [#1058](1058/) | import: a member left out for two causes gets a Next: that names only one rename | open | #1060 | 0 | 0 (0 pending) |
+| ↳ [#1061](1061/) | test: check:crap fails under machine load through vendor-check's 10s hooks, and reads as red tests | open | #1060 | 0 | 0 (0 pending) |
 
 ## Totals
 
-Owner decisions 95 · rulings 329 (interpretation 218, extension 109, stop 2) · pending extensions 71 · rejected 2
+Owner decisions 95 · rulings 332 (interpretation 221, extension 109, stop 2) · pending extensions 71 · rejected 2
 
 ## Conventions
 

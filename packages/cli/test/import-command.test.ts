@@ -392,7 +392,7 @@ describe("runImport / 3.1", () => {
 		expect(existsSync(join(cwd, "src/schema/app.schema.ts"))).toBe(true);
 		expect(existsSync(join(cwd, "src/schema/billing.schema.ts"))).toBe(false);
 		expect(outcome.stdout).toContain(
-			'Not inferred: nothing to infer in schema "billing".',
+			'Not inferred: no table or enum to declare in schema "billing".',
 		);
 	});
 
@@ -432,7 +432,9 @@ describe("runImport / 3.1", () => {
 		expect(outcome.exitCode).toBe(0);
 		expect(
 			outcome.stdout.some((line) =>
-				line.includes('Not inferred: nothing to infer in schema "billing"'),
+				line.includes(
+					'Not inferred: no table or enum to declare in schema "billing"',
+				),
 			),
 		).toBe(false);
 		expect(outcome.stdout).toContain(
@@ -492,11 +494,13 @@ describe("runImport / 3.1", () => {
 		);
 		expect(
 			outcome.stdout.some((line) =>
-				line.includes('Not inferred: nothing to infer in schema "App"'),
+				line.includes(
+					'Not inferred: no table or enum to declare in schema "App"',
+				),
 			),
 		).toBe(false);
 		expect(outcome.stdout).toContain(
-			'Not inferred: nothing to infer in schema "billing".',
+			'Not inferred: no table or enum to declare in schema "billing".',
 		);
 		const bandPrefixes = outcome.stdout
 			.map((line) => /^(Guessed|Not inferred|Approximated|Omitted):/.exec(line))
@@ -550,7 +554,7 @@ describe("runImport / 3.1", () => {
 			/^(Guessed|Not inferred|Approximated|Omitted):/.test(line),
 		);
 		expect(bandLines[0]).toBe(
-			'Not inferred: nothing to infer in schema "billing".',
+			'Not inferred: no table or enum to declare in schema "billing".',
 		);
 	});
 
@@ -582,7 +586,7 @@ describe("runImport / 3.1", () => {
 			"utf8",
 		);
 		expect(firstSource).toContain(
-			'Not inferred: nothing to infer in schema "billing".',
+			'Not inferred: no table or enum to declare in schema "billing".',
 		);
 
 		const cwd2 = mkdtempSync(join(tmpdir(), "hejbro-import-command-test-"));
@@ -613,7 +617,8 @@ describe("runImport / 3.1", () => {
 		const guessedLine =
 			"Guessed: TypeScript keys from SQL names, the default numeric mode, and unknown array-element nullability (read as nullable).";
 		const wayOut = "The loss ends when you hand-edit the starter declarations.";
-		const billingLine = 'Not inferred: nothing to infer in schema "billing".';
+		const billingLine =
+			'Not inferred: no table or enum to declare in schema "billing".';
 		const result = resultFor(
 			[table("app", "widgets", [idColumn])],
 			[guessedLine, wayOut],
@@ -657,6 +662,312 @@ describe("runImport / 3.1", () => {
 		);
 		expect(headerIndices.every((index) => index !== -1)).toBe(true);
 		expect(headerIndices).toEqual([...headerIndices].sort((a, b) => a - b));
+	});
+});
+
+/**
+ * 712/R15 (D106 round 2, R2-B2/R2-N3, lead ruling): a schema whose only
+ * objects are omitted for their own name still held something the
+ * reading saw -- `import-nothing-to-infer` used to fire for it anyway,
+ * discarding the loss report and telling the user "nothing here" about
+ * a schema that in fact held a table/enum hejbro just could not carry
+ * the name of. The classification now counts what the reading saw
+ * (an `Omitted:` line naming that schema), not what it kept --
+ * `nothing-declarable` is reserved for that name cause; a schema
+ * holding only a standalone sequence or function (a *kind* cause, D66,
+ * not a name one) stays `nothing-to-infer`, alongside its own
+ * `Not inferred:` line, never silently. Neither refusal ever suppresses
+ * the report that precedes it: both print the full loss report to
+ * stdout before exiting 1.
+ */
+describe("runImport / 712 D106 R2 3.1 (R2-B2, R2-N3)", () => {
+	const badOnlyOmittedLine =
+		'Omitted: table "bad_only.Only" -- its catalog name is not a valid hejbro SQL identifier, so no declaration can carry it.';
+	const badEnumOnlyOmittedLine =
+		'Omitted: enum type "bad_enum_only.Color" -- its catalog name is not a valid hejbro SQL identifier, so no declaration can carry it.';
+	const badTableSeqOmittedLine =
+		'Omitted: table "bad_table_plus_seq.T" -- its catalog name is not a valid hejbro SQL identifier, so no declaration can carry it.';
+	const badTableSeqNotInferredLine =
+		'Not inferred: sequence "bad_table_plus_seq.s2" -- no column owns it, and the DSL has no defineSequence() (D66).';
+	const seqOnlyNotInferredLine =
+		'Not inferred: sequence "seq_only.s" -- no column owns it, and the DSL has no defineSequence() (D66).';
+	const fnOnlyNotInferredLine = "Not inferred: 1 function(s) not inferred.";
+
+	const nothingDeclarableMessage = (schemas: string): string =>
+		`hejbro import found nothing it could declare in schema(s) ${schemas}: each one held something whose name no declaration can carry (see the "Omitted" line(s) above). Next: follow the way out that line names (a rename in the database), then rerun \`hejbro import\`.`;
+
+	const nothingToInferMessage = (schemas: string): string =>
+		`hejbro import found no table or enum to declare in schema(s) ${schemas}. Next: confirm the schema name(s) are correct and that they hold a table or enum type to declare, then rerun \`hejbro import\`.`;
+
+	it.each<[string, string, ReadonlyArray<string>]>([
+		["a table with an uncarriable name only", "bad_only", [badOnlyOmittedLine]],
+		[
+			"an enum with an uncarriable name only",
+			"bad_enum_only",
+			[badEnumOnlyOmittedLine],
+		],
+		[
+			"a table with an uncarriable name plus a standalone sequence",
+			"bad_table_plus_seq",
+			[badTableSeqOmittedLine, badTableSeqNotInferredLine],
+		],
+	])(
+		"refuses with import-nothing-declarable, never import-nothing-to-infer, for a schema holding %s -- naming that schema and printing the loss report first",
+		async (_label, schema, lossReport) => {
+			const outcome = await runImport(
+				cwd,
+				[
+					"--url",
+					"postgres://fixture",
+					"--schema",
+					schema,
+					"--out",
+					"src/schema",
+				],
+				depsFor(resultFor([], lossReport)),
+			);
+
+			expect(outcome.exitCode).toBe(1);
+			expect(outcome.stderr).toContain("error[import-nothing-declarable]");
+			expect(outcome.stderr).not.toContain("import-nothing-to-infer");
+			expect(outcome.stderr).toContain(nothingDeclarableMessage(schema));
+			lossReport.map((line) => expect(outcome.stdout).toContain(line));
+			expect(existsSync(join(cwd, "src/schema"))).toBe(false);
+		},
+	);
+
+	it("names only the schema that held something, never a schema the database does not hold, in the same refusal", async () => {
+		const outcome = await runImport(
+			cwd,
+			[
+				"--url",
+				"postgres://fixture",
+				"--schema",
+				"bad_only",
+				"--schema",
+				"nope",
+				"--out",
+				"src/schema",
+			],
+			depsFor(resultFor([], [badOnlyOmittedLine])),
+		);
+
+		expect(outcome.exitCode).toBe(1);
+		expect(outcome.stderr).toContain(nothingDeclarableMessage("bad_only"));
+		expect(outcome.stderr).not.toContain("nope");
+		expect(outcome.stdout).toContain(badOnlyOmittedLine);
+		expect(outcome.stdout).toContain(
+			'Not inferred: no table or enum to declare in schema "nope".',
+		);
+	});
+
+	it("names only the schema that held something, never a schema that is genuinely empty, in the same refusal", async () => {
+		const outcome = await runImport(
+			cwd,
+			[
+				"--url",
+				"postgres://fixture",
+				"--schema",
+				"bad_only",
+				"--schema",
+				"empty_s",
+				"--out",
+				"src/schema",
+			],
+			depsFor(resultFor([], [badOnlyOmittedLine])),
+		);
+
+		expect(outcome.exitCode).toBe(1);
+		expect(outcome.stderr).toContain(nothingDeclarableMessage("bad_only"));
+		expect(outcome.stderr).not.toContain("empty_s");
+		expect(outcome.stdout).toContain(badOnlyOmittedLine);
+		expect(outcome.stdout).toContain(
+			'Not inferred: no table or enum to declare in schema "empty_s".',
+		);
+	});
+
+	it("writes files and prints the omission with no refusal at all when the uncarriable schema sits beside a healthy one", async () => {
+		const outcome = await runImport(
+			cwd,
+			[
+				"--url",
+				"postgres://fixture",
+				"--schema",
+				"bad_only",
+				"--schema",
+				"healthy",
+				"--out",
+				"src/schema",
+			],
+			depsFor(
+				resultFor(
+					[table("healthy", "widgets", [idColumn])],
+					[badOnlyOmittedLine],
+				),
+			),
+		);
+
+		expect(outcome.exitCode).toBe(0);
+		expect(existsSync(join(cwd, "src/schema/healthy.schema.ts"))).toBe(true);
+		expect(existsSync(join(cwd, "src/schema/bad_only.schema.ts"))).toBe(false);
+		expect(outcome.stdout).toContain(badOnlyOmittedLine);
+	});
+
+	/**
+	 * R2-N3 boundary, lead ruling: a schema holding *only* a standalone
+	 * sequence or function is a *kind* cause (D66, no DSL builder), never
+	 * a name one -- it stays `import-nothing-to-infer`, not
+	 * `import-nothing-declarable`, but the refusal still prints the
+	 * schema's own `Not inferred:` line rather than an empty stdout.
+	 */
+	it.each<[string, string, string]>([
+		["a standalone sequence only", "seq_only", seqOnlyNotInferredLine],
+		["a function only", "fn_only", fnOnlyNotInferredLine],
+	])(
+		"refuses with import-nothing-to-infer, never import-nothing-declarable, for a schema holding %s -- printing its own Not-inferred line first",
+		async (_label, schema, notInferredLine) => {
+			const outcome = await runImport(
+				cwd,
+				[
+					"--url",
+					"postgres://fixture",
+					"--schema",
+					schema,
+					"--out",
+					"src/schema",
+				],
+				depsFor(resultFor([], [notInferredLine])),
+			);
+
+			expect(outcome.exitCode).toBe(1);
+			expect(outcome.stderr).toContain("error[import-nothing-to-infer]");
+			expect(outcome.stderr).not.toContain("import-nothing-declarable");
+			expect(outcome.stderr).toContain(nothingToInferMessage(schema));
+			expect(outcome.stdout).toContain(notInferredLine);
+			expect(outcome.stdout).toContain(
+				`Not inferred: no table or enum to declare in schema "${schema}".`,
+			);
+			expect(existsSync(join(cwd, "src/schema"))).toBe(false);
+		},
+	);
+
+	/** Regression guard: a schema holding no table, enum, sequence or function at all keeps `import-nothing-to-infer`, printing its own generic line, corrected wording. */
+	it("still refuses with import-nothing-to-infer, corrected wording, when the only named schema truly holds nothing", async () => {
+		const outcome = await runImport(
+			cwd,
+			[
+				"--url",
+				"postgres://fixture",
+				"--schema",
+				"empty_schema",
+				"--out",
+				"src/schema",
+			],
+			depsFor(emptyResult),
+		);
+
+		expect(outcome.exitCode).toBe(1);
+		expect(outcome.stderr).toContain("error[import-nothing-to-infer]");
+		expect(outcome.stderr).toContain(nothingToInferMessage("empty_schema"));
+		expect(outcome.stdout).toContain(
+			'Not inferred: no table or enum to declare in schema "empty_schema".',
+		);
+		expect(existsSync(join(cwd, "src/schema"))).toBe(false);
+	});
+});
+
+/**
+ * 712/R17 (D106 round 2 constructor review, B2, lead ruling, extended):
+ * a schema whose own name fails D36 counts what it held, not that its
+ * own name failed. `partitionSchemas` (`compose.ts`) now puts a
+ * D36-failing schema on `omittedSchemas` only when it held at least one
+ * table or enum -- a schema failing D36 but holding nothing, or holding
+ * only a standalone sequence or a function, earns no `Omitted: schema
+ * …` line at all (that line's own rename would recover nothing) and
+ * never reaches `omittedSchemaNames`; it falls through to the same
+ * `Not inferred: no table or enum to declare in schema "X".` line a
+ * genuinely empty schema gets, and classifies as
+ * `import-nothing-to-infer`, never `import-nothing-declarable` on its
+ * own name alone.
+ */
+describe("runImport / 712 D106 R2 B2 (R17): an omitted-for-name schema counts what it held", () => {
+	const badWithContentOmittedLine =
+		'Omitted: schema "BadWithContent" -- its catalog name is not a valid hejbro SQL identifier.';
+	const notInferredLineFor = (schemaName: string): string =>
+		`Not inferred: no table or enum to declare in schema "${schemaName}".`;
+
+	it.each<[string]>([["EmptyBad"], ["SeqOnlyBad"]])(
+		"refuses with import-nothing-to-infer, never import-nothing-declarable, and never prints an Omitted line, for %s (its own name fails D36 but it lost no table or enum) -- alone",
+		async (schemaName) => {
+			const outcome = await runImport(
+				cwd,
+				[
+					"--url",
+					"postgres://fixture",
+					"--schema",
+					schemaName,
+					"--out",
+					"src/schema",
+				],
+				depsFor(resultFor([])),
+			);
+
+			expect(outcome.exitCode).toBe(1);
+			expect(outcome.stderr).toContain("error[import-nothing-to-infer]");
+			expect(outcome.stderr).not.toContain("import-nothing-declarable");
+			expect(outcome.stdout).not.toContain("Omitted:");
+			expect(outcome.stdout).toContain(notInferredLineFor(schemaName));
+			expect(existsSync(join(cwd, "src/schema"))).toBe(false);
+		},
+	);
+
+	it.each<[string]>([["EmptyBad"], ["SeqOnlyBad"]])(
+		"refuses with import-nothing-declarable naming only the sibling that lost a table, never %s, beside it -- and still names %s's own Not-inferred line",
+		async (schemaName) => {
+			const outcome = await runImport(
+				cwd,
+				[
+					"--url",
+					"postgres://fixture",
+					"--schema",
+					schemaName,
+					"--schema",
+					"BadWithContent",
+					"--out",
+					"src/schema",
+				],
+				depsFor(resultFor([], [badWithContentOmittedLine], ["BadWithContent"])),
+			);
+
+			expect(outcome.exitCode).toBe(1);
+			expect(outcome.stderr).toContain("error[import-nothing-declarable]");
+			expect(outcome.stderr).toContain("BadWithContent");
+			expect(outcome.stderr).not.toContain(schemaName);
+			expect(outcome.stdout).toContain(badWithContentOmittedLine);
+			expect(outcome.stdout).toContain(notInferredLineFor(schemaName));
+		},
+	);
+
+	it("writes files and prints the sibling's Not-inferred line, no refusal at all, when an empty badly-named schema sits beside a healthy one", async () => {
+		const outcome = await runImport(
+			cwd,
+			[
+				"--url",
+				"postgres://fixture",
+				"--schema",
+				"EmptyBad",
+				"--schema",
+				"healthy",
+				"--out",
+				"src/schema",
+			],
+			depsFor(resultFor([table("healthy", "widgets", [idColumn])])),
+		);
+
+		expect(outcome.exitCode).toBe(0);
+		expect(existsSync(join(cwd, "src/schema/healthy.schema.ts"))).toBe(true);
+		expect(outcome.stdout).not.toContain("Omitted:");
+		expect(outcome.stdout).toContain(notInferredLineFor("EmptyBad"));
 	});
 });
 

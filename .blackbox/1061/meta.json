@@ -1,0 +1,21 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#1061",
+  "title": "test: check:crap fails under machine load through vendor-check's 10s hooks, and reads as red tests",
+  "parent": "quickstart-now/hejbro#995",
+  "status": "open",
+  "opened": "2026-09-09",
+  "closed": null,
+  "decisions": [],
+  "work": [],
+  "prs": [
+    {
+      "number": 1060,
+      "role": "refs",
+      "pinnedAt": "2026-09-09T00:38Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

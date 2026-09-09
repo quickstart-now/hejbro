@@ -141,7 +141,7 @@ codes and the SHA.
       tests pin each sentence. Files: `loss-report.ts`, `pull.ts`,
       `import.ts`, their tests, the delta spec.
 
-- [ ] 2.3 (~5m) Docs, changeset, ledger. The brownfield reference
+- [x] 2.3 (~5m) Docs, changeset, ledger. The brownfield reference
       states: the grants the reading models are schema-usage and
       table-level (column- and sequence-level grants contribute no role
       name, N1); partitioning, inheritance, UNLOGGED, comments and RLS
@@ -153,3 +153,67 @@ codes and the SHA.
       say nothing about `check` (N10). `pnpm changeset` → `patch`; one
       ledger row per task; README badges. Files: the reference,
       `.changeset/*.md`, `task-times.csv`, `README.md`.
+
+## 3. D106 round 2 corrections (evaluation.md R2-B1, R2-B2, R2-N1, R2-N2, R2-N3 + docs R2-N6, R2-N7)
+
+One group, one team, sequential; lands on
+`fix-catalog-inference-2-d106-r2` as its own PR with a `patch`
+changeset; constructor-mode review (D110). **Files edited**:
+`packages/cli/src/infer/loss-report.ts`, `packages/cli/src/commands/
+import.ts`, `packages/cli/src/commands/pull.ts` and their tests
+(3.1, 3.2, 3.3); `openspec/changes/harden-catalog-inference-2/specs/
+catalog-inference/spec.md` (3.1, 3.2); `skills/hejbro/references/
+brownfield-adoption.md`, one `.changeset/*.md`, `openspec/
+task-times.csv` (3.3). Anything else goes back to the planner.
+Commit condition, serial: `TURBO_FORCE=1 pnpm check` first, then
+`check-types`, `test`, `check:crap`, `check:modified-titles`; report
+exit codes and the SHA. No hand edits under `.blackbox/`.
+
+**Ordering.** 3.1 → 3.2 → 3.3.
+
+- [x] 3.1 (~8m) R2-B2 — a schema whose only objects are omitted for
+      their names prints its report and is refused as
+      `nothing-declarable` (712/R15). Red: the import and pull command
+      tests over an input table {a schema holding one table with an
+      uncarriable name; one enum only; a table plus a standalone
+      sequence; such a schema beside an absent schema; beside an
+      empty schema; beside a healthy one} × {import, pull}: the loss
+      report prints (`Omitted: table "…"`/`enum type "…"` with their
+      consequence sentence), the refusal — when nothing at all could
+      be declared or carried — is `*-nothing-declarable` naming that
+      schema, never `*-nothing-to-infer`; a schema with truly nothing
+      (no table, enum, sequence or function) keeps `nothing-to-infer`;
+      beside a healthy schema no refusal, the report names the
+      omission. R2-N3: the `nothing-to-infer` text says "no table or
+      enum to declare" (a standalone sequence or function is a
+      Not-inferred object, not nothing). Green: the classification
+      counts objects the reading saw, not objects it kept. Files:
+      `import.ts`, `pull.ts`, tests, the delta (a sentence stating
+      which refusal each case gets, under requirement 1's "never stop
+      the reading").
+
+- [x] 3.2 (~7m) R2-B1 and R2-N1 — lines say the way out they have.
+      Red: `pull`'s primary-key approximation line names the way out
+      (rename the constraint in the database to the derived name)
+      without the `check` clause, and the delta's parenthetical scopes
+      "keeping it leaves `check` reporting …" to `import` while `pull`'s
+      line stops at the rename; the foreign-key line under the type
+      cause through a generated column ("references column X, which
+      this reading left out because its expression names column Y")
+      states Y's own cause — the type cause wording, not the name
+      cause — for both commands. R2-N2: the delta sentence says the
+      omission band is several ordered lists, one per kind of object
+      **and cause**. Files: `loss-report.ts`, `compose.ts` (lead-approved,
+      one field only: `omissionEntryFor`'s `"generatedExpression"` branch
+      gains `...rootNotInferredSqlTypeField(cause.rootNotInferredSqlType)`,
+      mirroring `firstOffendingColumn`'s own symmetric field), tests, the
+      delta.
+
+- [x] 3.3 (~5m) Reference, changeset, ledger. The brownfield reference
+      names that a domain and a composite type have no line of their
+      own (they appear through the column line's type name, R2-N6) and
+      that the re-import way out ends with a stale snapshot (`verify`
+      reports `snapshot-stale` until the next `generate`; the mid-chain
+      gap is #1037, R2-N7); `pnpm changeset` → `patch`; one ledger row
+      per task; README badges. Files: the reference, `.changeset/*.md`,
+      `task-times.csv`, `README.md`.

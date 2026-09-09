@@ -79,8 +79,15 @@ platform schemas are exactly the ones a run leaves unnamed, so reading
 scope as omission would drop the most ordinary reference such a
 database has. Leaving an object out for its name SHALL never stop the
 reading — everything else in the named schemas is still inferred — and
-the loss report SHALL name each of them. A column named there is
-still described: the description records what the database holds, and
+the loss report SHALL name each of them. When every named schema would
+leave nothing to write, the run refuses: a schema that lost a table or
+enum to a name no declaration can carry — the object's own name or its
+schema's — is refused as `nothing-declarable`, naming every such
+schema; `nothing-to-infer` means no table or enum to declare, and a
+schema holding only a standalone sequence or a function earns it too;
+the report still names that schema on its own `Not inferred:` line. A
+column named there is still described: the
+description records what the database holds, and
 the snapshot records what a declaration can express. Every list the
 reading orders by name when writing the starter declarations SHALL be
 ordered by code points as the loss report is, so the file `import`
@@ -202,15 +209,21 @@ sequence the column does not own is kept as a raw default, naming that
 sequence; a foreign key whose own catalog name D36 cannot carry is
 declared under the derived name, naming both; a primary key whose
 catalog name is not the derived one is declared under the derived
-name, naming the name it dropped and the way out whole (rename the
-constraint in the database to the derived name; keeping it leaves
-`check` reporting the declared name as missing on every run, beside
-its inventory line for the catalog's own name); and every default,
+name, naming the name it dropped and the way out: `import`'s line
+states it whole (rename the constraint in the database to the derived
+name; keeping it leaves `check` reporting the declared name as missing
+on every run, beside its inventory line for the catalog's own name),
+and `pull`'s line states the rename alone, since a pull consumer runs
+no `check` for the parenthetical to describe; and every default,
 check, generated, and index-predicate expression is carried as raw SQL
 text rather than as the typed builders a hand-written declaration
 would use — and the command that removes the loss:
 linking the schema repository for `pull`, hand-editing the starter
-declarations for `import`.
+declarations for `import`. Refusing SHALL NOT suppress the report: when
+a reading completes and the run then refuses because nothing could be
+written — `nothing-to-infer` or `nothing-declarable` — the loss report
+still prints to stdout before the run exits with its diagnostic on
+stderr.
 
 Where a line names an object the reading left out of the declarations,
 the consequence it states SHALL be what hejbro will actually do about
@@ -229,8 +242,10 @@ code points, never by a collation — the same comparator `check`'s
 inventory uses, shared, so two locales and an NFC/NFD pair print the
 same order; the report's own bands (what was guessed, what was not
 inferred, each approximation, each omission) keep the order stated
-here. The omission band is itself several ordered lists, one per kind
-of object it names, never one list merged across kinds.
+here. The omission band is itself several ordered lists rather than
+one, and no list mixes an object left out for its own name with one
+left out because something it names was left out; within a list the
+lines sort by code points, whatever caused each omission.
 
 #### Scenario: The report names the way out
 - **WHEN** `pull --db-url` completes

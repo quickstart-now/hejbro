@@ -1,0 +1,73 @@
+{
+  "version": 3,
+  "number": 1060,
+  "ref": "quickstart-now/hejbro#1060",
+  "title": "fix(cli): the refusals split on what a schema lost, the band sentence states its invariant, pull's lines name their way out (#712 d106 r2)",
+  "head": "7731432f309c23f5845bb1a6723317423b010c9c",
+  "headRef": "fix-catalog-inference-2-d106-r2",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-09T00:37Z",
+  "refs": [
+    {
+      "path": ".changeset/harden-catalog-inference-refusal-split.md",
+      "blob": "107fa6aa711b1e9ef1b040d55305bbbb96e0b146"
+    },
+    {
+      "path": "README.md",
+      "blob": "724cf018c7482911c58003de79a6c460f3a73199"
+    },
+    {
+      "path": "openspec/changes/harden-catalog-inference-2/evaluation.md",
+      "blob": "fd300bbf5f8df3f59c36811765694056ceb98861"
+    },
+    {
+      "path": "openspec/changes/harden-catalog-inference-2/specs/catalog-inference/spec.md",
+      "blob": "98f73acd179880e3d3233ba8fb82ade6aca487a7"
+    },
+    {
+      "path": "openspec/changes/harden-catalog-inference-2/tasks.md",
+      "blob": "bac7f9391e672379739aba96107f2c4ecab642ee"
+    },
+    {
+      "path": "openspec/task-times.csv",
+      "blob": "ba255a3f5acf6a68db0e08a3c3bb884b990b178b"
+    },
+    {
+      "path": "packages/cli/src/commands/import.ts",
+      "blob": "1e1dd10115c33c64ca45048ffb3201f972a355e2"
+    },
+    {
+      "path": "packages/cli/src/commands/pull.ts",
+      "blob": "62191a87ed26dd2e43b4c586b8fe163a3335f877"
+    },
+    {
+      "path": "packages/cli/src/infer/compose.ts",
+      "blob": "07cd853bc430287efdd599d0e359521b358733df"
+    },
+    {
+      "path": "packages/cli/src/infer/loss-report.ts",
+      "blob": "0dfd16ed516285b4eeda22fc89d601f269b63e76"
+    },
+    {
+      "path": "packages/cli/test/import-command.test.ts",
+      "blob": "d82333977b067862eb1875bf3cc06275129b75b8"
+    },
+    {
+      "path": "packages/cli/test/infer-compose.test.ts",
+      "blob": "41a495e2dfa09bce20f041a8042f7f3210bf3368"
+    },
+    {
+      "path": "packages/cli/test/infer-loss-report.test.ts",
+      "blob": "b2c4a1ecf7cb35b274d2f4d9bd90ee87c645b24c"
+    },
+    {
+      "path": "packages/cli/test/pull-command.test.ts",
+      "blob": "95f0884eeab0602029138cf2c6c68b3184e0482a"
+    },
+    {
+      "path": "skills/hejbro/references/brownfield-adoption.md",
+      "blob": "5d9f7577f50fab7ee157bd75bd75ee357a11764e"
+    }
+  ]
+}

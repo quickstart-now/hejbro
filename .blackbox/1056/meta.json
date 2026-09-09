@@ -1,0 +1,21 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#1056",
+  "title": "import: a materialized view is named in no band of the loss report",
+  "parent": "quickstart-now/hejbro#995",
+  "status": "open",
+  "opened": "2026-09-09",
+  "closed": null,
+  "decisions": [],
+  "work": [],
+  "prs": [
+    {
+      "number": 1060,
+      "role": "refs",
+      "pinnedAt": "2026-09-09T00:37Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

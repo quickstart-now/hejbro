@@ -513,3 +513,533 @@ Requirement 2, *The loss is announced, with the way out*:
 universal-sentence entries verified (every one of the 17 delta
 scenarios exercised; B1 sits in requirement 1's first sentence, B2 in
 scenario *A reference into a schema the run did not name is kept*).
+
+## Round 2 (after the round-1 corrections)
+
+Context-free re-review of the corrected delta
+`openspec/changes/harden-catalog-inference-2/specs/catalog-inference/spec.md`
+(the same two MODIFIED requirements; 12 + 5 scenarios) against dev
+`779e7bba` (detached worktree `hejbro-worktrees/d106-catalog-inference-2-r2`,
+`packages/cli/dist/cli.js`, hejbro v0.2.0-pre.1). Read: the delta, the
+two base requirements it replaces (`openspec/specs/catalog-inference/
+spec.md`), the round-1 text above (Method, B1, B2, N1-N12, the
+scenario list), `skills/hejbro/SKILL.md`, `skills/hejbro/references/
+{brownfield-adoption,polyrepo,dsl-cheatsheet}.md`, `README.md`, every
+`--help`, the built packages' `index.d.ts` as installed (copied to
+`/private/tmp/d106-cf-r2/typings/`), and the archived
+`2026-09-06-add-vendored-related/evaluation.md` for shape. Not read:
+`proposal.md`, `design.md`, `tasks.md`, `.blackbox/`, `packages/*/src`,
+`packages/*/test`, `examples/*/test`, archived proposals, issues, PRs,
+git log, changesets. No tool result showed forbidden material (one
+`docker logs` dump landed in a tool result by a redirection slip; it
+holds only this review's own SQL and the CLI's catalog queries). The
+round-1 text above was `md5`-checked before this section was appended
+and is untouched.
+
+### Method
+
+One `postgres:17-alpine` (container `d106-cf-r2-pg`, host port 55795,
+`log_statement=all`, removed afterwards). Every input is built with
+`psql`, never with hejbro, and every project is a real one (`hejbro
+init`, `package.json` pointing `hejbro`, `@hejbro/core`, `@hejbro/query`,
+`@hejbro/pg` at the built packages through `file:` plus
+`pnpm.overrides`). Everything is kept under `/private/tmp/d106-cf-r2/`
+(`INDEX.txt` lists it): `sql/` (inputs, the round-trip dumps and their
+diff, the Postgres log and the per-session verb summary), one
+`proj-*/` per database and command with every stdout/stderr/exit saved
+beside it.
+
+- **Round-1 corpus replayed.** The six round-1 databases (`corpus`,
+  `gen1`, `enumdb`, `omit`, `pk`, `loc`) were reloaded from
+  `/private/tmp/d106-cf/sql/*.sql` (copied to `sql/`) and every
+  round-1 command re-run on the new build: `import` and `pull` of
+  `corpus` (`proj-corpus/runs/`, `proj-corpus-pull/`), `gen1`
+  (`proj-gen1`, `proj-gen1-pull`), `enumdb` (`proj-enum`), `omit`
+  (`proj-omit`), `pk` before and after the round-1 extension (`proj-pk`,
+  `proj-pk-pull`, `proj-pk/out-order`, `proj-pk-pull-order`, `proj-pk2`
+  for the `baseline`/`migrate`/`check`/rename walk), `loc` under
+  `C`/`en_US.UTF-8`/`ko_KR.UTF-8` (`proj-loc`). Each stdout was
+  `diff`ed against its round-1 counterpart, so what the corrections
+  changed is read off the diff rather than guessed.
+- **`r2` (`sql/r2.sql`, `proj-r2/`, `proj-r2-pull*/`)**: the cascade
+  corpus. Named schemas `g`, `h`, `"Gx"`, `empty_s` (holds nothing),
+  `fn_only` (one function), `enum_only` (one enum), `bad_only` (one
+  table `"Only"`), `nope` (does not exist); unnamed `ux`. In `g`:
+  `plain` with generated columns of every builder shape (`a + b`,
+  `upper(a::text)`, a concatenation, `n / 2`, the constant `1`, beside
+  an identity column) and an index, a unique index, a unique
+  constraint, a check and a foreign key (`plain_ref.tot`) bound to
+  them; `gen_name` with `"Amount"` (omitted for its name) and generated
+  columns `dbl`, `mixed` (naming `"Amount"` and a kept `qty`), `via_fn`
+  (`upper(("Amount")::text)`), `qty2` (kept column only), plus every
+  object the delta lists on each: indexes, unique constraints, checks
+  (`"Amount" > 0`, `"Amount" > qty`, through `length()`, `check (true)`,
+  `qty > 0`), an expression index, a predicate index, two INCLUDE-only
+  indexes (`"Amount"`, `dbl`), and `gen_name_ref` with foreign keys onto
+  `dbl`, `mixed`, `qty2`; `gen_enum` with `st "Status"`, `st_arr
+  "Status"[]`, `ok status` and generated `st_is_x (st = 'x')`, `ok_is_a`,
+  `st_arr_len (cardinality(st_arr))`, an index on `st_arr`, an index and
+  a unique index on `st_is_x`, checks on `st`, `ok`, `st_is_x`, and
+  `gen_enum_ref.ref -> st_is_x`; `gen_type` with `pt point`, `tsv
+  tsvector`, `mny money`, `em g.dom` (a domain) and generated `pt_txt`,
+  `tsv_len`, `em_up`, `plain_gen (id * 2)`, an index and a unique index
+  on `pt_txt`, an index and a unique constraint and a predicate index on
+  `mny`, checks on `pt`, `em`, `pt_txt`, and `gen_type_ref` with keys
+  onto `pt_txt` and `mny`; `pk_money` (primary key on `money`),
+  `pk_enum` (primary key on `"Status"`) and a referencing table each;
+  `pk_gen` (primary key on a generated column of a kept column);
+  `gen_self` with a generated `"Doubled"` omitted for its own name and
+  an index, check, unique constraint and foreign key on it; a
+  partitioned `part`/`part_2026`, an `INHERITS` pair `base`/`kid` and a
+  mixed-case `"Mixed"`, each with a generated column; `into_ux` with two
+  keys into `ux.target`. In `h`: a second `gen_name` (same table name,
+  same index name `gen_name_dbl_idx`, same `"Amount"` shape), `ok`
+  beside `"Bad"` with a key into `"Bad"` and a self-key. Later added
+  (psql heredocs recorded in `proj-r2-probe/`): `g2` with `pk_gen_bad`
+  (primary key on a generated column that names `"Amt"`), `dep` whose
+  column `a` was renamed to `"A"` after its index, predicate index,
+  generated column, check and unique index were created (so the
+  dependency is the catalog's, not the original text), `dep_ref`, and a
+  view; and the refusal-boundary schemas `seq_only`, `bad_enum_only`,
+  `bad_table_plus_seq`, `bad_col_only`.
+- **Commands on `r2`**: `import` over all eight named schemas,
+  `baseline`, `migrate`, `check` (`proj-r2/runs/`); `pull --schema g`
+  and `--schema g` with `Gx`, `nope`, `h`; `pull` and `import` on each
+  single-purpose schema alone and in pairs (`proj-r2-pull-*`,
+  `proj-r2-probe/probe-*`); the round trip (`sql/rt-r2-baseline-as-
+  written.sql` applied with `psql -1` to the empty `r2_rt`, `ux.target`
+  pre-created; container `pg_dump --schema-only -n g -n h -n enum_only
+  -n ux` of both, `sql/dump-r2-diff.txt`); the way out followed
+  literally (`alter table g.gen_name rename column "Amount" to amount`,
+  `g.gen_self."Doubled"` to `doubled`, `alter type g."Status" rename to
+  status_old`, then `check`, `import --out fresh-out`, `import --out
+  src/schema`, the merge, `check`, `verify`); three strict `tsc`
+  compiles of pulled contracts.
+
+Execution rows: 64 recorded CLI invocations (import 24, pull 20,
+baseline 4, migrate 4, check 9, verify 1, 2 refused by design) plus 21
+`init`s; 8 databases loaded, 1 round-trip apply, 2 dumps, 3 renames;
+138 CLI catalog-reading sessions isolated in `sql/pg-full.log`
+(`sql/reader-sessions.txt`: the only two `pg_depend` sessions holding a
+non-`SELECT`/`SET` statement are the two `pg_dump`s).
+
+### Blocking findings
+
+#### R2-B1: `pull`'s primary-key line no longer names the way out
+
+**Sentence contradicted** (requirement 2, first sentence, universal
+over commands): "Every command that uses a catalog reading SHALL print
+a loss report naming ... every approximation the reading made ... a
+primary key whose catalog name is not the derived one is declared
+under the derived name, naming the name it dropped and the way out
+whole (rename the constraint in the database to the derived name;
+keeping it leaves `check` reporting the declared name as missing on
+every run, beside its inventory line for the catalog's own name)".
+
+**Input**: `pk` (`sql/pk.sql`: `constraint pk_orders primary key`,
+`constraint "PK_Items" primary key`), `hejbro pull --db-url .../pk
+--schema shop` (`proj-pk-pull/pull.stdout`, and after the extension
+`proj-pk-pull-order/pull.stdout`).
+
+**Observed**: `Approximated: the primary key "shop.orders.pk_orders"
+is declared under the derived name "orders_pkey" instead -- the DSL
+derives every primary-key name; the pulled contract carries neither
+name, since it names no primary key at all -- the bundle's migration
+SQL and `schema.json` do carry "orders_pkey".` The dropped name is
+named and the consequence stated is true (`contract.ts` holds no
+`pkey`/`pk_orders`/`PK_Items` string; `snapshot.sql` lines 14 and 25
+and `schema.json` lines 34 and 189 carry `items_pkey`/`orders_pkey`),
+but no way out is named: no "rename the constraint to ...", nothing
+about `check`. Round 1 measured the previous text of this line
+(`Rename the constraint to "orders_pkey" in the database; until you
+do, check reports the declared "orders_pkey" as missing on every run
+and lists "pk_orders" in its unmanaged-index inventory`) and called
+the `check` half misleading for a consumer (N8 b); the correction
+removed the whole parenthetical from `pull` and left the requirement
+sentence universal. `import`'s line still carries it whole
+(`proj-pk/import-order.stdout`, `proj-pk2/import.stdout`) and its
+promise was re-verified end to end (S15 below).
+
+**Expected**: either the line names the way out the sentence
+prescribes, or the delta scopes the parenthetical to `import` and
+states what `pull`'s line says instead (the sentence "SHALL NOT
+promise that `check` will report it where `check` will not" pulls the
+other way for a consumer who never runs `check`, so the two sentences
+have to be reconciled in the text; the code cannot satisfy both as
+written).
+
+**Provenance**: opened by the round-1 N8(b) correction; the round-1
+`pull` output carried the way out.
+
+#### R2-B2: a schema whose only objects are omitted for their names is refused as "nothing to infer", with no loss report
+
+**Sentences contradicted** (requirement 1): "Leaving an object out for
+its name SHALL never stop the reading -- everything else in the named
+schemas is still inferred -- and the loss report SHALL name each of
+them"; requirement 2: a loss report is printed by "Every command that
+uses a catalog reading". Also the reference's own split
+(`brownfield-adoption.md`, "`pull`'s own `--schema` handling"):
+"`error[pull-nothing-declarable]` when at least one held something
+this reading could not carry the name of".
+
+**Input**: `r2` schemas `bad_only` (one table `"Only"`),
+`bad_enum_only` (one enum `"Color"`), `bad_table_plus_seq` (table `"T"`
+plus a standalone sequence). Commands: `hejbro import --schema
+bad_only --out out-bad`, `hejbro pull --schema bad_only`, the same for
+the other two, and the pairs `--schema nope --schema bad_only`,
+`--schema empty_s --schema bad_only` (`proj-r2-probe/probe-imp-bad*`,
+`probe-pull-bad*`, `probe-pull-nope-bad`, `probe-pull-empty-bad`,
+`proj-r2-pull-bad/`).
+
+**Observed**: every one exits 1 with `error[import-nothing-to-infer]`
+/ `error[pull-nothing-to-infer]`: `found no table, enum, or sequence
+to infer in schema(s) bad_only. Next: confirm the schema name(s) are
+correct and that the database holds objects in them, then rerun`;
+stdout is empty, so no `Guessed`, no `Omitted: table
+"bad_only.Only"`, no way out. The schema name is correct and the
+schema does hold a table; the way out printed sends the user to the
+wrong place. The contrast inputs show the intended shape exists one
+level up: `--schema Gx` alone prints the full report (`Omitted: schema
+"Gx" ...`) and then `nothing-declarable` naming `Gx`; `--schema
+bad_only --schema Gx` prints `Omitted: table "bad_only.Only"` (with
+its own consequence sentence: "the omitted table was the only thing
+that schema would have declared, so nothing keeps naming it after this
+run's own report") but the refusal that follows names only `Gx`
+("found nothing it could declare in schema(s) Gx"); and the eight-
+schema `import` (`proj-r2/runs/import.stdout`) prints that same line
+and writes the other files. So the table-level and enum-level
+omissions are classed as "nothing" whenever they are all a schema
+holds, and the report that would have named them is skipped.
+
+**Expected**: the report printed (naming `"Only"`, `"Color"`, `"T"`)
+and the refusal, if any, the `nothing-declarable` one naming the
+schema, exactly as the schema-level case already does.
+
+**Provenance**: `pull`'s two refusals are new in this change; the
+reference says `import`'s split "already makes" the same distinction,
+and the shipped `import` shows the same classification (no older
+binary was run). The delta text is silent on refusals; the
+contradiction is with the universal "SHALL name each of them".
+
+### Non-blocking findings
+
+- **R2-N1 -- Foreign-key lines under the type cause, through a
+  generated column, state the wrong cause.** `r2`:
+  `gen_type_ref.ref -> gen_type.pt_txt` (a generated column naming
+  `pt point`): `Omitted: foreign key "g.gen_type_ref.gen_type_ref_ref_fkey"
+  -- it references column "g.gen_type.pt_txt", which this reading left
+  out because its expression names column "g.gen_type.pt", whose own
+  name no declaration can carry, so the key cannot be declared
+  either.` (`proj-r2/runs/import.stdout`; the same words in
+  `proj-r2-pull/pull.stdout`). `pt`'s name is fine; its type has no
+  builder, which the index, check, unique and generated-column lines
+  for the same `pt_txt` say correctly ("which this reading did not
+  infer, because no column builder expresses its type "point""). The
+  first-order type-cause key (`gen_type_ref_m_fkey`, on `money`) is
+  right; the enum-cause second-order key (`gen_enum_ref_ref_fkey`) is
+  right; only the name-cause template is reused for the type cause on
+  the foreign-key kind. The line carries no `Next:` (consistent with
+  the reference's "no exit today"), so no false remedy is printed, but
+  the reference's "every one of these lines names the column that cost
+  it and that column's own cause" does not hold here. Disposition:
+  fix.
+- **R2-N2 -- The omission band prints two lists for one kind.**
+  Requirement 2 (new text): "The omission band is itself several
+  ordered lists, one per kind of object it names". Observed order in
+  `proj-r2/runs/import.stdout`: schema, table, enum type, index, check,
+  unique constraint, generated column, primary key, foreign key,
+  column; within the foreign-key kind `h.ok.ok_ref_fkey` (target
+  omitted) prints before `g.gen_enum_ref.gen_enum_ref_ref_fkey` (column
+  omitted), and in `corpus` `app.orders.orders_bad_schema_ref_fkey` ...
+  `orders_ext_bad_table_ref_fkey` print before
+  `app.enum_child.enum_child_code_fkey`; the index, unique-constraint
+  and check kinds likewise print their own-name list first
+  (`app.users.IDX_Users_Email`, `UQ_Users_Item2`, `CK_Users_N`) and
+  their column-cascade list after. Each list is code-point ordered and
+  identical under three locales (`proj-loc`), so the scenario holds;
+  the sentence undercounts the lists (one per kind and cause).
+  Disposition: docs (say so) or fix (one list per kind).
+- **R2-N3 -- The `nothing-to-infer` text names what it did not look
+  at.** `seq_only` (a standalone sequence only): `found no table,
+  enum, or sequence to infer in schema(s) seq_only`
+  (`probe-imp-seq`, `probe-pull-seq`), while a standalone sequence is a
+  Not-inferred object, not nothing; `fn_only` in the eight-schema run
+  gets `Not inferred: 1 function(s) not inferred.` and `Not inferred:
+  nothing to infer in schema "fn_only".` in one report. Disposition:
+  text ("no table or enum to declare").
+- **R2-N4 -- INCLUDE columns (round-1 N3), unchanged and not claimed
+  fixed.** `gen1`: `t_a_include_idx (a) include (b)` is re-created as
+  `create index "t_a_include_idx" on "app2"."t" ("a")`
+  (`proj-gen1/migrations`, line 28) with no line; the INCLUDE-only
+  dependencies `gen_name_id_incl_amount_idx`, `gen_name_id_incl_dbl_idx`
+  and `t_include_omitted_only_idx` are omitted correctly but their
+  lines say "its expression names column". After the way out (below)
+  the merged starter carries `index("gen_name_id_incl_amount_idx").on(t.id)`
+  and `check` passes, because INCLUDE is neither declared nor compared.
+  Disposition: fix.
+- **R2-N5 -- The unread target's handle is still typed by guess
+  (round-1 N7), not claimed fixed.** `existingTable("ux", "target", {
+  code: text(), id: text() })` for an integer `id`
+  (`proj-r2/src/schema/g.schema.ts`); `plain`'s own key
+  (`gen1`: `existingTable("ext2", "plain", { id: text() })`) the same.
+  Nothing consumes it; the keys emit and apply on `r2_rt`.
+  Disposition: fix or by design.
+- **R2-N6 -- A domain and a composite type have no line of their
+  own.** `g.dom` (`sql/dump-r2-diff.txt`, `CREATE DOMAIN g.dom`) and the
+  corpus's `app.email_domain`/`app.composite_t` appear only through the
+  column line's type name (`column "g.gen_type.em" (type "g.dom") -- no
+  column builder expresses it`). The reference's list of what neither
+  reading carries (#1034) does not name types the DSL has no builder
+  for. Disposition: docs.
+- **R2-N7 -- The way out ends with a stale snapshot.** After
+  `rename`, `import --out fresh-out` and the merge, `check` is clean
+  (below) but `hejbro verify` exits 1 with `error[snapshot-stale]`
+  (`proj-r2/runs/verify-after-merge.stderr`), and the next step is a
+  `generate` whose `add column`/`create index` statements target
+  objects the database already holds (the reference's #1037 gap). The
+  lines promise only what `check` does, which is true; the reference's
+  "merge the new file's declaration into the one already checked in"
+  says nothing about the snapshot. Disposition: docs.
+
+Round-1 non-blocking status, measured on the new build: N1 docs
+(reference sentence present; `gen1` still `g_tableonly, postgres`),
+N2 fixed (S17), N3 open (R2-N4), N4 docs (the #1034 paragraph; the
+`r2` dump diff still shows `INHERITS`, `PARTITION BY`, `ATTACH
+PARTITION` only on the source side), N5 settled (S14), N6 docs
+(`foo__bar`/`foo_bar_` example in the reference), N7 open (R2-N5),
+N8(a) fixed (`pull`'s column-cause key lines read "... so the key
+cannot be carried either", `proj-corpus-pull/pull-corpus.stdout` vs
+round 1), N8(b) changed into R2-B1, N8(c) fixed (`Omitted: unique
+constraint "app.users.UQ_Users_Item2"` in both commands), N9 docs, N10
+docs, N11 fixed (S13), N12 open (`t2`, `bad_col_only`), not a delta
+subject.
+
+### Scenarios verified
+
+Requirement 1, *A catalog reading yields a snapshot and a marked
+description*:
+
+1. **Round-1 B1 closed: generated columns are read, emitted,
+   compared and typed read-only.** `gen1`: `total:
+   integer().generatedAlwaysAs(sql.raw("(a + b)"))`, `label:
+   text().generatedAlwaysAs(sql.raw("upper((a)::text)"))`
+   (`proj-gen1/src/schema/app2.schema.ts`); `corpus`: `fullLen:
+   integer().generatedAlwaysAs(sql.raw("length(email)"))`
+   (`app.schema.ts` line 198); `r2`: all ten kept generated columns
+   (`plain.total/label/both_txt/n_half/one`, `gen_type.plain_gen`,
+   `base/kid/part/part_2026.v2`, `gen_enum.ok_is_a`, `gen_name.qty2`,
+   `pk_gen.id2` under `.primaryKey()`). `baseline` emits `generated
+   always as (...) stored` for each (`proj-r2/migrations`, `proj-gen1/
+   migrations` lines 18-19, corpus line 169); `check` against the
+   imported database exits 0 with `no differences` on `gen1` and `r2`
+   (corpus exits 1 only for the announced `orders_created_by_fk`
+   derived name, S16); the round trip keeps every one (none appears in
+   `sql/dump-r2-diff.txt`); the pulled contracts' `Insert`/`Update`
+   omit them (`proj-r2-pull/.hejbro/vendor/contract.ts` `plain`:
+   Insert holds `id, a, b, n` only; `gen1` `t`: `id?, a, b, plainId?,
+   otherCode?, userId?`), `Row` keeps them; the Approximated blanket
+   line now reads "every default, check, generated, and
+   index-predicate expression". A primary key on a kept generated
+   column (`pk_gen`) and a foreign key onto one (`plain_ref.tot ->
+   plain.total`, `gen_name_ref.qty2_ref -> gen_name.qty2`) survive and
+   apply on `r2_rt`.
+2. **Round-1 B2 closed on the corrected sentence.** "carrying no
+   relation for it ... the contract gives a relation only where the
+   target has a `Tables` key": `gen1` contract `Relationships` lines
+   35-45 name `ext2.other`/`ext2.plain`, `Relations: {}` line 49,
+   `contractMetadata.tables.t.foreignKeys` lines 83-84; `r2` `into_ux`
+   `Relationships` (lines 186-194, `ux.target`), `Relations: {}` (198),
+   `foreignKeys` (510-511), no `"target"` entry among `Tables` (keys
+   listed: 20 tables of `g`); `corpus` `orders` `Relationships` carry
+   `ext.things` twice (lines 45, 51) and `Relations` holds `user` only.
+   All three contracts compile under `tsc --strict
+   --exactOptionalPropertyTypes` (exit 0).
+3. **Read-only, with the dependency query.** 138 CLI sessions that
+   ran the `pg_depend` query sent only `set` and `select`
+   (`sql/reader-sessions.txt`); the two `pg_dump` sessions are the only
+   `pg_depend` sessions with `BEGIN`/`LOCK`/`PREPARE`. Dependency is
+   the catalog's, not the text: `g2.dep`'s column `a` renamed to `"A"`
+   after its objects were created, and every line names `"g2.dep.A"`
+   (`probe-imp-g2.stdout`); the predicate index
+   `gen_name_qty_where_amount_idx`, the expression index
+   `gen_name_amount_expr_idx` and the INCLUDE-only indexes are found
+   through the dependency rows.
+4. **A column left out for its name takes its generated columns,
+   and they take their own objects (second order).** `gen_name`:
+   `dbl`, `mixed`, `via_fn` omitted ("its expression names column
+   "g.gen_name.Amount""); with them `gen_name_dbl_idx`,
+   `gen_name_mixed_idx`, `gen_name_id_incl_dbl_idx`, `gen_name_dbl_uq`,
+   `gen_name_mixed_uq`, `gen_name_dbl_chk`, `gen_name_ref_dbl_ref_fkey`,
+   `gen_name_ref_mixed_ref_fkey`; `qty2` (kept column only) and its
+   index, unique constraint and key stay; `gen_self."Doubled"` (a
+   generated column omitted for its own name) takes
+   `gen_self_doubled_idx`, `_uq`, `_chk`, `gen_self_ref_d_fkey`;
+   `g2.pk_gen_bad` loses `amt2` and with it `pk_gen_bad_pkey` ("the
+   table is declared without a primary key") and
+   `pk_gen_bad_ref_r_fkey`. The starter loads (`baseline`: `loaded 27
+   declarations`), none of them reaches the starter, the snapshot SQL
+   or the pulled contract, and no Approximated line names any of them
+   (the Approximated band holds `gen_name_qty2_uq`, `plain_total_uq`
+   and the blanket line only).
+5. **The enum cause cascades the same way.** `gen_enum.st`, `st_arr`,
+   `pk_enum.st`, `pk_enum_ref.st`, `st2` omitted with `"Status"`;
+   generated `st_is_x`, `st_arr_len` omitted with them; then
+   `gen_enum_st_is_x_idx`, `_uidx`, `gen_enum_st_is_x_chk`,
+   `gen_enum_st_arr_idx`, `gen_enum_st_chk`, `gen_enum_ref_ref_fkey`,
+   `pk_enum_pkey`, `pk_enum_ref_st_fkey` (one line for the enum-to-enum
+   key); `ok`, `ok_is_a`, `gen_enum_ok_chk` on the kept `status` stay.
+6. **The type cause cascades the same way, without a `Next:`.**
+   `gen_type.pt/tsv/mny/em` are `Not inferred` (with their types
+   `point`, `tsvector`, `money`, `g.dom`); generated `pt_txt`,
+   `tsv_len`, `em_up` omitted ("which this reading did not infer,
+   because no column builder expresses its type"); then
+   `gen_type_pt_txt_idx`, `_uidx`, `gen_type_pt_txt_chk`,
+   `gen_type_mny_idx`, `gen_type_id_where_mny_idx`, `gen_type_mny_uq`,
+   `gen_type_pt_chk`, `gen_type_em_chk`, `gen_type_ref_m_fkey`,
+   `gen_type_ref_ref_fkey`, `pk_money_pkey`, `pk_money_ref_m_fkey`;
+   none of these lines carries a `Next:`; `plain_gen (id * 2)` on the
+   same table stays. The foreign-key cause text is R2-N1.
+7. **Partitioned, inherited and mixed-case tables.** `part`,
+   `part_2026`, `base`, `kid` keep `v2` as a generated column; `"Mixed"`
+   is omitted whole with `mixed_v2_idx` (one table line, no index
+   line), `h."Bad"` likewise and `h.ok` keeps `ok_ref2_fkey` while
+   `ok_ref_fkey` is named with "references table "h.Bad"".
+8. **Same names across schemas.** `g.gen_name` and `h.gen_name`, each
+   with `gen_name_dbl_idx`, are read into two starter files with their
+   own lines (`h.gen_name.gen_name_dbl_idx`, `h.gen_name.dbl`,
+   `h.gen_name.Amount`); `pull --schema g --schema h` refuses with
+   `pull-table-name-collision` naming both and writes nothing, as
+   `polyrepo.md` says.
+9. **A reference into a schema the run did not name is kept**
+   (scenario). `into_ux.t/c -> ux.target(id/code)`: unexported
+   `uxTargetRef`, both keys declared against it, emitted by `baseline`
+   and applied on `r2_rt` (`APPLIED-TO-EMPTY`), carried in the
+   contract as in S2, no report line contains `ux.target`, no
+   `ux.schema.ts` written; the description records `ux.target` as
+   `existing: true` (`schema.json` line 778).
+10. **What is not inferred is named / description records what the
+    database holds.** `r2`: `1 function(s)` (`fn_only.f`), `1 view(s)`
+    (`g2.dep_view`), the seven typed column lines, `grants beyond their
+    role name`; the pulled description carries `amount`, `mixed`,
+    `doubled` keys for the omitted columns (`schema.json` lines 897,
+    912, 968) while the snapshot SQL and contract carry none of them.
+11. **Round-1 scenarios on the replayed corpus stand.** Every
+    round-1 stdout differs from its replay only in the corrected text
+    (the `Next:` tails, the unique-constraint noun, `pulled corpus
+    (app, aux)`, the two `pull` Approximated lines, the un-doubled
+    clause); the starter files of `loc` are byte-identical under the
+    three locales and identical to round 1's report order
+    (`B_table`, `Zeta`, `é_nfd`, `é_nfc`; `IDX_a`, `IDX_b`, `idx_A`;
+    `É_col`, `é_col`); the corpus baseline still emits `chk_positive`
+    against each of `a_c` and `ab` (lines 59, 66) and `create unique
+    index` for `users_email_key`/`users_user_id_uq` (178, 184); the
+    corpus roles are `app_auditor, app_reader, app_schemagrant,
+    app_writer, postgres` in the report and the contract (`roles`
+    line 430) with no `public`.
+12. **Code-point order in the starter.** `g.schema.ts` declares
+    `base, gen_enum, gen_enum_ref, gen_name, gen_name_ref, ..., plain,
+    plain_ref` (dependency kept: each `_ref` after its target), indexes
+    `plain_label_uidx, plain_total_idx, plain_total_uq`, keys
+    `into_ux_c_fkey, into_ux_t_fkey`; enum values `["a","b"]`,
+    `["x","y"]` in catalog order.
+
+Requirement 2, *The loss is announced, with the way out*:
+
+13. **`pull`'s schema list.** `pull --schema g --schema Gx` and
+    `--schema g --schema nope` both print `pulled r2 (g)`, write
+    `hejbro.lock` `schemas: ["g"]` and `contractMetadata.schemas:
+    ["g"]` (`proj-r2-pull-gx`, `proj-r2-pull-nope`); `corpus` now
+    `pulled corpus (app, aux)` with the lock `["app","aux"]` (round 1:
+    `BadSchema` listed). `Not inferred: nothing to infer in schema
+    "nope".` prints in the Not-inferred band, after the typed-column
+    lines, once per named-but-absent or empty schema (`empty_s`,
+    `fn_only`, `nope` in the eight-schema `import`), never for an
+    omitted schema (`Gx` gets its Omitted line instead).
+14. **The Approximated band's order** (round-1 N5). `pk` extended:
+    UNIQUE (`orders_code_key`), nextval (`seqd`), foreign key
+    (`FK_Orders_Buyer` -> `orders_buyer_fk`, both names), primary key
+    (`PK_Items` -> `items_pkey`, `pk_orders` -> `orders_pkey`),
+    expressions -- the order the corrected sentence states, in
+    `import` (`proj-pk/import-order.stdout`) and `pull`
+    (`proj-pk-pull-order/pull.stdout`).
+15. **A dropped primary-key name is announced with the way out**
+    (scenario), `import`. `proj-pk2`: after `baseline` + `migrate`,
+    `check` exits 1 with `error[check-object-missing]:
+    shop.orders.orders_pkey` and `shop.items.items_pkey` on stderr and
+    `unmanaged index (backs constraint pk_orders ...): shop.orders.pk_orders`
+    / `PK_Items` on stdout; after `alter table ... rename constraint`
+    (both) only the announced `orders_buyer_fk` finding remains and the
+    inventory is empty. The `pull` half is R2-B1.
+16. **FK derived name.** `FK_Orders_CreatedBy` -> `orders_created_by_fk`
+    named with both names; `check` on `corpus` reports the declared
+    name missing (exit 1), as the `import` line says; `pull`'s line now
+    says "the pulled contract carries "orders_created_by_fk" in its
+    foreign-key metadata, never "FK_Orders_CreatedBy"", and the
+    contract, `snapshot.sql` and `schema.json` hold exactly that name
+    (`grep`: one each, no `FK_Orders_CreatedBy`).
+17. **The way out followed literally, to the end** (round-1 N2).
+    `r2`: after `rename` alone, `check` still lists `g.gen_name.amount`,
+    `dbl`, `mixed`, `via_fn`, `g.gen_self.doubled` and the `status_old`
+    columns as unmanaged (28 matching lines, `check2-after-rename.stdout`)
+    -- renaming never ends the listing; `import --schema g --out
+    fresh-out` exits 0 and its report carries no line for `gen_name`,
+    `gen_self` or the enum (only the type-cause lines and `Mixed`
+    remain); `import --out src/schema` refuses with
+    `import-destination-exists`, as the line's "fresh `--out`" implies;
+    merging the fresh `g.schema.ts` over the checked-in one (diff:
+    `statusOld` enum, `amount`, `dbl`, `mixed`, `viaFn`, `doubled`, the
+    `st*` columns, and every index/check/unique/key the cascade had
+    dropped) makes `check` exit 0 with `no differences` and no
+    inventory line for any of them (24 lines remain, all type-cause,
+    `Mixed`, `Bad`, `h.gen_name`). `verify` afterwards is R2-N7.
+18. **What each omission line says `check` will do, measured.**
+    `proj-r2/runs/check1.stdout` lists exactly the objects the lines
+    name: 2 tables (`g.Mixed`, `h.Bad`), 24 columns (3 by name, 5 by
+    enum, 9 generated, 7 by type), 21 indexes (15 plain, 4 backing the
+    omitted unique constraints, 2 backing `pk_enum_pkey`/`pk_money_pkey`),
+    10 check constraints; no line names `g.Status` (no enum axis), no
+    line names anything under `Gx` (the schema line's "`check` will not
+    list them") or `bad_only.Only` (the table line's "nothing keeps
+    naming it after this run's own report"); foreign-key lines promise
+    nothing about `check` and `check` lists no foreign key.
+19. **Two refusals and the report around them.** `pull --schema nope`
+    -> `pull-nothing-to-infer`, nothing written; `pull --schema Gx` ->
+    the report (Guessed, Not inferred, Approximated, `Omitted: schema
+    "Gx"`, the way-out line) then `pull-nothing-declarable` naming
+    `Gx`, nothing written (`.hejbro/` absent); `--schema nope --schema
+    Gx` -> `Not inferred: nothing to infer in schema "nope".` plus the
+    `Gx` line, then `nothing-declarable` naming `Gx` only; `--schema
+    fn_only --schema enum_only` -> `pulled r2 (enum_only)` with the
+    function counted and `nothing to infer in schema "fn_only"`;
+    `import` mirrors each with its own codes. The table-only and
+    enum-only cases are R2-B2.
+20. **The report names the way out** (scenario). Every `pull` ends
+    with `The loss ends when you link the schema repository.` and
+    every `pull` Omitted line with "then link the schema repository";
+    every `import` ends with `The loss ends when you hand-edit the
+    starter declarations.`; each starter file's header carries the same
+    lines as the terminal.
+21. **An omitted enum's line / an omitted object's line** (scenarios).
+    `Omitted: enum type "g.Status" ... every column typed by it is
+    left out with it: "g.gen_enum.st", "g.gen_enum.st_arr",
+    "g.pk_enum.st", "g.pk_enum_ref.st", "g.pk_enum_ref.st2". `check`
+    keeps naming each of them as unmanaged until it is declared, and
+    never names the type itself -- its inventory has no enum axis.
+    Next: rename the type in the database, then re-run `hejbro import`
+    into a fresh `--out` and merge the declarations, or declare them
+    by hand.`; `omit` replay: index, check and table lines unchanged
+    but for the `Next:` tail, each "until it is renamed in the database
+    and declared".
+
+### Verdict
+
+**BLOCKED** -- R2-B1, R2-B2. 2 blocking, 7 non-blocking, 21 scenario
+and universal-sentence entries verified. Round-1 B1 and B2 are closed
+on the shipped build and the corrected text (S1, S2); the cascade the
+corrections added holds in every shape constructed (S4-S7) with one
+wrong cause sentence (R2-N1); N2, N5, N8(a)(c) and N11 are fixed and
+the reference's new sentences match measurement (N1, N4, N6, N9, N10,
+the refusal split except for R2-B2). R2-B1 is a text-versus-output
+contradiction opened by the N8(b) correction and is likely settled in
+the delta; R2-B2 is a shipped-behaviour gap at the boundary the new
+refusals introduced.
