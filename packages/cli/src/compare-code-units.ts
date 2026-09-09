@@ -24,3 +24,13 @@ export const compareCodeUnits = (a: string, b: string): number => {
 	}
 	return 0;
 };
+
+/**
+ * The schema names a refusal diagnostic lists: each once, ordered by
+ * code units like every list the report prints (D106 round 3,
+ * R3-B1/R3-N5) -- echoing the `--schema` flags verbatim repeated a
+ * duplicated flag and followed the flag order, which no requirement
+ * promises.
+ */
+export const listSchemaNames = (schemas: ReadonlyArray<string>): string =>
+	[...new Set(schemas)].sort(compareCodeUnits).join(", ");

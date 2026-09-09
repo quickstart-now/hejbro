@@ -413,6 +413,61 @@ describe("runPull / 4.1", () => {
 	});
 
 	/**
+	 * D106 round 3, R3-B1 / R3-N5 (mirroring `import`): the empty-schema
+	 * lines and the refusal's schema list follow code units, not the
+	 * `--schema` flag order, and a repeated flag is named once.
+	 */
+	it("sorts the empty-schema lines and the refusal's schema list by code units whatever the --schema order", async () => {
+		const emptyLine = (schemaName: string): string =>
+			`Not inferred: no table or enum to declare in schema "${schemaName}".`;
+		const isEmptyLine = (line: string): boolean =>
+			line.startsWith("Not inferred: no table or enum to declare in schema");
+
+		const outcome = await runPull(
+			cwd,
+			[
+				"--db-url",
+				"postgres://fixture",
+				"--schema",
+				"zeta",
+				"--schema",
+				"app",
+				"--schema",
+				"Alpha",
+			],
+			depsFor(widgetsResult),
+		);
+
+		expect(outcome.exitCode).toBe(0);
+		expect(outcome.stdout.filter(isEmptyLine)).toEqual([
+			emptyLine("Alpha"),
+			emptyLine("zeta"),
+		]);
+
+		const refused = await runPull(
+			cwd,
+			[
+				"--db-url",
+				"postgres://fixture",
+				"--schema",
+				"zeta",
+				"--schema",
+				"Alpha",
+				"--schema",
+				"zeta",
+			],
+			depsFor(emptyResult),
+		);
+
+		expect(refused.exitCode).toBe(1);
+		expect(refused.stderr).toContain("in schema(s) Alpha, zeta.");
+		expect(refused.stdout.filter(isEmptyLine)).toEqual([
+			emptyLine("Alpha"),
+			emptyLine("zeta"),
+		]);
+	});
+
+	/**
 	 * Schema-vendoring spec, "pull writes where vendor writes": an
 	 * already-vendored (git-sourced) repository's outputs are replaced
 	 * outright, and the lock left behind is marked as `pull`'s own -- the

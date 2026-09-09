@@ -2,6 +2,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { hejbroError, throwHejbroError } from "@hejbro/core";
 import type { Driver } from "@hejbro/query";
 import { defineCommand } from "citty";
+import { compareCodeUnits, listSchemaNames } from "../compare-code-units";
 import { currentDatabaseName } from "../apply/reset";
 import type { CheckDriverImporter } from "../check/driver";
 import { withCheckConnection } from "../check/driver";
@@ -190,13 +191,17 @@ const emptySchemaLines = (
 ): ReadonlyArray<string> => {
 	const withObjects = schemasWithInferredObjects(result);
 	const omitted = new Set(result.omittedSchemaNames);
-	return schemas
+	// D106 round 3, R3-B1: this list followed the `--schema` flag order
+	// while every other list sorts by code units; the requirement's
+	// "within each list ... ordered by code points" sentence is universal.
+	return [...new Set(schemas)]
 		.filter((schemaName) => !withObjects.has(schemaName))
 		.filter((schemaName) => !omitted.has(schemaName))
 		.filter(
 			(schemaName) =>
 				!schemaHeldAnUncarriableName(result.lossReport, schemaName),
 		)
+		.sort(compareCodeUnits)
 		.map(
 			(schemaName) =>
 				`Not inferred: no table or enum to declare in schema "${schemaName}".`,
@@ -219,7 +224,7 @@ const nothingToInferResult = (
 ): PullResult => {
 	const error = hejbroError(
 		"pull-nothing-to-infer",
-		`hejbro pull found no table or enum to declare in schema(s) ${schemas.join(", ")}. Next: confirm the schema name(s) are correct and that they hold a table or enum type to declare, then rerun \`hejbro pull\`.`,
+		`hejbro pull found no table or enum to declare in schema(s) ${listSchemaNames(schemas)}. Next: confirm the schema name(s) are correct and that they hold a table or enum type to declare, then rerun \`hejbro pull\`.`,
 	);
 	const diagnostic = fromHejbroError(error, FALLBACK_IDENTITY);
 	return {
@@ -243,7 +248,7 @@ const nothingDeclarableResult = (
 ): PullResult => {
 	const error = hejbroError(
 		"pull-nothing-declarable",
-		`hejbro pull found nothing it could carry into the contract in schema(s) ${uncarriableSchemas.join(", ")}: each one held something whose name no declaration can carry (see the "Omitted" line(s) above). Next: follow the way out that line names (a rename in the database), then rerun \`hejbro pull\`.`,
+		`hejbro pull found nothing it could carry into the contract in schema(s) ${listSchemaNames(uncarriableSchemas)}: each one held something whose name no declaration can carry (see the "Omitted" line(s) above). Next: follow the way out that line names (a rename in the database), then rerun \`hejbro pull\`.`,
 	);
 	const diagnostic = fromHejbroError(error, FALLBACK_IDENTITY);
 	return {

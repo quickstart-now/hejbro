@@ -663,6 +663,77 @@ describe("runImport / 3.1", () => {
 		expect(headerIndices.every((index) => index !== -1)).toBe(true);
 		expect(headerIndices).toEqual([...headerIndices].sort((a, b) => a - b));
 	});
+
+	/**
+	 * D106 round 3, R3-B1 / R3-N5: the empty-schema lines followed the
+	 * `--schema` flag order while every other list sorts by code units,
+	 * against the requirement's universal "within each list ... ordered
+	 * by code points" sentence. The flags are given out of order on
+	 * purpose (`zeta`, `app`, `Alpha`, `beta`: a capital sorts before
+	 * every lowercase letter by code unit, so a collation would disagree),
+	 * and the refusal diagnostic names each schema once, in the same order,
+	 * even when a flag is repeated.
+	 */
+	it("sorts the empty-schema lines by code units whatever the --schema order, in stdout, the file header and the refusal alike", async () => {
+		const emptyLine = (schemaName: string): string =>
+			`Not inferred: no table or enum to declare in schema "${schemaName}".`;
+		const isEmptyLine = (line: string): boolean =>
+			line.startsWith("Not inferred: no table or enum to declare in schema");
+		const result = resultFor([table("app", "widgets", [idColumn])], []);
+
+		const outcome = await runImport(
+			cwd,
+			[
+				"--url",
+				"postgres://fixture",
+				"--schema",
+				"zeta",
+				"--schema",
+				"app",
+				"--schema",
+				"Alpha",
+				"--schema",
+				"beta",
+				"--out",
+				"src/schema",
+			],
+			depsFor(result),
+		);
+
+		expect(outcome.exitCode).toBe(0);
+		const sortedLines = [emptyLine("Alpha"), emptyLine("beta"), emptyLine("zeta")];
+		expect(outcome.stdout.filter(isEmptyLine)).toEqual(sortedLines);
+		const fileLines = readFileSync(
+			join(cwd, "src/schema/app.schema.ts"),
+			"utf8",
+		).split("\n");
+		expect(
+			fileLines.filter((line) => isEmptyLine(line.replace(/^ \* /, ""))),
+		).toEqual(sortedLines.map((line) => ` * ${line}`));
+
+		const refused = await runImport(
+			cwd,
+			[
+				"--url",
+				"postgres://fixture",
+				"--schema",
+				"zeta",
+				"--schema",
+				"Alpha",
+				"--schema",
+				"zeta",
+				"--schema",
+				"beta",
+				"--out",
+				"src/schema-refused",
+			],
+			depsFor(emptyResult),
+		);
+
+		expect(refused.exitCode).toBe(1);
+		expect(refused.stderr).toContain("in schema(s) Alpha, beta, zeta.");
+		expect(refused.stdout.filter(isEmptyLine)).toEqual(sortedLines);
+	});
 });
 
 /**
