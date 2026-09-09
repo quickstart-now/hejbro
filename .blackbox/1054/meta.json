@@ -1,0 +1,21 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#1054",
+  "title": "query: a set operation with same-family width divergence converts rows with the left branch's converters, so a promoted column arrives raw",
+  "parent": "quickstart-now/hejbro#995",
+  "status": "open",
+  "opened": "2026-09-09",
+  "closed": null,
+  "decisions": [],
+  "work": [],
+  "prs": [
+    {
+      "number": 1062,
+      "role": "refs",
+      "pinnedAt": "2026-09-09T01:38Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

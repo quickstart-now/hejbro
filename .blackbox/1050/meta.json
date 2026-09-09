@@ -4,9 +4,9 @@
   "ref": "quickstart-now/hejbro#1050",
   "title": "widen-set-op-execute: group 1 — the core-built set operation types its union",
   "parent": "quickstart-now/hejbro#738",
-  "status": "open",
+  "status": "closed",
   "opened": "2026-09-08",
-  "closed": null,
+  "closed": "2026-09-09",
   "decisions": [],
   "work": [
     {
@@ -115,7 +115,13 @@
       "decisions": []
     }
   ],
-  "prs": [],
+  "prs": [
+    {
+      "number": 1062,
+      "role": "closes",
+      "pinnedAt": "2026-09-09T01:38Z"
+    }
+  ],
   "origin": null,
   "followUps": []
 }

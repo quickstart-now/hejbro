@@ -1,0 +1,73 @@
+{
+  "version": 3,
+  "number": 1062,
+  "ref": "quickstart-now/hejbro#1062",
+  "title": "feat(core,query): a set operation reads back as the union of its branches on every surface (#738)",
+  "head": "910c4895e19129038d095ffc79f3292aaadcd852",
+  "headRef": "widen-set-op-execute",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-09T01:38Z",
+  "refs": [
+    {
+      "path": ".changeset/widen-set-op-execute.md",
+      "blob": "279c3db25b0959e2ac19ce77a463a7ba5dfc1f5e"
+    },
+    {
+      "path": "README.md",
+      "blob": "a3db9cf185e57c1869a9e6e1abe761bc09b34245"
+    },
+    {
+      "path": "openspec/changes/widen-set-op-execute/design.md",
+      "blob": "47f66589007812ec5a79c6b644bffffc5e256463"
+    },
+    {
+      "path": "openspec/changes/widen-set-op-execute/proposal.md",
+      "blob": "51daa2711cda03bcb303b87be1b5c7b58cdf571a"
+    },
+    {
+      "path": "openspec/changes/widen-set-op-execute/specs/query-type-inference/spec.md",
+      "blob": "f7cde27307b569e62df202c50d5026ddfc83f2d1"
+    },
+    {
+      "path": "openspec/changes/widen-set-op-execute/tasks.md",
+      "blob": "dc10f3c9401184c685a2997ec7ffdbcc1487bb32"
+    },
+    {
+      "path": "openspec/task-times.csv",
+      "blob": "38b73eb3388a8b53567b054261692c258e61ffc6"
+    },
+    {
+      "path": "packages/core/src/index.ts",
+      "blob": "d58db8db4fc4111a075792db60bd7c02e04c2875"
+    },
+    {
+      "path": "packages/core/src/query/select.ts",
+      "blob": "ec63a3c7c60041f6e053c56ee9d5601be7cbf19e"
+    },
+    {
+      "path": "packages/core/src/query/with.ts",
+      "blob": "3a6e77d2721d376d8220f76fb64b69637e1a9864"
+    },
+    {
+      "path": "packages/core/test/query/cte-set-op-fold.types.test.ts",
+      "blob": "95e993b9ccd4189199a0e89fee24210c47eb150a"
+    },
+    {
+      "path": "packages/core/test/query/set-op-stage.types.test.ts",
+      "blob": "e924f7e031b6bfa5d887a26a4756812e79a0ae83"
+    },
+    {
+      "path": "packages/query/src/db/db.ts",
+      "blob": "55ac0f24c868a064ad8a657dc1e27b99c03d1d98"
+    },
+    {
+      "path": "packages/query/test/db/execute-result-type.test.ts",
+      "blob": "6fa9d53feb80e7f9cedee46d10a422299efc5690"
+    },
+    {
+      "path": "skills/hejbro/references/query-layer.md",
+      "blob": "b1e3e738fa11ff2cf5c7feea44a736a4fe488174"
+    }
+  ]
+}
