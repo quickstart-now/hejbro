@@ -1524,3 +1524,346 @@ code or in the sentence; R3-N2 (a kept key whose backing uniqueness was
 omitted for its name, so the baseline and the pulled bundle cannot
 apply to an empty database) is the finding with the largest user
 consequence and is not covered by any delta sentence.
+
+## Round 4 (after the round-3 correction)
+
+Context-free re-review of the corrected delta
+`openspec/changes/harden-catalog-inference-2/specs/catalog-inference/spec.md`
+(the same two MODIFIED requirements; 12 + 5 scenarios) against dev
+`76d3ef2e` (detached worktree `hejbro-worktrees/d106-catalog-inference-2-r4`,
+`packages/cli/dist/cli.js`, hejbro v0.2.0-pre.1), which carries the
+change and its round-1, round-2 and round-3 corrections. This round is
+narrow by design: it decides whether R3-B1 (the `Not inferred: no table
+or enum to declare in schema "X".` lines printed in `--schema` flag
+order) is closed, and whether the correction opened an ordering
+contradiction in any other list the report prints or in either refusal
+diagnostic. Read: the delta, the two base requirements it replaces
+(`openspec/specs/catalog-inference/spec.md`, diffed sentence by
+sentence), the round-1, round-2 and round-3 text above (Method, every
+B and N, both scenario lists), `skills/hejbro/SKILL.md`,
+`skills/hejbro/references/{brownfield-adoption,polyrepo}.md`,
+`README.md`, every `--help`, the built packages as installed from
+`file:` into the scratch projects, the round-3 corpus under
+`/private/tmp/d106-cf-r3/` (read-only: `INDEX.txt`, `sql/r3.sql`,
+`sql/loc.sql`, the `proj-r3/runs/imp-order-notinf.*`,
+`proj-r3-pull/runs/pull-order-notinf.*`, `imp-header-order.*`,
+`imp-pair-*`, `imp-order-schema.*`, `imp-triple.stderr`, `proj-band/
+runs/imp.stdout`, `proj-band-pull/runs/pull.stdout`, `proj-loc/runs/*`
+and the helper scripts), and the archived
+`2026-09-06-add-vendored-related/evaluation.md` for shape. Not read:
+`proposal.md`, `design.md`, `tasks.md`, `.blackbox/`, `packages/*/src`,
+`packages/*/test`, `examples/*/test`, archived proposals, issues, PRs,
+git log, changesets. No tool result showed forbidden material. The
+round-1, round-2 and round-3 text above was `md5`-checked
+(`30a42005…`) before this section was appended and is untouched.
+
+### Method
+
+One `postgres:17-alpine` (container `d106-cf-r4-pg`, host port 55840,
+`log_statement=all`, removed afterwards). Every input is built with
+`psql`, never with hejbro, and every project is a real one (`hejbro
+init`, `package.json` pointing `hejbro`, `@hejbro/core`, `@hejbro/query`,
+`@hejbro/pg` at the built packages through `file:` plus
+`pnpm.overrides`). Everything is kept under `/private/tmp/d106-cf-r4/`
+(`INDEX.txt` lists it): `sql/` (the inputs), one `proj-*/` per database
+and command with every stdout/stderr/exit saved under `runs/`.
+
+- **`r3` replayed and extended** (`sql/r3.sql` copied from round 3;
+  `sql/r3-ord-ext.sql` adds the empty schemas `zed`, `abc`, `"Zed"`,
+  `"ABC"`; `sql/r3-order-ext.sql` rebuilds round 3's `order_a."At"` /
+  `order_z."Zt"`; `sql/r3-band-ext.sql` rebuilds `band.t2`'s `z_fk` /
+  `y_fk`; `sql/r3-wayout.sql` records the two mutations of the way-out
+  walk). Round 3's R3-B1 inputs re-run verbatim on `import` and `pull`
+  (`proj-r3/runs/imp-order-notinf`, `imp-pair-fn-BadFn`,
+  `imp-pair-BadSeq-empty`, `imp-header-order`, `imp-order-schema`, and
+  the `proj-r3-pull/runs/pull-*` twins), then this round's own flag
+  orders: a capital beside lowercase in reverse code-point order
+  (`--schema zed --schema abc --schema Zed --schema ABC --schema nope
+  --schema empty_s`), a repeated flag (`empty_s nope empty_s`; `zed
+  zed`; `bad_only Gx bad_only`; `good_with_bad good_with_bad`), a
+  schema that does not exist beside one that is empty (`nope empty_s
+  "Bad Empty" nope2`; `nope2 nope`), a successful run whose starter
+  header carries the list (`zed good_with_bad Zed nope abc ABC`), the
+  `nothing-declarable` set in round 3's flag order (`two_bad
+  bad_enum_only Gx "Gx Enum" bad_only`), and a mixed set (`zed
+  bad_only Gx nope "Bad Seq" "Gx Both"`). Both refusal diagnostics'
+  way out followed literally: `create table zed.t (...)` and the
+  ord-cap flags re-run; `alter table bad_only."Only" rename to only_t`
+  and `--schema Gx --schema bad_only --schema nope` re-run, on `import`
+  and `pull`. `band` re-imported and re-pulled and diffed against
+  round 3's stdout.
+- **`r4` (`sql/r4.sql`, projects `proj-r4`, `proj-r4-pull`)**, the
+  richer catalog: schemas `zeta_s` and `alpha_s` passed as `--schema
+  zeta_s --schema alpha_s --schema Mid` so flag order and code-point
+  order disagree, plus the badly named `"Mid"` holding a table; roles
+  `zrole`, `arole`, `"Role_Cap"` (grant, grant, policy); enums
+  `zeta_s."Zenum"`, `zeta_s.kind`, `alpha_s."aEnum"`, `alpha_s.kind2`;
+  standalone sequences `zseq`, `aseq`, `"Seq_Cap"`, `zseq2`,
+  `unowned_for_default`; omitted tables `zeta_s."A_Bad"`,
+  `alpha_s."Z_Bad"`, `"Zz"`, `"bad-dash"`; kept tables `zeta_s.b_tbl`
+  (created before `a_tbl`, which references it) holding name-cause
+  columns `"Col_Z"`, `"col_A"`, `"_lead"`, an enum-cause `zcol_e`, a
+  type-cause `zm money`, a `nextval` default on `zseq`, generated
+  columns `g_z` / `a_g` naming the omitted columns, own-name objects
+  `"Z_Chk"`, `"a_Chk"`, `"Z_Uq"`, `"a_Uq"`, `"Z_Idx"`, `"a_Idx"`,
+  cascade objects `z_cchk`, `a_cchk`, `m_cchk`, `z_cuq`, `a_cuq`,
+  `z_cidx`, `a_cidx`, `m_cidx`, `e_cidx`, kept `z_uq`, `a_uq`,
+  `keep_idx`, primary key `pk_b_tbl`; `zeta_s.a_tbl` with keys
+  `"FK_Z"`, `"FK_A"` (kept under derived names), `z_fk` / `a_fk` onto
+  the omitted tables, `m_fk` / `b_fk` onto the omitted columns, `k_fk`
+  into `"Mid".t`; `alpha_s.z_tbl` (created before `y_tbl`, which
+  references it) with `"Col_Y"`, `am point`, `"Y_Chk"`, `y_cchk`,
+  `"Y_Uq"`, `y_uq`, `"Y_Idx"`, `y_cidx`, and `alpha_s.y_tbl` with a
+  `"PK_Y"` primary key and a `nextval` on `unowned_for_default`; two
+  functions, two views. Every object was created in an order that
+  differs from code-point order. Imported, imported again with the
+  flags reversed, pulled, compiled under `tsc --strict
+  --exactOptionalPropertyTypes`, baselined, migrated and checked.
+- **`ord_s` (`sql/r4-ord.sql`, project `proj-ord`)**: one schema whose
+  starter-file lists carry names where code-point order (`2` 0x32
+  before `_` 0x5F), ICU collation order (`_` before `2`; measured with
+  Node's `localeCompare`: `["a_c","a2c"]`), column order and creation
+  order all differ: enums `e_n` (values `z`, `a`) and `e2n`; tables
+  `t_a`, `t2a`, `t_b`; foreign keys `a_c` (on `zz`), `a2c` (on `aa`),
+  `b_c` (on `mm`); checks `z_k`, `z2k`, `y_k`; indexes `i_x`, `i2x`,
+  `h_x`. Imported under `C`, `en_US.UTF-8` and `ko_KR.UTF-8`.
+- **`loc4` (`sql/loc4.sql`, project `proj-loc4`)**: five empty schemas
+  `ez`, `e_a`, `"é_nfc"` (U+00E9), `"é_nfd"` (`e` + U+0301), `"E_cap"`,
+  imported under the three locales with the flags in a non-code-point
+  order. **`loc`** (round 1's `sql/loc.sql`, project `proj-loc`)
+  replayed under the three locales, then baselined, migrated and
+  checked so the inventory's order could be set beside the report's.
+
+Execution rows: 46 recorded CLI invocations (import 21, of which 12
+refused by design; pull 19, of which 10 refused by design; baseline 2,
+migrate 2, check 2) plus 9 locale imports and 1 strict `tsc` compile,
+10 `init`s, 4 databases loaded, 2 way-out mutations. Load average
+4.4-5.9 throughout; no command timed out.
+
+### Blocking findings
+
+None. R3-B1 is closed on this build (S1-S3 below), and no other list
+the report prints, no starter-file list, and neither refusal
+diagnostic contradicts the code-point sentence on any input
+constructed (S4-S12).
+
+### Non-blocking findings
+
+- **R4-N1 -- A repeated `--schema` flag names the schema twice in
+  `pull`'s `pulled` line, lock and contract metadata.** `hejbro pull
+  --db-url .../r3 --schema good_with_bad --schema good_with_bad` into
+  a fresh project (`proj-rep-pull/runs/pull-rep.stdout`, exit 0) prints
+  `pulled r3 (good_with_bad, good_with_bad)`; `hejbro.lock` carries
+  `"schemas": ["good_with_bad", "good_with_bad"]` and `contract.ts`
+  line 36 `schemas: ["good_with_bad", "good_with_bad"]`, and the
+  `contractHash` differs from the single-flag pull's
+  (`proj-rep-pull1`: `0360a861…` against `f2f247f2…`), while
+  `snapshot.sql` and `schema.json` are byte-identical between the two.
+  The same flags on `import` write one file with one header and print
+  one `created` line (`proj-r3/runs/imp-rep-success`, `out-rep3/`);
+  the refusals dedupe (`--schema zed --schema zed` prints one `Not
+  inferred` line and `schema(s) zed`; `bad_only Gx bad_only` prints
+  `schema(s) Gx, bad_only`). No delta sentence covers the `pulled`
+  line or the lock; the reference does: "The `pulled …` line, the
+  lock's own `schemas`, and the contract's own metadata all name
+  exactly the schemas that actually contributed something to the
+  snapshot" (`brownfield-adoption.md` lines 540-543) -- a schema named
+  twice is not "exactly". Whether this predates the change was not
+  measured (no older build was run). Disposition: fix (dedupe the flag
+  list once, where the diagnostics already do).
+- **R4-N2 -- The starter's `foreignKeys` list sorts by the key's
+  columns, not by the `name:` it prints.** `ord_s.t_b`
+  (`proj-ord/out-C/ord_s.schema.ts`): `foreignKeys: [{ columns:
+  [t.aa], …, name: "a2c" }, { columns: [t.mm], …, name: "b_c" }, {
+  columns: [t.zz], …, name: "a_c" }]` -- the order of the columns
+  `aa`, `mm`, `zz` (equally the derived names `t_b_aa_fk`,
+  `t_b_mm_fk`, `t_b_zz_fk`), where the constraint names would order
+  `a2c`, `a_c`, `b_c` and creation order was `a_c`, `a2c`, `b_c`. The
+  same file's `indexes` (`h_x`, `i2x`, `i_x`) and `checks` (`y_k`,
+  `z2k`, `z_k`) sort by the name they print. The list is code-point
+  ordered on its key and byte-identical under the three locales, so
+  the sentence "every list the reading orders by name … SHALL be
+  ordered by code points" holds; noted because a reader sees the
+  `name:` fields out of order beside two sibling lists that are not.
+  Disposition: by design or docs.
+- **Carried, evidence unchanged by the correction.** R3-N1 (a badly
+  named schema that lost nothing never names what it holds: `"Bad
+  Seq"` prints no sequence line in `proj-r3/runs/imp-mixed.stdout`),
+  R3-N2, R3-N3 (`Guessed role names: postgres.` on `good_with_bad`
+  with no grant), R3-N4 ("the only thing that schema would have
+  declared" on both `two_bad` lines, `imp-decl-order.stdout` lines
+  8-9), R3-N6 (the foreign-key kind still prints two lists: `r4`'s
+  `a_fk`, `k_fk`, `z_fk` then `b_fk`, `m_fk`, `proj-r4/runs/imp.stdout`
+  lines 55-59) and R3-N7 are as round 3 measured them; the `band`
+  import and pull are byte-identical to round 3's stdout
+  (`proj-r3/runs/imp-band2.stdout`, `proj-r3-pull/runs/pull-band2.stdout`
+  against `/private/tmp/d106-cf-r3/proj-band/runs/imp.stdout` and
+  `proj-band-pull/runs/pull.stdout`, the `created` path aside), and
+  the `loc` import under the three locales is byte-identical to round
+  3's (`proj-loc/run-*.stdout`). R3-N5 (the refusal diagnostics listed
+  schemas in flag order) is fixed on this build (S4).
+
+### Scenarios verified
+
+Requirement 2, *The loss is announced, with the way out* -- the
+universal code-point sentence and R3-B1:
+
+1. **Round 3's R3-B1 inputs, re-run verbatim.** `import --schema nope
+   --schema fn_only --schema empty_s --schema "Bad Empty" --schema
+   dom_only` (`proj-r3/runs/imp-order-notinf.stdout`) now prints the
+   five lines `"Bad Empty"`, `"dom_only"`, `"empty_s"`, `"fn_only"`,
+   `"nope"` (lines 4-8) where round 3 printed them in flag order; the
+   `pull` twin the same (`proj-r3-pull/runs/pull-order-notinf.stdout`
+   lines 4-8); `fn_only "Bad Fn"` prints `"Bad Fn"`, `"fn_only"`;
+   `"Bad Seq" empty_s "Bad Empty"` prints `"Bad Empty"`, `"Bad Seq"`,
+   `"empty_s"`; the successful `nope good_with_bad empty_s "Bad
+   Empty"` prints `"Bad Empty"`, `"empty_s"`, `"nope"` on stdout and
+   in `out-header-order/good_with_bad.schema.ts` lines 9-11. Every
+   refusal still carries the full report on stdout (10, 7, 7 lines)
+   and the two-line diagnostic on stderr, exit 1.
+2. **This round's flag orders.** Reverse code-point order with a
+   capital beside lowercase (`zed abc Zed ABC nope empty_s`) prints
+   `"ABC"`, `"Zed"`, `"abc"`, `"empty_s"`, `"nope"`, `"zed"` in
+   `import` and `pull` (`imp-ord-cap`, `pull-ord-cap`); a schema that
+   does not exist beside one that is empty (`nope empty_s "Bad Empty"
+   nope2`) prints `"Bad Empty"`, `"empty_s"`, `"nope"`, `"nope2"`,
+   the absent ones sorted with the rest; two absent schemas alone
+   (`nope2 nope`) print `"nope"`, `"nope2"`; a repeated flag (`empty_s
+   nope empty_s`) prints each schema once, `"empty_s"`, `"nope"`, and
+   `zed zed` prints one line. The successful `zed good_with_bad Zed
+   nope abc ABC` prints `"ABC"`, `"Zed"`, `"abc"`, `"nope"`, `"zed"`
+   on stdout and in `out-hdr2/good_with_bad.schema.ts` lines 9-13,
+   and the header's twelve lines equal the stdout minus the `created`
+   line (`diff`: only the closing `*/`); `pull`'s twin prints the same
+   five lines and `pulled r3 (good_with_bad)`, lock `schemas`
+   `["good_with_bad"]`.
+3. **The new list does not depend on the locale** (scenario *The
+   report's order does not depend on the locale*, applied to the
+   corrected list). `loc4` under `C`, `en_US.UTF-8`, `ko_KR.UTF-8`
+   with flags `"é_nfc" ez "E_cap" "é_nfd" e_a`: stdout and stderr
+   byte-identical across the three, printing `"E_cap"`, `"e_a"`,
+   `"ez"`, `"é_nfd"` (NFD, `e` then U+0301), `"é_nfc"` (U+00E9) --
+   code points, where a collation would put `E_cap` after `e_a` and
+   the NFC/NFD pair together as equals (`proj-loc4/runs-*.stdout`).
+4. **Both refusal diagnostics name schemas once each, by code points**
+   (R3-N5, fixed). `import-nothing-declarable` for flags `two_bad
+   bad_enum_only Gx "Gx Enum" bad_only` reads `schema(s) Gx, Gx Enum,
+   bad_enum_only, bad_only, two_bad` (`imp-decl-order.stderr`; round 3
+   printed the flag order); `"Gx Enum" Gx order_z order_a` reads `Gx,
+   Gx Enum, order_a, order_z`; the mixed `zed bad_only Gx nope "Bad
+   Seq" "Gx Both"` reads `Gx, Gx Both, bad_only` while the three
+   `Not inferred` lines above it read `"Bad Seq"`, `"nope"`, `"zed"`;
+   `bad_only Gx bad_only` reads `Gx, bad_only`. `import-nothing-to-
+   infer` reads `ABC, Zed, abc, empty_s, nope, zed` for the ord-cap
+   flags and `Bad Empty, dom_only, empty_s, fn_only, nope` for round
+   3's. Every `pull-*` twin's stderr differs only in the command name
+   and code prefix (`proj-r3-pull/runs/*.stderr`).
+5. **Both ways out followed to the end.** `nothing-to-infer`'s "confirm
+   the schema name(s) are correct and that they hold a table or enum
+   type to declare, then rerun": after `create table zed.t (id integer
+   primary key)` the ord-cap flags exit 0, write
+   `out-cap-wayout/zed.schema.ts`, and print the five remaining
+   schemas `"ABC"`, `"Zed"`, `"abc"`, `"empty_s"`, `"nope"` on stdout
+   and in the header (`imp-ord-cap-wayout`); `pull` writes the bundle,
+   `pulled r3 (zed)`. `nothing-declarable`'s "follow the way out that
+   line names (a rename in the database), then rerun": after `alter
+   table bad_only."Only" rename to only_t`, `--schema Gx --schema
+   bad_only --schema nope` exits 0, writes `out-decl-wayout/
+   bad_only.schema.ts`, keeps `Omitted: schema "Gx"` and `Not
+   inferred: … "nope"`, and announces the renamed table's kept
+   `Only_pkey` under the derived `only_t_pkey` with the whole way out
+   (`imp-decl-wayout`); `pull` prints `pulled r3 (bad_only)`.
+6. **Every list the `r4` report prints is in code-point order,
+   whatever the flag order** (`proj-r4/runs/imp.stdout`; `imp-rev`
+   with the flags reversed differs only in the `created` paths; the
+   `pull` differs only in the line tails and `pulled r4 (alpha_s,
+   zeta_s)` for `created`). `created`: `alpha_s` before `zeta_s`.
+   Guessed role names: `Role_Cap, arole, postgres, zrole`. Not
+   inferred typed columns: `alpha_s.z_tbl.am`, `zeta_s.b_tbl.zm`;
+   sequences: `alpha_s.unowned_for_default`, `alpha_s.zseq2`,
+   `zeta_s.Seq_Cap`, `zeta_s.aseq`, `zeta_s.zseq` (created `zseq`,
+   `aseq`, `Seq_Cap`, `zseq2`, `unowned_for_default`). Approximated
+   UNIQUE: `alpha_s.z_tbl.y_uq`, `zeta_s.b_tbl.a_uq`, `zeta_s.b_tbl.z_uq`;
+   nextval: `alpha_s.y_tbl.an`, `zeta_s.b_tbl.zn`; foreign keys:
+   `FK_A`, `FK_Z` (created `FK_Z` first); primary keys:
+   `alpha_s.y_tbl.PK_Y`, `zeta_s.b_tbl.pk_b_tbl` (created `pk_b_tbl`
+   first). Omitted: schema `Mid`; tables `alpha_s.Z_Bad`, `alpha_s.Zz`,
+   `alpha_s.bad-dash`, `zeta_s.A_Bad` (created `A_Bad` first); enum
+   types `alpha_s.aEnum`, `zeta_s.Zenum` (created `Zenum` first); the
+   own-name index-and-unique list `alpha_s.z_tbl.Y_Idx`, `Y_Uq`,
+   `zeta_s.b_tbl.Z_Idx`, `Z_Uq`, `a_Idx`, `a_Uq`; own-name checks
+   `Y_Chk`, `Z_Chk`, `a_Chk`; cascade indexes `y_cidx`, `a_cidx`,
+   `e_cidx`, `m_cidx`, `z_cidx`; cascade checks `y_cchk`, `a_cchk`,
+   `m_cchk`, `z_cchk`; cascade uniques `a_cuq`, `z_cuq`; generated
+   `a_g`, `g_z` (physical order `g_z`, `a_g`); foreign keys `a_fk`,
+   `k_fk`, `z_fk` then `b_fk`, `m_fk`; own-name columns
+   `alpha_s.z_tbl.Col_Y`, `zeta_s.b_tbl.Col_Z`, `zeta_s.b_tbl._lead`,
+   `zeta_s.b_tbl.col_A` (`C` 0x43, `_` 0x5F, `c` 0x63; physical order
+   `Col_Z`, `col_A`, `_lead`, `Col_Y`). Bands in the stated order:
+   Guessed, Not inferred, Approximated, Omitted, the closing line.
+7. **Lists inside a line.** The omitted-enum line's column list reads
+   `"zeta_s.a_tbl.acol_e", "zeta_s.b_tbl.zcol_e"` where `b_tbl` and
+   its column were created first (`imp.stdout` line 32); `Guessed role
+   names` as above; the `pulled` line as above.
+8. **No list mixes an own-name omission with a cascade one.** In `r4`
+   the own-name `Z_Idx`/`Z_Uq`/`a_Idx`/`a_Uq` and `Z_Chk`/`a_Chk` print
+   before the first cascade line although `a_cidx` and `a_cchk` would
+   sort among them in one merged list; within each cascade list the
+   name-, enum- and type-caused lines sort by code points alone
+   (`a_cidx`, `e_cidx`, `m_cidx`, `z_cidx`). The two foreign-key lists
+   are both cascade lists (R3-N6 carried).
+9. **The shared comparator.** `proj-r4`: `baseline` loads 8
+   declarations, `migrate` registers the file, `check` exits 1 listing
+   as unmanaged exactly the report's tables (`Z_Bad`, `Zz`, `bad-dash`,
+   `A_Bad`), the columns `Col_Y`, `aenumcol`, `am`, `acol_e`, `Col_Z`,
+   `_lead`, `a_g`, `col_A`, `g_z`, `zcol_e`, `zm`, the indexes `PK_Y`,
+   `Y_Idx`, `Y_Uq`, `y_cidx`, `Z_Idx`, `Z_Uq`, `a_Idx`, `a_Uq`,
+   `a_cidx`, `a_cuq`, `e_cidx`, `m_cidx`, `pk_b_tbl`, `z_cidx`,
+   `z_cuq` and the checks `Y_Chk`, `y_cchk`, `Z_Chk`, `a_Chk`,
+   `a_cchk`, `m_cchk`, `z_cchk` -- the same relative order as the
+   report's lists (`proj-r4/runs/check.stdout`); `check`'s stderr
+   names `alpha_s.y_tbl.y_tbl_pkey`, `zeta_s.a_tbl.a_tbl_ref_ok_fk`,
+   `a_tbl_ref_ok2_fk` and `zeta_s.b_tbl.b_tbl_pkey` as missing and
+   lists `PK_Y` and `pk_b_tbl` as unmanaged indexes, exactly what the
+   four Approximated lines said. `proj-loc`'s `check` inventory
+   (`B_table`, `Zeta`, the NFD table, the NFC table; `IDX_a`, `IDX_b`,
+   `idx_A`; the two accented columns) is byte-identical to round 3's
+   and to the report's Omitted order under every locale.
+10. **Every starter-file list is code-point ordered, locale-free**
+    (requirement 1's closing sentence). `ord_s` under three locales:
+    files byte-identical; imports `check, index, integer, pgEnum,
+    schema, sql, table`; enums `e2n` then `e_n`; tables `t2a`, `t_a`,
+    then `t_b` (its dependency); indexes `h_x`, `i2x`, `i_x`; checks
+    `y_k`, `z2k`, `z_k`; unique indexes `t_a_aa_key`, `t_a_mm_key`,
+    `t_a_zz_key`; enum values `["z","a"]` keep the catalog's order;
+    columns keep physical order. `r4`'s `b_tbl` indexes `a_uq`,
+    `keep_idx`, `z_uq` (created `z_uq`, `a_uq`, `keep_idx`); `b_tbl`
+    before `a_tbl` and `z_tbl` before `y_tbl` (dependencies). The
+    foreign-key list is R4-N2. The `r4` starter compiles under `tsc
+    --strict --exactOptionalPropertyTypes` (exit 0).
+11. **The pull bundle's own lists.** `proj-r4-pull`: `hejbro.lock`
+    `schemas` `["alpha_s", "zeta_s"]` and `contract.ts` `schemas:
+    ["alpha_s", "zeta_s"]`, `roles: ["Role_Cap", "arole", "postgres",
+    "zrole"]` for flags given `zeta_s` first; `schema.json` `roles`
+    the same. Not a delta sentence; measured so the correction's reach
+    is known.
+12. **Refusing does not suppress the report.** All 22 refusals this
+    round carry the full report on stdout (5-12 lines) before the
+    diagnostic on stderr.
+
+### Verdict
+
+**ARCHIVE** -- 0 blocking, 2 non-blocking (R4-N1, R4-N2), 12 scenario
+and universal-sentence entries verified. R3-B1 is closed on the shipped
+build: the `Not inferred: no table or enum to declare` lines sort by
+code points in `import`, in `pull` and in the starter header for every
+flag order constructed (reverse code-point order, a capital beside
+lowercase, a repeated flag, an absent schema beside an empty one, an
+NFC/NFD pair under three locales), both refusal diagnostics name each
+schema once in that order, and every other list the report prints --
+the Omitted band's lists, the Not-inferred band's lists, the Guessed
+role names, the Approximated lists, the enum line's column list, the
+`created` and `pulled` lines -- sorts the same way on a catalog built
+so that flag order, creation order and physical order all disagree
+with it; the `band` and `loc` replays are byte-identical to round 3,
+so the correction changed nothing else that was measured.
