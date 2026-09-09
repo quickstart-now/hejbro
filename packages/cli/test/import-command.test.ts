@@ -701,7 +701,11 @@ describe("runImport / 3.1", () => {
 		);
 
 		expect(outcome.exitCode).toBe(0);
-		const sortedLines = [emptyLine("Alpha"), emptyLine("beta"), emptyLine("zeta")];
+		const sortedLines = [
+			emptyLine("Alpha"),
+			emptyLine("beta"),
+			emptyLine("zeta"),
+		];
 		expect(outcome.stdout.filter(isEmptyLine)).toEqual(sortedLines);
 		const fileLines = readFileSync(
 			join(cwd, "src/schema/app.schema.ts"),
