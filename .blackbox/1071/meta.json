@@ -1,20 +1,15 @@
 {
   "version": 3,
   "kind": "issue",
-  "ref": "quickstart-now/hejbro#487",
-  "title": "core select().union() never checks key-set compatibility",
-  "parent": "quickstart-now/hejbro#282",
+  "ref": "quickstart-now/hejbro#1071",
+  "title": "query: select(ref) over a CTE reference type-checks as rows but compile() throws missing-from-table",
+  "parent": "quickstart-now/hejbro#995",
   "status": "open",
   "opened": "2026-09-09",
   "closed": null,
   "decisions": [],
   "work": [],
   "prs": [
-    {
-      "number": 1062,
-      "role": "refs",
-      "pinnedAt": "2026-09-09T01:38Z"
-    },
     {
       "number": 1072,
       "role": "refs",
