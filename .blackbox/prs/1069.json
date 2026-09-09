@@ -1,0 +1,57 @@
+{
+  "version": 3,
+  "number": 1069,
+  "ref": "quickstart-now/hejbro#1069",
+  "title": "fix(query): a set-op body of db.with folds its branches (#738 d106 r1)",
+  "head": "4c286521206c8c337f057dff78d2b33e819e46b5",
+  "headRef": "fix-widen-set-op-d106-r1",
+  "base": "dev",
+  "merged": null,
+  "pinnedAt": "2026-09-09T02:58Z",
+  "refs": [
+    {
+      "path": ".changeset/widen-set-op-execute-round-1.md",
+      "blob": "34647f3b34a634e7750aafec4e1cff9c9d58dc71"
+    },
+    {
+      "path": "README.md",
+      "blob": "1eb0bc212d083cde7da79d6f6cb833f3eaaa1473"
+    },
+    {
+      "path": "openspec/changes/widen-set-op-execute/evaluation.md",
+      "blob": "04a5c44cc4f6b15d8d07826ab677802ae4dc1775"
+    },
+    {
+      "path": "openspec/changes/widen-set-op-execute/specs/query-type-inference/spec.md",
+      "blob": "25f205f17850edbc39055b0c9f87573636cff09f"
+    },
+    {
+      "path": "openspec/changes/widen-set-op-execute/tasks.md",
+      "blob": "ea24f7e5e6d3c4d28c22367b5e02732cdda7b407"
+    },
+    {
+      "path": "openspec/task-times.csv",
+      "blob": "69eb01750a32ee8599f6da1c3b7cb28c0345902e"
+    },
+    {
+      "path": "packages/query/src/db/chain.ts",
+      "blob": "913579c2082ac872c291a027df7d1b8458228784"
+    },
+    {
+      "path": "packages/query/src/types/select-result.ts",
+      "blob": "092e4e8913de7a0f0d528cf780339d5b6ac562d5"
+    },
+    {
+      "path": "packages/query/test/db/with-body-set-op.types.test.ts",
+      "blob": "26e484f99e90456f87bbf79bf8208357b0fe89f0"
+    },
+    {
+      "path": "packages/query/test/types/chain-types.test.ts",
+      "blob": "81d89a36ac0f84fdec7ae0f9fb894a4923e6473f"
+    },
+    {
+      "path": "skills/hejbro/references/query-layer.md",
+      "blob": "df485b11cca37930799bcb5b4b69539047f54608"
+    }
+  ]
+}

@@ -126,10 +126,11 @@ export type SelectResult<
 		? { readonly [K in keyof TColumns]: SelectColumnResult<TColumns[K]> }
 		: TProjection extends Record<string, Expr>
 			? {
-					readonly [K in keyof TProjection]: NestedOrExprResult<
-						TProjection[K],
-						TLeftJoined
-					>;
+					// A CTE reference carries a symbol-keyed meta member beside
+					// its fields; it is not a column and never reaches a row.
+					readonly [K in keyof TProjection as K extends symbol
+						? never
+						: K]: NestedOrExprResult<TProjection[K], TLeftJoined>;
 				}
 			: never;
 

@@ -8,9 +8,12 @@ change removes — a core-built stage now carries both branches, so the
 handle resolves the same union the chain does. The measured Postgres
 facts and every other scenario move unchanged into the requirement
 below.
-**Migration**: none for callers; a core-built set operation's awaited
-row type widens from the left branch's row to the branch union, which
-every existing consumer already accepts.
+**Migration**: a core-built set operation's awaited row type widens
+from the left branch's row to the branch union; a consumer that assigned
+that row to the left branch's narrower type (`const n: number = …` over
+`integer` ∪ `bigint`, `const note: string = …` over a right branch that
+declares the column nullable) must widen its own annotation, and every
+other caller is unaffected.
 
 ## ADDED Requirements
 
@@ -51,9 +54,15 @@ in EITHER branch SHALL be nullable in the result.
 
 That union SHALL hold on every surface that executes a set operation:
 the chain, where both branches' row types are resolved before they are
-combined, a set operation built from the core builder's own combinators
-executed through a db handle, and one declared as a CTE body, whose own
-reference reads the same folded row.
+combined; a set operation built from the core builder's own combinators
+executed through a db handle — `handle.execute(...)` and the body
+`handle.with(...)` returns alike, the latter folding each branch's own
+untracked read (an object-projected column widened, a whole-table
+column at its declared nullability, the rule that position already has
+for a plain body); and one declared as a CTE body, whose own reference
+reads the same folded row. A `withCte(...)` statement passed to
+`handle.execute` is not a typed surface (its rows read as the untyped
+driver row) and is outside this requirement.
 A core-built stage carries both branch stages, so each branch resolves
 to its own row — with its own left-joined tracking — before the two
 are combined; a column is nullable in the result because a branch
@@ -91,7 +100,9 @@ driver row's value.
   still arrive converted per the left branch's declarations, so a
   column the branches declare at different widths, which Postgres
   promotes (`integer` ∪ `bigint` → `bigint`), arrives in the driver's
-  raw shape from either branch (measured)
+  raw shape from either branch when the left branch is the narrower
+  declaration, and converted by the left branch's own codec — inside
+  the union — when it is the wider one (measured in both orders)
 
 #### Scenario: A left-joined branch widens the core-built result, an inner-joined one does not
 - **WHEN** one branch of a core-built set operation projects a column
@@ -110,8 +121,9 @@ driver row's value.
 
 #### Scenario: A set operation declared as a CTE body reads back as the union of its branches
 - **WHEN** a set operation built with the core combinators is declared as
-  a CTE body — `withCte((w) => w.as("x", select(a).union(select(b))))` —
-  and the CTE's own reference is read
+  a CTE body — `withCte((w) => { const x = w.as("x",
+  select(a).union(select(b))); return select({ k: x.k }, x); })` — and
+  the CTE's own reference is read
 - **THEN** the reference's columns type as the union of both branches'
   read-back types — a column declared nullable in either branch reading
   nullable, a column whose branches declare different read types reading

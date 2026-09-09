@@ -76,6 +76,15 @@
       "title": "1.5 P1-P4: CTE merge-shape spikes, observation-point correction, #1054 residue",
       "pr": null,
       "decisions": []
+    },
+    {
+      "id": "W2",
+      "at": "2026-09-09T02:30Z",
+      "title": "D106 round 1: the db.with body folds a set-op body (B1), N1-N8 corrected, N9 observed",
+      "pr": null,
+      "decisions": [
+        "R5"
+      ]
     }
   ],
   "prs": [
@@ -83,6 +92,11 @@
       "number": 1062,
       "role": "refs",
       "pinnedAt": "2026-09-09T01:38Z"
+    },
+    {
+      "number": 1069,
+      "role": "refs",
+      "pinnedAt": "2026-09-09T02:58Z"
     }
   ],
   "origin": null,
