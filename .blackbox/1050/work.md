@@ -1108,3 +1108,40 @@ two-message answer (hold, then the final A/B/C ruling) had already
 arrived by the time R1's own work was reached, so no distinct idle-wait
 segment is separable from the rest of the window.
 
+<a id="w14"></a>
+## W14 — N2: the two SetOpResult recursions fold different inputs, not the same one twice
+
+_2026-09-09T00:06Z_
+
+N2 (review round 1, facts-only, no action taken): the two recursions
+over the shared `SetOpResult` symbol fold DIFFERENT inputs, and that
+difference is observable, not incidental. `db.ts`'s `SetOpBranchRow`
+recurses over each branch's own RESOLVED row (`SelectResult`, its own
+left-joined tracking included via `Exclude<TLeftJoined, undefined>`);
+`with.ts`'s `CteSetOpBranchProjection` recurses over each branch's own
+RAW projection (`projectionInput`, no join tracking at all -- a CTE
+body carries no left-joined set outward, task 1.5a's own invariant).
+For the identical two branches (one left-joins a table, the other
+inner-joins the same table), `db.execute()` on that set operation reads
+the projected column as `tag: string | null`; `w.as(...)`'s own CTE
+reference reads the same column as `tag: string` -- by design (the
+CTE-reference contract's own untracked-joins rule, unrelated to this
+change), but the two recursions' own INPUTS are why, not `SetOpResult`
+itself (`SetOpResult`'s own per-column union formula is identical
+either way -- it never sees a join-tracking difference, only whatever
+row/projection type each recursion already resolved before handing it
+in).
+
+This is the fact the final commit's own two-clause recursion comments
+encode (`5bc8d62c`, `packages/query/src/db/db.ts` /
+`packages/core/src/query/with.ts`): "the per-column union is the one
+shared rule -- change it in `SetOpResult`" (what W9's own bidirectional
+mutation already proved) paired with "what this recursion folds ...
+is its own -- change that here" (N2's own boundary, so a future change
+to one recursion's own INPUT resolution never silently reaches the
+other). The lead's own first-draft wording for these two comments
+("the rule lives in `SetOpResult` only — change it there, never here")
+was flagged in review as overreaching -- true for the fold FORMULA,
+false read as "this file carries no rule of its own" -- and withdrawn
+in favor of the two-clause form above before this commit landed.
+

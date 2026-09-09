@@ -99,6 +99,13 @@
       "title": "task-times recorded: wso group -- transplant-cell table and time-accounting notes restated",
       "pr": null,
       "decisions": []
+    },
+    {
+      "id": "W14",
+      "at": "2026-09-09T00:06Z",
+      "title": "N2: the two SetOpResult recursions fold different inputs, not the same one twice",
+      "pr": null,
+      "decisions": []
     }
   ],
   "prs": [],
