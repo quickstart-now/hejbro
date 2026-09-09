@@ -2,9 +2,9 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { hejbroError, throwHejbroError } from "@hejbro/core";
 import { defineCommand } from "citty";
-import { compareCodeUnits, listSchemaNames } from "../compare-code-units";
 import type { CheckDriverImporter } from "../check/driver";
 import { withCheckConnection } from "../check/driver";
+import { compareCodeUnits, listSchemaNames } from "../compare-code-units";
 import {
 	enumsInSnapshot,
 	sequencesInSnapshot,
