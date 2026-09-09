@@ -106,6 +106,13 @@
       "title": "N2: the two SetOpResult recursions fold different inputs, not the same one twice",
       "pr": null,
       "decisions": []
+    },
+    {
+      "id": "W15",
+      "at": "2026-09-09T00:25Z",
+      "title": "check:crap red, corrected mechanism: a load-timeout hook, not a shared-path deletion",
+      "pr": null,
+      "decisions": []
     }
   ],
   "prs": [],

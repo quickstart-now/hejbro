@@ -1145,3 +1145,56 @@ was flagged in review as overreaching -- true for the fold FORMULA,
 false read as "this file carries no rule of its own" -- and withdrawn
 in favor of the two-clause form above before this commit landed.
 
+<a id="w15"></a>
+## W15 — check:crap red, corrected mechanism: a load-timeout hook, not a shared-path deletion
+
+_2026-09-09T00:25Z_
+
+`check:crap`'s own first-attempt red (recorded in this session's own
+report to the planner, W12/W13's own surrounding text) carried a wrong
+mechanism, corrected here by the lead's own direct measurement.
+
+**Wrong (this session's own first read).** "Concurrent runs deleted a
+shared `/tmp/hejbro-*` directory, so the process's own cwd disappeared."
+No such shared path exists in the code: `grep` for glob-based `/tmp/
+hejbro-*` cleanup across the CLI test suite returns zero matches, and
+every fixture directory is created through `mkdtemp` (a unique,
+collision-proof name per test run, never a shared or predictable one).
+
+**Corrected (the lead's own measurement).** `vendor-check.test.ts`'s own
+git-fixture `link` hook times out at 10000ms under load; vitest then
+moves on to its own cleanup while that hook's subprocess is still
+alive, and THAT subprocess's own cwd disappears from under it —
+`uv_cwd ENOENT` is a downstream symptom of the timeout, not evidence of
+a shared-path deletion. The 135 leftover `/tmp/hejbro-*` directories
+observed are themselves a TRACE of runs that never reached their own
+cleanup step (because they timed out first), not the cause of anything.
+Classified as the #673 class (subprocess-spawning suite, hook timeout
+under load) — not a #102-style worktree-interference case (no shared
+directory, no cross-worktree deletion).
+
+**Adopted verdict form (lead-ratified): "4 PR-unrelated grounds + an
+explicit limit," not a bare "unrelated, ignore it."**
+1. The 3 changed files in the PR under test sit outside `packages/cli`
+   entirely, and their own diff is comment-only (13 lines, 0 code).
+2. The identical worktree ran this same gate at exit 0 three hours
+   earlier, and the only delta since then is those 13 comment lines
+   plus a blackbox-only commit.
+3. `check` and `check-types` both stayed at exit 0 throughout.
+4. Every failing test in the retry's own red run touches CLI
+   generate/verify/restore machinery — zero surface overlap with this
+   change's own set-operation types.
+   **Limit, stated plainly rather than folded into the verdict:** "PR-
+   unrelated" is settled by the four grounds above; "caused by
+   contended load" is a strong inference from the timeout's own shape
+   (10000ms hook, ENOENT immediately after), not confirmed by a
+   re-run on a quiet machine -- that confirmation was never attempted
+   here (gates were frozen team-wide before it could be).
+
+**One-line lesson, restated for the permanent record:** the error
+text's own surface direction (`cwd ... removed`) was read as the
+mechanism instead of as a symptom to trace backward from -- the actual
+order runs timeout-first, cleanup-second, ENOENT-third, the reverse of
+what the wording alone suggests. Trace a mechanism from the code path
+that produces the error, never from the error message's own grammar.
+
