@@ -1,20 +1,15 @@
 {
   "version": 3,
   "kind": "issue",
-  "ref": "quickstart-now/hejbro#1034",
-  "title": "import: partitioning, inheritance, UNLOGGED, comments and RLS enablement are dropped without a Not inferred line",
+  "ref": "quickstart-now/hejbro#1052",
+  "title": "import: a destination refusal after a completed catalog reading throws without printing the loss report",
   "parent": "quickstart-now/hejbro#995",
   "status": "open",
-  "opened": "2026-09-08",
+  "opened": "2026-09-09",
   "closed": null,
   "decisions": [],
   "work": [],
   "prs": [
-    {
-      "number": 1049,
-      "role": "refs",
-      "pinnedAt": "2026-09-08T16:58Z"
-    },
     {
       "number": 1060,
       "role": "refs",
