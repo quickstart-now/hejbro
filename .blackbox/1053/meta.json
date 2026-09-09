@@ -1,0 +1,21 @@
+{
+  "version": 3,
+  "kind": "issue",
+  "ref": "quickstart-now/hejbro#1053",
+  "title": "query: a CTE reference drops the nullability its entry acquired by left-joining",
+  "parent": "quickstart-now/hejbro#995",
+  "status": "open",
+  "opened": "2026-09-09",
+  "closed": null,
+  "decisions": [],
+  "work": [],
+  "prs": [
+    {
+      "number": 1062,
+      "role": "refs",
+      "pinnedAt": "2026-09-09T01:38Z"
+    }
+  ],
+  "origin": null,
+  "followUps": []
+}

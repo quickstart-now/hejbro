@@ -52,14 +52,40 @@ export type SelectProjection = Table | Record<string, Expr>;
 export type { OrderTermInput };
 export { resolveOrderTerm };
 
-/** A combined set-operation stage (add-set-operations, D103): carries the recursive node, whole-set `orderBy`/`limit`, and the same six combinators every select stage carries ({@link SetOpCombinators}) — so `(a union b) except c` chains naturally, and `c`'s own compatibility is checked exactly like `b`'s was (#487: this used to be a hand-duplicated, unchecked six rather than this intersection, which is how the chained position kept the gap after the first position was fixed). */
+/**
+ * A combined set-operation stage (add-set-operations, D103): carries the
+ * recursive node, whole-set `orderBy`/`limit`, and the same six combinators
+ * every select stage carries ({@link SetOpCombinators}) — so `(a union b)
+ * except c` chains naturally, and `c`'s own compatibility is checked
+ * exactly like `b`'s was (#487: this used to be a hand-duplicated,
+ * unchecked six rather than this intersection, which is how the chained
+ * position kept the gap after the first position was fixed).
+ *
+ * `TLeftStage`/`TRightStage` (widen-set-op-execute, task 1.1, design.md
+ * Q1/Q2): each branch's own stage type — a `SelectLimited<P, TLeftJoined>`
+ * for a select branch, or a nested `SetOpStage<...>` for `(a union b)
+ * except c`'s left side — carried so `@hejbro/query`'s `execute()` can
+ * resolve each branch's own row (its own left-joined tracking included)
+ * before folding them, the same two-step the chain surface already does.
+ * Both default to `unknown`: every existing one-argument `SetOpStage<P>`
+ * still assigns (`unknown` is the type top), so `with.ts`'s CTE body/
+ * anchor parameters and `db/chain.ts`'s branch-node accessor — both
+ * one-argument positions, Q2 — keep compiling unchanged. Nothing in this
+ * package reads either parameter: the runtime, the built node, the
+ * rendered SQL and the key-order guard are all untouched; only
+ * `@hejbro/query`'s `ExecuteResult` names them.
+ */
 export type SetOpStage<
 	TProjection extends SelectProjection = SelectProjection,
+	TLeftStage = unknown,
+	TRightStage = unknown,
 > = {
 	readonly setOpQuery: SetOpNode;
 	readonly projectionInput: TProjection;
-	orderBy(...terms: ReadonlyArray<OrderTermInput>): SetOpStage<TProjection>;
-	limit(count: number): SetOpStage<TProjection>;
+	orderBy(
+		...terms: ReadonlyArray<OrderTermInput>
+	): SetOpStage<TProjection, TLeftStage, TRightStage>;
+	limit(count: number): SetOpStage<TProjection, TLeftStage, TRightStage>;
 } & SetOpCombinators<TProjection>;
 
 /** What a combinator accepts as its other side: any select stage, or a prior combination. */
@@ -87,27 +113,64 @@ type CompatibleSetOpBranch<TProjection, TOther> = [
 	? never
 	: unknown;
 
-/** The six combinators every select stage carries (and every {@link SetOpStage} carries again) — each binds the OTHER branch's own projection (`TOther`) and gates it through {@link CompatibleSetOpBranch}, so a mismatched key set resolves the parameter to `never` and the call does not compile (#487). The runtime, the built node, and the rendered SQL are unchanged: this is a type-level narrowing only, and the result stays `SetOpStage<TProjection>` — the left branch's own projection, per SQL's own naming rule. */
-export type SetOpCombinators<TProjection extends SelectProjection> = {
-	union<TOther extends SelectProjection>(
-		other: SetOpBranch<TOther> & CompatibleSetOpBranch<TProjection, TOther>,
-	): SetOpStage<TProjection>;
-	unionAll<TOther extends SelectProjection>(
-		other: SetOpBranch<TOther> & CompatibleSetOpBranch<TProjection, TOther>,
-	): SetOpStage<TProjection>;
-	intersect<TOther extends SelectProjection>(
-		other: SetOpBranch<TOther> & CompatibleSetOpBranch<TProjection, TOther>,
-	): SetOpStage<TProjection>;
-	intersectAll<TOther extends SelectProjection>(
-		other: SetOpBranch<TOther> & CompatibleSetOpBranch<TProjection, TOther>,
-	): SetOpStage<TProjection>;
-	except<TOther extends SelectProjection>(
-		other: SetOpBranch<TOther> & CompatibleSetOpBranch<TProjection, TOther>,
-	): SetOpStage<TProjection>;
-	exceptAll<TOther extends SelectProjection>(
-		other: SetOpBranch<TOther> & CompatibleSetOpBranch<TProjection, TOther>,
-	): SetOpStage<TProjection>;
-};
+/**
+ * The branch object's own projection (widen-set-op-execute, task 1.1) —
+ * both {@link SelectLimited} and {@link SetOpStage} carry `projectionInput`
+ * structurally, so this reads it off whichever one `TBranch` actually is
+ * without re-deriving the {@link SetOpBranch} union's own two cases.
+ */
+type BranchProjection<TBranch> = TBranch extends {
+	readonly projectionInput: infer TProjection extends SelectProjection;
+}
+	? TProjection
+	: never;
+
+/**
+ * The six combinators every select stage carries (and every {@link
+ * SetOpStage} carries again) — each accepts the OTHER branch's own STAGE
+ * (`TOther`: the whole branch object, not only its projection) and gates
+ * it through {@link CompatibleSetOpBranch} on the two branches'
+ * projections, so a mismatched key set resolves the parameter to `never`
+ * and the call does not compile (#487).
+ *
+ * The LEFT branch's own stage type is `this` — polymorphic `this` inside a
+ * method position resolves per call site to whatever concrete stage the
+ * method was actually invoked on ({@link SelectLimited}'s own instantiation
+ * for a select stage, {@link SetOpStage}'s own for a nested `(a union b)
+ * except c`). `interface`, not `type` (the one other exception in this
+ * package, `kind/object-kind.ts`'s `ObjectKind`): polymorphic `this` in
+ * return position needs an interface; `type` cannot name it (TS2526), and
+ * threading the stage explicitly is circular (TS2456). The runtime, the
+ * built node, and the rendered SQL are unchanged: this is a type-level
+ * narrowing only, and the result keeps `TProjection` — the left branch's
+ * own projection, per SQL's own naming rule.
+ */
+export interface SetOpCombinators<TProjection extends SelectProjection> {
+	union<TOther extends SetOpBranch>(
+		other: TOther &
+			CompatibleSetOpBranch<TProjection, BranchProjection<TOther>>,
+	): SetOpStage<TProjection, this, TOther>;
+	unionAll<TOther extends SetOpBranch>(
+		other: TOther &
+			CompatibleSetOpBranch<TProjection, BranchProjection<TOther>>,
+	): SetOpStage<TProjection, this, TOther>;
+	intersect<TOther extends SetOpBranch>(
+		other: TOther &
+			CompatibleSetOpBranch<TProjection, BranchProjection<TOther>>,
+	): SetOpStage<TProjection, this, TOther>;
+	intersectAll<TOther extends SetOpBranch>(
+		other: TOther &
+			CompatibleSetOpBranch<TProjection, BranchProjection<TOther>>,
+	): SetOpStage<TProjection, this, TOther>;
+	except<TOther extends SetOpBranch>(
+		other: TOther &
+			CompatibleSetOpBranch<TProjection, BranchProjection<TOther>>,
+	): SetOpStage<TProjection, this, TOther>;
+	exceptAll<TOther extends SetOpBranch>(
+		other: TOther &
+			CompatibleSetOpBranch<TProjection, BranchProjection<TOther>>,
+	): SetOpStage<TProjection, this, TOther>;
+}
 
 /** `SameKeys<TLeft, TRight>` is `true` only when both sides carry exactly the same key set (neither a missing nor an extra one) — the shape half of the union-compatibility question, checked in both directions since `keyof` alone only proves a subset. */
 type SameKeys<TLeft, TRight> = [keyof TLeft] extends [keyof TRight]
@@ -217,6 +280,39 @@ export type SetOpResult<TLeft, TRight> =
 		? SetOpFamiliesRefused<TLeft, TRight> extends true
 			? never
 			: { readonly [K in keyof TLeft]: TLeft[K] | TRight[K & keyof TRight] }
+		: never;
+
+/**
+ * `true` when `TStage` is still {@link SetOpStage}'s own bare default
+ * (`unknown`, both branch parameters omitted) — the tuple wrap keeps the
+ * check from distributing over a union and misfiring on `never` (a naked
+ * `TStage extends unknown` is trivially always true otherwise). Shared by
+ * `@hejbro/query`'s `ExecuteResult` and this file's own CTE fold
+ * (widen-set-op-execute, task 1.5b) so "no real branch was carried" is one
+ * judgment, not two independently maintained copies of it.
+ */
+export type IsUnfilledBranch<TStage> = [unknown] extends [TStage]
+	? true
+	: false;
+
+/**
+ * Extracts a {@link SetOpStage}'s own three type parameters back out —
+ * `never` when `TStage` is not one. Shared by `@hejbro/query`'s
+ * `ExecuteResult` and this file's own CTE fold (widen-set-op-execute, task
+ * 1.5b): both need the same branch-projection/branch-stage triple, and
+ * re-deriving the `infer` pattern twice risks the two copies drifting.
+ */
+export type SetOpStageBranches<TStage> =
+	TStage extends SetOpStage<
+		infer TProjection extends SelectProjection,
+		infer TLeftStage,
+		infer TRightStage
+	>
+		? {
+				readonly projection: TProjection;
+				readonly left: TLeftStage;
+				readonly right: TRightStage;
+			}
 		: never;
 
 /**
