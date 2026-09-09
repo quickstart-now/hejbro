@@ -78,8 +78,11 @@ type SelectRow<TProjection extends SelectProjection> = Awaited<
 
 /** Same technique, for the `with` and `related()` boundary tests (task 3.4). */
 declare const chainWith: ChainApi<typeof appModule>["with"];
+// `with` is generic over the BODY since widen-set-op-execute's D106
+// round-1 correction (a set-op body folds); a plain body still reads
+// `SelectResult<TProjection>`, which is what these cells assert.
 type WithRow<TProjection extends SelectProjection> = Awaited<
-	ReturnType<typeof chainWith<TProjection>>
+	ReturnType<typeof chainWith<SelectLimited<TProjection>>>
 >[number];
 
 declare const chainSelectWithRelations: ChainApi<

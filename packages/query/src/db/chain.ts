@@ -9,6 +9,7 @@ import type {
 	InsertConflictable,
 	InsertFinal,
 	InsertReturnable,
+	IsUnfilledBranch,
 	OrderTermInput,
 	ReturningProjection,
 	SelectDistinctable,
@@ -23,6 +24,7 @@ import type {
 	SetOpFamiliesRefused,
 	SetOpNode,
 	SetOpStage,
+	SetOpStageBranches,
 	Table,
 	UntrackedJoins,
 	UpdateFilterable,
@@ -302,7 +304,7 @@ const makeWithChain = <TProjection extends SelectProjection>(
 	run: ChainRun,
 	stage: WithStage<TProjection>,
 	tables: Declarations["tables"],
-): WithChainTerminal<TProjection> => ({
+): WithChainTerminal<SelectResult<TProjection>> => ({
 	withQuery: stage.withQuery,
 	...makeChainTerminal<SelectResult<TProjection>>(
 		run,
@@ -851,11 +853,48 @@ type RelatedCapableMembers<TSchema, TTable extends Table> = {
  * `setOpQuery` off the others). `<Verb>ChainTerminal` matches this
  * package's own `ChainTerminal` naming for the same role.
  */
-export type WithChainTerminal<TProjection extends SelectProjection> =
-	PromiseLike<ReadonlyArray<SelectResult<TProjection>>> & {
-		compile(): CompileResult;
-		readonly withQuery: WithNode;
-	};
+export type WithChainTerminal<TRow> = PromiseLike<ReadonlyArray<TRow>> & {
+	compile(): CompileResult;
+	readonly withQuery: WithNode;
+};
+
+/** What `db.with(...)`'s callback may return: core's own `WithBody` shapes, branch parameters left open so a built set-op stage keeps them. */
+export type WithBodyInput =
+	| SelectLimited<SelectProjection>
+	| SetOpStage<SelectProjection, unknown, unknown>;
+
+/**
+ * The row a `db.with(...)` body reads back (D106 round 1, B1). The WITH
+ * position carries no join set, so a plain body reads
+ * `SelectResult<TProjection>` as it always did — an object-projected
+ * column widened, a whole-table column at its declared nullability. A
+ * set operation in that position folds each branch's own untracked read
+ * through the one shared `SetOpResult`; the branch convention
+ * (`SetOpStageBranches`, `IsUnfilledBranch`) is core's, and a hand-written
+ * `SetOpStage<TProjection>` (both branches unfilled) keeps the
+ * left-projection fallback, exactly as `ExecuteResult` does.
+ */
+export type WithBodyRow<TBody> =
+	TBody extends SelectLimited<infer TProjection extends SelectProjection>
+		? SelectResult<TProjection>
+		: [SetOpStageBranches<TBody>] extends [never]
+			? never
+			: WithSetOpRow<
+					SetOpStageBranches<TBody>["projection"],
+					SetOpStageBranches<TBody>["left"],
+					SetOpStageBranches<TBody>["right"]
+				>;
+
+type WithSetOpRow<
+	TProjection extends SelectProjection,
+	TLeftStage,
+	TRightStage,
+> =
+	IsUnfilledBranch<TLeftStage> extends true
+		? SelectResult<TProjection>
+		: IsUnfilledBranch<TRightStage> extends true
+			? SelectResult<TProjection>
+			: SetOpResult<WithBodyRow<TLeftStage>, WithBodyRow<TRightStage>>;
 
 export type ChainApi<TSchema = Record<string, unknown>> = {
 	/**
@@ -907,11 +946,9 @@ export type ChainApi<TSchema = Record<string, unknown>> = {
 	 * The asymmetry with core's `withCte` is deliberate, not an
 	 * inconsistency (`skills/hejbro`, task 7.2, carries the same line).
 	 */
-	with<TProjection extends SelectProjection>(
-		build: (
-			w: CteBuilder,
-		) => SelectLimited<TProjection> | SetOpStage<TProjection>,
-	): WithChainTerminal<TProjection>;
+	with<TBody extends WithBodyInput>(
+		build: (w: CteBuilder) => TBody,
+	): WithChainTerminal<WithBodyRow<TBody>>;
 };
 
 export const createChainApi = (
@@ -963,5 +1000,12 @@ export const createChainApi = (
 			coreDeleteFrom(target),
 			tables,
 		),
-	with: (build) => makeWithChain(runFor("db.with"), coreWithCte(build), tables),
+	// The body's row type is decided by `WithBodyRow` at the boundary; the
+	// runtime wrapper is the same for every body shape.
+	with: <TBody extends WithBodyInput>(build: (w: CteBuilder) => TBody) =>
+		makeWithChain(
+			runFor("db.with"),
+			coreWithCte(build as (w: CteBuilder) => WithBodyInput),
+			tables,
+		) as WithChainTerminal<WithBodyRow<TBody>>,
 });
