@@ -1,5 +1,75 @@
 # @hejbro/pg
 
+## 0.2.0-pre.2
+
+### Minor Changes
+
+- 8d79eb0: The driver capability set gains a fourth key, `batched-transactions`: a
+  driver that declares it can run a pre-assembled list of statements as
+  one transaction, in one round trip where possible, returning one row
+  list per member. Every `Driver` now implements a mandatory `batch`
+  member — a driver declaring the capability `false` still implements it,
+  by refusing before sending anything, the same pattern `transaction`
+  already uses on a non-interactive driver.
+  
+  `db.as(context)` picks a driver's declared capability to decide how it
+  runs: `interactive-transactions` still wins where declared, otherwise a
+  driver declaring `batched-transactions` runs the context and the
+  caller's own statement as one batch. This makes `@hejbro/neon`'s HTTP
+  path (`neonDriver(sql)`, built from a `neon()` query function) usable
+  with `db.as(context)` for the first time — role and settings apply
+  transaction-local to that one batch. `db.transaction(callback)` is
+  unaffected and still requires `interactive-transactions`, since a
+  callback is interactive by definition.
+  
+  A batch failure is reported as a batch: every member statement, in
+  order, with a statement that the driver does not report which member
+  failed — never naming only the caller's own statement, which may not
+  have been the actual cause. A driver whose `batch` resolves the wrong
+  number of row lists (fewer, more, or none) is refused with the new
+  `batch-result-count-mismatch`, naming both counts, rather than silently
+  handing a context statement's own rows back as the caller's.
+  
+  A multi-command `sql`-kind text (`select 1; select 2`, only reachable
+  through the `sql` escape hatch) now resolves to the **last** command's
+  rows — psql's own convention — instead of `undefined` or a crash.
+  `@hejbro/pg` and `@hejbro/neon`'s own session-setup statement is itself
+  multi-command, so this rule is exercised on every connection. `@hejbro/
+  query` exports this fold itself as `lastRows(result)`. It also newly
+  exports `preparedStatementName(sql)` — the prepared-statement naming
+  rule `@hejbro/pg` and `@hejbro/neon` both call, so neither driver holds
+  its own copy of it anymore.
+- 6cbedf2: The driver capability set gains a third key, `prepared-statements`, and
+  `pgDriver`/`neonDriver`'s session-oriented (`Pool`) path can now name
+  every built statement (`select`/`insert`/`update`/`delete`/a set
+  operation) it sends, so a connection parses and plans each distinct
+  text once instead of on every execution:
+  
+  ```ts
+  const driver = pgDriver(pool, { preparedStatements: true });
+  ```
+  
+  Opt-in, defaulting to `false` — an existing caller's driver sends
+  exactly what it always did. A `sql`-kind statement (the escape hatch, a
+  context's own applied statements, a migration body) is always sent
+  unnamed regardless of the option, since hejbro parses no SQL and a
+  `sql`-kind text may carry more than one command. `@hejbro/supabase`'s
+  `supabaseDriver` now refuses, at construction, a base driver that
+  declares `prepared-statements: true` for its `"transaction-pooler"`
+  endpoint — a name prepared on one pooled backend does not exist on the
+  next one the pooler hands out for a later transaction. Every other
+  existing driver (`@hejbro/nile`'s decorator, `hejbro`'s CLI paths) is
+  unaffected and declares `false`.
+
+### Patch Changes
+
+- 5b86f88: `preparedStatements` is read as `=== true`, so a non-boolean value from an untyped caller never lands in the declaration; a driver's `capabilities` object is frozen (D106 round 1 of add-prepared-statements, N3).
+- Updated dependencies [8d79eb0]
+- Updated dependencies [6cbedf2]
+- Updated dependencies [9e4fd05]
+- Updated dependencies [98e9965]
+  - @hejbro/query@0.2.0-pre.2
+
 ## 0.2.0-pre.1
 
 ### Patch Changes
