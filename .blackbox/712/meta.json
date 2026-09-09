@@ -304,6 +304,16 @@
         "R16",
         "R17"
       ]
+    },
+    {
+      "id": "W12",
+      "at": "2026-09-09T02:32Z",
+      "title": "D106 round 4: ARCHIVE, R3-B1 closed; R4-N1 = #1039, R4-N2 by design",
+      "pr": null,
+      "decisions": [
+        "R16",
+        "R17"
+      ]
     }
   ],
   "prs": [
