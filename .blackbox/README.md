@@ -89,7 +89,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 | ↳ [#707](707/) | check is silent about undeclared indexes and check constraints on managed tables | closed | #878 #879 | 0 | 5 (0 pending) |
 | ↳ [#712](712/) | decide whether an enum type's catalog name is held to D36 by the catalog reading | closed | #1026 #1049 #1060 #1066 #1068 | 0 | 17 (4 pending) |
 | ↳ [#726](726/) | loss report promises check will report an omitted column, but check has no column-level inventory | closed | #878 | 0 | 1 (0 pending) |
-| ↳ [#738](738/) | execute() of a core-built set operation cannot widen a column to the union of both branches | open | #1062 #1069 | 0 | 5 (4 pending) |
+| ↳ [#738](738/) | execute() of a core-built set operation cannot widen a column to the union of both branches | closed | #1062 #1069 | 0 | 6 (4 pending) |
 | ↳ [#740](740/) | Vendored contract column order follows JS key order, not the snapshot's physical order | closed | #858 #861 | 0 | 2 (0 pending) |
 | ↳ [#741](741/) | `hejbro init --config <path>` is ignored and scaffolds a competing project | closed | #840 #847 | 0 | 4 (0 pending) |
 | ↳ [#742](742/) | Add the constructor-review corpus to `examples/brownfield` | closed | #900 | 0 | 1 (0 pending) |
@@ -276,7 +276,7 @@ Flight recorder: one folder per work item, keyed by its tracker number. Each hol
 
 ## Totals
 
-Owner decisions 95 · rulings 337 (interpretation 222, extension 113, stop 2) · pending extensions 75 · rejected 2
+Owner decisions 95 · rulings 338 (interpretation 223, extension 113, stop 2) · pending extensions 75 · rejected 2
 
 ## Conventions
 
@@ -285,4 +285,4 @@ Owner decisions 95 · rulings 337 (interpretation 222, extension 113, stop 2) ·
 - Every PR is pinned before merge: each changed file's blob SHA, stored once per item in `prs/<N>.json` and checked both ways (every pin matches the PR head, every changed file is pinned) by the pre-merge hook and by CI. A folder's `meta.json` holds one line per PR (`closes`, `refs` or `own`); a parent's PR column is derived from its children.
 - Never read this directory during normal work. It answers provenance questions only.
 
-Merged but not closed: #412, #714, #815, #819, #837, #860
+Merged but not closed: #412, #487, #714, #737, #815, #819, #837, #860, #942, #995, #1053, #1054, #1055, #1059, #1061
