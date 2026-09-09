@@ -294,6 +294,16 @@
       "title": "cfr2 constructor review round: PASS, NB1 fixed here, NB2 filed #1058, NB3 won't-fix",
       "pr": null,
       "decisions": []
+    },
+    {
+      "id": "W11",
+      "at": "2026-09-09T01:49Z",
+      "title": "D106 round 3: the empty-schema lines sort by code units (R3-B1), triage of R3-N1..N7",
+      "pr": null,
+      "decisions": [
+        "R16",
+        "R17"
+      ]
     }
   ],
   "prs": [
