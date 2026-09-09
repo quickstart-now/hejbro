@@ -263,6 +263,8 @@ describe("ExecuteResult folds both branches for a core-built set operation, flat
 	});
 
 	it("3a: a nullable LEFT column against a notNull RIGHT one -- nullable", () => {
+		// 3b covers the direction; this cell is an anchor that does not
+		// react to the fold being dropped.
 		type LeftBranch = SelectLimited<FlagTableNullable, never>;
 		type RightBranch = SelectLimited<FlagTableNotNull, never>;
 		type Stage = SetOpStage<FlagTableNullable, LeftBranch, RightBranch>;

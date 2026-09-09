@@ -145,6 +145,11 @@ type MergedCteRowEnvironment<
  * `SetOpStage` at all) is itself assignable to any object shape, so an
  * un-wrapped `SetOpStageBranches<TStage> extends {...}` check would
  * wrongly match a `SelectLimited` branch here too.
+ *
+ * The other recursion over `SetOpResult` lives in
+ * packages/query/src/db/db.ts. The per-column union is the one shared
+ * rule — change it in `SetOpResult`. What this recursion folds (raw
+ * projections) is its own — change that here.
  */
 type CteSetOpBranchProjection<TStage> =
 	TStage extends SelectLimited<

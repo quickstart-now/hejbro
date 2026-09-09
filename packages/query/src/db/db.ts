@@ -248,6 +248,12 @@ const rolesOf = (
  * numeric-mode divergence) is still visible once the outer fold reads
  * it — depth is bounded by the statement, never by a fixed type budget.
  * `never` for anything else.
+ *
+ * The other recursion over `SetOpResult` lives in
+ * packages/core/src/query/with.ts. The per-column union is the one
+ * shared rule — change it in `SetOpResult`. What this recursion folds
+ * (resolved rows with their left-join set) is its own — change that
+ * here.
  */
 type SetOpBranchRow<TStage> =
 	TStage extends SelectLimited<
