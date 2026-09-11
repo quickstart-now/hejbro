@@ -103,7 +103,7 @@ jobs:
       # monolithic action's top-level input is named `version-script`, the
       # decomposed sub-action's is `script`; they differ even within the
       # same release, which is the trap this comment exists to name).
-      - uses: changesets/action/version@8488615a623b1b9c987934bb89eae8af6a946ac1 # v2.1.1
+      - uses: changesets/action/version@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
         with:
           script: pnpm run version-packages
           # Hardcoded, not `${{ github.ref_name }}`: this workflow only

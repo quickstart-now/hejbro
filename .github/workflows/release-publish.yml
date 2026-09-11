@@ -164,7 +164,7 @@ jobs:
       # published nothing (the same invariant #155's token-based guard
       # enforced, now enforced by npm's own OIDC handshake instead of a
       # step in this file).
-      - uses: changesets/action/publish@8488615a623b1b9c987934bb89eae8af6a946ac1 # v2.1.1
+      - uses: changesets/action/publish@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
         with:
           script: pnpm release
         env:
