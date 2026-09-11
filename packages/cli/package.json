@@ -52,7 +52,7 @@
 		"citty": "^0.2.2",
 		"jiti": "^2.7.0",
 		"tinyglobby": "^0.2.17",
-		"zod": "^4.4.3"
+		"zod": "^4.5.4"
 	},
 	"devDependencies": {
 		"@hejbro/nile": "workspace:*",
