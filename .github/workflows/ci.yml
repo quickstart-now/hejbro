@@ -74,7 +74,7 @@ jobs:
       # they pass dev's required-signatures ruleset -- and the ref update
       # re-runs CI on that commit. With only a PAT (BLACKBOX_TOKEN) they are
       # pushed with git, unsigned. With neither, verify only.
-      - uses: actions/create-github-app-token@v2
+      - uses: actions/create-github-app-token@v3
         id: app
         if: env.HAS_APP == 'true'
         with:
