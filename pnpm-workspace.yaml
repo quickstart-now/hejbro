@@ -3,10 +3,10 @@ packages:
   - examples/*
 
 catalog:
-  tsdown: 0.22.14
+  tsdown: 0.23.0
   typescript: ^5.9.3
   vitest: 4.1.11
   "@vitest/coverage-v8": 4.1.11
-  pg: ^8.23.0
+  pg: ^8.23.1
   "@types/pg": ^8.23.1
-  "@neondatabase/serverless": ^1.1.0
+  "@neondatabase/serverless": ^1.2.0
