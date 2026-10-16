@@ -66,7 +66,7 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
           token: ${{ secrets.BLACKBOX_TOKEN || github.token }}
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@v7.1.0
         with: { node-version: 24 }
       # Bot mode (#793). With the GitHub App (BLACKBOX_APP_ID +
       # BLACKBOX_APP_PRIVATE_KEY) the pins are committed through the Git Data
@@ -149,7 +149,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@v7.1.0
         with: { node-version: 24, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
@@ -218,7 +218,7 @@ jobs:
       - run: git fetch origin dev:dev
         if: github.ref != 'refs/heads/dev'
       - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@v7.1.0
         with: { node-version: "${{ matrix.node-version }}", cache: pnpm }
       - run: node --version
       - run: pnpm install --frozen-lockfile
